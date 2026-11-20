@@ -1,0 +1,178 @@
+{
+  "name": "Logitech F310",
+  "components": [
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": true,
+      "centerPx": [1193, 541],
+      "sizePx": [95, 95],
+      "sdlSourceIndex": 0,
+      "sourceIndex": 1
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": true,
+      "centerPx": [1294, 440],
+      "sizePx": [95, 95],
+      "sdlSourceIndex": 1,
+      "sourceIndex": 2
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": true,
+      "centerPx": [1093, 440],
+      "sizePx": [95, 95],
+      "sdlSourceIndex": 2,
+      "sourceIndex": 3
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": true,
+      "centerPx": [1196, 340],
+      "sizePx": [95, 95],
+      "sdlSourceIndex": 3,
+      "sourceIndex": 4
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [410, 125],
+      "sizePx": [165, 76],
+      "sdlSourceIndex": 9,
+      "sourceIndex": 5
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [1215, 125],
+      "sizePx": [165, 76],
+      "sdlSourceIndex": 10,
+      "sourceIndex": 6
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [667, 338],
+      "sizePx": [85, 64],
+      "sdlSourceIndex": 4,
+      "sourceIndex": 7
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [945, 340],
+      "sizePx": [85, 64],
+      "sdlSourceIndex": 6,
+      "sourceIndex": 8
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": true,
+      "centerPx": [807, 386],
+      "sizePx": [150, 125],
+      "sdlSourceIndex": 5,
+      "sourceIndex": 999
+    },
+    {
+      "type": "axis",
+      "isYellow": false,
+      "centerPx": [120, 204],
+      "sizePx": [80, 234],
+      "sdlSourceIndex": 4,
+      "sdlSourceRange": [0, 1],
+      "sourceIndex": 2,
+      "sourceRange": [0, 1]
+    },
+    {
+      "type": "axis",
+      "isYellow": false,
+      "centerPx": [1501, 204],
+      "sizePx": [80, 234],
+      "sdlSourceIndex": 5,
+      "sdlSourceRange": [0, 1],
+      "sourceIndex": 3,
+      "sourceRange": [0, 1]
+    },
+    {
+      "type": "joystick",
+      "isYellow": true,
+      "centerPx": [607, 663],
+      "radiusPx": 100,
+      "sdlXSourceIndex": 0,
+      "sdlXSourceInverted": false,
+      "sdlYSourceIndex": 1,
+      "sdlYSourceInverted": true,
+      "sdlButtonSourceIndex": 7,
+      "xSourceIndex": 0,
+      "xSourceInverted": false,
+      "ySourceIndex": 1,
+      "ySourceInverted": true,
+      "buttonSourceIndex": 9
+    },
+    {
+      "type": "joystick",
+      "isYellow": true,
+      "centerPx": [1000, 663],
+      "radiusPx": 100,
+      "sdlXSourceIndex": 2,
+      "sdlXSourceInverted": false,
+      "sdlYSourceIndex": 3,
+      "sdlYSourceInverted": true,
+      "sdlButtonSourceIndex": 8,
+      "xSourceIndex": 4,
+      "xSourceInverted": false,
+      "ySourceIndex": 5,
+      "ySourceInverted": true,
+      "buttonSourceIndex": 10
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [415, 365],
+      "sizePx": [70, 70],
+      "sdlSourceIndex": 11,
+      "sourceIndex": 0,
+      "sourcePov": "up"
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [485, 435],
+      "sizePx": [70, 70],
+      "sdlSourceIndex": 14,
+      "sourceIndex": 0,
+      "sourcePov": "right"
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [415, 505],
+      "sizePx": [70, 70],
+      "sdlSourceIndex": 12,
+      "sourceIndex": 0,
+      "sourcePov": "down"
+    },
+    {
+      "type": "button",
+      "isYellow": true,
+      "isEllipse": false,
+      "centerPx": [345, 435],
+      "sizePx": [70, 70],
+      "sdlSourceIndex": 13,
+      "sourceIndex": 0,
+      "sourcePov": "left"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "2024-2025 Field",
+  "locales": {
+    "en-US": "2024-2025 Field",
+    "es-419": "Campo 2024-2025",
+    "fr": "Terrain 2024-2025",
+    "nl": "Veld 2024-2025",
+    "pt-BR": "Campo 2024-2025",
+    "ro": "Teren 2024-2025",
+    "tr": "2024-2025 Sahası",
+    "ru": "Поле 2024-2025",
+    "kk": "2024-2025 алаңы",
+    "he": "מגרש 2024-2025",
+    "ar": "ملعب 2024-2025",
+    "hi": "2024-2025 फील्ड",
+    "zh-CN": "2024-2025 场地",
+    "zh-TW": "2024-2025 場地"
+  },
+  "isFTC": true,
+  "coordinateSystem": "center-rotated",
+  "topLeft": [
+    0,
+    0
+  ],
+  "bottomRight": [
+    2214,
+    2214
+  ],
+  "widthInches": 143.182,
+  "heightInches": 143.182
+}

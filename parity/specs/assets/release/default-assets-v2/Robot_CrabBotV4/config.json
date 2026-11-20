@@ -1,0 +1,216 @@
+{
+  "name": "Crab Bot",
+  "locales": {
+    "en-US": "Crab Bot",
+    "es-419": "Bot Cangrejo",
+    "fr": "Bot Crabe",
+    "nl": "Krab Bot",
+    "pt-BR": "Bot Caranguejo",
+    "ro": "Bot Rac",
+    "tr": "Yengeç Bot",
+    "ru": "Бот-краб",
+    "kk": "Шаян бот",
+    "he": "בוט סרטן",
+    "ar": "بوت السلطعون",
+    "hi": "केकड़ा बोट",
+    "zh-CN": "螃蟹机器人",
+    "zh-TW": "螃蟹機器人"
+  },
+  "isFTC": false,
+  "rotations": [
+    {
+      "axis": "z",
+      "degrees": 180
+    }
+  ],
+  "position": [
+    0,
+    0,
+    0.045
+  ],
+  "cameras": [
+    {
+      "name": "Front Camera",
+      "locales": {
+        "en-US": "Front Camera",
+        "es-419": "Cámara frontal",
+        "fr": "Caméra avant",
+        "nl": "Camera voor",
+        "pt-BR": "Câmera frontal",
+        "ro": "Cameră frontală",
+        "tr": "Ön Kamera",
+        "ru": "Передняя камера",
+        "kk": "Алдыңғы камера",
+        "he": "מצלמה קדמית",
+        "ar": "كاميرا أمامية",
+        "hi": "सामने का कैमरा",
+        "zh-CN": "前置相机",
+        "zh-TW": "前置攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        }
+      ],
+      "position": [
+        0.2,
+        0,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Back Camera",
+      "locales": {
+        "en-US": "Back Camera",
+        "es-419": "Cámara trasera",
+        "fr": "Caméra arrière",
+        "nl": "Camera achter",
+        "pt-BR": "Câmera traseira",
+        "ro": "Cameră spate",
+        "tr": "Arka Kamera",
+        "ru": "Задняя камера",
+        "kk": "Артқы камера",
+        "he": "מצלמה אחורית",
+        "ar": "كاميرا خلفية",
+        "hi": "पीछे का कैमरा",
+        "zh-CN": "后置相机",
+        "zh-TW": "後置攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        },
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "position": [
+        -0.2,
+        0,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Left Camera",
+      "locales": {
+        "en-US": "Left Camera",
+        "es-419": "Cámara izquierda",
+        "fr": "Caméra gauche",
+        "nl": "Camera links",
+        "pt-BR": "Câmera esquerda",
+        "ro": "Cameră stânga",
+        "tr": "Sol Kamera",
+        "ru": "Левая камера",
+        "kk": "Сол жақ камера",
+        "he": "מצלמה שמאלית",
+        "ar": "كاميرا يسارية",
+        "hi": "बायां कैमरा",
+        "zh-CN": "左侧相机",
+        "zh-TW": "左側攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        },
+        {
+          "axis": "z",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        0,
+        0.2,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Right Camera",
+      "locales": {
+        "en-US": "Right Camera",
+        "es-419": "Cámara derecha",
+        "fr": "Caméra droite",
+        "nl": "Camera rechts",
+        "pt-BR": "Câmera direita",
+        "ro": "Cameră dreapta",
+        "tr": "Sağ Kamera",
+        "ru": "Правая камера",
+        "kk": "Оң жақ камера",
+        "he": "מצלמה ימנית",
+        "ar": "كاميرا يمينية",
+        "hi": "दायां कैमरा",
+        "zh-CN": "右侧相机",
+        "zh-TW": "右側攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        },
+        {
+          "axis": "z",
+          "degrees": -90
+        }
+      ],
+      "position": [
+        0,
+        -0.2,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "ShellCam",
+      "locales": {
+        "en-US": "ShellCam",
+        "es-419": "Cámara Caparazón",
+        "fr": "Caméra Carapace",
+        "nl": "Schildcamera",
+        "pt-BR": "Câmera Casco",
+        "ro": "Cameră Carapace",
+        "tr": "Kabuk Kamerası",
+        "ru": "Камера-панцирь",
+        "kk": "Сауыт камерасы",
+        "he": "מצלמת שריון",
+        "ar": "كاميرا الصدفة",
+        "hi": "कवच कैमरा",
+        "zh-CN": "蟹壳相机",
+        "zh-TW": "蟹殼攝影機"
+      },
+      "rotations": [],
+      "position": [
+        0.05,
+        0,
+        0.45
+      ],
+      "resolution": [
+        1920,
+        1080
+      ],
+      "fov": 90
+    }
+  ],
+  "components": []
+}
