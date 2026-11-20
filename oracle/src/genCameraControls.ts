@@ -592,6 +592,48 @@ function randomOp(ops: Op[], rect: number[]) {
   runCase("library defaults", { camera: [75, 16 / 9, 0.1, 100, 3, 4, 5], rect: [0, 0, 800, 450], config: [] }, ops);
 }
 
+// Paths the random scripts almost never reach: a pointerup lost outside the window leaves a zombie
+// pointer so the next pointerdown starts with two, a buttonless pointerdown has no mouseButton,
+// and a finite maxSpeed, a zero restThreshold and polar limits change the damping.
+{
+  const ops: Op[] = [
+    ["setLookAt", 0, 6, -12, 0, 0.5, 0, false],
+    ["update", 0],
+    ["pointerdown", 1, 2, 400, 300],
+    ["pointermove", 1, 2, 380, 310],
+    ["update", 1 / 60],
+    ["pointerup", 9, 0, 380, 310],
+    ["pointerdown", 1, 1, 500, 200],
+    ["pointermove", 1, 1, 520, 190],
+    ["update", 1 / 60],
+    ["pointermove", 1, 3, 530, 185],
+    ["update", 1 / 60],
+    ["pointerup", 1, 0, 530, 185],
+    ["pointermove", 1, 1, 540, 180],
+    ["update", 1 / 60],
+    ["pointerup", 1, 0, 540, 180],
+    ["pointerdown", 4, 0, 200, 200],
+    ["pointermove", 4, 0, 210, 210],
+    ["pointerdown", 5, 4, 200, 200],
+    ["pointermove", 5, 4, 200, 260],
+    ["update", 1 / 60],
+    ["pointerup", 4, 0, 0, 0],
+    ["pointerup", 5, 0, 0, 0]
+  ];
+  frames(ops, 10, 1 / 60);
+  ops.push(["set", "maxSpeed", 2], ["moveTo", 30, 0.5, -20, true]);
+  frames(ops, 20, 1 / 60);
+  ops.push(["dolly", -40, true]);
+  frames(ops, 20, 1 / 60);
+  ops.push(["set", "maxSpeed", Infinity], ["set", "restThreshold", 0], ["rotate", 1, 0.3, true]);
+  frames(ops, 40, 1 / 30);
+  ops.push(["set", "minPolarAngle", 1], ["set", "maxPolarAngle", 2], ["rotate", 0, 3, true]);
+  frames(ops, 10, 1 / 60);
+  ops.push(["rotate", 0, -3, false], ["set", "smoothTime", 0], ["setLookAt", 3, 3, 3, 0, 0, 0, true]);
+  frames(ops, 5, 1 / 60);
+  runCase("zombie pointers, speed caps and limits", { camera: UPSTREAM_CAMERA, rect: [0, 0, 1100, 650], config: UPSTREAM_CONFIG }, ops);
+}
+
 // Seeded random scripts.
 const RANDOM_CASES = platform === "mac" ? 110 : 30;
 for (let n = 0; n < RANDOM_CASES; n++) {

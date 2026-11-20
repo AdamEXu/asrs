@@ -35,17 +35,17 @@
       "generatedOn": "macos-aarch64"
     },
     "field3d/camera-controls-mac": {
-      "cases": 124,
-      "content": "579a8c9f432027b6",
-      "generator": "0c676272021c27ff",
+      "cases": 125,
+      "content": "c7d8fe04bfba0a08",
+      "generator": "0ad1d487d76170a2",
       "spec": "parity/specs/field3d/camera-controls-mac.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
     "field3d/camera-controls-other": {
-      "cases": 44,
-      "content": "dce60cba99a5e050",
-      "generator": "01545500742c37f7",
+      "cases": 45,
+      "content": "21e8591091fed7ce",
+      "generator": "1e012348c4df3c4e",
       "spec": "parity/specs/field3d/camera-controls-other.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
