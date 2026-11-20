@@ -529,6 +529,21 @@ fn math_spec() -> Spec {
     spec
 }
 
+/// Skips a Smi divided by `+0`: on Windows V8 answers `+NaN` from the interpreter's Smi path
+/// and `-NaN` from optimized code, so the oracle's result depends on when the site tiers up.
+#[allow(clippy::float_cmp)]
+fn push_rem(rem: &mut Spec, a: f64, b: f64) {
+    let smi = |x: f64| {
+        x.trunc() == x
+            && (-1_073_741_824.0..1_073_741_824.0).contains(&x)
+            && !(x == 0.0 && x.is_sign_negative())
+    };
+    if smi(a) && b == 0.0 && b.is_sign_positive() {
+        return;
+    }
+    rem.call("(a, b) => a % b", vec![n(a), n(b)]);
+}
+
 fn rem_boundaries(rem: &mut Spec) {
     let smi_edges = [
         1073741823.0,
@@ -545,7 +560,7 @@ fn rem_boundaries(rem: &mut Spec) {
     ];
     for &a in &smi_edges {
         for b in [0.0, -0.0, 1.0, -1.0, 4.0, 0.25, f64::INFINITY] {
-            rem.call("(a, b) => a % b", vec![n(a), n(b)]);
+            push_rem(rem, a, b);
         }
     }
 }
@@ -639,13 +654,13 @@ fn ops_specs() -> (Spec, Spec) {
     let pairs = pair_values();
     for &a in &pairs {
         for &b in &pairs {
-            rem.call("(a, b) => a % b", vec![n(a), n(b)]);
+            push_rem(&mut rem, a, b);
             spec.call("(a, b) => a ** b", vec![n(a), n(b)]);
         }
     }
     for _ in 0..300 {
         let v = random_doubles(&mut rng, 2, 60, -60);
-        rem.call("(a, b) => a % b", vec![n(v[0]), n(v[1])]);
+        push_rem(&mut rem, v[0], v[1]);
         spec.call("(a, b) => a ** b", vec![n(v[0].abs()), n(v[1] / 1e15)]);
     }
     let bigs = [

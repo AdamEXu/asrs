@@ -83,25 +83,25 @@
       "generatedOn": "macos-aarch64"
     },
     "js/math-rem/linux-aarch64": {
-      "cases": 992,
-      "content": "ba4463283dec34b5",
-      "generator": "b571da27906d3dc8",
+      "cases": 980,
+      "content": "5001d446f16a7017",
+      "generator": "fbe83aff0018bbea",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "linux-aarch64"
     },
     "js/math-rem/macos-aarch64": {
-      "cases": 992,
-      "content": "ba4463283dec34b5",
-      "generator": "b571da27906d3dc8",
+      "cases": 980,
+      "content": "5001d446f16a7017",
+      "generator": "fbe83aff0018bbea",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
     "js/math-rem/windows-aarch64": {
-      "cases": 992,
-      "content": "eb029d834dab9cd5",
-      "generator": "b571da27906d3dc8",
+      "cases": 980,
+      "content": "e02ff52693333343",
+      "generator": "fbe83aff0018bbea",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "windows-aarch64"
@@ -211,12 +211,36 @@
       "generatedOn": "macos-aarch64"
     },
     "log/util": {
-      "cases": 7141,
-      "content": "8a06f51360d0a8d4",
-      "generator": "ddd0512fd9c660ad",
+      "cases": 7139,
+      "content": "b98e32d82d477de1",
+      "generator": "92f5d369691ab998",
       "spec": "parity/specs/log/util.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
+    },
+    "log/util-rem/linux-aarch64": {
+      "cases": 2,
+      "content": "64415ee47e101ad0",
+      "generator": "abedc5cbb44dd880",
+      "spec": "parity/specs/log/util-rem.fn.json",
+      "zone": "UTC",
+      "generatedOn": "linux-aarch64"
+    },
+    "log/util-rem/macos-aarch64": {
+      "cases": 2,
+      "content": "64415ee47e101ad0",
+      "generator": "abedc5cbb44dd880",
+      "spec": "parity/specs/log/util-rem.fn.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "log/util-rem/windows-aarch64": {
+      "cases": 2,
+      "content": "779ce0d41fd802be",
+      "generator": "abedc5cbb44dd880",
+      "spec": "parity/specs/log/util-rem.fn.json",
+      "zone": "UTC",
+      "generatedOn": "windows-aarch64"
     },
     "msgpack/decode": {
       "cases": 7131,

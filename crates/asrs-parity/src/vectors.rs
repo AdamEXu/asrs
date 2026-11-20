@@ -28,11 +28,7 @@ pub fn vectors_dir() -> PathBuf {
 /// The vector of platform-dependent spec `spec` for the platform this test runs on, named
 /// `<os>-<arch>` as the oracle's manifest names hosts (`windows-aarch64`).
 pub fn platform_vector(spec: &str) -> String {
-    format!(
-        "{spec}/{}-{}",
-        std::env::consts::OS,
-        std::env::consts::ARCH
-    )
+    format!("{spec}/{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
 /// The file holding vector `id`: `<id>.jsonl.zst`, or plain `<id>.jsonl`.

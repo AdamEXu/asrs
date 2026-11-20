@@ -74,13 +74,15 @@ pub fn pow(x: f64, y: f64) -> f64 {
 /// The `%` operator on numbers: the first NaN operand, else the exact `fmod` result, with
 /// V8's NaN for the invalid cases (`x` infinite or `y` zero).
 ///
-/// That NaN depends on the platform. V8 returns the canonical `0x7ff8...` from its Smi path
-/// (both operands Smis) and otherwise whatever the C library's `fmod` returns. On Windows
-/// (measured on arm64) the UCRT returns `0xfff8...`, so `1.5 % 0` and `1 % -0` are negative
-/// NaNs there while `1 % 0` is not. With pointer compression a Smi is an integer in
-/// `[-2^30, 2^30)` other than `-0`. V8 also keeps integral values that came out of float
-/// arithmetic as heap numbers (`(1 + 0.5 - 0.5) % 0` is `0xfff8...` on Windows); a plain `f64`
-/// cannot tell those apart, so this assumes every such operand is a Smi.
+/// That NaN depends on the platform. V8's interpreter returns the canonical `0x7ff8...` from
+/// its Smi path (both operands Smis) and otherwise whatever the C library's `fmod` returns.
+/// On Windows (measured on arm64) the UCRT returns `0xfff8...`, so `1.5 % 0` and `1 % -0` are
+/// negative NaNs there while a cold `1 % 0` is not. With pointer compression a Smi is an
+/// integer in `[-2^30, 2^30)` other than `-0`. Two cases cannot be reproduced from `f64`
+/// values alone, and this takes the Smi answer for both: V8 keeps integral results of float
+/// arithmetic as heap numbers (`(1 + 0.5 - 0.5) % 0` is `0xfff8...` on Windows), and once a
+/// site is optimized it calls `fmod` for Smis too (`7 % 0` turns `0xfff8...` after a few
+/// thousand calls).
 pub fn rem(x: f64, y: f64) -> f64 {
     if x.is_nan() {
         return quiet(x);
