@@ -488,7 +488,7 @@ fn in_receiver(value: &JsValue) -> JsString {
         JsValue::Bool(false) => JsString::from("false"),
         JsValue::Number(x) => JsString::from(number::to_string(*x)),
         JsValue::String(s) => s.clone(),
-        JsValue::BigInt(b) => JsString::from(b.to_string()),
+        JsValue::BigInt(b) => JsString::from(format!("{b}")),
         _ => JsString::new(),
     }
 }
