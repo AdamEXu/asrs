@@ -2,8 +2,7 @@ use crate::{
     AbsoluteLength, App, Bounds, DefiniteLength, Edges, GridTemplate, Length, Pixels, Point, Size,
     Style, Window, size,
     util::{
-        ceil_to_device_pixel, round_half_toward_zero, round_stroke_to_device_pixel,
-        round_to_device_pixel,
+        ceil_to_device_pixel, round_half_up, round_stroke_to_device_pixel, round_to_device_pixel,
     },
 };
 use collections::{FxHashMap, FxHashSet};
@@ -295,9 +294,9 @@ impl TaffyLayoutEngine {
     // by `scale_factor`, so that snapping targets physical pixels. Bounds
     // are divided by `scale_factor` before being returned to GPUI.
     //
-    // Midpoints are rounded toward zero. This is a stylistic choice: a
-    // 1-logical-pixel line at 150% scale should render as 1 dp rather than
-    // 2 dp.
+    // Midpoints are rounded up, as Chromium snaps layout positions. Stroke
+    // widths round midpoints toward zero: a 1-logical-pixel line at 150%
+    // scale should render as 1 dp rather than 2 dp.
     //
     // Pixel snapping is done in two phases:
     //
@@ -380,8 +379,8 @@ impl TaffyLayoutEngine {
 
         let absolute_far = absolute_outer_origin + Point::from(Size::from(layout_size));
         let snapped_bounds = Bounds::from_corners(
-            absolute_outer_origin.map(round_half_toward_zero),
-            absolute_far.map(round_half_toward_zero),
+            absolute_outer_origin.map(round_half_up),
+            absolute_far.map(round_half_up),
         );
 
         let bounds = (snapped_bounds / scale_factor).map(Pixels);

@@ -56,7 +56,7 @@ Windows the symlinks under upstream's `lite/` are skipped.
 | `cargo xtask oracle fn --list` | upstream modules, npm packages and helpers callable by `fn` |
 | `cargo xtask oracle run [--zone <zone>] <entry> [args]` | run `target/oracle/dist/<entry>.mjs` under the oracle runtime |
 | `cargo xtask oracle build` | rebuild the harness bundles only, after editing `oracle/src` |
-| `cargo xtask oracle gen [<id>...] [--check]` | regenerate committed vectors (below); `--check` fails if they are stale |
+| `cargo xtask oracle gen [<id>...] [--check \| --stale]` | regenerate committed vectors (below); `--check` fails if they are stale, `--stale` regenerates only stale ones |
 | `cargo xtask oracle pack` | write the pack for `setup --from-pack` (above) |
 | `cargo xtask oracle selftest` | CVE-1 encoder/decoder self test |
 | `cargo xtask oracle smoke` | `smoke/fn-requests.jsonl` against `smoke/fn-expected.jsonl` |
@@ -151,9 +151,21 @@ Signaling NaN bit patterns are outside the contract: V8 may quiet them.
 
 Specs live in `parity/specs`, vectors in `parity/vectors/<id>.jsonl.zst`, and
 `parity/vectors/MANIFEST.json` records the upstream commit, Electron version and environment
-policy, and for each vector its case count, content hash, generator hash (oracle sources plus
-spec files plus zone, with CRLF hashed as LF), spec, zone and the `<os>-<arch>` it was
-generated on.
+policy, and for each vector its case count, content hash, generator hash, spec, zone and the
+`<os>-<arch>` it was generated on. The header is pretty-printed and each vector is one
+compact line, sorted by id, so branches that add or regenerate different vectors touch
+different lines.
+
+A generator hash covers only what that vector's generator uses: the harness files its entry
+point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
+as paths under `oracle/`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
+`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page), `build.mjs`
+and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
+Files are hashed with CRLF as LF. Upstream sources, upstream's bundles and workers, the
+Electron version and the environment policy are not in the per-vector hash: the manifest
+header pins them (upstream commit, Electron, policy) and a change there makes every vector
+stale. So editing `src/genRegex.ts` makes only the `regex/*` vectors stale, while editing a
+file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of them stale.
 
 - `<id>.jsonl`: `fn` requests, run under UTC. Each vector line is the request with the
   oracle's `ok` or `throw` key appended. An `error` response fails generation.
@@ -182,8 +194,13 @@ vector and its manifest entry back. Rust tests load the current platform's vecto
 `gen` with no ids regenerates every vector and drops manifest entries and files no spec
 produces. `gen <id>...` takes spec or vector ids and refuses to run if the manifest's commit,
 Electron version or policy differs from the current one, since that needs a full run.
+`gen --stale [<id>...]` regenerates only the vectors (of those ids, or all) whose manifest
+entry is stale, and with no ids also drops orphans; it is the usual command after editing a
+generator or merging main. Stale platform vectors of other hosts are listed for
+`cargo xtask host <name> gen <id>`.
 
-`gen --check` works in two stages. First, without running the oracle, it fails if the
+`gen --check` works in two stages. It builds the harness (to learn each entry's inputs);
+then, without running the oracle, it fails if the
 manifest's upstream commit, Electron version or environment policy differs from the current
 one, or if any vector's generator hash, spec, zone or content hash (against the committed
 file) is stale, or a manifest entry has no spec. So an edit to a spec or to the oracle
@@ -221,8 +238,10 @@ shipped app. `__build_date__` is pinned to `1970-01-01T00:00:00.000Z` for reprod
 
 ## Adding an entry point
 
-Add `src/<name>.ts` (starting with `import "./shims"`), list it in `entries` in `build.mjs`,
-and run it with `cargo xtask oracle run <name>`. Harness code can import upstream sources as
+Add `src/<name>.ts` (starting with `import "./shims"`) and run it with
+`cargo xtask oracle run <name>`. Every top-level `src/*.ts` file is bundled as an entry point,
+so `build.mjs` needs no edit (and other vectors' hashes do not change). If the entry spawns or
+loads another bundle at runtime, add it to `runtimeLoads` in `build.mjs`. Harness code can import upstream sources as
 `@upstream/<path under src>`.
 
 ## Synthetic corpus

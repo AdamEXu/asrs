@@ -18,485 +18,65 @@
     ]
   },
   "vectors": {
-    "assets/builtin": {
-      "cases": 11,
-      "content": "24546c58dd38ab92",
-      "generator": "417de4a0e2579745",
-      "spec": "parity/specs/assets/builtin.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "assets/bundled": {
-      "cases": 4,
-      "content": "2696e7b72672cdf5",
-      "generator": "ec7d8cf0c78fb24b",
-      "spec": "parity/specs/assets/bundled.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "assets/malformed": {
-      "cases": 400,
-      "content": "93a3c60821a3f221",
-      "generator": "cad722043b97164f",
-      "spec": "parity/specs/assets/malformed.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "assets/parsers": {
-      "cases": 276,
-      "content": "26217e89b5e279e9",
-      "generator": "513d939c1945b7e3",
-      "spec": "parity/specs/assets/parsers.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "assets/release": {
-      "cases": 161,
-      "content": "5cbdc51ca1a98070",
-      "generator": "bc16b54b58928d6a",
-      "spec": "parity/specs/assets/release.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "cve1/identity": {
-      "cases": 7,
-      "content": "c50fd3a6eb87c9e4",
-      "generator": "818db8d83b233269",
-      "spec": "parity/specs/cve1/identity.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "cve1/torture": {
-      "cases": 471,
-      "content": "3bf51e863655d3d2",
-      "generator": "86f35440bf0c11e6",
-      "spec": "parity/specs/cve1/torture.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "field3d/camera-controls-mac": {
-      "cases": 125,
-      "content": "c7d8fe04bfba0a08",
-      "generator": "4f2b64aa31c9d45f",
-      "spec": "parity/specs/field3d/camera-controls-mac.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "field3d/camera-controls-other": {
-      "cases": 45,
-      "content": "21e8591091fed7ce",
-      "generator": "e8211de27be7e057",
-      "spec": "parity/specs/field3d/camera-controls-other.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "field3d/three": {
-      "cases": 9460,
-      "content": "df05db1732c3129d",
-      "generator": "5e6d70cf162908ff",
-      "spec": "parity/specs/field3d/three.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/collation": {
-      "cases": 5002,
-      "content": "87628654f82c6a0f",
-      "generator": "1f81f086b18f054a",
-      "spec": "parity/specs/js/collation.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/collation-unsafe": {
-      "cases": 2,
-      "content": "d83814ebe2b5110b",
-      "generator": "9ec410844054756a",
-      "spec": "parity/specs/js/collation-unsafe.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/color": {
-      "cases": 269,
-      "content": "e69f617d0af8da11",
-      "generator": "b534ca88ea8d2b94",
-      "spec": "parity/specs/js/color.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/math": {
-      "cases": 30547,
-      "content": "bc953b36ab0bd1da",
-      "generator": "8e92dceec96f0045",
-      "spec": "parity/specs/js/math.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/math-ops": {
-      "cases": 4386,
-      "content": "8da33629a4276780",
-      "generator": "eebf79253eb54470",
-      "spec": "parity/specs/js/math-ops.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/math-rem/linux-aarch64": {
-      "cases": 980,
-      "content": "5001d446f16a7017",
-      "generator": "d79208c4c90f33a3",
-      "spec": "parity/specs/js/math-rem.fn.json",
-      "zone": "UTC",
-      "generatedOn": "linux-aarch64"
-    },
-    "js/math-rem/macos-aarch64": {
-      "cases": 980,
-      "content": "5001d446f16a7017",
-      "generator": "d79208c4c90f33a3",
-      "spec": "parity/specs/js/math-rem.fn.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/math-rem/windows-aarch64": {
-      "cases": 980,
-      "content": "e02ff52693333343",
-      "generator": "d79208c4c90f33a3",
-      "spec": "parity/specs/js/math-rem.fn.json",
-      "zone": "UTC",
-      "generatedOn": "windows-aarch64"
-    },
-    "js/sort": {
-      "cases": 10000,
-      "content": "37813dd4a2a30954",
-      "generator": "e7d73b0c065da182",
-      "spec": "parity/specs/js/sort.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/time": {
-      "cases": 29,
-      "content": "ef1e569718d27e3a",
-      "generator": "ac3bcad7328c0e6a",
-      "spec": "parity/specs/js/time.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/time-zones/America/Los_Angeles": {
-      "cases": 146,
-      "content": "2580ce5d5f3e42a2",
-      "generator": "ade01c7eade47936",
-      "spec": "parity/specs/js/time-zones.fn.json",
-      "zone": "America/Los_Angeles",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/time-zones/Asia/Kolkata": {
-      "cases": 146,
-      "content": "e0f4993d7a66247e",
-      "generator": "16aa13b92bb1770b",
-      "spec": "parity/specs/js/time-zones.fn.json",
-      "zone": "Asia/Kolkata",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/time-zones/Pacific/Auckland": {
-      "cases": 146,
-      "content": "f114b45007c2414e",
-      "generator": "9b8cc3d02c41a2f6",
-      "spec": "parity/specs/js/time-zones.fn.json",
-      "zone": "Pacific/Auckland",
-      "generatedOn": "macos-aarch64"
-    },
-    "js/time-zones/UTC": {
-      "cases": 146,
-      "content": "eab17d3ef494eb09",
-      "generator": "f2eebf36bc675a4f",
-      "spec": "parity/specs/js/time-zones.fn.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "json/docs": {
-      "cases": 20000,
-      "content": "a7b43de9d1d50a6c",
-      "generator": "ce90ecd5dfa312cb",
-      "spec": "parity/specs/json/docs.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "json/invalid": {
-      "cases": 10000,
-      "content": "2393f89877fc1cad",
-      "generator": "5eb55028c5edda34",
-      "spec": "parity/specs/json/invalid.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "json/values": {
-      "cases": 9039,
-      "content": "e9c6fb788248c26b",
-      "generator": "77f99c5b36ffd14b",
-      "spec": "parity/specs/json/values.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "jstring/case-data": {
-      "cases": 86933,
-      "content": "0a510602f8e9ea46",
-      "generator": "8919cbe3a0650d07",
-      "spec": "parity/specs/jstring/case-data.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "jstring/ops": {
-      "cases": 408,
-      "content": "6fc7fdfcfc585eee",
-      "generator": "f90295a4c0e4243d",
-      "spec": "parity/specs/jstring/ops.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "jstring/utf8": {
-      "cases": 12844,
-      "content": "8e595ceab22ed01c",
-      "generator": "8ddb62f125f051d4",
-      "spec": "parity/specs/jstring/utf8.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/core": {
-      "cases": 2509,
-      "content": "778ae44fe606577c",
-      "generator": "6b30042173114edd",
-      "spec": "parity/specs/log/core.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/field": {
-      "cases": 4000,
-      "content": "b8fd74d1b4a65179",
-      "generator": "d246dd4a1a81a750",
-      "spec": "parity/specs/log/field.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/geometry": {
-      "cases": 179,
-      "content": "efe04e0bfa72c886",
-      "generator": "f520901e23f622c7",
-      "spec": "parity/specs/log/geometry.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/geometry-math": {
-      "cases": 45746,
-      "content": "ed8412b2876a5543",
-      "generator": "c1fb8fc5a941c974",
-      "spec": "parity/specs/log/geometry-math.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/photon": {
-      "cases": 81,
-      "content": "13c35c892c2c7d87",
-      "generator": "5c4dc3f0ef6b3999",
-      "spec": "parity/specs/log/photon.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/proto-renderer": {
-      "cases": 8,
-      "content": "2b67d7217af978f6",
-      "generator": "cae95f8102797e2b",
-      "spec": "parity/specs/log/proto-renderer.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/struct": {
-      "cases": 5,
-      "content": "5b842ffa1a277c13",
-      "generator": "530ff8ce605b7f7d",
-      "spec": "parity/specs/log/struct.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/struct-fuzz": {
-      "cases": 2369,
-      "content": "31b82a923741b434",
-      "generator": "7506050cb5a3a155",
-      "spec": "parity/specs/log/struct-fuzz.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/struct-replay": {
-      "cases": 363,
-      "content": "b247e6a9d54a9c8f",
-      "generator": "58711e631d608777",
-      "spec": "parity/specs/log/struct-replay.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/units": {
-      "cases": 34289,
-      "content": "b1a121bb7b5161a3",
-      "generator": "14c4afcfb6a27691",
-      "spec": "parity/specs/log/units.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/util": {
-      "cases": 7139,
-      "content": "b98e32d82d477de1",
-      "generator": "9ffb3bb15ede2baf",
-      "spec": "parity/specs/log/util.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/util-rem/linux-aarch64": {
-      "cases": 2,
-      "content": "64415ee47e101ad0",
-      "generator": "806566be89262365",
-      "spec": "parity/specs/log/util-rem.fn.json",
-      "zone": "UTC",
-      "generatedOn": "linux-aarch64"
-    },
-    "log/util-rem/macos-aarch64": {
-      "cases": 2,
-      "content": "64415ee47e101ad0",
-      "generator": "806566be89262365",
-      "spec": "parity/specs/log/util-rem.fn.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "log/util-rem/windows-aarch64": {
-      "cases": 2,
-      "content": "779ce0d41fd802be",
-      "generator": "806566be89262365",
-      "spec": "parity/specs/log/util-rem.fn.json",
-      "zone": "UTC",
-      "generatedOn": "windows-aarch64"
-    },
-    "msgpack/decode": {
-      "cases": 7131,
-      "content": "6ef775b5fdf738d5",
-      "generator": "e37a8beb317ee683",
-      "spec": "parity/specs/msgpack/decode.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "msgpack/encode": {
-      "cases": 100193,
-      "content": "b4c663a4660606e0",
-      "generator": "4931e7d497ff6698",
-      "spec": "parity/specs/msgpack/encode.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "msgpack/multi": {
-      "cases": 766,
-      "content": "d1cae0b634ef8bf3",
-      "generator": "c5436ee76d4f0f41",
-      "spec": "parity/specs/msgpack/multi.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "number/numberformat": {
-      "cases": 182,
-      "content": "44a96cd7bef54d21",
-      "generator": "0cc475e7ce56321a",
-      "spec": "parity/specs/number/numberformat.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "number/parse": {
-      "cases": 569,
-      "content": "495136adba4d37f3",
-      "generator": "16c110ec84e8e0d8",
-      "spec": "parity/specs/number/parse.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "number/toexponential": {
-      "cases": 880,
-      "content": "2ab4522ddb392cc2",
-      "generator": "5a71cbfe1f4e63e9",
-      "spec": "parity/specs/number/toexponential.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "number/tofixed": {
-      "cases": 1033,
-      "content": "fa7343e79bca3fb7",
-      "generator": "95f1f6d150425147",
-      "spec": "parity/specs/number/tofixed.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "number/toprecision": {
-      "cases": 1104,
-      "content": "f658c6cab73cb999",
-      "generator": "b95256fc0c9026e6",
-      "spec": "parity/specs/number/toprecision.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "number/tostring": {
-      "cases": 970,
-      "content": "059629bdb39b45e3",
-      "generator": "d49cdf1cba4784f6",
-      "spec": "parity/specs/number/tostring.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "oracle/environment": {
-      "cases": 9,
-      "content": "c81349e4328e1864",
-      "generator": "07ad94ae5277ed07",
-      "spec": "parity/specs/oracle/environment.jsonl",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "oracle/zones/America/Los_Angeles": {
-      "cases": 20,
-      "content": "142943aab1921b94",
-      "generator": "af30057e47f70bf5",
-      "spec": "parity/specs/oracle/zones.fn.json",
-      "zone": "America/Los_Angeles",
-      "generatedOn": "macos-aarch64"
-    },
-    "oracle/zones/Asia/Kolkata": {
-      "cases": 20,
-      "content": "9d6f982b1323735f",
-      "generator": "fa5b6beb51c9a6a6",
-      "spec": "parity/specs/oracle/zones.fn.json",
-      "zone": "Asia/Kolkata",
-      "generatedOn": "macos-aarch64"
-    },
-    "oracle/zones/Pacific/Auckland": {
-      "cases": 20,
-      "content": "fa0a6f3f5b83a239",
-      "generator": "e4eb50ed5f746d2b",
-      "spec": "parity/specs/oracle/zones.fn.json",
-      "zone": "Pacific/Auckland",
-      "generatedOn": "macos-aarch64"
-    },
-    "oracle/zones/UTC": {
-      "cases": 20,
-      "content": "c66de66de1d609b3",
-      "generator": "ddd341ddbe72c464",
-      "spec": "parity/specs/oracle/zones.fn.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "regex/engine": {
-      "cases": 30000,
-      "content": "e40a050ba624ab32",
-      "generator": "74d18691430c3d2d",
-      "spec": "parity/specs/regex/engine.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    },
-    "regex/sites": {
-      "cases": 29428,
-      "content": "094e81eb7469edfa",
-      "generator": "b88886f92c075640",
-      "spec": "parity/specs/regex/sites.entry.json",
-      "zone": "UTC",
-      "generatedOn": "macos-aarch64"
-    }
+    "cve1/identity": {"cases":7,"content":"c50fd3a6eb87c9e4","generator":"2a8b7660099a6000","spec":"parity/specs/cve1/identity.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "cve1/torture": {"cases":471,"content":"3bf51e863655d3d2","generator":"e651a435e12fdd9a","spec":"parity/specs/cve1/torture.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/camera-controls-mac": {"cases":125,"content":"c7d8fe04bfba0a08","generator":"c6a9d2a792eed9fc","spec":"parity/specs/field3d/camera-controls-mac.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/camera-controls-other": {"cases":45,"content":"21e8591091fed7ce","generator":"449ef2c3179d3838","spec":"parity/specs/field3d/camera-controls-other.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/three": {"cases":9460,"content":"df05db1732c3129d","generator":"efcc1edd8b4fdb89","spec":"parity/specs/field3d/three.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/collation": {"cases":5002,"content":"87628654f82c6a0f","generator":"61675d1f332b167e","spec":"parity/specs/js/collation.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/collation-unsafe": {"cases":2,"content":"d83814ebe2b5110b","generator":"513addc503d7a22c","spec":"parity/specs/js/collation-unsafe.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/color": {"cases":269,"content":"e69f617d0af8da11","generator":"8056cae759ece029","spec":"parity/specs/js/color.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/math": {"cases":30547,"content":"bc953b36ab0bd1da","generator":"e432a02624bb18bc","spec":"parity/specs/js/math.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/math-ops": {"cases":4386,"content":"8da33629a4276780","generator":"ddff9187c1b13ffd","spec":"parity/specs/js/math-ops.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/math-rem/linux-aarch64": {"cases":980,"content":"5001d446f16a7017","generator":"14045fb071fbfbb4","spec":"parity/specs/js/math-rem.fn.json","zone":"UTC","generatedOn":"linux-aarch64"},
+    "js/math-rem/macos-aarch64": {"cases":980,"content":"5001d446f16a7017","generator":"14045fb071fbfbb4","spec":"parity/specs/js/math-rem.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/math-rem/windows-aarch64": {"cases":980,"content":"e02ff52693333343","generator":"14045fb071fbfbb4","spec":"parity/specs/js/math-rem.fn.json","zone":"UTC","generatedOn":"windows-aarch64"},
+    "js/sort": {"cases":10000,"content":"37813dd4a2a30954","generator":"e8f9e5117bbe7562","spec":"parity/specs/js/sort.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/time": {"cases":29,"content":"ef1e569718d27e3a","generator":"6a7b15b7ed671d2b","spec":"parity/specs/js/time.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/time-zones/America/Los_Angeles": {"cases":146,"content":"2580ce5d5f3e42a2","generator":"03cfa8010f966f2d","spec":"parity/specs/js/time-zones.fn.json","zone":"America/Los_Angeles","generatedOn":"macos-aarch64"},
+    "js/time-zones/Asia/Kolkata": {"cases":146,"content":"e0f4993d7a66247e","generator":"c192c6c3bb5be0ee","spec":"parity/specs/js/time-zones.fn.json","zone":"Asia/Kolkata","generatedOn":"macos-aarch64"},
+    "js/time-zones/Pacific/Auckland": {"cases":146,"content":"f114b45007c2414e","generator":"5494e1dc7ac590d3","spec":"parity/specs/js/time-zones.fn.json","zone":"Pacific/Auckland","generatedOn":"macos-aarch64"},
+    "js/time-zones/UTC": {"cases":146,"content":"eab17d3ef494eb09","generator":"1498068bdb89a63c","spec":"parity/specs/js/time-zones.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "json/docs": {"cases":20000,"content":"a7b43de9d1d50a6c","generator":"fa0bf6c93738ba3b","spec":"parity/specs/json/docs.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "json/invalid": {"cases":10000,"content":"2393f89877fc1cad","generator":"25d47ba5c4f74e44","spec":"parity/specs/json/invalid.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "json/values": {"cases":9039,"content":"e9c6fb788248c26b","generator":"06806dffb929eedb","spec":"parity/specs/json/values.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "jstring/case-data": {"cases":86933,"content":"0a510602f8e9ea46","generator":"42b7109b0bfa19d0","spec":"parity/specs/jstring/case-data.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "jstring/ops": {"cases":408,"content":"6fc7fdfcfc585eee","generator":"657dc3d03d12e138","spec":"parity/specs/jstring/ops.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "jstring/utf8": {"cases":12844,"content":"8e595ceab22ed01c","generator":"e571c9af83e0c4ca","spec":"parity/specs/jstring/utf8.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "live/base": {"cases":408,"content":"ac8ad6d3b797cfcd","generator":"99aa55e7e4cd87ec","spec":"parity/specs/live/base.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/core": {"cases":2509,"content":"778ae44fe606577c","generator":"e9e560acdbcd43cf","spec":"parity/specs/log/core.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/field": {"cases":4000,"content":"b8fd74d1b4a65179","generator":"d92c701d71e4c2cf","spec":"parity/specs/log/field.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/geometry": {"cases":179,"content":"efe04e0bfa72c886","generator":"7a4329d5d101a5e3","spec":"parity/specs/log/geometry.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/geometry-math": {"cases":45746,"content":"ed8412b2876a5543","generator":"4f2789364226f4ad","spec":"parity/specs/log/geometry-math.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/photon": {"cases":81,"content":"13c35c892c2c7d87","generator":"cb9ac245532e17dd","spec":"parity/specs/log/photon.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/proto-renderer": {"cases":8,"content":"2b67d7217af978f6","generator":"eefa94d5ea11c634","spec":"parity/specs/log/proto-renderer.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/struct": {"cases":5,"content":"5b842ffa1a277c13","generator":"2b33ce62dff388c8","spec":"parity/specs/log/struct.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/struct-fuzz": {"cases":2369,"content":"31b82a923741b434","generator":"8cf261e17b9dec4d","spec":"parity/specs/log/struct-fuzz.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/struct-replay": {"cases":363,"content":"b247e6a9d54a9c8f","generator":"2a74c9c838179caf","spec":"parity/specs/log/struct-replay.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/units": {"cases":34289,"content":"b1a121bb7b5161a3","generator":"4245a1ccf205ac7c","spec":"parity/specs/log/units.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/util": {"cases":7139,"content":"b98e32d82d477de1","generator":"2c52abce4dc8d13e","spec":"parity/specs/log/util.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/util-rem/linux-aarch64": {"cases":2,"content":"64415ee47e101ad0","generator":"683a224b4722a4d6","spec":"parity/specs/log/util-rem.fn.json","zone":"UTC","generatedOn":"linux-aarch64"},
+    "log/util-rem/macos-aarch64": {"cases":2,"content":"64415ee47e101ad0","generator":"683a224b4722a4d6","spec":"parity/specs/log/util-rem.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/util-rem/windows-aarch64": {"cases":2,"content":"779ce0d41fd802be","generator":"683a224b4722a4d6","spec":"parity/specs/log/util-rem.fn.json","zone":"UTC","generatedOn":"windows-aarch64"},
+    "model/prefs": {"cases":7175,"content":"f5f9b2e3aede6d0e","generator":"2f003093f686ac9f","spec":"parity/specs/model/prefs.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "model/schemas": {"cases":64,"content":"ce7261fcb98bd505","generator":"446a55de9060cdaa","spec":"parity/specs/model/schemas.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "msgpack/decode": {"cases":7131,"content":"6ef775b5fdf738d5","generator":"d7b404f17ffc7e18","spec":"parity/specs/msgpack/decode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "msgpack/encode": {"cases":100193,"content":"b4c663a4660606e0","generator":"c657cea299166933","spec":"parity/specs/msgpack/encode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "msgpack/multi": {"cases":766,"content":"d1cae0b634ef8bf3","generator":"a00ff161660540de","spec":"parity/specs/msgpack/multi.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/numberformat": {"cases":182,"content":"44a96cd7bef54d21","generator":"d8d98ad1eebc099b","spec":"parity/specs/number/numberformat.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/parse": {"cases":569,"content":"495136adba4d37f3","generator":"695eb94ce1c3fa0d","spec":"parity/specs/number/parse.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/toexponential": {"cases":880,"content":"2ab4522ddb392cc2","generator":"aa46ad7ec6740e4c","spec":"parity/specs/number/toexponential.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/tofixed": {"cases":1033,"content":"fa7343e79bca3fb7","generator":"eabc0de9ed99536e","spec":"parity/specs/number/tofixed.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/toprecision": {"cases":1104,"content":"f658c6cab73cb999","generator":"d0e1eead17ce9a77","spec":"parity/specs/number/toprecision.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/tostring": {"cases":970,"content":"059629bdb39b45e3","generator":"659e183d72975a2f","spec":"parity/specs/number/tostring.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "oracle/environment": {"cases":9,"content":"c81349e4328e1864","generator":"20e2683b49e7cf82","spec":"parity/specs/oracle/environment.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "oracle/zones/America/Los_Angeles": {"cases":20,"content":"142943aab1921b94","generator":"1f92dc284fefa9b2","spec":"parity/specs/oracle/zones.fn.json","zone":"America/Los_Angeles","generatedOn":"macos-aarch64"},
+    "oracle/zones/Asia/Kolkata": {"cases":20,"content":"9d6f982b1323735f","generator":"f190c3a6835c51f7","spec":"parity/specs/oracle/zones.fn.json","zone":"Asia/Kolkata","generatedOn":"macos-aarch64"},
+    "oracle/zones/Pacific/Auckland": {"cases":20,"content":"fa0a6f3f5b83a239","generator":"d888ec71f1d761f2","spec":"parity/specs/oracle/zones.fn.json","zone":"Pacific/Auckland","generatedOn":"macos-aarch64"},
+    "oracle/zones/UTC": {"cases":20,"content":"c66de66de1d609b3","generator":"6ebc5c0a42a4b323","spec":"parity/specs/oracle/zones.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "regex/engine": {"cases":30000,"content":"e40a050ba624ab32","generator":"65f65355c900232d","spec":"parity/specs/regex/engine.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "regex/sites": {"cases":29428,"content":"094e81eb7469edfa","generator":"a9ad53bdb1fb3c40","spec":"parity/specs/regex/sites.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "spark/2025": {"cases":101233,"content":"1e1e04e36553bdd4","generator":"89696499ede0de77","spec":"parity/specs/spark/2025.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "spark/2026": {"cases":101387,"content":"63d71ee55046d700","generator":"26bac087029d339c","spec":"parity/specs/spark/2026.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }
 }

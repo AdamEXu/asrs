@@ -1,0 +1,11 @@
+{
+  "electron": "39.2.7",
+  "chrome": "142.0.7444.235",
+  "platform": "darwin",
+  "arch": "arm64",
+  "osRelease": "27.3.0",
+  "generator": "aff568587c9c1192",
+  "file": "boxes-macos.jsonl.zst",
+  "cases": 194,
+  "content": "46fecaa831b9d627"
+}
