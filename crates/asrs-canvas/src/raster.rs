@@ -618,22 +618,25 @@ impl<'a> Raster<'a> {
         });
     }
 
-    /// Fills a device-space path. `skia_points` is the point count Skia's own path would have,
-    /// which picks its scan converter; `None` means a rect frame, which Skia covers exactly.
-    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, skia_points: Option<usize>) {
+    /// Fills a device-space path. `skia_like` approximates the points of the device path Skia
+    /// itself would fill, which picks its scan converter; `None` means a rect frame, which
+    /// Skia covers exactly.
+    fn fill_device(
+        &mut self,
+        path: &tiny_skia::Path,
+        fill: &Fill,
+        skia_like: Option<&tiny_skia::Path>,
+    ) {
         let Some(source) = self.source(fill, 256) else {
             return;
         };
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        let analytic = skia_points.is_none_or(|n| scan::should_use_analytic(path, n));
-        let coverage = if analytic {
-            if skia_points.is_some() {
+        let coverage = match skia_like {
+            None => scan::rasterize(path, w, h),
+            Some(skia_like) if scan::should_use_analytic(path, skia_like) => {
                 scan::rasterize_analytic(path, w, h)
-            } else {
-                scan::rasterize(path, w, h)
             }
-        } else {
-            scan::rasterize_supersampled(path, w, h)
+            Some(_) => scan::rasterize_supersampled(path, w, h),
         };
         if let Some(coverage) = coverage {
             self.paint(&coverage, &source);
@@ -645,10 +648,11 @@ impl<'a> Raster<'a> {
             return;
         }
         let ctm = self.state.transform;
-        if let Some(path) = self.path.to_skia(Some(&ctm), CONIC_TOLERANCE) {
+        let device = self.path.to_skia(Some(&ctm), CONIC_TOLERANCE);
+        let skia_like = self.path.to_skia(Some(&ctm), f32::INFINITY);
+        if let (Some(device), Some(skia_like)) = (device, skia_like) {
             let fill = self.state.fill.clone();
-            let points = self.path.skia_point_count();
-            self.fill_device(&path, &fill, Some(points));
+            self.fill_device(&device, &fill, Some(&skia_like));
         }
     }
 
@@ -722,18 +726,23 @@ impl<'a> Raster<'a> {
         let Some(outline) = stroke_outline(&user, &style, res_scale) else {
             return;
         };
+        let Some(device) = outline.transform(ctm) else {
+            return;
+        };
         // Skia strokes conics directly, so its outline is about as dense as stroking one quad
         // per conic; the finely split quads drawn here would overstate it.
-        let points = if path.has_conics() {
+        let skia_like = if path.has_conics() {
             path.to_skia(None, f32::INFINITY)
                 .and_then(|coarse| stroke_outline(&coarse, &style, res_scale))
-                .map_or(outline.points().len(), |p| p.points().len())
+                .and_then(|coarse| coarse.transform(ctm))
         } else {
-            outline.points().len()
+            None
         };
-        if let Some(device) = outline.transform(ctm) {
-            self.fill_device(&device, &stroke, Some(points));
-        }
+        self.fill_device(
+            &device,
+            &stroke,
+            Some(skia_like.as_ref().unwrap_or(&device)),
+        );
     }
 
     fn stroke_current_path(&mut self) {

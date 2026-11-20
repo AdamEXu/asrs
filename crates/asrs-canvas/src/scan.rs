@@ -408,13 +408,14 @@ fn is_rect(path: &tiny_skia::Path) -> bool {
 }
 
 /// Skia's `ShouldUseAAA`: rects and paths with few points for their size get analytic coverage;
-/// denser paths (dashes, round caps, long polylines) go to the 4x supersampler.
-pub fn should_use_analytic(path: &tiny_skia::Path, skia_points: usize) -> bool {
+/// denser paths (dashes, round caps, long polylines) go to the 4x supersampler. `skia_like`
+/// holds about as many points as the device path Skia itself would fill.
+pub fn should_use_analytic(path: &tiny_skia::Path, skia_like: &tiny_skia::Path) -> bool {
     if is_rect(path) {
         return true;
     }
     let b = path.bounds();
-    (skia_points as f32) < b.width().max(b.height()) / 2.0 - 10.0
+    (skia_like.points().len() as f32) < b.width().max(b.height()) / 2.0 - 10.0
 }
 
 /// Skia's supersampling scan converter (`SkScan_AntiPath`), which tiny-skia ports.
