@@ -20,10 +20,7 @@ fn hex_bytes(json: &Json) -> Result<Vec<u8>, String> {
         return Err("odd hex length".to_owned());
     }
     (0..text.len() / 2)
-        .map(|i| {
-            u8::from_str_radix(&text[2 * i..2 * i + 2], 16)
-                .map_err(|e| format!("hex: {e}"))
-        })
+        .map(|i| u8::from_str_radix(&text[2 * i..2 * i + 2], 16).map_err(|e| format!("hex: {e}")))
         .collect()
 }
 
@@ -33,8 +30,11 @@ fn compare(actual: &Json, expected: &Json, at: &str) -> Result<(), String> {
     }
     Err(format!(
         "{at}: {}",
-        diff::report(&Value::from_json_lenient(expected), &Value::from_json_lenient(actual))
-            .unwrap_or_else(|| "values differ".to_owned())
+        diff::report(
+            &Value::from_json_lenient(expected),
+            &Value::from_json_lenient(actual)
+        )
+        .unwrap_or_else(|| "values differ".to_owned())
     ))
 }
 
@@ -72,12 +72,11 @@ fn public_logs_dir() -> PathBuf {
         return PathBuf::from(dir).join("public-logs");
     }
     let target = root.join("target");
-    if target.is_symlink() {
-        if let Ok(real) = fs::canonicalize(&target) {
-            if let Some(parent) = real.parent() {
-                return parent.join("cache").join("public-logs");
-            }
-        }
+    if target.is_symlink()
+        && let Ok(real) = fs::canonicalize(&target)
+        && let Some(parent) = real.parent()
+    {
+        return parent.join("cache").join("public-logs");
     }
     target.join("cache").join("public-logs")
 }
@@ -97,9 +96,7 @@ fn compare_blocks(actual: &Json, expected: &Json, data: &[u8], case: &str) -> Re
     };
     let expected_str = expected_str.to_string_lossy();
     for (i, digest) in blocks.iter().enumerate() {
-        let expected = expected_str
-            .get(16 * i..16 * i + 16)
-            .unwrap_or("<missing>");
+        let expected = expected_str.get(16 * i..16 * i + 16).unwrap_or("<missing>");
         if digest != expected {
             let first = i * 512;
             return Err(format!(
@@ -126,7 +123,10 @@ record_vectors!(public, "wpilog/public", |record: &Record| {
         .ok_or_else(|| format!("{case}: no file"))?;
     let path = public_logs_dir().join(&file);
     let data = fs::read(&path).map_err(|e| {
-        format!("{case}: {}: {e} (fetch with `cargo xtask corpus fetch`)", path.display())
+        format!(
+            "{case}: {}: {e} (fetch with `cargo xtask corpus fetch`)",
+            path.display()
+        )
     })?;
     let size = info.get("size").and_then(Json::as_f64).unwrap_or(-1.0);
     if data.len() as f64 != size {

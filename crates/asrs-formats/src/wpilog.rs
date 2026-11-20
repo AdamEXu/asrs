@@ -1,8 +1,8 @@
 //! Port of `src/hub/dataSources/wpilog/WPILOGDecoder.ts`, `WPILOGShared.ts` and
 //! `indexer/wpilogIndexer.c`.
 
-use asrs_js::string::encoding::TextDecoder;
 use asrs_js::string::JsString;
+use asrs_js::string::encoding::TextDecoder;
 
 pub const HEADER_STRING: &[u8; 6] = b"WPILOG";
 pub const HEADER_VERSION: u16 = 0x0100;
@@ -150,35 +150,41 @@ impl<'a> WpilogRecord<'a> {
     }
 
     pub fn integer_array(&self) -> Result<Vec<f64>, WpilogError> {
-        if self.data.len() % 8 != 0 {
+        if !self.data.len().is_multiple_of(8) {
             return Err(WpilogError::Message("Not an integer array"));
         }
         Ok(self
             .data
-            .chunks_exact(8)
-            .map(|c| i64::from_le_bytes(c.try_into().unwrap()) as f64)
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&c| i64::from_le_bytes(c) as f64)
             .collect())
     }
 
     pub fn float_array(&self) -> Result<Vec<f64>, WpilogError> {
-        if self.data.len() % 4 != 0 {
+        if !self.data.len().is_multiple_of(4) {
             return Err(WpilogError::Message("Not a float array"));
         }
         Ok(self
             .data
-            .chunks_exact(4)
-            .map(|c| f64::from(f32::from_le_bytes(c.try_into().unwrap())))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&c| f64::from(f32::from_le_bytes(c)))
             .collect())
     }
 
     pub fn double_array(&self) -> Result<Vec<f64>, WpilogError> {
-        if self.data.len() % 8 != 0 {
+        if !self.data.len().is_multiple_of(8) {
             return Err(WpilogError::Message("Not a double array"));
         }
         Ok(self
             .data
-            .chunks_exact(8)
-            .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|&c| f64::from_le_bytes(c))
             .collect())
     }
 
@@ -270,8 +276,7 @@ impl<'a> WpilogDecoder<'a> {
         if !self.is_valid() {
             return Err(WpilogError::Message("Log is not valid"));
         }
-        let extra_header_size =
-            u32::from_le_bytes(self.data[8..12].try_into().unwrap()) as usize;
+        let extra_header_size = u32::from_le_bytes(self.data[8..12].try_into().unwrap()) as usize;
         let mut position = 12 + extra_header_size;
         loop {
             let Some((record, size)) = self.record_at(position) else {
@@ -489,9 +494,7 @@ mod tests {
         let mut count = 0;
         decoder.for_each(|_, _| count += 1).unwrap();
         assert_eq!(count, 3);
-        assert!(WpilogDecoder::new(b"bad")
-            .for_each(|_, _| {})
-            .is_err());
+        assert!(WpilogDecoder::new(b"bad").for_each(|_, _| {}).is_err());
     }
 
     #[test]
@@ -545,10 +548,7 @@ mod tests {
         let decoder = WpilogDecoder::new(&data);
         let (b, s1) = decoder.record_at(12).unwrap();
         assert_eq!(b.boolean(), Ok(true));
-        assert_eq!(
-            b.integer(),
-            Err(WpilogError::Message("Not an integer"))
-        );
+        assert_eq!(b.integer(), Err(WpilogError::Message("Not an integer")));
         let (i, s2) = decoder.record_at(12 + s1).unwrap();
         assert_eq!(i.integer(), Ok(-5.0));
         let (d, s3) = decoder.record_at(12 + s1 + s2).unwrap();
@@ -586,7 +586,12 @@ mod tests {
         let mut data = header(b"");
         data.extend_from_slice(&record(1, 0, &[7]));
         data.extend_from_slice(&record(2, 0, &[9]));
-        for cut in [data.len() - 1, data.len() - 2, data.len() - 3, data.len() - 4] {
+        for cut in [
+            data.len() - 1,
+            data.len() - 2,
+            data.len() - 3,
+            data.len() - 4,
+        ] {
             let index = index(&data[..cut]).unwrap();
             assert_eq!(index.records.len(), 1);
         }

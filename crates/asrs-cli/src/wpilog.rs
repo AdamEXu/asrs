@@ -1,9 +1,7 @@
 //! JSON conversion for the wpilog oracle vectors; all reader and indexer logic
 //! lives in `asrs_formats::wpilog`.
 
-use asrs_formats::wpilog::{
-    self, CONTROL_ENTRY, WpilogDecoder, WpilogError, WpilogRecord,
-};
+use asrs_formats::wpilog::{self, CONTROL_ENTRY, WpilogDecoder, WpilogError, WpilogRecord};
 use asrs_js::string::JsString;
 use asrs_parity::{Json, Utf16String};
 
@@ -59,27 +57,31 @@ fn getter_json(record: &WpilogRecord<'_>) -> Json {
         ),
         (
             "integerArray",
-            attempt(|| record.integer_array(), |a| {
-                Json::Array(a.into_iter().map(num).collect())
-            }),
+            attempt(
+                || record.integer_array(),
+                |a| Json::Array(a.into_iter().map(num).collect()),
+            ),
         ),
         (
             "floatArray",
-            attempt(|| record.float_array(), |a| {
-                Json::Array(a.into_iter().map(num).collect())
-            }),
+            attempt(
+                || record.float_array(),
+                |a| Json::Array(a.into_iter().map(num).collect()),
+            ),
         ),
         (
             "doubleArray",
-            attempt(|| record.double_array(), |a| {
-                Json::Array(a.into_iter().map(num).collect())
-            }),
+            attempt(
+                || record.double_array(),
+                |a| Json::Array(a.into_iter().map(num).collect()),
+            ),
         ),
         (
             "stringArray",
-            attempt(|| record.string_array(), |a| {
-                Json::Array(a.into_iter().map(text).collect())
-            }),
+            attempt(
+                || record.string_array(),
+                |a| Json::Array(a.into_iter().map(text).collect()),
+            ),
         ),
     ])
 }
@@ -125,19 +127,17 @@ fn control_json(record: &WpilogRecord<'_>) -> Json {
     )])
 }
 
-pub fn record_json(
-    record: &WpilogRecord<'_>,
-    position: u32,
-    size: usize,
-    getters: bool,
-) -> Json {
+pub fn record_json(record: &WpilogRecord<'_>, position: u32, size: usize, getters: bool) -> Json {
     let mut pairs = vec![
         ("p".into(), Json::Number(f64::from(position))),
         ("e".into(), Json::Number(f64::from(record.entry()))),
         ("t".into(), num(record.timestamp())),
         ("s".into(), Json::Number(size as f64)),
         ("c".into(), control_json(record)),
-        ("d".into(), Json::object([("b", Json::string(&hex(&record.raw())))])),
+        (
+            "d".into(),
+            Json::object([("b", Json::string(&hex(&record.raw())))]),
+        ),
     ];
     if getters {
         pairs.push(("g".into(), getter_json(record)));
@@ -188,9 +188,7 @@ pub fn summary(data: &[u8]) -> Json {
             let records: Vec<Json> = indexed
                 .records
                 .iter()
-                .map(|&(entry, position)| {
-                    record_at(&decoder, entry, position, true)
-                })
+                .map(|&(entry, position)| record_at(&decoder, entry, position, true))
                 .collect();
             pairs.push((
                 "index".into(),
@@ -220,12 +218,7 @@ pub fn summary(data: &[u8]) -> Json {
     Json::Object(pairs)
 }
 
-fn record_at(
-    decoder: &WpilogDecoder<'_>,
-    entry: u32,
-    position: u32,
-    getters: bool,
-) -> Json {
+fn record_at(decoder: &WpilogDecoder<'_>, entry: u32, position: u32, getters: bool) -> Json {
     match decoder.record_at(position as usize) {
         None => Json::object([
             ("p", Json::Number(f64::from(position))),
