@@ -361,3 +361,5 @@
 {"fn":"shared/util:htmlEncode","args":["plain"]}
 {"fn":"shared/util:htmlEncode","args":["&amp;"]}
 {"fn":"shared/util:htmlEncode","args":[" x "]}
+{"fn":"String.prototype.padStart","args":["x",{"n": "41bfffffe9000000"},""]}
+{"fn":"String.prototype.padEnd","args":["x",{"n": "7ff0000000000000"},""]}

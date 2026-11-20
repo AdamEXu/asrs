@@ -310,13 +310,13 @@ impl JsString {
         if target <= self.0.len() {
             return Ok(self.clone());
         }
-        if target > MAX_STRING_LENGTH {
-            return Err(JsError::range("Invalid string length"));
-        }
         let space = JsString::from_units(vec![0x20]);
         let filler = fill.unwrap_or(&space);
         if filler.0.is_empty() {
             return Ok(self.clone());
+        }
+        if target > MAX_STRING_LENGTH {
+            return Err(JsError::range("Invalid string length"));
         }
         let needed = target - self.0.len();
         let mut padding = Vec::with_capacity(needed);
