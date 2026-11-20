@@ -7,9 +7,7 @@ use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::text::probe::Probe;
-use asrs_ui::text::{
-    Align, Direction, FontSpec, LineHeight, Overflow, Text, TextStyle, WhiteSpace, snap_remainder,
-};
+use asrs_ui::text::{Text, TextStyle, snap_remainder};
 use gpui_kit::{
     AppContext, Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb, size,
 };
@@ -57,37 +55,16 @@ fn hex(s: &str) -> u32 {
 }
 
 fn style(b: &Json) -> TextStyle {
-    let mut s = TextStyle::new(FontSpec::parse(&text(b, "font")).expect("font"));
-    let lh = text(b, "lineHeight");
-    s.line_height = match lh.as_str() {
-        "normal" => LineHeight::Normal,
-        v => match v.strip_suffix("px") {
-            Some(px) => LineHeight::Px(px.parse().expect("line-height px")),
-            None => LineHeight::Number(v.parse().expect("line-height number")),
-        },
-    };
-    s.align = match text(b, "align").as_str() {
-        "left" => Align::Left,
-        "right" => Align::Right,
-        "center" => Align::Center,
-        "end" => Align::End,
-        _ => Align::Start,
-    };
-    s.direction = match text(b, "direction").as_str() {
-        "rtl" => Direction::Rtl,
-        _ => Direction::Ltr,
-    };
-    s.white_space = match text(b, "whiteSpace").as_str() {
-        "pre" => WhiteSpace::Pre,
-        "nowrap" => WhiteSpace::NoWrap,
-        _ => WhiteSpace::Normal,
-    };
-    s.overflow = match text(b, "overflow").as_str() {
-        "clip" => Overflow::Clip,
-        "ellipsis" => Overflow::Ellipsis,
-        _ => Overflow::Visible,
-    };
-    s
+    let keys = [
+        ("font", "font"),
+        ("line-height", "lineHeight"),
+        ("text-align", "align"),
+        ("direction", "direction"),
+        ("white-space", "whiteSpace"),
+        ("text-overflow", "overflow"),
+    ];
+    let values: Vec<(&str, String)> = keys.iter().map(|&(css, k)| (css, text(b, k))).collect();
+    TextStyle::from_css(values.iter().map(|(k, v)| (*k, v.as_str()))).expect("text style")
 }
 
 fn load(path: &Path) -> Scene {

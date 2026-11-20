@@ -91,6 +91,67 @@ impl Style {
             overflow: Overflow::Visible,
         }
     }
+
+    /// A style from CSS declarations: `font` (required), `line-height`, `text-align`,
+    /// `direction`, `white-space` and `text-overflow` (which implies `overflow: hidden`).
+    /// Unknown properties and values are `None`.
+    pub fn from_css<'a>(
+        declarations: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Option<Style> {
+        let mut font = None;
+        let mut style = Style::new(FontSpec::default());
+        for (property, value) in declarations {
+            let value = value.trim();
+            match property {
+                "font" => font = Some(FontSpec::parse(value)?),
+                "line-height" => {
+                    style.line_height = match value {
+                        "normal" => LineHeight::Normal,
+                        v => match v.strip_suffix("px") {
+                            Some(px) => LineHeight::Px(px.parse().ok()?),
+                            None => LineHeight::Number(v.parse().ok()?),
+                        },
+                    }
+                }
+                "text-align" => {
+                    style.align = match value {
+                        "start" => Align::Start,
+                        "end" => Align::End,
+                        "left" => Align::Left,
+                        "right" => Align::Right,
+                        "center" => Align::Center,
+                        _ => return None,
+                    }
+                }
+                "direction" => {
+                    style.direction = match value {
+                        "ltr" => Direction::Ltr,
+                        "rtl" => Direction::Rtl,
+                        _ => return None,
+                    }
+                }
+                "white-space" => {
+                    style.white_space = match value {
+                        "normal" => WhiteSpace::Normal,
+                        "nowrap" => WhiteSpace::NoWrap,
+                        "pre" => WhiteSpace::Pre,
+                        _ => return None,
+                    }
+                }
+                "text-overflow" => {
+                    style.overflow = match value {
+                        "visible" => Overflow::Visible,
+                        "clip" => Overflow::Clip,
+                        "ellipsis" => Overflow::Ellipsis,
+                        _ => return None,
+                    }
+                }
+                _ => return None,
+            }
+        }
+        style.font = font?;
+        Some(style)
+    }
 }
 
 /// A run of glyphs painted from one origin: a line's text, the part of it an ellipsis leaves,
@@ -702,6 +763,37 @@ mod tests {
 
     fn style(css: &str) -> Style {
         Style::new(FontSpec::parse(css).unwrap())
+    }
+
+    #[test]
+    fn parses_css_declarations() {
+        let s = Style::from_css([
+            ("font", "bold 14px system-ui"),
+            ("line-height", "30px"),
+            ("text-align", "right"),
+            ("direction", "rtl"),
+            ("white-space", "nowrap"),
+            ("text-overflow", "ellipsis"),
+        ])
+        .unwrap();
+        assert_eq!(s.font.weight, 700.0);
+        assert_eq!(s.line_height, LineHeight::Px(30.0));
+        assert_eq!(
+            (s.align, s.direction, s.white_space, s.overflow),
+            (
+                Align::Right,
+                Direction::Rtl,
+                WhiteSpace::NoWrap,
+                Overflow::Ellipsis
+            )
+        );
+        let one = Style::from_css([("font", "11px system-ui"), ("line-height", "1")]).unwrap();
+        assert_eq!(one.line_height, LineHeight::Number(1.0));
+        assert_eq!(Style::from_css([("line-height", "1")]), None);
+        assert_eq!(
+            Style::from_css([("font", "12px serif"), ("color", "red")]),
+            None
+        );
     }
 
     #[test]
