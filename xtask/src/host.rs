@@ -46,9 +46,9 @@ commands on a host (cargo xtask host <name> ...):
                           as `host` in parity/vectors/canvas/<os>.json
   check                   the X01 exit criteria: sync, setup (selftest and smoke), selftest,
                           smoke, `oracle gen --check` (in the desktop session: the proto-renderer
-                          vector opens a BrowserWindow), `host local gui-check` (host description,
-                          colour patches at 1x and 2x, real app launch), the S1 spike window, then
-                          fetch target/parity/host
+                          vector opens a BrowserWindow), a workspace build, `host local
+                          gui-check` (host description, colour patches at 1x and 2x, real app
+                          launch), the S1 spike window, then fetch target/parity/host
 
 commands on the machine itself (cargo xtask host local ...):
   describe [--manifest]   write target/parity/host/host.json: OS, Electron, displays, theme,
@@ -611,10 +611,11 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
         self.sync(paths)?;
         self.run(&self.setup_command())?;
         let s1_build = "cargo build --release --manifest-path spikes/s1-gpui-shell/Cargo.toml";
-        let steps: [(&str, bool, &str); 6] = [
+        let steps: [(&str, bool, &str); 7] = [
             ("selftest", false, "cargo xtask oracle selftest"),
             ("smoke", false, "cargo xtask oracle smoke"),
             ("gen --check", true, "cargo xtask oracle gen --check"),
+            ("port build", false, "cargo build --workspace --all-targets"),
             ("gui-check", true, "cargo xtask host local gui-check"),
             ("s1 build", false, s1_build),
             ("s1 window", true, "cargo xtask host local s1"),
