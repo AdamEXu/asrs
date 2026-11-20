@@ -7,7 +7,6 @@ use asrs_log::log::{Log, LogError};
 pub enum SchemaError {
     /// The parser threw. The worker catches it, so only the writes made before the throw remain.
     Threw,
-    /// A `Log` write ended the way `LogError` describes.
     Log(LogError),
 }
 
@@ -26,7 +25,6 @@ pub fn get(_type: &JsString) -> Option<SchemaParser> {
     None
 }
 
-/// Registered names whose parser is not ported yet.
 pub fn unported() -> impl Iterator<Item = &'static str> {
     NAMES
         .into_iter()
