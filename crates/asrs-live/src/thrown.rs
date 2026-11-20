@@ -6,6 +6,7 @@ use std::fmt;
 
 use asrs_js::json::JsonError;
 use asrs_js::string::{JsError, JsString};
+use asrs_log::log::LogError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Thrown(pub JsString);
@@ -43,5 +44,15 @@ impl From<JsonError> for Thrown {
         let mut text = JsString::from(format!("{}: ", e.name));
         text.push_str(&e.message);
         Thrown(text)
+    }
+}
+
+impl From<LogError> for Thrown {
+    fn from(e: LogError) -> Self {
+        match e {
+            LogError::Proto(e) => Thrown::error(e.js_name(), e.js_message().to_string_lossy()),
+            LogError::NeverCompletes => Thrown::new("upstream never completes"),
+            LogError::Unmodeled(what) => Thrown::new(what),
+        }
     }
 }
