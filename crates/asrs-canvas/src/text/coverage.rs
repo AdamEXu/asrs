@@ -44,7 +44,7 @@ pub fn render_coverage(
             } => {
                 let shaped = backend.shape(&font, text);
                 let compress = match max_width {
-                    Some(m) if !(*m > 0.0) || !m.is_finite() => continue,
+                    Some(m) if !m.is_finite() || *m <= 0.0 => continue,
                     Some(m) if shaped.width > *m => m / shaped.width,
                     _ => 1.0,
                 };

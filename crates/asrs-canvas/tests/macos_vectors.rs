@@ -59,7 +59,10 @@ fn s2_corpus_widths_match_chromium() {
             .unwrap();
         let ours = backend.shape(&FontSpec::parse(&font), &text).width;
         let entry = worst.entry(font).or_default();
-        entry.0 = entry.0.max((ours - expected).abs());
+        let error = (ours - expected).abs();
+        if error > entry.0 {
+            entry.0 = error;
+        }
         entry.1 += usize::from((ours / 10.0).ceil() != (expected / 10.0).ceil());
         entry.2 += 1;
     }

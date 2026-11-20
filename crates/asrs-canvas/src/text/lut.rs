@@ -26,7 +26,7 @@ impl MaskGammaLut {
             return None;
         }
         let mut rows = Box::new([[0u8; 256]; ROWS]);
-        for (row, chunk) in rows.iter_mut().zip(bytes.chunks_exact(256)) {
+        for (row, chunk) in rows.iter_mut().zip(bytes.as_chunks::<256>().0) {
             row.copy_from_slice(chunk);
         }
         Some(MaskGammaLut(rows))

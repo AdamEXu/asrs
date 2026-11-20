@@ -31,7 +31,9 @@ pub fn decode_png(bytes: &[u8]) -> Result<Rgba, String> {
     let data = match info.color_type {
         png::ColorType::Rgba => buf,
         png::ColorType::Rgb => buf
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         other => return Err(format!("png: unsupported colour type {other:?}")),
@@ -74,7 +76,9 @@ fn blend(value: u32, alpha: u32, background: u32) -> u8 {
 pub fn composite(image: &Rgba, background: [u8; 3]) -> Rgb {
     let data = image
         .data
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|p| {
             let a = u32::from(p[3]);
             [0, 1, 2].map(|c| blend(u32::from(p[c]), a, u32::from(background[c])))

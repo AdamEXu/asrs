@@ -108,7 +108,7 @@ fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
         let raw = render_coverage(scene.width, scene.height, &scene.ops, backend.as_mut());
         let samples: Vec<(u8, u8)> = raw
             .iter()
-            .zip(chromium.data.chunks_exact(4))
+            .zip(chromium.data.as_chunks::<4>().0)
             .filter(|(r, c)| **r != 0 || c[3] != 0)
             .map(|(&r, c)| (r, c[3]))
             .collect();

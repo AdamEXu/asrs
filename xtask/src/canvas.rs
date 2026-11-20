@@ -310,10 +310,12 @@ fn scene_names(reference: &Path, wanted: &[String]) -> Result<Vec<String>> {
         .map_err(|e| format!("{}: {e}; run `cargo xtask canvas ref` first", dir.display()))?
     {
         let path = entry.map_err(|e| e.to_string())?.path();
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if let Some(name) = name.strip_suffix(".json") {
-                names.push(name.to_owned());
-            }
+        if let Some(name) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_suffix(".json"))
+        {
+            names.push(name.to_owned());
         }
     }
     names.sort();
