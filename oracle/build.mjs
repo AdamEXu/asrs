@@ -126,7 +126,7 @@ function recordInputs(metafile) {
     const name = path.basename(outPath).replace(/\.m?js$/, "");
     const files = new Set(harnessInputs[name] ?? []);
     for (const input of Object.keys(output.inputs)) {
-      if (/^[\w-]+:/.test(input) && !path.isAbsolute(input)) continue;
+      if (/^([\w-]+|\(disabled\)):/.test(input) && !path.isAbsolute(input)) continue;
       const full = fs.realpathSync(path.resolve(here, input));
       const rel = path.relative(realHere, full);
       if (rel.startsWith("..") || path.isAbsolute(rel) || rel.split(path.sep).includes("node_modules")) continue;
@@ -149,7 +149,7 @@ recordInputs(
       platform: "node",
       sourcemap: "linked",
       nodePaths: [path.join(args.upstream, "node_modules")],
-      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream) },
+      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream), __HARNESS_DIR__: JSON.stringify(args.harness) },
       banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; const require = __oracleCreateRequire(import.meta.url);' },
       external: ["electron"],
       plugins: [oraclePlugin],
@@ -187,6 +187,28 @@ for (const [entry, outfile] of [
     ).metafile
   );
 }
+// The DOM harness evaluates the real hub inside a jsdom window, so it is a browser bundle of
+// upstream sources with the WebGL-only 3D renderer replaced by a stub.
+const field3dStub = {
+  name: "field3d-stub",
+  setup(build) {
+    build.onResolve({ filter: /\/Field3dRendererImpl$/ }, () => ({ path: path.join(here, "src/dom/field3dStub.ts") }));
+  }
+};
+recordInputs(
+  (
+    await esbuild.build({
+      ...common,
+      entryPoints: [path.join(here, "src/dom/page.ts")],
+      outfile: path.join(args.out, "domPage.js"),
+      format: "iife",
+      platform: "browser",
+      nodePaths: [path.join(args.upstream, "node_modules")],
+      plugins: [field3dStub, oraclePlugin],
+      logOverride: { "direct-eval": "silent", "equals-negative-zero": "silent" }
+    })
+  ).metafile
+);
 fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
 fs.writeFileSync(
   path.join(args.out, "canvasPage.html"),
@@ -198,7 +220,8 @@ fs.writeFileSync(
 // inputs, so `oracle gen` invalidates its vectors when they change.
 const runtimeLoads = {
   protoRenderer: ["rendererMain", "rendererPage", "src/renderer/renderer.html"],
-  canvasMain: ["canvasPage"]
+  canvasMain: ["canvasPage"],
+  dom: ["domPage"]
 };
 const inputs = {};
 for (const name of entries) {

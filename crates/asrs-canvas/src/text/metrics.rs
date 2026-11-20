@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+use asrs_js::value::JsValue;
 
 use super::layout::shape;
 use super::{
@@ -137,21 +139,68 @@ pub fn text_state(calls: &[Call]) -> (FontSpec, String, String) {
     state
 }
 
-/// A deterministic stand-in for a platform font, shared with the oracle's recording canvas so
-/// painters that lay out by `measureText` produce identical traces on both sides. Advances per
-/// UTF-16 code unit, in em: 0.25 for space, `.`, `,` and `:`, 0.55 for ASCII digits, 0.6 for
-/// anything else. Every non-space code unit inks `[0, -0.7em, advance, 0.2em]`. Ascent is
-/// `round(0.8em)`, descent `round(0.2em)`, with no typo metrics. It draws nothing.
+/// A deterministic stand-in for a platform font, shared with the oracle's recording canvas
+/// (`oracle/src/dom/recordingCanvas.ts`) so painters that lay out by `measureText` produce
+/// identical traces on both sides. Both read `oracle/src/canvas/fixedAdvance.json`: advances
+/// per UTF-16 code unit in em, the first matching `[first, last, em]` range or else
+/// `defaultAdvance`; every code unit not in `blank` inks `[0, inkTop, advance, inkBottom]` em;
+/// ascent is `round(ascent em)`, descent `round(descent em)`, with no typo metrics. It draws
+/// nothing.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FixedAdvance;
 
+struct AdvanceTable {
+    ranges: Vec<(u16, u16, f32)>,
+    default: f32,
+    blank: Vec<u16>,
+    ascent: f32,
+    descent: f32,
+    ink_top: f32,
+    ink_bottom: f32,
+}
+
+static TABLE_SOURCE: &str = include_str!("../../../../oracle/src/canvas/fixedAdvance.json");
+
+fn table() -> &'static AdvanceTable {
+    static TABLE: OnceLock<AdvanceTable> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let json = asrs_js::json::parse_str(TABLE_SOURCE).expect("fixedAdvance.json parses");
+        let number = |v: &JsValue| v.as_f64().expect("fixedAdvance.json holds numbers");
+        let field = |key: &str| {
+            json.get(key)
+                .unwrap_or_else(|| panic!("fixedAdvance.json has no {key}"))
+        };
+        let list = |key: &str| field(key).as_array().unwrap_or_default();
+        AdvanceTable {
+            ranges: list("advances")
+                .iter()
+                .map(|range| {
+                    let range = range.as_array().unwrap_or_default();
+                    (
+                        number(&range[0]) as u16,
+                        number(&range[1]) as u16,
+                        number(&range[2]) as f32,
+                    )
+                })
+                .collect(),
+            default: number(field("defaultAdvance")) as f32,
+            blank: list("blank").iter().map(|u| number(u) as u16).collect(),
+            ascent: number(field("ascent")) as f32,
+            descent: number(field("descent")) as f32,
+            ink_top: number(field("inkTop")) as f32,
+            ink_bottom: number(field("inkBottom")) as f32,
+        }
+    })
+}
+
 impl FixedAdvance {
     fn advance(unit: u16) -> f32 {
-        match unit {
-            0x20 | 0x2c | 0x2e | 0x3a => 0.25,
-            0x30..=0x39 => 0.55,
-            _ => 0.6,
-        }
+        let table = table();
+        table
+            .ranges
+            .iter()
+            .find(|(first, last, _)| (*first..=*last).contains(&unit))
+            .map_or(table.default, |(_, _, em)| *em)
     }
 }
 
@@ -174,9 +223,10 @@ impl TextBackend for FixedAdvance {
     }
 
     fn metrics(&mut self, font: &FontSpec) -> FontMetrics {
+        let table = table();
         FontMetrics {
-            ascent: (font.size * 0.8 + 0.5).floor(),
-            descent: (font.size * 0.2 + 0.5).floor(),
+            ascent: (font.size * table.ascent + 0.5).floor(),
+            descent: (font.size * table.descent + 0.5).floor(),
             line_gap: 0.0,
             typo: None,
         }
@@ -184,15 +234,16 @@ impl TextBackend for FixedAdvance {
 
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
         let unit = glyph.id as u16;
-        if unit == 0x20 {
+        let table = table();
+        if table.blank.contains(&unit) {
             return None;
         }
         let size = f32::from_bits(glyph.face);
         Some(Bounds {
             left: 0.0,
-            top: -0.7 * size,
+            top: table.ink_top * size,
             right: Self::advance(unit) * size,
-            bottom: 0.2 * size,
+            bottom: table.ink_bottom * size,
         })
     }
 
