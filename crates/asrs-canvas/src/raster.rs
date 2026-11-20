@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
-    FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
+    FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
     Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
 };
 
@@ -732,6 +732,11 @@ impl<'a> Raster<'a> {
                 if x0 == x1 && y0 == y1 {
                     return None;
                 }
+                if coverage_scale >= 256 && alpha >= 1.0 && s.iter().all(|c| c.1.a >= 1.0) {
+                    if let Some(p) = self.dithered_linear([*x0, *y0, *x1, *y1], s) {
+                        return Some(Source::Device(p));
+                    }
+                }
                 LinearGradient::new(
                     point(*x0, *y0),
                     point(*x1, *y1),
@@ -777,6 +782,44 @@ impl<'a> Raster<'a> {
                     .map(Source::Device)
             }
         }
+    }
+
+    /// Chromium's CPU canvas ordered-dithers opaque gradient fills: each channel packs as
+    /// `floor(v * 255 + (BAYER[x & 7][y & 7] + 0.5) / 64)` over device coordinates.
+    fn dithered_linear(&self, g: [f64; 4], stops: &[(f32, Rgba)]) -> Option<Pixmap> {
+        const BAYER: [[u8; 8]; 8] = [
+            [0, 32, 8, 40, 2, 34, 10, 42],
+            [48, 16, 56, 24, 50, 18, 58, 26],
+            [12, 44, 4, 36, 14, 46, 6, 38],
+            [60, 28, 52, 20, 62, 30, 54, 22],
+            [3, 35, 11, 43, 1, 33, 9, 41],
+            [51, 19, 59, 27, 49, 17, 57, 25],
+            [15, 47, 7, 39, 13, 45, 5, 37],
+            [63, 31, 55, 23, 61, 29, 53, 21],
+        ];
+        let inverse = self.state.transform.inverse()?;
+        let [x0, y0, x1, y1] = g;
+        let (dx, dy) = (x1 - x0, y1 - y0);
+        let len2 = dx * dx + dy * dy;
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        let mut out = Pixmap::new(w, h)?;
+        let data = out.data_mut();
+        for py in 0..h {
+            for px in 0..w {
+                let (cx, cy) = (f64::from(px) + 0.5, f64::from(py) + 0.5);
+                let ux = inverse.a * cx + inverse.c * cy + inverse.e;
+                let uy = inverse.b * cx + inverse.d * cy + inverse.f;
+                let t = ((ux - x0) * dx + (uy - y0) * dy) / len2;
+                let c = sample_stops(stops, t as f32);
+                let d = (f64::from(BAYER[(px & 7) as usize][(py & 7) as usize]) + 0.5) / 64.0;
+                let i = ((py * w + px) * 4) as usize;
+                data[i] = (f64::from(c.r) * 255.0 + d) as u8;
+                data[i + 1] = (f64::from(c.g) * 255.0 + d) as u8;
+                data[i + 2] = (f64::from(c.b) * 255.0 + d) as u8;
+                data[i + 3] = 255;
+            }
+        }
+        Some(out)
     }
 
     /// The canvas-spec two-point conical gradient evaluated at every device pixel centre, for
@@ -1541,20 +1584,12 @@ impl<'a> Raster<'a> {
             FilterQuality::Nearest
         };
         let m = image_to_device;
-        let fractional_shift = m.a == 1.0
-            && m.d == 1.0
-            && m.b == 0.0
-            && m.c == 0.0
-            && (m.e.fract() != 0.0 || m.f.fract() != 0.0);
-        let (pixmap, transform) = if quality == FilterQuality::Bilinear && fractional_shift {
-            let (fx, fy) = (m.e - m.e.floor(), m.f - m.f.floor());
-            (
-                shift_bilinear(image, fx as f32, fy as f32),
-                Affine::translation(m.e.floor(), m.f.floor()),
-            )
-        } else {
-            (image.clone(), m)
-        };
+        let pure_translate = m.a == 1.0 && m.d == 1.0 && m.b == 0.0 && m.c == 0.0;
+        if quality == FilterQuality::Bilinear && pure_translate {
+            let image = image.clone();
+            self.blit_decal_image(&image, src, m.e, m.f);
+            return;
+        }
         let anti_alias = if ctm.is_scale_translate() {
             dst[2] * ctm.a.abs() < 1.0 || dst[3] * ctm.d.abs() < 1.0
         } else if ctm.a == 0.0 && ctm.d == 0.0 {
@@ -1563,13 +1598,78 @@ impl<'a> Raster<'a> {
             true
         };
         let source = Source::Image {
-            pixmap,
-            transform,
+            pixmap: image.clone(),
+            transform: m,
             quality,
             opacity: self.state.alpha as f32,
         };
         if let Some(spans) = self.rect_spans(dst, anti_alias) {
             self.paint_spans(&spans, &source);
+        }
+    }
+
+    /// Chromium's CPU-canvas `drawImage` for a pure translation. A dest pixel is covered when
+    /// its sample coordinate `s = p + 0.5 - d` lies in `(0, image]`. Both filter taps clamp to
+    /// the image border, the interpolation weight is the top 4 bits of the 16.16 fixed-point
+    /// fraction, and the premultiplied channels combine as one `sum(tap * wx * wy) >> 8` sum.
+    /// With an opaque paint alpha source-over blends as `s + (d * (255 - s_a) + 127) / 255`.
+    /// Below that, the paint alpha expands the source to `v * (a8 + 1)` in u16 units and the
+    /// destination scales by `256 - v_a * (a8 + 1) / 255`, summed before the `>> 8` pack.
+    fn blit_decal_image(&mut self, image: &Pixmap, src: [f64; 4], e: f64, f: f64) {
+        let (il, it, ir, ib) = (src[0], src[1], src[0] + src[2], src[1] + src[3]);
+        let (e, f) = (e as f32 as f64, f as f32 as f64);
+        let (pw, ph) = (i64::from(self.pixmap.width()), i64::from(self.pixmap.height()));
+        let (x0, y0) = (
+            ((e + il - 0.5).floor() as i64 + 1).max(0),
+            ((f + it - 0.5).floor() as i64 + 1).max(0),
+        );
+        let (x1, y1) = (
+            ((e + ir - 0.5).floor() as i64).min(pw - 1),
+            ((f + ib - 0.5).floor() as i64).min(ph - 1),
+        );
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+        let alpha8 = (self.state.alpha as f32 * 255.0 + 0.5).clamp(0.0, 255.0) as i64;
+        if alpha8 == 0 {
+            return;
+        }
+        let (il, it, ir, ib) = (il as i64, it as i64, ir as i64, ib as i64);
+        let iw = i64::from(image.width());
+        let data = image.data();
+        let tap = |x: i64, y: i64, c: usize| -> i64 {
+            i64::from(data[((y * iw + x) * 4) as usize + c])
+        };
+        let dst = self.pixmap.data_mut();
+        for y in y0..=y1 {
+            let v16 = ((y as f64 - f) * 65536.0).round() as i64;
+            let j0 = v16.div_euclid(65536);
+            let wy = v16.rem_euclid(65536) >> 12;
+            let (j0, j1) = (j0.clamp(it, ib - 1), (j0 + 1).clamp(it, ib - 1));
+            for x in x0..=x1 {
+                let u16 = ((x as f64 - e) * 65536.0).round() as i64;
+                let i0 = u16.div_euclid(65536);
+                let wx = u16.rem_euclid(65536) >> 12;
+                let (i0, i1) = (i0.clamp(il, ir - 1), (i0 + 1).clamp(il, ir - 1));
+                let mut pixel = [0u8; 4];
+                for (c, p) in pixel.iter_mut().enumerate() {
+                    let row = |j: i64| tap(i0, j, c) * (16 - wx) + tap(i1, j, c) * wx;
+                    *p = ((row(j0) * (16 - wy) + row(j1) * wy) >> 8).clamp(0, 255) as u8;
+                }
+                let k = ((y * pw + x) * 4) as usize;
+                if alpha8 == 255 {
+                    let inv = 255 - u32::from(pixel[3]);
+                    for (d, s) in dst[k..k + 4].iter_mut().zip(pixel) {
+                        *d = (u32::from(s) + (u32::from(*d) * inv + 127) / 255).min(255) as u8;
+                    }
+                } else {
+                    let s16 = pixel.map(|v| u32::from(v) * (alpha8 as u32 + 1));
+                    let inv = 256 - s16[3] / 255;
+                    for (d, s) in dst[k..k + 4].iter_mut().zip(s16) {
+                        *d = ((s + u32::from(*d) * inv) >> 8).min(255) as u8;
+                    }
+                }
+            }
         }
     }
 }
@@ -1634,50 +1734,7 @@ fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
     stops[stops.len() - 1].1
 }
 
-/// The image resampled bilinearly (premultiplied, in Skia's float arithmetic, clamped at the image
-/// edges) at a sub-pixel offset `(fx, fy)` in `[0, 1)`. tiny-skia drops to nearest-neighbour for
-/// any pure translate, so fractional image positions are resolved here instead.
-fn shift_bilinear(image: &Pixmap, fx: f32, fy: f32) -> Pixmap {
-    let (w, h) = (image.width() as i64, image.height() as i64);
-    let (ow, oh) = (w + i64::from(fx > 0.0), h + i64::from(fy > 0.0));
-    let size = IntSize::from_wh(ow as u32, oh as u32).expect("non-empty image");
-    let src = image.data();
-    let at = |x: i64, y: i64, c: usize| {
-        let (x, y) = (x.clamp(0, w - 1), y.clamp(0, h - 1));
-        f32::from(src[((y * w + x) * 4) as usize + c]) * (1.0 / 255.0)
-    };
-    let mut out = vec![0u8; (ow * oh * 4) as usize];
-    for y in 0..oh {
-        let v = y as f32 - fy;
-        let y0 = v.floor();
-        let ty = v - y0;
-        for x in 0..ow {
-            let u = x as f32 - fx;
-            let x0 = u.floor();
-            let tx = u - x0;
-            let (x0, y0) = (x0 as i64, y0 as i64);
-            let taps = [
-                (x0, y0, (1.0 - tx) * (1.0 - ty)),
-                (x0 + 1, y0, tx * (1.0 - ty)),
-                (x0, y0 + 1, (1.0 - tx) * ty),
-                (x0 + 1, y0 + 1, tx * ty),
-            ];
-            for c in 0..4 {
-                let value = taps.iter().fold(0.0f32, |sum, &(sx, sy, weight)| {
-                    sum + at(sx, sy, c) * weight
-                });
-                out[((y * ow + x) * 4) as usize + c] = pixels::to_unorm(value);
-            }
-        }
-    }
-    for p in out.as_chunks_mut::<4>().0 {
-        let a = p[3];
-        for c in &mut p[..3] {
-            *c = (*c).min(a);
-        }
-    }
-    Pixmap::from_vec(out, size).expect("sized buffer")
-}
+
 
 #[cfg(test)]
 mod tests {
