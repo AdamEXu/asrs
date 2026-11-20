@@ -148,11 +148,8 @@ impl HistoricalDataSource {
                     log: payload,
                     is_partial,
                 } => {
-                    // Each decode merges into a fresh hub log, so the merge offset is never
-                    // computed; F09 passes L14's getMergeOffset here.
-                    let merged = Log::from_serialized(payload.structured_clone(), realm).and_then(
-                        |source| log.merge_with(&source, &JsString::new(), realm, |_, _| 0.0),
-                    );
+                    let merged = Log::from_serialized(payload.structured_clone(), realm)
+                        .and_then(|source| log.merge_with(&source, &JsString::new(), realm));
                     if merged.is_ok() {
                         self.log_is_partial = is_partial;
                         self.status = Status::Idle;
