@@ -328,6 +328,10 @@ dependencies = [
 [[package]]
 name = "asrs-formats"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-hub"
