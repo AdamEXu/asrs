@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use asrs_js::string::JsString;
 use tiny_skia::{
     FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
-    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Stroke, StrokeDash,
+    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode,
     Transform,
 };
 
 use crate::color::{self, Rgba};
+use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::hairline;
 use crate::path::{Affine, Path, Pt};
@@ -124,28 +125,6 @@ enum Source {
         quality: FilterQuality,
         opacity: f32,
     },
-}
-
-/// The only way any stroke reaches the pixmap: dashed, outlined and filled. tiny-skia's
-/// hairline stroker (`Pixmap::stroke_path` for device widths up to 1) does not match Skia.
-pub fn stroke_outline(
-    path: &tiny_skia::Path,
-    stroke: &Stroke,
-    res_scale: f32,
-) -> Option<tiny_skia::Path> {
-    let dashed;
-    let path = match &stroke.dash {
-        Some(dash) => {
-            dashed = path.dash(dash, res_scale)?;
-            &dashed
-        }
-        None => path,
-    };
-    let solid = Stroke {
-        dash: None,
-        ..stroke.clone()
-    };
-    path.stroke(&solid, res_scale)
 }
 
 fn pt32(x: f64, y: f64) -> Pt {
@@ -858,21 +837,13 @@ impl<'a> Raster<'a> {
         self.paint_spans(&spans, &source);
     }
 
-    /// Fills a device-space path: Skia's analytic AA, or with `snap` off the exact area that
-    /// its rect scanners (`AntiFillRect`, `AntiFrameRect`) produce.
-    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, snap: bool) {
+    /// Fills a device-space path with the exact area coverage of Skia's `AntiFrameRect`.
+    fn fill_exact(&mut self, path: &tiny_skia::Path, fill: &Fill) {
         let Some(source) = self.source(fill, 256) else {
             return;
         };
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        if snap {
-            let spans = {
-                let mut spans = Spans::new(w, h);
-                aaa::fill_path(&SkPath::from_tiny(path), w, h, false, &mut spans);
-                spans
-            };
-            self.paint_spans(&spans, &source);
-        } else if let Some(coverage) = scan::rasterize(path, w, h) {
+        if let Some(coverage) = scan::rasterize(path, w, h) {
             self.paint(&coverage, &source);
         }
     }
@@ -893,28 +864,6 @@ impl<'a> Raster<'a> {
         let device = self.path.to_sk(Some(&ctm));
         let fill = self.state.fill.clone();
         self.fill_sk(&device, &fill);
-    }
-
-    fn dash(&self) -> Option<StrokeDash> {
-        let s = &self.state;
-        if s.dash.is_empty() {
-            return None;
-        }
-        StrokeDash::new(
-            s.dash.iter().map(|&v| v as f32).collect(),
-            s.dash_offset as f32,
-        )
-    }
-
-    fn stroke_style(&self) -> Stroke {
-        let s = &self.state;
-        Stroke {
-            width: s.line_width as f32,
-            miter_limit: s.miter_limit as f32,
-            line_cap: s.line_cap,
-            line_join: s.line_join,
-            dash: self.dash(),
-        }
     }
 
     /// `SkDrawTreatAsHairline`: a stroke whose width maps to at most one device pixel on both
@@ -938,36 +887,54 @@ impl<'a> Raster<'a> {
         }
         let ctm = self.state.transform.to_skia();
         let res_scale = tiny_skia::PathStroker::compute_resolution_scale(&ctm);
-        let Some(user) = path.to_skia(None, CONIC_TOLERANCE / res_scale) else {
-            return;
-        };
+        let user = path.to_sk(None);
         let stroke = self.state.stroke.clone();
-        if let Some(coverage) = self.hairline_coverage() {
-            let dashed = match self.dash() {
-                Some(dash) => user.dash(&dash, res_scale),
-                None => Some(user),
-            };
-            let Some(device) = dashed.and_then(|p| p.transform(ctm)) else {
+        let hairline = self.hairline_coverage();
+        let s = &self.state;
+        let rec = dash::StrokeRec {
+            width: if hairline.is_some() {
+                0.0
+            } else {
+                s.line_width as f32
+            },
+            hairline: hairline.is_some(),
+            cap: s.line_cap,
+            miter: (s.line_join == LineJoin::Miter).then_some(s.miter_limit as f32),
+            res_scale,
+        };
+        let dash = dash::Dash {
+            intervals: s.dash.iter().map(|&v| v as f32).collect(),
+            phase: s.dash_offset as f32,
+        };
+        let dashed = if s.dash.is_empty() {
+            None
+        } else {
+            dash::dash_path(&user, &dash, &rec, self.local_clip_bounds())
+        };
+        let (source, filled) = match dashed {
+            Some(d) => (d.path, d.filled),
+            None => (user, false),
+        };
+        if let Some(coverage) = hairline {
+            let Some(device) = source.transformed(&self.state.transform).to_tiny() else {
                 return;
             };
-            let Some(source) = self.source(&stroke, (coverage * 256.0) as u32) else {
+            let Some(paint) = self.source(&stroke, (coverage * 256.0) as u32) else {
                 return;
             };
             let (w, h) = (self.pixmap.width(), self.pixmap.height());
             for (a, b) in hairline::segments(&device, self.state.line_cap) {
                 if let Some(coverage) = hairline::coverage(a, b, w, h) {
-                    self.paint(&coverage, &source);
+                    self.paint(&coverage, &paint);
                 }
             }
             return;
         }
-        let source = match self.dash() {
-            Some(dash) => match user.dash(&dash, res_scale) {
-                Some(dashed) => SkPath::from_tiny(&dashed),
-                None => return,
-            },
-            None => path.to_sk(None),
-        };
+        if filled {
+            let device = source.transformed(&self.state.transform);
+            self.fill_sk(&device, &stroke);
+            return;
+        }
         let s = &self.state;
         let style = stroke::Style {
             width: s.line_width as f32,
@@ -979,6 +946,19 @@ impl<'a> Raster<'a> {
         let outline = stroke::stroke_path(&source, &style);
         let device = outline.transformed(&self.state.transform);
         self.fill_sk(&device, &stroke);
+    }
+
+    /// `SkDraw::computeConservativeLocalClipBounds`: the canvas outset by a pixel, in user space.
+    fn local_clip_bounds(&self) -> Option<crate::skpath::Rect> {
+        let inverse = self.state.transform.inverse()?;
+        let (w, h) = (self.pixmap.width() as f32, self.pixmap.height() as f32);
+        let r = Rect::from_ltrb(-1.0, -1.0, w + 1.0, h + 1.0)?.transform(inverse.to_skia())?;
+        Some(crate::skpath::Rect {
+            left: r.left(),
+            top: r.top(),
+            right: r.right(),
+            bottom: r.bottom(),
+        })
     }
 
     fn stroke_current_path(&mut self) {
@@ -1384,7 +1364,7 @@ impl<'a> Raster<'a> {
         }
         if let Some(frame) = builder.finish() {
             let stroke = s.stroke.clone();
-            self.fill_device(&frame, &stroke, false);
+            self.fill_exact(&frame, &stroke);
         }
         true
     }
@@ -1809,5 +1789,28 @@ mod tests {
         assert_eq!(raster.register("$a").unwrap().data[..4], [255, 0, 0, 128]);
         let pixmap = raster.into_pixmap();
         assert_eq!(pixmap.pixel(3, 1), pixmap.pixel(0, 0));
+    }
+}
+
+#[cfg(test)]
+mod dash_tests {
+    use super::*;
+    use crate::display::Canvas2d;
+
+    #[test]
+    fn zero_length_dashes_draw_round_caps() {
+        let mut c = Canvas2d::new(300, 100);
+        c.set_line_dash(&[0.0, 4.0]);
+        c.set_line_width(2.0);
+        c.set_line_cap("round");
+        c.begin_path();
+        c.move_to(10.0, 50.0);
+        c.line_to(290.0, 50.0);
+        c.stroke();
+        let mut raster = Raster::new(300, 100).unwrap();
+        raster.run(&c.calls);
+        let p = raster.into_pixmap();
+        let row: Vec<u8> = (0..40).map(|x| p.pixel(x, 50).unwrap().alpha()).collect();
+        assert!(row.iter().any(|&a| a > 0), "{row:?}");
     }
 }

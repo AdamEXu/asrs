@@ -4,6 +4,7 @@ pub mod aaa;
 pub mod blit;
 pub mod clip;
 pub mod color;
+pub mod dash;
 pub mod display;
 pub mod hairline;
 pub mod path;

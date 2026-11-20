@@ -181,6 +181,45 @@ impl SkPath {
         out
     }
 
+    /// The path as tiny-skia geometry, conics split into quads to within a quarter pixel.
+    pub fn to_tiny(&self) -> Option<tiny_skia::Path> {
+        let mut b = tiny_skia::PathBuilder::new();
+        let mut pi = 0;
+        let mut wi = 0;
+        let mut last = P { x: 0.0, y: 0.0 };
+        for &v in &self.verbs {
+            match v {
+                Verb::Move => {
+                    last = self.pts[pi];
+                    b.move_to(last.x, last.y);
+                    pi += 1;
+                }
+                Verb::Line => {
+                    last = self.pts[pi];
+                    b.line_to(last.x, last.y);
+                    pi += 1;
+                }
+                Verb::Quad => {
+                    let (c, e) = (self.pts[pi], self.pts[pi + 1]);
+                    b.quad_to(c.x, c.y, e.x, e.y);
+                    last = e;
+                    pi += 2;
+                }
+                Verb::Conic => {
+                    let pts = [last, self.pts[pi], self.pts[pi + 1]];
+                    for q in crate::path::conic_to_quads(pts, self.weights[wi], 0.25) {
+                        b.quad_to(q[1].x, q[1].y, q[2].x, q[2].y);
+                    }
+                    last = pts[2];
+                    pi += 2;
+                    wi += 1;
+                }
+                Verb::Close => b.close(),
+            }
+        }
+        b.finish()
+    }
+
     pub fn set_convex(&mut self, convex: bool) {
         self.convex = Some(convex);
     }

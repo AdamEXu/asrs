@@ -1203,29 +1203,3 @@ mod tests {
         assert_eq!(out.pts[5], p(11.0, 29.0));
     }
 }
-
-#[cfg(test)]
-mod debug_dump {
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn dump_round_join_v() {
-        let mut src = SkPath::new();
-        src.move_to(p(220.0, 70.0));
-        src.line_to(p(240.0, 20.0));
-        src.line_to(p(260.0, 70.0));
-        let mut s = Style {
-            width: 5.0,
-            miter_limit: 10.0,
-            cap: LineCap::Butt,
-            join: LineJoin::Round,
-            res_scale: 1.0,
-        };
-        let out = stroke_path(&src, &s);
-        eprintln!("{:?}\n{:?}\n{:?}", out.verbs, out.pts, out.weights);
-        s.join = LineJoin::Miter;
-        let out = stroke_path(&src, &s);
-        eprintln!("{:?}\n{:?}", out.verbs, out.pts);
-    }
-}
