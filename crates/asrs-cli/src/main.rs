@@ -10,6 +10,7 @@ mod js_msgpack;
 mod js_regex;
 mod js_string;
 mod js_time;
+mod log_struct;
 mod shared;
 
 use std::process::ExitCode;
