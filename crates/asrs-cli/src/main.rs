@@ -19,6 +19,7 @@ mod log_keys;
 mod log_run;
 mod log_struct;
 mod photon;
+mod robot_state;
 mod shared;
 mod tabs_console;
 mod units;

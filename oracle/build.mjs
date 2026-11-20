@@ -116,14 +116,26 @@ const entries = fs
   .readdirSync(path.join(here, "src"), { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts"))
   .map((entry) => entry.name.slice(0, -3))
+  .concat(
+    fs
+      .readdirSync(path.join(here, "src/lazyHelpers"))
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".d.ts"))
+      .map((name) => "lazyHelpers/" + name.slice(0, -3))
+  )
   .sort();
 
 const realHere = fs.realpathSync(here);
+fs.mkdirSync(args.out, { recursive: true });
+const realOut = fs.realpathSync(args.out);
 const harnessInputs = {};
 function recordInputs(metafile) {
   for (const [outPath, output] of Object.entries(metafile.outputs)) {
     if (!output.entryPoint) continue;
-    const name = path.basename(outPath).replace(/\.m?js$/, "");
+    const name = path
+      .relative(realOut, fs.realpathSync(path.resolve(here, outPath)))
+      .replace(/\.m?js$/, "")
+      .split(path.sep)
+      .join("/");
     const files = new Set(harnessInputs[name] ?? []);
     for (const input of Object.keys(output.inputs)) {
       if (/^([\w-]+|\(disabled\)):/.test(input) && !path.isAbsolute(input)) continue;

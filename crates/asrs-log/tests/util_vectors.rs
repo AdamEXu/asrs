@@ -94,6 +94,11 @@ fn log_sequences() {
 }
 
 #[test]
+fn log_writers() {
+    check_fn_vectors("log/writers", dispatch);
+}
+
+#[test]
 fn log_key_utils() {
     check_fn_vectors("log/key-utils", dispatch);
 }
