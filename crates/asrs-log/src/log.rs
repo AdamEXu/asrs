@@ -1,9 +1,11 @@
+pub mod log_core;
 pub mod log_field;
 pub mod log_field_tree;
 pub mod log_key_utils;
 pub mod log_value_sets;
 pub mod loggable_type;
 
+pub use log_core::{Log, SerializedLog, TimestampDisplay};
 pub use log_field::{LogField, SerializedLogField};
 pub use log_field_tree::LogFieldTree;
 pub use log_value_sets::{

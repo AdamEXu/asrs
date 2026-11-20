@@ -11,6 +11,7 @@ mod js_regex;
 mod js_string;
 mod js_time;
 mod log_field;
+mod log_run;
 mod shared;
 
 use std::process::ExitCode;

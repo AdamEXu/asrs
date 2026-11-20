@@ -27,6 +27,9 @@ mod js_time;
 #[path = "../../asrs-cli/src/log_field.rs"]
 #[allow(dead_code)]
 mod log_field;
+#[path = "../../asrs-cli/src/log_run.rs"]
+#[allow(dead_code)]
+mod log_run;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;
@@ -56,6 +59,11 @@ fn util_utc() {
 #[test]
 fn log_field_sequences() {
     check_fn_vectors("log/field", dispatch);
+}
+
+#[test]
+fn log_sequences() {
+    check_fn_vectors("log/core", dispatch);
 }
 
 fn n(x: f64) -> Value {

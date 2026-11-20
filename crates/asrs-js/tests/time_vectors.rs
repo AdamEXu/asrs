@@ -26,6 +26,10 @@ mod log_field {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
 }
 
+mod log_run {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
 #[path = "../../asrs-cli/src/js_time.rs"]
 mod js_time;
 

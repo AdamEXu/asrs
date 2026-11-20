@@ -123,6 +123,7 @@ const entries = [
   "genRegex",
   "genMsgpack",
   "genLogField",
+  "genLog",
   "genThree",
   "decode",
   "export",
