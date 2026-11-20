@@ -64,6 +64,12 @@
       "generator": "65bc9e746e46630e",
       "spec": "parity/specs/jstring/utf8.entry.json"
     },
+    "log/proto-renderer": {
+      "cases": 8,
+      "content": "49e49f7147530133",
+      "generator": "5b0370b78a13713a",
+      "spec": "parity/specs/log/proto-renderer.entry.json"
+    },
     "number/numberformat": {
       "cases": 182,
       "content": "44a96cd7bef54d21",

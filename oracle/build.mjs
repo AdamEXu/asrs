@@ -107,7 +107,19 @@ const oraclePlugin = {
   }
 };
 
-const entries = ["fn", "selftest", "cve1Torture", "corpusA", "genCaseData", "genUtf8", "genJson"];
+const entries = [
+  "fn",
+  "selftest",
+  "cve1Torture",
+  "corpusA",
+  "genCaseData",
+  "genUtf8",
+  "genJson",
+  "decode",
+  "export",
+  "historicalRun",
+  "protoRenderer"
+];
 
 await esbuild.build({
   entryPoints: Object.fromEntries(entries.map((name) => [name, path.join(here, "src", name + ".ts")])),
@@ -125,6 +137,28 @@ await esbuild.build({
   plugins: [oraclePlugin],
   logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
 });
+
+// The renderer check runs in a real Electron main process and BrowserWindow, not under the shims.
+await esbuild.build({
+  entryPoints: [path.join(here, "src/renderer/main.ts")],
+  outfile: path.join(args.out, "rendererMain.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "esnext",
+  external: ["electron"],
+  logLevel: "warning"
+});
+await esbuild.build({
+  entryPoints: [path.join(here, "src/renderer/page.ts")],
+  outfile: path.join(args.out, "rendererPage.js"),
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "esnext",
+  logLevel: "warning"
+});
+fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
 
 fs.writeFileSync(
   path.join(args.out, "modules.json"),

@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::{Result, vectors, workspace_root};
+use crate::{Result, historical, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 const EMSDK_VERSION: &str = "4.0.12";
@@ -31,6 +31,13 @@ commands:
                       fails if any committed vector differs
   fn [args]           run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)
+  decode <file>       canonical Log dump of one log file, after the initial load and after
+                      every field is loaded (real HistoricalDataSource and worker bundles)
+  export <file> --options <json> [--out <file>]
+                      exact bytes the real export worker produces for one ExportOptions
+  historical [<corpus>...] [--check] [--jobs N]
+                      decode dumps and the export matrix over the synthetic corpora
+                      (`cargo xtask oracle historical --help`)
   run <entry> [args]  run target/oracle/dist/<entry>.mjs under the oracle runtime
   selftest            CVE-1 encoder and decoder self test
   smoke               run oracle/smoke/fn-requests.jsonl and compare with fn-expected.jsonl
@@ -98,6 +105,12 @@ pub fn run(args: &[String]) -> Result {
         Some("build") => build_harness(&paths),
         Some("gen") => vectors::generate(&paths, rest),
         Some("fn") => run_entry(&paths, "fn", rest),
+        Some("decode") => run_entry(&paths, "decode", rest),
+        Some("export") => run_entry(&paths, "export", rest),
+        Some("historical") if rest.iter().any(|a| a == "--help") => {
+            Err(historical::USAGE.to_owned())
+        }
+        Some("historical") => historical::run(&paths, rest),
         Some("run") => match rest.split_first() {
             Some((entry, entry_args)) => run_entry(&paths, entry, entry_args),
             None => Err(USAGE.to_owned()),

@@ -32,11 +32,11 @@ pub fn run(args: &[String]) -> Result {
     }
 }
 
-fn synthetic_dir(root: &Path) -> PathBuf {
+pub(crate) fn synthetic_dir(root: &Path) -> PathBuf {
     root.join("parity/corpus/synthetic")
 }
 
-fn output_dir(root: &Path, name: &str) -> PathBuf {
+pub(crate) fn output_dir(root: &Path, name: &str) -> PathBuf {
     root.join("target/parity/corpus/synthetic").join(name)
 }
 
@@ -268,7 +268,7 @@ fn count_cases(manifest: &str) -> usize {
 }
 
 /// Ignores the generator hash, so a change to the oracle that leaves the output alone still passes.
-fn compare(committed: &str, regenerated: &str) -> Option<String> {
+pub(crate) fn compare(committed: &str, regenerated: &str) -> Option<String> {
     let strip = |text: &str| -> Vec<String> {
         text.lines()
             .filter(|l| !l.trim_start().starts_with("\"generator\":"))
@@ -295,6 +295,10 @@ fn compare(committed: &str, regenerated: &str) -> Option<String> {
     Some(report)
 }
 
+pub(crate) fn names(root: &Path) -> Result<Vec<String>> {
+    Ok(discover(root)?.into_iter().map(|s| s.name).collect())
+}
+
 fn list(paths: &Paths, args: &[String]) -> Result {
     for spec in discover(&paths.root)? {
         if args.first().is_some_and(|n| n != &spec.name) {
@@ -319,7 +323,7 @@ fn list(paths: &Paths, args: &[String]) -> Result {
     Ok(())
 }
 
-fn upstream_commit(paths: &Paths) -> String {
+pub(crate) fn upstream_commit(paths: &Paths) -> String {
     Command::new("git")
         .arg("-C")
         .arg(&paths.reference)
@@ -331,7 +335,7 @@ fn upstream_commit(paths: &Paths) -> String {
         .unwrap_or_default()
 }
 
-fn remove_dir(dir: &Path) -> Result {
+pub(crate) fn remove_dir(dir: &Path) -> Result {
     match fs::remove_dir_all(dir) {
         Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
             Err(format!("{}: {e}", dir.display()))

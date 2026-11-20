@@ -1,0 +1,4 @@
+{
+  "entry": "protoRenderer",
+  "args": ["--seed", "0x6328a5c0"]
+}
