@@ -321,8 +321,10 @@ impl<'a> WpilogDecoder<'a> {
     }
 }
 
-/// The C indexer's WASM trap is reported as this error: the indexer can try to
-/// read at negative offsets (a negative extra-header size) or past the buffer.
+/// The C indexer's WASM trap: a read at a negative offset (a negative extra-header size) or past
+/// the buffer. Upstream's `run` rejects with a `RuntimeError`, which `start` catches and answers
+/// with `failed`. Offsets in `[-bufferIn, 0)` read the module's own heap and do not trap
+/// upstream; the port reports those as traps too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexError;
 
@@ -368,13 +370,25 @@ fn extra_header_size(data: &[u8]) -> i32 {
     ])
 }
 
+const INITIAL_RECORD_CAPACITY: usize = 10_000;
+
+/// The record count at which the C's doubling `realloc` past 1.3 GB fails inside the 4 GiB wasm
+/// heap and the loop exits early, measured for inputs up to 700 MB. A record whose size wraps
+/// the offset back to an earlier record loops until then.
+const RECORD_LIMIT: usize = 163_840_000;
+
 pub fn index(data: &[u8]) -> Result<WpilogIndex, IndexError> {
+    index_with_limit(data, RECORD_LIMIT)
+}
+
+fn index_with_limit(data: &[u8], record_limit: usize) -> Result<WpilogIndex, IndexError> {
     let buffer_size = data.len() as i32;
     let mut offset: i32 = 12i32.wrapping_add(extra_header_size(data));
     let mut has_initial_timestamp = false;
     let mut min_timestamp: i64 = 0;
     let mut max_timestamp: i64 = 0;
-    let mut records: Vec<(u32, u32)> = Vec::new();
+    let mut capacity = INITIAL_RECORD_CAPACITY;
+    let mut records: Vec<(u32, u32)> = Vec::with_capacity(capacity);
 
     while offset.wrapping_add(4) <= buffer_size {
         let length_bitfield = byte_at(data, offset)?;
@@ -412,6 +426,13 @@ pub fn index(data: &[u8]) -> Result<WpilogIndex, IndexError> {
             has_initial_timestamp = true;
         }
 
+        if records.len() >= capacity {
+            if capacity >= record_limit {
+                break;
+            }
+            capacity *= 2;
+            records.reserve_exact(capacity - records.len());
+        }
         records.push((entry, offset as u32));
         offset = offset
             .wrapping_add(header_length)
@@ -637,6 +658,18 @@ mod tests {
         let decoder = WpilogDecoder::new(&data);
         let (record, _) = decoder.record_at(12).unwrap();
         assert_eq!(record.timestamp(), -1.0);
+    }
+
+    #[test]
+    fn index_size_wrapping_back_loops_until_the_record_limit() {
+        let mut data = header(b"");
+        data.extend_from_slice(&record(1, 3, &[0]));
+        let wrap = (u32::MAX - 11).to_le_bytes();
+        data.extend_from_slice(&[0x0c, 2, wrap[0], wrap[1], wrap[2], wrap[3], 9]);
+        let index = index_with_limit(&data, 40_000).unwrap();
+        assert_eq!(index.records.len(), 40_000);
+        assert_eq!(&index.records[..3], &[(1, 12), (2, 17), (1, 12)]);
+        assert_eq!(index.max_timestamp, 9f64 * 1.0e-6);
     }
 
     #[test]
