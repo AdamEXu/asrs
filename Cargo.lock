@@ -348,6 +348,9 @@ dependencies = [
 [[package]]
 name = "asrs-hub"
 version = "0.1.0"
+dependencies = [
+ "asrs-model",
+]
 
 [[package]]
 name = "asrs-js"
@@ -433,7 +436,10 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
  "raw-window-handle",
- "resvg 0.46.0",
+ "roxmltree 0.21.2",
+ "simplecss",
+ "svgtypes 0.16.2",
+ "tiny-skia",
 ]
 
 [[package]]

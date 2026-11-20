@@ -1,10 +1,17 @@
 use gpui_kit::{
-    App, ClickEvent, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    StatefulInteractiveElement, Styled, Window, div, px, rgb,
+    App, ClickEvent, ElementId, FocusHandle, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement, Styled, Window, div, px, rgb,
 };
 
 use crate::icon::{Icon, IconFit, IconSource};
-use crate::theme::{Appearance, BUTTON_RADIUS, IconTint};
+use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, IconTint};
+
+/// Chromium keeps `:focus-visible` until focus moves, so whether focus arrived from the
+/// keyboard is latched rather than read from the latest input.
+struct FocusState {
+    handle: FocusHandle,
+    from_keyboard: bool,
+}
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -14,6 +21,10 @@ type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 ///
 /// `blurred` mirrors upstream's `button.blurred` class, which the hub toggles on every existing
 /// button from the main process's `set-focused` message, not live window focus.
+///
+/// An enabled button is a tab stop. Focused from the keyboard it takes `global.css`'s
+/// `:focus-visible` style: a 2 px `#446ce3` outline outside the box, which follows the 3 px
+/// border radius that rule also sets.
 #[derive(IntoElement)]
 pub struct IconButton {
     id: ElementId,
@@ -91,14 +102,50 @@ impl RenderOnce for IconButton {
             .unwrap_or_else(|| Appearance::of(window, cx));
         let theme = appearance.theme();
         let chain = self.tint.chain(appearance, self.blurred, self.disabled);
+        let focus = (!self.disabled).then(|| {
+            window.use_keyed_state(self.id.clone(), cx, |_, cx| FocusState {
+                handle: cx.focus_handle().tab_stop(true),
+                from_keyboard: false,
+            })
+        });
+        let focus_visible = focus.as_ref().is_some_and(|state| {
+            let focused = state.read(cx).handle.is_focused(window);
+            let keyboard = window.last_input_was_keyboard();
+            state.update(cx, |s, _| {
+                s.from_keyboard = focused && (s.from_keyboard || keyboard);
+                s.from_keyboard
+            })
+        });
+        let radius = if focus_visible {
+            FOCUS_RING_RADIUS
+        } else {
+            BUTTON_RADIUS
+        };
         let mut button = div()
             .id(self.id)
             .relative()
             .flex_none()
             .w(px(self.width))
             .h(px(self.height))
-            .rounded(px(BUTTON_RADIUS))
+            .rounded(px(radius))
             .child(Icon::new(self.icon, chain).fit(self.fit));
+        if let Some(focus) = &focus {
+            button = button.track_focus(&focus.read(cx).handle);
+        }
+        if focus_visible {
+            let outset = px(-FOCUS_RING_WIDTH);
+            button = button.child(
+                div()
+                    .absolute()
+                    .top(outset)
+                    .left(outset)
+                    .right(outset)
+                    .bottom(outset)
+                    .border(px(FOCUS_RING_WIDTH))
+                    .border_color(rgb(theme.focus_ring))
+                    .rounded(px(FOCUS_RING_RADIUS + FOCUS_RING_WIDTH)),
+            );
+        }
         if !self.disabled {
             let (hover, active) = (theme.button_hover, theme.button_active);
             button = button

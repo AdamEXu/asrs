@@ -13,8 +13,13 @@ use indexmap::IndexSet;
 use super::LoggableType;
 use super::log_field::{LogField, SerializedLogField};
 use super::log_field_tree::LogFieldTree;
-use super::log_key_utils::split_log_key;
+use super::log_key_utils::{PHOTON_PREFIX, STRUCT_PREFIX, get_schema_type, split_log_key};
 use super::log_value_sets::{LogValue, LogValueSet, LogValueSetAny, RawValue};
+use super::log_writers::{FieldUnitCache, LogError, QueuedStructure};
+use super::photon_struct_decoder::PhotonStructDecoder;
+use super::proto_decoder::{ProtoDecoder, SerializedProtoDecoder};
+use super::struct_decoder::{SerializedStructDecoder, StructDecoder};
+use crate::realm::JsRealm;
 use crate::util::lower_bound;
 
 const DEFAULT_TIMESTAMP_RANGE: [f64; 2] = [0.0, 10.0];
@@ -68,15 +73,28 @@ pub struct Log {
     enable_timestamp_set_cache: bool,
     timestamp_set_cache: TimestampSetCaches,
     pub(super) changed_fields: IndexSet<JsString>,
+    pub(super) field_unit_cache: FieldUnitCache,
+    pub(super) struct_decoder: StructDecoder,
+    pub(super) proto_decoder: ProtoDecoder,
+    pub(super) photon_decoder: PhotonStructDecoder,
+    pub(super) queued_structs: Vec<QueuedStructure>,
+    pub(super) queued_struct_arrays: Vec<QueuedStructure>,
+    pub(super) queued_protos: Vec<QueuedStructure>,
 }
 
-/// `Log.toSerialized()` for the parts this module owns. Columns are shared with the log.
+/// `Log.toSerialized()`. Columns are shared with the log. The photon decoder is not part of it,
+/// as upstream.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SerializedLog {
     pub fields: JsObject<SerializedLogField>,
     pub generated_parents: Vec<JsString>,
     pub timestamp_range: Option<[f64; 2]>,
     pub timestamp_zero: Option<f64>,
+    pub struct_decoder: SerializedStructDecoder,
+    pub proto_decoder: SerializedProtoDecoder,
+    pub queued_structs: Vec<QueuedStructure>,
+    pub queued_struct_arrays: Vec<QueuedStructure>,
+    pub queued_protos: Vec<QueuedStructure>,
 }
 
 impl Default for Log {
@@ -89,7 +107,7 @@ fn child_key(key: &JsString, child: &str) -> JsString {
     child_key_js(key, &JsString::from(child))
 }
 
-fn child_key_js(key: &JsString, child: &JsString) -> JsString {
+pub(super) fn child_key_js(key: &JsString, child: &JsString) -> JsString {
     let mut out = key.clone();
     out.push_unit(u16::from(b'/'));
     out.push_str(child);
@@ -137,6 +155,13 @@ impl Log {
             enable_timestamp_set_cache,
             timestamp_set_cache: TimestampSetCaches::default(),
             changed_fields: IndexSet::new(),
+            field_unit_cache: FieldUnitCache::default(),
+            struct_decoder: StructDecoder::new(),
+            proto_decoder: ProtoDecoder::new(),
+            photon_decoder: PhotonStructDecoder::new(),
+            queued_structs: Vec::new(),
+            queued_struct_arrays: Vec::new(),
+            queued_protos: Vec::new(),
         }
     }
 
@@ -189,6 +214,7 @@ impl Log {
         if self.fields.remove_key(key).is_none() {
             return;
         }
+        self.field_unit_cache.remove(key);
         self.generated_parents.shift_remove(key);
         self.changed_fields.shift_remove(key);
 
@@ -362,6 +388,7 @@ impl Log {
         if let Some(field) = self.fields.get_units_mut(key.units()) {
             field.metadata_string = metadata;
             self.changed_fields.insert(key.clone());
+            self.field_unit_cache.remove(key);
         }
     }
 
@@ -638,10 +665,33 @@ impl Log {
         }
     }
 
-    /// Writes a Raw value. Schema registration for `.schema/struct:` and
-    /// `.schema/photonstruct:` keys belongs to the structured writers.
-    pub fn put_raw(&mut self, key: &JsString, timestamp: f64, value: impl Into<RawValue>) {
-        self.put_value(key, timestamp, value.into());
+    /// Writes a Raw value. A `.schema/struct:` or `.schema/photonstruct:` key also registers the
+    /// schema and retries every queued structure.
+    pub fn put_raw(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: impl Into<RawValue>,
+    ) -> Result<(), LogError> {
+        let value = value.into();
+        self.put_value(key, timestamp, value.clone());
+        let Some(schema_type) = get_schema_type(key) else {
+            return Ok(());
+        };
+        let struct_prefix = JsString::from(STRUCT_PREFIX);
+        let photon_prefix = JsString::from(PHOTON_PREFIX);
+        if schema_type.starts_with(&struct_prefix, None) {
+            let name = schema_type.slice(struct_prefix.len() as f64, None);
+            self.struct_decoder.add_schema(&name, &value);
+            self.photon_decoder.add_schema(&name, &value);
+            self.attempt_queued_structures()?;
+        }
+        if schema_type.starts_with(&photon_prefix, None) {
+            let name = schema_type.slice(photon_prefix.len() as f64, None);
+            self.photon_decoder.add_schema(&name, &value);
+            self.attempt_queued_structures()?;
+        }
+        Ok(())
     }
 
     pub fn put_boolean(&mut self, key: &JsString, timestamp: f64, value: bool) {
@@ -720,7 +770,7 @@ impl Log {
         timestamp: f64,
         value: &JsValue,
         allow_root_write: bool,
-    ) {
+    ) -> Result<(), LogError> {
         match value {
             JsValue::Bool(b) => {
                 if allow_root_write {
@@ -739,15 +789,15 @@ impl Log {
             }
             JsValue::Bytes(bytes) => {
                 if allow_root_write {
-                    self.put_raw(key, timestamp, Arc::<[u8]>::from(bytes.as_slice()));
+                    self.put_raw(key, timestamp, Arc::<[u8]>::from(bytes.as_slice()))?;
                 }
             }
             JsValue::Array(items) => {
-                self.put_unknown_array(key, timestamp, items, allow_root_write)
+                self.put_unknown_array(key, timestamp, items, allow_root_write)?
             }
             JsValue::Object(object) => {
                 for (name, item) in object.iter() {
-                    self.put_unknown_struct(&child_key_js(key, name), timestamp, item, true);
+                    self.put_unknown_struct(&child_key_js(key, name), timestamp, item, true)?;
                 }
             }
             JsValue::ExtData(kind, data) => {
@@ -756,10 +806,11 @@ impl Log {
                     &child_key(key, "data"),
                     timestamp,
                     Arc::<[u8]>::from(data.as_slice()),
-                );
+                )?;
             }
             JsValue::Null | JsValue::Undefined | JsValue::BigInt(_) | JsValue::Date(_) => {}
         }
+        Ok(())
     }
 
     fn put_unknown_array(
@@ -768,7 +819,7 @@ impl Log {
         timestamp: f64,
         items: &[JsValue],
         allow_root_write: bool,
-    ) {
+    ) -> Result<(), LogError> {
         let existing_type = self.get_type(key);
         let uniform = |type_name: &str, array_type: LoggableType| {
             if items.is_empty() {
@@ -796,9 +847,10 @@ impl Log {
             self.field_mut_existing(&length_key)
                 .put_number(timestamp, items.len() as f64);
             for (i, item) in items.iter().enumerate() {
-                self.put_unknown_struct(&child_key(key, &format!("{i}")), timestamp, item, true);
+                self.put_unknown_struct(&child_key(key, &format!("{i}")), timestamp, item, true)?;
             }
         }
+        Ok(())
     }
 
     /// Writes a JSON string and its decoded children; text that does not parse writes only the
@@ -812,7 +864,8 @@ impl Log {
         self.set_structured_type(key, Some(JsString::from("JSON")));
         let decoded = json::parse(&value).unwrap_or(JsValue::Null);
         if !decoded.is_null() {
-            self.put_unknown_struct(key, timestamp, &decoded, false);
+            self.put_unknown_struct(key, timestamp, &decoded, false)
+                .expect("JSON values hold no bytes, so they never reach putRaw");
         }
     }
 
@@ -884,12 +937,20 @@ impl Log {
             generated_parents: self.generated_parents.iter().cloned().collect(),
             timestamp_range: self.timestamp_range,
             timestamp_zero: self.timestamp_zero,
+            struct_decoder: self.struct_decoder.to_serialized(),
+            proto_decoder: self.proto_decoder.to_serialized(),
+            queued_structs: self.queued_structs.clone(),
+            queued_struct_arrays: self.queued_struct_arrays.clone(),
+            queued_protos: self.queued_protos.clone(),
         }
     }
 
-    /// `Log.fromSerialized`: a log with the timestamp set cache enabled and nothing marked
-    /// changed.
-    pub fn from_serialized(serialized: SerializedLog) -> Self {
+    /// `Log.fromSerialized` in `realm`: a log with the timestamp set cache enabled and nothing
+    /// marked changed. Rebuilding the proto decoder re-adds every descriptor, which can throw.
+    pub fn from_serialized(
+        serialized: SerializedLog,
+        realm: &mut JsRealm,
+    ) -> Result<Self, LogError> {
         let mut log = Log::new(true);
         for (key, field) in serialized.fields {
             log.fields.insert(key, LogField::from_serialized(field));
@@ -897,7 +958,14 @@ impl Log {
         log.generated_parents = serialized.generated_parents.into_iter().collect();
         log.timestamp_range = serialized.timestamp_range;
         log.timestamp_zero = serialized.timestamp_zero;
-        log
+        log.struct_decoder = StructDecoder::from_serialized(serialized.struct_decoder);
+        log.proto_decoder =
+            ProtoDecoder::from_serialized(&mut realm.proto, &serialized.proto_decoder)
+                .map_err(LogError::Proto)?;
+        log.queued_structs = serialized.queued_structs;
+        log.queued_struct_arrays = serialized.queued_struct_arrays;
+        log.queued_protos = serialized.queued_protos;
+        Ok(log)
     }
 }
 
