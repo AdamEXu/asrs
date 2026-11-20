@@ -82,7 +82,9 @@ fn to_number(value: &Value) -> Result<f64, Response> {
         }
         Value::Number(bits) => f64::from_bits(*bits),
         Value::String(s) => number::to_number(s.units()),
-        Value::BigInt(digits) => number::to_number(&digits.encode_utf16().collect::<Vec<u16>>()),
+        Value::BigInt(_) => {
+            return Err(type_error("Cannot convert a BigInt value to a number"));
+        }
         Value::Symbol(_) => {
             return Err(type_error("Cannot convert a Symbol value to a number"));
         }
@@ -149,8 +151,18 @@ fn this_number(args: &[Value], method: &str) -> Result<f64, Response> {
     }
 }
 
+/// `Number()` and `Intl.NumberFormat` format accept a BigInt where `ToNumber` throws.
+fn to_number_or_bigint(value: &Value) -> Result<f64, Response> {
+    match value {
+        Value::BigInt(digits) => Ok(number::to_number(
+            &digits.encode_utf16().collect::<Vec<u16>>(),
+        )),
+        other => to_number(other),
+    }
+}
+
 fn number_fn(args: &[Value]) -> Response {
-    match to_number(&arg(args, 0)) {
+    match to_number_or_bigint(&arg(args, 0)) {
         Ok(x) => ok_number(x),
         Err(r) => r,
     }
@@ -281,12 +293,12 @@ fn number_format(args: &[Value]) -> Response {
         (Err(r), _, _) | (_, Err(r), _) | (_, _, Err(r)) => return r,
     };
     let grouping = match options.get("useGrouping") {
-        None => true,
+        None | Some(Value::Undefined) => true,
         Some(Value::Bool(b)) => *b,
         Some(Value::Number(bits)) => {
             f64::from_bits(*bits) != 0.0 && !f64::from_bits(*bits).is_nan()
         }
-        Some(Value::Null) | Some(Value::Undefined) => false,
+        Some(Value::Null) => false,
         Some(_) => true,
     };
     let sign_display = match options.get("signDisplay") {
@@ -295,7 +307,7 @@ fn number_format(args: &[Value]) -> Response {
         Some(Value::String(s)) if s.eq_str("exceptZero") => SignDisplay::ExceptZero,
         _ => SignDisplay::Auto,
     };
-    let value = match to_number(&arg(args, 2)) {
+    let value = match to_number_or_bigint(&arg(args, 2)) {
         Ok(x) => x,
         Err(r) => return r,
     };
