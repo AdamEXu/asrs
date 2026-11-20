@@ -1,6 +1,6 @@
 import "./shims";
 import { toTree } from "./cve1";
-import { run } from "./stateRun";
+import { run } from "./lazyHelpers/stateRun";
 
 // Emits `oracle:stateRun` ground truth for asrs_log::joystick_state and
 // asrs_log::mechanism_state:

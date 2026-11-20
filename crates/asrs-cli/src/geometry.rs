@@ -12,7 +12,7 @@ use asrs_log::geometry::{
 use asrs_log::log::Log;
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::functions::{arg, to_number, to_units, type_error};
+use crate::functions::{arg, quiet_nan, to_number, to_units, type_error};
 use crate::log_field::{boolean, js_string};
 use crate::log_run;
 use crate::shared::{Function, get_prop, strict_equal};
@@ -86,23 +86,12 @@ fn respond(f: impl FnOnce() -> Result<Value, Response>) -> Response {
     }
 }
 
-/// Boxing a double as a JS number quiets a signaling NaN (V8 sets bit 51 on
-/// HeapNumber materialization). Applies to both directions of this adapter:
-/// scalars the upstream callee would see and outputs the oracle encodes.
-fn quiet(x: f64) -> f64 {
-    if x.is_nan() {
-        f64::from_bits(x.to_bits() | (1 << 51))
-    } else {
-        x
-    }
-}
-
 fn num(v: &Value) -> Result<f64, Response> {
-    to_number(v).map(quiet)
+    to_number(v).map(quiet_nan)
 }
 
 fn n(x: f64) -> Value {
-    Value::number(quiet(x))
+    Value::number(quiet_nan(x))
 }
 
 fn numbers(xs: &[f64]) -> Value {

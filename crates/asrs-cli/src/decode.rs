@@ -8,11 +8,14 @@ use std::process::ExitCode;
 use asrs_formats::historical::HistoricalDataSource;
 use asrs_formats::worker::Abort;
 use asrs_js::string::JsString;
+use asrs_js::time::V8MathRandom;
 use asrs_log::log::{Log, SerializedLog};
+use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
 use asrs_services::historical_start;
 
 use crate::log_field::{serialized_value, string_value};
+use crate::log_run;
 
 const USAGE: &str = "usage: asrs-cli decode <log file>";
 const NEVER_COMPLETES: u8 = 3;
@@ -72,25 +75,11 @@ fn dump_log(
         ])
         .encode(),
     );
-    lines.push(
-        Value::object([
-            (
-                "structSchemaStrings",
-                Value::object(Vec::<(&str, Value)>::new()),
-            ),
-            ("structSchemas", Value::object(Vec::<(&str, Value)>::new())),
-        ])
-        .encode(),
-    );
-    lines.push(Value::object([("protoDescriptors", Value::Array(Vec::new()))]).encode());
-    lines.push(
-        Value::object([
-            ("queuedStructs", Value::Array(Vec::new())),
-            ("queuedStructArrays", Value::Array(Vec::new())),
-            ("queuedProtos", Value::Array(Vec::new())),
-        ])
-        .encode(),
-    );
+    let [strings, schemas, protos, structs, arrays, proto_queue] =
+        log_run::decoder_state(serialized);
+    lines.push(Value::object([strings, schemas]).encode());
+    lines.push(Value::object([protos]).encode());
+    lines.push(Value::object([structs, arrays, proto_queue]).encode());
     lines
 }
 
@@ -101,8 +90,9 @@ pub fn run(args: &[String]) -> ExitCode {
     };
     let mut source = HistoricalDataSource::open_file(path);
     let mut log = Log::new(true);
+    let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
     let files = historical_start::read_files(source.path());
-    match source.handle_main_message(&mut log, &files) {
+    match source.handle_main_message(&mut log, &mut realm, &files) {
         Ok(Some(Abort::NeverReturns)) => {
             eprintln!("{path}: upstream's worker never returns");
             return ExitCode::from(NEVER_COMPLETES);

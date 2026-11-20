@@ -1,0 +1,21 @@
+{
+  "protocol": "ftc",
+  "seed": 7,
+  "latencyMs": 3,
+  "endMs": 7500,
+  "client": { "source": "ftc", "address": "127.0.0.1" },
+  "server": { "status": { "activeOpMode": "Auto", "activeOpModeStatus": "RUNNING" } },
+  "steps": [
+    { "t": 0, "server": ["down", "refuse"] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 2500, "server": ["up"] },
+    { "t": 3500, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [{ "timestamp": 1700000003000, "data": { "v": "1" } }] }] },
+    { "t": 3600, "client": ["dump"] },
+    { "t": 4000, "server": ["drop"] },
+    { "t": 4100, "client": ["dump"] },
+    { "t": 5500, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [{ "timestamp": 1700000005000, "data": { "v": "2" } }] }] },
+    { "t": 6000, "server": ["mute", true] },
+    { "t": 6500, "client": ["prefs", null] },
+    { "t": 7000, "client": ["dump"] }
+  ]
+}

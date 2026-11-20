@@ -1,0 +1,90 @@
+{
+  "protocol": "rlog",
+  "seed": 99,
+  "latencyMs": 1,
+  "endMs": 9000,
+  "client": {
+    "source": "rlog",
+    "address": "127.0.0.1",
+    "prefs": {
+      "rlogPort": 5801
+    }
+  },
+  "server": {
+    "port": 5801
+  },
+  "steps": [
+    {
+      "t": 0,
+      "server": [
+        "down",
+        "hang"
+      ]
+    },
+    {
+      "t": 0,
+      "client": [
+        "connect"
+      ]
+    },
+    {
+      "t": 3200,
+      "server": [
+        "down",
+        "refuse"
+      ]
+    },
+    {
+      "t": 4500,
+      "server": [
+        "up"
+      ]
+    },
+    {
+      "t": 5200,
+      "server": [
+        "send",
+        "0300"
+      ]
+    },
+    {
+      "t": 6200,
+      "server": [
+        "send",
+        "0200400000000000000001000000022f580006646f75626c6502000000083ff0000000000000"
+      ]
+    },
+    {
+      "t": 6300,
+      "server": [
+        "send",
+        "004000cccccccccccd0200000003000000"
+      ]
+    },
+    {
+      "t": 7000,
+      "client": [
+        "dump"
+      ]
+    },
+    {
+      "t": 7400,
+      "client": [
+        "prefs",
+        null
+      ]
+    },
+    {
+      "t": 7500,
+      "server": [
+        "drop"
+      ]
+    },
+    {
+      "t": 8500,
+      "client": [
+        "dump"
+      ]
+    }
+  ]
+}

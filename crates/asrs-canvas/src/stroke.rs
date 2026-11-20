@@ -204,7 +204,7 @@ enum Reduction {
 }
 
 impl SkPath {
-    fn set_last_pt(&mut self, pt: P) {
+    pub fn set_last_pt(&mut self, pt: P) {
         match self.pts.last_mut() {
             Some(last) => *last = pt,
             None => self.move_to(pt),

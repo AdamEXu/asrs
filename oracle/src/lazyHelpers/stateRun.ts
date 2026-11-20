@@ -1,6 +1,6 @@
 import { decodePovBitfield, getJoystickState } from "@upstream/shared/log/LogJoystickState";
 import { getMechanismState, mergeMechanismStates } from "@upstream/shared/log/LogMechanismState";
-import { runWithLog } from "./logRun";
+import { runWithLog } from "../logRun";
 
 // Replays logRun write ops against a real upstream Log, then runs a list of
 // joystick and mechanism calls, reporting each result as {ok: ...} or
