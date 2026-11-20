@@ -47,20 +47,29 @@ fn serialized_log(v: &Value) -> Result<SerializedLog, String> {
         Value::Null | Value::Undefined => None,
         v => Some(number(&v)?),
     };
+    // getMergeOffset reads only fields and the timestamp range, so the decoder state and the
+    // retry queues stay empty instead of being parsed.
     Ok(SerializedLog {
         fields,
         generated_parents,
         timestamp_range,
         timestamp_zero,
+        ..SerializedLog::default()
     })
 }
 
+fn log(v: &Value) -> Result<Log, String> {
+    let (mut realm, _, _) = log_run::script_realm(Vec::new());
+    Log::from_serialized(serialized_log(v)?, &mut realm)
+        .map_err(|e| format!("mergeCalculatorRun: fromSerialized failed: {e:?}"))
+}
+
 fn merge_calculator_run(args: &[Value]) -> Response {
-    let target = match serialized_log(&arg(args, 1)).map(Log::from_serialized) {
+    let target = match log(&arg(args, 1)) {
         Ok(log) => log,
         Err(e) => return Response::Error(e),
     };
-    let source = match serialized_log(&arg(args, 2)).map(Log::from_serialized) {
+    let source = match log(&arg(args, 2)) {
         Ok(log) => log,
         Err(e) => return Response::Error(e),
     };
