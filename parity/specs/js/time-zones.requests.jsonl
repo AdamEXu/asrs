@@ -126,7 +126,7 @@
 {"fn":"shared/util:formatDate","args":[{"n":"4014000000000000"}]}
 {"fn":"shared/util:formatDate","args":["abc"]}
 {"fn":"shared/util:formatDate","args":[true]}
-{"fn":"shared/util:formatDate","args":[{"o":"Object"}]}
+{"fn":"shared/util:formatDate","args":[{"o":[]}]}
 {"fn":"shared/util:formatDate","args":[{"n":"0000000000000000"}]}
 {"fn":"shared/util:formatDate","args":[null]}
 {"fn":"shared/util:formatDate","args":[{"box":{"d":"0000000000000000"}}]}
@@ -134,12 +134,12 @@
 {"fn":"Date.prototype.toLocaleTimeString","args":[{"n":"4014000000000000"}]}
 {"fn":"Date.prototype.toLocaleTimeString","args":["abc"]}
 {"fn":"Date.prototype.toLocaleTimeString","args":[null]}
-{"fn":"Date.prototype.toLocaleTimeString","args":[{"o":"Object"}]}
+{"fn":"Date.prototype.toLocaleTimeString","args":[{"o":[]}]}
 {"fn":"Date.prototype.toString","args":[{"n":"4014000000000000"}]}
 {"fn":"Date.prototype.toString","args":["abc"]}
 {"fn":"Date.prototype.toString","args":[null]}
-{"fn":"Date.prototype.toString","args":[{"o":"Object"}]}
+{"fn":"Date.prototype.toString","args":[{"o":[]}]}
 {"fn":"Date.prototype.getTimezoneOffset","args":[{"n":"4014000000000000"}]}
 {"fn":"Date.prototype.getTimezoneOffset","args":["abc"]}
 {"fn":"Date.prototype.getTimezoneOffset","args":[null]}
-{"fn":"Date.prototype.getTimezoneOffset","args":[{"o":"Object"}]}
+{"fn":"Date.prototype.getTimezoneOffset","args":[{"o":[]}]}

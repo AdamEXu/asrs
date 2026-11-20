@@ -20,7 +20,9 @@ thread_local! {
 }
 
 /// Runs `f` with `zone` as the ambient zone; the default is the system zone,
-/// matching the oracle's `TZ`.
+/// matching the oracle's `TZ`. Used by the vector tests and future scripted
+/// zones rather than the binary itself.
+#[allow(dead_code)]
 pub fn with_zone<T>(zone: NamedZone, f: impl FnOnce() -> T) -> T {
     ZONE.with(|z| {
         let previous = z.replace(Some(zone));
@@ -41,6 +43,7 @@ pub fn with_rng<T>(rng: Box<dyn Rng>, f: impl FnOnce() -> T) -> T {
 }
 
 /// Runs `f` with `clock` as the ambient `Date.now()`.
+#[allow(dead_code)]
 pub fn with_clock<T>(clock: Box<dyn Clock>, f: impl FnOnce() -> T) -> T {
     CLOCK.with(|c| {
         let previous = std::mem::replace(&mut *c.borrow_mut(), clock);
@@ -229,7 +232,7 @@ fn format_date_fn(args: &[Value]) -> Response {
 }
 
 fn format_time_fn(args: &[Value]) -> Response {
-    match to_number(&arg(args, 0)) {
+    match to_number_arg(&arg(args, 0)) {
         Ok(t) => ok_string(time::format_time_with_ms(t)),
         Err(r) => r,
     }
@@ -279,7 +282,7 @@ fn with_random_fn(args: &[Value]) -> Response {
     let values = match arg(args, 0) {
         Value::Array(items) => items
             .iter()
-            .map(|v| v.as_f64().unwrap_or(f64::NAN))
+            .map(|v| to_number(v).unwrap_or(f64::NAN))
             .collect::<Vec<f64>>(),
         _ => Vec::new(),
     };

@@ -25,28 +25,28 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
     ("npm:color-convert:hex.hsl.raw", |a| hex_to(a, |t| {
         arr_response(color::hex_hsl_raw(t))
     })),
-    ("npm:color-convert:rgb.hsl", |a| channels_to(a, |c| {
+    ("npm:color-convert:rgb.hsl", |a| channels_to(a, true, |c| {
         arr_response(color::rgb_hsl(c).map(math::round))
     })),
-    ("npm:color-convert:rgb.hsl.raw", |a| channels_to(a, |c| {
+    ("npm:color-convert:rgb.hsl.raw", |a| channels_to(a, true, |c| {
         arr_response(color::rgb_hsl(c))
     })),
-    ("npm:color-convert:rgb.hex", |a| channels_to(a, |c| {
+    ("npm:color-convert:rgb.hex", |a| channels_to(a, false, |c| {
         ok_string(color::rgb_hex(c))
     })),
-    ("npm:color-convert:rgb.hex.raw", |a| channels_to(a, |c| {
+    ("npm:color-convert:rgb.hex.raw", |a| channels_to(a, false, |c| {
         ok_string(color::rgb_hex(c))
     })),
-    ("npm:color-convert:hsl.rgb", |a| channels_to(a, |c| {
+    ("npm:color-convert:hsl.rgb", |a| channels_to(a, true, |c| {
         arr_response(color::hsl_rgb(c).map(math::round))
     })),
-    ("npm:color-convert:hsl.rgb.raw", |a| channels_to(a, |c| {
+    ("npm:color-convert:hsl.rgb.raw", |a| channels_to(a, true, |c| {
         arr_response(color::hsl_rgb(c))
     })),
-    ("npm:color-convert:hsl.hex", |a| channels_to(a, |c| {
+    ("npm:color-convert:hsl.hex", |a| channels_to(a, true, |c| {
         ok_string(color::hsl_hex(c))
     })),
-    ("npm:color-convert:hsl.hex.raw", |a| channels_to(a, |c| {
+    ("npm:color-convert:hsl.hex.raw", |a| channels_to(a, true, |c| {
         ok_string(color::hsl_hex(c))
     })),
     ("shared/Colors:ensureThemeContrast", ensure_theme_contrast_fn),
@@ -56,7 +56,7 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
 /// (string, array or typed array), otherwise the whole argument list.
 /// `undefined`/`null` arg0 returns `arg0` before any of that.
 enum Wrapped {
-    Nullish(Value),
+    Nullish,
     Text(Vec<u16>),
     Items(Vec<Value>),
 }
@@ -64,7 +64,7 @@ enum Wrapped {
 fn wrapped(args: &[Value]) -> Wrapped {
     let arg0 = args.first().cloned().unwrap_or(Value::Undefined);
     match arg0 {
-        Value::Undefined | Value::Null => Wrapped::Nullish(arg0),
+        Value::Undefined | Value::Null => Wrapped::Nullish,
         Value::String(s) if s.units().len() > 1 => Wrapped::Text(s.units().to_vec()),
         Value::Array(items) if items.len() > 1 => Wrapped::Items(items),
         Value::Bytes(bytes) if bytes.len() > 1 => Wrapped::Items(
@@ -82,7 +82,7 @@ fn wrapped(args: &[Value]) -> Wrapped {
 /// an array join (which ignores the radix).
 fn hex_text(args: &[Value]) -> Result<Option<String>, Response> {
     Ok(match wrapped(args) {
-        Wrapped::Nullish(_) => None,
+        Wrapped::Nullish => None,
         Wrapped::Text(units) => Some(JsString::from_units(units).to_string_lossy()),
         Wrapped::Items(items) => Some(
             JsString::from_units(array_join(&items)).to_string_lossy(),
@@ -90,18 +90,22 @@ fn hex_text(args: &[Value]) -> Result<Option<String>, Response> {
     })
 }
 
-/// `args[i]` for `i` in 0..3, each value as the arithmetic operand the
-/// conversions use it as (`undefined` reads as `NaN`, `BigInt` cannot mix).
-fn channels(args: &[Value]) -> Result<Option<[f64; 3]>, Response> {
+/// `args[i]` for `i` in 0..3, each value as the operand the conversions use it
+/// as (`undefined` reads as `NaN`). `arith` picks the `BigInt` error: the
+/// conversions that do arithmetic first fail with the "mix" TypeError, while
+/// `rgb.hex`'s `Math.round` fails with the "convert" one.
+fn channels(args: &[Value], arith: bool) -> Result<Option<[f64; 3]>, Response> {
     let items: Vec<f64> = match wrapped(args) {
-        Wrapped::Nullish(_) => return Ok(None),
+        Wrapped::Nullish => return Ok(None),
         Wrapped::Text(units) => units.iter().map(|&u| number::to_number(&[u])).collect(),
         Wrapped::Items(items) => items
             .iter()
             .map(|v| match v {
-                Value::BigInt(_) => Err(type_error(
-                    "Cannot mix BigInt and other values, use explicit conversions",
-                )),
+                Value::BigInt(_) => Err(if arith {
+                    type_error("Cannot mix BigInt and other types, use explicit conversions")
+                } else {
+                    type_error("Cannot convert a BigInt value to a number")
+                }),
                 Value::Symbol(_) => {
                     Err(type_error("Cannot convert a Symbol value to a number"))
                 }
@@ -134,8 +138,12 @@ fn hex_to(args: &[Value], f: impl Fn(&str) -> Response) -> Response {
     }
 }
 
-fn channels_to(args: &[Value], f: impl Fn([f64; 3]) -> Response) -> Response {
-    match channels(args) {
+fn channels_to(
+    args: &[Value],
+    arith: bool,
+    f: impl Fn([f64; 3]) -> Response,
+) -> Response {
+    match channels(args, arith) {
         Ok(Some(c)) => f(c),
         Ok(None) => Response::Ok(args.first().cloned().unwrap_or(Value::Undefined)),
         Err(r) => r,
