@@ -46,6 +46,11 @@ mod photon;
 #[allow(dead_code)]
 mod shared;
 
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use std::collections::HashSet;
 
 use asrs_parity::random::Rng;
