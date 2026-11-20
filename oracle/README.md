@@ -356,6 +356,29 @@ The dump is CVE-1 JSONL, written for `initial` and then for `full`:
 {"queuedStructs", "queuedStructArrays", "queuedProtos"}
 ```
 
+`decode --initial` stops after the `initial` phase.
+
+`decodeWorker <file>` (`src/decodeWorker.ts`) runs the worker bundle for the file's extension
+alone, with the files main would send, and prints every message it posts, one request at a time
+(the next request is posted once the worker has finished the previous one):
+
+```text
+{"request": "start"}                                         then the messages start posts
+{"request": "parseField", "key"}                             then the messages parseField posts
+{"type": "progress", "value"}
+{"type": "initial", "isPartial"}                             then the dump lines above for message.log
+{"type": "failed"}
+{"type": "fields", "count"}                                  then one line per field response:
+{"key", "generatedParent", "type", "timestamps", "values", "structuredType", "wpilibType",
+ "metadataString", "stripingReference", "typeWarning"}
+{"type": "threw"}                                            the handler threw (the worker's error event)
+```
+
+When the initial log is partial, the requests after `start` are every key of the initial log in
+order, then every key `HistoricalDataSource` always requests (the robot-state key lists in
+`updateFieldRequest`'s order), `"/"` plus the first key, `/asrs-oracle/missing`, and the first key
+again. Lines are written synchronously, so a worker that never answers leaves the lines before it.
+
 `export` decodes like `decode` (through `full`), then runs the real `exportWorker` bundle through
 upstream's `WorkerManager` on `log.toSerialized()`, as `prepare-export` does, and writes what main's
 `write-export` would: a string as UTF-8 (lone surrogates become U+FFFD), bytes as they are. Exit
