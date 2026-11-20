@@ -1,0 +1,240 @@
+{
+ "protocol": "nt4",
+ "seed": 55,
+ "latencyMs": 1,
+ "endMs": 690,
+ "client": {
+  "source": "nt4-client"
+ },
+ "server": {
+  "version": "4.0"
+ },
+ "steps": [
+  {
+   "t": 0,
+   "client": [
+    "connect"
+   ]
+  },
+  {
+   "t": 50,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": {
+       "name": "/p/arr",
+       "id": 1,
+       "type": "int",
+       "properties": []
+      }
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/p/str",
+       "id": 2,
+       "type": "int",
+       "properties": "abc"
+      }
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/p/obj",
+       "id": 3,
+       "type": "int",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 60,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/arr",
+       "update": {
+        "0": "a",
+        "1": "b"
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 70,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/arr",
+       "update": {
+        "length": 1
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 80,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/arr",
+       "update": {
+        "length": -1
+       }
+      }
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/after",
+       "id": 4,
+       "type": "int",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 90,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/arr",
+       "update": {
+        "length": null
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 110,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/str",
+       "update": {
+        "0": "x"
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 120,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/str",
+       "update": {
+        "length": null
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 130,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/p/str",
+       "update": {
+        "7": null
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 140,
+   "server": [
+    "textraw",
+    "[{\"method\":\"properties\",\"params\":{\"name\":\"/p/obj\",\"update\":{\"__proto__\":5,\"k\":2}}}]"
+   ]
+  },
+  {
+   "t": 150,
+   "server": [
+    "textraw",
+    "[{\"method\":\"announce\",\"params\":{\"name\":\"/p/own\",\"id\":5,\"type\":\"int\",\"properties\":{\"__proto__\":1}}},{\"method\":\"properties\",\"params\":{\"name\":\"/p/own\",\"update\":{\"__proto__\":2}}}]"
+   ]
+  },
+  {
+   "t": 160,
+   "client": [
+    "nt4",
+    "publish",
+    "/pub",
+    "double"
+   ]
+  },
+  {
+   "t": 170,
+   "client": [
+    "nt4",
+    "setProperties",
+    "/pub",
+    {
+     "o": [
+      [
+       "__proto__",
+       {
+        "o": [
+         [
+          "y",
+          1
+         ]
+        ]
+       }
+      ],
+      [
+       "k",
+       2
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "t": 180,
+   "server": [
+    "drop"
+   ]
+  }
+ ]
+}
