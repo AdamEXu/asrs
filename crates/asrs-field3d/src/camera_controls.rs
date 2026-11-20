@@ -175,7 +175,9 @@ fn approx_equals(a: f64, b: f64, error: f64) -> bool {
 }
 
 fn approx_equals_vec3(a: Vector3, b: Vector3, error: f64) -> bool {
-    approx_equals(a.x, b.x, error) && approx_equals(a.y, b.y, error) && approx_equals(a.z, b.z, error)
+    approx_equals(a.x, b.x, error)
+        && approx_equals(a.y, b.y, error)
+        && approx_equals(a.z, b.z, error)
 }
 
 fn clamp_vec3(v: Vector3, min: Vector3, max: Vector3) -> Vector3 {
@@ -422,7 +424,11 @@ impl CameraControls {
 
     pub fn rotate_to(&mut self, azimuth_angle: f64, polar_angle: f64, enable_transition: bool) {
         self.is_user_controlling_rotate = false;
-        let theta = clamp(azimuth_angle, self.min_azimuth_angle, self.max_azimuth_angle);
+        let theta = clamp(
+            azimuth_angle,
+            self.min_azimuth_angle,
+            self.max_azimuth_angle,
+        );
         let phi = clamp(polar_angle, self.min_polar_angle, self.max_polar_angle);
         self.spherical_end.theta = theta;
         self.spherical_end.phi = phi;
@@ -486,7 +492,8 @@ impl CameraControls {
 
     pub fn truck(&mut self, x: f64, y: f64, enable_transition: bool) {
         self.camera.update_matrix();
-        let x_column = Vector3::from_matrix_column(&self.camera.object.matrix, 0).multiply_scalar(x);
+        let x_column =
+            Vector3::from_matrix_column(&self.camera.object.matrix, 0).multiply_scalar(x);
         let y_column =
             Vector3::from_matrix_column(&self.camera.object.matrix, 1).multiply_scalar(-y);
         let offset = x_column + y_column;
@@ -861,9 +868,13 @@ impl CameraControls {
         if !self.enabled {
             return;
         }
-        let mouse_button = [mouse_button::LEFT, mouse_button::MIDDLE, mouse_button::RIGHT]
-            .into_iter()
-            .find(|&bit| event.buttons & bit == bit);
+        let mouse_button = [
+            mouse_button::LEFT,
+            mouse_button::MIDDLE,
+            mouse_button::RIGHT,
+        ]
+        .into_iter()
+        .find(|&bit| event.buttons & bit == bit);
         if let Some(button) = mouse_button
             && let Some(i) = self
                 .active_pointers
@@ -1016,7 +1027,7 @@ impl CameraControls {
         }
     }
 
-    /// Internal state for parity dumps, in the field order the oracle records.
+    /// Internal state for parity dumps.
     pub fn debug_state(&self) -> ControlsDebugState {
         ControlsDebugState {
             spherical: self.spherical,
@@ -1047,9 +1058,6 @@ impl CameraControls {
             last_distance: self.last_distance,
             zoom: [self.zoom, self.zoom_end, self.last_zoom],
             element_rect: self.element_rect,
-            drag_start_position: self.drag_start_position,
-            last_drag_position: self.last_drag_position,
-            dolly_start: self.dolly_start,
             active_pointers: self.active_pointers.clone(),
         }
     }
@@ -1076,8 +1084,5 @@ pub struct ControlsDebugState {
     pub last_distance: f64,
     pub zoom: [f64; 3],
     pub element_rect: ElementRect,
-    pub drag_start_position: [f64; 2],
-    pub last_drag_position: [f64; 2],
-    pub dolly_start: [f64; 2],
     pub active_pointers: Vec<Pointer>,
 }

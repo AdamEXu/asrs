@@ -34,6 +34,22 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "field3d/camera-controls-mac": {
+      "cases": 124,
+      "content": "64b1c1c2d60526eb",
+      "generator": "ad0c127c536fc10d",
+      "spec": "parity/specs/field3d/camera-controls-mac.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "field3d/camera-controls-other": {
+      "cases": 44,
+      "content": "93ce2f3b773809c6",
+      "generator": "c3701181d0c32575",
+      "spec": "parity/specs/field3d/camera-controls-other.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "field3d/three": {
       "cases": 9460,
       "content": "df05db1732c3129d",
