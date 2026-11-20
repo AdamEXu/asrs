@@ -1,0 +1,56 @@
+#![allow(clippy::disallowed_methods)]
+
+mod assets;
+mod check;
+mod layout;
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode};
+
+type Result<T = ()> = std::result::Result<T, String>;
+
+const USAGE: &str = "usage: cargo xtask <command>
+
+commands:
+  check     layout rules, rustfmt, clippy, tests
+  layout    crate dependency and lint opt-out rules only
+  assets    copy upstream assets into assets/";
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let result = match args.first().map(String::as_str) {
+        Some("check") => check::run(),
+        Some("layout") => layout::run(),
+        Some("assets") => assets::run(),
+        _ => Err(USAGE.to_owned()),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            eprintln!("{message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask lives inside the workspace")
+        .to_path_buf()
+}
+
+fn cargo(args: &[&str]) -> Result {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    eprintln!("$ cargo {}", args.join(" "));
+    let status = Command::new(cargo)
+        .args(args)
+        .current_dir(workspace_root())
+        .status()
+        .map_err(|e| format!("failed to run cargo: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("cargo {} failed ({status})", args.join(" ")))
+    }
+}
