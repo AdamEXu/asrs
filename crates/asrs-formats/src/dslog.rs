@@ -7,7 +7,7 @@ use asrs_js::math;
 use asrs_js::string::{JsString, TextDecoder};
 use asrs_log::log::Log;
 
-use crate::worker::{Abort, Response};
+use crate::worker::{Abort, DecodeWorker, Request, Response};
 
 const HEADER_SIZE: i64 = 4 + 8 + 8;
 const PERIOD_SECS: f64 = 0.02;
@@ -457,6 +457,19 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
         is_partial: false,
     });
     Ok(())
+}
+
+/// dsLogWorker: answers `start` and ignores every other request.
+pub struct DsLogWorker;
+
+impl DecodeWorker for DsLogWorker {
+    fn handle(&mut self, request: Request, post: &mut dyn FnMut(Response)) -> Result<(), Abort> {
+        let Request::Start(files) = request else {
+            return Ok(());
+        };
+        let files: Vec<Option<&[u8]>> = files.iter().map(Option::as_deref).collect();
+        run_worker(&files, &mut |response| post(response))
+    }
 }
 
 #[cfg(test)]

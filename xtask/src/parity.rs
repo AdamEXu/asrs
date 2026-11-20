@@ -21,12 +21,17 @@ suites:
         oracle must still match the committed vectors and the two sides must agree.
   fn <spec id or .jsonl path>... [--plant]
         stream fn requests through both sides and compare every response
-  decode [<log file>...] [--timeout SECS]
-        decode log files with both sides and compare the canonical dumps: every
-        .dslog/.dsevents file under the corpus b tree, the public log cache and the
-        fuzz corpora, or just the files listed. An oracle that does not finish in time
-        and an asrs-cli that exits with code 3 mean 'never completes'; that verdict
+  decode [<log file>...] [--timeout SECS] [--plant]
+        decode log files with both sides and compare the canonical dumps (`decode`) and
+        the decode worker's messages, initial log and per-field responses
+        (`decodeWorker`): every .dslog/.dsevents/.wpilog file under the corpus a and b
+        trees, the public log cache and the fuzz corpora, or just the files listed. A
+        WPILOG's `decode` dump is compared on its initial phase only until lazy loading
+        is ported (F09). An oracle that does not finish in time and an asrs-cli that
+        exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
+        Exit code 4 from asrs-cli (a path the port does not model yet) is listed and
+        not compared.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
         anything else byte by byte
@@ -191,10 +196,13 @@ fn resolve_spec(root: &Path, spec: &str) -> Result<PathBuf> {
     ))
 }
 
-/// `cargo xtask parity decode`: `oracle decode` and `asrs-cli decode` on the same file must
-/// produce the same verdict (a dump or "never completes") and the same dump bytes.
+/// `cargo xtask parity decode`: for every case, `oracle decode` and `asrs-cli decode` must give
+/// the same verdict and the same dump bytes, and so must `oracle decodeWorker` and
+/// `asrs-cli decode-worker`. A WPILOG is compared on its "initial" phase only: its "full" phase
+/// needs lazy field loading (unit F09); the worker run covers its per-field responses.
 fn decode_suite(args: &[String]) -> Result {
     let mut timeout = 60u64;
+    let mut plant = false;
     let mut positional = Vec::new();
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -205,6 +213,7 @@ fn decode_suite(args: &[String]) -> Result {
                     .and_then(|v| v.parse().ok())
                     .ok_or("--timeout needs a number")?;
             }
+            "--plant" => plant = true,
             flag if flag.starts_with("--") => {
                 return Err(format!("unknown option {flag}\n\n{USAGE}"));
             }
@@ -212,20 +221,27 @@ fn decode_suite(args: &[String]) -> Result {
         }
     }
     let paths = Paths::new()?;
-    let cases = if positional.is_empty() {
+    let files = if positional.is_empty() {
         decode_cases(&paths)?
     } else {
         positional.iter().map(PathBuf::from).collect()
     };
-    if cases.is_empty() {
+    if files.is_empty() {
         return Err("no decode cases found".to_owned());
     }
     cargo(&["build", "--quiet", "-p", "asrs-cli"])?;
+    oracle::build_harness(&paths)?;
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| crate::workspace_root().join("target"))
         .join("debug")
         .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
+    let mut cases = Vec::new();
+    for file in &files {
+        let partial = file.extension().is_some_and(|e| e == "wpilog");
+        cases.push((file, DecodeMode::Decode { partial }));
+        cases.push((file, DecodeMode::Worker));
+    }
     let timeout = Duration::from_secs(timeout);
     let workers = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
@@ -243,17 +259,20 @@ fn decode_suite(args: &[String]) -> Result {
                     if i >= cases.len() {
                         return;
                     }
-                    let path = &cases[i];
-                    let oracle = DecodeVerdict::oracle(run_decode(
-                        oracle::oracle_command(&paths, "decode")
-                            .expect("oracle decode command")
-                            .arg(path),
-                        timeout,
-                    ));
-                    let rust = DecodeVerdict::port(run_decode(
-                        Command::new(&target).arg("decode").arg(path),
-                        timeout,
-                    ));
+                    let (path, mode) = &cases[i];
+                    let mut oracle_command = oracle::oracle_command(&paths, mode.oracle_entry())
+                        .expect("oracle decode command");
+                    oracle_command.args(mode.flags()).arg(path);
+                    let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, timeout));
+                    let mut rust_command = Command::new(&target);
+                    rust_command
+                        .arg(mode.cli_command())
+                        .args(mode.flags())
+                        .arg(path);
+                    let mut rust = DecodeVerdict::port(run_decode(&mut rust_command, timeout));
+                    if plant && i == 0 {
+                        rust.plant();
+                    }
                     *results[i].lock().expect("decode result poisoned") = Some((oracle, rust));
                 }
             });
@@ -261,56 +280,91 @@ fn decode_suite(args: &[String]) -> Result {
     });
     let mut failures = Vec::new();
     let mut never = 0;
-    for (i, path) in cases.iter().enumerate() {
+    let mut unmodeled = Vec::new();
+    for (i, (path, mode)) in cases.iter().enumerate() {
         let (oracle, rust) = results[i]
             .lock()
             .expect("decode result poisoned")
             .take()
             .expect("every case ran");
-        if matches!(oracle, DecodeVerdict::NeverCompletes) {
+        let name = format!("{} ({})", path.display(), mode.cli_command());
+        if let DecodeVerdict::NeverCompletes(_) = oracle {
             never += 1;
         }
         match (oracle, rust) {
-            (DecodeVerdict::Dump(want), DecodeVerdict::Dump(got)) => {
+            (DecodeVerdict::Dump(want), DecodeVerdict::Dump(got))
+            | (DecodeVerdict::NeverCompletes(want), DecodeVerdict::NeverCompletes(got)) => {
                 if let Some(report) = diff::report_bytes(&want, &got) {
-                    failures.push(format!("{}: {report}", path.display()));
+                    failures.push(format!("{name}: {report}"));
                 }
             }
-            (DecodeVerdict::NeverCompletes, DecodeVerdict::NeverCompletes) => {}
+            (_, DecodeVerdict::Unmodeled) => unmodeled.push(name),
             (o, r) => failures.push(format!(
-                "{}: oracle {} but asrs-cli {}",
-                path.display(),
+                "{name}: oracle {} but asrs-cli {}",
                 o.describe(),
                 r.describe()
             )),
         }
     }
     eprintln!(
-        "decode: {} cases, {never} where upstream never completes",
-        cases.len()
+        "decode: {} files, {} comparisons, {never} where upstream never completes, {} the port does not model yet",
+        files.len(),
+        cases.len(),
+        unmodeled.len()
     );
-    finish("decode", cases.len(), failures)
+    for name in &unmodeled {
+        eprintln!("  not modeled: {name}");
+    }
+    finish("decode", cases.len() - unmodeled.len(), failures)
 }
 
-/// The `.dslog`/`.dsevents` files the suite decodes: corpus b, the public log cache and the
-/// generated fuzz corpora.
+enum DecodeMode {
+    /// `decode`; a partial log stops after the "initial" phase.
+    Decode { partial: bool },
+    /// `decodeWorker` / `decode-worker`.
+    Worker,
+}
+
+impl DecodeMode {
+    fn oracle_entry(&self) -> &'static str {
+        match self {
+            DecodeMode::Decode { .. } => "decode",
+            DecodeMode::Worker => "decodeWorker",
+        }
+    }
+
+    fn cli_command(&self) -> &'static str {
+        match self {
+            DecodeMode::Decode { .. } => "decode",
+            DecodeMode::Worker => "decode-worker",
+        }
+    }
+
+    fn flags(&self) -> &'static [&'static str] {
+        match self {
+            DecodeMode::Decode { partial: true } => &["--initial"],
+            _ => &[],
+        }
+    }
+}
+
+/// The `.dslog`/`.dsevents`/`.wpilog` files the suite decodes: corpora a and b, the public log
+/// cache and the generated fuzz corpora.
 fn decode_cases(paths: &Paths) -> Result<Vec<PathBuf>> {
     let mut cases = Vec::new();
-    let is_ds = |p: &Path| {
+    let is_ported = |p: &Path| {
         p.extension()
-            .is_some_and(|e| e == "dslog" || e == "dsevents")
+            .is_some_and(|e| e == "dslog" || e == "dsevents" || e == "wpilog")
     };
-    collect_paths(
-        &crate::workspace_root().join("target/parity/corpus/synthetic/b"),
-        &is_ds,
-        &mut cases,
-    );
-    collect_paths(&paths.cache.join("public-logs"), &is_ds, &mut cases);
-    collect_paths(
-        &crate::workspace_root().join("target/parity/corpus/fuzz"),
-        &is_ds,
-        &mut cases,
-    );
+    let root = crate::workspace_root();
+    for dir in [
+        root.join("target/parity/corpus/synthetic/a"),
+        root.join("target/parity/corpus/synthetic/b"),
+        paths.cache.join("public-logs"),
+        root.join("target/parity/corpus/fuzz"),
+    ] {
+        collect_paths(&dir, &is_ported, &mut cases);
+    }
     cases.sort();
     Ok(cases)
 }
@@ -330,15 +384,19 @@ fn collect_paths(dir: &Path, keep: &dyn Fn(&Path) -> bool, out: &mut Vec<PathBuf
 }
 
 const NEVER_COMPLETES: i32 = 3;
+const UNMODELED: i32 = 4;
 
 enum DecodeRun {
     Exited(Option<i32>, Vec<u8>),
-    TimedOut,
+    TimedOut(Vec<u8>),
 }
 
+/// A run's outcome with what it printed. "Never completes" keeps the output written before the
+/// worker stopped answering, which must agree too.
 enum DecodeVerdict {
     Dump(Vec<u8>),
-    NeverCompletes,
+    NeverCompletes(Vec<u8>),
+    Unmodeled,
     Broken(String),
 }
 
@@ -348,7 +406,7 @@ impl DecodeVerdict {
         match run {
             DecodeRun::Exited(Some(0), out) => DecodeVerdict::Dump(out),
             DecodeRun::Exited(code, _) => DecodeVerdict::Broken(format!("exited with {code:?}")),
-            DecodeRun::TimedOut => DecodeVerdict::NeverCompletes,
+            DecodeRun::TimedOut(out) => DecodeVerdict::NeverCompletes(out),
         }
     }
 
@@ -356,16 +414,28 @@ impl DecodeVerdict {
     fn port(run: DecodeRun) -> Self {
         match run {
             DecodeRun::Exited(Some(0), out) => DecodeVerdict::Dump(out),
-            DecodeRun::Exited(Some(NEVER_COMPLETES), _) => DecodeVerdict::NeverCompletes,
+            DecodeRun::Exited(Some(NEVER_COMPLETES), out) => DecodeVerdict::NeverCompletes(out),
+            DecodeRun::Exited(Some(UNMODELED), _) => DecodeVerdict::Unmodeled,
             DecodeRun::Exited(code, _) => DecodeVerdict::Broken(format!("exited with {code:?}")),
-            DecodeRun::TimedOut => DecodeVerdict::Broken("timed out".to_owned()),
+            DecodeRun::TimedOut(_) => DecodeVerdict::Broken("timed out".to_owned()),
+        }
+    }
+
+    /// Flips one bit of the last byte before the final newline, to show a mismatch report.
+    fn plant(&mut self) {
+        if let DecodeVerdict::Dump(out) | DecodeVerdict::NeverCompletes(out) = self
+            && out.len() >= 2
+        {
+            let at = out.len() - 2;
+            out[at] ^= 1;
         }
     }
 
     fn describe(&self) -> String {
         match self {
             DecodeVerdict::Dump(bytes) => format!("dumped {} bytes", bytes.len()),
-            DecodeVerdict::NeverCompletes => "never completes".to_owned(),
+            DecodeVerdict::NeverCompletes(_) => "never completes".to_owned(),
+            DecodeVerdict::Unmodeled => "does not model it".to_owned(),
             DecodeVerdict::Broken(why) => why.clone(),
         }
     }
@@ -399,7 +469,7 @@ fn run_decode(command: &mut Command, timeout: Duration) -> DecodeRun {
     let out = reader.join().unwrap_or_default();
     match status {
         Some(status) => DecodeRun::Exited(status.code(), out),
-        None => DecodeRun::TimedOut,
+        None => DecodeRun::TimedOut(out),
     }
 }
 
