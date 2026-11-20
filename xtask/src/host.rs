@@ -56,10 +56,11 @@ commands on the machine itself (cargo xtask host local ...):
   describe [--manifest]   write target/parity/host/host.json: OS, Electron, displays, theme,
                           Chromium and native rasterizers, sha256 of the UI font files. With
                           --manifest also store it as `host` in parity/vectors/canvas/<os>.json
-  colour-patch            512 sRGB patches through capturePage at device scale 1 and 2. Gate:
-                          every patch within 1 level per channel with --force-color-profile=srgb.
-                          A run without the switch is recorded too and must pass on a host whose
-                          display profile is sRGB
+  colour-patch            512 sRGB patches through capturePage at device scale 1 and 2, with
+                          and without --force-color-profile=srgb. Gate on Windows and Linux,
+                          whose display profile is pinned to sRGB: every patch exact in both
+                          runs. On macOS: within 1 level per channel with the switch; the run
+                          without it is recorded only
   launch                  start the real upstream app with isolated userData and capture its hub
   gui-check               describe, colour-patch and launch
   s1                      run the S1 spike (`auto`) and require that its window opened
@@ -953,7 +954,13 @@ fn read_json_file(path: &Path) -> Result<Json> {
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn patch_result(paths: &Paths, dir: &Path, switches: &[&str], scale: &str) -> Result<(f64, f64)> {
+fn patch_result(
+    paths: &Paths,
+    dir: &Path,
+    switches: &[&str],
+    scale: &str,
+    exact_required: bool,
+) -> Result<(f64, f64)> {
     let file = dir.join(format!("colour-patch@{scale}x.json"));
     let factor = format!("--force-device-scale-factor={scale}");
     let switches: Vec<&str> = switches.iter().copied().chain([factor.as_str()]).collect();
@@ -976,28 +983,37 @@ fn patch_result(paths: &Paths, dir: &Path, switches: &[&str], scale: &str) -> Re
             file.display()
         ));
     }
+    if exact_required && number("exact") != 512.0 {
+        return Err(format!(
+            "colour-patch@{scale}x: {} of 512 patches exact on an sRGB display, max delta {} ({})",
+            number("exact"),
+            number("maxDelta"),
+            file.display()
+        ));
+    }
     Ok((number("exact"), number("maxDelta")))
 }
 
 fn colour_patch(paths: &Paths, out: &Path) -> Result {
     build_host_bundle(paths)?;
+    let srgb_display = std::env::consts::OS != "macos";
+    let raw = out.join("raw");
+    let runs: [(&str, &Path, &[&str], bool); 2] = [
+        ("sRGB forced", out, COLOUR_SWITCHES, true),
+        ("display profile", &raw, &["--lang=en-US"], srgb_display),
+    ];
     let mut failures = Vec::new();
     for scale in ["1", "2"] {
-        match patch_result(paths, out, COLOUR_SWITCHES, scale) {
-            Ok((exact, delta)) => {
-                eprintln!(
-                    "colour-patch@{scale}x (sRGB forced): {exact}/512 exact, max delta {delta}"
-                )
+        for (label, dir, switches, gated) in runs {
+            match patch_result(paths, dir, switches, scale, srgb_display) {
+                Ok((exact, delta)) => {
+                    eprintln!(
+                        "colour-patch@{scale}x ({label}): {exact}/512 exact, max delta {delta}"
+                    )
+                }
+                Err(e) if gated => failures.push(format!("{label}: {e}")),
+                Err(e) => eprintln!("colour-patch@{scale}x ({label}, not gated): {e}"),
             }
-            Err(e) => failures.push(e),
-        }
-        match patch_result(paths, &out.join("raw"), &["--lang=en-US"], scale) {
-            Ok((exact, delta)) => {
-                eprintln!(
-                    "colour-patch@{scale}x (display profile): {exact}/512 exact, max delta {delta}"
-                )
-            }
-            Err(e) => eprintln!("colour-patch@{scale}x (display profile, not gated): {e}"),
         }
     }
     if failures.is_empty() {
