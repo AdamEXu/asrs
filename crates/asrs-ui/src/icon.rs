@@ -152,8 +152,9 @@ fn source_key(source: &IconSource) -> u64 {
     h.finish()
 }
 
-/// Rasterizes and caches one icon at a device-space rectangle. The cache never evicts: keys are
-/// bounded by symbols x chains x the few sizes and scales the UI uses.
+/// Rasterizes and caches one icon at a device-space rectangle. Only the sub-pixel part of the
+/// position is keyed, so the cache never evicts: keys are bounded by symbols x chains x the few
+/// sizes and scales the UI uses, however far icons move or scroll.
 fn cached_image(
     source: &IconSource,
     chain: &'static str,
@@ -161,16 +162,21 @@ fn cached_image(
     viewport: Option<[f64; 2]>,
     cx: &mut App,
 ) -> Option<(i32, i32, Arc<RenderImage>)> {
+    let [x, y, w, h] = rect;
+    let (dx, dy) = (x.floor(), y.floor());
+    let local = [x - dx, y - dy, w, h];
+    let shift =
+        |(rx, ry, image): (i32, i32, Arc<RenderImage>)| (rx + dx as i32, ry + dy as i32, image);
     let source_hash = source_key(source);
     let key = Key {
         source: source_hash,
         chain,
-        rect: rect.map(f64::to_bits),
+        rect: local.map(f64::to_bits),
         viewport: viewport.map(|v| v.map(f64::to_bits)),
     };
     let cache = cx.default_global::<IconCache>();
     if let Some(hit) = cache.images.get(&key) {
-        return hit.clone();
+        return hit.clone().map(shift);
     }
     let tree = cache
         .trees
@@ -179,13 +185,13 @@ fn cached_image(
         .clone();
     let image = tree.and_then(|tree| {
         let filter = FilterChain::parse(chain).ok()?;
-        let raster = symbols::rasterize(&tree, rect, viewport, &filter)?;
+        let raster = symbols::rasterize(&tree, local, viewport, &filter)?;
         let buffer = RgbaImage::from_raw(raster.width, raster.height, raster.bgra)?;
         let image = Arc::new(RenderImage::new(vec![Frame::new(buffer)]));
         Some((raster.x, raster.y, image))
     });
     cache.images.insert(key, image.clone());
-    image
+    image.map(shift)
 }
 
 pub fn paint_icon(
