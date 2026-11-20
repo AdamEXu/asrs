@@ -25,7 +25,9 @@ driven over SSH; neither has GPU acceleration, so Chromium and native code rende
             /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519 (override with ASRS_LINUX_KEYS).
             Checkout ~/asrs, oracle pack ~/asrs-pack.tar.zst.
 
-The dev machine has 16 GB of memory and each VM takes 8 GB: run one at a time.
+The dev machine has 16 GB of memory; the Windows VM takes 8 GB and the Linux VM 6 GB (plus 8 GB
+of swap inside it), so avoid heavy builds on both at once. The Windows VM is shared with other
+projects: do not stop it while someone else is using it.
 
 commands on a host (cargo xtask host <name> ...):
   start | stop | status   boot the VM and wait for SSH, shut it down, or report its state
