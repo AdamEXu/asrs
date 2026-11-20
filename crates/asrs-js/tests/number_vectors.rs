@@ -25,6 +25,9 @@ mod js_time;
 mod js_msgpack {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
 }
+mod photon {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
 
 use asrs_parity::{FnCase, Response, fn_vectors};
 
