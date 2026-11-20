@@ -1,0 +1,50 @@
+{
+  "protocol": "nt4",
+  "seed": 3141,
+  "latencyMs": 1,
+  "endMs": 9000,
+  "client": {
+    "source": "nt4",
+    "mode": "default",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "logging", "liveDiscard": 3 }
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 0,
+    "topics": [
+      { "name": "/A/x0", "type": "double", "value": 0 },
+      { "name": "/A/x1", "type": "double", "value": 1 },
+      { "name": "/A/x2", "type": "double", "value": 2 },
+      { "name": "/A/x3", "type": "double", "value": 3 },
+      { "name": "/A/x4", "type": "double", "value": 4 },
+      { "name": "/A/x5", "type": "double", "value": 5 },
+      { "name": "/A/x6", "type": "double", "value": 6 },
+      { "name": "/A/x7", "type": "double", "value": 7 },
+      { "name": "/A/x8", "type": "double", "value": 8 },
+      { "name": "/A/x9", "type": "double", "value": 9 },
+      { "name": "/B/flags", "type": "boolean[]", "value": [true, false] },
+      { "name": "/B/name", "type": "string", "value": "run" },
+      { "name": "/B/raw", "type": "raw", "value": "0123456789abcdef0123456789abcdef" }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "server": ["batch", [["/A/x0", 10], ["/A/x1", 11], ["/A/x2", 12]]] },
+    { "t": 1000, "server": ["batch", [["/A/x3", 13], ["/A/x4", 14], ["/B/flags", [false, true]]]] },
+    { "t": 1500, "server": ["batch", [["/A/x5", 15], ["/A/x6", 16], ["/B/name", "mid"]]] },
+    { "t": 2000, "server": ["batch", [["/A/x7", 17], ["/A/x8", 18], ["/B/raw", "ff00ff00ff00ff00"]] ] },
+    { "t": 2500, "server": ["set", "/A/x9", 19] },
+    { "t": 3000, "client": ["dump"] },
+    { "t": 3500, "client": ["prefs", { "liveSubscribeMode": "low-bandwidth" }] },
+    { "t": 4000, "client": ["fields", ["/A", "/B"], []] },
+    { "t": 4500, "server": ["batch", [["/A/x0", 20], ["/A/x1", 21], ["/A/x2", 22], ["/A/x3", 23], ["/A/x4", 24], ["/A/x5", 25], ["/A/x6", 26], ["/A/x7", 27], ["/A/x8", 28], ["/A/x9", 29]]] },
+    { "t": 5000, "client": ["dump"] },
+    { "t": 5500, "client": ["prefs", { "liveDiscard": -1 }] },
+    { "t": 6000, "server": ["batch", [["/A/x0", 30], ["/B/name", "end"]]] },
+    { "t": 6500, "client": ["prefs", { "liveSubscribeMode": "logging" }] },
+    { "t": 7000, "server": ["batch", [["/A/x1", 31], ["/A/x2", 32]]] },
+    { "t": 7500, "client": ["dump"] },
+    { "t": 8500, "client": ["stop"] }
+  ]
+}

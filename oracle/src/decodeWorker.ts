@@ -16,7 +16,7 @@ import {
 } from "@upstream/shared/log/RobotState";
 import { encode } from "./cve1";
 import { dumpLog } from "./historical/dump";
-import { OracleWorker, terminatedWorkersExited } from "./shims";
+import { OracleWorker, resolveWorkerScript, terminatedWorkersExited } from "./shims";
 import { realSetImmediate } from "./historical/timers";
 
 const USAGE = `usage: decodeWorker <log file>
@@ -127,7 +127,20 @@ const files = file.endsWith(".dslog")
   ? [readOrNull(file), readOrNull(file.slice(0, -5) + "dsevents")]
   : [readOrNull(file)];
 
-const worker = new OracleWorker("../bundles/" + workerName, { type: "module" });
+// The worker realm's `Date` is pinned so decoders that throttle progress by wall clock
+// (Road Runner, RLOG) emit a fixed sequence; asrs-cli pins the same value.
+const loader =
+  "data:text/javascript," +
+  encodeURIComponent(`
+const RealDate = globalThis.Date;
+const FROZEN = 1000000000000;
+globalThis.Date = new Proxy(RealDate, {
+  construct: (target, args) => (args.length === 0 ? new RealDate(FROZEN) : Reflect.construct(target, args)),
+  get: (target, property, receiver) => (property === "now" ? () => FROZEN : Reflect.get(target, property, receiver))
+});
+await import(${JSON.stringify(resolveWorkerScript("../bundles/" + workerName))});
+`);
+const worker = new OracleWorker(loader, { type: "module" });
 let initial: any = null;
 worker.onmessage = (event) => {
   if (event.data.type === "initial") initial = event.data;

@@ -1,0 +1,37 @@
+{
+  "protocol": "nt4",
+  "seed": 90,
+  "latencyMs": 1,
+  "endMs": 3600,
+  "client": {
+    "source": "nt4",
+    "mode": "systemcore",
+    "address": "172.22.11.2",
+    "prefs": { "liveSubscribeMode": "low-bandwidth" },
+    "tabs": ["/SmartDashboard", "/Robot"],
+    "sidebar": []
+  },
+  "server": {
+    "version": "4.1",
+    "ports": [6810],
+    "offsetUs": -2000000,
+    "topics": [
+      { "name": "/SmartDashboard/x", "type": "double", "value": 1.25 },
+      { "name": "/DriverStation/Enabled", "type": "boolean", "value": true },
+      { "name": "/Robot/x", "type": "double", "value": 0.5 },
+      { "name": "/SmartDashboard/label", "type": "string", "value": "sc" }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "server": ["batch", [["/SmartDashboard/x", 2.0], ["/Robot/x", 0.75]]] },
+    { "t": 1200, "client": ["log", "createBlankField", "NT:/Robot/DogLog/Options", 2] },
+    { "t": 1400, "client": ["tune", "NT:/Robot/x", 5.0] },
+    { "t": 1600, "client": ["tune", "NT:/SmartDashboard/x", 4.25] },
+    { "t": 1800, "client": ["log", "setGeneratedParent", "NT:/SmartDashboard"] },
+    { "t": 2000, "client": ["tune", "NT:/SmartDashboard/x", 9.0] },
+    { "t": 2400, "client": ["untune", "NT:/SmartDashboard/x"] },
+    { "t": 2800, "client": ["dump"] },
+    { "t": 3200, "client": ["stop"] }
+  ]
+}

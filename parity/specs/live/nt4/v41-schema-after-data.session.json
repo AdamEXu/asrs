@@ -1,0 +1,35 @@
+{
+  "protocol": "nt4",
+  "seed": 66,
+  "latencyMs": 1,
+  "endMs": 4000,
+  "client": {
+    "source": "nt4",
+    "mode": "default",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "logging" }
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 4000000,
+    "topics": [
+      { "name": "/Pair", "type": "struct:Pair", "value": "000000000000f03f00000000000004c0" },
+      { "name": "/Pairs", "type": "struct:Pair[]", "value": "000000000000f03f00000000000004c0000000000000084000000000000010c0" },
+      { "name": "/Msg", "type": "proto:Point", "value": "09000000000000f83f1100000000000002c01a02686920072801" },
+      { "name": "/Other", "type": "double", "value": 1.0 }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "server": ["set", "/Pair", "00000000000000400000000000000a40"] },
+    { "t": 700, "server": ["announce", "/.schema/struct:Pair", "structschema"] },
+    { "t": 800, "server": ["setraw", "/.schema/struct:Pair", "646f75626c6520613b646f75626c652062"] },
+    { "t": 900, "client": ["dump"] },
+    { "t": 1100, "server": ["announce", "/.schema/proto:Point", "proto:FileDescriptorProto"] },
+    { "t": 1200, "server": ["setraw", "/.schema/proto:Point", "0a0b706f696e742e70726f746f22470a05506f696e7412090a017818012001280112090a0179180220012801120d0a056c6162656c180320012809120d0a05636f756e74180420012805120a0a026f6b180520012808"] },
+    { "t": 1500, "server": ["set", "/Msg", "09000000000000f83f1100000000000008401a02686520092800"] },
+    { "t": 1900, "server": ["set", "/Pair", "00000000000010400000000000001440"] },
+    { "t": 2400, "client": ["dump"] },
+    { "t": 3000, "client": ["dump"] }
+  ]
+}

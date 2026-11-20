@@ -86,6 +86,7 @@ function domNodes(root: Element, attributes: string[]): unknown[] {
 
 function selectionState(): object {
   const s = w.selection;
+  const button = (cls: string) => (document.getElementsByClassName(cls)[0] as HTMLElement)?.hidden ?? null;
   return {
     mode: s.getMode(),
     hoveredTime: s.getHoveredTime(),
@@ -94,7 +95,14 @@ function selectionState(): object {
     currentLiveTime: s.getCurrentLiveTime(),
     grabZoomRange: s.getGrabZoomRange(),
     timelineRange: s.getTimelineRange(),
-    timelineIsMaxZoom: s.getTimelineIsMaxZoom()
+    timelineIsMaxZoom: s.getTimelineIsMaxZoom(),
+    buttons: {
+      play: button("play"),
+      pause: button("pause"),
+      lock: button("lock"),
+      unlock: button("unlock"),
+      showLockButtons: document.documentElement.style.getPropertyValue("--show-lock-buttons")
+    }
   };
 }
 
@@ -191,6 +199,21 @@ async function step(s: any, index: number) {
     } catch (error) {
       exception("event " + e.type, error);
     }
+    await settle();
+  } else if ("selection" in s) {
+    const [method, ...rawArgs] = s.selection as [string, ...unknown[]];
+    try {
+      if (method === "setLiveConnected") {
+        w.selection.setLiveConnected(() => (w as any).__liveTime);
+      } else {
+        (w.selection as any)[method](...rawArgs.map((a) => fromTree(a)));
+      }
+    } catch (error) {
+      exception("selection " + method, error);
+    }
+    await settle();
+  } else if ("liveTime" in s) {
+    (w as any).__liveTime = fromTree(s.liveTime);
     await settle();
   } else if ("capture" in s) {
     write({ capture: toTree(s.label ?? index), time: toTree(clock.now - clock.start) });

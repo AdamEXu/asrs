@@ -1,0 +1,253 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          5
+        ]
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "exactly-at-max"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "past-max-static"
+      },
+      {
+        "advance": 992
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            2,
+            6
+          ],
+          false
+        ]
+      },
+      {
+        "selection": [
+          "setPlaybackLooping",
+          true
+        ]
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          5
+        ]
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "loop-end-at-max"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "looped-at-max"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          1
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "hover-while-playing"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          null
+        ]
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "selection": [
+          "setPlaybackLooping",
+          false
+        ]
+      },
+      {
+        "selection": [
+          "setPlaybackSpeed",
+          4
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "speed-while-static"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 250
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "played-at-4x"
+      },
+      {
+        "selection": [
+          "setPlaybackSpeed",
+          0.25
+        ]
+      },
+      {
+        "advance": 400
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "slowed-mid-play"
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "selection": [
+          "goIdle"
+        ]
+      },
+      {
+        "selection": [
+          "setPlaybackSpeed",
+          2
+        ]
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "speed-while-idle"
+      },
+      {
+        "event": {
+          "target": "button.tab-control.pause",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "space-on-button"
+      },
+      {
+        "main": "new-tab",
+        "data": 7
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "arrow-unlocked-video"
+      },
+      {
+        "main": "new-tab",
+        "data": 1
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "arrow-line-graph"
+      }
+    ]
+  }
+}

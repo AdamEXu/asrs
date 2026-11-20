@@ -22,7 +22,7 @@ const RULES: &[Rule] = &[
     rule("asrs-js", false, &[]),
     rule("asrs-log", true, &["asrs-js"]),
     rule("asrs-formats", true, &["asrs-js", "asrs-log"]),
-    rule("asrs-live", true, &["asrs-js", "asrs-log"]),
+    rule("asrs-live", true, &["asrs-js", "asrs-log", "asrs-formats"]),
     rule("asrs-canvas", false, &["asrs-js"]),
     rule(
         "asrs-model",

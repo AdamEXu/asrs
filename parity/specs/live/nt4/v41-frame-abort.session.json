@@ -1,0 +1,26 @@
+{
+  "protocol": "nt4",
+  "seed": 2718,
+  "latencyMs": 1,
+  "endMs": 1500,
+  "client": {
+    "source": "nt4",
+    "mode": "default",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "logging" }
+  },
+  "server": {
+    "version": "4.1",
+    "topics": [
+      { "name": "/A", "type": "double", "value": 1 },
+      { "name": "/.schema/proto:Bad", "type": "proto:FileDescriptorProto" },
+      { "name": "/B", "type": "double", "value": 1 }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "server": ["batch", [["/A", 2], ["/.schema/proto:Bad", "ffff"], ["/A", 3], ["/B", 4]]] },
+    { "t": 700, "server": ["batch", [["/A", 5], ["/B", 6]]] },
+    { "t": 1000, "client": ["dump"] }
+  ]
+}
