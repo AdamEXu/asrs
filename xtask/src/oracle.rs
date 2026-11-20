@@ -4,11 +4,13 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::{Result, vectors, workspace_root};
+use asrs_parity::json::{self, Json};
+
+use crate::{Result, pack, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
-const EMSDK_VERSION: &str = "4.0.12";
-const UPSTREAM_COMMIT: &str = "8fc5b89fc93be5dba5a66005ea6111fa16594aa8";
+pub(crate) const EMSDK_VERSION: &str = "4.0.12";
+pub(crate) const UPSTREAM_COMMIT: &str = "8fc5b89fc93be5dba5a66005ea6111fa16594aa8";
 const UPSTREAM_REPO: &str = "https://github.com/Mechanical-Advantage/AdvantageScope.git";
 const EMSDK_REPO: &str = "https://github.com/emscripten-core/emsdk.git";
 
@@ -24,31 +26,101 @@ commands:
                         5. emsdk 4.0.12 into the cache, then upstream's wasmCompile.mjs
                         6. npm ci for oracle/package.json in target/oracle/harness
                         7. esbuild the harness entry points into target/oracle/dist
+  setup --from-pack <file> [--force]
+                      install from an `oracle pack` archive instead of building: unpack the
+                      upstream copy (bundles and WASM included), then steps 2 (npm ci only),
+                      3, 6 and 7. Needs no reference checkout, emsdk or rolldown.
+  pack [--out <file>] write the built upstream copy (without node_modules) to
+                      target/oracle/pack.tar.zst for `setup --from-pack` on another host
   build               rebuild only the harness bundles (step 7)
   gen [<id>...] [--check]
                       regenerate committed vectors from parity/specs into parity/vectors and
-                      update parity/vectors/MANIFEST.json; --check regenerates in memory and
-                      fails if any committed vector differs
-  fn [args]           run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
+                      update parity/vectors/MANIFEST.json. --check first fails, without running
+                      the oracle, if the manifest's upstream commit, Electron version or
+                      environment policy, or any vector's generator hash, zone or content hash,
+                      differs from the current one; then it regenerates in memory and fails if
+                      any committed vector differs
+  fn [--zone <zone>] [args]
+                      run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)
-  run <entry> [args]  run target/oracle/dist/<entry>.mjs under the oracle runtime
+  run [--zone <zone>] <entry> [args]
+                      run target/oracle/dist/<entry>.mjs under the oracle runtime
   selftest            CVE-1 encoder and decoder self test
   smoke               run oracle/smoke/fn-requests.jsonl and compare with fn-expected.jsonl
-  env                 print the oracle paths as JSON
+  env                 print the oracle paths and the environment policy as JSON
 
 Every command runs `ELECTRON_RUN_AS_NODE=1 <electron> <bundle>`, so V8 and ICU are the
-shipped app's own. Downloads (npm, Electron, emsdk) go to $ASRS_CACHE, which defaults to
-<real target dir>/../cache when target/ is a symlink and to target/cache otherwise.";
+shipped app's own, with TZ=<zone> (UTC unless --zone names one of America/Los_Angeles,
+Asia/Kolkata, Pacific/Auckland) and LANG=LC_ALL=en_US.UTF-8 overriding the caller's values.
+Every entry exits non-zero if the zone or locale it resolves differs. Downloads (npm,
+Electron, emsdk) go to $ASRS_CACHE, which defaults to <real target dir>/../cache when
+target/ is a symlink and to target/cache otherwise.";
+
+pub(crate) const DEFAULT_ZONE: &str = "UTC";
+pub(crate) const ZONES: &[&str] = &[
+    DEFAULT_ZONE,
+    "America/Los_Angeles",
+    "Asia/Kolkata",
+    "Pacific/Auckland",
+];
+const POSIX_LOCALE: &str = "en_US.UTF-8";
+const APP_SWITCHES: &[&str] = &["--lang=en-US"];
+const ZONE_VARIABLE: &str = "ASRS_ORACLE_ZONE";
+const CLEARED_VARIABLES: &[&str] = &["LANGUAGE", "NODE_OPTIONS", "NODE_ICU_DATA"];
+
+pub(crate) fn environment_policy() -> Json {
+    Json::object([
+        ("TZ", Json::string(DEFAULT_ZONE)),
+        ("LANG", Json::string(POSIX_LOCALE)),
+        ("LC_ALL", Json::string(POSIX_LOCALE)),
+        (
+            "appSwitches",
+            Json::Array(APP_SWITCHES.iter().map(|s| Json::string(s)).collect()),
+        ),
+        (
+            "zones",
+            Json::Array(ZONES.iter().map(|z| Json::string(z)).collect()),
+        ),
+    ])
+}
+
+pub(crate) fn check_zone(zone: &str) -> Result {
+    if ZONES.contains(&zone) {
+        Ok(())
+    } else {
+        Err(format!(
+            "zone {zone:?} is not in the environment policy; allowed: {}",
+            ZONES.join(", ")
+        ))
+    }
+}
+
+pub(crate) fn host_tag() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn pin_environment(command: &mut Command, zone: &str) {
+    for name in CLEARED_VARIABLES {
+        command.env_remove(name);
+    }
+    command
+        .env("TZ", zone)
+        .env("LANG", POSIX_LOCALE)
+        .env("LC_ALL", POSIX_LOCALE)
+        .env(ZONE_VARIABLE, zone);
+}
 
 pub(crate) struct Paths {
     pub(crate) root: PathBuf,
     pub(crate) reference: PathBuf,
     pub(crate) oracle_src: PathBuf,
-    upstream: PathBuf,
+    pub(crate) upstream: PathBuf,
     harness: PathBuf,
     dist: PathBuf,
     stamps: PathBuf,
-    cache: PathBuf,
+    pub(crate) cache: PathBuf,
+    pub(crate) out: PathBuf,
+    pub(crate) install: PathBuf,
 }
 
 impl Paths {
@@ -72,6 +144,8 @@ impl Paths {
             harness: out.join("harness"),
             dist: out.join("dist"),
             stamps: out.join("stamps"),
+            install: out.join("install.json"),
+            out,
             cache,
             root,
         })
@@ -94,18 +168,61 @@ pub fn run(args: &[String]) -> Result {
     let paths = Paths::new()?;
     let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
-        Some("setup") => setup(&paths, rest.iter().any(|a| a == "--force")),
+        Some("setup") => setup_command(&paths, rest),
+        Some("pack") => pack::pack(&paths, rest),
         Some("build") => build_harness(&paths),
         Some("gen") => vectors::generate(&paths, rest),
-        Some("fn") => run_entry(&paths, "fn", rest),
-        Some("run") => match rest.split_first() {
-            Some((entry, entry_args)) => run_entry(&paths, entry, entry_args),
-            None => Err(USAGE.to_owned()),
-        },
-        Some("selftest") => run_entry(&paths, "selftest", &[]),
+        Some("fn") => {
+            let (zone, rest) = zone_option(rest)?;
+            run_entry(&paths, "fn", zone, rest)
+        }
+        Some("run") => {
+            let (zone, rest) = zone_option(rest)?;
+            match rest.split_first() {
+                Some((entry, entry_args)) => run_entry(&paths, entry, zone, entry_args),
+                None => Err(USAGE.to_owned()),
+            }
+        }
+        Some("selftest") => run_entry(&paths, "selftest", DEFAULT_ZONE, &[]),
         Some("smoke") => smoke(&paths),
         Some("env") => print_env(&paths),
         _ => Err(USAGE.to_owned()),
+    }
+}
+
+fn zone_option(args: &[String]) -> Result<(&str, &[String])> {
+    match args {
+        [flag, zone, rest @ ..] if flag == "--zone" => {
+            check_zone(zone)?;
+            Ok((zone, rest))
+        }
+        [flag] if flag == "--zone" => Err("--zone needs a zone name".to_owned()),
+        _ => Ok((DEFAULT_ZONE, args)),
+    }
+}
+
+fn setup_command(paths: &Paths, args: &[String]) -> Result {
+    let mut force = false;
+    let mut from_pack = None;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--force" => force = true,
+            "--from-pack" => {
+                from_pack = Some(PathBuf::from(
+                    iter.next().ok_or("--from-pack needs a file")?,
+                ));
+            }
+            other => {
+                return Err(format!(
+                    "oracle setup: unknown argument {other:?}\n\n{USAGE}"
+                ));
+            }
+        }
+    }
+    match from_pack {
+        Some(file) => pack::setup_from_pack(paths, &file, force),
+        None => setup(paths, force),
     }
 }
 
@@ -113,16 +230,13 @@ fn setup(paths: &Paths, force: bool) -> Result {
     check_reference(paths)?;
     fs::create_dir_all(&paths.stamps).map_err(|e| e.to_string())?;
     fs::create_dir_all(&paths.cache).map_err(|e| e.to_string())?;
+    let _ = fs::remove_file(&paths.install);
 
     step("sync upstream");
     let changed = sync_upstream(&paths.reference, &paths.upstream)?;
     eprintln!("  {changed} files updated");
 
-    let lock = read(&paths.upstream.join("package-lock.json"))?;
-    stamped(paths, "npm-upstream", &hash_bytes(&lock), force, || {
-        step("npm ci (upstream)");
-        npm_ci(paths, &paths.upstream)
-    })?;
+    install_upstream_packages(paths, force)?;
 
     let licenses = paths.upstream.join("src/licenses.json");
     if force || !licenses.exists() {
@@ -130,25 +244,7 @@ fn setup(paths: &Paths, force: bool) -> Result {
         exec(node().arg("getLicenses.mjs").current_dir(&paths.upstream))?;
     }
 
-    let electron_ok = paths
-        .electron()
-        .ok()
-        .filter(|bin| bin.exists())
-        .and_then(|_| {
-            fs::read_to_string(paths.upstream.join("node_modules/electron/dist/version")).ok()
-        })
-        .is_some_and(|v| v.trim().trim_start_matches('v') == ELECTRON_VERSION);
-    if force || !electron_ok {
-        step("download Electron");
-        exec(
-            node()
-                .arg("node_modules/electron/install.js")
-                .env("electron_config_cache", paths.cache.join("electron"))
-                .env("force_no_cache", if force { "true" } else { "false" })
-                .current_dir(&paths.upstream),
-        )?;
-    }
-    check_electron_version(paths)?;
+    install_electron(paths, force)?;
 
     let bundle_inputs = hash_tree(
         &paths.upstream,
@@ -199,6 +295,42 @@ fn setup(paths: &Paths, force: bool) -> Result {
         )
     })?;
 
+    finish_setup(paths, force, "build")
+}
+
+pub(crate) fn install_upstream_packages(paths: &Paths, force: bool) -> Result {
+    let lock = read(&paths.upstream.join("package-lock.json"))?;
+    stamped(paths, "npm-upstream", &hash_bytes(&lock), force, || {
+        step("npm ci (upstream)");
+        npm_ci(paths, &paths.upstream)
+    })
+}
+
+pub(crate) fn install_electron(paths: &Paths, force: bool) -> Result {
+    let electron_ok = paths
+        .electron()
+        .ok()
+        .filter(|bin| bin.exists())
+        .and_then(|_| {
+            fs::read_to_string(paths.upstream.join("node_modules/electron/dist/version")).ok()
+        })
+        .is_some_and(|v| v.trim().trim_start_matches('v') == ELECTRON_VERSION);
+    if force || !electron_ok {
+        step("download Electron");
+        exec(
+            node()
+                .arg("node_modules/electron/install.js")
+                .env("electron_config_cache", paths.cache.join("electron"))
+                .env("force_no_cache", if force { "true" } else { "false" })
+                .current_dir(&paths.upstream),
+        )?;
+    }
+    check_electron_version(paths)
+}
+
+/// Harness install, build and self checks shared by both setup paths. The install record is
+/// written last, so an interrupted setup leaves none behind.
+pub(crate) fn finish_setup(paths: &Paths, force: bool, source: &str) -> Result {
     fs::create_dir_all(&paths.harness).map_err(|e| e.to_string())?;
     for file in ["package.json", "package-lock.json"] {
         fs::copy(paths.oracle_src.join(file), paths.harness.join(file))
@@ -217,10 +349,70 @@ fn setup(paths: &Paths, force: bool) -> Result {
     )?;
 
     build_harness(paths)?;
-    run_entry(paths, "selftest", &[])?;
+    run_entry(paths, "selftest", DEFAULT_ZONE, &[])?;
     smoke(paths)?;
+    write_install(paths, source)?;
     eprintln!("oracle setup complete");
     print_env(paths)
+}
+
+pub(crate) struct Install {
+    pub(crate) upstream_commit: String,
+    pub(crate) upstream_version: String,
+}
+
+fn write_install(paths: &Paths, source: &str) -> Result {
+    let record = Json::object([
+        ("upstreamCommit", Json::string(UPSTREAM_COMMIT)),
+        ("upstreamVersion", Json::string(&upstream_version(paths)?)),
+        ("electron", Json::string(ELECTRON_VERSION)),
+        ("source", Json::string(source)),
+        ("host", Json::string(&host_tag())),
+    ]);
+    fs::write(&paths.install, record.to_pretty() + "\n")
+        .map_err(|e| format!("{}: {e}", paths.install.display()))
+}
+
+/// The installed oracle, refused unless it was set up for the pinned upstream commit and
+/// Electron version.
+pub(crate) fn installed(paths: &Paths) -> Result<Install> {
+    let text = fs::read_to_string(&paths.install).map_err(|_| {
+        format!(
+            "{} is missing; run `cargo xtask oracle setup` (or `setup --from-pack <file>`)",
+            paths.install.display()
+        )
+    })?;
+    let record = json::parse(&text).map_err(|e| format!("{}: {e}", paths.install.display()))?;
+    let field = |key: &str| {
+        record
+            .get(key)
+            .and_then(Json::as_str)
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_default()
+    };
+    let (commit, electron) = (field("upstreamCommit"), field("electron"));
+    if commit != UPSTREAM_COMMIT || electron != ELECTRON_VERSION {
+        return Err(format!(
+            "the installed oracle is upstream {commit:?} with Electron {electron:?}, but xtask pins {UPSTREAM_COMMIT} with Electron {ELECTRON_VERSION}; rerun `cargo xtask oracle setup`"
+        ));
+    }
+    Ok(Install {
+        upstream_commit: commit,
+        upstream_version: field("upstreamVersion"),
+    })
+}
+
+pub(crate) fn upstream_version(paths: &Paths) -> Result<String> {
+    let path = paths.upstream.join("package.json");
+    let package = String::from_utf8(read(&path)?).map_err(|e| e.to_string())?;
+    json::parse(&package)
+        .ok()
+        .and_then(|p| {
+            p.get("version")
+                .and_then(Json::as_str)
+                .map(|v| v.to_string_lossy())
+        })
+        .ok_or_else(|| format!("{}: no version", path.display()))
 }
 
 fn check_reference(paths: &Paths) -> Result {
@@ -268,7 +460,7 @@ fn check_reference(paths: &Paths) -> Result {
     Ok(())
 }
 
-fn step(name: &str) {
+pub(crate) fn step(name: &str) {
     eprintln!("==> {name}");
 }
 
@@ -327,7 +519,7 @@ fn install_emsdk(paths: &Paths, force: bool) -> Result {
     Ok(())
 }
 
-fn npm_ci(paths: &Paths, dir: &Path) -> Result {
+pub(crate) fn npm_ci(paths: &Paths, dir: &Path) -> Result {
     exec(
         Command::new(if cfg!(windows) { "npm.cmd" } else { "npm" })
             .args(["ci", "--ignore-scripts", "--no-audit", "--no-fund"])
@@ -352,6 +544,11 @@ pub(crate) fn build_harness(paths: &Paths) -> Result {
 }
 
 pub(crate) fn oracle_command(paths: &Paths, entry: &str) -> Result<Command> {
+    oracle_command_in(paths, entry, DEFAULT_ZONE)
+}
+
+pub(crate) fn oracle_command_in(paths: &Paths, entry: &str, zone: &str) -> Result<Command> {
+    check_zone(zone)?;
     let bundle = paths.dist.join(format!("{entry}.mjs"));
     if !bundle.exists() {
         return Err(format!(
@@ -361,11 +558,12 @@ pub(crate) fn oracle_command(paths: &Paths, entry: &str) -> Result<Command> {
     }
     let mut command = Command::new(paths.electron()?);
     command.arg(bundle).env("ELECTRON_RUN_AS_NODE", "1");
+    pin_environment(&mut command, zone);
     Ok(command)
 }
 
-fn run_entry(paths: &Paths, entry: &str, args: &[String]) -> Result {
-    exec(oracle_command(paths, entry)?.args(args))
+fn run_entry(paths: &Paths, entry: &str, zone: &str, args: &[String]) -> Result {
+    exec(oracle_command_in(paths, entry, zone)?.args(args))
 }
 
 fn check_electron_version(paths: &Paths) -> Result {
@@ -449,31 +647,18 @@ pub(crate) fn pipe(command: &mut Command, input: Vec<u8>) -> Result<String> {
 
 fn print_env(paths: &Paths) -> Result {
     let electron = paths.electron().unwrap_or_default();
-    let json_path = |p: &Path| json_string(&p.display().to_string());
-    println!(
-        "{{\n  \"electron\": {},\n  \"electronVersion\": {},\n  \"upstream\": {},\n  \"dist\": {},\n  \"cache\": {},\n  \"root\": {}\n}}",
-        json_path(&electron),
-        json_string(ELECTRON_VERSION),
-        json_path(&paths.upstream),
-        json_path(&paths.dist),
-        json_path(&paths.cache),
-        json_path(&paths.root)
-    );
+    let path = |p: &Path| Json::string(&p.display().to_string());
+    let env = Json::object([
+        ("electron", path(&electron)),
+        ("electronVersion", Json::string(ELECTRON_VERSION)),
+        ("upstream", path(&paths.upstream)),
+        ("dist", path(&paths.dist)),
+        ("cache", path(&paths.cache)),
+        ("root", path(&paths.root)),
+        ("environment", environment_policy()),
+    ]);
+    println!("{}", env.to_pretty());
     Ok(())
-}
-
-fn json_string(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 fn node() -> Command {
@@ -523,6 +708,39 @@ pub(crate) fn hash_tree(base: &Path, roots: &[&str]) -> Result<String> {
         hash = fnv1a(hash, &read(&base.join(&rel))?);
     }
     Ok(format!("{hash:016x}"))
+}
+
+/// Like [`hash_bytes`], but CRLF line endings hash as LF, so a checkout with `core.autocrlf`
+/// on Windows computes the same generator hashes as the dev machine.
+pub(crate) fn hash_text(bytes: &[u8]) -> String {
+    format!(
+        "{:016x}",
+        fnv1a(0xcbf2_9ce4_8422_2325, &normalize_newlines(bytes))
+    )
+}
+
+pub(crate) fn hash_text_tree(base: &Path, roots: &[&str]) -> Result<String> {
+    let mut files = Vec::new();
+    for root in roots {
+        collect_files(base, &base.join(root), &mut files)?;
+    }
+    files.sort();
+    let mut hash = 0xcbf2_9ce4_8422_2325;
+    for rel in files {
+        hash = fnv1a(hash, rel.as_bytes());
+        hash = fnv1a(hash, &normalize_newlines(&read(&base.join(&rel))?));
+    }
+    Ok(format!("{hash:016x}"))
+}
+
+fn normalize_newlines(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    for (i, &b) in bytes.iter().enumerate() {
+        if !(b == b'\r' && bytes.get(i + 1) == Some(&b'\n')) {
+            out.push(b);
+        }
+    }
+    out
 }
 
 fn collect_files(base: &Path, path: &Path, out: &mut Vec<String>) -> Result {
