@@ -1,0 +1,129 @@
+{
+  "name": "2023 Field",
+  "locales": {
+    "en-US": "2023 Field",
+    "es-419": "Campo 2023",
+    "fr": "Terrain 2023",
+    "nl": "Veld 2023",
+    "pt-BR": "Campo 2023",
+    "ro": "Teren 2023",
+    "tr": "2023 Sahası",
+    "ru": "Поле 2023",
+    "kk": "2023 алаңы",
+    "he": "מגרש 2023",
+    "ar": "ملعب 2023",
+    "hi": "2023 फील्ड",
+    "zh-CN": "2023 场地",
+    "zh-TW": "2023 場地"
+  },
+  "isFTC": false,
+  "coordinateSystem": "wall-blue",
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    }
+  ],
+  "widthInches": 651.25,
+  "heightInches": 315.5,
+  "driverStations": [
+    [
+      8.27,
+      -0.611
+    ],
+    [
+      8.27,
+      1.218
+    ],
+    [
+      8.27,
+      3.046
+    ],
+    [
+      -8.27,
+      3.046
+    ],
+    [
+      -8.27,
+      1.218
+    ],
+    [
+      -8.27,
+      -0.611
+    ]
+  ],
+  "gamePieces": [
+    {
+      "name": "Cone",
+      "locales": {
+        "en-US": "Cone",
+        "es-419": "Cono",
+        "fr": "Cône",
+        "nl": "Kegel",
+        "pt-BR": "Cone",
+        "ro": "Con",
+        "tr": "Koni",
+        "ru": "Конус",
+        "kk": "Конус",
+        "he": "קונוס",
+        "ar": "مخروط",
+        "hi": "शंकु",
+        "zh-CN": "圆锥",
+        "zh-TW": "圓錐"
+      },
+      "rotations": [
+        {
+          "axis": "x",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Traffic_Cone_v2",
+        "Traffic_Cone_v2_1",
+        "Traffic_Cone_v2_2",
+        "Traffic_Cone_v2_3"
+      ]
+    },
+    {
+      "name": "Cube",
+      "locales": {
+        "en-US": "Cube",
+        "es-419": "Cubo",
+        "fr": "Cube",
+        "nl": "Kubus",
+        "pt-BR": "Cubo",
+        "ro": "Cub",
+        "tr": "Küp",
+        "ru": "Куб",
+        "kk": "Куб",
+        "he": "קובייה",
+        "ar": "مكعب",
+        "hi": "घन",
+        "zh-CN": "立方体",
+        "zh-TW": "立方體"
+      },
+      "rotations": [
+        {
+          "axis": "x",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Cube_v3",
+        "Cube_v3_1",
+        "Cube_v3_2",
+        "Cube_v3_3"
+      ]
+    }
+  ]
+}

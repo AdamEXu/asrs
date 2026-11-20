@@ -1,0 +1,4 @@
+{
+  "entry": "genAssets",
+  "args": ["dir", "parity/specs/assets/release"]
+}

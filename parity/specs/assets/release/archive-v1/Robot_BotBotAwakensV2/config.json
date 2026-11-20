@@ -1,0 +1,87 @@
+{
+  "name": "Bot-Bot Awakens",
+  "isFTC": false,
+  "rotations": [
+    {
+      "axis": "z",
+      "degrees": 90
+    },
+    {
+      "axis": "y",
+      "degrees": 90
+    }
+  ],
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "cameras": [
+    {
+      "name": "Limelight",
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": 180
+        },
+        {
+          "axis": "y",
+          "degrees": 20.773
+        }
+      ],
+      "position": [
+        0.258,
+        0,
+        1.01
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 59.6
+    },
+    {
+      "name": "Front Camera",
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        }
+      ],
+      "position": [
+        0.27,
+        0,
+        0.71
+      ],
+      "resolution": [
+        320,
+        240
+      ],
+      "fov": 120
+    },
+    {
+      "name": "Back Camera",
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 25
+        },
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "position": [
+        -0.27,
+        0,
+        0.62
+      ],
+      "resolution": [
+        320,
+        240
+      ],
+      "fov": 90
+    }
+  ],
+  "components": []
+}

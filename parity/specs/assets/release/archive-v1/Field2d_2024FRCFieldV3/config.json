@@ -1,0 +1,32 @@
+{
+  "name": "2024 Field",
+  "locales": {
+    "en-US": "2024 Field",
+    "es-419": "Campo 2024",
+    "fr": "Terrain 2024",
+    "nl": "Veld 2024",
+    "pt-BR": "Campo 2024",
+    "ro": "Teren 2024",
+    "tr": "2024 Sahası",
+    "ru": "Поле 2024",
+    "kk": "2024 алаңы",
+    "he": "מגרש 2024",
+    "ar": "ملعب 2024",
+    "hi": "2024 फील्ड",
+    "zh-CN": "2024 场地",
+    "zh-TW": "2024 場地"
+  },
+  "isFTC": false,
+  "coordinateSystem": "wall-blue",
+  "sourceUrl": "https://www.chiefdelphi.com/t/2024-crescendo-top-down-field-renders/447764",
+  "topLeft": [
+    513,
+    78
+  ],
+  "bottomRight": [
+    3327,
+    1475
+  ],
+  "widthInches": 651.25,
+  "heightInches": 323.25
+}

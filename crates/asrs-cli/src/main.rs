@@ -1,5 +1,6 @@
 #![allow(clippy::disallowed_methods)]
 
+mod assets;
 mod canvas_cmd;
 mod decode;
 mod fn_cmd;

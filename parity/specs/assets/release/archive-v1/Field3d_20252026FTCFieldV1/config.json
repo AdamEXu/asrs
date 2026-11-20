@@ -1,0 +1,161 @@
+{
+  "name": "2025-2026 Field",
+  "isFTC": true,
+  "coordinateSystem": "center-rotated",
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    }
+  ],
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "widthInches": 143.182,
+  "heightInches": 143.182,
+  "driverStations": [
+    [
+      2.515,
+      -1.219
+    ],
+    [
+      2.515,
+      0
+    ],
+    [
+      -2.515,
+      0
+    ],
+    [
+      -2.515,
+      -1.219
+    ]
+  ],
+  "gamePieces": [
+    {
+      "name": "Artifact (Purple)",
+      "rotations": [],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Purple_Artifact_-_am-3376a_purple",
+        "Purple_Artifact_-_am-3376a_purple_1",
+        "Purple_Artifact_-_am-3376a_purple_2",
+        "Purple_Artifact_-_am-3376a_purple_3",
+        "Purple_Artifact_-_am-3376a_purple_4",
+        "Purple_Artifact_-_am-3376a_purple_5",
+        "Purple_Artifact_-_am-3376a_purple_6",
+        "Purple_Artifact_-_am-3376a_purple_7",
+        "Purple_Artifact_-_am-3376a_purple_8",
+        "Purple_Artifact_-_am-3376a_purple_9",
+        "Purple_Artifact_-_am-3376a_purple_10",
+        "Purple_Artifact_-_am-3376a_purple_11",
+        "Purple_Artifact_-_am-3376a_purple_12",
+        "Purple_Artifact_-_am-3376a_purple_13",
+        "Purple_Artifact_-_am-3376a_purple_14",
+        "Purple_Artifact_-_am-3376a_purple_15"
+      ]
+    },
+    {
+      "name": "Artifact (Green)",
+      "rotations": [],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Green_Artifact_-_am-3376a_green",
+        "Green_Artifact_-_am-3376a_green_1",
+        "Green_Artifact_-_am-3376a_green_2",
+        "Green_Artifact_-_am-3376a_green_3",
+        "Green_Artifact_-_am-3376a_green_4",
+        "Green_Artifact_-_am-3376a_green_5",
+        "Green_Artifact_-_am-3376a_green_6",
+        "Green_Artifact_-_am-3376a_green_7"
+      ]
+    }
+  ],
+  "aprilTags": [
+    {
+      "variant": "frc-36h11",
+      "id": 20,
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": -36
+        }
+      ],
+      "position": [
+        -1.413,
+        1.482,
+        0.749
+      ]
+    },
+    {
+      "variant": "frc-36h11",
+      "id": 21,
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": -90
+        }
+      ],
+      "position": [
+        0,
+        1.818,
+        0.461
+      ]
+    },
+    {
+      "variant": "frc-36h11",
+      "id": 22,
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": 30
+        }
+      ],
+      "position": [
+        0.084,
+        1.947,
+        0.461
+      ]
+    },
+    {
+      "variant": "frc-36h11",
+      "id": 23,
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": 150
+        }
+      ],
+      "position": [
+        -0.07,
+        1.955,
+        0.461
+      ]
+    },
+    {
+      "variant": "frc-36h11",
+      "id": 24,
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": -144
+        }
+      ],
+      "position": [
+        1.413,
+        1.482,
+        0.749
+      ]
+    }
+  ]
+}

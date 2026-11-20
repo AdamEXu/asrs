@@ -1,0 +1,31 @@
+{
+  "name": "2025-2026 Field",
+  "locales": {
+    "en-US": "2025-2026 Field",
+    "es-419": "Campo 2025-2026",
+    "fr": "Terrain 2025-2026",
+    "nl": "Veld 2025-2026",
+    "pt-BR": "Campo 2025-2026",
+    "ro": "Teren 2025-2026",
+    "tr": "2025-2026 Sahası",
+    "ru": "Поле 2025-2026",
+    "kk": "2025-2026 алаңы",
+    "he": "מגרש 2025-2026",
+    "ar": "ملعب 2025-2026",
+    "hi": "2025-2026 फील्ड",
+    "zh-CN": "2025-2026 场地",
+    "zh-TW": "2025-2026 場地"
+  },
+  "isFTC": true,
+  "coordinateSystem": "center-rotated",
+  "topLeft": [
+    0,
+    0
+  ],
+  "bottomRight": [
+    2445,
+    2445
+  ],
+  "widthInches": 143.182,
+  "heightInches": 143.182
+}

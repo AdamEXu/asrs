@@ -1,0 +1,103 @@
+{
+  "name": "Frog Bot",
+  "locales": {
+    "en-US": "Frog Bot",
+    "es-419": "Bot Rana",
+    "fr": "Bot Grenouille",
+    "nl": "Kikker Bot",
+    "pt-BR": "Bot Sapo",
+    "ro": "Bot Broască",
+    "tr": "Kurbağa Bot",
+    "ru": "Бот-лягушка",
+    "kk": "Бақа бот",
+    "he": "בוט צפרדע",
+    "ar": "بوت الضفدع",
+    "hi": "मेंढक बोट",
+    "zh-CN": "青蛙机器人",
+    "zh-TW": "青蛙機器人"
+  },
+  "isFTC": true,
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    },
+    {
+      "axis": "z",
+      "degrees": 90
+    }
+  ],
+  "position": [
+    0,
+    0.038,
+    0.051
+  ],
+  "cameras": [
+    {
+      "name": "Front Camera",
+      "locales": {
+        "en-US": "Front Camera",
+        "es-419": "Cámara frontal",
+        "fr": "Caméra avant",
+        "nl": "Camera voor",
+        "pt-BR": "Câmera frontal",
+        "ro": "Cameră frontală",
+        "tr": "Ön Kamera",
+        "ru": "Передняя камера",
+        "kk": "Алдыңғы камера",
+        "he": "מצלמה קדמית",
+        "ar": "كاميرا أمامية",
+        "hi": "सामने का कैमरा",
+        "zh-CN": "前置相机",
+        "zh-TW": "前置攝影機"
+      },
+      "rotations": [],
+      "position": [
+        0.165,
+        0,
+        0.2
+      ],
+      "resolution": [
+        640,
+        480
+      ],
+      "fov": 54.5
+    },
+    {
+      "name": "Back Camera",
+      "locales": {
+        "en-US": "Back Camera",
+        "es-419": "Cámara trasera",
+        "fr": "Caméra arrière",
+        "nl": "Camera achter",
+        "pt-BR": "Câmera traseira",
+        "ro": "Cameră spate",
+        "tr": "Arka Kamera",
+        "ru": "Задняя камера",
+        "kk": "Артқы камера",
+        "he": "מצלמה אחורית",
+        "ar": "كاميرا خلفية",
+        "hi": "पीछे का कैमरा",
+        "zh-CN": "后置相机",
+        "zh-TW": "後置攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "position": [
+        -0.165,
+        0,
+        0.2
+      ],
+      "resolution": [
+        640,
+        480
+      ],
+      "fov": 54.5
+    }
+  ],
+  "components": []
+}

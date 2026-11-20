@@ -319,6 +319,7 @@ dependencies = [
  "asrs-js",
  "asrs-live",
  "asrs-log",
+ "asrs-model",
  "asrs-parity",
  "asrs-services",
  "asrs-tabs",
@@ -386,6 +387,7 @@ name = "asrs-model"
 version = "0.1.0"
 dependencies = [
  "asrs-js",
+ "asrs-log",
  "asrs-parity",
 ]
 

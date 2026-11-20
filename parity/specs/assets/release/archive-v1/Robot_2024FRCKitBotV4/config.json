@@ -1,0 +1,103 @@
+{
+  "name": "2024 KitBot",
+  "locales": {
+    "en-US": "2024 KitBot",
+    "es-419": "KitBot 2024",
+    "fr": "KitBot 2024",
+    "nl": "KitBot 2024",
+    "pt-BR": "KitBot 2024",
+    "ro": "KitBot 2024",
+    "tr": "2024 KitBot",
+    "ru": "KitBot 2024",
+    "kk": "2024 KitBot",
+    "he": "KitBot 2024",
+    "ar": "KitBot 2024",
+    "hi": "2024 KitBot",
+    "zh-CN": "2024 KitBot",
+    "zh-TW": "2024 KitBot"
+  },
+  "isFTC": false,
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    },
+    {
+      "axis": "z",
+      "degrees": -90
+    }
+  ],
+  "position": [
+    0.41021,
+    -0.3429,
+    0.135
+  ],
+  "cameras": [
+    {
+      "name": "Front Camera",
+      "locales": {
+        "en-US": "Front Camera",
+        "es-419": "Cámara frontal",
+        "fr": "Caméra avant",
+        "nl": "Camera voor",
+        "pt-BR": "Câmera frontal",
+        "ro": "Cameră frontală",
+        "tr": "Ön Kamera",
+        "ru": "Передняя камера",
+        "kk": "Алдыңғы камера",
+        "he": "מצלמה קדמית",
+        "ar": "كاميرا أمامية",
+        "hi": "सामने का कैमरा",
+        "zh-CN": "前置相机",
+        "zh-TW": "前置攝影機"
+      },
+      "rotations": [],
+      "position": [
+        0.35,
+        0,
+        0.5
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Back Camera",
+      "locales": {
+        "en-US": "Back Camera",
+        "es-419": "Cámara trasera",
+        "fr": "Caméra arrière",
+        "nl": "Camera achter",
+        "pt-BR": "Câmera traseira",
+        "ro": "Cameră spate",
+        "tr": "Arka Kamera",
+        "ru": "Задняя камера",
+        "kk": "Артқы камера",
+        "he": "מצלמה אחורית",
+        "ar": "كاميرا خلفية",
+        "hi": "पीछे का कैमरा",
+        "zh-CN": "后置相机",
+        "zh-TW": "後置攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "position": [
+        -0.35,
+        0,
+        0.5
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    }
+  ],
+  "components": []
+}
