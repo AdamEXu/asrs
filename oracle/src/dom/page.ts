@@ -6,8 +6,6 @@ import { fromTree, toTree } from "../cve1";
 import { measureFixed, parseFontSize } from "./recordingCanvas";
 
 const w = window as any;
-let liveValue: number | null = null;
-let liveConnected = false;
 const write = (record: object) => w.__oracleWrite(JSON.stringify(record));
 const ignoredMain = new Set(fixture.ignoreMain ?? ["save-state", "save-type-memory", "update-touch-bar-slider"]);
 
@@ -191,20 +189,19 @@ async function step(s: any, index: number) {
     }
     await settle();
   } else if ("selection" in s) {
-    const [method, ...args] = s.selection as [string, ...unknown[]];
-    w.selection[method](...args.map((a) => fromTree(a)));
+    const [method, ...rawArgs] = s.selection as [string, ...unknown[]];
+    try {
+      if (method === "setLiveConnected") {
+        w.selection.setLiveConnected(() => (w as any).__liveTime);
+      } else {
+        (w.selection as any)[method](...rawArgs.map((a) => fromTree(a)));
+      }
+    } catch (error) {
+      exception("selection " + method, error);
+    }
     await settle();
   } else if ("liveTime" in s) {
-    if (s.liveTime === null) {
-      liveValue = null;
-      w.selection.setLiveDisconnected();
-    } else {
-      liveValue = s.liveTime;
-      if (!liveConnected) {
-        liveConnected = true;
-        w.selection.setLiveConnected(() => liveValue);
-      }
-    }
+    (w as any).__liveTime = fromTree(s.liveTime);
     await settle();
   } else if ("tuner" in s) {
     if (s.tuner === null) {
@@ -228,7 +225,8 @@ async function step(s: any, index: number) {
 w.__oracleRun = async () => {
   setExceptionHandler(exception);
   w.addEventListener("drag-update", (event: Event) => {
-    write({ drag: toTree((event as CustomEvent).detail.data) });
+    const detail = (event as CustomEvent).detail;
+    write({ drag: toTree(detail.data), end: toTree(detail.end), x: toTree(detail.x), y: toTree(detail.y) });
   });
   for (const listener of windowMessageListeners) listener({ data: "port", ports: [port] });
   const prefs = JSON.parse(JSON.stringify(DEFAULT_PREFS));

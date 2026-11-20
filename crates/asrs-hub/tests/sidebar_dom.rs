@@ -15,10 +15,11 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use asrs_hub::drag::{Drag, DragPayload};
 use asrs_hub::sidebar::{
-    DragPayload, EventOutcome, INDENT_SIZE_PX, RowRect, RowValue, Sidebar, SidebarEnv, SidebarRow,
-    Tuner,
+    EventOutcome, INDENT_SIZE_PX, RowRect, RowValue, Sidebar, SidebarEnv, SidebarRow, Tuner,
 };
+use asrs_js::number;
 use asrs_js::string::JsString;
 use asrs_js::value::{JsValue, ToJs};
 use asrs_log::log::{Log, LoggableType, RawValue};
@@ -529,7 +530,60 @@ fn dom_emit(selector: &str, nodes: Vec<Value>) -> Emit {
     }
 }
 
+const FIXED_ADVANCE_JSON: &str = include_str!("../../../oracle/src/canvas/fixedAdvance.json");
+
+/// `recordingCanvas.ts::fixedWidth`: f32 sum of the shared table's advances.
+fn fixed_width(size: f32, text: &JsString) -> f32 {
+    thread_local! {
+        static TABLE: (Vec<(u16, u16, f32)>, f32) = {
+            let json = asrs_parity::json::parse(FIXED_ADVANCE_JSON).expect("fixedAdvance.json");
+            let advances = json
+                .get("advances")
+                .and_then(Json::as_array)
+                .expect("advances")
+                .iter()
+                .map(|r| {
+                    let r = r.as_array().expect("advance range");
+                    let n = |i: usize| r[i].as_f64().expect("advance number");
+                    (n(0) as u16, n(1) as u16, n(2) as f32)
+                })
+                .collect();
+            let default = json.get("defaultAdvance").and_then(Json::as_f64).expect("defaultAdvance");
+            (advances, default as f32)
+        };
+    }
+    TABLE.with(|(advances, default)| {
+        text.units().iter().fold(0.0f32, |x, &unit| {
+            let em = advances
+                .iter()
+                .find(|(first, last, _)| unit >= *first && unit <= *last)
+                .map_or(*default, |(_, _, em)| *em);
+            x + em * size
+        })
+    })
+}
+
+/// `clientWidth` of `.field-value` under the default layout's `"text": 12` rule: the rounded
+/// fixed-table width of its `textContent`.
+fn value_client_width(value: &RowValue) -> f64 {
+    let text = match value {
+        RowValue::Number { span_text, .. } => span_text.clone(),
+        RowValue::Text { text } => text.clone(),
+        RowValue::None | RowValue::Bool { .. } => JsString::new(),
+    };
+    (fixed_width(12.0, &text) as f64).round()
+}
+
+fn display(shown: bool) -> Option<Value> {
+    Some(cve_string(&js(if shown {
+        "display: initial;"
+    } else {
+        "display: none;"
+    })))
+}
+
 fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
+    let style = |text: String| Some(cve_string(&js(&text)));
     let mut nodes = vec![node_tuple(0, "span", "", false, &JsString::new(), vec![])];
     for row in sidebar.rows() {
         let depth = (row.indent / INDENT_SIZE_PX) as usize + 1;
@@ -544,7 +598,17 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
             container_class,
             false,
             &JsString::new(),
-            vec![],
+            extra(
+                attrs,
+                |name| match name {
+                    "style" => style(format!(
+                        "--value-width: {}px;",
+                        number::to_string(row.value_width)
+                    )),
+                    _ => None,
+                },
+                None,
+            ),
         ));
         let item_class = if row.generated {
             "field-item generated"
@@ -559,7 +623,12 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
             &JsString::new(),
             vec![],
         ));
-        for inner in ["polygon", "polygon", "rect"] {
+        let icons = [
+            ("polygon", row.has_children && !row.expanded),
+            ("polygon", row.expanded),
+            ("rect", !row.has_children),
+        ];
+        for (inner, shown) in icons {
             nodes.push(node_tuple(
                 depth + 2,
                 "svg",
@@ -570,6 +639,7 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
                     attrs,
                     |name| match name {
                         "height" | "width" => Some(cve_string(&js("12"))),
+                        "style" => display(shown),
                         _ => None,
                     },
                     None,
@@ -604,6 +674,12 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
                 attrs,
                 |name| match name {
                     "title" => row.label_title.as_ref().map(cve_string),
+                    "style" => row.label_bold.and_then(|bold| {
+                        style(format!(
+                            "font-weight: {};",
+                            if bold { "bolder" } else { "initial" }
+                        ))
+                    }),
                     _ => None,
                 },
                 None,
@@ -621,6 +697,7 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
                     attrs,
                     |name| match name {
                         "title" => Some(cve_string(&row.warning_title)),
+                        "style" => style("cursor: help;".to_string()),
                         _ => None,
                     },
                     None,
@@ -641,7 +718,7 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
             RowValue::None => (vec![], JsString::new()),
             RowValue::Bool {
                 fill,
-                line_hidden: _,
+                line_hidden,
                 tunable,
             } => {
                 let circle_extra = extra(
@@ -649,6 +726,14 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
                     |name| match name {
                         "fill" => fill.as_ref().map(cve_string),
                         "cx" | "cy" | "r" => Some(cve_string(&js("4.5"))),
+                        _ => None,
+                    },
+                    None,
+                );
+                let line_extra = extra(
+                    attrs,
+                    |name| match name {
+                        "style" => line_hidden.and_then(|hidden| display(!hidden)),
                         _ => None,
                     },
                     None,
@@ -678,7 +763,7 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
                             &JsString::new(),
                             circle_extra,
                         ),
-                        node_tuple(depth + 3, "line", "", false, &JsString::new(), vec![]),
+                        node_tuple(depth + 3, "line", "", false, &JsString::new(), line_extra),
                     ],
                     JsString::new(),
                 )
@@ -733,7 +818,17 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
                 "",
                 !row.expanded,
                 &JsString::new(),
-                vec![],
+                extra(
+                    attrs,
+                    |name| match name {
+                        "style" => style(format!(
+                            "--indent: {}px;",
+                            number::to_string(row.indent + INDENT_SIZE_PX)
+                        )),
+                        _ => None,
+                    },
+                    None,
+                ),
             ));
         }
     }
@@ -760,23 +855,44 @@ fn project_search_results(sidebar: &Sidebar) -> Vec<Value> {
     nodes
 }
 
-fn project_drag_item(sidebar: &Sidebar) -> Vec<Value> {
+fn project_drag_item(drag: &Drag, attrs: &[&str]) -> Vec<Value> {
+    let style = drag.item_position().map(|(left, top)| {
+        js(&format!(
+            "left: {}px; top: {}px;",
+            number::to_string(left),
+            number::to_string(top)
+        ))
+    });
+    let item_extra = extra(
+        attrs,
+        |name| match (name, &style) {
+            ("style", Some(style)) => Some(cve_string(style)),
+            _ => None,
+        },
+        None,
+    );
     let mut nodes = vec![node_tuple(
         0,
         "span",
         "",
-        sidebar.drag_item_hidden(),
+        drag.item_hidden(),
         &JsString::new(),
-        vec![],
+        item_extra,
     )];
-    if let Some(item) = sidebar.drag_item() {
+    if let Some(item) = drag.item() {
+        let weight = if item.bold { "bolder" } else { "initial" };
+        let text_extra = extra(
+            attrs,
+            |name| (name == "style").then(|| cve_string(&js(&format!("font-weight: {weight};")))),
+            None,
+        );
         nodes.push(node_tuple(
             1,
             "span",
             "field-text",
             false,
             &item.text,
-            vec![],
+            text_extra,
         ));
     }
     nodes
@@ -985,6 +1101,7 @@ macro_rules! senv {
             inner_height: $ctx.inner_height,
             can_scroll_into_view: false,
             loading_fields: &$ctx.loading_fields,
+            measure_value: &value_client_width,
         }
     };
 }
@@ -1002,6 +1119,7 @@ struct Ctx<'a> {
 struct Runner<'a> {
     ctx: Ctx<'a>,
     sidebar: &'a mut Sidebar,
+    drag: Drag,
     layout: Layout,
     emitted: Vec<Emit>,
     now: f64,
@@ -1032,9 +1150,14 @@ impl Runner<'_> {
 
     fn drain(&mut self) {
         self.sync_range();
-        for payload in self.sidebar.take_drags() {
+        for update in self.drag.take_updates() {
             self.emitted.push(Emit {
-                values: vec![("drag", drag_payload(&payload))],
+                values: vec![
+                    ("drag", drag_payload(&update.data)),
+                    ("end", Value::Bool(update.end)),
+                    ("x", Value::number(update.x)),
+                    ("y", Value::number(update.y)),
+                ],
             });
         }
         for (name, data) in self.sidebar.take_main_messages() {
@@ -1149,11 +1272,16 @@ impl Runner<'_> {
 
         match (target.as_str(), etype.as_str()) {
             ("window", "mousemove") => {
-                self.sidebar.window_mouse_move(iv("clientX"), iv("clientY"));
+                let (x, y) = (iv("clientX"), iv("clientY"));
+                self.sidebar.handle_mouse_move(x);
+                self.drag.move_to(x, y);
+                self.sidebar.fields_mouse_move(&mut self.drag, x, y);
             }
-            ("window", "mouseup") => self.sidebar.window_mouse_up(),
-            ("window", "touchend") => self.sidebar.window_touch_end(),
-            ("window", "touchmove") => self.sidebar.window_touch_move(),
+            ("window", "mouseup") => {
+                self.sidebar.handle_mouse_up();
+                self.drag.end();
+            }
+            ("window", "touchend") => self.drag.end(),
             ("div.side-bar-handle", "mousedown") => self.sidebar.handle_mouse_down(),
             ("div.side-bar-handle", "click") => self.sidebar.handle_click(now),
             ("div.side-bar", "scroll") => {
@@ -1188,13 +1316,9 @@ impl Runner<'_> {
                 self.outcome(outcome);
             }
             ("div.field-item-label", "mousedown") => {
-                self.sidebar.label_mouse_down(
-                    index,
-                    iv("clientX"),
-                    iv("clientY"),
-                    iv("offsetX"),
-                    iv("offsetY"),
-                );
+                // jsdom has no layout, so a MouseEvent's offsetX/offsetY equal its clientX/clientY.
+                let (x, y) = (iv("clientX"), iv("clientY"));
+                self.sidebar.label_mouse_down(index, x, y, x, y);
             }
             ("div.field-item-label", "mouseup") => {
                 self.sidebar
@@ -1206,8 +1330,13 @@ impl Runner<'_> {
             }
             ("div.field-item-label", "touchstart") => {
                 let rect = self.row_rects().get(index).copied().unwrap_or_default();
-                self.sidebar
-                    .label_touch_start(index, iv("clientX"), iv("clientY"), rect);
+                self.sidebar.label_touch_start(
+                    &mut self.drag,
+                    index,
+                    iv("clientX"),
+                    iv("clientY"),
+                    rect,
+                );
             }
             (".field-item-container input", "focus")
             | (".field-item-container input", "blur")
@@ -1375,6 +1504,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             inner_height,
         },
         sidebar: &mut sidebar,
+        drag: Drag::default(),
         layout,
         emitted: Vec::new(),
         now: start,
@@ -1455,29 +1585,15 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 "stepCycle" => sel.step_cycle(truthy(&arg(0)?)),
                 "setPlaybackSpeed" => sel.set_playback_speed(number(&arg(0)?)?),
                 "setPlaybackLooping" => sel.set_playback_looping(truthy(&arg(0)?)),
+                "setLiveConnected" => {
+                    let cell = live_cell.clone();
+                    sel.set_live_connected(Box::new(move || cell.borrow().unwrap_or(f64::NAN)));
+                }
                 "setLiveDisconnected" => sel.set_live_disconnected(),
                 other => return Err(format!("{}: unknown selection method {other}", where_())),
             }
         } else if let Some(live) = step.get("liveTime") {
-            match opt_number(&json_to_cve(live))? {
-                Some(t) => {
-                    let already_connected = {
-                        let s = selection.borrow();
-                        s.live_connected
-                    };
-                    *live_cell.borrow_mut() = Some(t);
-                    if !already_connected {
-                        let cell = live_cell.clone();
-                        selection
-                            .borrow_mut()
-                            .set_live_connected(Box::new(move || cell.borrow().unwrap_or(0.0)));
-                    }
-                }
-                None => {
-                    *live_cell.borrow_mut() = None;
-                    selection.borrow_mut().set_live_disconnected();
-                }
-            }
+            *live_cell.borrow_mut() = opt_number(&json_to_cve(live))?;
         } else if let Some(tuner_step) = step.get("tuner") {
             match tuner_step {
                 Json::Null => *tuner.borrow_mut() = None,
@@ -1584,7 +1700,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                             "#fieldList" => project_field_list(runner.sidebar, &attr_refs),
                             "div.side-bar-title" => project_title(runner.sidebar),
                             ".search-results" => project_search_results(runner.sidebar),
-                            "#dragItem" => project_drag_item(runner.sidebar),
+                            "#dragItem" => project_drag_item(&runner.drag, &attr_refs),
                             "input.side-bar-search" => {
                                 project_search_input(runner.sidebar, &attr_refs)
                             }

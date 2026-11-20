@@ -21,6 +21,7 @@ use asrs_model::selection::{Selection, SelectionMode};
 use indexmap::IndexSet;
 
 use crate::custom_schemas;
+use crate::drag::{Drag, DragItem, DragPayload};
 
 pub const DEFAULT_SIDEBAR_WIDTH: f64 = 300.0;
 pub const INDENT_SIZE_PX: f64 = 20.0;
@@ -115,6 +116,8 @@ pub struct SidebarEnv<'a> {
     /// `scrollIntoViewIfNeeded`, so search highlights abort there).
     pub can_scroll_into_view: bool,
     pub loading_fields: &'a HashSet<JsString>,
+    /// `clientWidth` of a displayed, unhidden `.field-value` showing `value`.
+    pub measure_value: &'a dyn Fn(&RowValue) -> f64,
 }
 
 /// An event that surfaced the upstream `scrollIntoViewIfNeeded` throw: jsdom lacks the method,
@@ -148,6 +151,7 @@ struct BoolState {
     tunable: bool,
     first_update: bool,
     last_value: Option<bool>,
+    last_hidden: Option<bool>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -161,6 +165,7 @@ struct NumberState {
     last_has_value: bool,
     first_update: bool,
     last_value: Option<f64>,
+    last_char_count: Option<usize>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -168,6 +173,7 @@ struct TextState {
     text: JsString,
     first_update: bool,
     last_value: Option<JsString>,
+    last_char_count: Option<usize>,
     last_sidebar_width: f64,
 }
 
@@ -178,6 +184,29 @@ enum ValueState {
     Bool(BoolState),
     Number(Box<NumberState>),
     Text(TextState),
+}
+
+impl ValueState {
+    fn to_row(&self) -> RowValue {
+        match self {
+            ValueState::None => RowValue::None,
+            ValueState::Bool(state) => RowValue::Bool {
+                fill: state.fill.clone(),
+                line_hidden: state.line_hidden,
+                tunable: state.tunable,
+            },
+            ValueState::Number(state) => RowValue::Number {
+                input_value: state.input_value.clone(),
+                input_hidden: state.input_hidden,
+                span_hidden: state.span_hidden,
+                span_text: state.span_text.clone(),
+                placeholder: state.placeholder.clone(),
+            },
+            ValueState::Text(state) => RowValue::Text {
+                text: state.text.clone(),
+            },
+        }
+    }
 }
 
 /// `searchExpandCallbacks`: `highlightForSearch` for full-key rows and
@@ -211,7 +240,7 @@ struct Node {
     generated: bool,
     known_label: bool,
     label_loading: bool,
-    label_bold: bool,
+    label_bold: Option<bool>,
     label_title: Option<JsString>,
     type_label: Option<JsString>,
     warning_hidden: bool,
@@ -222,7 +251,9 @@ struct Node {
     expanded: bool,
     children_materialized: bool,
     children: Vec<usize>,
+    parent: Option<usize>,
     value_element_hidden: bool,
+    value_width: f64,
     value: ValueState,
 }
 
@@ -240,13 +271,16 @@ pub struct SidebarRow {
     pub expanded: bool,
     pub has_children: bool,
     pub label_loading: bool,
-    pub label_bold: bool,
+    /// The label's inline `font-weight`: unset until the row joins or leaves a select group.
+    pub label_bold: Option<bool>,
     pub label_title: Option<JsString>,
     pub type_label: Option<JsString>,
     pub warning_hidden: bool,
     pub warning_title: JsString,
     pub highlighted: bool,
     pub value_hidden: bool,
+    /// The container's `--value-width` in px.
+    pub value_width: f64,
     pub value: RowValue,
 }
 
@@ -268,20 +302,6 @@ pub enum RowValue {
     Text {
         text: JsString,
     },
-}
-
-/// The `span.field-text` inside `#dragItem`.
-#[derive(Clone, Debug)]
-pub struct DragItem {
-    pub text: JsString,
-    pub bold: bool,
-}
-
-/// The `data` of `startDrag`/`drag-update` events.
-#[derive(Clone, Debug)]
-pub struct DragPayload {
-    pub fields: Vec<JsString>,
-    pub children: Vec<JsString>,
 }
 
 pub struct Sidebar {
@@ -314,11 +334,6 @@ pub struct Sidebar {
     shadow_shown: bool,
     last_handle_click: f64,
     menu_active: Vec<bool>,
-    drag_active: bool,
-    drag_data: Option<DragPayload>,
-    drag_item: Option<DragItem>,
-    drag_item_hidden: bool,
-    drag_events: Vec<DragPayload>,
     main_messages: Vec<(JsString, JsValue)>,
     timers: Vec<Timer>,
     next_timer_seq: u64,
@@ -356,11 +371,6 @@ impl Sidebar {
             shadow_shown: false,
             last_handle_click: 0.0,
             menu_active: Vec::new(),
-            drag_active: false,
-            drag_data: None,
-            drag_item: None,
-            drag_item_hidden: false,
-            drag_events: Vec::new(),
             main_messages: Vec::new(),
             timers: Vec::new(),
             next_timer_seq: 0,
@@ -432,11 +442,6 @@ impl Sidebar {
         std::mem::take(&mut self.main_messages)
     }
 
-    /// `drag-update` event payloads emitted by hub.ts's `dragMove`/`dragEnd`.
-    pub fn take_drags(&mut self) -> Vec<DragPayload> {
-        std::mem::take(&mut self.drag_events)
-    }
-
     /// `saveState`.
     pub fn save_state(&self) -> SidebarState {
         SidebarState {
@@ -492,71 +497,47 @@ impl Sidebar {
         self.sidebar_handle_active = true;
     }
 
-    /// `window.mouseup`: the sidebar's handle listener runs before hub.ts's `dragEnd`.
-    pub fn window_mouse_up(&mut self) {
+    /// The handle's `window` `mouseup` listener, which runs before hub.ts's `dragEnd`.
+    pub fn handle_mouse_up(&mut self) {
         self.sidebar_handle_active = false;
-        self.drag_end();
     }
 
-    /// `window.touchend`: `dragEnd` alone.
-    pub fn window_touch_end(&mut self) {
-        self.drag_end();
-    }
-
-    fn drag_end(&mut self) {
-        if self.drag_active {
-            self.drag_active = false;
-            if let Some(payload) = self.drag_data.take() {
-                self.drag_events.push(payload);
-            }
-            self.drag_item_hidden = true;
+    /// The handle's `window` `mousemove` listener, which runs before hub.ts's `dragMove`.
+    pub fn handle_mouse_move(&mut self, client_x: f64) {
+        if !self.sidebar_handle_active {
+            return;
         }
+        let mut width = client_x;
+        if width > 500.0 {
+            width = 500.0;
+        }
+        if (80.0..160.0).contains(&width) {
+            width = 160.0;
+        }
+        if width < 80.0 {
+            if self.sidebar_width > 0.0 {
+                width = 0.0;
+            } else {
+                width = self.sidebar_width;
+            }
+        }
+        self.sidebar_width = width;
     }
 
-    /// `window.mousemove`: handle drag, then per-field drag thresholds.
-    pub fn window_mouse_move(&mut self, client_x: f64, client_y: f64) {
-        if self.sidebar_handle_active {
-            let mut width = client_x;
-            if width > 500.0 {
-                width = 500.0;
-            }
-            if (80.0..160.0).contains(&width) {
-                width = 160.0;
-            }
-            if width < 80.0 {
-                if self.sidebar_width > 0.0 {
-                    width = 0.0;
-                } else {
-                    width = self.sidebar_width;
-                }
-            }
-            self.sidebar_width = width;
-        }
-        let ids: Vec<usize> = (0..self.nodes.len()).collect();
-        for id in ids {
+    /// The field labels' `window` `mousemove` listeners, which run after hub.ts's `dragMove`,
+    /// so the move that starts a drag dispatches no `drag-update`. `offset` is the pressed
+    /// label's `[offsetX, offsetY]` at mousedown.
+    pub fn fields_mouse_move(&mut self, drag: &mut Drag, client_x: f64, client_y: f64) {
+        for id in 0..self.nodes.len() {
             let Some(down) = self.nodes[id].mouse_down else {
                 continue;
             };
             if abs(client_x - down[0]) >= FIELD_DRAG_THRESHOLD_PX
                 || abs(client_y - down[1]) >= FIELD_DRAG_THRESHOLD_PX
             {
-                self.drag_event(id, down[0], down[1], down[2], down[3]);
+                self.drag_event(drag, id, down[0], down[1], down[2], down[3]);
                 self.nodes[id].mouse_down = None;
             }
-        }
-        if self.drag_active
-            && let Some(payload) = self.drag_data.clone()
-        {
-            self.drag_events.push(payload);
-        }
-    }
-
-    /// `window.touchmove`: `dragMove` with the first touch.
-    pub fn window_touch_move(&mut self) {
-        if self.drag_active
-            && let Some(payload) = self.drag_data.clone()
-        {
-            self.drag_events.push(payload);
         }
     }
 
@@ -924,11 +905,11 @@ impl Sidebar {
             match self.select_group.iter().position(|k| k == &full_key) {
                 None => {
                     self.select_group.push(full_key);
-                    self.nodes[id].label_bold = true;
+                    self.nodes[id].label_bold = Some(true);
                 }
                 Some(index) => {
                     self.select_group.remove(index);
-                    self.nodes[id].label_bold = false;
+                    self.nodes[id].label_bold = Some(false);
                 }
             }
         }
@@ -955,14 +936,29 @@ impl Sidebar {
     }
 
     /// `field-item-label` touchstart. `rect` is the label's `getBoundingClientRect`.
-    pub fn label_touch_start(&mut self, flat_index: usize, x: f64, y: f64, rect: RowRect) {
+    pub fn label_touch_start(
+        &mut self,
+        drag: &mut Drag,
+        flat_index: usize,
+        x: f64,
+        y: f64,
+        rect: RowRect,
+    ) {
         if let Some(id) = self.flat_id(flat_index) {
-            self.drag_event(id, x, y, x - rect.x, y - rect.y);
+            self.drag_event(drag, id, x, y, x - rect.x, y - rect.y);
         }
     }
 
     /// The label `dragEvent`: fills `#dragItem` and calls `window.startDrag`.
-    fn drag_event(&mut self, id: usize, x: f64, y: f64, offset_x: f64, offset_y: f64) {
+    fn drag_event(
+        &mut self,
+        drag: &mut Drag,
+        id: usize,
+        x: f64,
+        y: f64,
+        offset_x: f64,
+        offset_y: f64,
+    ) {
         let node = &self.nodes[id];
         let Some(full_key) = node.full_key.clone() else {
             return;
@@ -989,18 +985,22 @@ impl Sidebar {
             },
             children,
         };
-        self.drag_item = Some(DragItem {
-            text,
-            bold: is_group,
-        });
-        self.drag_active = true;
-        self.drag_data = Some(payload);
-        let _ = (x, y, offset_x, offset_y);
+        drag.start(
+            x,
+            y,
+            offset_x,
+            offset_y,
+            DragItem {
+                text,
+                bold: is_group,
+            },
+            payload,
+        );
         if is_group {
             self.select_group.clear();
             for node in &mut self.nodes {
-                if !node.detached {
-                    node.label_bold = false;
+                if !node.detached && node.full_key.is_some() {
+                    node.label_bold = Some(false);
                 }
             }
         }
@@ -1049,15 +1049,15 @@ impl Sidebar {
 
     fn set_tuning_mode_active(&mut self, env: &SidebarEnv<'_>, active: bool) {
         self.is_tuning_mode = active;
-        for node in &mut self.nodes {
-            if node.detached {
+        for id in 0..self.nodes.len() {
+            if self.nodes[id].detached {
                 continue;
             }
-            let Some(full_key) = node.full_key.clone() else {
+            let Some(full_key) = self.nodes[id].full_key.clone() else {
                 continue;
             };
             let tunable = active && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
-            match &mut node.value {
+            match &mut self.nodes[id].value {
                 ValueState::Bool(state) => {
                     state.tunable = tunable;
                     if !tunable {
@@ -1070,6 +1070,7 @@ impl Sidebar {
                     if !tunable {
                         self.tuning_value_cache.remove_key(&full_key);
                     }
+                    self.measure_value_width(env, id);
                 }
                 _ => {}
             }
@@ -1250,7 +1251,7 @@ impl Sidebar {
         let Some(full_key) = self.nodes[id].full_key.clone() else {
             return;
         };
-        match &mut self.nodes[id].value {
+        let remeasure = match &mut self.nodes[id].value {
             ValueState::Bool(state) => {
                 let value = time.and_then(|t| get_value_at::<bool>(env.log, &full_key, t, None));
                 if !state.first_update && value == state.last_value {
@@ -1270,7 +1271,11 @@ impl Sidebar {
                     }));
                     state.line_hidden = Some(v);
                 }
-                self.nodes[id].value_element_hidden = value.is_none();
+                let hidden = value.is_none();
+                let changed = state.last_hidden != Some(hidden);
+                state.last_hidden = Some(hidden);
+                self.nodes[id].value_element_hidden = hidden;
+                changed
             }
             ValueState::Number(state) => {
                 let value = time.and_then(|t| get_value_at::<f64>(env.log, &full_key, t, None));
@@ -1290,8 +1295,12 @@ impl Sidebar {
                     Some(v) if rem(v, 1.0) == 0.0 => JsString::from(number::to_string(v)),
                     Some(v) => JsString::from(number::to_fixed(v, 3.0).unwrap()),
                 };
+                let char_count = value_str.len();
                 state.placeholder = Some(value_str.clone());
                 state.span_text = value_str;
+                let changed = state.last_char_count != Some(char_count);
+                state.last_char_count = Some(char_count);
+                changed
             }
             ValueState::Text(state) => {
                 let value =
@@ -1318,10 +1327,47 @@ impl Sidebar {
                         }
                     }
                 };
+                let char_count = value_str.len();
                 state.text = value_str;
+                let changed = state.last_char_count != Some(char_count);
+                state.last_char_count = Some(char_count);
+                changed
             }
-            ValueState::None => {}
+            ValueState::None => false,
+        };
+        if remeasure {
+            self.measure_value_width(env, id);
         }
+    }
+
+    fn displayed(&self, id: usize) -> bool {
+        let mut node = &self.nodes[id];
+        if node.detached {
+            return false;
+        }
+        while let Some(parent) = node.parent {
+            node = &self.nodes[parent];
+            if !node.expanded {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// `--value-width`, which upstream re-measures only when the value element's visibility,
+    /// character count or tuning mode changes, so a same-length value keeps the old width.
+    fn measure_value_width(&mut self, env: &SidebarEnv<'_>, id: usize) {
+        let node = &self.nodes[id];
+        let client_width = if node.value_element_hidden || !self.displayed(id) {
+            0.0
+        } else {
+            (env.measure_value)(&node.value.to_row())
+        };
+        self.nodes[id].value_width = if client_width == 0.0 {
+            0.0
+        } else {
+            client_width + VALUE_WIDTH_MARGIN_PX
+        };
     }
 
     // --- getActiveFields ---
@@ -1598,7 +1644,7 @@ impl Sidebar {
                         || starts_with(&full_title, "/Log"))))
                 && (KNOWN_KEYS.iter().any(|k| title == js(k)) || starts_with(&title, MERGED_KEY)),
             label_loading: false,
-            label_bold: false,
+            label_bold: None,
             label_title: None,
             type_label: None,
             warning_hidden: false,
@@ -1609,7 +1655,9 @@ impl Sidebar {
             expanded: false,
             children_materialized: false,
             children: Vec::new(),
+            parent,
             value_element_hidden: false,
+            value_width: 0.0,
             value: ValueState::None,
         };
         self.nodes.push(node);
@@ -1652,10 +1700,13 @@ impl Sidebar {
                     if !tunable {
                         self.tuning_value_cache.remove_key(&full_key);
                     }
-                    if let Some(cached) = self.tuning_value_cache.get_key(&full_key) {
-                        state.input_value = cached.clone();
-                    }
                     self.nodes[id].value = ValueState::Number(Box::new(state));
+                    self.measure_value_width(env, id);
+                    if let Some(cached) = self.tuning_value_cache.get_key(&full_key).cloned()
+                        && let ValueState::Number(state) = &mut self.nodes[id].value
+                    {
+                        state.input_value = cached;
+                    }
                 }
                 Some(LoggableType::String) => {
                     self.nodes[id].value = ValueState::Text(TextState {
@@ -1743,24 +1794,8 @@ impl Sidebar {
                     warning_title: js(TYPE_WARNING_TEXT),
                     highlighted: node.highlighted,
                     value_hidden: node.value_element_hidden,
-                    value: match &node.value {
-                        ValueState::None => RowValue::None,
-                        ValueState::Bool(state) => RowValue::Bool {
-                            fill: state.fill.clone(),
-                            line_hidden: state.line_hidden,
-                            tunable: state.tunable,
-                        },
-                        ValueState::Number(state) => RowValue::Number {
-                            input_value: state.input_value.clone(),
-                            input_hidden: state.input_hidden,
-                            span_hidden: state.span_hidden,
-                            span_text: state.span_text.clone(),
-                            placeholder: state.placeholder.clone(),
-                        },
-                        ValueState::Text(state) => RowValue::Text {
-                            text: state.text.clone(),
-                        },
-                    },
+                    value_width: node.value_width,
+                    value: node.value.to_row(),
                 }
             })
             .collect()
@@ -1793,14 +1828,6 @@ impl Sidebar {
 
     pub fn select_group(&self) -> &[JsString] {
         &self.select_group
-    }
-
-    pub fn drag_item(&self) -> Option<&DragItem> {
-        self.drag_item.as_ref()
-    }
-
-    pub fn drag_item_hidden(&self) -> bool {
-        self.drag_item_hidden
     }
 
     pub fn tuning_button_hidden(&self) -> bool {

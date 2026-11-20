@@ -21,6 +21,106 @@
         "log": "../logs/nt.json"
       },
       {
+        "log": [
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/NaN",
+            0.0,
+            {
+              "n": "7ff8000000000000"
+            }
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/NegZero",
+            0.0,
+            {
+              "n": "8000000000000000"
+            }
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/Inf",
+            0.0,
+            {
+              "n": "7ff0000000000000"
+            }
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/NegBig",
+            0.0,
+            -123456.0
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/Small",
+            0.0,
+            0.001
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/AlmostBig",
+            0.0,
+            99999.9999
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/Neg",
+            0.0,
+            -2.5
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/Int",
+            0.0,
+            -7.0
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/Eps",
+            0.0,
+            1e-10
+          ],
+          [
+            "putNumber",
+            "/SmartDashboard/Edge/Half",
+            0.0,
+            0.0015
+          ],
+          [
+            "putString",
+            "/SmartDashboard/Edge/Nine",
+            0.0,
+            "123456789"
+          ],
+          [
+            "putString",
+            "/SmartDashboard/Edge/Ten",
+            0.0,
+            "1234567890"
+          ],
+          [
+            "putString",
+            "/SmartDashboard/Edge/Surrogate",
+            0.0,
+            "a😀😀😀😀😀"
+          ],
+          [
+            "putString",
+            "/SmartDashboard/Edge/Empty",
+            0.0,
+            ""
+          ],
+          [
+            "putBoolean",
+            "/SmartDashboard/Edge/Flag",
+            0.0,
+            false
+          ]
+        ]
+      },
+      {
         "frames": 1
       },
       {
@@ -28,6 +128,30 @@
           "target": "#fieldList svg.field-item-icon",
           "type": "click",
           "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 6,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 18,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 9,
           "kind": "MouseEvent"
         }
       },
@@ -43,7 +167,8 @@
               "title",
               "placeholder",
               "fill",
-              "type"
+              "type",
+              "style"
             ]
           }
         ],
@@ -66,7 +191,8 @@
             "attributes": [
               "title",
               "placeholder",
-              "fill"
+              "fill",
+              "style"
             ]
           },
           {
@@ -93,7 +219,8 @@
             "attributes": [
               "title",
               "placeholder",
-              "fill"
+              "fill",
+              "style"
             ]
           }
         ],
@@ -115,11 +242,88 @@
             "attributes": [
               "title",
               "placeholder",
-              "fill"
+              "fill",
+              "style"
             ]
           }
         ],
         "label": "idle-hovered"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/SmartDashboard/Arm/Angle",
+            0.1,
+            -1.0
+          ],
+          [
+            "putString",
+            "/SmartDashboard/Arm/Mode",
+            0.1,
+            "short"
+          ]
+        ]
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          0.1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "same-length-number"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "sidebar-hidden"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "sidebar-restored"
       }
     ]
   }

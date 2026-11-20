@@ -71,7 +71,8 @@
               "placeholder",
               "type",
               "fill",
-              "value"
+              "value",
+              "style"
             ]
           },
           {
@@ -83,6 +84,11 @@
       },
       {
         "liveTime": 10.0
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
       },
       {
         "event": {
@@ -108,7 +114,8 @@
               "placeholder",
               "type",
               "fill",
-              "value"
+              "value",
+              "style"
             ]
           }
         ],
@@ -135,7 +142,8 @@
               "placeholder",
               "type",
               "fill",
-              "value"
+              "value",
+              "style"
             ]
           }
         ],
@@ -164,7 +172,8 @@
               "title",
               "placeholder",
               "type",
-              "value"
+              "value",
+              "style"
             ]
           }
         ],
@@ -213,7 +222,8 @@
               "title",
               "placeholder",
               "type",
-              "value"
+              "value",
+              "style"
             ]
           }
         ],
