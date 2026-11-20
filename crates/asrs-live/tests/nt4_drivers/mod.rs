@@ -1004,7 +1004,9 @@ impl PublisherDriver {
             "putBoolean" => log.put_boolean(&key, num(0), args[1].as_bool().expect("bool")),
             "putString" => log.put_string(&key, num(0), args[1].as_str().expect("string").clone()),
             "putRaw" => match &args[1] {
-                JsValue::Bytes(b) => log.put_raw(&key, num(0), b.clone()),
+                JsValue::Bytes(b) => log
+                    .put_raw(&key, num(0), b.clone())
+                    .expect("plain raw puts never fail"),
                 other => panic!("putRaw {other:?}"),
             },
             "putNumberArray" => log.put_number_array(
