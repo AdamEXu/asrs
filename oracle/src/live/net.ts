@@ -318,8 +318,9 @@ export class Net implements Outbox {
    * relies on: writes while connecting are held and go out on connect; an idle timeout
    * (`setTimeout`) fires once after that long without activity, where connecting, reads and
    * writes are activity once connected; a refused connection emits `error` then `close`; a server drop emits
-   * `close`; `destroy()` emits `close` once; writes after that go nowhere. `close` is emitted
-   * from a microtask, as Node emits it from `process.nextTick`.
+   * `close`; `destroy()` emits `close` once; writes after that go nowhere. `error` is emitted
+   * at once, as from `process.nextTick`, and `close` as a later task, as from the handle's close
+   * callback.
    */
   createConnection(options: { host: string; port: number }): unknown {
     const net = this;
@@ -392,7 +393,7 @@ export class Net implements Outbox {
         if (this.idleTimer !== null) clearTimeout(this.idleTimer);
         this.idleTimer = null;
         this.pending = [];
-        Promise.resolve().then(() => this.emit("close"));
+        net.loop.deliver(0, () => this.emit("close"));
       }
 
       destroy() {

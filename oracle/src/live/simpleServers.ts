@@ -11,6 +11,7 @@ export class RLOGServer extends MockServer {
   constructor(out: Outbox, ctx: ServerContext, config: any) {
     super(out, ctx);
     this.port = config.port ?? 5800;
+    if (typeof this.port !== "number") throw new Error("rlog: port must be a number");
   }
 
   protected ports(): number[] {
@@ -86,11 +87,21 @@ export class PhoenixServer extends MockServer {
   }
 
   private checkDevices(devices: PhoenixDevice[]): PhoenixDevice[] {
+    if (!Array.isArray(devices)) throw new Error("phoenix: devices must be a list");
     checkJsonNumbers(devices, "phoenix devices");
+    const scalar = (v: unknown) => typeof v === "number" || typeof v === "string";
     return devices.map((d) => {
+      const plain = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
+      if (!plain(d.device) || !scalar(d.device.ID)) throw new Error("phoenix: device needs an object with a numeric or string ID");
+      const signals = d.signals ?? [];
+      if (!Array.isArray(signals) || !signals.every((s) => plain(s) && scalar(s.Id))) {
+        throw new Error("phoenix: signals must be objects with a numeric or string Id");
+      }
       const values = d.values ?? {};
-      if (Object.values(values).some((list) => !Array.isArray(list))) throw new Error("phoenix: values must map ids to arrays");
-      return { device: d.device, signals: d.signals ?? [], values };
+      if (!plain(values) || Object.values(values).some((list) => !Array.isArray(list))) {
+        throw new Error("phoenix: values must map ids to arrays");
+      }
+      return { device: d.device, signals, values };
     });
   }
 
@@ -205,10 +216,12 @@ export class FTCServer extends MockServer {
     let text: string;
     switch (op[0]) {
       case "status":
+        if (op[1] === undefined) throw new Error("ftc: status needs a value");
         checkJsonNumbers(op[1], "ftc status");
         this.status = op[1];
         return;
       case "send":
+        if (op[1] === undefined) throw new Error("ftc: send needs a value");
         checkJsonNumbers(op[1], "ftc send");
         text = JSON.stringify(op[1]);
         break;

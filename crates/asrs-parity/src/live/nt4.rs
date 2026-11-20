@@ -126,10 +126,8 @@ impl Nt4 {
             None => vec![5810.0],
             Some(p) => p
                 .as_array()
-                .ok_or("nt4: ports must be an array")?
-                .iter()
-                .map(|p| p.as_f64().unwrap_or(f64::NAN))
-                .collect(),
+                .and_then(|ports| ports.iter().map(Json::as_f64).collect::<Option<Vec<_>>>())
+                .ok_or("nt4: ports must be a list of numbers")?,
         };
         let offset_us = present("offsetUs").map_or(Some(0.0), Json::as_f64);
         let offset_us = offset_us
@@ -182,7 +180,10 @@ impl Nt4 {
         let Json::Object(properties) = properties else {
             return Err(format!("nt4: topic {name} properties must be an object"));
         };
-        check_json_numbers(&Json::Object(properties.clone()), "nt4 topic properties")?;
+        check_json_numbers(
+            &Json::Object(properties.clone()),
+            &format!("nt4 topic {name} properties"),
+        )?;
         self.topics.push(Topic {
             id: self.next_topic_id,
             name: name.clone(),
@@ -294,7 +295,16 @@ impl Nt4 {
         }
     }
 
-    fn update_properties(&mut self, cx: &mut Cx<'_>, topic: usize, update: &Properties) {
+    fn update_properties(
+        &mut self,
+        cx: &mut Cx<'_>,
+        topic: usize,
+        update: &Properties,
+    ) -> Result<(), String> {
+        check_json_numbers(
+            &Json::Object(update.clone()),
+            &format!("nt4 topic {} properties", self.topics[topic].name),
+        )?;
         let properties = &mut self.topics[topic].properties;
         for (key, value) in update {
             if *value == Json::Null {
@@ -324,16 +334,17 @@ impl Nt4 {
                 Self::send_json(cx, self.conns[i].id, vec![message]);
             }
         }
+        Ok(())
     }
 
     fn subscribe(&mut self, cx: &mut Cx<'_>, conn: usize, params: &Properties) {
-        let params = Json::Object(params.clone());
+        let get = |key: &str| params.iter().find(|(k, _)| k.eq_str(key)).map(|(_, v)| v);
         let (Some(Json::Number(subuid)), Some(Json::Array(topics))) =
-            (params.get("subuid"), params.get("topics"))
+            (get("subuid"), get("topics"))
         else {
             return;
         };
-        let options = object(params.get("options"));
+        let options = object(get("options"));
         let flag = |key: &str| {
             options.is_some_and(|o| {
                 o.iter()
@@ -504,7 +515,7 @@ impl Protocol for Nt4 {
                         .and_then(|n| self.find(n));
                     if let (Some(topic), Some(Json::Object(update))) = (topic, get("update")) {
                         let update = update.clone();
-                        self.update_properties(cx, topic, &update);
+                        self.update_properties(cx, topic, &update)?;
                     }
                 }
                 _ => {}
@@ -549,9 +560,8 @@ impl Protocol for Nt4 {
                 let Some(Json::Object(update)) = op.get(2) else {
                     return Err("nt4: properties needs an update object".to_owned());
                 };
-                check_json_numbers(&op[2], "nt4 properties")?;
                 let topic = self.known(op.get(1))?;
-                self.update_properties(cx, topic, update);
+                self.update_properties(cx, topic, update)?;
             }
             "set" | "setraw" => {
                 let update = self.update(cx, op.get(1), op.get(2), op.get(3), name == "setraw")?;
@@ -576,7 +586,7 @@ impl Protocol for Nt4 {
                 self.send_values(cx, &updates);
             }
             "text" => {
-                let value = op.get(1).unwrap_or(&Json::Null);
+                let value = op.get(1).ok_or("nt4: text needs a value")?;
                 check_json_numbers(value, "nt4 text")?;
                 for i in self.main_conns(cx) {
                     cx.push_ws(self.conns[i].id, Payload::Text(value.to_compact()));

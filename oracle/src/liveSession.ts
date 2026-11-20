@@ -63,7 +63,7 @@ async function main() {
 
   const protocol: string = session.protocol;
   if (!(protocol in SERVERS)) fail(`unknown protocol ${JSON.stringify(protocol)}`);
-  const seed = BigInt(integer(session.seed, "seed", 0));
+  const seed = BigInt(integer(session.seed, "seed", 1));
   const epochMs = integer(session.epochMs ?? 1700000000000, "epochMs", 0);
   const latencyMs = integer(session.latencyMs ?? 1, "latencyMs", 1);
   const endMs = integer(session.endMs, "endMs", 0);
@@ -84,7 +84,9 @@ async function main() {
   let lastT = 0;
   const serverSteps: { t: number; op: any[] }[] = [];
   const clientOps: { t: number; op: any[] }[] = [];
-  for (const [i, step] of (session.steps ?? []).entries()) {
+  const allSteps = session.steps ?? [];
+  if (!Array.isArray(allSteps)) fail("steps must be a list");
+  for (const [i, step] of allSteps.entries()) {
     const t = integer(step.t, `steps[${i}].t`, 0);
     if (t < lastT || t > endMs) fail(`steps[${i}]: times must be non-decreasing and at most endMs`);
     lastT = t;

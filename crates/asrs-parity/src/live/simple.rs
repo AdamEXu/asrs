@@ -26,12 +26,12 @@ pub struct Rlog {
 }
 
 impl Rlog {
-    pub fn new(config: &Json) -> Self {
-        Self {
-            port: present(config, "port")
-                .and_then(Json::as_f64)
-                .unwrap_or(5800.0),
-        }
+    pub fn new(config: &Json) -> Result<Self, String> {
+        let port = match present(config, "port") {
+            None => 5800.0,
+            Some(port) => port.as_f64().ok_or("rlog: port must be a number")?,
+        };
+        Ok(Self { port })
     }
 }
 
@@ -125,25 +125,49 @@ impl Phoenix {
         let Some(list) = list else {
             return Ok(Vec::new());
         };
-        check_json_numbers(list, "phoenix devices")?;
         let items = list.as_array().ok_or("phoenix: devices must be a list")?;
+        check_json_numbers(list, "phoenix devices")?;
+        let scalar = |v: Option<&Json>| matches!(v, Some(Json::Number(_) | Json::String(_)));
         items
             .iter()
             .map(|d| {
+                let device = match d.get("device") {
+                    Some(device @ Json::Object(_)) if scalar(device.get("ID")) => device.clone(),
+                    _ => {
+                        return Err(
+                            "phoenix: device needs an object with a numeric or string ID"
+                                .to_owned(),
+                        );
+                    }
+                };
+                let signals = match present(d, "signals") {
+                    None => Vec::new(),
+                    Some(Json::Array(signals))
+                        if signals
+                            .iter()
+                            .all(|s| matches!(s, Json::Object(_)) && scalar(s.get("Id"))) =>
+                    {
+                        signals.clone()
+                    }
+                    Some(_) => {
+                        return Err(
+                            "phoenix: signals must be objects with a numeric or string Id"
+                                .to_owned(),
+                        );
+                    }
+                };
                 let values = match present(d, "values") {
                     None => Vec::new(),
-                    Some(Json::Object(pairs)) => pairs.clone(),
-                    Some(_) => return Err("phoenix: values must be an object".to_owned()),
+                    Some(Json::Object(pairs))
+                        if pairs.iter().all(|(_, v)| v.as_array().is_some()) =>
+                    {
+                        pairs.clone()
+                    }
+                    Some(_) => return Err("phoenix: values must map ids to arrays".to_owned()),
                 };
-                if values.iter().any(|(_, v)| v.as_array().is_none()) {
-                    return Err("phoenix: values must map ids to arrays".to_owned());
-                }
                 Ok(Device {
-                    device: d.get("device").cloned().ok_or("phoenix: device missing")?,
-                    signals: present(d, "signals")
-                        .and_then(Json::as_array)
-                        .unwrap_or_default()
-                        .to_vec(),
+                    device,
+                    signals,
                     values,
                 })
             })
@@ -328,8 +352,13 @@ impl Protocol for Ftc {
     }
 
     fn step(&mut self, cx: &mut Cx<'_>, op: &[Json]) -> Result<(), String> {
-        let arg = op.get(1).cloned().unwrap_or(Json::Null);
-        let text = match op_name(op).as_str() {
+        let name = op_name(op);
+        let arg = match (name.as_str(), op.get(1)) {
+            (_, Some(arg)) => arg.clone(),
+            ("status" | "send", None) => return Err(format!("ftc: {name} needs a value")),
+            _ => Json::Null,
+        };
+        let text = match name.as_str() {
             "status" => {
                 check_json_numbers(&arg, "ftc status")?;
                 self.status = arg;

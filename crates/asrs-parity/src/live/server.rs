@@ -134,7 +134,7 @@ pub fn hex_to_bytes(json: &Json) -> Result<Vec<u8>, String> {
         .collect())
 }
 
-/// `String(value)` for the JSON values a session puts where upstream compares strings.
+/// `String(value)` for the scalar JSON values a session puts where upstream compares strings.
 pub fn js_string(json: &Json) -> String {
     match json {
         Json::String(s) => s.to_string_lossy(),
@@ -142,7 +142,6 @@ pub fn js_string(json: &Json) -> String {
     }
 }
 
-/// Connection state the shared steps act on.
 #[derive(Default)]
 pub struct Base {
     up: bool,
@@ -201,7 +200,6 @@ impl Cx<'_> {
     }
 }
 
-/// One protocol's behaviour on top of [`Base`].
 pub trait Protocol {
     fn ports(&self) -> Vec<f64>;
     fn accept_ws(&mut self, _url: &str, _protocols: &[String]) -> Option<String> {
@@ -213,6 +211,9 @@ pub trait Protocol {
     }
     fn http(&mut self, _cx: &mut Cx<'_>, _url: &str) -> Result<Option<(f64, String)>, String> {
         Ok(None)
+    }
+    fn tcp_data(&mut self, _cx: &mut Cx<'_>, _id: u32, _data: &[u8]) -> Result<(), String> {
+        Ok(())
     }
     fn step(&mut self, cx: &mut Cx<'_>, op: &[Json]) -> Result<(), String>;
 }
@@ -302,7 +303,18 @@ impl MockServer {
                     }
                 }
             }
-            ClientEvent::HttpAbort { .. } | ClientEvent::TcpSend { .. } => {}
+            ClientEvent::TcpSend { id, data } => {
+                if self.base.tcp.contains(id) {
+                    let mut cx = Cx {
+                        t,
+                        epoch_ms,
+                        base: &mut self.base,
+                        out: &mut out,
+                    };
+                    self.protocol.tcp_data(&mut cx, *id, data)?;
+                }
+            }
+            ClientEvent::HttpAbort { .. } => {}
             ClientEvent::TcpOpen { id, port, .. } => {
                 let id = *id;
                 if self.answers(*port, &mut out, ServerEvent::TcpRefuse { id }) {

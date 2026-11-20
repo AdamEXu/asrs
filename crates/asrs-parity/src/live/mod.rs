@@ -51,7 +51,6 @@ impl Payload {
     }
 }
 
-/// What the client side sends, as the trace records it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ClientEvent {
     WsOpen {
@@ -87,7 +86,6 @@ pub enum ClientEvent {
     },
 }
 
-/// What a mock server does, as the trace records it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ServerEvent {
     WsAccept { id: u32, protocol: String },
@@ -264,7 +262,6 @@ impl ServerEvent {
     }
 }
 
-/// One line of a session trace.
 pub struct TraceEvent {
     pub t: f64,
     pub ev: String,
@@ -283,10 +280,15 @@ impl TraceEvent {
         let ev = record
             .string("ev")
             .ok_or_else(|| at("needs a string \"ev\"".to_owned()))?;
-        let id = record
-            .field("id")
-            .and_then(Json::as_f64)
-            .map(|id| id as u32);
+        let id = match record.field("id") {
+            None => None,
+            Some(Json::Number(id))
+                if id.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(id) =>
+            {
+                Some(*id as u32)
+            }
+            Some(_) => return Err(at("\"id\" must be a connection number".to_owned())),
+        };
         let v = match record.field("v") {
             None => None,
             Some(_) => Some(record.value("v").map_err(|e| at(e.to_string()))?),
@@ -333,11 +335,19 @@ pub struct Session {
     pub client_steps: Vec<Step>,
 }
 
-const PROTOCOLS: [(&str, &[&str]); 4] = [
-    ("nt4", &["nt4", "nt4-publisher"]),
-    ("rlog", &["rlog"]),
-    ("phoenix", &["phoenix"]),
-    ("ftc", &["ftc"]),
+type Builder = fn(&Json, f64) -> Result<Box<dyn server::Protocol>, String>;
+
+const PROTOCOLS: [(&str, &[&str], Builder); 4] = [
+    ("nt4", &["nt4", "nt4-publisher"], |c, epoch| {
+        Ok(Box::new(nt4::Nt4::new(c, epoch)?))
+    }),
+    ("rlog", &["rlog"], |c, _| {
+        Ok(Box::new(simple::Rlog::new(c)?))
+    }),
+    ("phoenix", &["phoenix"], |c, _| {
+        Ok(Box::new(simple::Phoenix::new(c)?))
+    }),
+    ("ftc", &["ftc"], |c, _| Ok(Box::new(simple::Ftc::new(c)?))),
 ];
 
 impl Session {
@@ -356,10 +366,10 @@ impl Session {
             .unwrap_or_default();
         let sources = PROTOCOLS
             .iter()
-            .find(|(p, _)| *p == protocol)
-            .map(|(_, s)| *s)
+            .find(|(p, _, _)| *p == protocol)
+            .map(|(_, s, _)| *s)
             .ok_or_else(|| format!("unknown protocol {protocol:?}"))?;
-        let seed = integer("seed", None, 0.0)? as u64;
+        let seed = integer("seed", None, 1.0)? as u64;
         let epoch_ms = integer("epochMs", Some(1_700_000_000_000.0), 0.0)?;
         let latency_ms = integer("latencyMs", Some(1.0), 1.0)?;
         let end_ms = integer("endMs", None, 0.0)?;
@@ -381,13 +391,12 @@ impl Session {
             server_steps: Vec::new(),
             client_steps: Vec::new(),
         };
+        let steps = match present("steps") {
+            None => &[][..],
+            Some(steps) => steps.as_array().ok_or("steps must be a list")?,
+        };
         let mut last = 0.0;
-        for (i, step) in present("steps")
-            .and_then(Json::as_array)
-            .unwrap_or_default()
-            .iter()
-            .enumerate()
-        {
+        for (i, step) in steps.iter().enumerate() {
             let t = match step.get("t").and_then(Json::as_f64) {
                 Some(t) if msgpack::is_safe_integer(t) && t >= 0.0 => t,
                 _ => return Err(format!("steps[{i}].t must be an integer >= 0")),
@@ -421,19 +430,17 @@ impl Session {
     }
 
     pub fn server(&self) -> Result<MockServer, String> {
-        let config = &self.server;
-        let protocol: Box<dyn server::Protocol> = match self.protocol.as_str() {
-            "nt4" => Box::new(nt4::Nt4::new(config, self.epoch_ms)?),
-            "rlog" => Box::new(simple::Rlog::new(config)),
-            "phoenix" => Box::new(simple::Phoenix::new(config)?),
-            "ftc" => Box::new(simple::Ftc::new(config)?),
-            other => return Err(format!("unknown protocol {other:?}")),
-        };
-        Ok(MockServer::new(protocol, self.epoch_ms))
+        let (_, _, build) = PROTOCOLS
+            .iter()
+            .find(|(p, _, _)| *p == self.protocol)
+            .ok_or_else(|| format!("unknown protocol {:?}", self.protocol))?;
+        Ok(MockServer::new(
+            build(&self.server, self.epoch_ms)?,
+            self.epoch_ms,
+        ))
     }
 }
 
-/// Every session file under `parity/specs/live`, sorted.
 pub fn session_files() -> Vec<PathBuf> {
     fn visit(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else {
@@ -496,7 +503,6 @@ impl ServerHost {
         Ok(host)
     }
 
-    /// Queues what the client sent at `sent_at`.
     pub fn arrive(&mut self, sent_at: f64, event: ClientEvent) {
         self.queue
             .push((sent_at + self.latency_ms, 0, self.seq, Work::Arrival(event)));
@@ -507,7 +513,8 @@ impl ServerHost {
         self.queue.iter().map(|q| q.0).reduce(f64::min)
     }
 
-    /// Runs everything queued for `t`; each server event is delivered `latencyMs` later.
+    /// The server events at `t`, in order; the caller delivers each to the client `latencyMs`
+    /// later.
     pub fn process(&mut self, t: f64) -> Result<Vec<ServerEvent>, String> {
         let (mut due, rest): (Vec<_>, Vec<_>) = self.queue.drain(..).partition(|q| q.0 == t);
         self.queue = rest;

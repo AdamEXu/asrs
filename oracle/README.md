@@ -424,10 +424,12 @@ mock server, entirely in process on a fake clock, and prints a trace. Each sessi
 `cargo xtask oracle run liveSession <file>` prints a trace without writing a vector.
 
 Adding a session (the N units): write the file, run `cargo xtask oracle gen --stale`, commit
-both. Nothing shared changes: xtask discovers session files, and the Rust test
+the session, its vector and the new `MANIFEST.json` line. No code or other spec changes: xtask
+discovers session files, and the Rust test
 `crates/asrs-parity/tests/live_sessions.rs` replays every one of them against the Rust mocks
-(below). A session that needs a mock or harness feature that does not exist yet is a harness
-change, not a session.
+(below). The manifest is the one shared file; a conflict there after merging main is resolved
+by rerunning `oracle gen --stale`. A session that needs a mock or harness feature that does not
+exist yet is a harness change, not a session.
 
 ### Session format
 
@@ -450,7 +452,7 @@ change, not a session.
 | Field | Meaning |
 |---|---|
 | `protocol` | `nt4`, `rlog`, `phoenix` or `ftc`: which mock serves the session |
-| `seed` | `Math.random` is V8's own generator under `--random-seed=<seed>` (`src/live/random.ts`; the port uses `asrs_js::time::V8MathRandom::from_seed`). It is installed before the source is built, so the source UUID, NT4 uids and the msgpack key-cache evictions all draw from it |
+| `seed` | at least 1 (V8 treats 0 as no seed); `Math.random` is V8's own generator under `--random-seed=<seed>` (`src/live/random.ts`; the port uses `asrs_js::time::V8MathRandom::from_seed`). It is installed before the source is built, so the source UUID, NT4 uids and the msgpack key-cache evictions all draw from it |
 | `epochMs` | `Date.now()` at session time 0 (default 1700000000000) |
 | `latencyMs` | one-way network delay, an integer of at least 1 (default 1) |
 | `endMs` | the session stops after this time; a final `dump` is recorded then |
@@ -477,7 +479,7 @@ Client ops, applied the way `hub.ts` does:
 
 Server ops shared by every mock: `["up"]`; `["down", "refuse" \| "hang"]` (new connections and
 requests are refused or never answered, open ones stay); `["mute", bool]` (pushes on open
-connections are dropped, handshakes still answered); `["drop"]` (the server closes every open
+connections are dropped; handshakes and HTTP replies still go out); `["drop"]` (the server closes every open
 connection, websockets first, each in opening order). Per protocol (each server class documents
 its own behaviour in detail):
 
@@ -501,7 +503,9 @@ in order: the server (every client message arriving now in send order, then the 
 for now in file order); the client steps for now (file order); then client tasks until none is
 due, where a delivery (server message, IPC message, socket event) due now goes before any
 timer, oldest first, and timers follow Blink's rules (see `src/live/clock.ts` and
-`asrs_live::timers`). Every task is followed by a full microtask drain. `requestIdleCallback`
+`asrs_live::timers`). The emulated main process shares that one timer queue and those rules, so its heartbeat
+interval and socket timers order against the renderer's by creation. Every task is followed by a
+full microtask drain. `requestIdleCallback`
 fires at its `timeout`, `requestAnimationFrame` 16 ms later, both as ordinary timers. IPC
 between the renderer and the emulated main process is a delivery with no delay.
 
@@ -513,7 +517,8 @@ throws, a refused handshake fires `error` then `close`, a server drop fires `clo
 `fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
 `http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
 go out on connect, `setTimeout` is an idle timer refreshed by connecting, reads and writes, a
-refusal emits `error` then `close`, and `close` comes from a microtask.
+refusal emits `error` then `close`; `error` is emitted at once and `close` as a later
+delivery, as Node emits it from the handle's close callback.
 
 ### Trace
 

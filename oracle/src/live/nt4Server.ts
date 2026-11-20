@@ -116,6 +116,9 @@ export class NT4Server extends MockServer {
     this.version = config.version ?? "4.1";
     if (this.version !== "4.1" && this.version !== "4.0") throw new Error(`nt4: unknown version ${this.version}`);
     this.serverPorts = config.ports ?? [5810];
+    if (!Array.isArray(this.serverPorts) || !this.serverPorts.every((p) => typeof p === "number")) {
+      throw new Error("nt4: ports must be a list of numbers");
+    }
     this.offsetUs = config.offsetUs ?? 0;
     if (!Number.isSafeInteger(this.offsetUs)) throw new Error("nt4: offsetUs must be a safe integer");
     for (const t of config.topics ?? []) {
@@ -208,6 +211,7 @@ export class NT4Server extends MockServer {
   }
 
   private updateProperties(topic: Topic, update: { [key: string]: unknown }): void {
+    checkJsonNumbers(update, `nt4 topic ${topic.name} properties`);
     for (const key of Object.keys(update)) {
       if (update[key] === null) delete topic.properties[key];
       else topic.properties[key] = update[key];
@@ -317,7 +321,6 @@ export class NT4Server extends MockServer {
       }
       case "properties":
         if (!isObject(op[2])) throw new Error("nt4: properties needs an update object");
-        checkJsonNumbers(op[2], "nt4 properties");
         this.updateProperties(this.known(op[1]), op[2]);
         break;
       case "set":
@@ -330,6 +333,7 @@ export class NT4Server extends MockServer {
         this.sendValues((op[1] as any[][]).map(([name, value, ts]) => this.update(name, value, ts, false)));
         break;
       case "text":
+        if (op[1] === undefined) throw new Error("nt4: text needs a value");
         checkJsonNumbers(op[1], "nt4 text");
         for (const [id] of this.mainConns()) this.pushWs(id, JSON.stringify(op[1]));
         break;
