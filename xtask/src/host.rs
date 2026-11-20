@@ -64,6 +64,7 @@ commands on the machine itself (cargo xtask host local ...):
 
 Results land in target/parity/host/ on the machine that ran them.";
 
+const WINDOWS_NODE: &str = r"C:\tools\node-v24.18.0-win-arm64";
 const GUI_DIR: &str = "C:/work/.gui";
 const SYNC_DIR: &str = "C:/work/.sync";
 const LINUX_VM: &str = "asrs-linux";
@@ -198,8 +199,8 @@ impl Host {
         match self.os {
             Os::Linux => format!("bash -lc {}", sh_quote(body)),
             Os::Windows => format!(
-                "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {}",
-                powershell_encode(body)
+                "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -OutputFormat Text -EncodedCommand {}",
+                powershell_encode(&format!("$ProgressPreference = 'SilentlyContinue'\n{body}"))
             ),
         }
     }
@@ -253,7 +254,7 @@ impl Host {
         let body = match self.os {
             Os::Linux => format!("cd {} && {command}", self.checkout()),
             Os::Windows => format!(
-                "$ErrorActionPreference = 'Continue'\nSet-Location {}\n{command}\nexit $LASTEXITCODE",
+                "$ErrorActionPreference = 'Continue'\n$env:Path = '{WINDOWS_NODE};' + $env:Path\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
                 self.checkout()
             ),
         };
@@ -271,7 +272,7 @@ impl Host {
             Os::Windows => {
                 let gui = GUI_DIR.replace('/', "\\");
                 let batch = format!(
-                    "@echo off\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
+                    "@echo off\r\nset PATH={WINDOWS_NODE};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
                     self.checkout().replace('/', "\\")
                 );
                 format!(

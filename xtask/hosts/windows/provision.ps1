@@ -1,9 +1,22 @@
 $ErrorActionPreference = 'Stop'
 
-foreach ($tool in 'git', 'cargo', 'rustup', 'node', 'npm.cmd', 'tar.exe') {
+foreach ($tool in 'git', 'cargo', 'rustup', 'tar.exe') {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
         throw "$tool is not on PATH; install it with the VM's guest\install-toolchain.ps1"
     }
+}
+
+# The VM's own Node 26 exits extract-zip early, so Electron's install.js leaves an empty dist.
+# xtask puts this Node 24 first on PATH for asrs commands only.
+$node = 'node-v24.18.0-win-arm64'
+if (-not (Test-Path "C:\tools\$node\node.exe")) {
+    $zip = "C:\work\.sync\$node.zip"
+    curl.exe -fsSL --retry 5 -o $zip "https://nodejs.org/dist/v24.18.0/$node.zip"
+    if ((Get-FileHash -Algorithm SHA256 $zip).Hash -ne 'F274669ADB93B1FD0FBF8F21FD078609E9DCC84333D4F2718D2DDE3F9A161A01') {
+        throw "${zip}: sha256 mismatch"
+    }
+    Expand-Archive -Force $zip C:\tools
+    Remove-Item $zip
 }
 
 $desktop = 'HKCU:\Control Panel\Desktop'

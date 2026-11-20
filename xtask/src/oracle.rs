@@ -884,13 +884,15 @@ fn copy_symlink(from: &Path, to: &Path) -> Result<usize> {
         result.map_err(|e| format!("{}: {e}", to.display()))?;
     }
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&link, to).map_err(err)?;
+    {
+        std::os::unix::fs::symlink(&link, to).map_err(err)?;
+        Ok(1)
+    }
     #[cfg(windows)]
-    return Err(format!(
+    Err(format!(
         "{}: symlinks in upstream are not supported on Windows",
         from.display()
-    ));
-    Ok(1)
+    ))
 }
 
 fn remove_stale(dst: &Path, rel: &Path, seen: &HashSet<PathBuf>) -> Result {
