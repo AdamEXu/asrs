@@ -32,7 +32,19 @@ const ccModule: any = await import("camera-controls");
 const CameraControls = ccModule.default?.default ?? ccModule.default;
 CameraControls.install({ THREE });
 
-const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n");
+// V8 gives the same NaN different bits depending on which tier ran the code, so NaNs are
+// written as one canonical pattern to keep the vector bytes reproducible.
+const NAN_BITS = /^[7f]ff[0-9a-f]{13}$/;
+const canonicalNaN = (tree: unknown): unknown => {
+  if (Array.isArray(tree)) return tree.map(canonicalNaN);
+  if (tree !== null && typeof tree === "object") {
+    const n = (tree as { n?: unknown }).n;
+    if (typeof n === "string" && NAN_BITS.test(n) && !/^[7f]ff0{13}$/.test(n)) return { n: "7ff8000000000000" };
+    return Object.fromEntries(Object.entries(tree).map(([k, v]) => [k, canonicalNaN(v)]));
+  }
+  return tree;
+};
+const out = (value: object) => process.stdout.write(JSON.stringify(canonicalNaN(value)) + "\n");
 
 let seed = platform === "mac" ? 0x0c0c_0290 : 0x0c0c_0291;
 const rng = () => {
