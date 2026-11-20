@@ -373,7 +373,6 @@ impl Nt4Source {
             }
         }
 
-        // Remove duplicates based on prefixes
         let copy = active.clone();
         for field0 in &copy {
             for field1 in &copy {
@@ -616,7 +615,6 @@ fn put_topic_value(
         return Ok(false);
     };
     let Some(ty) = topic.type_str() else {
-        // `topic.type.startsWith` on a non-string type
         return Err(Thrown::type_error(
             "topic.type.startsWith is not a function",
         ));
@@ -682,10 +680,7 @@ impl Nt4Handler for Inner {
         }
         let key = self.key_from_topic(topic)?;
         let Some(ty) = topic.type_str() else {
-            // `getStructuredTypeFromRaw` calls `topic.type.startsWith`
-            return Err(Thrown::type_error(
-                "topic.type.startsWith is not a function",
-            ));
+            return Err(Thrown::type_error("rawType.startsWith is not a function"));
         };
         let structured_type = get_structured_type_from_raw(ty);
         {
@@ -888,5 +883,39 @@ impl Nt4Tuner {
         } else {
             key.slice(WPILOG_PREFIX.len() as f64, None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timers::ManualClock;
+
+    fn tuner(mode: Nt4Mode) -> Nt4Tuner {
+        let mut timers = TimerQueue::new(Rc::new(ManualClock::new(0.0)));
+        let client = Nt4Client::new(
+            "127.0.0.1",
+            NT4_PORTS_DEFAULT,
+            "AdvantageScope",
+            &mut timers,
+        );
+        Nt4Tuner {
+            client: Rc::new(RefCell::new(client)),
+            mode,
+        }
+    }
+
+    #[test]
+    fn has_tunable_fields_follows_the_mode() {
+        let mut log = Log::new(true);
+        log.create_blank_field(&js("/Drive/x"), LoggableType::Number);
+        assert!(tuner(Nt4Mode::Default).has_tunable_fields(&log));
+        assert!(!tuner(Nt4Mode::AdvantageKit).has_tunable_fields(&log));
+        assert!(!tuner(Nt4Mode::Systemcore).has_tunable_fields(&log));
+        assert!(!tuner(Nt4Mode::DriverStation).has_tunable_fields(&log));
+        log.create_blank_field(&js("/TuningX"), LoggableType::Empty);
+        assert!(tuner(Nt4Mode::AdvantageKit).has_tunable_fields(&log));
+        assert!(!tuner(Nt4Mode::DriverStation).has_tunable_fields(&log));
+        assert!(tuner(Nt4Mode::Default).has_tunable_fields(&Log::new(true)));
     }
 }
