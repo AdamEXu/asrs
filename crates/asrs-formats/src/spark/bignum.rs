@@ -1,8 +1,7 @@
-//! The bignumber.js 9.1.2 subset `can-spec-util.ts` uses. A finite value is a sign, a
+//! The bignumber.js 9.1.2 subset `getCanSignalValue` uses. A finite value is a sign, a
 //! significant-decimal-digit string and a base-10 exponent for the first digit, matching
 //! BigNumber's `s`/`c`/`e` triple: `value = 0.digits * 10^(exp + 1)`. Arithmetic is exact
-//! (`times`, `plus`, `minus`), `div` is 20 significant digits ROUND_HALF_UP (the library's
-//! `DECIMAL_PLACES`/`ROUNDING_MODE` defaults), and `toNumber` is `Number(valueOf())`, the
+//! (`times`, `plus`, `minus`), and `toNumber` is `Number(valueOf())`, the
 //! correctly-rounded f64 of the decimal expansion. NaN, +/-Infinity and signed zero follow
 //! the library: comparisons with NaN return false, x - x is +0 under the default
 //! ROUNDING_MODE (4), and -0 keeps its sign through `toNumber`.
@@ -23,18 +22,8 @@ pub struct Finite {
     pub exp: i64,
 }
 
-const ROUND_UP: u8 = 0;
-pub const ROUND_DOWN: u8 = 1;
-const ROUND_CEIL: u8 = 2;
-pub(crate) const ROUND_FLOOR: u8 = 3;
-pub const ROUND_HALF_UP: u8 = 4;
-pub const ROUND_HALF_DOWN: u8 = 5;
-const ROUND_HALF_EVEN: u8 = 6;
-const ROUND_HALF_CEIL: u8 = 7;
-const ROUND_HALF_FLOOR: u8 = 8;
-
-const ROUNDING_MODE: u8 = ROUND_HALF_UP;
-const DECIMAL_PLACES: i64 = 20;
+const ROUND_FLOOR: u8 = 3;
+const ROUNDING_MODE: u8 = 4;
 const MAX_EXP: i64 = 10_000_000;
 const MIN_EXP: i64 = -10_000_000;
 
@@ -295,82 +284,6 @@ impl BigNum {
         }
     }
 
-    /// `x.div(y)`: the quotient rounded to `DECIMAL_PLACES` (20) decimal places with
-    /// `ROUNDING_MODE` (half-up), i.e. to `20 + q.e + 1` significant digits.
-    pub fn div(&self, y: &BigNum) -> BigNum {
-        let s_neg = self.sign_bit() ^ y.sign_bit();
-        let (x_inf, y_inf) = (
-            matches!(self, BigNum::Infinity { .. }),
-            matches!(y, BigNum::Infinity { .. }),
-        );
-        if matches!(self, BigNum::Nan)
-            || matches!(y, BigNum::Nan)
-            || (x_inf && y_inf)
-            || (self.is_zero() && y.is_zero())
-        {
-            return BigNum::Nan;
-        }
-        if self.is_zero() || y_inf {
-            return BigNum::zero(s_neg);
-        }
-        if x_inf || y.is_zero() {
-            return BigNum::Infinity { neg: s_neg };
-        }
-        let (xf, yf) = (self.finite(), y.finite());
-        let (xd, yd) = (&xf.digits, &yf.digits);
-        // Quotient exponent: (0.xdigits / 0.ydigits) * 10^(x.e - y.e); when the
-        // numerator's digit string (padded) sorts below the denominator's, one more
-        // power of ten.
-        let mut exp = xf.exp - yf.exp;
-        if cmp_digits(
-            &shift(xd, yd.len().saturating_sub(xd.len())),
-            &shift(yd, xd.len().saturating_sub(yd.len())),
-        ) == std::cmp::Ordering::Less
-        {
-            exp -= 1;
-        }
-        // Significant digits wanted, plus one for the rounding digit.
-        let sd = DECIMAL_PLACES + exp + 1;
-        let want = (sd + 1).max(2) as usize;
-        // q = (xd / yd) * 10^(yd.len - xd.len + x.e - y.e); the first quotient digit is
-        // floor(rem / den) with the scaling below so it lands at exponent `exp`.
-        let m0 = yd.len() as i64 - xd.len() as i64 + xf.exp - yf.exp - exp;
-        let den = shift(yd, (-m0).max(0) as usize);
-        let mut rem = shift(xd, m0.max(0) as usize);
-        let mut digits: Vec<u8> = Vec::new();
-        let mut more = false;
-        loop {
-            let mut d = 0u8;
-            while cmp_digits(&rem, &den) != std::cmp::Ordering::Less {
-                rem = sub_digits(&rem, &den);
-                d += 1;
-            }
-            digits.push(d);
-            let rem_zero = rem.iter().all(|r| *r == 0);
-            if digits.len() >= want {
-                more = !rem_zero;
-                break;
-            }
-            if rem_zero {
-                break;
-            }
-            rem.push(0);
-        }
-        let finite = Finite {
-            neg: s_neg,
-            digits,
-            exp,
-        };
-        let (rounded, _) = round_finite(&finite, sd, ROUNDING_MODE, more);
-        match rounded {
-            BigNum::Finite(f) => {
-                let t = f.exp - f.digits.len() as i64 + 1;
-                BigNum::finish(f.neg, f.digits, t)
-            }
-            other => other,
-        }
-    }
-
     /// The operand with its sign flipped; `y.s = -b` in the library's delegation.
     fn negated(&self) -> BigNum {
         match self {
@@ -451,18 +364,6 @@ impl BigNum {
         self.compare(y).is_some_and(|c| c > 0)
     }
 
-    /// `x.integerValue(rm)`: `round(x, x.e + 1, rm)` — round to an integer; Infinity and
-    /// NaN pass through.
-    pub fn integer_value(&self, rm: u8) -> BigNum {
-        match self {
-            BigNum::Nan | BigNum::Infinity { .. } => self.clone(),
-            BigNum::Finite(f) => {
-                let (rounded, _) = round_finite(f, f.exp + 1, rm, false);
-                rounded
-            }
-        }
-    }
-
     /// `x.toNumber()`: `+valueOf(this)`, the correctly-rounded f64 of the decimal value.
     /// -0 survives because `valueOf` writes `-0`.
     pub fn to_number(&self) -> f64 {
@@ -500,6 +401,7 @@ impl BigNum {
 
     /// `x.toFixed()`: the plain decimal expansion (no rounding when `dp` is omitted),
     /// `-` only for a non-zero negative.
+    #[cfg(test)]
     pub fn to_fixed(&self) -> String {
         match self {
             BigNum::Nan => "NaN".to_owned(),
@@ -653,94 +555,6 @@ fn shift(digits: &[u8], zeros: usize) -> Vec<u8> {
     out
 }
 
-/// `round(x, sd, rm, r)` on a finite value: round to `sd` significant digits. Returns the
-/// rounded value and whether rounding dropped non-zero digits.
-fn round_finite(f: &Finite, sd: i64, rm: u8, r_extra: bool) -> (BigNum, bool) {
-    if sd >= f.digits.len() as i64 && !r_extra && sd > 0 {
-        return (BigNum::Finite(f.clone()), false);
-    }
-    if sd <= 0 {
-        // Digit at the round position: the first digit for sd == 0, zero for sd < 0.
-        let rd = if sd == 0 {
-            f.digits.first().copied().unwrap_or(0)
-        } else {
-            0
-        };
-        let r = r_extra || sd < 0 || f.digits.len() > 1;
-        if round_up(rd, r, rm, f.neg, 0) {
-            return (
-                BigNum::Finite(Finite {
-                    neg: f.neg,
-                    digits: vec![1],
-                    exp: -sd,
-                }),
-                true,
-            );
-        }
-        return (BigNum::zero(f.neg), true);
-    }
-    let sd = sd as usize;
-    let rd = f.digits.get(sd).copied().unwrap_or(0);
-    let r = r_extra
-        || f.digits[(sd + 1).min(f.digits.len())..]
-            .iter()
-            .any(|d| *d != 0);
-    let prev = if sd > 0 { f.digits[sd - 1] } else { 0 };
-    let mut kept: Vec<u8> = f.digits[..sd.min(f.digits.len())].to_vec();
-    let mut exp = f.exp;
-    if round_up(rd, r, rm, f.neg, prev) {
-        // Increment the kept digits; all-nines carries out the front.
-        let mut i = kept.len();
-        loop {
-            if i == 0 {
-                kept.insert(0, 1);
-                exp += 1;
-                break;
-            }
-            i -= 1;
-            if kept[i] == 9 {
-                kept[i] = 0;
-            } else {
-                kept[i] += 1;
-                break;
-            }
-        }
-    }
-    while kept.last() == Some(&0) {
-        kept.pop();
-    }
-    if kept.is_empty() {
-        return (BigNum::zero(f.neg), true);
-    }
-    (
-        BigNum::Finite(Finite {
-            neg: f.neg,
-            digits: kept,
-            exp,
-        }),
-        true,
-    )
-}
-
-/// The `r = rm < 4 ? ... : ...` decision of bignumber.js `round`.
-fn round_up(rd: u8, r: bool, rm: u8, neg: bool, prev: u8) -> bool {
-    if rm < 4 {
-        (rd != 0 || r) && (rm == ROUND_UP || rm == if neg { ROUND_FLOOR } else { ROUND_CEIL })
-    } else {
-        rd > 5
-            || (rd == 5
-                && (rm == ROUND_HALF_UP
-                    || r
-                    || (rm == ROUND_HALF_EVEN && prev % 2 == 1)
-                    || rm
-                        == if neg {
-                            ROUND_HALF_FLOOR
-                        } else {
-                            ROUND_HALF_CEIL
-                        }))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -800,20 +614,6 @@ mod tests {
     }
 
     #[test]
-    fn integer_value() {
-        assert_eq!(fixed(&bn("2.5").integer_value(ROUND_HALF_DOWN)), "2");
-        assert_eq!(fixed(&bn("2.5").integer_value(ROUND_HALF_UP)), "3");
-        assert_eq!(fixed(&bn("-2.5").integer_value(ROUND_HALF_DOWN)), "-2");
-        assert_eq!(fixed(&bn("0.5").integer_value(ROUND_HALF_UP)), "1");
-        assert_eq!(fixed(&bn("0.4").integer_value(ROUND_HALF_UP)), "0");
-        assert_eq!(fixed(&bn("-0.4").integer_value(ROUND_DOWN)), "0");
-        assert_eq!(
-            fixed(&bn("32442.9").integer_value(ROUND_HALF_DOWN)),
-            "32443"
-        );
-    }
-
-    #[test]
     fn to_number() {
         assert_eq!(bn("0.5").to_number(), 0.5);
         assert_eq!(bn("-0").to_number().to_bits(), (-0.0f64).to_bits());
@@ -830,14 +630,34 @@ mod tests {
     }
 
     #[test]
-    fn div() {
-        assert_eq!(fixed(&bn("1").div(&bn("3"))), "0.33333333333333333333");
-        assert_eq!(fixed(&bn("1.5").div(&bn("1"))), "1.5");
-        assert_eq!(fixed(&bn("0").div(&bn("0"))), "NaN");
-        assert_eq!(fixed(&bn("1").div(&bn("0"))), "Infinity");
+    fn signal_edges() {
+        let decode = |x: BigNum, scale: &str, offset: &str| {
+            x.times(&bn(scale)).plus(&bn(offset)).to_number().to_bits()
+        };
+        assert_eq!(decode(BigNum::from_f64(-0.0), "1", "0"), 0);
         assert_eq!(
-            fixed(&bn("32442").div(&bn("0.00003082369457075716"))),
-            "1052501994.05940608469304528568"
+            decode(BigNum::from_f64(-0.0), "1", "-0"),
+            0x8000000000000000
+        );
+        assert_eq!(
+            decode(
+                BigNum::from_int(18446744073709551615),
+                "2.4703282292062328e-324",
+                "0"
+            ),
+            0x00c0000000000000
+        );
+        assert_eq!(
+            decode(
+                BigNum::from_f64(1.401298464324817e-45),
+                "0.00001541161211566339",
+                "0"
+            ),
+            0x35a02905eb9547bf
+        );
+        assert_eq!(
+            decode(BigNum::from_int(9007199254740993), "1", "0"),
+            0x4340000000000000
         );
     }
 }

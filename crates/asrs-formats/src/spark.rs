@@ -7,10 +7,10 @@ mod bitstring;
 mod can_spec;
 pub mod tables;
 
-pub use bignum::{BigNum, ROUND_DOWN, ROUND_HALF_DOWN};
+pub use bignum::BigNum;
 pub use can_spec::{
-    Frame, FrameKind, ParsedCanFrame, Signal, SignalType, SignalValue, build_can_frame_payload,
-    get_can_signal_value, parse_can_frame,
+    Frame, FrameKind, ParsedCanFrame, Signal, SignalType, SignalValue, get_can_signal_value,
+    parse_can_frame,
 };
 
 /// Any `Error` thrown by the upstream port sites; `message` is the thrown text.

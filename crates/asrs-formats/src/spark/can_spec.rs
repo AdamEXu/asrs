@@ -1,16 +1,16 @@
-//! Port of `can-spec-util.ts`: `getCanSignalValue`, `parseCanFrame` and
-//! `buildCanFramePayload`. Bit positions are LSB-first. `isBigEndian` is kept in
-//! the spec structs but ignored on decode, matching upstream (it has a TODO and
-//! never applies it). `console.warn`/`console.error` calls upstream emits on
-//! clamped or failed values are dropped; they do not change return values.
+//! Port of `can-spec-util.ts`: `getCanSignalValue` and `parseCanFrame`. Bit positions
+//! are LSB-first. `isBigEndian` is kept in the spec structs but ignored on decode,
+//! matching upstream (it has a TODO and never applies it). `console.warn` calls on
+//! clamped values are dropped; they do not change return values.
+//!
+//! `buildCanFramePayload` and the double-signal decode are not ported: both reach
+//! `writeBigUInt64LE(Number(..))` in the `buffer` package, which always throws, upstream
+//! never calls the former, and no frame URCL decodes has a double signal (the table
+//! generator rejects one).
 
 use super::BigNum;
 use super::SparkError;
-use super::bitstring::{
-    BitString, bit_string_to_buffer, bit_string_to_uint, buffer_to_bit_string, concat,
-    double_to_bit_string, float_to_bit_string, get_sub_bit_string, int_to_bit_string,
-    uint_to_bit_string,
-};
+use super::bitstring::{BitString, bit_string_to_uint, buffer_to_bit_string, get_sub_bit_string};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SignalType {
@@ -18,7 +18,6 @@ pub enum SignalType {
     Uint,
     Int,
     Float,
-    Double,
 }
 
 /// Decimal fields are stored as their `BigNumber("...")` literal and parsed by
@@ -123,14 +122,6 @@ pub fn get_can_signal_value(
             }
             BigNum::from_f64(f32::from_bits(signal_as_uint as u32) as f64)
         }
-        SignalType::Double => {
-            if signal_bits.bits != 64 {
-                return Err(SparkError("Double signals must be 32 bits".to_owned()));
-            }
-            // `writeBigUInt64LE(Number(uint))` rounds the bits through f64.
-            let rounded = signal_as_uint as f64;
-            BigNum::from_f64(f64::from_bits(rounded as u64))
-        }
         SignalType::Boolean => unreachable!("boolean handled above"),
     };
     let mut result = unadjusted
@@ -180,123 +171,4 @@ pub fn parse_can_frame(
         entries.push((key, get_can_signal_value(signal, bit_string)?));
     }
     Ok(ParsedCanFrame { entries })
-}
-
-/// `buildCanFramePayload`. `signalValues` must contain every signal in the spec.
-pub fn build_can_frame_payload(
-    frame_spec: &Frame,
-    signal_values: &ParsedCanFrame,
-) -> Result<Vec<u8>, SparkError> {
-    let mut frame_bit_string = BitString { value: 0, bits: 0 };
-    for (signal_key, signal_spec) in frame_spec.signals {
-        if signal_spec.signal_type == SignalType::Boolean {
-            let value = match signal_values.get(signal_key) {
-                Some(SignalValue::Bool(b)) => *b,
-                _ => panic!("missing boolean value for signal {signal_key}"),
-            };
-            frame_bit_string = concat(
-                frame_bit_string,
-                BitString {
-                    value: value as u64,
-                    bits: 1,
-                },
-            );
-            continue;
-        }
-        let mut decoded_value = match signal_values.get(signal_key) {
-            Some(SignalValue::Num(v)) => v.clone(),
-            _ => panic!("missing numeric value for signal {signal_key}"),
-        };
-        if let Some(min) = signal_spec.decoded_min {
-            let min = decimal(min);
-            if decoded_value.lt(&min) {
-                decoded_value = min;
-            }
-        }
-        if let Some(max) = signal_spec.decoded_max {
-            let max = decimal(max);
-            if decoded_value.gt(&max) {
-                decoded_value = max;
-            }
-        }
-        let adjusted_value = decoded_value
-            .minus(&decimal(signal_spec.offset))
-            .div(&decimal(signal_spec.decode_scale_factor));
-        let mut encoded_value = adjusted_value.clone();
-        if matches!(signal_spec.signal_type, SignalType::Uint | SignalType::Int) {
-            encoded_value = adjusted_value.integer_value(super::bignum::ROUND_HALF_DOWN);
-            let encoded_min = decimal(
-                signal_spec
-                    .encoded_min
-                    .expect("integer signals have encodedMin"),
-            );
-            let encoded_max = decimal(
-                signal_spec
-                    .encoded_max
-                    .expect("integer signals have encodedMax"),
-            );
-            if encoded_value.lt(&encoded_min) || encoded_value.gt(&encoded_max) {
-                encoded_value = adjusted_value.integer_value(super::bignum::ROUND_DOWN);
-                if encoded_value.lt(&encoded_min) {
-                    encoded_value = encoded_min;
-                }
-                if encoded_value.gt(&encoded_max) {
-                    encoded_value = encoded_max;
-                }
-            }
-        }
-        let signal_bit_string = match encode_signal(signal_spec, &encoded_value) {
-            Ok(bs) => bs,
-            Err(_) => {
-                return Err(SparkError(format!(
-                    "Failed to encode signal \"{}\" on frame \"{}\"",
-                    signal_spec.name, frame_spec.name
-                )));
-            }
-        };
-        frame_bit_string = concat(frame_bit_string, signal_bit_string);
-    }
-    let buffer = bit_string_to_buffer(frame_bit_string)?;
-    if buffer.len() != frame_spec.length_bytes as usize {
-        return Err(SparkError(format!(
-            "The assembled CAN frame payload was {} bytes when it should have been {} bytes",
-            buffer.len(),
-            frame_spec.length_bytes
-        )));
-    }
-    Ok(buffer)
-}
-
-fn encode_signal(signal_spec: &Signal, encoded_value: &BigNum) -> Result<BitString, SparkError> {
-    match signal_spec.signal_type {
-        SignalType::Uint => {
-            let int = parse_bigint(&encoded_value.to_fixed())?;
-            uint_to_bit_string(int, signal_spec.length_bits)
-        }
-        SignalType::Float => float_to_bit_string(encoded_value.to_number()),
-        SignalType::Int => {
-            let int = parse_bigint(&encoded_value.to_fixed())?;
-            int_to_bit_string(int, signal_spec.length_bits)
-        }
-        SignalType::Double => double_to_bit_string(encoded_value.to_number()),
-        SignalType::Boolean => unreachable!("boolean handled in buildCanFramePayload"),
-    }
-}
-
-/// `BigInt(str)`: a decimal integer string, nothing else.
-fn parse_bigint(s: &str) -> Result<i128, SparkError> {
-    let (neg, digits) = match s.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, s),
-    };
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(SparkError(format!("Cannot convert {s} to a BigInt")));
-    }
-    digits
-        .bytes()
-        .try_fold(0i128, |a, b| {
-            a.checked_mul(10)?.checked_add((b - b'0') as i128)
-        })
-        .map(|v| if neg { -v } else { v })
-        .ok_or_else(|| SparkError(format!("Cannot convert {s} to a BigInt")))
 }
