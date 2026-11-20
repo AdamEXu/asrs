@@ -101,7 +101,7 @@ fn tree_value(children: &JsObject<LogFieldTree>) -> Value {
     )
 }
 
-fn dump(log: &Log) -> Value {
+pub(crate) fn dump(log: &Log) -> Value {
     let serialized = log.to_serialized();
     Value::object([
         ("keys", strings(serialized.fields.keys())),
