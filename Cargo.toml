@@ -47,3 +47,6 @@ opt-level = 3
 
 [profile.dev.package.asrs-parity]
 opt-level = 3
+
+[profile.dev.package.asrs-log]
+opt-level = 1
