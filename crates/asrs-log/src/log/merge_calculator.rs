@@ -164,15 +164,13 @@ fn transitions_compatible(
         && b.from_mode != RobotMode::Disabled
         && b.to_mode != RobotMode::Disabled
     {
-        return !both_have_mode_info
-            || (a.from_mode == b.from_mode && a.to_mode == b.to_mode);
+        return !both_have_mode_info || (a.from_mode == b.from_mode && a.to_mode == b.to_mode);
     }
     false
 }
 
 /// `findCoarseOffset`: the candidate with the highest interval cross-correlation
 /// score, or `None` when no candidates exist or enabled overlap is zero.
-#[expect(clippy::too_many_arguments)]
 fn find_coarse_offset(
     target_range: [f64; 2],
     source_range: [f64; 2],
@@ -270,7 +268,7 @@ fn get_total_enabled_duration(ranges: &[NormalizedStateRange]) -> f64 {
 }
 
 /// `scoreCandidateOffset`: sweeps the overlapping window of both logs at `offset`.
-#[expect(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn score_candidate_offset(
     offset: f64,
     target_range: [f64; 2],
@@ -345,8 +343,12 @@ fn refine_offset_with_transitions(
     source_transitions: &[StateTransition],
     both_have_mode_info: bool,
 ) -> f64 {
-    let mut residuals =
-        match_inlier_transitions(coarse_offset, target_transitions, source_transitions, both_have_mode_info);
+    let mut residuals = match_inlier_transitions(
+        coarse_offset,
+        target_transitions,
+        source_transitions,
+        both_have_mode_info,
+    );
 
     if residuals.is_empty() {
         return coarse_offset;
