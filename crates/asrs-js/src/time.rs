@@ -135,7 +135,7 @@ pub trait LocalZone {
     fn instant(&self, epoch_ms: f64) -> Option<ZoneInstant>;
 
     /// The `en-US` name `Date.prototype.toString` prints in parentheses.
-    fn long_name(&self, instant: &ZoneInstant) -> String;
+    fn long_name(&self, epoch_ms: f64, instant: &ZoneInstant) -> String;
 
     /// `LocalTZA(t, isUTC=false)` with ECMAScript's `compatible` disambiguation:
     /// a wall-clock reading in a fold resolves to the earlier instant and a
@@ -169,7 +169,7 @@ impl LocalZone for FixedZone {
         }
     }
 
-    fn long_name(&self, instant: &ZoneInstant) -> String {
+    fn long_name(&self, _epoch_ms: f64, instant: &ZoneInstant) -> String {
         gmt_offset(instant.offset_ms)
     }
 
@@ -221,18 +221,81 @@ impl NamedZone {
     /// year, or clamped to the earliest timestamp when it precedes the tzdb's
     /// first transition (where the offset is constant).
     fn representable(&self, epoch_ms: i64) -> Option<jiff::Timestamp> {
+        let clamped = || {
+            Some(if epoch_ms < 0 {
+                jiff::Timestamp::MIN
+            } else {
+                jiff::Timestamp::MAX
+            })
+        };
         let days = epoch_ms.div_euclid(86_400_000);
         let (year, _, _) = civil_from_days(days);
         if year > 9999 {
             let cycles = (year - 9999 + 399) / 400;
             let shifted = epoch_ms.checked_sub(cycles * CYCLE_MS)?;
-            jiff::Timestamp::from_millisecond(shifted).ok()
+            jiff::Timestamp::from_millisecond(shifted)
+                .ok()
+                .or_else(clamped)
         } else if year < -9999 {
             Some(jiff::Timestamp::MIN)
         } else {
-            jiff::Timestamp::from_millisecond(epoch_ms).ok()
+            jiff::Timestamp::from_millisecond(epoch_ms).ok().or_else(clamped)
         }
     }
+
+    /// ICU's daylight flag for `Date.prototype.toString` naming. For instants
+    /// from 1970 on it is the tzdb flag; before that ICU projects the zone's
+    /// final rules backward, so a wartime or LMT offset still names the season
+    /// its wall clock falls in. The US 2007+ and NZ 2007+ schedules cover the
+    /// pinned zones; every other zone is never "daylight" for naming.
+    fn icu_daylight(&self, epoch_ms: f64, instant: &ZoneInstant) -> bool {
+        if epoch_ms >= 0.0 {
+            return instant.is_dst;
+        }
+        let la = self.iana_name() == Some("America/Los_Angeles");
+        if !la && self.iana_name() != Some("Pacific/Auckland") {
+            return false;
+        }
+        let Some(c) = epoch_to_civil(epoch_ms, self) else {
+            return false;
+        };
+        let y = i64::from(c.year);
+        if la {
+            // Mar Sun>=8 at 02:00 standard (-8:00), Nov Sun>=1 at 02:00
+            // daylight (-7:00), wall-clock triggers.
+            let start = rule_epoch(y, 3, nth_weekday(y, 3, 0, 2), 7_200_000, -28_800_000);
+            let end = rule_epoch(y, 11, nth_weekday(y, 11, 0, 1), 7_200_000, -25_200_000);
+            epoch_ms >= start as f64 && epoch_ms < end as f64
+        } else {
+            // Sep lastSun at 02:00 standard (+12:00), Apr Sun>=1 at 03:00
+            // standard, standard-time triggers.
+            let start = rule_epoch(y, 9, last_weekday(y, 9, 0), 7_200_000, 43_200_000);
+            let end = rule_epoch(y, 4, nth_weekday(y, 4, 0, 1), 10_800_000, 43_200_000);
+            epoch_ms >= start as f64 || epoch_ms < end as f64
+        }
+    }
+}
+
+/// The epoch ms when a wall-clock rule triggers: `local` at `hour` interpreted
+/// under `offset_ms`.
+fn rule_epoch(year: i64, month: i64, day: i64, hour_ms: i64, offset_ms: i64) -> i64 {
+    days_from_civil_i64(year, month, day) * 86_400_000 + hour_ms - offset_ms
+}
+
+/// Day of month of the `n`-th `weekday` (0 = Sunday) in `month`.
+fn nth_weekday(year: i64, month: i64, weekday: i64, n: i64) -> i64 {
+    let first = days_from_civil_i64(year, month, 1);
+    let w = (first + 4).rem_euclid(7);
+    (7 + weekday - w).rem_euclid(7) + 1 + (n - 1) * 7
+}
+
+/// Day of month of the last `weekday` (0 = Sunday) in `month`.
+fn last_weekday(year: i64, month: i64, weekday: i64) -> i64 {
+    let (y, m) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    let last = days_from_civil_i64(y, m, 1) - 1;
+    let w = (last + 4).rem_euclid(7);
+    let dom = days_from_civil_i64(y, m, 1) - days_from_civil_i64(year, month, 1);
+    dom - (7 + w - weekday).rem_euclid(7)
 }
 
 impl LocalZone for NamedZone {
@@ -251,8 +314,8 @@ impl LocalZone for NamedZone {
         })
     }
 
-    fn long_name(&self, instant: &ZoneInstant) -> String {
-        let name = match (self.iana_name(), instant.is_dst) {
+    fn long_name(&self, epoch_ms: f64, instant: &ZoneInstant) -> String {
+        let name = match (self.iana_name(), self.icu_daylight(epoch_ms, instant)) {
             (Some("UTC"), _) => "Coordinated Universal Time",
             (Some("America/Los_Angeles"), false) => "Pacific Standard Time",
             (Some("America/Los_Angeles"), true) => "Pacific Daylight Time",
@@ -329,8 +392,8 @@ impl<T: LocalZone + ?Sized> LocalZone for &T {
         (**self).instant(epoch_ms)
     }
 
-    fn long_name(&self, instant: &ZoneInstant) -> String {
-        (**self).long_name(instant)
+    fn long_name(&self, epoch_ms: f64, instant: &ZoneInstant) -> String {
+        (**self).long_name(epoch_ms, instant)
     }
 
     fn local_to_epoch(&self, local_ms: f64) -> f64 {
@@ -447,8 +510,8 @@ pub fn date_to_string(epoch_ms: f64, zone: &impl LocalZone) -> String {
     let Some(c) = epoch_to_civil(clipped, zone) else {
         return "Invalid Date".to_owned();
     };
-    let days = (clipped as i64).div_euclid(86_400_000);
-    let weekday = WEEKDAYS[(days + 4).rem_euclid(7) as usize];
+    let local_days = math::floor((clipped + instant.offset_ms) / MS_PER_DAY) as i64;
+    let weekday = WEEKDAYS[(local_days + 4).rem_euclid(7) as usize];
     let year = if c.year < 0 {
         format!("-{:04}", c.year.unsigned_abs())
     } else {
@@ -463,7 +526,7 @@ pub fn date_to_string(epoch_ms: f64, zone: &impl LocalZone) -> String {
         c.minute,
         c.second,
         gmt_offset(instant.offset_ms),
-        zone.long_name(&instant)
+        zone.long_name(clipped, &instant)
     )
 }
 
@@ -544,6 +607,10 @@ pub fn create_uuid(rng: &mut dyn Rng) -> String {
 
 /// Days from the epoch to `y-m(1-12)-d` on the proleptic Gregorian calendar,
 /// the same calendar ECMAScript's `Day`/`MakeDay` uses.
+fn days_from_civil_i64(y: i64, m: i64, d: i64) -> i64 {
+    days_from_civil(y as f64, m as f64, d as f64) as i64
+}
+
 fn days_from_civil(y: f64, m: f64, d: f64) -> f64 {
     let y = if m <= 2.0 { y - 1.0 } else { y };
     let era = math::floor(y / 400.0);
