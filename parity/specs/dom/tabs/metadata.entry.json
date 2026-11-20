@@ -1,0 +1,66 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 1012,
+    "assets": "../assets/minimal.json",
+    "images": {
+      "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
+        3900,
+        1800
+      ]
+    },
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 12
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          },
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])",
+            "attributes": [
+              "title",
+              "src"
+            ]
+          }
+        ],
+        "label": "selected"
+      },
+      {
+        "eval": "window.selection.setHoveredTime(6)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "canvas"
+        ],
+        "label": "hovered"
+      }
+    ]
+  }
+}
