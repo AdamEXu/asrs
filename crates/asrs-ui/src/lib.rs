@@ -9,6 +9,7 @@ pub mod gpui {
 }
 
 pub mod button;
+pub mod canvas_view;
 #[cfg(feature = "parity")]
 pub mod capture;
 pub mod filter;

@@ -17,6 +17,7 @@ parity = [
 
 [dependencies]
 anyhow = { version = "=1.0.104", optional = true }
+asrs-canvas = { path = "../asrs-canvas" }
 gpui-kit.workspace = true
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
