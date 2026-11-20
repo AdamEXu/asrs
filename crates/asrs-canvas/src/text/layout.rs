@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::{FontSpec, Mask, Shaped, TextBackend, baseline_offset};
+use super::{FontSpec, Mask, Shaped, TextBackend, baseline_offset, relax};
 
 /// Blink's `TextRun::SetNormalizeSpace`: tabs, newlines and no-break spaces shape as spaces.
 pub fn normalize_space(text: &str) -> Cow<'_, str> {
@@ -46,9 +46,9 @@ fn pre_scale_x([a, b, c, d, e, f]: Matrix, s: f32) -> Matrix {
 
 /// The glyph masks `fillText(text, x, y, maxWidth)` paints under the device matrix `ctm`, at
 /// integer device positions: Blink's `DrawTextInternal` (float location, alignment, baseline,
-/// `maxWidth` as a horizontal scale about the location) followed by Skia's glyph placement
-/// (quarter-pixel x phase, rounded y when the matrix keeps axes, quarter phases on both axes
-/// otherwise).
+/// `maxWidth` as a horizontal scale with the location divided by it) followed by Skia's glyph
+/// placement (quarter-pixel phases along the axis the baseline maps to, the other axis rounded,
+/// quarter phases on both axes when it maps to neither).
 #[allow(clippy::too_many_arguments)]
 pub fn place_text(
     backend: &mut dyn TextBackend,
@@ -90,18 +90,19 @@ pub fn place_text(
     let matrix = pre_translate(matrix, location.0, location.1);
     let [a, b, c, d, e, f] = matrix;
     let axis_aligned = b == 0.0 && c == 0.0 && a > 0.0 && d > 0.0;
-    let (round_x, round_y) = if axis_aligned {
-        (0.125, 0.5)
+    let (round_x, round_y, keep_x, keep_y) = if relax(b) == 0.0 {
+        (0.125, 0.5, true, false)
+    } else if relax(a) == 0.0 {
+        (0.5, 0.125, false, true)
     } else {
-        (0.125, 0.125)
+        (0.125, 0.125, true, true)
     };
     let (e, f) = (e + round_x, f + round_y);
     let mut placed = Vec::with_capacity(shaped.glyphs.len());
     for glyph in &shaped.glyphs {
-        let device_x = (glyph.x * a + 0.0 * c) + e;
-        let device_y = (glyph.x * b + 0.0 * d) + f;
-        let (ix, phase_x) = subpixel(device_x);
-        let (iy, phase_y) = subpixel(device_y);
+        let (ix, phase_x) = subpixel(glyph.x * a + e);
+        let (iy, phase_y) = subpixel(glyph.x * b + f);
+        let (phase_x, phase_y) = (phase_x * u8::from(keep_x), phase_y * u8::from(keep_y));
         let mask = if axis_aligned {
             let scale = f64::from(d);
             backend.raw_mask(glyph.glyph, scale, f64::from(a) / scale, phase_x)

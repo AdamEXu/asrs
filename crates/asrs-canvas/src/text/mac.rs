@@ -22,7 +22,9 @@ use core_text::run::CTRun;
 use core_text::string_attributes::kCTFontAttributeName;
 
 use super::font::FontKey;
-use super::{Bounds, Family, FontMetrics, FontSpec, Glyph, Mask, Shaped, ShapedGlyph, TextBackend};
+use super::{
+    Bounds, Family, FontMetrics, FontSpec, Glyph, Mask, Shaped, ShapedGlyph, TextBackend, relax,
+};
 
 const K_CT_FONT_UI_FONT_SYSTEM: u32 = 2;
 const K_CG_IMAGE_ALPHA_ONLY: u32 = 7;
@@ -197,12 +199,6 @@ fn hb_scale(units: i64, upem: u32, size: f32) -> i32 {
     ((units * x_mult + 32768) >> 16) as i32
 }
 
-/// Skia's `sk_relax`: the strike's device matrix entries rounded to 1/1024, so that nearly equal
-/// matrices share glyph masks.
-fn relax(v: f32) -> f32 {
-    (v * 1024.0 + 0.5).floor() / 1024.0
-}
-
 /// Skia's `SkScalarRoundToScalar`.
 fn round(v: f32) -> f32 {
     (v + 0.5).floor()
@@ -256,8 +252,7 @@ impl CoreText {
         }
     }
 
-    /// The face at the device text size, as `SkScalerContext_Mac` sizes its CTFont: the vertical
-    /// scale goes into the font and the rest of the matrix into the text matrix.
+    /// The face at the device text size, as `SkScalerContext_Mac` sizes its CTFont.
     fn device_font(&mut self, face: u32, font: &CTFont, size: f32) -> CTFont {
         self.device
             .entry((face, size.to_bits()))

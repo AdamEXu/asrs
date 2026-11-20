@@ -98,6 +98,11 @@ pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
     return None;
 }
 
+/// Skia's `sk_relax`: a strike's device matrix entry rounded to 1/1024.
+pub(crate) fn relax(v: f32) -> f32 {
+    (v * 1024.0 + 0.5).floor() / 1024.0
+}
+
 /// Blink's `LayoutUnit::FromFloatRound`.
 fn layout_round(v: f32) -> f32 {
     (v * 64.0).round() / 64.0
