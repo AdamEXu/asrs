@@ -7,6 +7,7 @@ mod decode_worker;
 mod fn_cmd;
 mod functions;
 mod geometry;
+mod heatmap;
 mod js_color;
 mod js_json;
 mod js_math;
@@ -19,6 +20,7 @@ mod log_field;
 mod log_keys;
 mod log_run;
 mod log_struct;
+mod merge_calculator;
 mod photon;
 mod robot_state;
 mod shared;
@@ -38,7 +40,8 @@ commands:
   decode-worker <file>
                 run the file's decode worker alone and print its messages (same as oracle decodeWorker)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
-  canvas render rasterize the oracle's canvas scenes with asrs-canvas";
+  canvas render rasterize the oracle's canvas scenes with asrs-canvas
+  heatmap       replay the oracle's heatmap fixtures with asrs-tabs";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +50,7 @@ fn main() -> ExitCode {
         Some("decode") => return decode::run(&args[1..]),
         Some("decode-worker") => return decode_worker::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
+        Some("heatmap") => heatmap::run(&args[1..]),
         Some("wpilog") => wpilog::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };

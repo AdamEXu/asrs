@@ -14,10 +14,10 @@ use super::log_core::{Log, child_key_js};
 use super::log_field::LogField;
 use super::log_key_utils::apply_key_prefix;
 use super::log_value_sets::RawValue;
+use super::merge_calculator::get_merge_offset;
 use super::proto_decoder::{
     ProtoDecoder, ProtoError, SerializedProtoDecoder, friendly_schema_type,
 };
-use super::robot_state::{RobotMode, get_robot_state_ranges};
 use super::struct_decoder::{DecodeError, StructDecoder};
 use crate::msgpack;
 use crate::realm::JsRealm;
@@ -371,18 +371,17 @@ impl Log {
 
     /// `mergeWith(source, prefix)`: copies the source's fields (timestamps shifted by the merge
     /// offset) under `prefix`, replacing fields with the same key, and merges the generated
-    /// parents, the timestamp range and zero, and the struct and proto schemas. `merge_offset`
-    /// is `getMergeOffset`, called only when both logs have a timestamp range. Returns the
+    /// parents, the timestamp range and zero, and the struct and proto schemas. The offset is
+    /// `getMergeOffset`, computed only when both logs have a timestamp range. Returns the
     /// offset; when rebuilding the proto decoder throws, everything before it stays merged.
     pub fn merge_with(
         &mut self,
         source: &Log,
         prefix: &JsString,
         realm: &mut JsRealm,
-        merge_offset: impl FnOnce(&Log, &Log) -> f64,
     ) -> Result<f64, LogError> {
         let offset = if self.timestamp_range.is_some() && source.timestamp_range.is_some() {
-            merge_offset(self, source)
+            get_merge_offset(self, source)
         } else {
             0.0
         };
@@ -434,20 +433,6 @@ impl Log {
                 .map_err(LogError::Proto)?;
         Ok(offset)
     }
-}
-
-/// `getMergeOffset` when it returns before aligning: unless both logs have an enabled range, the
-/// offset is the difference of the range starts. `None` where the alignment (unit L14) applies.
-pub fn merge_offset_fallback(target: &Log, source: &Log) -> Option<f64> {
-    let enabled = |log: &Log| {
-        get_robot_state_ranges(log)
-            .iter()
-            .any(|range| range.mode != RobotMode::Disabled)
-    };
-    if enabled(target) && enabled(source) {
-        return None;
-    }
-    Some(target.get_timestamp_range()[0] - source.get_timestamp_range()[0])
 }
 
 /// The metadata-JSON step of `getUnit`: the last of `unit`, `units`, `Unit`, `Units` present,
