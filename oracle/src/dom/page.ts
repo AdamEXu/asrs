@@ -164,7 +164,11 @@ async function step(s: any, index: number) {
     for (const [method, ...args] of s.log as [string, ...unknown[]][]) {
       w.log[method](...args.map((a) => fromTree(a)));
     }
-    w.sidebar.refresh();
+    try {
+      w.sidebar.refresh();
+    } catch (error) {
+      exception("log", error);
+    }
     if (s.newFields !== false) w.tabs.refresh();
     await settle();
   } else if ("advance" in s) await run(s.advance);

@@ -81,8 +81,6 @@ fn json_to_cve(j: &Json) -> Value {
     Value::from_json_lenient(j)
 }
 
-// --- Scripted selection -----------------------------------------------------
-
 /// `window.selection`: `SelectionImpl` semantics for the modes fixtures drive.
 /// `now` is the runner clock for playback math; `log` supplies timestamp ranges.
 struct ScriptedSelection {
@@ -265,8 +263,6 @@ impl Selection for ScriptedSelection {
     fn apply_timeline_scroll(&mut self, _dx: f64, _dy: f64, _width_pixels: f64) {}
 }
 
-// --- Stub tuner -------------------------------------------------------------
-
 struct StubTuner {
     keys: HashSet<JsString>,
     events: Rc<RefCell<Vec<Emit>>>,
@@ -300,8 +296,6 @@ impl Tuner for StubTuner {
         });
     }
 }
-
-// --- Pseudo-DOM for layout rules -------------------------------------------
 
 /// The element shape `env.ts::rectOf` reasons about: tag, class list, hidden
 /// flag, position among same-tag siblings and parent for ancestor checks.
@@ -476,8 +470,6 @@ fn menu_button_rect(layout: &Layout) -> RowRect {
     let button = el("button", &[], false, 1, table);
     layout.rect_of(&button)
 }
-
-// --- Emit --------------------------------------------------------------------
 
 struct Emit {
     values: Vec<(&'static str, Value)>,
@@ -811,7 +803,7 @@ fn project_field_list(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
             vec![],
         ));
         nodes.extend(value_children);
-        if row.has_children {
+        if row.child_span {
             nodes.push(node_tuple(
                 depth,
                 "span",
@@ -956,8 +948,6 @@ fn project_tuning_button(sidebar: &Sidebar, attrs: &[&str]) -> Vec<Value> {
     ]
 }
 
-// --- Log steps ----------------------------------------------------------------
-
 fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
     for call in calls {
         let parts = call
@@ -1076,17 +1066,22 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
     Ok(())
 }
 
-// --- Replay -------------------------------------------------------------------
-
-const SCROLL_ABORT_ERROR: &str = "TypeError: fieldElement.scrollIntoViewIfNeeded is not a function";
-
-fn exception_emit(where_: &str) -> Emit {
-    Emit {
+fn exception_emit(where_: &str, outcome: EventOutcome) -> Option<Emit> {
+    let error = match outcome {
+        EventOutcome::Ok => return None,
+        EventOutcome::HighlightAborted => {
+            "TypeError: fieldElement.scrollIntoViewIfNeeded is not a function"
+        }
+        EventOutcome::MergedFilenameMissing => {
+            "TypeError: Cannot read properties of undefined (reading 'replace')"
+        }
+    };
+    Some(Emit {
         values: vec![
             ("exception", cve_string(&js(where_))),
-            ("error", cve_string(&js(SCROLL_ABORT_ERROR))),
+            ("error", cve_string(&js(error))),
         ],
-    }
+    })
 }
 
 /// Build a `SidebarEnv` inline so the `RefMut` temporaries never escape their
@@ -1206,9 +1201,7 @@ impl Runner<'_> {
     }
 
     fn outcome(&mut self, outcome: EventOutcome) {
-        if outcome == EventOutcome::HighlightAborted {
-            self.emitted.push(exception_emit("event"));
-        }
+        self.emitted.extend(exception_emit("event", outcome));
     }
 
     fn nth_row_with(&self, index: usize, pred: impl Fn(&RowValue) -> bool) -> Option<usize> {
@@ -1521,9 +1514,9 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             let outcome = runner
                 .sidebar
                 .restore_state(&mut senv!(runner.ctx), &sidebar_state);
-            if outcome == EventOutcome::HighlightAborted {
-                runner.emitted.push(exception_emit("main restore-state"));
-            }
+            runner
+                .emitted
+                .extend(exception_emit("main restore-state", outcome));
         }
     }
     runner.drain();
@@ -1553,10 +1546,9 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                     .collect(),
             };
             run_log_step(&log, &calls).map_err(|e| format!("{}: {e}", where_()))?;
-            runner
-                .sidebar
-                .refresh(&mut senv!(runner.ctx), false)
-                .map_err(|_| format!("{}: refresh aborted during log step", where_()))?;
+            if let Err(outcome) = runner.sidebar.refresh(&mut senv!(runner.ctx), false) {
+                runner.emitted.extend(exception_emit("log", outcome));
+            }
         } else if let Some(sel_step) = step.get("selection") {
             let parts = sel_step
                 .as_array()

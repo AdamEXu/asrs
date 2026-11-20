@@ -1,20 +1,106 @@
 {
   "entry": "dom",
-  "inputs": ["../logs/merged.json"],
+  "inputs": [
+    "../logs/merged.json"
+  ],
   "fixture": {
     "seed": 7,
     "layout": [
-      { "selector": "div.field-item", "rect": [0, 100, 300, 20] }
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
     ],
     "steps": [
-      { "log": "../logs/merged.json" },
-      { "frames": 1 },
+      {
+        "log": "../logs/merged.json"
+      },
+      {
+        "frames": 1
+      },
       {
         "capture": [
-          { "kind": "dom", "selector": "#fieldList", "attributes": ["title"] },
-          { "kind": "dom", "selector": "div.side-bar-title" }
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
         ],
         "label": "merged-roots"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/Log-1/Stray",
+            0.0,
+            1.0
+          ],
+          [
+            "putNumber",
+            "/Log2.5/Stray",
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "style"
+            ]
+          }
+        ],
+        "label": "negative-merge-index"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 6,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "after-throw-click"
       }
     ]
   }

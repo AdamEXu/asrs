@@ -120,12 +120,15 @@ pub struct SidebarEnv<'a> {
     pub measure_value: &'a dyn Fn(&RowValue) -> f64,
 }
 
-/// An event that surfaced the upstream `scrollIntoViewIfNeeded` throw: jsdom lacks the method,
-/// so any highlight-for-search hits it and aborts the listener mid-way.
+/// Whether the upstream listener or `refresh` threw part-way, leaving rows half built.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EventOutcome {
     Ok,
+    /// `scrollIntoViewIfNeeded` is missing (jsdom), so any highlight-for-search throws.
     HighlightAborted,
+    /// A merged-log root such as `Log-1` or `Log0.5` indexes past the filenames, and
+    /// `htmlEncode(undefined)` throws.
+    MergedFilenameMissing,
 }
 
 type Aborted = EventOutcome;
@@ -235,6 +238,8 @@ struct Node {
     /// materialize, and throw on detached elements.
     detached: bool,
     has_children: bool,
+    child_span: bool,
+    expand_listeners: bool,
     children_generated: bool,
     indent: f64,
     generated: bool,
@@ -270,6 +275,8 @@ pub struct SidebarRow {
     pub known_label: bool,
     pub expanded: bool,
     pub has_children: bool,
+    /// Whether the children's container exists; false when building the row threw first.
+    pub child_span: bool,
     pub label_loading: bool,
     /// The label's inline `font-weight`: unset until the row joins or leaves a select group.
     pub label_bold: Option<bool>,
@@ -456,7 +463,6 @@ impl Sidebar {
         env: &mut SidebarEnv<'_>,
         state: &SidebarState,
     ) -> EventOutcome {
-        let width_equal = state.width == self.sidebar_width;
         let expanded_set: IndexSet<JsString> = state.expanded.iter().cloned().collect();
         let expanded_equal = self.expanded_fields.len() == expanded_set.len()
             && self
@@ -465,7 +471,6 @@ impl Sidebar {
                 .all(|k| expanded_set.contains(k));
         self.sidebar_width = state.width;
         self.expanded_fields = expanded_set;
-        let _ = width_equal;
         if !expanded_equal && let Err(outcome) = self.refresh(env, true) {
             return outcome;
         }
@@ -490,8 +495,6 @@ impl Sidebar {
     pub fn sidebar_shown(&self) -> bool {
         self.applied_width() != 0.0
     }
-
-    // --- Sidebar handle ---
 
     pub fn handle_mouse_down(&mut self) {
         self.sidebar_handle_active = true;
@@ -560,8 +563,6 @@ impl Sidebar {
         }
     }
 
-    // --- Menu bar ---
-
     pub fn menu_button_click(&mut self, index: usize, rect: RowRect) {
         if self.menu_active.len() <= index {
             self.menu_active.resize(index + 1, false);
@@ -590,8 +591,6 @@ impl Sidebar {
             self.menu_active[index] = false;
         }
     }
-
-    // --- Search controls ---
 
     pub fn search_focus(&mut self) {
         self.search_focused = true;
@@ -864,6 +863,9 @@ impl Sidebar {
         let Some(id) = self.flat_id(flat_index) else {
             return EventOutcome::Ok;
         };
+        if !self.nodes[id].expand_listeners {
+            return EventOutcome::Ok;
+        }
         let result = match slot {
             0 => self.set_expanded(env, id, true, now),
             1 => self.set_expanded(env, id, false, now),
@@ -874,8 +876,6 @@ impl Sidebar {
             Err(outcome) => outcome,
         }
     }
-
-    // --- Field labels: drag, select group, context menu ---
 
     /// `field-item-label` mousedown (only registered on full-key rows upstream).
     pub fn label_mouse_down(&mut self, flat_index: usize, x: f64, y: f64, ox: f64, oy: f64) {
@@ -1016,8 +1016,6 @@ impl Sidebar {
         data.insert("content", JsValue::String(js(TYPE_WARNING_TEXT)));
         self.send_main("alert", JsValue::Object(data));
     }
-
-    // --- Tuning ---
 
     /// `tuning-button` click.
     pub fn tuning_button_click(&mut self, env: &SidebarEnv<'_>) {
@@ -1173,8 +1171,6 @@ impl Sidebar {
             state.last_has_value = has_value;
         }
     }
-
-    // --- Periodic ---
 
     /// `periodic`: `searchPeriodic`, `updateTitle`, `updateValues`, `updateTuningButton`.
     /// `rects` are `.field-item` rects in display order (one per materialized row).
@@ -1370,8 +1366,6 @@ impl Sidebar {
         };
     }
 
-    // --- getActiveFields ---
-
     /// `getActiveFields`. `rects` are `.field-item` rects in display order.
     pub fn get_active_fields(
         &mut self,
@@ -1432,8 +1426,6 @@ impl Sidebar {
         }
         self.active_fields.clone()
     }
-
-    // --- refresh & row construction ---
 
     /// `refresh`.
     pub fn refresh(&mut self, env: &mut SidebarEnv<'_>, force: bool) -> Attempt<()> {
@@ -1635,6 +1627,8 @@ impl Sidebar {
             tree_children: field.children.clone(),
             detached,
             has_children,
+            child_span: false,
+            expand_listeners: false,
             children_generated,
             indent,
             generated,
@@ -1719,25 +1713,29 @@ impl Sidebar {
             self.update_metadata(env, id);
             self.update_loading(env, id);
         } else if starts_with(&title, MERGED_KEY) && indent == 0.0 {
-            let merge_index = number::to_number(title.slice(3.0, None).units());
+            let merge_index = number::to_number(title.slice(MERGED_KEY.len() as f64, None).units());
             let filenames = (self.get_filenames)();
-            if merge_index < filenames.len() as f64 && merge_index >= 0.0 {
+            if merge_index < filenames.len() as f64 {
+                if merge_index < 0.0 || merge_index.fract() != 0.0 {
+                    self.nodes[id].type_label = Some(JsString::new());
+                    return Err(EventOutcome::MergedFilenameMissing);
+                }
                 let mut label = js(" \u{2013} ");
                 label.push_str(&filenames[merge_index as usize]);
                 self.nodes[id].type_label = Some(label);
             }
         }
         if has_children {
+            self.nodes[id].child_span = true;
             self.search_callbacks.push(SearchCallback::Expand(id));
             self.expand_for_search(env, id, now)?;
+            self.nodes[id].expand_listeners = true;
             if self.expanded_fields.contains(&self.nodes[id].full_title) {
                 self.set_expanded(env, id, true, now)?;
             }
         }
         Ok(id)
     }
-
-    // --- View data ---
 
     /// `(arena id, sibling position)` pairs in display order (DFS pre-order).
     fn dfs_ids(&self) -> Vec<(usize, usize)> {
@@ -1786,6 +1784,7 @@ impl Sidebar {
                     known_label: node.known_label,
                     expanded: node.expanded,
                     has_children: node.has_children,
+                    child_span: node.child_span,
                     label_loading: node.label_loading,
                     label_bold: node.label_bold,
                     label_title: node.label_title.clone(),
@@ -1886,7 +1885,8 @@ pub fn sort_keys(a: &JsString, b: &JsString, use_known: bool) -> Ordering {
     locale_compare_numeric(a, b)
 }
 
-/// `String(value)` for JSON-shaped values (metadata tooltips).
+/// `String(value)` for JSON-shaped values (metadata tooltips). `Array.prototype.join` writes
+/// nothing for `null` items.
 fn js_to_string(value: &JsValue) -> JsString {
     match value {
         JsValue::Undefined => js("undefined"),
@@ -1900,7 +1900,9 @@ fn js_to_string(value: &JsValue) -> JsString {
                 if index > 0 {
                     text.push_str(&js(","));
                 }
-                text.push_str(&js_to_string(item));
+                if !matches!(item, JsValue::Null | JsValue::Undefined) {
+                    text.push_str(&js_to_string(item));
+                }
             }
             text
         }

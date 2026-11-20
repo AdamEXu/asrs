@@ -714,8 +714,8 @@ Also written as they happen: `{"main": name, "data": ...}` for every hub-to-main
 ignored, `{"drag": <data>, "end", "x", "y"}` for every `drag-update` event the hub dispatches during a field
 drag, `{"tuner": ...}` records from a `{"tuner"}` stub step, and
 `{"exception": where, "error": "<name>: <message>"}` when upstream code throws in
-a timer, frame, event listener (reported by jsdom, `where` is `event`), message handler or
-`eval`, or a promise rejection goes unhandled (the run goes on, as a page would). Every value
+a timer, frame, event listener (reported by jsdom, `where` is `event`), message handler,
+`log` step's `sidebar.refresh()` or `eval`, or a promise rejection goes unhandled (the run goes on, as a page would). Every value
 is CVE-1 inside a plain JSON object, so Rust reads it with `asrs_parity::record_vectors!` and
 `Record::value`.
 
