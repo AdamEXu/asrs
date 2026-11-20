@@ -109,8 +109,32 @@ fn path_arg(path: &Path) -> String {
     path.display().to_string()
 }
 
+const GENERATOR_STAMP: &str = "generator.txt";
+
+fn generator_hash(paths: &Paths) -> Result<String> {
+    oracle::hash_tree(
+        &paths.root,
+        &["oracle/src/canvas", "oracle/src/canvasMain.ts"],
+    )
+}
+
+fn references_current(paths: &Paths, dir: &Path) -> Result<bool> {
+    let stamp = fs::read_to_string(dir.join(GENERATOR_STAMP)).unwrap_or_default();
+    Ok(stamp.trim() == generator_hash(paths)?)
+}
+
 pub(crate) fn reference(paths: &Paths, out: &Path, scenes: &[String]) -> Result {
     oracle::build_harness(paths)?;
+    let stamp = out.join(GENERATOR_STAMP);
+    if scenes.is_empty() {
+        for stale in [out.join("scenes"), out.join("ref"), out.join("dom")] {
+            if stale.exists() {
+                fs::remove_dir_all(&stale).map_err(|e| format!("{}: {e}", stale.display()))?;
+            }
+        }
+    } else if stamp.exists() {
+        fs::remove_file(&stamp).map_err(|e| format!("{}: {e}", stamp.display()))?;
+    }
     let mut args = vec!["canvas".to_owned(), path_arg(out)];
     args.extend(scenes.iter().cloned());
     electron(paths, &args)?;
@@ -123,6 +147,7 @@ pub(crate) fn reference(paths: &Paths, out: &Path, scenes: &[String]) -> Result 
                 &["dom".to_owned(), path_arg(out), scale.to_owned()],
             )?;
         }
+        write(&stamp, format!("{}\n", generator_hash(paths)?).as_bytes())?;
     }
     eprintln!("canvas references in {}", out.display());
     Ok(())
@@ -389,25 +414,33 @@ pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
         let load = |p: PathBuf| pixel::read_png(&p).map(|i| pixel::composite(&i, scene.background));
         let cpu = load(reference.join(format!("ref/{name}.cpu.png")))?;
         let gpu = load(reference.join(format!("ref/{name}.gpu.png")))?;
+        let cpu_gpu = pixel::compare(&cpu, &gpu, scene.background)
+            .map_err(|e| format!("{name}: {e}"))?
+            .stats;
         let port_png = port.join(format!("{name}.png"));
-        if !port_png.exists() {
-            eprintln!("{name:<24} {:>58}", "no port render | FAIL");
-            failed.push(name.clone());
-            rows.push(Json::object([
-                ("scene", Json::string(&name)),
-                ("pass", Json::Bool(false)),
-                (
-                    "failures",
-                    Json::Array(vec![Json::string("no port render")]),
-                ),
-            ]));
-            continue;
-        }
-        let ours = load(port_png)?;
-        let cpu_gpu = pixel::compare(&cpu, &gpu, scene.background)?.stats;
-        let port_gpu = pixel::compare(&gpu, &ours, scene.background)?.stats;
-        let port_cpu =
-            pixel::compare(&cpu, &ours, scene.background).map_err(|e| format!("{name}: {e}"))?;
+        let compared = if port_png.exists() {
+            load(port_png).and_then(|ours| {
+                Ok((
+                    pixel::compare(&cpu, &ours, scene.background)?,
+                    pixel::compare(&gpu, &ours, scene.background)?.stats,
+                ))
+            })
+        } else {
+            Err("no port render".to_owned())
+        };
+        let (port_cpu, port_gpu) = match compared {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{name:<24} {e} | FAIL");
+                failed.push(name.clone());
+                rows.push(Json::object([
+                    ("scene", Json::string(&name)),
+                    ("pass", Json::Bool(false)),
+                    ("failures", Json::Array(vec![Json::string(&e)])),
+                ]));
+                continue;
+            }
+        };
         let failures = gate(&scene, &port_cpu.stats, &port_gpu, &cpu_gpu);
         if port_cpu.stats.exact_mismatch > 0 {
             pixel::write_png(
@@ -470,7 +503,7 @@ fn run_port(paths: &Paths, args: &[String]) -> Result {
         return Err(USAGE.to_owned());
     };
     let ref_dir = reference_dir(paths);
-    if !ref_dir.join("scenes").is_dir() {
+    if !references_current(paths, &ref_dir)? {
         reference(paths, &ref_dir, &[])?;
     }
     let port = ref_dir.join("port");
