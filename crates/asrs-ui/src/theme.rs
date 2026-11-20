@@ -1,4 +1,4 @@
-use gpui_kit::{App, Global, Rgba, Window, WindowAppearance, rgb};
+use gpui_kit::{App, Global, Window, WindowAppearance};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Appearance {
@@ -91,12 +91,6 @@ pub const DARK: Theme = Theme {
     button_hover: 0x333333,
     button_active: 0x444444,
 };
-
-impl Theme {
-    pub fn rgba(hex: u32) -> Rgba {
-        rgb(hex)
-    }
-}
 
 /// Every `filter` chain upstream applies to `<img>` content in `global.css`, `hub.css` and
 /// `renderers.css`, verbatim.

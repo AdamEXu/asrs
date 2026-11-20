@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 use std::sync::Arc;
 
 use asrs_parity::json::Json;

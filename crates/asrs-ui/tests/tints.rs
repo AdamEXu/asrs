@@ -1,4 +1,5 @@
 #![cfg(target_os = "macos")]
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::BTreeSet;
 

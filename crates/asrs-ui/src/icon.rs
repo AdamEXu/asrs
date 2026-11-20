@@ -188,7 +188,6 @@ fn cached_image(
     image
 }
 
-/// Paints `source` placed by `placement` in a box at `origin` (window logical px).
 pub fn paint_icon(
     source: &IconSource,
     chain: &'static str,
@@ -218,7 +217,6 @@ pub fn paint_icon(
     let _ = window.paint_image(bounds, bounds, Corners::default(), image, 0, false);
 }
 
-/// An `<img>` filling its parent box according to `fit`, filtered by `chain`.
 #[derive(IntoElement)]
 pub struct Icon {
     source: IconSource,

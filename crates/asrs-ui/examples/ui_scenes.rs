@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
