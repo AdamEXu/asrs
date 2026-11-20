@@ -8,13 +8,14 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use asrs_js::string::JsString;
 use asrs_js::time::{Clock, V8MathRandom};
 use asrs_live::nt4::{
     NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId,
     WsMessage,
 };
 use asrs_live::{ManualClock, Thrown, TimerId, TimerQueue};
-use asrs_log::msgpack::KeyCache;
+use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{ClientEvent, Payload, ServerEvent, ServerHost, Session, trace_line};
@@ -41,6 +42,7 @@ impl Trace {
 }
 
 /// `Date.now()`: the session epoch plus loop time.
+#[derive(Clone)]
 pub struct WallClock {
     pub loop_clock: ManualClock,
     pub epoch_ms: f64,
@@ -312,14 +314,13 @@ impl Nt4Transport for FakeNet {
     }
 }
 
-/// Everything a driver can reach: the renderer's timers, the browser network, `Date`,
-/// `Math.random`, the realm's msgpack key cache and the trace.
+/// Everything a driver can reach: the renderer's timers, the browser network, `Date`, the
+/// realm (`Math.random`, the msgpack key cache and the proto realm) and the trace.
 pub struct Env {
     pub timers: TimerQueue,
     pub net: FakeNet,
     pub wall: WallClock,
-    pub rng: V8MathRandom,
-    pub keys: KeyCache,
+    pub realm: JsRealm,
     pub trace: Trace,
 }
 
@@ -333,8 +334,7 @@ impl Env {
             timers: &mut self.timers,
             net: &mut self.net,
             clock: &self.wall,
-            rng: &mut self.rng,
-            keys: &mut self.keys,
+            realm: &mut self.realm,
         }
     }
 
@@ -374,8 +374,7 @@ pub fn run(
             loop_clock: clock.clone(),
             epoch_ms: session.epoch_ms,
         },
-        rng: V8MathRandom::from_seed(session.seed),
-        keys: KeyCache::new(),
+        realm: JsRealm::new(Box::new(V8MathRandom::from_seed(session.seed))),
         trace: trace.clone(),
     };
     let mut driver = make(&mut env);
@@ -439,6 +438,215 @@ pub fn js_arg(json: &Json) -> Result<asrs_js::value::JsValue, Thrown> {
 
 pub fn js_value(value: &asrs_js::value::JsValue) -> Value {
     js_json::from_js(value)
+}
+
+/// `(window.log)[op[1]](...op.slice(2))`: the session's `log` op, a `Log` method call whose
+/// first argument is the field key.
+pub fn log_op(
+    log: &mut asrs_log::log::Log,
+    realm: &mut JsRealm,
+    op: &[Json],
+) -> Result<(), Thrown> {
+    use asrs_log::log::LoggableType;
+    use asrs_log::log::log_value_sets::RawValue;
+    let method = op[1].as_str().expect("method").to_string_lossy();
+    let key = JsString::from_units(op[2].as_str().expect("key").units().to_vec());
+    let args: Vec<asrs_js::value::JsValue> =
+        op[3..].iter().map(js_arg).collect::<Result<_, _>>()?;
+    let num = |i: usize| args[i].as_f64().expect("number");
+    match method.as_str() {
+        "putNumber" => log.put_number(&key, num(0), num(1)),
+        "putBoolean" => log.put_boolean(&key, num(0), args[1].as_bool().expect("bool")),
+        "putString" => log.put_string(&key, num(0), args[1].as_str().expect("string").clone()),
+        "putJSON" => log.put_json(&key, num(0), args[1].as_str().expect("string").clone()),
+        "putRaw" => match &args[1] {
+            asrs_js::value::JsValue::Bytes(b) => log.put_raw(&key, num(0), b.clone())?,
+            other => panic!("putRaw {other:?}"),
+        },
+        "putMsgpack" => match &args[1] {
+            asrs_js::value::JsValue::Bytes(b) => {
+                log.put_msgpack(realm, &key, num(0), RawValue::from(b.clone()))?
+            }
+            other => panic!("putMsgpack {other:?}"),
+        },
+        "putStruct" => match &args[1] {
+            asrs_js::value::JsValue::Bytes(b) => log.put_struct(
+                &key,
+                num(0),
+                RawValue::from(b.clone()),
+                args[2].as_str().expect("schema type"),
+                args[3].as_bool().expect("is array"),
+            )?,
+            other => panic!("putStruct {other:?}"),
+        },
+        "putPhotonStruct" => match &args[1] {
+            asrs_js::value::JsValue::Bytes(b) => log.put_photon_struct(
+                &key,
+                num(0),
+                RawValue::from(b.clone()),
+                args[2].as_str().expect("schema type"),
+            )?,
+            other => panic!("putPhotonStruct {other:?}"),
+        },
+        "putProto" => match &args[1] {
+            asrs_js::value::JsValue::Bytes(b) => log.put_proto(
+                realm,
+                &key,
+                num(0),
+                RawValue::from(b.clone()),
+                args[2].as_str().expect("schema type"),
+            )?,
+            other => panic!("putProto {other:?}"),
+        },
+        "putNumberArray" => log.put_number_array(
+            &key,
+            num(0),
+            args[1]
+                .as_array()
+                .expect("array")
+                .iter()
+                .map(|v| v.as_f64().expect("number"))
+                .collect(),
+        ),
+        "putBooleanArray" => log.put_boolean_array(
+            &key,
+            num(0),
+            args[1]
+                .as_array()
+                .expect("array")
+                .iter()
+                .map(|v| v.as_bool().expect("bool"))
+                .collect(),
+        ),
+        "putStringArray" => log.put_string_array(
+            &key,
+            num(0),
+            args[1]
+                .as_array()
+                .expect("array")
+                .iter()
+                .map(|v| v.as_str().expect("string").clone())
+                .collect(),
+        ),
+        "createBlankField" => {
+            let ty = match num(0) as u8 {
+                0 => LoggableType::Raw,
+                1 => LoggableType::Boolean,
+                2 => LoggableType::Number,
+                3 => LoggableType::String,
+                4 => LoggableType::BooleanArray,
+                5 => LoggableType::NumberArray,
+                6 => LoggableType::StringArray,
+                _ => LoggableType::Empty,
+            };
+            log.create_blank_field(&key, ty);
+        }
+        "setWpilibType" => {
+            log.set_wpilib_type(&key, args[0].as_str().expect("type").clone());
+        }
+        "setStructuredType" => log.set_structured_type(&key, args[0].as_str().cloned()),
+        "setMetadataString" => {
+            log.set_metadata_string(&key, args[0].as_str().expect("metadata").clone());
+        }
+        "setGeneratedParent" => log.set_generated_parent(&key),
+        "clearBeforeTime" => log.clear_before_time(num(0), true),
+        other => panic!("the driver does not model Log.{other}"),
+    }
+    Ok(())
+}
+
+/// `dump(log)` from `oracle/src/logRun.ts`: `toSerialized()` spelled out as the trace's
+/// dump payload.
+pub fn dump(log: &asrs_log::log::Log) -> Value {
+    let serialized = log.to_serialized();
+    Value::object([
+        ("keys", strings(serialized.fields.keys())),
+        (
+            "fields",
+            Value::Array(
+                serialized
+                    .fields
+                    .values()
+                    .map(serialized_field_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "generatedParents",
+            strings(serialized.generated_parents.iter()),
+        ),
+        (
+            "timestampRange",
+            serialized.timestamp_range.map_or(Value::Null, |r| numbers(&r)),
+        ),
+        (
+            "timestampZero",
+            serialized.timestamp_zero.map_or(Value::Null, Value::number),
+        ),
+    ])
+}
+
+fn string_value(s: &JsString) -> Value {
+    Value::String(asrs_parity::Utf16String::from_units(
+        s.units().to_vec(),
+    ))
+}
+
+fn optional_string(s: &Option<JsString>) -> Value {
+    s.as_ref().map_or(Value::Null, string_value)
+}
+
+fn numbers(xs: &[f64]) -> Value {
+    Value::Array(xs.iter().map(|&x| Value::number(x)).collect())
+}
+
+fn strings<'a>(items: impl Iterator<Item = &'a JsString>) -> Value {
+    Value::Array(items.map(string_value).collect())
+}
+
+fn column<T, F>(values: &asrs_log::log::LogValues, item: F) -> Value
+where
+    T: asrs_log::log::LogValue,
+    F: Fn(&T) -> Value,
+{
+    Value::Array(
+        values
+            .as_slice::<T>()
+            .unwrap_or_default()
+            .iter()
+            .map(item)
+            .collect(),
+    )
+}
+
+fn serialized_field_value(s: &asrs_log::log::SerializedLogField) -> Value {
+    use asrs_log::log::LogValues;
+    let values = match &s.values {
+        LogValues::Raw(_) => column::<std::sync::Arc<[u8]>, _>(&s.values, |v| {
+            Value::Bytes(v.to_vec())
+        }),
+        LogValues::Boolean(_) => column::<bool, _>(&s.values, |v| Value::Bool(*v)),
+        LogValues::Number(_) => column::<f64, _>(&s.values, |v| Value::number(*v)),
+        LogValues::String(_) => column::<JsString, _>(&s.values, string_value),
+        LogValues::BooleanArray(_) => column::<Vec<bool>, _>(&s.values, |v| {
+            Value::Array(v.iter().map(|b| Value::Bool(*b)).collect())
+        }),
+        LogValues::NumberArray(_) => column::<Vec<f64>, _>(&s.values, |v| numbers(v)),
+        LogValues::StringArray(_) => column::<Vec<JsString>, _>(&s.values, |v| {
+            Value::Array(v.iter().map(string_value).collect())
+        }),
+        LogValues::Empty(_) => column::<(), _>(&s.values, |_| Value::Undefined),
+    };
+    Value::object([
+        ("type", Value::number(f64::from(s.get_type() as u8))),
+        ("timestamps", numbers(&s.timestamps)),
+        ("values", values),
+        ("structuredType", optional_string(&s.structured_type)),
+        ("wpilibType", optional_string(&s.wpilib_type)),
+        ("metadataString", string_value(&s.metadata_string)),
+        ("stripingReference", Value::Bool(s.striping_reference)),
+        ("typeWarning", Value::Bool(s.type_warning)),
+    ])
 }
 
 /// Hands a browser event to the client's listener; exceptions escaping it are dropped.

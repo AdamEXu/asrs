@@ -1,60 +1,33 @@
-//! Thin stand-ins for `NT4Source` (with `NT4Tuner`) and `NT4Publisher`: they call the client
-//! exactly where and when upstream's classes do, which is all that reaches the wire, but keep no
-//! real `Log` on the source side. The source models each `Log` by the fields announcements
-//! create, which is all its subscription logic and the tuner read; values are only type-checked,
-//! as the data callback does to decide whether to run the output callback. The publisher needs
-//! values, so it uses the real `Log`.
+//! Thin adapters driving the real `NT4Source`/`NT4Tuner` and `NT4Publisher` ports the way
+//! `oracle/src/liveSession.ts` does: `window` is `Nt4Window` plus the session's tabs, sidebar
+//! and preferences, the output callback assigns `window.log` and records `output` events with
+//! the oracle's `logId` numbering, and `dump` ops serialize `window.log`. Stopped sources stay
+//! alive so their idle loops keep running, as upstream's do.
 //!
-//! What the real N02 source must add over this driver: the `Log` writes of every callback
-//! (typed puts including struct, photon, proto and msgpack, which decode with the client's
-//! `cx.keys` and `cx.rng` between `decodeMulti` yields, plus custom schemas and generated
-//! parents), so `dump` lines match too; an exception from a put returned from
-//! `on_new_topic_data`, which ends the frame; `clearBeforeTime` of the connect time in
-//! `periodic`; `getURCLKeys` and the tuner's checks against the real `window.log`; non-string
-//! topic names and types from malformed announcements; the tuner's `window.log` puts and
-//! `hasTunableFields`. N03 must add robot mode (`getRobotAddress`); this driver runs sim only.
-//! Both keep upstream's leaks: a stopped source's idle loop keeps running and still draws
-//! subscription ids from `Math.random` when the subscribe mode changes, and `stop()` reports
-//! `Stopped` on every call.
+//! N03 must add robot mode (`getRobotAddress`); this driver runs sim only.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use asrs_js::json;
-use asrs_js::math;
 use asrs_js::string::JsString;
+use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_live::nt4::{
-    NT4_PORTS_DEFAULT, NT4_PORTS_DS, NT4_PORTS_SYSTEMCORE, Nt4Client, Nt4Context, Nt4Handler,
-    Nt4Topic,
+    NT4_PORTS_DEFAULT, NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Mode, Nt4Source, Nt4Tuner, Nt4Window,
 };
-use asrs_live::{LiveDataSourceBase, LiveDataSourceStatus, Thrown, TimerId};
+use asrs_live::{
+    LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId, TunedValue,
+};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
 use asrs_log::log::log_key_utils::filter_field_by_prefixes;
 use asrs_log::log::log_util::{get_or_default, log_values_equal};
 use asrs_log::log::log_value_sets::RawValue;
-use asrs_log::log::robot_state::{AUTONOMOUS_KEYS, ENABLED_KEYS, UTILITY_KEYS};
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::Session;
 
-use asrs_live::nt4::NetEvent;
-
-use crate::support::{self, Driver, Env, Trace, js_arg};
-
-const WPILOG_PREFIX: &str = "NT:";
-const DS_PREFIX: &str = "DS:";
-const AKIT_PREFIX: &str = "/AdvantageKit";
-const AKIT_TUNING_PREFIX: &str = "/Tuning";
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    Default,
-    AdvantageKit,
-    Systemcore,
-    DriverStation,
-}
+use crate::support::{self, Driver, Env, Trace};
 
 fn js(s: &str) -> JsString {
     JsString::from(s)
@@ -68,6 +41,7 @@ fn starts(a: &JsString, b: &JsString) -> bool {
 #[derive(Clone)]
 struct Prefs {
     live_subscribe_mode: String,
+    live_discard: f64,
     publish_filter: JsString,
 }
 
@@ -75,6 +49,7 @@ impl Prefs {
     fn defaults() -> Self {
         Prefs {
             live_subscribe_mode: "low-bandwidth".to_owned(),
+            live_discard: 1200.0,
             publish_filter: JsString::new(),
         }
     }
@@ -83,8 +58,18 @@ impl Prefs {
         if let Some(mode) = json.get("liveSubscribeMode").and_then(Json::as_str) {
             self.live_subscribe_mode = mode.to_string_lossy();
         }
+        if let Some(discard) = json.get("liveDiscard").and_then(Json::as_f64) {
+            self.live_discard = discard;
+        }
         if let Some(filter) = json.get("publishFilter").and_then(Json::as_str) {
             self.publish_filter = JsString::from_units(filter.units().to_vec());
+        }
+    }
+
+    fn as_live(&self) -> LivePreferences {
+        LivePreferences {
+            live_discard: Some(self.live_discard),
+            live_subscribe_mode: Some(js(&self.live_subscribe_mode)),
         }
     }
 }
@@ -135,428 +120,32 @@ fn status_callback(
     })
 }
 
-/// One `Log` as the source's logic sees it: field key, type, wpilib type and metadata.
-#[derive(Default)]
-struct LogModel {
-    fields: Vec<(JsString, LoggableType, Option<JsString>, JsString)>,
-}
-
-impl LogModel {
-    fn field(
-        &self,
-        key: &JsString,
-    ) -> Option<&(JsString, LoggableType, Option<JsString>, JsString)> {
-        self.fields.iter().find(|f| f.0 == *key)
+/// The oracle's `logId(log)`: the index a `Log` object first reached the trace under.
+fn log_id(ids: &Rc<RefCell<Vec<usize>>>, log: Option<&LiveLog>) -> Value {
+    let Some(log) = log else {
+        return Value::Null;
+    };
+    let ptr = Rc::as_ptr(log) as usize;
+    let mut ids = ids.borrow_mut();
+    if !ids.contains(&ptr) {
+        ids.push(ptr);
     }
-
-    fn field_mut(
-        &mut self,
-        key: &JsString,
-    ) -> Option<&mut (JsString, LoggableType, Option<JsString>, JsString)> {
-        self.fields.iter_mut().find(|f| f.0 == *key)
-    }
-
-    fn urcl_keys(&self) -> Vec<JsString> {
-        self.fields
-            .iter()
-            .filter(|f| f.2.as_ref().is_some_and(|t| starts(t, &js("URCL"))))
-            .map(|f| f.0.clone())
-            .collect()
-    }
-}
-
-/// The hub's side: `window.log` and the harness's log numbering.
-struct Hub {
-    logs: Vec<LogModel>,
-    ids: Vec<Option<u32>>,
-    next_id: u32,
-    window_log: usize,
-    tabs: Vec<JsString>,
-    sidebar: Vec<JsString>,
-    prefs: Option<Prefs>,
-}
-
-impl Hub {
-    fn new_log(&mut self) -> usize {
-        self.logs.push(LogModel::default());
-        self.ids.push(None);
-        self.logs.len() - 1
-    }
-
-    fn log_id(&mut self, log: usize) -> u32 {
-        *self.ids[log].get_or_insert_with(|| {
-            self.next_id += 1;
-            self.next_id - 1
-        })
-    }
-}
-
-fn log_type(nt_type: &JsValue) -> LoggableType {
-    match nt_type.as_str().map(JsString::to_string_lossy).as_deref() {
-        Some("boolean") => LoggableType::Boolean,
-        Some("int" | "float" | "double") => LoggableType::Number,
-        Some("string" | "json") => LoggableType::String,
-        Some("boolean[]") => LoggableType::BooleanArray,
-        Some("int[]" | "float[]" | "double[]") => LoggableType::NumberArray,
-        Some("string[]") => LoggableType::StringArray,
-        _ => LoggableType::Raw,
-    }
-}
-
-fn array_of(value: &JsValue, ty: &str) -> bool {
-    value
-        .as_array()
-        .is_some_and(|items| items.iter().all(|v| v.type_of() == ty))
-}
-
-/// The parts of `NT4Source` its client callbacks touch.
-struct SourceState {
-    mode: Mode,
-    base: LiveDataSourceBase,
-    log: Option<usize>,
-    should_run_output_callback: bool,
-    connect_time: Option<f64>,
-    no_fields_timeout: Option<TimerId>,
-    hub: Rc<RefCell<Hub>>,
-}
-
-impl SourceState {
-    fn key_from_topic(&self, name: &JsString) -> JsString {
-        if self.mode == Mode::AdvantageKit {
-            if starts(name, &js(AKIT_PREFIX)) {
-                name.slice(AKIT_PREFIX.len() as f64, None)
-            } else {
-                name.clone()
-            }
-        } else {
-            let mut key = js(self.log_prefix());
-            key.push_str(name);
-            key
-        }
-    }
-
-    fn log_prefix(&self) -> &'static str {
-        if self.mode == Mode::DriverStation {
-            DS_PREFIX
-        } else {
-            WPILOG_PREFIX
-        }
-    }
-
-    fn metadata(topic: &Nt4Topic) -> JsString {
-        match topic.properties.as_object() {
-            Some(o) if !o.is_empty() => js(&json::stringify(&topic.properties)
-                .ok()
-                .flatten()
-                .unwrap_or_default()),
-            _ => JsString::new(),
-        }
-    }
-}
-
-impl Nt4Handler for SourceState {
-    fn on_topic_announce(
-        &mut self,
-        topic: &Nt4Topic,
-        cx: &mut Nt4Context<'_>,
-    ) -> Result<(), Thrown> {
-        let Some(log) = self.log else {
-            return Ok(());
-        };
-        if let Some(t) = self.no_fields_timeout {
-            cx.timers.clear(t);
-        }
-        let Some(name) = topic.name_str() else {
-            return Ok(());
-        };
-        if name.is_empty() {
-            return Ok(());
-        }
-        let key = self.key_from_topic(name);
-        let metadata = Self::metadata(topic);
-        let wpilib = topic.type_str().cloned();
-        let ty = log_type(&topic.ty);
-        let mut hub = self.hub.borrow_mut();
-        let model = &mut hub.logs[log];
-        if model.field(&key).is_none() {
-            model.fields.push((key.clone(), ty, None, JsString::new()));
-        }
-        let field = model.field_mut(&key).expect("created");
-        field.2 = wpilib;
-        field.3 = metadata;
-        self.should_run_output_callback = true;
-        Ok(())
-    }
-
-    fn on_topic_properties_update(
-        &mut self,
-        topic: &Nt4Topic,
-        _cx: &mut Nt4Context<'_>,
-    ) -> Result<(), Thrown> {
-        let Some(log) = self.log else {
-            return Ok(());
-        };
-        let Some(name) = topic.name_str() else {
-            return Ok(());
-        };
-        if name.is_empty() {
-            return Ok(());
-        }
-        let key = self.key_from_topic(name);
-        let metadata = Self::metadata(topic);
-        if let Some(field) = self.hub.borrow_mut().logs[log].field_mut(&key) {
-            field.3 = metadata;
-        }
-        self.should_run_output_callback = true;
-        Ok(())
-    }
-
-    fn on_new_topic_data(
-        &mut self,
-        topic: &Nt4Topic,
-        _timestamp_us: f64,
-        value: JsValue,
-        _cx: &mut Nt4Context<'_>,
-    ) -> Result<(), Thrown> {
-        if self.log.is_none() || topic.name_str().is_none_or(JsString::is_empty) {
-            return Ok(());
-        }
-        let ty = topic
-            .type_str()
-            .map(JsString::to_string_lossy)
-            .unwrap_or_default();
-        let updated = match ty.as_str() {
-            "boolean" => value.type_of() == "boolean",
-            "int" | "float" | "double" => value.type_of() == "number",
-            "string" | "json" => value.type_of() == "string",
-            "boolean[]" => array_of(&value, "boolean"),
-            "int[]" | "float[]" | "double[]" => array_of(&value, "number"),
-            "string[]" => array_of(&value, "string"),
-            _ => matches!(value, JsValue::Bytes(_)),
-        };
-        if updated {
-            self.should_run_output_callback = true;
-        }
-        Ok(())
-    }
-
-    fn on_connect(&mut self, cx: &mut Nt4Context<'_>) -> Result<(), Thrown> {
-        self.base.set_status(LiveDataSourceStatus::Active);
-        let log = self.hub.borrow_mut().new_log();
-        self.log = Some(log);
-        self.should_run_output_callback = true;
-        if self.connect_time.is_none_or(|t| t == 0.0) {
-            self.connect_time = Some(Nt4Client::client_time_us(cx.clock));
-        }
-        if self.mode == Mode::AdvantageKit {
-            self.no_fields_timeout = Some(cx.timers.set_timeout(5000.0));
-        }
-        Ok(())
-    }
-
-    fn on_disconnect(&mut self, cx: &mut Nt4Context<'_>) -> Result<(), Thrown> {
-        self.base.set_status(LiveDataSourceStatus::Connecting);
-        self.should_run_output_callback = false;
-        self.connect_time = None;
-        if let Some(t) = self.no_fields_timeout {
-            cx.timers.clear(t);
-        }
-        Ok(())
-    }
-}
-
-struct Source {
-    client: Option<Nt4Client>,
-    state: SourceState,
-    idle_timer: Option<TimerId>,
-    logging_subscription: Option<f64>,
-    low_bandwidth_topic_subscription: Option<f64>,
-    low_bandwidth_data_subscriptions: JsObject<f64>,
-}
-
-impl Source {
-    fn periodic(&mut self, env: &mut Env) -> Result<(), Thrown> {
-        let Some(client) = self.client.as_mut() else {
-            return self.output(env);
-        };
-        let hub = Rc::clone(&self.state.hub);
-        let hub = hub.borrow();
-        let logging = hub
-            .prefs
-            .as_ref()
-            .is_some_and(|p| p.live_subscribe_mode == "logging");
-        let patterns = if self.state.mode == Mode::AdvantageKit {
-            vec![js("/AdvantageKit/"), js("/Tuning/")]
-        } else {
-            vec![js("")]
-        };
-        if logging {
-            let ids: Vec<f64> = self
-                .low_bandwidth_data_subscriptions
-                .values()
-                .copied()
-                .collect();
-            for id in ids {
-                client.unsubscribe(id, &mut env.cx())?;
-            }
-            self.low_bandwidth_data_subscriptions = JsObject::new();
-            if let Some(id) = self.low_bandwidth_topic_subscription {
-                client.unsubscribe(id, &mut env.cx())?;
-                self.low_bandwidth_topic_subscription = None;
-            }
-            if self.logging_subscription.is_none() {
-                self.logging_subscription =
-                    Some(client.subscribe(&patterns, true, true, 0.02, &mut env.cx())?);
-            }
-        } else {
-            if let Some(id) = self.logging_subscription {
-                client.unsubscribe(id, &mut env.cx())?;
-                self.logging_subscription = None;
-            }
-            if self.low_bandwidth_topic_subscription.is_none() {
-                self.low_bandwidth_topic_subscription =
-                    Some(client.subscribe_topics_only(&patterns, true, &mut env.cx())?);
-            }
-
-            let mut active: Vec<JsString> = Vec::new();
-            let mut add = |field: JsString| {
-                if !active.contains(&field) {
-                    active.push(field);
-                }
-            };
-            if self.state.log == Some(hub.window_log) {
-                let log = &hub.logs[hub.window_log];
-                let announced: Vec<JsString> = log
-                    .fields
-                    .iter()
-                    .filter(|f| f.1 != LoggableType::Empty)
-                    .map(|f| f.0.clone())
-                    .collect();
-                let initial: Vec<JsString> = match self.state.mode {
-                    Mode::AdvantageKit => vec![js("/.schema"), js("/Timestamp")],
-                    Mode::DriverStation => vec![js("DS:/.schema")],
-                    _ => vec![
-                        js("NT:/.schema"),
-                        js("NT:/AdvantageKit/.schema"),
-                        js("NT:/AdvantageKit/Timestamp"),
-                    ],
-                };
-                let keys: Vec<JsString> = initial
-                    .into_iter()
-                    .chain(ENABLED_KEYS.iter().map(|k| js(k)))
-                    .chain(AUTONOMOUS_KEYS.iter().map(|k| js(k)))
-                    .chain(UTILITY_KEYS.iter().map(|k| js(k)))
-                    .chain(hub.tabs.iter().cloned())
-                    .chain(hub.sidebar.iter().cloned())
-                    .chain(log.urcl_keys())
-                    .collect();
-                for key in &keys {
-                    for announced_key in &announced {
-                        let subscribe_key = if starts(announced_key, key) {
-                            key
-                        } else if starts(key, announced_key) {
-                            announced_key
-                        } else {
-                            continue;
-                        };
-                        if self.state.mode == Mode::AdvantageKit {
-                            if starts(subscribe_key, &js(AKIT_TUNING_PREFIX)) {
-                                add(subscribe_key.clone());
-                            } else {
-                                let mut field = js(AKIT_PREFIX);
-                                field.push_str(subscribe_key);
-                                add(field);
-                            }
-                        } else {
-                            add(subscribe_key.slice(self.state.log_prefix().len() as f64, None));
-                        }
-                    }
-                }
-            }
-            let copy = active.clone();
-            for field0 in &copy {
-                for field1 in &copy {
-                    if field0 != field1 && starts(field0, field1) {
-                        active.retain(|f| f != field0);
-                    }
-                }
-            }
-            for field in &active {
-                if self
-                    .low_bandwidth_data_subscriptions
-                    .get_key(field)
-                    .is_none()
-                {
-                    let id = client.subscribe(
-                        std::slice::from_ref(field),
-                        true,
-                        true,
-                        0.02,
-                        &mut env.cx(),
-                    )?;
-                    self.low_bandwidth_data_subscriptions
-                        .insert(field.clone(), id);
-                }
-            }
-            let entries: Vec<(JsString, f64)> = self
-                .low_bandwidth_data_subscriptions
-                .iter()
-                .map(|(k, v)| (k.clone(), *v))
-                .collect();
-            for (field, id) in entries {
-                if !active.contains(&field) {
-                    client.unsubscribe(id, &mut env.cx())?;
-                    self.low_bandwidth_data_subscriptions.remove_key(&field);
-                }
-            }
-        }
-        drop(hub);
-        self.output(env)
-    }
-
-    fn output(&mut self, env: &mut Env) -> Result<(), Thrown> {
-        let state = &mut self.state;
-        if !state.should_run_output_callback
-            || state.base.status() == LiveDataSourceStatus::Stopped
-            || !state.base.has_output_callback()
-        {
-            return Ok(());
-        }
-        let Some(log) = state.log else {
-            return Ok(());
-        };
-        state.should_run_output_callback = false;
-        let time = match self.client.as_ref() {
-            Some(client) => match client.server_time_us(&env.wall, None) {
-                None => 10.0,
-                Some(server_time) => (server_time - client.network_latency_us()) / 1000000.0,
-            },
-            None => 10.0,
-        };
-        let mut hub = state.hub.borrow_mut();
-        hub.window_log = log;
-        let id = hub.log_id(log);
-        drop(hub);
-        env.app(
-            "output",
-            Some(&Value::Array(vec![
-                Value::number(f64::from(id)),
-                Value::number(time),
-            ])),
-        );
-        Ok(())
-    }
+    Value::number(ids.iter().position(|p| *p == ptr).expect("inserted") as f64)
 }
 
 pub struct SourceDriver {
-    mode: Mode,
+    mode: Nt4Mode,
     address: String,
-    hub: Rc<RefCell<Hub>>,
-    sources: Vec<Source>,
+    prefs: Option<Prefs>,
+    window: Nt4Window,
+    window_log: Rc<RefCell<LiveLog>>,
+    live_logs: Rc<RefCell<Vec<LiveLog>>>,
+    log_ids: Rc<RefCell<Vec<usize>>>,
+    sources: Vec<Nt4Source>,
 }
 
 impl SourceDriver {
-    pub fn new(session: &Session, _env: &mut Env) -> Self {
+    pub fn new(session: &Session, env: &mut Env) -> Self {
         let c = &session.client;
         let mode = match c
             .get("mode")
@@ -564,161 +153,119 @@ impl SourceDriver {
             .map(|m| m.to_string_lossy())
             .as_deref()
         {
-            Some("default") => Mode::Default,
-            Some("akit") => Mode::AdvantageKit,
-            Some("systemcore") => Mode::Systemcore,
-            Some("ds") => Mode::DriverStation,
+            Some("default") => Nt4Mode::Default,
+            Some("akit") => Nt4Mode::AdvantageKit,
+            Some("systemcore") => Nt4Mode::Systemcore,
+            Some("ds") => Nt4Mode::DriverStation,
             other => panic!("unknown nt4 mode {other:?}"),
         };
-        let mut hub = Hub {
-            logs: Vec::new(),
-            ids: Vec::new(),
-            next_id: 0,
-            window_log: 0,
-            tabs: string_list(c.get("tabs")),
-            sidebar: string_list(c.get("sidebar")),
-            prefs: initial_prefs(session),
-        };
-        let first = hub.new_log();
-        hub.log_id(first);
-        let hub = Rc::new(RefCell::new(hub));
+        let initial: LiveLog = Rc::new(RefCell::new(Log::new(true)));
+        let prefs = initial_prefs(session);
+        let trace = env.trace.clone();
+        let clock = env.wall.loop_clock.clone();
         SourceDriver {
             mode,
             address: c
                 .get("address")
                 .and_then(Json::as_str)
                 .map_or_else(|| "127.0.0.1".to_owned(), |s| s.to_string_lossy()),
-            hub,
+            window: Nt4Window {
+                log: initial.clone(),
+                preferences: prefs.as_ref().map(Prefs::as_live),
+                tabs_fields: string_list(c.get("tabs")),
+                sidebar_fields: string_list(c.get("sidebar")),
+                send_main_message: Box::new(move |name, data| {
+                    trace.app(
+                        clock.now(),
+                        "main",
+                        Some(&Value::Array(vec![
+                            Value::string(name),
+                            support::js_value(&data),
+                        ])),
+                    );
+                }),
+            },
+            window_log: Rc::new(RefCell::new(initial.clone())),
+            live_logs: Rc::new(RefCell::new(vec![initial.clone()])),
+            log_ids: Rc::new(RefCell::new(vec![Rc::as_ptr(&initial) as usize])),
+            prefs,
             sources: Vec::new(),
         }
     }
 
-    fn stop_current(&mut self, env: &mut Env) {
-        let Some(source) = self.sources.last_mut() else {
-            return;
-        };
-        source.state.base.stop(&mut env.timers);
-        if let Some(client) = source.client.as_mut() {
-            let state = &mut source.state;
-            let _ = client.disconnect(state, &mut env.cx());
-        }
+    /// The output callback writes `window.log`; re-read it before touching the window.
+    fn sync_window(&mut self) {
+        self.window.log = self.window_log.borrow().clone();
+        self.window.preferences = self.prefs.as_ref().map(Prefs::as_live);
     }
 
-    fn connect(&mut self, env: &mut Env) {
-        self.stop_current(env);
-        if self.hub.borrow().prefs.is_none() {
-            return;
-        }
-        let base = LiveDataSourceBase::new(&mut env.rng);
-        let idle_timer = Some(env.timers.set_timeout(100.0));
-        let hub = Rc::clone(&self.hub);
-        let mut source = Source {
-            client: None,
-            state: SourceState {
-                mode: self.mode,
-                base,
-                log: None,
-                should_run_output_callback: false,
-                connect_time: None,
-                no_fields_timeout: None,
-                hub,
-            },
-            idle_timer,
-            logging_subscription: None,
-            low_bandwidth_topic_subscription: None,
-            low_bandwidth_data_subscriptions: JsObject::new(),
-        };
-        let trace = env.trace.clone();
-        let clock = env.wall.loop_clock.clone();
-        source.state.base.connect(
-            &self.address,
-            status_callback(&trace, &clock),
-            Box::new(|_, _| {}),
-            true,
-            &mut env.timers,
-        );
-        source.state.should_run_output_callback = false;
-        let log = self.hub.borrow_mut().new_log();
-        source.state.log = Some(log);
-        let ports = match self.mode {
-            Mode::Systemcore => NT4_PORTS_SYSTEMCORE,
-            Mode::DriverStation => NT4_PORTS_DS,
-            _ => NT4_PORTS_DEFAULT,
-        };
-        let mut client = Nt4Client::new(&self.address, ports, "AdvantageScope", &mut env.timers);
-        client.connect(&mut env.cx());
-        source.client = Some(client);
-        self.sources.push(source);
-    }
-
-    fn tuner_publish(&mut self, key: &JsString, value: &Json, env: &mut Env) -> Result<(), Thrown> {
-        let source = self.tuner_source()?;
-        let mode = source.state.mode;
-        let remote_key = remote_key(mode, key);
-        let hub = Rc::clone(&source.state.hub);
-        let hub = hub.borrow();
-        let window_log = &hub.logs[hub.window_log];
-        let field = window_log.field(key);
-        let ty = field.map(|f| f.1);
-        let dog_log = window_log.field(&js("NT:/Robot/DogLog/Options")).is_some();
-        if !matches!(ty, Some(LoggableType::Number | LoggableType::Boolean))
-            || starts(&remote_key, &js(AKIT_PREFIX))
-            || (dog_log && starts(&remote_key, &js("/Robot")))
-        {
-            return Ok(());
-        }
-        let metadata = field.map(|f| f.3.clone()).unwrap_or_default();
-        if !metadata.is_empty()
-            && let Ok(JsValue::Object(parsed)) = json::parse(&metadata)
-            && let Some(JsValue::Bool(mutable)) = parsed.get("mutable")
-            && !*mutable
-        {
-            return Ok(());
-        }
-        let Some(wpilib_type) = field.and_then(|f| f.2.clone()) else {
-            return Ok(());
-        };
-        let client = source.client.as_mut().expect("tuner client");
-        client.publish_topic(&remote_key, &wpilib_type, &mut env.cx())?;
-        if let Some(timestamp) = client.server_time_us(&env.wall, None) {
-            let value = match value {
-                Json::Number(n) if starts(&wpilib_type, &js("int")) => {
-                    JsValue::Number(math::floor(*n))
-                }
-                Json::Number(n) => JsValue::Number(*n),
-                Json::Bool(b) => JsValue::Bool(*b),
-                other => panic!("tune value {other:?}"),
-            };
-            client.add_timestamped_sample(&remote_key, timestamp, value, &mut env.cx())?;
+    fn stop_current(&mut self, env: &mut Env) -> Result<(), Thrown> {
+        if let Some(source) = self.sources.last_mut() {
+            source.stop(&mut env.cx())?;
         }
         Ok(())
     }
 
-    fn tuner_source(&mut self) -> Result<&mut Source, Thrown> {
-        let source = self
-            .sources
-            .last_mut()
-            .ok_or_else(|| Thrown::new("no tuner"))?;
-        if source.client.is_none() || source.state.log.is_none() {
-            return Err(Thrown::new(
-                "Cannot create NT4 tuner before starting connection",
-            ));
+    fn connect(&mut self, env: &mut Env) -> Result<(), Thrown> {
+        self.stop_current(env)?;
+        if self.prefs.is_none() {
+            return Ok(());
         }
-        Ok(source)
+        let trace = env.trace.clone();
+        let clock = env.wall.loop_clock.clone();
+        let window_log = Rc::clone(&self.window_log);
+        let live_logs = Rc::clone(&self.live_logs);
+        let log_ids = Rc::clone(&self.log_ids);
+        let output: OutputCallback = Box::new(move |log, supplier| {
+            if let Some(l) = &log {
+                *window_log.borrow_mut() = Rc::clone(l);
+                live_logs.borrow_mut().push(Rc::clone(l));
+            }
+            trace.app(
+                clock.now(),
+                "output",
+                Some(&Value::Array(vec![
+                    log_id(&log_ids, log.as_ref()),
+                    Value::number(supplier()),
+                ])),
+            );
+        });
+        let status = status_callback(&env.trace, &env.wall.loop_clock);
+        let mut source = Nt4Source::new(
+            self.mode,
+            &mut *env.realm.random,
+            Rc::new(env.wall.clone()),
+            &mut env.timers,
+        );
+        let prefs = self.prefs.as_ref().map(Prefs::as_live);
+        source.connect(
+            &self.address,
+            status,
+            output,
+            prefs.as_ref(),
+            &mut env.cx(),
+        );
+        self.sources.push(source);
+        Ok(())
     }
-}
 
-fn remote_key(mode: Mode, key: &JsString) -> JsString {
-    if mode == Mode::AdvantageKit {
-        if starts(key, &js(AKIT_TUNING_PREFIX)) {
-            key.clone()
-        } else {
-            let mut remote = js(AKIT_PREFIX);
-            remote.push_str(key);
-            remote
+    /// `liveSource?.getTuner() ?? throw "no tuner"`.
+    fn tuner(&self) -> Result<Nt4Tuner, Thrown> {
+        match self.sources.last() {
+            Some(source) => source.tuner(),
+            None => Err(Thrown::new("no tuner")),
         }
-    } else {
-        key.slice(WPILOG_PREFIX.len() as f64, None)
+    }
+
+    fn dump(&mut self, env: &mut Env) {
+        let log = self.window_log.borrow().clone();
+        env.app(
+            "dump",
+            Some(&Value::Array(vec![
+                log_id(&self.log_ids, Some(&log)),
+                support::dump(&log.borrow()),
+            ])),
+        );
     }
 }
 
@@ -732,26 +279,34 @@ fn op_key(op: &[Json], i: usize) -> JsString {
 
 impl Driver for SourceDriver {
     fn op(&mut self, op: &[Json], env: &mut Env) -> Result<(), Thrown> {
+        self.sync_window();
         match op_name(op).as_str() {
-            "connect" => self.connect(env),
-            "stop" => self.stop_current(env),
-            "prefs" => prefs_op(&mut self.hub.borrow_mut().prefs, &op[1]),
+            "connect" => self.connect(env)?,
+            "stop" => self.stop_current(env)?,
+            "prefs" => prefs_op(&mut self.prefs, &op[1]),
             "fields" => {
-                let mut hub = self.hub.borrow_mut();
-                hub.tabs = string_list(op.get(1));
-                hub.sidebar = string_list(op.get(2));
+                self.window.tabs_fields = string_list(op.get(1));
+                self.window.sidebar_fields = string_list(op.get(2));
             }
-            "tune" => self.tuner_publish(&op_key(op, 1), &op[2], env)?,
+            "log" => {
+                let log = self.window.log.clone();
+                support::log_op(&mut log.borrow_mut(), &mut env.realm, op)?;
+            }
+            "tune" => {
+                let value = match &op[2] {
+                    Json::Number(n) => TunedValue::Number(*n),
+                    Json::Bool(b) => TunedValue::Boolean(*b),
+                    other => panic!("tune value {other:?}"),
+                };
+                let key = op_key(op, 1);
+                let log = self.window.log.clone();
+                self.tuner()?.publish(&log, &key, value, &mut env.cx())?;
+            }
             "untune" => {
-                let source = self.tuner_source()?;
-                let remote = remote_key(source.state.mode, &op_key(op, 1));
-                source
-                    .client
-                    .as_mut()
-                    .expect("tuner client")
-                    .unpublish_topic(&remote, &mut env.cx())?;
+                let key = op_key(op, 1);
+                self.tuner()?.unpublish(&key, &mut env.cx())?;
             }
-            "dump" => {}
+            "dump" => self.dump(env),
             other => panic!("the NT4Source driver does not model {other}"),
         }
         Ok(())
@@ -759,48 +314,27 @@ impl Driver for SourceDriver {
 
     fn notify(&mut self, event: NetEvent, env: &mut Env) {
         for source in &mut self.sources {
-            if let Some(client) = source.client.as_mut() {
-                support::dispatch(client, &event, &mut source.state, &mut env.cx());
-            }
+            let _ = source.handle_net_event(&event, &mut env.cx());
         }
     }
 
     fn timer(&mut self, id: TimerId, env: &mut Env) {
+        self.sync_window();
+        let window = &mut self.window;
+        let mut cx = env.cx();
         for source in &mut self.sources {
-            if source.idle_timer == Some(id) {
-                source.idle_timer = None;
-                if source.periodic(env).is_ok() {
-                    source.idle_timer = Some(env.timers.set_timeout(100.0));
-                }
-                return;
-            }
-            if source.state.no_fields_timeout == Some(id) {
-                let content = "No fields were received from the server. AdvantageKit mode is selected. Are you connecting to a server without AdvantageKit?";
-                env.app(
-                    "main",
-                    Some(&Value::Array(vec![
-                        Value::string("error"),
-                        Value::object([
-                            ("title", Value::string("Problem with NT4 connection")),
-                            ("content", Value::string(content)),
-                        ]),
-                    ])),
-                );
-                return;
-            }
-            if let Some(client) = source.client.as_mut()
-                && client
-                    .handle_timer(id, &mut source.state, &mut env.cx())
-                    .is_some()
-            {
-                return;
-            }
-            if source.state.base.handle_timer(id, None) {
+            if source.handle_timer(id, window, &mut cx) {
                 return;
             }
         }
     }
+
+    fn finish(&mut self, env: &mut Env) {
+        self.dump(env);
+    }
 }
+
+
 
 struct Publisher {
     client: Nt4Client,
@@ -993,57 +527,6 @@ impl PublisherDriver {
         Ok(())
     }
 
-    fn log_op(&mut self, op: &[Json]) -> Result<(), Thrown> {
-        let method = op_name(&op[1..]);
-        let key = op_key(op, 2);
-        let args: Vec<JsValue> = op[3..].iter().map(js_arg).collect::<Result<_, _>>()?;
-        let num = |i: usize| args[i].as_f64().expect("number");
-        let log = &mut self.log;
-        match method.as_str() {
-            "putNumber" => log.put_number(&key, num(0), num(1)),
-            "putBoolean" => log.put_boolean(&key, num(0), args[1].as_bool().expect("bool")),
-            "putString" => log.put_string(&key, num(0), args[1].as_str().expect("string").clone()),
-            "putRaw" => match &args[1] {
-                JsValue::Bytes(b) => log
-                    .put_raw(&key, num(0), b.clone())
-                    .expect("plain raw puts never fail"),
-                other => panic!("putRaw {other:?}"),
-            },
-            "putNumberArray" => log.put_number_array(
-                &key,
-                num(0),
-                args[1]
-                    .as_array()
-                    .expect("array")
-                    .iter()
-                    .map(|v| v.as_f64().expect("number"))
-                    .collect(),
-            ),
-            "putBooleanArray" => log.put_boolean_array(
-                &key,
-                num(0),
-                args[1]
-                    .as_array()
-                    .expect("array")
-                    .iter()
-                    .map(|v| v.as_bool().expect("bool"))
-                    .collect(),
-            ),
-            "putStringArray" => log.put_string_array(
-                &key,
-                num(0),
-                args[1]
-                    .as_array()
-                    .expect("array")
-                    .iter()
-                    .map(|v| v.as_str().expect("string").clone())
-                    .collect(),
-            ),
-            "setWpilibType" => log.set_wpilib_type(&key, args[0].as_str().expect("type").clone()),
-            other => panic!("the publisher driver does not model Log.{other}"),
-        }
-        Ok(())
-    }
 }
 
 fn js_values_equal(ty: LoggableType, a: &JsValue, b: &JsValue) -> bool {
@@ -1114,8 +597,17 @@ impl Driver for PublisherDriver {
                 self.selected = op[1].as_f64();
                 self.hovered = op[2].as_f64();
             }
-            "log" => self.log_op(op)?,
-            "dump" => {}
+            "log" => support::log_op(&mut self.log, &mut env.realm, op)?,
+            "dump" => {
+                // `g.log` is the publisher's log, registered under id 0 at session start.
+                env.app(
+                    "dump",
+                    Some(&Value::Array(vec![
+                        Value::number(0.0),
+                        support::dump(&self.log),
+                    ])),
+                );
+            }
             other => panic!("the publisher driver does not model {other}"),
         }
         Ok(())
@@ -1151,5 +643,15 @@ impl Driver for PublisherDriver {
                 return;
             }
         }
+    }
+
+    fn finish(&mut self, env: &mut Env) {
+        env.app(
+            "dump",
+            Some(&Value::Array(vec![
+                Value::number(0.0),
+                support::dump(&self.log),
+            ])),
+        );
     }
 }

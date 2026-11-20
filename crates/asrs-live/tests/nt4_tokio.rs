@@ -13,6 +13,7 @@ use asrs_live::nt4::{
 };
 use asrs_live::{LiveRuntime, MonotonicClock, Thrown, TimerQueue};
 use asrs_log::msgpack::{self, KeyCache};
+use asrs_log::realm::JsRealm;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
@@ -145,8 +146,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
 
     let mut timers = TimerQueue::new(Rc::new(MonotonicClock::new()));
     let mut net = TokioTransport::new(runtime.handle().clone());
-    let mut rng = V8MathRandom::from_seed(7);
-    let mut keys = KeyCache::new();
+    let mut realm = JsRealm::new(Box::new(V8MathRandom::from_seed(7)));
     let clock = SystemClock;
     let mut seen = Seen::default();
     let mut client = Nt4Client::new("127.0.0.1", &[port], "AdvantageScope", &mut timers);
@@ -155,8 +155,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
             timers: &mut timers,
             net: &mut net,
             clock: &clock,
-            rng: &mut rng,
-            keys: &mut keys,
+            realm: &mut realm,
         };
         client.connect(&mut cx);
         client
@@ -174,8 +173,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
                 timers: &mut timers,
                 net: &mut net,
                 clock: &clock,
-                rng: &mut rng,
-                keys: &mut keys,
+                realm: &mut realm,
             };
             let _ = client.handle_net_event(&event, &mut seen, &mut cx);
         }
@@ -184,8 +182,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
                 timers: &mut timers,
                 net: &mut net,
                 clock: &clock,
-                rng: &mut rng,
-                keys: &mut keys,
+                realm: &mut realm,
             };
             let _ = client.handle_timer(id, &mut seen, &mut cx);
         }
