@@ -44,50 +44,74 @@ pub trait Rng {
     fn next_f64(&mut self) -> f64;
 }
 
-/// V8's `Math.random`: xorshift128+ over two u64 lanes, the low 52 bits of the
-/// sum loaded into the mantissa of a `[1, 2)` double.
-pub struct XorShift128Plus {
+/// V8's `Math.random`, bit for bit: a xorshift128+ state seeded through
+/// MurmurHash3, refilled 64 doubles at a time (each the top 53 bits of `s0`)
+/// and served from the end of the cache. `from_seed(n)` reproduces
+/// `--random-seed=n`.
+pub struct V8MathRandom {
     s0: u64,
     s1: u64,
+    cache: [f64; V8MathRandom::CACHE_SIZE],
+    index: usize,
 }
 
-impl XorShift128Plus {
-    pub fn new(s0: u64, s1: u64) -> Self {
-        Self { s0, s1 }
-    }
+impl V8MathRandom {
+    const CACHE_SIZE: usize = 64;
 
-    /// Seeds 16 bytes from the OS entropy source, like upstream's
-    /// `RandomSeedSource`.
-    pub fn from_entropy() -> Self {
-        let mut seed = [0u8; 16];
-        if getrandom::fill(&mut seed).is_err() {
-            let d = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default();
-            seed[..8].copy_from_slice(&d.as_nanos().to_le_bytes()[..8]);
-            seed[8..].copy_from_slice(&(d.as_nanos() >> 64).to_le_bytes()[..8]);
+    pub fn from_seed(seed: u64) -> Self {
+        Self {
+            s0: murmur_hash3(seed),
+            s1: murmur_hash3(!seed),
+            cache: [0.0; Self::CACHE_SIZE],
+            index: 0,
         }
-        Self::new(
-            u64::from_le_bytes(seed[..8].try_into().expect("8 bytes")),
-            u64::from_le_bytes(seed[8..].try_into().expect("8 bytes")),
-        )
+    }
+
+    /// Seeds from 8 bytes of OS entropy, as V8 does without `--random-seed`.
+    pub fn from_entropy() -> Self {
+        let mut seed = [0u8; 8];
+        if getrandom::fill(&mut seed).is_err() {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            seed = (nanos as u64).to_le_bytes();
+        }
+        Self::from_seed(u64::from_le_bytes(seed))
+    }
+
+    fn refill(&mut self) {
+        for slot in &mut self.cache {
+            let mut s1 = self.s0;
+            let s0 = self.s1;
+            self.s0 = s0;
+            s1 ^= s1 << 23;
+            s1 ^= s1 >> 17;
+            s1 ^= s0;
+            s1 ^= s0 >> 26;
+            self.s1 = s1;
+            *slot = (self.s0 >> 11) as f64 / (1u64 << 53) as f64;
+        }
+        self.index = Self::CACHE_SIZE;
     }
 }
 
-impl Rng for XorShift128Plus {
+fn murmur_hash3(mut h: u64) -> u64 {
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xFF51_AFD7_ED55_8CCD);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xC4CE_B9FE_1A85_EC53);
+    h ^= h >> 33;
+    h
+}
+
+impl Rng for V8MathRandom {
     fn next_f64(&mut self) -> f64 {
-        let mut s1 = self.s0;
-        let s0 = self.s1;
-        self.s0 = s0;
-        s1 ^= s1 << 23;
-        s1 ^= s1 >> 17;
-        s1 ^= s0;
-        s1 ^= s0 >> 26;
-        self.s1 = s1;
-        let random = self.s0.wrapping_add(self.s1);
-        const MANTISSA_MASK: u64 = 0x000f_ffff_ffff_ffff;
-        const EXPONENT_BITS: u64 = 0x3ff0_0000_0000_0000;
-        f64::from_bits((random & MANTISSA_MASK) | EXPONENT_BITS) - 1.0
+        if self.index == 0 {
+            self.refill();
+        }
+        self.index -= 1;
+        self.cache[self.index]
     }
 }
 
@@ -662,4 +686,20 @@ fn time_from_day_ms(ms: i64) -> (i64, i64, i64, i64) {
     let second = (ms % 60_000) / 1000;
     let milli = ms % 1000;
     (hour, minute, second, milli)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v8_math_random_matches_electron_seed_42() {
+        let mut rng = V8MathRandom::from_seed(42);
+        let draws: Vec<u64> = (0..130).map(|_| rng.next_f64().to_bits()).collect();
+        assert_eq!(draws[0], 0x3fe9_67b8_a4f3_3142);
+        assert_eq!(draws[1], 0x3fe0_d0e3_67f2_3fe4);
+        assert_eq!(draws[63], 0x3fb4_e1b5_6906_4d78);
+        assert_eq!(draws[64], 0x3fde_1f7a_c97a_0320);
+        assert_eq!(draws[129], 0x3fcd_016b_bed4_84d4);
+    }
 }

@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 
 use asrs_js::number;
-use asrs_js::time::{self, Clock, NamedZone, Rng, SetRng, SystemClock, XorShift128Plus};
+use asrs_js::time::{self, Clock, NamedZone, Rng, SetRng, SystemClock, V8MathRandom};
 use asrs_parity::{Response, Value};
 
 use crate::functions::{arg, ok_number, ok_string, to_number, type_error};
@@ -15,7 +15,7 @@ pub type Function = fn(&[Value]) -> Response;
 
 thread_local! {
     static ZONE: RefCell<Option<NamedZone>> = const { RefCell::new(None) };
-    static RNG: RefCell<Box<dyn Rng>> = RefCell::new(Box::new(XorShift128Plus::from_entropy()));
+    static RNG: RefCell<Box<dyn Rng>> = RefCell::new(Box::new(V8MathRandom::from_entropy()));
     static CLOCK: RefCell<Box<dyn Clock>> = RefCell::new(Box::new(SystemClock));
 }
 
