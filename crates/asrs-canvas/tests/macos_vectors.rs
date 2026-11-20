@@ -2,8 +2,9 @@
 
 use std::collections::BTreeMap;
 
+use asrs_canvas::text::layout::place_text;
 use asrs_canvas::text::lut::{self, MaskGammaLut};
-use asrs_canvas::text::{FontSpec, platform_backend};
+use asrs_canvas::text::{FontSpec, TextMetrics, measure_text, platform_backend};
 use asrs_parity::vectors;
 
 #[test]
@@ -19,59 +20,139 @@ fn embedded_lut_has_the_four_macos_rows() {
     }
 }
 
-const S2_FONTS: [&str; 4] = ["12px ", "16px ", "200 12px ", "200 14px "];
-const NOT_IN_S2_CORPUS: [&str; 12] = [
-    "",
-    "Drag to zoom",
-    "Click to add a field",
-    "\u{b5}s 45\u{b0} \u{b1}",
-    "caf\u{e9} na\u{ef}ve",
-    "\u{65e5}\u{672c}\u{8a9e}",
-    "\u{1f916} robot",
-    "A\u{301}",
-    "\t tab",
-    "fi fl ffi",
-    "1.23e+21",
-    "-0",
+const FIELDS: [&str; 10] = [
+    "width",
+    "actualBoundingBoxLeft",
+    "actualBoundingBoxRight",
+    "actualBoundingBoxAscent",
+    "actualBoundingBoxDescent",
+    "fontBoundingBoxAscent",
+    "fontBoundingBoxDescent",
+    "hangingBaseline",
+    "alphabeticBaseline",
+    "ideographicBaseline",
 ];
 
-#[test]
-fn s2_corpus_widths_match_chromium() {
+/// Strings Chromium draws with a fallback font it picks differently from CoreText: emoji
+/// (Chromium leaves out `Apple Color Emoji`'s tracking and reports its bitmap bounds rounded
+/// out) and CJK next to Helvetica or a `wght` instance (Chromium matches the fallback's weight).
+const FALLBACK: [&str; 2] = ["\u{1f916} robot", "\u{65e5}\u{672c}\u{8a9e}"];
+
+fn field(m: &TextMetrics, name: &str) -> f64 {
+    match name {
+        "width" => m.width,
+        "actualBoundingBoxLeft" => m.actual_bounding_box_left,
+        "actualBoundingBoxRight" => m.actual_bounding_box_right,
+        "actualBoundingBoxAscent" => m.actual_bounding_box_ascent,
+        "actualBoundingBoxDescent" => m.actual_bounding_box_descent,
+        "fontBoundingBoxAscent" => m.font_bounding_box_ascent,
+        "fontBoundingBoxDescent" => m.font_bounding_box_descent,
+        "hangingBaseline" => m.hanging_baseline,
+        "alphabeticBaseline" => m.alphabetic_baseline,
+        _ => m.ideographic_baseline,
+    }
+}
+
+#[derive(Debug, Default)]
+struct Error {
+    cases: usize,
+    inexact: usize,
+    max: f64,
+    flips: usize,
+    worst: String,
+}
+
+type Errors = BTreeMap<String, Error>;
+
+/// Every measured field of the macOS width vectors (9 fonts, 53 strings, 3 aligns, 4
+/// baselines) against `measure_text`, keyed by `font / field`, fallback strings apart.
+fn measure_errors() -> (Errors, Errors) {
     let records = vectors::load("canvas/measure-macos").unwrap();
     let mut backend = platform_backend().unwrap();
-    let mut worst: BTreeMap<String, (f64, usize, usize)> = BTreeMap::new();
+    let (mut main, mut fallback) = (Errors::new(), Errors::new());
     for r in &records {
-        let font = r.string("font").unwrap();
+        let css = r.string("font").unwrap();
         let text = r.string("text").unwrap();
-        if !S2_FONTS.iter().any(|f| font.starts_with(f))
-            || NOT_IN_S2_CORPUS.contains(&text.as_str())
-            || r.string("align").as_deref() != Some("left")
-            || r.string("baseline").as_deref() != Some("alphabetic")
-        {
-            continue;
+        let align = r.string("align").unwrap();
+        let baseline = r.string("baseline").unwrap();
+        let font = FontSpec::parse(&css).unwrap();
+        let ours = measure_text(backend.as_mut(), &font, &align, &baseline, &text);
+        let expected = r.value("metrics").unwrap();
+        let errors = if FALLBACK.contains(&text.as_str()) {
+            &mut fallback
+        } else {
+            &mut main
+        };
+        for name in FIELDS {
+            let want = expected.get(name).unwrap().as_f64().unwrap();
+            let got = field(&ours, name);
+            let e: &mut Error = errors.entry(format!("{css} / {name}")).or_default();
+            e.cases += 1;
+            if got.to_bits() != want.to_bits() {
+                e.inexact += 1;
+                let diff = (got - want).abs();
+                if diff >= e.max {
+                    e.max = diff;
+                    e.worst = format!("{text:?} {align} {baseline}: {got} vs {want}");
+                }
+            }
+            if name == "width" {
+                e.flips += usize::from((got / 10.0).ceil() != (want / 10.0).ceil());
+            }
         }
-        let expected = r
-            .value("metrics")
-            .unwrap()
-            .get("width")
-            .unwrap()
-            .as_f64()
-            .unwrap();
-        let ours = backend.shape(&FontSpec::parse(&font), &text).width;
-        let entry = worst.entry(font).or_default();
-        let error = (ours - expected).abs();
-        if error > entry.0 {
-            entry.0 = error;
+    }
+    (main, fallback)
+}
+
+fn report(errors: &Errors) -> String {
+    errors
+        .iter()
+        .filter(|(_, e)| e.inexact > 0)
+        .map(|(k, e)| {
+            format!(
+                "{k}: {}/{} inexact, max {:.6}, {} flips, worst {}\n",
+                e.inexact, e.cases, e.max, e.flips, e.worst
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn text_metrics_are_bit_exact_against_chromium() {
+    let (main, fallback) = measure_errors();
+    let report = report(&main);
+    assert_eq!(main.len(), 9 * FIELDS.len(), "{report}");
+    for (key, e) in &main {
+        assert_eq!(e.cases, 51 * 12, "{key}");
+        assert_eq!(e.inexact, 0, "{key}\n{report}");
+    }
+    let s2_fonts = ["12px ", "16px ", "200 12px ", "200 14px "];
+    for (key, e) in &fallback {
+        if s2_fonts.iter().any(|f| key.starts_with(f)) && key.ends_with("/ width") {
+            assert_eq!(e.flips, 0, "{key}");
         }
-        entry.1 += usize::from((ours / 10.0).ceil() != (expected / 10.0).ceil());
-        entry.2 += 1;
     }
-    let report = format!("{worst:#?}");
-    for (font, (max, flips, n)) in &worst {
-        assert_eq!(*n, 41, "{font}");
-        let limit = if font.starts_with("200 ") { 0.03 } else { 0.0 };
-        assert!(*max <= limit, "{font}: width off by {max}\n{report}");
-        assert_eq!(*flips, 0, "{font}: ceil(w/10) flips\n{report}");
+}
+
+#[test]
+fn zero_size_font_measures_and_draws_nothing() {
+    let mut backend = platform_backend().unwrap();
+    for css in ["0px sans-serif", "0px system-ui", "200 0px system-ui"] {
+        let font = FontSpec::parse(css).unwrap();
+        let m = measure_text(backend.as_mut(), &font, "center", "top", "Robot");
+        assert_eq!(m, TextMetrics::default(), "{css}");
+        let identity = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        let placed = place_text(
+            backend.as_mut(),
+            &font,
+            "left",
+            "alphabetic",
+            "Robot",
+            10.0,
+            10.0,
+            None,
+            identity,
+        );
+        assert!(placed.is_empty(), "{css}");
     }
-    assert_eq!(worst.len(), 4, "{report}");
 }

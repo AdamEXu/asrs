@@ -3,18 +3,23 @@ use std::collections::HashMap;
 use asrs_js::string::JsString;
 use tiny_skia::{
     FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
-    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Stroke, StrokeDash,
-    Transform,
+    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
 };
 
+use crate::aaa;
+use crate::blit::Spans;
 use crate::color::{self, Rgba};
+use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::hairline;
-use crate::path::{Affine, Path};
+use crate::path::{Affine, Path, Pt};
 use crate::pixels;
-use crate::scan::{self, Blend, Coverage, div255};
+use crate::scan::{self, Blend, Coverage};
+use crate::skpath::SkPath;
+use crate::stroke;
+use crate::text::layout::{Placed, place_text};
 use crate::text::lut::MaskGammaLut;
-use crate::text::{FontSpec, TextBackend, baseline_offset, glyph_origin};
+use crate::text::{FontSpec, TextBackend};
 
 const CONIC_TOLERANCE: f32 = 0.25;
 
@@ -81,7 +86,7 @@ impl Default for State {
             dash: Vec::new(),
             dash_offset: 0.0,
             alpha: 1.0,
-            font: FontSpec::parse("10px sans-serif"),
+            font: FontSpec::default(),
             align: "start".to_owned(),
             baseline: "alphabetic".to_owned(),
             smoothing: true,
@@ -102,10 +107,26 @@ pub struct Raster<'a> {
     state: State,
     stack: Vec<State>,
     path: Path,
+    fast: Fast,
+    draw_path_count: u32,
+    draw_line_count: u32,
     images: HashMap<String, Pixmap>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
+    errors: Vec<(usize, CanvasError)>,
+    calls: usize,
 }
+
+/// An exception Blink throws from a canvas call instead of drawing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CanvasError {
+    /// `IndexSizeError` with its message.
+    IndexSize(&'static str),
+    /// `RangeError` with its message.
+    Range(&'static str),
+}
+
+const OUT_OF_MEMORY: CanvasError = CanvasError::Range("Out of memory at ImageData creation");
 
 enum Source {
     Solid([u8; 4]),
@@ -119,26 +140,119 @@ enum Source {
     },
 }
 
-/// The only way any stroke reaches the pixmap: dashed, outlined and filled. tiny-skia's
-/// hairline stroker (`Pixmap::stroke_path` for device widths up to 1) does not match Skia.
-pub fn stroke_outline(
-    path: &tiny_skia::Path,
-    stroke: &Stroke,
-    res_scale: f32,
-) -> Option<tiny_skia::Path> {
-    let dashed;
-    let path = match &stroke.dash {
-        Some(dash) => {
-            dashed = path.dash(dash, res_scale)?;
-            &dashed
+fn pt32(x: f64, y: f64) -> Pt {
+    Pt {
+        x: x as f32,
+        y: y as f32,
+    }
+}
+
+/// What Blink's `CanvasPath` line and arc builders hold besides the general path.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Fast {
+    None,
+    Start(Pt),
+    Line(Pt, Pt),
+    Arc(FastArc),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FastArc {
+    x: f32,
+    y: f32,
+    r: f32,
+    start: f32,
+    sweep: f32,
+    closed: bool,
+}
+
+impl FastArc {
+    /// The path `cc::DrawArcImpl` and `SkDevice::drawArc` draw for this arc.
+    fn path(&self, fill: bool) -> Path {
+        let oval = [
+            self.x - self.r,
+            self.y - self.r,
+            self.x + self.r,
+            self.y + self.r,
+        ];
+        let degrees = |v: f32| {
+            let d = v * 180.0 / std::f32::consts::PI;
+            if d.is_finite() { d } else { 0.0 }
+        };
+        let (mut start, mut sweep) = (degrees(self.start), degrees(self.sweep));
+        let mut path = Path::new();
+        if self.closed {
+            if (sweep.abs() - 360.0).abs() <= 1.0 / 4096.0 {
+                path.add_oval(oval);
+            } else {
+                path.arc_to_oval(oval, start, sweep, false);
+                path.close();
+            }
+            return path;
         }
-        None => path,
-    };
-    let solid = Stroke {
-        dash: None,
-        ..stroke.clone()
-    };
-    path.stroke(&solid, res_scale)
+        if oval[2] - oval[0] <= 0.0 || oval[3] - oval[1] <= 0.0 || sweep == 0.0 {
+            return path;
+        }
+        if fill && sweep.abs() >= 360.0 {
+            path.add_oval(oval);
+            return path;
+        }
+        if sweep.abs() > 3600.0 {
+            sweep = 3600.0f32.copysign(sweep) + sweep % 360.0;
+        }
+        let mut force = true;
+        while sweep <= -360.0 {
+            path.arc_to_oval(oval, start, -180.0, force);
+            start -= 180.0;
+            path.arc_to_oval(oval, start, -180.0, false);
+            start -= 180.0;
+            force = false;
+            sweep += 360.0;
+        }
+        while sweep >= 360.0 {
+            path.arc_to_oval(oval, start, 180.0, force);
+            start += 180.0;
+            path.arc_to_oval(oval, start, 180.0, false);
+            start += 180.0;
+            force = false;
+            sweep -= 360.0;
+        }
+        path.arc_to_oval(oval, start, sweep, force);
+        path
+    }
+}
+
+struct DashPoints {
+    first: Option<[f32; 4]>,
+    last: Option<[f32; 4]>,
+    points: Vec<Pt>,
+    size: (f32, f32),
+}
+
+/// `SkDashPath::CalcDashParameters`: the length left in the dash the phase lands in, and its
+/// index.
+fn dash_parameters(intervals: &[f32], phase: f32, len: f32) -> (f32, usize) {
+    let mut phase = phase;
+    if phase < 0.0 {
+        phase = -phase;
+        if phase > len {
+            phase %= len;
+        }
+        phase = len - phase;
+        if phase == len {
+            phase = 0.0;
+        }
+    } else if phase >= len {
+        phase %= len;
+    }
+    for (i, &gap) in intervals.iter().enumerate() {
+        if phase > gap || (phase == gap && gap != 0.0) {
+            phase -= gap;
+        } else {
+            return (gap - phase, i);
+        }
+    }
+    (intervals[0], 0)
 }
 
 fn finite(values: &[f64]) -> bool {
@@ -155,9 +269,7 @@ fn validate_rect(x: f64, y: f64, w: f64, h: f64) -> Option<[f64; 4]> {
     Some([x, y, w, h])
 }
 
-fn to_int32(v: f64) -> i64 {
-    if v.is_finite() { v.trunc() as i64 } else { 0 }
-}
+use asrs_js::number::to_int32;
 
 impl<'a> Raster<'a> {
     pub fn new(width: u32, height: u32) -> Option<Raster<'a>> {
@@ -166,9 +278,14 @@ impl<'a> Raster<'a> {
             state: State::default(),
             stack: Vec::new(),
             path: Path::new(),
+            fast: Fast::None,
+            draw_path_count: 0,
+            draw_line_count: 0,
             images: HashMap::new(),
             registers: HashMap::new(),
             text: None,
+            errors: Vec::new(),
+            calls: 0,
         })
     }
 
@@ -194,6 +311,11 @@ impl<'a> Raster<'a> {
         self.pixmap
     }
 
+    /// Every exception a call threw, with the index of the call among those applied.
+    pub fn errors(&self) -> &[(usize, CanvasError)] {
+        &self.errors
+    }
+
     pub fn run(&mut self, calls: &[Call]) {
         for call in calls {
             self.apply(call);
@@ -201,6 +323,13 @@ impl<'a> Raster<'a> {
     }
 
     pub fn apply(&mut self, call: &Call) {
+        self.calls += 1;
+        if let Err(e) = self.apply_call(call) {
+            self.errors.push((self.calls - 1, e));
+        }
+    }
+
+    fn apply_call(&mut self, call: &Call) -> Result<(), CanvasError> {
         match call {
             Call::Set(p) => self.set(p),
             Call::Save => self.stack.push(self.state.clone()),
@@ -220,20 +349,33 @@ impl<'a> Raster<'a> {
                     self.set_transform(self.state.transform.then(&Affine::translation(x, y)));
                 }
             }
-            Call::BeginPath => self.path = Path::new(),
-            Call::ClosePath => self.path.close(),
+            Call::BeginPath => {
+                self.path = Path::new();
+                self.fast = Fast::None;
+            }
+            Call::ClosePath => self.close_path(),
             &Call::MoveTo(x, y) => {
                 if self.invertible() {
+                    if finite(&[x, y]) {
+                        self.fast = if self.path.is_empty() {
+                            Fast::Start(pt32(x, y))
+                        } else {
+                            Fast::None
+                        };
+                    }
                     self.path.move_to(x, y);
                 }
             }
             &Call::LineTo(x, y) => {
                 if self.invertible() {
-                    self.path.line_to(x, y);
+                    self.line_to(x, y);
                 }
             }
             &Call::Rect(x, y, w, h) => {
                 if self.invertible() {
+                    if finite(&[x, y, w, h]) {
+                        self.fast = Fast::None;
+                    }
                     self.path.rect(x, y, w, h);
                 }
             }
@@ -246,8 +388,7 @@ impl<'a> Raster<'a> {
                 anticlockwise,
             } => {
                 if self.invertible() {
-                    self.path
-                        .arc(x, y, radius, start, end, anticlockwise.unwrap_or(false));
+                    self.arc(x, y, radius, start, end, anticlockwise.unwrap_or(false));
                 }
             }
             &Call::Ellipse {
@@ -261,6 +402,12 @@ impl<'a> Raster<'a> {
                 anticlockwise,
             } => {
                 if self.invertible() {
+                    if finite(&[x, y, radius_x, radius_y, rotation, start, end])
+                        && radius_x >= 0.0
+                        && radius_y >= 0.0
+                    {
+                        self.fast = Fast::None;
+                    }
                     self.path.ellipse(
                         x,
                         y,
@@ -301,20 +448,7 @@ impl<'a> Raster<'a> {
                 sh,
                 ref register,
             } => {
-                let (mut x, mut y, mut w, mut h) =
-                    (to_int32(sx), to_int32(sy), to_int32(sw), to_int32(sh));
-                if w == 0 || h == 0 {
-                    return;
-                }
-                if w < 0 {
-                    x += w;
-                    w = -w;
-                }
-                if h < 0 {
-                    y += h;
-                    h = -h;
-                }
-                let data = pixels::read_rect(&self.pixmap, x, y, w as u32, h as u32);
+                let data = self.get_image_data(sx, sy, sw, sh)?;
                 self.registers.insert(register.clone(), data);
             }
             Call::PutImageData { data, dx, dy } => {
@@ -323,10 +457,50 @@ impl<'a> Raster<'a> {
                     ImageDataSource::Inline(image) => Some(image.clone()),
                 };
                 if let Some(image) = image {
-                    pixels::write_rect(&mut self.pixmap, &image, to_int32(*dx), to_int32(*dy));
+                    pixels::write_rect(
+                        &mut self.pixmap,
+                        &image,
+                        i64::from(to_int32(*dx)),
+                        i64::from(to_int32(*dy)),
+                    );
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Blink's `getImageDataInternal`: the arguments are WebIDL `long`s, and sizes whose
+    /// arithmetic overflows `int` or whose buffer cannot exist throw instead of allocating.
+    fn get_image_data(&self, sx: f64, sy: f64, sw: f64, sh: f64) -> Result<ImageData, CanvasError> {
+        let (mut x, mut y, mut w, mut h) = (to_int32(sx), to_int32(sy), to_int32(sw), to_int32(sh));
+        if w.checked_mul(h).is_none() {
+            return Err(OUT_OF_MEMORY);
+        }
+        if w == 0 {
+            return Err(CanvasError::IndexSize("The source width is 0."));
+        }
+        if h == 0 {
+            return Err(CanvasError::IndexSize("The source height is 0."));
+        }
+        if w < 0 {
+            x = x.checked_add(w).ok_or(OUT_OF_MEMORY)?;
+            w = i32::try_from(w.unsigned_abs()).unwrap_or(i32::MAX);
+        }
+        if h < 0 {
+            y = y.checked_add(h).ok_or(OUT_OF_MEMORY)?;
+            h = i32::try_from(h.unsigned_abs()).unwrap_or(i32::MAX);
+        }
+        if x.checked_add(w).is_none() || y.checked_add(h).is_none() {
+            return Err(OUT_OF_MEMORY);
+        }
+        let elements = 4u32
+            .checked_mul(w as u32)
+            .and_then(|v| v.checked_mul(h as u32));
+        if elements.is_none() {
+            return Err(CanvasError::Range("Out of memory at ImageData creation."));
+        }
+        pixels::read_rect(&self.pixmap, i64::from(x), i64::from(y), w as u32, h as u32)
+            .ok_or(CanvasError::Range("Array buffer allocation failed"))
     }
 
     fn set(&mut self, property: &Property) {
@@ -374,7 +548,11 @@ impl<'a> Raster<'a> {
                     s.alpha = alpha;
                 }
             }
-            Property::Font(css) => s.font = FontSpec::parse(css),
+            Property::Font(css) => {
+                if let Some(font) = FontSpec::parse(css) {
+                    s.font = font;
+                }
+            }
             Property::TextAlign(align) => {
                 if ["start", "end", "left", "right", "center"].contains(&align.as_str()) {
                     s.align.clone_from(align);
@@ -409,6 +587,9 @@ impl<'a> Raster<'a> {
             return;
         }
         self.state.transform = new;
+        if new.is_invertible() {
+            self.fast = Fast::None;
+        }
         if let Some(inverse) = new.inverse()
             && old.is_invertible()
         {
@@ -421,11 +602,93 @@ impl<'a> Raster<'a> {
             return;
         };
         if self.invertible() {
+            if self.state.transform != Affine::IDENTITY {
+                self.fast = Fast::None;
+            }
             self.path.transform(&self.state.transform);
         }
         self.state = previous;
         if let Some(inverse) = self.state.transform.inverse() {
+            if self.state.transform != Affine::IDENTITY {
+                self.fast = Fast::None;
+            }
             self.path.transform(&inverse);
+        }
+    }
+
+    /// Blink's `CanvasPath::lineTo`: a lone `moveTo` (or nothing) followed by one `lineTo` is
+    /// remembered as a line, which `stroke()` draws with `drawLine`.
+    fn line_to(&mut self, x: f64, y: f64) {
+        if !finite(&[x, y]) {
+            return;
+        }
+        let p = pt32(x, y);
+        self.fast = match self.fast {
+            Fast::None if self.path.is_empty() => Fast::Line(p, p),
+            Fast::Start(s) => Fast::Line(s, p),
+            _ => Fast::None,
+        };
+        self.path.line_to(x, y);
+    }
+
+    fn close_path(&mut self) {
+        match self.fast {
+            Fast::Line(a, b) if a == b => {
+                self.path = Path::new();
+                self.fast = Fast::None;
+                return;
+            }
+            Fast::Arc(mut arc) => {
+                arc.closed = true;
+                self.fast = Fast::Arc(arc);
+            }
+            _ => self.fast = Fast::None,
+        }
+        self.path.close();
+    }
+
+    /// Blink's `CanvasPath::arc`: an arc of radius at least 1 on an empty path is remembered as
+    /// an arc, which `fill()` and `stroke()` draw with `drawArc`.
+    fn arc(&mut self, x: f64, y: f64, radius: f64, start: f64, end: f64, ccw: bool) {
+        let v = [x, y, radius, start, end].map(|v| v as f32);
+        if !v.iter().all(|v| v.is_finite()) || v[2] < 0.0 {
+            return;
+        }
+        let [xf, yf, r, s, e] = v;
+        let was_empty = self.path.is_empty();
+        self.fast = Fast::None;
+        if r == 0.0 || s == e {
+            if was_empty {
+                let p = Pt {
+                    x: xf + r * s.cos(),
+                    y: yf + r * s.sin(),
+                };
+                self.fast = Fast::Line(p, p);
+            }
+            self.path.arc(x, y, radius, start, end, ccw);
+            return;
+        }
+        let (s, e) = crate::path::arc_angles(s, e, ccw);
+        if was_empty && r >= 1.0 {
+            self.fast = Fast::Arc(FastArc {
+                x: xf,
+                y: yf,
+                r,
+                start: s,
+                sweep: e - s,
+                closed: false,
+            });
+        }
+        self.path.arc(x, y, radius, start, end, ccw);
+    }
+
+    /// `cc::RecordPaintCanvas::drawPath` bookkeeping for its lines-as-paths heuristic.
+    fn count_draw_path(&mut self) {
+        if self.draw_path_count != u32::MAX {
+            self.draw_path_count += 1;
+            if self.draw_path_count > 4 {
+                self.draw_line_count = 0;
+            }
         }
     }
 
@@ -461,7 +724,7 @@ impl<'a> Raster<'a> {
             Fill::Color(c) => {
                 let a = modulate(c.a * alpha);
                 Some(Source::Solid(
-                    [c.r * a, c.g * a, c.b * a, a].map(|v| (v * 255.0 + 0.5) as u8),
+                    [c.r, c.g, c.b, a].map(|v| (v * 255.0 + 0.5) as u8),
                 ))
             }
             Fill::Linear(_, s) | Fill::Radial(_, s) if s.is_empty() => None,
@@ -568,69 +831,81 @@ impl<'a> Raster<'a> {
         Some(out)
     }
 
-    /// Blends `source` through `coverage`. Shaders are evaluated over the coverage bounds into
-    /// a scratch pixmap first, then blended with the same 8-bit arithmetic as solid colours.
     fn paint(&mut self, coverage: &Coverage, source: &Source) {
-        match source {
+        let spans = coverage.to_spans(self.pixmap.width(), self.pixmap.height());
+        self.paint_spans(&spans, source);
+    }
+
+    /// Blends `source` through `spans` in blit order. Shaders are evaluated over the bounds of
+    /// the spans into a scratch pixmap first, then blended with the same 8-bit arithmetic as
+    /// solid colours.
+    fn paint_spans(&mut self, spans: &Spans, source: &Source) {
+        let shader = match source {
             Source::Solid(color) => {
-                scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |_, _| *color)
+                scan::blit_spans_solid(&mut self.pixmap, spans, *color);
+                return;
             }
             Source::Device(pixmap) => {
                 let stride = pixmap.width() as usize;
                 let data = pixmap.data();
-                scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |x, y| {
+                scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |x, y| {
                     let i = (y * stride + x) * 4;
                     [data[i], data[i + 1], data[i + 2], data[i + 3]]
                 });
+                return;
             }
-            Source::Shader(shader) => {
-                if let Some(scratch) = shade(coverage, shader.clone()) {
-                    self.blit_scratch(coverage, &scratch);
-                }
-            }
+            Source::Shader(shader) => shader.clone(),
             Source::Image {
                 pixmap,
                 transform,
                 quality,
                 opacity,
-            } => {
-                let shader = Pattern::new(
-                    pixmap.as_ref(),
-                    SpreadMode::Pad,
-                    *quality,
-                    *opacity,
-                    transform.to_skia(),
-                );
-                if let Some(scratch) = shade(coverage, shader) {
-                    self.blit_scratch(coverage, &scratch);
-                }
-            }
-        }
-    }
-
-    fn blit_scratch(&mut self, coverage: &Coverage, scratch: &Pixmap) {
+            } => Pattern::new(
+                pixmap.as_ref(),
+                SpreadMode::Pad,
+                *quality,
+                *opacity,
+                transform.to_skia(),
+            ),
+        };
+        let Some(bounds) = spans.bounds() else {
+            return;
+        };
+        let Some(scratch) = shade(bounds, shader) else {
+            return;
+        };
         let stride = scratch.width() as usize;
         let data = scratch.data();
-        let (ox, oy) = (coverage.x as usize, coverage.y as usize);
-        scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |x, y| {
+        let (ox, oy) = (bounds[0] as usize, bounds[1] as usize);
+        scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |x, y| {
             let i = ((y - oy) * stride + (x - ox)) * 4;
             [data[i], data[i + 1], data[i + 2], data[i + 3]]
         });
     }
 
-    /// Fills a device-space path: Skia's analytic AA, or with `snap` off the exact area that
-    /// its rect scanners (`AntiFillRect`, `AntiFrameRect`) produce.
-    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, snap: bool) {
+    /// Fills a device path with Skia's analytic AA.
+    fn fill_sk(&mut self, path: &SkPath, fill: &Fill) {
+        let Some(source) = self.source(fill, 256) else {
+            return;
+        };
+        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
+        aaa::fill_path(
+            path,
+            self.pixmap.width(),
+            self.pixmap.height(),
+            false,
+            &mut spans,
+        );
+        self.paint_spans(&spans, &source);
+    }
+
+    /// Fills a device-space path with the exact area coverage of Skia's `AntiFrameRect`.
+    fn fill_exact(&mut self, path: &tiny_skia::Path, fill: &Fill) {
         let Some(source) = self.source(fill, 256) else {
             return;
         };
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        let coverage = if snap {
-            scan::rasterize_analytic(path, w, h)
-        } else {
-            scan::rasterize(path, w, h)
-        };
-        if let Some(coverage) = coverage {
+        if let Some(coverage) = scan::rasterize(path, w, h) {
             self.paint(&coverage, &source);
         }
     }
@@ -639,33 +914,18 @@ impl<'a> Raster<'a> {
         if !self.invertible() {
             return;
         }
+        match self.fast {
+            Fast::Line(..) => return,
+            Fast::Arc(arc) => {
+                self.fill_arc(arc);
+                return;
+            }
+            _ => self.count_draw_path(),
+        }
         let ctm = self.state.transform;
-        if let Some(device) = self.path.to_skia(Some(&ctm), CONIC_TOLERANCE) {
-            let fill = self.state.fill.clone();
-            self.fill_device(&device, &fill, true);
-        }
-    }
-
-    fn dash(&self) -> Option<StrokeDash> {
-        let s = &self.state;
-        if s.dash.is_empty() {
-            return None;
-        }
-        StrokeDash::new(
-            s.dash.iter().map(|&v| v as f32).collect(),
-            s.dash_offset as f32,
-        )
-    }
-
-    fn stroke_style(&self) -> Stroke {
-        let s = &self.state;
-        Stroke {
-            width: s.line_width as f32,
-            miter_limit: s.miter_limit as f32,
-            line_cap: s.line_cap,
-            line_join: s.line_join,
-            dash: self.dash(),
-        }
+        let device = self.path.to_sk(Some(&ctm));
+        let fill = self.state.fill.clone();
+        self.fill_sk(&device, &fill);
     }
 
     /// `SkDrawTreatAsHairline`: a stroke whose width maps to at most one device pixel on both
@@ -689,43 +949,334 @@ impl<'a> Raster<'a> {
         }
         let ctm = self.state.transform.to_skia();
         let res_scale = tiny_skia::PathStroker::compute_resolution_scale(&ctm);
-        let Some(user) = path.to_skia(None, CONIC_TOLERANCE / res_scale) else {
-            return;
-        };
+        let user = path.to_sk(None);
         let stroke = self.state.stroke.clone();
-        if let Some(coverage) = self.hairline_coverage() {
-            let dashed = match self.dash() {
-                Some(dash) => user.dash(&dash, res_scale),
-                None => Some(user),
-            };
-            let Some(device) = dashed.and_then(|p| p.transform(ctm)) else {
+        let hairline = self.hairline_coverage();
+        let s = &self.state;
+        let rec = dash::StrokeRec {
+            width: if hairline.is_some() {
+                0.0
+            } else {
+                s.line_width as f32
+            },
+            hairline: hairline.is_some(),
+            cap: s.line_cap,
+            miter: (s.line_join == LineJoin::Miter).then_some(s.miter_limit as f32),
+            res_scale,
+        };
+        let dash = dash::Dash {
+            intervals: s.dash.iter().map(|&v| v as f32).collect(),
+            phase: s.dash_offset as f32,
+        };
+        let dashed = if s.dash.is_empty() {
+            None
+        } else {
+            dash::dash_path(&user, &dash, &rec, self.local_clip_bounds())
+        };
+        let (source, filled) = match dashed {
+            Some(d) => (d.path, d.filled),
+            None => (user, false),
+        };
+        if let Some(coverage) = hairline {
+            let Some(device) = source.transformed(&self.state.transform).to_tiny() else {
                 return;
             };
-            let Some(source) = self.source(&stroke, (coverage * 256.0) as u32) else {
+            let Some(paint) = self.source(&stroke, (coverage * 256.0) as u32) else {
                 return;
             };
             let (w, h) = (self.pixmap.width(), self.pixmap.height());
             for (a, b) in hairline::segments(&device, self.state.line_cap) {
                 if let Some(coverage) = hairline::coverage(a, b, w, h) {
-                    self.paint(&coverage, &source);
+                    self.paint(&coverage, &paint);
                 }
             }
             return;
         }
-        let style = self.stroke_style();
-        let Some(outline) = stroke_outline(&user, &style, res_scale) else {
+        if filled {
+            let device = source.transformed(&self.state.transform);
+            self.fill_sk(&device, &stroke);
             return;
+        }
+        let s = &self.state;
+        let style = stroke::Style {
+            width: s.line_width as f32,
+            miter_limit: s.miter_limit as f32,
+            cap: s.line_cap,
+            join: s.line_join,
+            res_scale,
         };
-        let Some(device) = outline.transform(ctm) else {
-            return;
-        };
-        self.fill_device(&device, &stroke, true);
+        let outline = stroke::stroke_path(&source, &style);
+        let device = outline.transformed(&self.state.transform);
+        self.fill_sk(&device, &stroke);
+    }
+
+    /// `SkDraw::computeConservativeLocalClipBounds`: the canvas outset by a pixel, in user space.
+    fn local_clip_bounds(&self) -> Option<crate::skpath::Rect> {
+        let inverse = self.state.transform.inverse()?;
+        let (w, h) = (self.pixmap.width() as f32, self.pixmap.height() as f32);
+        let r = Rect::from_ltrb(-1.0, -1.0, w + 1.0, h + 1.0)?.transform(inverse.to_skia())?;
+        Some(crate::skpath::Rect {
+            left: r.left(),
+            top: r.top(),
+            right: r.right(),
+            bottom: r.bottom(),
+        })
     }
 
     fn stroke_current_path(&mut self) {
+        if self.invertible() {
+            match self.fast {
+                Fast::Line(a, b) => {
+                    if self.stroke_line(a, b) {
+                        return;
+                    }
+                }
+                Fast::Arc(arc) => {
+                    self.stroke_user_path(&arc.path(false));
+                    return;
+                }
+                _ => self.count_draw_path(),
+            }
+        }
         let path = std::mem::take(&mut self.path);
         self.stroke_user_path(&path);
         self.path = path;
+    }
+
+    /// `cc::DrawArcOp` filling: `drawOval` for closed or full circles (`addOval`), otherwise
+    /// `SkPathPriv::CreateDrawArcPath`.
+    fn fill_arc(&mut self, arc: FastArc) {
+        let path = arc.path(true);
+        let device = path.to_sk(Some(&self.state.transform));
+        let fill = self.state.fill.clone();
+        self.fill_sk(&device, &fill);
+    }
+
+    /// `cc::RecordPaintCanvas::drawLine` then `SkDraw::drawPoints`: once more than four paths
+    /// were drawn since the last run of five lines, cc replays the line as a path; otherwise a
+    /// dashed line that `SkDashPathEffect::asPoints` accepts becomes rects. Returns false when
+    /// the line is to be stroked as an ordinary path.
+    fn stroke_line(&mut self, a: Pt, b: Pt) -> bool {
+        if self.draw_line_count != u32::MAX {
+            self.draw_line_count += 1;
+            if self.draw_line_count > 4 {
+                self.draw_path_count = 0;
+            }
+        }
+        if self.draw_path_count > 4 {
+            return false;
+        }
+        let Some(points) = self.dash_as_points(a, b) else {
+            return false;
+        };
+        let stroke = self.state.stroke.clone();
+        let ctm = self.state.transform;
+        for rect in [points.first, points.last].into_iter().flatten() {
+            let mut path = Path::new();
+            path.rect(
+                f64::from(rect[0]),
+                f64::from(rect[1]),
+                f64::from(rect[2] - rect[0]),
+                f64::from(rect[3] - rect[1]),
+            );
+            let device = path.to_sk(Some(&ctm));
+            self.fill_sk(&device, &stroke);
+        }
+        let Some(source) = self.source(&stroke, 256) else {
+            return true;
+        };
+        let width = self.state.line_width as f32;
+        for p in points.points {
+            let (l, t) = (p.x - points.size.0, p.y - points.size.1);
+            let (r, b) = if points.size.0 == points.size.1 {
+                (l + width, t + width)
+            } else {
+                (p.x + points.size.0, p.y + points.size.1)
+            };
+            let rect = [
+                f64::from(l),
+                f64::from(t),
+                f64::from(r) - f64::from(l),
+                f64::from(b) - f64::from(t),
+            ];
+            if let Some(spans) = self.rect_spans(rect, true) {
+                self.paint_spans(&spans, &source);
+            }
+        }
+        true
+    }
+
+    /// `SkDashImpl::onAsPoints` with `cull_line`: an axis-aligned butt-capped line dashed with
+    /// equal integer on and off lengths, as rects centred on `points` plus partial first and
+    /// last rects.
+    fn dash_as_points(&self, a: Pt, b: Pt) -> Option<DashPoints> {
+        let s = &self.state;
+        let intervals: Vec<f32> = s.dash.iter().map(|&v| v as f32).collect();
+        if intervals.len() != 2 || s.line_cap != LineCap::Butt {
+            return None;
+        }
+        let interval_length = intervals[0] + intervals[1];
+        if !(interval_length > 0.0 && interval_length.is_finite()) {
+            return None;
+        }
+        if (intervals[0] - intervals[1]).abs() > 1.0 / 4096.0
+            || intervals[0] != intervals[0].floor()
+            || intervals[1] != intervals[1].floor()
+        {
+            return None;
+        }
+        let m = s.transform.to_skia();
+        let rect_stays = (m.kx == 0.0 && m.ky == 0.0 && m.sx != 0.0 && m.sy != 0.0)
+            || (m.sx == 0.0 && m.sy == 0.0 && m.kx != 0.0 && m.ky != 0.0);
+        if !rect_stays {
+            return None;
+        }
+        let (initial_dash_length, initial_dash_index) =
+            dash_parameters(&intervals, s.dash_offset as f32, interval_length);
+        let width = s.line_width as f32;
+        let mut pts = [a, b];
+        let (dx, dy) = (pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        if (dx != 0.0 && dy != 0.0) || (dx == 0.0 && dy == 0.0) {
+            return None;
+        }
+        let mut radius = width * 0.5;
+        if s.line_join == LineJoin::Miter {
+            radius *= s.miter_limit as f32;
+        }
+        let device = Rect::from_ltrb(
+            -radius,
+            -radius,
+            self.pixmap.width() as f32 + radius,
+            self.pixmap.height() as f32 + radius,
+        )?;
+        let bounds = device.transform(s.transform.inverse()?.to_skia())?;
+        let chop = |lo: f32, hi: f32, min: f32, max: f32| -> Option<(f32, f32)> {
+            if hi <= min || lo >= max {
+                return None;
+            }
+            let lo = if lo < min {
+                min - (min - lo) % interval_length
+            } else {
+                lo
+            };
+            let hi = if hi > max {
+                max + (hi - max) % interval_length
+            } else {
+                hi
+            };
+            Some((lo, hi))
+        };
+        if dx != 0.0 {
+            let (lo, hi) = if dx < 0.0 {
+                (pts[1].x, pts[0].x)
+            } else {
+                (pts[0].x, pts[1].x)
+            };
+            let (lo, hi) = chop(lo, hi, bounds.left(), bounds.right())?;
+            (pts[0].x, pts[1].x) = if dx < 0.0 { (hi, lo) } else { (lo, hi) };
+        } else {
+            let (lo, hi) = if dy < 0.0 {
+                (pts[1].y, pts[0].y)
+            } else {
+                (pts[0].y, pts[1].y)
+            };
+            let (lo, hi) = chop(lo, hi, bounds.top(), bounds.bottom())?;
+            (pts[0].y, pts[1].y) = if dy < 0.0 { (hi, lo) } else { (lo, hi) };
+        }
+        let (tx, ty) = (pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        if tx == 0.0 && ty == 0.0 {
+            return None;
+        }
+        let length = (tx * tx + ty * ty).sqrt();
+        let inv = 1.0 / length;
+        let tangent = (tx * inv, ty * inv);
+        let near = |a: f32, b: f32| (a - b).abs() <= 1.0 / 4096.0;
+        let (size, x_axis) = if near(1.0, tangent.0) || near(-1.0, tangent.0) {
+            ((intervals[0] * 0.5, width * 0.5), true)
+        } else if near(1.0, tangent.1) || near(-1.0, tangent.1) {
+            ((width * 0.5, intervals[0] * 0.5), false)
+        } else {
+            return None;
+        };
+        let clamped_initial = length.min(initial_dash_length);
+        let mut len2 = length;
+        if clamped_initial > 0.0 || initial_dash_index == 0 {
+            if initial_dash_index == 0 {
+                if clamped_initial > 0.0 {
+                    len2 -= clamped_initial;
+                }
+                len2 -= intervals[1];
+                if len2 < 0.0 {
+                    len2 = 0.0;
+                }
+            } else {
+                len2 -= clamped_initial;
+            }
+        }
+        let num_intervals = len2 / interval_length;
+        if !num_intervals.is_finite() || num_intervals > 1_000_000.0 {
+            return None;
+        }
+        let mut mid = num_intervals.floor() as usize;
+        len2 -= mid as f32 * interval_length;
+        let mut partial_last = false;
+        if len2 > 0.0 {
+            if len2 < intervals[0] {
+                partial_last = true;
+            } else {
+                mid += 1;
+            }
+        }
+        let mut out = DashPoints {
+            first: None,
+            last: None,
+            points: Vec::new(),
+            size,
+        };
+        let rect_around = |x: f32, y: f32, along: f32| -> [f32; 4] {
+            let (hw, hh) = if x_axis {
+                (along * 0.5, width * 0.5)
+            } else {
+                (width * 0.5, along * 0.5)
+            };
+            [x - hw, y - hh, x + hw, y + hh]
+        };
+        let mut distance = 0.0f32;
+        if clamped_initial > 0.0 || initial_dash_index == 0 {
+            if initial_dash_index == 0 {
+                if clamped_initial > 0.0 {
+                    let x = pts[0].x + tangent.0 * (clamped_initial * 0.5);
+                    let y = pts[0].y + tangent.1 * (clamped_initial * 0.5);
+                    if clamped_initial < intervals[0] {
+                        out.first = Some(rect_around(x, y, clamped_initial));
+                    } else {
+                        out.points.push(Pt { x, y });
+                    }
+                    distance += clamped_initial;
+                }
+                distance += intervals[1];
+            } else {
+                distance += clamped_initial;
+            }
+        }
+        if mid != 0 {
+            distance += intervals[0] * 0.5;
+            for _ in 0..mid {
+                out.points.push(Pt {
+                    x: pts[0].x + tangent.0 * distance,
+                    y: pts[0].y + tangent.1 * distance,
+                });
+                distance += interval_length;
+            }
+            distance -= intervals[0] * 0.5;
+        }
+        if partial_last {
+            let temp = length - distance;
+            let x = pts[0].x + tangent.0 * (distance + temp * 0.5);
+            let y = pts[0].y + tangent.1 * (distance + temp * 0.5);
+            out.last = Some(rect_around(x, y, temp));
+        }
+        Some(out)
     }
 
     /// The device rect of a user rect under a transform that keeps rects axis-aligned.
@@ -745,7 +1296,24 @@ impl<'a> Raster<'a> {
         path
     }
 
-    /// Coverage of a user rect: exact area when antialiased, Skia's rounded edges otherwise.
+    /// The blits `SkDraw::drawRect` makes to fill a user rect: `AntiFillRect` when the transform
+    /// keeps it axis-aligned, an analytic AA path fill otherwise; without antialiasing, Skia's
+    /// rounded edges.
+    fn rect_spans(&self, rect: [f64; 4], anti_alias: bool) -> Option<Spans> {
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        if !anti_alias {
+            return self.rect_coverage(rect, false).map(|c| c.to_spans(w, h));
+        }
+        if let Some(device) = self.device_rect(rect) {
+            let r = [device.left(), device.top(), device.right(), device.bottom()];
+            return Some(scan::anti_fill_rect(r, w, h));
+        }
+        let device = self.rect_path(rect).to_sk(Some(&self.state.transform));
+        let mut spans = Spans::new(w, h);
+        aaa::fill_path(&device, w, h, false, &mut spans);
+        Some(spans)
+    }
+
     fn rect_coverage(&self, rect: [f64; 4], anti_alias: bool) -> Option<Coverage> {
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
         if !anti_alias && let Some(device) = self.device_rect(rect) {
@@ -763,6 +1331,7 @@ impl<'a> Raster<'a> {
                 width: cw,
                 height: ch,
                 alpha: vec![255; cw * ch],
+                pair: false,
             });
         }
         let ctm = self.state.transform;
@@ -789,10 +1358,9 @@ impl<'a> Raster<'a> {
             return;
         }
         let fill = self.state.fill.clone();
-        if let (Some(source), Some(coverage)) =
-            (self.source(&fill, 256), self.rect_coverage(rect, true))
+        if let (Some(source), Some(spans)) = (self.source(&fill, 256), self.rect_spans(rect, true))
         {
-            self.paint(&coverage, &source);
+            self.paint_spans(&spans, &source);
         }
     }
 
@@ -857,7 +1425,7 @@ impl<'a> Raster<'a> {
         }
         if let Some(frame) = builder.finish() {
             let stroke = s.stroke.clone();
-            self.fill_device(&frame, &stroke, false);
+            self.fill_exact(&frame, &stroke);
         }
         true
     }
@@ -876,81 +1444,45 @@ impl<'a> Raster<'a> {
     }
 
     fn fill_text(&mut self, text: &JsString, x: f64, y: f64, max_width: Option<f64>) {
-        let Fill::Color(color) = self.state.fill else {
+        let fill = self.state.fill.clone();
+        let Some(source) = self.source(&fill, 256) else {
             return;
+        };
+        let luminance = match &fill {
+            Fill::Color(color) => color.to_u8(),
+            Fill::Linear(_, stops) | Fill::Radial(_, stops) => gradient_luminance(stops),
         };
         let ctm = self.state.transform;
         if !finite(&[x, y]) || !ctm.is_invertible() {
             return;
         }
-        let axis_aligned = ctm.is_scale_translate() && ctm.a > 0.0 && ctm.d > 0.0;
         let state = &self.state;
         let Some(TextRaster { backend, lut }) = self.text.as_mut() else {
             return;
         };
-        let font = state.font;
-        let shaped = backend.shape(&font, &text.to_string_lossy());
-        let compress = match max_width {
-            Some(m) if !(m.is_finite() && m > 0.0) => return,
-            Some(m) if shaped.width > m => m / shaped.width,
-            _ => 1.0,
-        };
-        let drawn = shaped.width * compress;
-        let x = match state.align.as_str() {
-            "center" => x - drawn / 2.0,
-            "right" | "end" => x - drawn,
-            _ => x,
-        };
-        let y = y + baseline_offset(&mut **backend, &font, &state.baseline);
-        let rgb = color.to_u8();
-        let a = color.a * state.alpha as f32;
-        let src = [color.r, color.g, color.b, 1.0].map(|c| (c * a * 255.0 + 0.5) as u32);
-        let (pw, ph) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
-        let data = self.pixmap.data_mut();
-        for glyph in &shaped.glyphs {
-            let gx = x + glyph.x * compress;
-            let device_x = ctm.a * gx + ctm.c * y + ctm.e;
-            let device_y = ctm.b * gx + ctm.d * y + ctm.f;
-            let (ix, iy, mask) = if axis_aligned {
-                let (ix, iy, phase) = glyph_origin(device_x, device_y);
-                let mask =
-                    backend.raw_mask(&font, glyph.id, ctm.d, ctm.a / ctm.d * compress, phase);
-                (ix, iy, mask)
-            } else {
-                let (ix, _, phase_x) = glyph_origin(device_x, 0.0);
-                let (iy, _, phase_y) = glyph_origin(device_y, 0.0);
-                let matrix = [ctm.a * compress, ctm.b * compress, ctm.c, ctm.d];
-                let mask =
-                    backend.raw_mask_transformed(&font, glyph.id, matrix, (phase_x, phase_y));
-                (ix, iy, mask)
-            };
-            let Some(mask) = mask else {
-                continue;
-            };
+        let glyphs = place_text(
+            &mut **backend,
+            &state.font,
+            &state.align,
+            &state.baseline,
+            &text.to_string_lossy(),
+            x,
+            y,
+            max_width,
+            [ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f],
+        );
+        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
+        for Placed { x: ix, y: iy, mask } in glyphs {
             for row in 0..mask.height as i32 {
-                let py = iy + mask.top + row;
-                if py < 0 || py >= ph {
-                    continue;
-                }
-                for col in 0..mask.width as i32 {
-                    let px = ix + mask.left + col;
-                    if px < 0 || px >= pw {
-                        continue;
-                    }
-                    let raw = mask.data[(row * mask.width as i32 + col) as usize];
-                    let m = u32::from(lut.apply(rgb, raw));
-                    if m == 0 {
-                        continue;
-                    }
-                    let s = src.map(|c| div255(c * m));
-                    let i = ((py * pw + px) * 4) as usize;
-                    for (k, &sc) in s.iter().enumerate() {
-                        let d = u32::from(data[i + k]);
-                        data[i + k] = (sc + div255(d * (255 - s[3]))).min(255) as u8;
-                    }
-                }
+                let start = (row * mask.width as i32) as usize;
+                let coverage: Vec<u8> = mask.data[start..start + mask.width as usize]
+                    .iter()
+                    .map(|&raw| lut.apply(luminance, raw))
+                    .collect();
+                spans.anti_h(ix + mask.left, iy + mask.top + row, &coverage);
             }
         }
+        self.paint_spans(&spans, &source);
     }
 
     fn draw_image(&mut self, id: &str, args: &[f64]) {
@@ -1036,17 +1568,21 @@ impl<'a> Raster<'a> {
             quality,
             opacity: self.state.alpha as f32,
         };
-        if let Some(coverage) = self.rect_coverage(dst, anti_alias) {
-            self.paint(&coverage, &source);
+        if let Some(spans) = self.rect_spans(dst, anti_alias) {
+            self.paint_spans(&spans, &source);
         }
     }
 }
 
-/// Evaluates `shader` (device space) at the pixel centres of the coverage bounds.
-fn shade(coverage: &Coverage, shader: Shader<'_>) -> Option<Pixmap> {
-    let mut scratch = Pixmap::new(coverage.width as u32, coverage.height as u32)?;
-    let (x, y) = (coverage.x as f32, coverage.y as f32);
-    let rect = Rect::from_xywh(x, y, coverage.width as f32, coverage.height as f32)?;
+/// Evaluates `shader` (device space) at the pixel centres of `bounds`.
+fn shade(bounds: [i32; 4], shader: Shader<'_>) -> Option<Pixmap> {
+    let (w, h) = (
+        (bounds[2] - bounds[0]) as u32,
+        (bounds[3] - bounds[1]) as u32,
+    );
+    let mut scratch = Pixmap::new(w, h)?;
+    let (x, y) = (bounds[0] as f32, bounds[1] as f32);
+    let rect = Rect::from_xywh(x, y, w as f32, h as f32)?;
     let paint = Paint {
         shader,
         anti_alias: false,
@@ -1054,6 +1590,23 @@ fn shade(coverage: &Coverage, shader: Shader<'_>) -> Option<Pixmap> {
     };
     scratch.fill_rect(rect, &paint, Transform::from_translate(-x, -y), None);
     Some(scratch)
+}
+
+/// `SkGradientBaseShader::onAsLuminanceColor`, which text masks are gamma-corrected for: the
+/// plain average of the stop colours, including the stops Skia pads at 0 and 1.
+fn gradient_luminance(stops: &[(f32, Rgba)]) -> [u8; 3] {
+    let mut colors: Vec<Rgba> = stops.iter().map(|s| s.1).collect();
+    if let (Some(first), Some(last)) = (stops.first(), stops.last()) {
+        if first.0 != 0.0 {
+            colors.insert(0, first.1);
+        }
+        if last.0 != 1.0 {
+            colors.push(last.1);
+        }
+    }
+    let scale = 1.0 / colors.len().max(1) as f32;
+    let sum = |f: fn(&Rgba) -> f32| colors.iter().map(f).fold(0.0f32, |a, b| a + b) * scale;
+    [sum(|c| c.r), sum(|c| c.g), sum(|c| c.b)].map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8)
 }
 
 fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
@@ -1270,6 +1823,31 @@ mod tests {
     }
 
     #[test]
+    fn get_image_data_throws_instead_of_allocating() {
+        let mut c = Canvas2d::new(4, 4);
+        c.get_image_data(0.0, 0.0, 0.0, 2.0, "$zero");
+        c.get_image_data(0.0, 0.0, 1e5, 1e5, "$int");
+        c.get_image_data(0.0, 0.0, 40000.0, 40000.0, "$bytes");
+        c.get_image_data(2_147_483_000.0, 0.0, 1000.0, 1.0, "$sum");
+        c.get_image_data(0.0, 0.0, 4_294_967_298.0, 1.0, "$wrapped");
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.run(&c.calls);
+        assert_eq!(
+            raster.errors(),
+            [
+                (0, CanvasError::IndexSize("The source width is 0.")),
+                (1, OUT_OF_MEMORY),
+                (
+                    2,
+                    CanvasError::Range("Out of memory at ImageData creation.")
+                ),
+                (3, OUT_OF_MEMORY),
+            ]
+        );
+        assert_eq!(raster.register("$wrapped").unwrap().width, 2);
+    }
+
+    #[test]
     fn image_data_round_trips_through_registers() {
         let mut c = Canvas2d::new(4, 2);
         c.set_fill_style("rgba(255, 0, 0, 0.5)");
@@ -1281,5 +1859,28 @@ mod tests {
         assert_eq!(raster.register("$a").unwrap().data[..4], [255, 0, 0, 128]);
         let pixmap = raster.into_pixmap();
         assert_eq!(pixmap.pixel(3, 1), pixmap.pixel(0, 0));
+    }
+}
+
+#[cfg(test)]
+mod dash_tests {
+    use super::*;
+    use crate::display::Canvas2d;
+
+    #[test]
+    fn zero_length_dashes_draw_round_caps() {
+        let mut c = Canvas2d::new(300, 100);
+        c.set_line_dash(&[0.0, 4.0]);
+        c.set_line_width(2.0);
+        c.set_line_cap("round");
+        c.begin_path();
+        c.move_to(10.0, 50.0);
+        c.line_to(290.0, 50.0);
+        c.stroke();
+        let mut raster = Raster::new(300, 100).unwrap();
+        raster.run(&c.calls);
+        let p = raster.into_pixmap();
+        let row: Vec<u8> = (0..40).map(|x| p.pixel(x, 50).unwrap().alpha()).collect();
+        assert!(row.iter().any(|&a| a > 0), "{row:?}");
     }
 }

@@ -169,6 +169,16 @@ with it, one oracle process per zone makes vector `<id>/<zone>`, for example
 the policy probes: `environment` (resolved zone and locales, `localeCompare`) and `zones` (the
 local-time sites under all four zones).
 
+`platforms` (in `.entry.json` or `.fn.json`, not combined with `zones`) marks a spec whose
+results V8 itself computes differently per platform, such as `js/math-rem` (the NaN that `%`
+returns comes from the C library's `fmod`). It lists `<os>-<arch>` tags and makes one vector
+`<id>/<tag>` per platform, which only a host of that platform generates and checks for
+content; elsewhere `gen` skips it and warns when it is stale, and `gen --check` checks only
+its manifest entry. Generate one from the dev machine with
+`cargo xtask host <name> gen <id>`, which syncs, runs `oracle gen` on the host and copies the
+vector and its manifest entry back. Rust tests load the current platform's vector with
+`asrs_parity::vectors::platform_vector("<id>")`.
+
 `gen` with no ids regenerates every vector and drops manifest entries and files no spec
 produces. `gen <id>...` takes spec or vector ids and refuses to run if the manifest's commit,
 Electron version or policy differs from the current one, since that needs a full run.

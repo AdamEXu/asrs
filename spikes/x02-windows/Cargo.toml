@@ -1,0 +1,23 @@
+[package]
+name = "x02-windows"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+asrs-canvas = { path = "../../crates/asrs-canvas" }
+asrs-js = { path = "../../crates/asrs-js" }
+asrs-parity = { path = "../../crates/asrs-parity" }
+rustybuzz = "=0.20.1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_DirectWrite",
+    "Win32_System_Com",
+] }
+
+[profile.release]
+debug = 1
