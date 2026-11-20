@@ -4,6 +4,7 @@ pub mod cve1;
 pub mod diff;
 pub mod json;
 pub mod pixel;
+pub mod pixel3d;
 pub mod protocol;
 pub mod random;
 pub mod utf16;

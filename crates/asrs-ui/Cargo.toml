@@ -17,6 +17,7 @@ parity = [
 
 [dependencies]
 anyhow = { version = "=1.0.104", optional = true }
+asrs-canvas = { path = "../asrs-canvas" }
 gpui-kit.workspace = true
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
@@ -120,4 +121,32 @@ required-features = ["parity"]
 [[test]]
 name = "icon_capture"
 harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "pixel_snap"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "canvas_view"
+harness = false
+required-features = ["parity"]
+
+[[example]]
+name = "text_scenes"
+required-features = ["parity"]
+
+[[test]]
+name = "text_scroll"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "text_box"
+harness = false
+required-features = ["parity"]
+
+[[example]]
+name = "canvas_frames"
 required-features = ["parity"]

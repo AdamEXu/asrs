@@ -12,6 +12,7 @@ mod js_msgpack;
 mod js_regex;
 mod js_string;
 mod js_time;
+mod live_base;
 mod log_field;
 mod log_keys;
 mod log_run;

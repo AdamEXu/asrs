@@ -43,6 +43,7 @@
     "jstring/case-data": {"cases":86933,"content":"0a510602f8e9ea46","generator":"42b7109b0bfa19d0","spec":"parity/specs/jstring/case-data.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "jstring/ops": {"cases":408,"content":"6fc7fdfcfc585eee","generator":"d23d732545bc90a3","spec":"parity/specs/jstring/ops.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "jstring/utf8": {"cases":12844,"content":"8e595ceab22ed01c","generator":"e571c9af83e0c4ca","spec":"parity/specs/jstring/utf8.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "live/base": {"cases":408,"content":"ac8ad6d3b797cfcd","generator":"ed6737fdf01ff893","spec":"parity/specs/live/base.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/core": {"cases":2509,"content":"778ae44fe606577c","generator":"5ef634dbdf9cfa6d","spec":"parity/specs/log/core.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/field": {"cases":4000,"content":"b8fd74d1b4a65179","generator":"d92c701d71e4c2cf","spec":"parity/specs/log/field.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/geometry": {"cases":179,"content":"efe04e0bfa72c886","generator":"7266da8cc64f0cba","spec":"parity/specs/log/geometry.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
@@ -59,6 +60,8 @@
     "log/util-rem/macos-aarch64": {"cases":2,"content":"64415ee47e101ad0","generator":"60fca8d440ed1737","spec":"parity/specs/log/util-rem.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/util-rem/windows-aarch64": {"cases":2,"content":"779ce0d41fd802be","generator":"60fca8d440ed1737","spec":"parity/specs/log/util-rem.fn.json","zone":"UTC","generatedOn":"windows-aarch64"},
     "log/util-run": {"cases":600,"content":"1d0ccea0dbcceed6","generator":"85fc2f0c6e827c35","spec":"parity/specs/log/util-run.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "model/prefs": {"cases":7175,"content":"f5f9b2e3aede6d0e","generator":"2f003093f686ac9f","spec":"parity/specs/model/prefs.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "model/schemas": {"cases":64,"content":"ce7261fcb98bd505","generator":"446a55de9060cdaa","spec":"parity/specs/model/schemas.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/decode": {"cases":7131,"content":"6ef775b5fdf738d5","generator":"d7b404f17ffc7e18","spec":"parity/specs/msgpack/decode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/encode": {"cases":100193,"content":"b4c663a4660606e0","generator":"c657cea299166933","spec":"parity/specs/msgpack/encode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/multi": {"cases":766,"content":"d1cae0b634ef8bf3","generator":"a00ff161660540de","spec":"parity/specs/msgpack/multi.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
@@ -74,6 +77,8 @@
     "oracle/zones/Pacific/Auckland": {"cases":20,"content":"fa0a6f3f5b83a239","generator":"3e0f8871d96fac3d","spec":"parity/specs/oracle/zones.fn.json","zone":"Pacific/Auckland","generatedOn":"macos-aarch64"},
     "oracle/zones/UTC": {"cases":20,"content":"c66de66de1d609b3","generator":"bbdb18804d016e42","spec":"parity/specs/oracle/zones.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "regex/engine": {"cases":30000,"content":"e40a050ba624ab32","generator":"ab1fe7cda90569c4","spec":"parity/specs/regex/engine.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "regex/sites": {"cases":29428,"content":"094e81eb7469edfa","generator":"800cd372e8b9df89","spec":"parity/specs/regex/sites.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
+    "regex/sites": {"cases":29428,"content":"094e81eb7469edfa","generator":"800cd372e8b9df89","spec":"parity/specs/regex/sites.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "spark/2025": {"cases":101233,"content":"1e1e04e36553bdd4","generator":"89696499ede0de77","spec":"parity/specs/spark/2025.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "spark/2026": {"cases":101387,"content":"63d71ee55046d700","generator":"26bac087029d339c","spec":"parity/specs/spark/2026.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }
 }
