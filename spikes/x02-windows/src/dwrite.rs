@@ -21,7 +21,7 @@ impl Variant {
         };
         Variant {
             grid_fit: flag("X02_GRIDFIT", true),
-            cleartype: flag("X02_CLEARTYPE", false),
+            cleartype: flag("X02_CLEARTYPE", true),
         }
     }
 }

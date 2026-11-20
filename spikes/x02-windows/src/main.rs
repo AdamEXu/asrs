@@ -14,7 +14,7 @@ const USAGE: &str = "usage: x02 <command>
   measure <measure.jsonl>                       widths against Chromium's measureText
   dom <dom dir> <out dir>                       DOM text scenes with ClearType masks
 
-Environment: X02_GRIDFIT=0|1 (default 1), X02_CLEARTYPE=0|1 (default 0).";
+Environment: X02_GRIDFIT=0|1 (default 1), X02_CLEARTYPE=0|1 (default 1).";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

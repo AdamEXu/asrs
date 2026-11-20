@@ -51,11 +51,11 @@ def main():
             edge = edges(a) | edges(b)
             near = neighbourhood(edge.astype(np.uint8), 2, np.maximum).astype(bool)
             interior = ~near
-            ssim = structural_similarity(a.astype(np.uint8), b.astype(np.uint8), channel_axis=2)
+            ssim = float(structural_similarity(a.astype(np.uint8), b.astype(np.uint8), channel_axis=2))
             row = {
                 "scene": name,
                 "tag": tag,
-                "ssim": round(float(ssim), 5),
+                "ssim": round(ssim, 5),
                 "differ_pct": round(100 * float((diff > 0).mean()), 3),
                 "exact_pct": round(100 * float((diff == 0).mean()), 3),
                 "mean_abs": round(float(np.abs(a - b).mean()), 3),
@@ -66,7 +66,7 @@ def main():
                 "interior_pct_of_image": round(100 * float(interior.mean()), 1),
             }
             row["gate4"] = (
-                row["ssim"] >= 0.995
+                ssim >= 0.995
                 and row["interior_max"] <= 2
                 and row["interior_differ_pct"] <= 0.05
                 and row["differ_pct"] <= 1.0
