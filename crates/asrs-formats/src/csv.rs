@@ -175,15 +175,14 @@ pub fn decode(log: &mut Log, data: &JsString, post: &mut dyn FnMut(Response)) ->
 /// both land in the worker's `catch` and answer `failed`.
 pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> Result<(), Abort> {
     let text_decoder = TextDecoder::new(None, false, false).expect("UTF-8 always resolves");
-    let decoded = match files.first().copied() {
-        Some(Some(bytes)) => text_decoder
+    let decoded = match files.first().copied().flatten() {
+        Some(bytes) => text_decoder
             .decode(bytes)
             .expect("nonfatal UTF-8 never errors"),
-        Some(None) => JsString::new(),
         None => JsString::new(),
     };
     let mut log = Log::new(false);
-    match decode(&mut log, &decoded, &mut |response| post(response)) {
+    match decode(&mut log, &decoded, post) {
         Ok(()) => {}
         Err(Abort::Threw) => {
             post(Response::Failed);
