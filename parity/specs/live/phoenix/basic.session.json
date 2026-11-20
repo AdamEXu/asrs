@@ -1,0 +1,58 @@
+{
+  "protocol": "phoenix",
+  "seed": 1250,
+  "latencyMs": 2,
+  "endMs": 2600,
+  "client": {
+    "source": "phoenix",
+    "address": "10.63.28.2",
+    "tabs": [
+      "Phoenix6/TalonFX-1/Position",
+      "Phoenix6/TalonFX-1/BridgeOutput",
+      "Phoenix6/TalonFX-1/Position",
+      "Phoenix6/TalonFX-1/Missing",
+      "Phoenix6/CANivore-canivore 1/CANcoder-Front Left/Velocity",
+      "Phoenix6/Pigeon2-3",
+      "NT:/Other"
+    ],
+    "sidebar": ["Phoenix6/TalonFX-1/Velocity"]
+  },
+  "server": {
+    "busUtil": 12.5,
+    "startUs": 5000000,
+    "points": 3,
+    "stepUs": 20000,
+    "devices": [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [
+          { "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" },
+          { "Id": 3, "Name": "BridgeOutput", "Summary": "Bridge", "Units": "" },
+          { "Id": 40, "Name": "Velocity", "Summary": "Rotor velocity", "Units": "rps" }
+        ],
+        "values": { "12": [0.5, 0.75, 1.25], "3": [1, 6, 99, 7.5], "40": [2] }
+      },
+      {
+        "device": { "CANbus": "canivore 1", "CANivoreDevName": "canivore 1", "ID": 5, "Model": "CANcoder", "Name": "Front Left", "IsPROApplication": true },
+        "signals": [
+          { "Id": 7, "Name": "Velocity", "Summary": "Velocity", "Units": "rps" },
+          { "Id": 2, "Name": "MagnetHealth", "Summary": "Magnet health", "Units": "" }
+        ],
+        "values": { "7": [-0.125, 0.000125] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 9, "Model": "Talon SRX", "Name": "Talon SRX 9", "IsPROApplication": false },
+        "signals": [{ "Id": 1, "Name": "Output", "Summary": "", "Units": "%" }]
+      }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "client": ["dump"] },
+    { "t": 700, "client": ["fields", ["Phoenix6/CANivore-canivore 1/CANcoder-Front Left/Velocity", "Phoenix6/TalonFX-1/Velocity", "Phoenix6/TalonFX-1/BridgeOutput"], []] },
+    { "t": 1200, "client": ["dump"] },
+    { "t": 1500, "client": ["prefs", { "liveDiscard": 0.5 }] },
+    { "t": 2000, "client": ["dump"] },
+    { "t": 2300, "client": ["stop"] }
+  ]
+}
