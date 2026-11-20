@@ -117,6 +117,18 @@
       "content": "059629bdb39b45e3",
       "generator": "34d44fa8b1369684",
       "spec": "parity/specs/number/tostring.jsonl"
+    },
+    "regex/engine": {
+      "cases": 30000,
+      "content": "e40a050ba624ab32",
+      "generator": "194f2e53e207b490",
+      "spec": "parity/specs/regex/engine.entry.json"
+    },
+    "regex/sites": {
+      "cases": 29428,
+      "content": "094e81eb7469edfa",
+      "generator": "db1f438754f3140e",
+      "spec": "parity/specs/regex/sites.entry.json"
     }
   }
 }

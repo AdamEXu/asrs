@@ -9,6 +9,9 @@ mod js_json;
 #[path = "../../asrs-cli/src/js_math.rs"]
 #[allow(dead_code)]
 mod js_math;
+#[path = "../../asrs-cli/src/js_regex.rs"]
+#[allow(dead_code)]
+mod js_regex;
 #[path = "../../asrs-cli/src/js_string.rs"]
 #[allow(dead_code)]
 mod js_string;

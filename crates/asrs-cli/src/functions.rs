@@ -1,7 +1,7 @@
 use asrs_js::number::{self, IntlOptions, SignDisplay};
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::{js_json, js_math, js_string};
+use crate::{js_json, js_math, js_regex, js_string};
 
 pub type Function = fn(&[Value]) -> Response;
 
@@ -27,6 +27,7 @@ pub fn lookup(name: &str) -> Option<Function> {
         .chain(js_math::FUNCTIONS)
         .chain(js_string::FUNCTIONS)
         .chain(js_json::FUNCTIONS)
+        .chain(js_regex::FUNCTIONS)
         .find(|(n, _)| *n == name)
         .map(|(_, f)| *f)
 }
@@ -38,7 +39,11 @@ fn oracle_call(args: &[Value]) -> Response {
         Some(s) => s.to_string_lossy(),
         None => return Response::Error("oracle:call needs a source string".to_owned()),
     };
-    match js_math::CALLS.iter().find(|(s, _)| *s == source) {
+    match js_math::CALLS
+        .iter()
+        .chain(js_regex::CALLS)
+        .find(|(s, _)| *s == source)
+    {
         Some((_, f)) => f(&args[1..]),
         None => Response::Error(format!("oracle:call: no port of {source:?}")),
     }
