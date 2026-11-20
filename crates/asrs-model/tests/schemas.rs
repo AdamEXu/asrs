@@ -10,6 +10,7 @@ use asrs_model::messages::{
     DownloadToMain, HubToMain, MainToDownload, MainToHub, MainToSatellite, SatelliteToMain,
     SelectionSetter,
 };
+use asrs_model::preferences::merge_preferences;
 use asrs_model::source_list_config::{SourceListItemState, SourceListTypeMemoryEntry};
 use asrs_model::tab_type::TabType;
 
@@ -51,6 +52,21 @@ fn json_file_pretty_layout_form() {
     assert_eq!(
         String::from_utf8(json_file::stringify_pretty(&value).unwrap()).unwrap(),
         "{\n  \"hubs\": [],\n  \"satellites\": [\n    {}\n  ],\n  \"version\": \"dev\"\n}\n"
+    );
+}
+
+#[test]
+fn update_preferences_on_a_primitive_file_drops_assignments_like_sloppy_mode() {
+    let data = json::parse_str(r#"{"theme":"dark","rlogPort":1}"#).unwrap();
+    for text in ["5", "\"prefs\"", "true"] {
+        let mut base = json::parse_str(text).unwrap();
+        merge_preferences(&mut base, &data).unwrap();
+        assert_eq!(json::stringify(&base).unwrap().unwrap(), text);
+    }
+    let mut base = json::parse_str("null").unwrap();
+    assert_eq!(
+        merge_preferences(&mut base, &data).unwrap_err().name,
+        "TypeError"
     );
 }
 
