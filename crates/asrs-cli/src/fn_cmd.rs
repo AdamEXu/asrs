@@ -2,7 +2,7 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use asrs_parity::{Request, Response};
 
-use crate::{functions, shared, units};
+use crate::{functions, geometry, shared, units};
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--list") {
@@ -10,6 +10,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             .iter()
             .chain(shared::FUNCTIONS)
             .chain(units::FUNCTIONS)
+            .chain(geometry::FUNCTIONS)
         {
             println!("{name}");
         }
