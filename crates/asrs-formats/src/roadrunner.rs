@@ -532,3 +532,414 @@ impl DecodeWorker for RoadRunnerWorker {
         run_worker(&files, &mut |response| post(response), &*self.clock)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use asrs_js::time::SetClock;
+    use asrs_log::log::LogValues;
+
+    use super::*;
+
+    struct Builder {
+        out: Vec<u8>,
+        revision: i16,
+    }
+
+    impl Builder {
+        fn new(revision: i16) -> Self {
+            let mut out = Vec::new();
+            out.extend_from_slice(b"RR");
+            out.extend_from_slice(&revision.to_be_bytes());
+            Builder { out, revision }
+        }
+        fn be(&mut self, v: i32) {
+            self.out.extend_from_slice(&v.to_be_bytes());
+        }
+        fn raw(&mut self, bytes: &[u8]) {
+            self.out.extend_from_slice(bytes);
+        }
+        fn str(&mut self, s: &str) {
+            self.be(s.len() as i32);
+            self.raw(s.as_bytes());
+        }
+        fn channel(&mut self, name: &str, schema: &[u8]) -> i32 {
+            self.be(0);
+            self.str(name);
+            self.raw(schema);
+            let arrays = count_arrays(schema);
+            if self.revision == 0 {
+                for _ in 0..arrays {
+                    self.be(0);
+                }
+            }
+            -1
+        }
+        fn message(&mut self, channel: i32, payload: &[u8]) {
+            self.be(1);
+            self.be(channel);
+            self.raw(payload);
+        }
+        fn restart(&mut self, revision: i16) {
+            self.raw(b"RR");
+            self.raw(&revision.to_be_bytes());
+            self.revision = revision;
+        }
+        fn bytes(self) -> Vec<u8> {
+            self.out
+        }
+    }
+
+    fn count_arrays(schema: &[u8]) -> usize {
+        // Counts array type ids (7) anywhere in the schema bytes; test schemas keep
+        // strings free of the type-id bytes.
+        schema
+            .chunks(4)
+            .filter(|c| *c == [0, 0, 0, 7])
+            .count()
+    }
+
+    const INT: &[u8] = &[0, 0, 0, 1];
+    const LONG: &[u8] = &[0, 0, 0, 2];
+    const DOUBLE: &[u8] = &[0, 0, 0, 3];
+    const STRING: &[u8] = &[0, 0, 0, 4];
+    const BOOLEAN: &[u8] = &[0, 0, 0, 5];
+
+    fn enum_schema(constants: &[&str]) -> Vec<u8> {
+        let mut v = vec![0, 0, 0, 6];
+        v.extend_from_slice(&(constants.len() as i32).to_be_bytes());
+        for c in constants {
+            v.extend_from_slice(&(c.len() as i32).to_be_bytes());
+            v.extend_from_slice(c.as_bytes());
+        }
+        v
+    }
+
+    fn struct_schema(fields: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut v = vec![0, 0, 0, 0];
+        v.extend_from_slice(&(fields.len() as i32).to_be_bytes());
+        for (name, schema) in fields {
+            v.extend_from_slice(&(name.len() as i32).to_be_bytes());
+            v.extend_from_slice(name.as_bytes());
+            v.extend_from_slice(schema);
+        }
+        v
+    }
+
+    fn array_schema(inner: &[u8]) -> Vec<u8> {
+        let mut v = vec![0, 0, 0, 7];
+        v.extend_from_slice(inner);
+        v
+    }
+
+    fn decode(data: &[u8]) -> (Vec<Response>, Result<bool, Abort>, Log) {
+        let mut log = Log::new(false);
+        let mut progress = Vec::new();
+        let end = {
+            let mut post = |value: f64| progress.push(Response::Progress(value));
+            RrLogDecoder::new().decode(&mut log, data, &mut post, &SetClock(1e12))
+        };
+        (progress, end, log)
+    }
+
+    fn field(log: &Log, key: &str) -> asrs_log::log::SerializedLogField {
+        let units: Vec<u16> = key.encode_utf16().collect();
+        log.to_serialized()
+            .fields
+            .remove_units(&units)
+            .unwrap_or_else(|| panic!("no field {key}"))
+    }
+
+    fn numbers(log: &Log, key: &str) -> Vec<f64> {
+        let LogValues::Number(v) = &field(log, key).values else {
+            panic!("{key} is not a number field")
+        };
+        v.as_slice().to_vec()
+    }
+
+    fn key(log: &Log, i: usize) -> String {
+        log.to_serialized()
+            .fields
+            .iter()
+            .nth(i)
+            .map(|(k, _)| k.to_string_lossy())
+            .unwrap()
+    }
+
+    #[test]
+    fn rejects_bad_magic_and_revisions() {
+        assert_eq!(decode(b"").1, Ok(false));
+        assert_eq!(decode(b"rr\x00\x01").1, Ok(false));
+        assert_eq!(decode(b"RR").1, Ok(false)); // revision read throws
+        assert_eq!(decode(b"RR\x00\x02").1, Ok(false));
+        assert_eq!(decode(b"RR\xff\xff").1, Ok(false));
+        // Header only: an empty but successful log.
+        assert_eq!(decode(b"RR\x00\x01").1, Ok(true));
+        assert_eq!(decode(b"RR\x00\x00").1, Ok(true));
+    }
+
+    #[test]
+    fn primitive_channels() {
+        let mut b = Builder::new(1);
+        b.channel("I", INT);
+        b.channel("L", LONG);
+        b.channel("D", DOUBLE);
+        b.channel("S", STRING);
+        b.channel("B", BOOLEAN);
+        b.message(0, &(-5i32).to_be_bytes());
+        b.message(1, &7_000_000_000_000_000_000i64.to_be_bytes());
+        b.message(2, &1.5f64.to_be_bytes());
+        let mut payload = 2i32.to_be_bytes().to_vec();
+        payload.extend_from_slice(b"hi");
+        b.message(3, &payload);
+        b.message(4, &[2]);
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        assert_eq!(numbers(&log, "I"), [-5.0]);
+        assert_eq!(numbers(&log, "L"), [7e18]);
+        assert_eq!(numbers(&log, "D"), [1.5]);
+        let LogValues::Boolean(v) = &field(&log, "B").values else {
+            panic!()
+        };
+        assert_eq!(v.as_slice(), [true]);
+    }
+
+    #[test]
+    fn enum_ordinals_out_of_range_write_nothing() {
+        let mut b = Builder::new(1);
+        b.channel("E", &enum_schema(&["A", "B"]));
+        b.message(0, &1i32.to_be_bytes());
+        b.message(0, &2i32.to_be_bytes());
+        b.message(0, &(-1i32).to_be_bytes());
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        let LogValues::String(v) = &field(&log, "E").values else {
+            panic!()
+        };
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].to_string_lossy(), "B");
+    }
+
+    #[test]
+    fn timestamps_and_running() {
+        let mut b = Builder::new(1);
+        b.channel("OPMODE_PRE_INIT", LONG);
+        b.channel("OPMODE_PRE_START", LONG);
+        b.channel("TIMESTAMP", LONG);
+        b.channel("OPMODE_POST_STOP", LONG);
+        b.channel("V", DOUBLE);
+        b.message(0, &1_000_000_000i64.to_be_bytes());
+        b.message(1, &2_000_000_000i64.to_be_bytes());
+        b.message(2, &3_000_000_000i64.to_be_bytes());
+        b.message(4, &9.0f64.to_be_bytes());
+        b.message(3, &4_000_000_000i64.to_be_bytes());
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        let LogValues::Boolean(v) = &field(&log, "RUNNING").values else {
+            panic!()
+        };
+        assert_eq!(v.as_slice(), [true, false]);
+        // V is written at the last TIMESTAMP, 3 seconds after the first.
+        assert_eq!(numbers(&log, "V"), [9.0]);
+        assert_eq!(field(&log, "V").timestamps.as_slice(), [2.0]);
+    }
+
+    #[test]
+    fn message_timestamp_fields() {
+        let stamped = struct_schema(&[("timestamp", LONG), ("v", INT)]);
+        let int_stamped = struct_schema(&[("timestamp", INT), ("v", INT)]);
+        let mut b = Builder::new(1);
+        b.channel("A", &stamped);
+        b.channel("B", &int_stamped);
+        b.channel("V", DOUBLE);
+        // A's timestamp field updates the timestamp; B's int does not.
+        let mut payload = 1_000_000_000i64.to_be_bytes().to_vec();
+        payload.extend_from_slice(&7i32.to_be_bytes());
+        b.message(0, &payload);
+        b.message(2, &5.0f64.to_be_bytes());
+        let mut payload = 99i32.to_be_bytes().to_vec();
+        payload.extend_from_slice(&8i32.to_be_bytes());
+        b.message(1, &payload);
+        b.message(2, &6.0f64.to_be_bytes());
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        assert_eq!(field(&log, "V").timestamps.as_slice(), [0.0]);
+        assert_eq!(numbers(&log, "V"), [6.0]);
+    }
+
+    #[test]
+    fn concatenated_logs_reset_channels_not_first_timestamp() {
+        let mut b = Builder::new(1);
+        b.channel("TIMESTAMP", LONG);
+        b.channel("A", INT);
+        b.message(0, &1_000_000_000i64.to_be_bytes());
+        b.restart(0);
+        // Channel ids restart: id 1 is now a fresh channel.
+        b.channel("TIMESTAMP", LONG);
+        b.channel("B", INT);
+        b.message(1, &9i32.to_be_bytes());
+        b.message(0, &2_000_000_000i64.to_be_bytes());
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        assert_eq!(numbers(&log, "B"), [9.0]);
+        assert_eq!(field(&log, "B").timestamps.as_slice(), [0.0]);
+        assert_eq!(field(&log, "TIMESTAMP").timestamps.as_slice(), [0.0, 1.0]);
+    }
+
+    #[test]
+    fn bad_revision_in_second_log_fails() {
+        let mut b = Builder::new(1);
+        b.channel("A", INT);
+        b.message(0, &1i32.to_be_bytes());
+        b.restart(2);
+        assert_eq!(decode(&b.bytes()).1, Ok(false));
+        // A file ending in exactly "RR" fails on the revision read.
+        let mut b = Builder::new(1);
+        b.raw(b"RR");
+        assert_eq!(decode(&b.bytes()).1, Ok(false));
+    }
+
+    #[test]
+    fn unknown_schema_and_channel_fail() {
+        let mut b = Builder::new(1);
+        b.channel("A", &[0, 0, 0, 9]);
+        assert_eq!(decode(&b.bytes()).1, Ok(false));
+        let mut b = Builder::new(1);
+        b.channel("A", INT);
+        b.message(5, &1i32.to_be_bytes());
+        assert_eq!(decode(&b.bytes()).1, Ok(false));
+    }
+
+    #[test]
+    fn truncation_keeps_decoded_records() {
+        let mut b = Builder::new(1);
+        b.channel("A", INT);
+        b.channel("B", INT);
+        b.message(0, &1i32.to_be_bytes());
+        b.message(1, &2i32.to_be_bytes());
+        let full = b.bytes();
+        let cut = full[..full.len() - 2].to_vec();
+        let (_, end, log) = decode(&cut);
+        assert_eq!(end, Ok(true));
+        assert_eq!(numbers(&log, "A"), [1.0]);
+        // Truncated inside a channel definition: same.
+        let cut = full[..24].to_vec();
+        let (_, end, _) = decode(&cut);
+        assert_eq!(end, Ok(true));
+    }
+
+    #[test]
+    fn revision_zero_array_padding() {
+        let arr = array_schema(INT);
+        let mut b = Builder::new(0);
+        b.channel("A", &arr);
+        let mut msg = 1i32.to_be_bytes().to_vec();
+        msg.extend_from_slice(&42i32.to_be_bytes());
+        b.message(0, &msg);
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        let LogValues::NumberArray(v) = &field(&log, "A").values else {
+            panic!()
+        };
+        assert_eq!(v.as_slice(), [vec![42.0]]);
+    }
+
+    #[test]
+    fn boolean_past_eof_reads_true() {
+        let mut b = Builder::new(1);
+        b.channel("B", BOOLEAN);
+        // The boolean byte is cut; dataArray[i] is undefined, which is !== 0.
+        b.be(1);
+        b.be(0);
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        let LogValues::Boolean(v) = &field(&log, "B").values else {
+            panic!()
+        };
+        assert_eq!(v.as_slice(), [true]);
+    }
+
+    #[test]
+    fn negative_string_length_moves_offset_back() {
+        let mut b = Builder::new(1);
+        b.channel("S", STRING);
+        b.be(1);
+        b.be(0);
+        b.be(-2);
+        b.raw(b"AB");
+        let (_, end, _) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+    }
+
+    #[test]
+    fn pose_detection_converts_inches() {
+        let pose = struct_schema(&[("x", DOUBLE), ("y", DOUBLE), ("heading", DOUBLE)]);
+        let mut b = Builder::new(1);
+        b.channel("P", &pose);
+        let mut payload = 1.0f64.to_be_bytes().to_vec();
+        payload.extend_from_slice(&2.0f64.to_be_bytes());
+        payload.extend_from_slice(&1.0f64.to_be_bytes());
+        b.message(0, &payload);
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        assert_eq!(numbers(&log, "P/rotation/value"), [1.0]);
+        assert!((numbers(&log, "P/translation/x")[0] - 0.0254).abs() < 1e-9);
+        assert!((numbers(&log, "P/translation/y")[0] - 0.0508).abs() < 1e-9);
+        assert_eq!(
+            field(&log, "P").structured_type.as_ref().unwrap().to_string_lossy(),
+            "Pose2d"
+        );
+    }
+
+    #[test]
+    fn struct_fields_write_in_insertion_order() {
+        let s = struct_schema(&[("b", INT), ("10", INT), ("a", INT), ("2", INT)]);
+        let mut b = Builder::new(1);
+        b.channel("K", &s);
+        let mut payload = Vec::new();
+        for v in [1i32, 2, 3, 4] {
+            payload.extend_from_slice(&v.to_be_bytes());
+        }
+        b.message(0, &payload);
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        let names: Vec<String> = (0..4).map(|i| key(&log, i)).collect();
+        assert_eq!(names, ["K/b", "K/10", "K/a", "K/2"]);
+    }
+
+    #[test]
+    fn progress_fires_once_then_done() {
+        let mut b = Builder::new(1);
+        b.channel("A", INT);
+        b.message(0, &1i32.to_be_bytes());
+        b.message(0, &2i32.to_be_bytes());
+        let data = b.bytes();
+        let (progress, end, _) = decode(&data);
+        assert_eq!(end, Ok(true));
+        assert_eq!(progress.len(), 1);
+        let Response::Progress(v) = progress[0] else {
+            panic!()
+        };
+        assert!(v > 0.0 && v < 1.0);
+    }
+
+    #[test]
+    fn worker_protocol() {
+        let mut b = Builder::new(1);
+        b.channel("A", INT);
+        b.message(0, &1i32.to_be_bytes());
+        let data = b.bytes();
+        let mut responses = Vec::new();
+        let end = run_worker(
+            &[Some(data.as_slice())],
+            &mut |r| responses.push(r),
+            &SetClock(1e12),
+        );
+        assert_eq!(end, Ok(()));
+        assert!(matches!(responses.last(), Some(Response::Initial { .. })));
+        assert_eq!(run_worker(&[], &mut |_| {}, &SetClock(1e12)), Err(Abort::Threw));
+        assert_eq!(
+            run_worker(&[None], &mut |_| {}, &SetClock(1e12)),
+            Err(Abort::Threw)
+        );
+    }
+}
