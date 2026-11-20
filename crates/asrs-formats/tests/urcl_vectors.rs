@@ -24,7 +24,7 @@ mod log_field;
 #[allow(dead_code)]
 mod log_run;
 
-use asrs_formats::urcl::{self, SchemaError};
+use asrs_formats::custom_schemas::{self, SchemaError};
 use asrs_js::string::JsString;
 use asrs_js::time::V8MathRandom;
 use asrs_log::log::{Log, LogField};
@@ -116,7 +116,7 @@ fn parse_record(
             let bytes = log_run::bytes(v)?;
             log.put_raw(key, timestamp, bytes.as_ref())
                 .map_err(|e| format!("putRaw: {e:?}"))?;
-            if let Some(parser) = urcl::custom_schema(type_) {
+            if let Some(parser) = custom_schemas::get(type_) {
                 match parser(log, key, timestamp, &bytes) {
                     Ok(()) | Err(SchemaError::Threw) => {}
                     Err(SchemaError::Log(e)) => return Err(format!("custom schema: {e:?}")),

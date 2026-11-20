@@ -9,39 +9,10 @@ use asrs_js::string::{JsString, TextDecoder};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_util::{get_or_default, get_value_at};
 use asrs_log::log::log_value_sets::RawValue;
-use asrs_log::log::{Log, LogError, LoggableType};
+use asrs_log::log::{Log, LoggableType};
 
+use crate::custom_schemas::SchemaError;
 use crate::spark::{self, Frame, SignalType, SignalValue, tables};
-
-#[derive(Debug)]
-pub enum SchemaError {
-    /// The parser threw. The wpilog worker catches it, so only the writes made before the
-    /// throw remain.
-    Threw,
-    /// A `Log` write ended the way `LogError` describes.
-    Log(LogError),
-}
-
-impl From<LogError> for SchemaError {
-    fn from(error: LogError) -> Self {
-        SchemaError::Log(error)
-    }
-}
-
-pub type SchemaParser = fn(&mut Log, &JsString, f64, &[u8]) -> Result<(), SchemaError>;
-
-/// `CustomSchemas.get(type)`.
-pub fn custom_schema(type_: &JsString) -> Option<SchemaParser> {
-    let parsers: [(&str, SchemaParser); 3] = [
-        ("URCL", parse_urcl_r1),
-        ("URCLr2_periodic", parse_urcl_r2),
-        ("URCLr3_periodic", parse_urcl_r3),
-    ];
-    parsers
-        .into_iter()
-        .find(|(name, _)| *type_ == js(name))
-        .map(|(_, parser)| parser)
-}
 
 const PERSISTENT_SIZE: usize = 8;
 const PERIODIC_SIZE: usize = 14;
