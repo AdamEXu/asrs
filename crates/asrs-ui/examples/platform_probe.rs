@@ -28,6 +28,7 @@ const ASPECT: (f64, f64, f64, f64) = (700.0, 120.0, 400.0, 300.0);
 const ELECTRON_OFFSET: f64 = 300.0;
 const RATIO: f64 = 16.0 / 9.0;
 const DRAGS: [(f64, f64); 3] = [(150.0, 40.0), (-60.0, 90.0), (-400.0, -400.0)];
+const UPSTREAM_ELECTRON: &str = "39.2.7";
 
 fn patch_origin(i: usize) -> (f64, f64) {
     (SIDEBAR + 20.0 + i as f64 * 80.0, 60.0)
@@ -202,6 +203,13 @@ async fn checks(
     };
     if electron.is_some() && ready.is_none() {
         report.check("electron", false, "no ready line within 10 s");
+    }
+    if let Some(ready) = &ready {
+        report.check(
+            "electron version is upstream's",
+            ready.version == UPSTREAM_ELECTRON,
+            format!("{} (upstream pins {UPSTREAM_ELECTRON})", ready.version),
+        );
     }
     let electron = electron.as_ref();
     srgb(cx, hub, electron.zip(ready.as_ref()), report).await;
@@ -470,6 +478,9 @@ async fn aspect(cx: &mut AsyncApp, electron: Option<(&Electron, &Ready)>, report
     let Some((electron, _)) = electron else {
         return;
     };
+    if electron.query(cx, "aspect").await.is_some() {
+        sleep(cx, 400).await;
+    }
     let mut theirs = Vec::new();
     for (dx, dy) in DRAGS {
         let Some(frame) = electron.query(cx, "aspect").await else {
@@ -502,7 +513,7 @@ app.whenReady().then(async () => {
   });
   await hub.loadURL("data:text/html," + encodeURIComponent(process.env.PROBE_HTML));
   hub.focus();
-  out("ready " + hub.getMediaSourceId().split(":")[1] + " " + rect(hub.getContentBounds()));
+  out("ready " + process.versions.electron + " " + hub.getMediaSourceId().split(":")[1] + " " + rect(hub.getContentBounds()));
   let aspect = null;
   const openAspect = async () => {
     if (aspect) return;
@@ -536,6 +547,7 @@ fn electron_html() -> String {
 }
 
 struct Ready {
+    version: String,
     hub_window: u32,
     hub_content: (f64, f64, f64, f64),
 }
@@ -598,9 +610,11 @@ impl Electron {
         for _ in 0..100 {
             sleep(cx, 100).await;
             if let Some(line) = self.drain().iter().find_map(|l| l.strip_prefix("ready ")) {
+                let (version, line) = line.split_once(' ')?;
                 let (id, rest) = line.split_once(' ')?;
                 sleep(cx, 800).await;
                 return Some(Ready {
+                    version: version.to_owned(),
                     hub_window: id.parse().ok()?,
                     hub_content: rect_of(rest)?,
                 });

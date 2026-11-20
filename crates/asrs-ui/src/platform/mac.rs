@@ -186,7 +186,8 @@ unsafe extern "C-unwind" fn window_will_resize(
     }
 }
 
-/// `-[ElectronNSWindowDelegate windowWillResize:toSize:]` for a framed window with no extra size.
+/// `-[ElectronNSWindowDelegate windowWillResize:toSize:]` for a framed window with no extra size,
+/// as of Electron 39, which upstream pins. Later Electron versions changed the min and max clamps.
 fn electron_aspect_resize(window: &NSWindow, aspect_ratio: f64, frame_size: NSSize) -> NSSize {
     let frame = window.frame();
     let content = window.contentRectForFrameRect(frame);
