@@ -247,5 +247,7 @@ mod tests {
             (font.size, font.weight, align.as_str()),
             (12.0, 700.0, "start")
         );
+        let width = canvas.measure_text(&mut FixedAdvance, "ab").width;
+        assert_eq!(width, f64::from(0.6f32 * 12.0 + 0.6 * 12.0));
     }
 }

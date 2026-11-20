@@ -131,26 +131,9 @@ pub fn baseline_offset(metrics: &FontMetrics, size: f32, baseline: &str) -> f32 
     }
 }
 
-/// Skia's glyph positioning: x snapped to a quarter device pixel, y rounded.
-pub fn glyph_origin(device_x: f64, device_y: f64) -> (i32, i32, u8) {
-    let quarter = (device_x * 4.0 + 0.5).floor();
-    let x = (quarter / 4.0).floor();
-    let phase = (quarter - x * 4.0) as u8;
-    (x as i32, (device_y + 0.5).floor() as i32, phase)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn glyph_origin_quantizes_to_quarter_pixels() {
-        assert_eq!(glyph_origin(10.0, 4.49), (10, 4, 0));
-        assert_eq!(glyph_origin(10.12, 4.5), (10, 5, 0));
-        assert_eq!(glyph_origin(10.13, 0.0), (10, 0, 1));
-        assert_eq!(glyph_origin(10.875, 0.0), (11, 0, 0));
-        assert_eq!(glyph_origin(-0.3, -0.5), (-1, 0, 3));
-    }
 
     #[test]
     fn baselines_follow_blink() {
