@@ -28,6 +28,9 @@ commands:
                         run `<program> <arg>... <scenes dir> <port dir> [<scene>...]`, then diff
   stable                regenerate the references and the LUT twice from scratch and require
                         identical bytes, and the LUT to equal the committed one
+  heatmap               run the upstream Heatmap fixtures on Chromium's CPU canvas, replay them
+                        with asrs-cli heatmap, and gate recorded fields exactly and RGBA at a
+                        max channel delta of 1
   list                  scene names
 
 Gates against the CPU canvas: pixel scenes at most 0.2 % pixelmatch (YIQ 0.1) and no blob over
@@ -53,6 +56,7 @@ pub fn run(args: &[String]) -> Result {
         },
         Some("run") => run_port(&paths, rest),
         Some("stable") => stable(&paths),
+        Some("heatmap") => heatmap(&paths),
         Some("list") => electron(&paths, &["list".to_owned()]),
         _ => Err(USAGE.to_owned()),
     }
@@ -537,6 +541,129 @@ fn run_port(paths: &Paths, args: &[String]) -> Result {
         return Err(format!("{exe} failed ({status})"));
     }
     diff(&ref_dir, &port, scenes)
+}
+
+const HEATMAP_MAX_CHANNEL: u8 = 1;
+const HEATMAP_FIELDS: &[&str] = &[
+    "created",
+    "setData",
+    "store",
+    "throw",
+    "canvas",
+    "readError",
+];
+
+fn heatmap(paths: &Paths) -> Result {
+    let dir = reference_dir(paths).join("heatmap");
+    electron(paths, &["heatmap".to_owned(), path_arg(&dir)])?;
+    let refs = dir.join("heatmap");
+    let port = refs.join("port");
+    if port.exists() {
+        fs::remove_dir_all(&port).map_err(|e| format!("{}: {e}", port.display()))?;
+    }
+    cargo(&[
+        "run",
+        "-p",
+        "asrs-cli",
+        "--quiet",
+        "--",
+        "heatmap",
+        &path_arg(&refs),
+        &path_arg(&port),
+    ])?;
+
+    let mut expected_names = Vec::new();
+    for entry in fs::read_dir(&refs).map_err(|e| format!("{}: {e}", refs.display()))? {
+        let name = entry.map_err(|e| e.to_string())?.file_name();
+        if let Some(name) = name.to_str().and_then(|n| n.strip_suffix(".expected.json")) {
+            expected_names.push(name.to_owned());
+        }
+    }
+    expected_names.sort_unstable();
+    if expected_names.is_empty() {
+        return Err(format!("no heatmap references under {}", refs.display()));
+    }
+
+    let mut failures = Vec::new();
+    let mut max_channel = 0u8;
+    let mut png_count = 0u64;
+    for name in &expected_names {
+        let expected = read_json(&refs.join(format!("{name}.expected.json")))?;
+        let actual = read_json(&port.join(format!("{name}.data.json")))?;
+        let updates = expected
+            .get("updates")
+            .and_then(Json::as_array)
+            .map(<[Json]>::to_vec)
+            .unwrap_or_default();
+        let ours = actual
+            .get("updates")
+            .and_then(Json::as_array)
+            .map(<[Json]>::to_vec)
+            .unwrap_or_default();
+        if updates.len() != ours.len() {
+            failures.push(format!(
+                "{name}: {} updates expected, {} replayed",
+                updates.len(),
+                ours.len()
+            ));
+            continue;
+        }
+        for (i, (expected_update, actual_update)) in updates.iter().zip(&ours).enumerate() {
+            for key in HEATMAP_FIELDS {
+                if expected_update.get(key) != actual_update.get(key) {
+                    failures.push(format!("{name} update {i}: {key} differs"));
+                }
+            }
+            let reference_png = refs.join(format!("{name}.{i}.png"));
+            if !reference_png.exists() {
+                continue;
+            }
+            png_count += 1;
+            let port_png = port.join(format!("{name}.{i}.png"));
+            match heatmap_channel_delta(&reference_png, &port_png) {
+                Ok(delta) => {
+                    max_channel = max_channel.max(delta);
+                    if delta > HEATMAP_MAX_CHANNEL {
+                        failures.push(format!(
+                            "{name} update {i}: max channel delta {delta}"
+                        ));
+                    }
+                }
+                Err(e) => failures.push(format!("{name} update {i}: {e}")),
+            }
+        }
+    }
+    eprintln!(
+        "heatmap: {} fixtures, {png_count} renders, max channel delta {max_channel}",
+        expected_names.len()
+    );
+    if failures.is_empty() {
+        eprintln!("heatmap: every update matches the CPU canvas");
+        Ok(())
+    } else {
+        for failure in failures.iter().take(10) {
+            eprintln!("  {failure}");
+        }
+        Err(format!("heatmap: {} failures", failures.len()))
+    }
+}
+
+fn heatmap_channel_delta(reference: &Path, port: &Path) -> Result<u8> {
+    let a = pixel::read_png(reference)?;
+    let b = pixel::read_png(port).map_err(|e| format!("{}: {e}", port.display()))?;
+    if a.width != b.width || a.height != b.height {
+        return Err(format!(
+            "size differs: {}x{} vs {}x{}",
+            a.width, a.height, b.width, b.height
+        ));
+    }
+    Ok(a
+        .data
+        .iter()
+        .zip(&b.data)
+        .map(|(x, y)| x.abs_diff(*y))
+        .max()
+        .unwrap_or(0))
 }
 
 fn files_under(dir: &Path) -> Result<Vec<String>> {

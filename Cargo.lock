@@ -317,6 +317,7 @@ dependencies = [
  "asrs-log",
  "asrs-parity",
  "asrs-services",
+ "asrs-tabs",
 ]
 
 [[package]]

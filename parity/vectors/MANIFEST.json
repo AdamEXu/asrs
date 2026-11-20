@@ -457,6 +457,14 @@
       "spec": "parity/specs/regex/sites.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
+    },
+    "tabs/heatmap": {
+      "cases": 31,
+      "content": "a4ef466ab9216eb2",
+      "generator": "bf39114ecad2fe55",
+      "spec": "parity/specs/tabs/heatmap.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
     }
   }
 }

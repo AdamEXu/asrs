@@ -5,6 +5,7 @@ mod decode;
 mod fn_cmd;
 mod functions;
 mod geometry;
+mod heatmap;
 mod js_color;
 mod js_json;
 mod js_math;
@@ -27,7 +28,8 @@ commands:
   fn [--list]   JSONL fn requests on stdin, CVE-1 responses on stdout (same protocol as the oracle)
   decode <file> decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
-  canvas render rasterize the oracle's canvas scenes with asrs-canvas";
+  canvas render rasterize the oracle's canvas scenes with asrs-canvas
+  heatmap       replay the oracle's heatmap fixtures with asrs-tabs";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -35,6 +37,7 @@ fn main() -> ExitCode {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
+        Some("heatmap") => heatmap::run(&args),
         _ => Err(USAGE.to_owned()),
     };
     match result {

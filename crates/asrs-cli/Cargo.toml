@@ -17,6 +17,7 @@ asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 asrs-parity = { path = "../asrs-parity" }
 asrs-services = { path = "../asrs-services" }
+asrs-tabs = { path = "../asrs-tabs" }
 
 [lints]
 workspace = true
