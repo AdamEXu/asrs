@@ -107,7 +107,7 @@ fn ends_with_ascii(units: &[u16], suffix: &str) -> bool {
 
 /// `[...new Set(timestamps.flat())].sort((a, b) => a - b)`. `Set` treats `-0` as `+0` and keeps
 /// one NaN.
-fn timestamp_union<'a>(columns: impl Iterator<Item = &'a [f64]>) -> Vec<f64> {
+pub(crate) fn timestamp_union<'a>(columns: impl Iterator<Item = &'a [f64]>) -> Vec<f64> {
     let mut seen = HashSet::new();
     let mut output = Vec::new();
     for column in columns {
