@@ -42,7 +42,9 @@ pub const POSE_3D_ZERO: Pose3d = Pose3d {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PoseAnnotations {
     pub is_2d_source: bool,
-    /// `aprilTagId`; `None` is upstream's `undefined` default.
+    /// `aprilTagId`; `None` is upstream's `undefined` default. Only
+    /// `grabAprilTag` emits the key at all.
+    pub has_april_tag_id: bool,
     pub april_tag_id: Option<f64>,
     pub vision_color: Option<JsString>,
     pub vision_size: Option<JsString>,
@@ -955,6 +957,7 @@ pub fn grab_april_tag(
             ],
         },
         annotation: PoseAnnotations {
+            has_april_tag_id: true,
             april_tag_id: number_or_undef(log, child(key, "/ID"), timestamp, uuid),
             is_2d_source: false,
             ..PoseAnnotations::default()

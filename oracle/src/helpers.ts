@@ -93,6 +93,18 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
 
   logFieldRun: async (type: number, ops: any[][]) => (await import("./logFieldRun")).run(type, ops),
 
+  // Runs grab* calls against a Log built from logRun write ops; each call
+  // result is {ok|throw}. See geometryRun.ts for the call shapes.
+  geometryRun: async (enableTimestampSetCache: boolean, ops: any[][], calls: any[][]) =>
+    (await import("./geometryRun")).run(enableTimestampSetCache, ops, calls),
+
+  // rotationSequenceToQuaternion's THREE.Quaternion as a plain object.
+  geometryQuat: async (rotations: { axis: string; degrees: number }[]) => {
+    const { rotationSequenceToQuaternion } = await import("@upstream/shared/geometry");
+    const q = rotationSequenceToQuaternion(rotations);
+    return { x: q.x, y: q.y, z: q.z, w: q.w };
+  },
+
   flushAnimationFrames: (time: number) => flushAnimationFrames(time),
 
   // A PhotonStructDecoder session on a fresh decoder; each op result is {ok|throw} so a

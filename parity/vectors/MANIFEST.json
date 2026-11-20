@@ -194,6 +194,22 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "log/geometry": {
+      "cases": 170,
+      "content": "7cc43fb4abc04078",
+      "generator": "af581673c68b0cc3",
+      "spec": "parity/specs/log/geometry.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "log/geometry-math": {
+      "cases": 45746,
+      "content": "ed8412b2876a5543",
+      "generator": "3816b0c95c45db48",
+      "spec": "parity/specs/log/geometry-math.jsonl",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "log/photon": {
       "cases": 81,
       "content": "13c35c892c2c7d87",
