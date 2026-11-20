@@ -10,6 +10,9 @@ publish.workspace = true
 name = "advantagescope"
 path = "src/main.rs"
 
+[features]
+parity = ["asrs-ui/parity"]
+
 [dependencies]
 asrs-ui.workspace = true
 

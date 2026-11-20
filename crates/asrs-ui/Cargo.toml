@@ -6,8 +6,25 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+parity = [
+    "dep:anyhow",
+    "dep:gpui-pre",
+    "dep:gpui-pre-platform",
+    "gpui-pre/test-support",
+    "gpui-pre-platform/test-support",
+]
+
 [dependencies]
+anyhow = { version = "=1.0.104", optional = true }
 gpui-kit.workspace = true
+gpui-pre = { workspace = true, optional = true }
+gpui-pre-platform = { workspace = true, optional = true }
+
+[[test]]
+name = "headless_capture"
+harness = false
+required-features = ["parity"]
 
 [lints]
 workspace = true
