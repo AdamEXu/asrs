@@ -28,11 +28,7 @@ drives it, and prints every message it posts (CVE-1 lines, see oracle/README.md)
   followed by its messages. The keys are the initial log's fields in order, the keys
   HistoricalDataSource always requests, "/" + the first field, a missing key and the first
   field again. If the worker's thread dies (its
-  realm runs out of memory), the run exits with status 3 after the lines so far.
-The worker's Date is frozen at WORKER_NOW (asrs-cli uses the same instant), so progress that
-upstream throttles on wall-clock time (RLOGDecoder) is the same under any machine load.`;
-
-const WORKER_NOW = 1_767_225_600_000;
+  realm runs out of memory), the run exits with status 3 after the lines so far.`;
 
 const MISSING_KEY = "/asrs-oracle/missing";
 
@@ -131,18 +127,20 @@ const files = file.endsWith(".dslog")
   ? [readOrNull(file), readOrNull(file.slice(0, -5) + "dsevents")]
   : [readOrNull(file)];
 
-function withFrozenDate(script: string): string {
-  const source =
-    `const RealDate = Date;` +
-    `globalThis.Date = class Date extends RealDate {` +
-    `constructor(...args) { if (args.length === 0) super(${WORKER_NOW}); else super(...args); }` +
-    `static now() { return ${WORKER_NOW}; }` +
-    `};` +
-    `await import(${JSON.stringify(resolveWorkerScript(script))});`;
-  return "data:text/javascript," + encodeURIComponent(source);
-}
-
-const worker = new OracleWorker(withFrozenDate("../bundles/" + workerName), { type: "module" });
+// The worker realm's `Date` is pinned so decoders that throttle progress by wall clock
+// (Road Runner, RLOG) emit a fixed sequence; asrs-cli pins the same value.
+const loader =
+  "data:text/javascript," +
+  encodeURIComponent(`
+const RealDate = globalThis.Date;
+const FROZEN = 1000000000000;
+globalThis.Date = new Proxy(RealDate, {
+  construct: (target, args) => (args.length === 0 ? new RealDate(FROZEN) : Reflect.construct(target, args)),
+  get: (target, property, receiver) => (property === "now" ? () => FROZEN : Reflect.get(target, property, receiver))
+});
+await import(${JSON.stringify(resolveWorkerScript("../bundles/" + workerName))});
+`);
+const worker = new OracleWorker(loader, { type: "module" });
 let initial: any = null;
 worker.onmessage = (event) => {
   if (event.data.type === "initial") initial = event.data;
