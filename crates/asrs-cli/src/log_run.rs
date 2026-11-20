@@ -78,7 +78,7 @@ fn member(v: &Value, name: &str) -> Value {
     v.get(name).cloned().unwrap_or(Value::Undefined)
 }
 
-fn serialized_field(v: &Value) -> Result<SerializedLogField, String> {
+pub(crate) fn serialized_field(v: &Value) -> Result<SerializedLogField, String> {
     let ty = loggable_type(&member(v, "type"))?;
     Ok(SerializedLogField {
         timestamps: Arc::new(array(&member(v, "timestamps"), number)?),
