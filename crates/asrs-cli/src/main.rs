@@ -22,6 +22,7 @@ mod log_struct;
 mod photon;
 mod robot_state;
 mod shared;
+mod state;
 mod tabs_console;
 mod units;
 mod wpilog;
