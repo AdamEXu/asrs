@@ -81,8 +81,8 @@ fn json_to_cve(j: &Json) -> Value {
     Value::from_json_lenient(j)
 }
 
-/// `window.selection`: `SelectionImpl` semantics for the modes fixtures drive.
-/// `now` is the runner clock for playback math; `log` supplies timestamp ranges.
+/// Stand-in for `window.selection` until D03's `SelectionImpl` is on main; replace it with
+/// that type rather than extending it. Covers only the methods the sidebar specs call.
 struct ScriptedSelection {
     mode: SelectionMode,
     hovered_time: Option<f64>,
