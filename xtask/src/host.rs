@@ -42,6 +42,8 @@ commands on a host (cargo xtask host <name> ...):
   fetch [<dir>]           copy target/parity[/<dir>] from the host into target/parity/<name>/
   theme light|dark        switch the desktop theme
   screenshot <file>       PNG of the host display
+  manifest                store the fetched host description (target/parity/<name>/host/host.json)
+                          as `host` in parity/vectors/canvas/<os>.json
   check                   the X01 exit criteria: sync, setup (selftest and smoke), selftest,
                           smoke, `oracle gen --check`, `host local gui-check` (host description,
                           colour patches at 1x and 2x, real app launch), the S1 spike window, fetch
@@ -120,6 +122,7 @@ fn run_remote(paths: &Paths, host: &Host, command: &str, rest: &[String]) -> Res
         ("theme", [theme]) if theme == "light" || theme == "dark" => host.theme(theme == "dark"),
         ("screenshot", [file]) => host.screenshot(Path::new(file)),
         ("check", []) => host.check(paths),
+        ("manifest", []) => host.record_manifest(paths),
         _ => Err(USAGE.to_owned()),
     }
 }
@@ -578,6 +581,29 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
         }
     }
 
+    fn record_manifest(&self, paths: &Paths) -> Result {
+        let file = paths
+            .root
+            .join("target/parity")
+            .join(self.name)
+            .join("host/host.json");
+        let text = fs::read_to_string(&file).map_err(|e| {
+            format!(
+                "{}: {e}; run `cargo xtask host {} check` first",
+                file.display(),
+                self.name
+            )
+        })?;
+        let description = json::parse(&text).map_err(|e| format!("{}: {e}", file.display()))?;
+        let platform = match self.os {
+            Os::Windows => "windows",
+            Os::Linux => "linux",
+        };
+        canvas::set_manifest_field(paths, platform, "host", description)?;
+        eprintln!("host description stored in parity/vectors/canvas/{platform}.json");
+        Ok(())
+    }
+
     fn check(&self, paths: &Paths) -> Result {
         self.sync(paths)?;
         self.run(&self.setup_command())?;
@@ -728,6 +754,7 @@ fn checkout_files(root: &Path) -> Result<BTreeSet<String>> {
         .split(|&b| b == 0)
         .filter(|f| !f.is_empty())
         .map(|f| String::from_utf8_lossy(f).into_owned())
+        .filter(|f| !f.split('/').any(|c| c == "target" || c == "node_modules"))
         .filter(|f| fs::symlink_metadata(root.join(f)).is_ok_and(|m| m.file_type().is_file()))
         .collect())
 }
@@ -936,7 +963,7 @@ fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
     fs::write(out.join("host.json"), &text).map_err(|e| e.to_string())?;
     print!("{text}");
     if manifest {
-        canvas::set_manifest_field(paths, "host", description)?;
+        canvas::set_manifest_field(paths, canvas::platform(), "host", description)?;
     }
     Ok(())
 }

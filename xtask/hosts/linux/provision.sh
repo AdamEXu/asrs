@@ -27,7 +27,8 @@ if [[ ! -x "$HOME/.cargo/bin/rustup" ]]; then
 fi
 
 # npm fetches upstream's git dependencies over ssh://git@github.com, and the host has no GitHub key.
-git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+git config --global --unset-all url."https://github.com/".insteadOf || true
+git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
 git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
 # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox needs.

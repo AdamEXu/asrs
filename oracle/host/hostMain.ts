@@ -46,6 +46,7 @@ function displays() {
 }
 
 async function info(out: string) {
+  const gpuInfo = await app.getGPUInfo("complete");
   writeJson(path.join(out, "electron.json"), {
     electron: process.versions.electron,
     chrome: process.versions.chrome,
@@ -59,7 +60,7 @@ async function info(out: string) {
     darkTheme: nativeTheme.shouldUseDarkColors,
     displays: displays(),
     gpuFeatureStatus: app.getGPUFeatureStatus(),
-    gpuInfo: await app.getGPUInfo("complete")
+    gpuInfo
   });
 }
 

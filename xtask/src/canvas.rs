@@ -262,8 +262,8 @@ fn read_json(path: &Path) -> Result<Json> {
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-pub(crate) fn set_manifest_field(paths: &Paths, key: &str, value: Json) -> Result {
-    let path = vectors_dir(paths).join(format!("{}.json", platform()));
+pub(crate) fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
+    let path = vectors_dir(paths).join(format!("{platform}.json"));
     let mut fields: Vec<(String, Json)> = match read_json(&path) {
         Ok(Json::Object(pairs)) => pairs
             .into_iter()
