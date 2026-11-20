@@ -386,6 +386,7 @@ name = "asrs-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "asrs-canvas",
  "asrs-parity",
  "block2 0.6.2",
  "gpui-kit",

@@ -16,6 +16,7 @@ parity = [
 ]
 
 [dependencies]
+asrs-canvas = { path = "../asrs-canvas" }
 anyhow = { version = "=1.0.104", optional = true }
 gpui-kit.workspace = true
 gpui-pre = { workspace = true, optional = true }
@@ -125,4 +126,8 @@ required-features = ["parity"]
 [[test]]
 name = "pixel_snap"
 harness = false
+required-features = ["parity"]
+
+[[example]]
+name = "text_scenes"
 required-features = ["parity"]

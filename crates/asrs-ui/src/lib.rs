@@ -15,6 +15,7 @@ pub mod filter;
 pub mod icon;
 pub mod platform;
 pub mod symbols;
+pub mod text;
 pub mod theme;
 
 use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};

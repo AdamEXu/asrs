@@ -1,0 +1,452 @@
+//! Static UI text, laid out and painted the way Blink does through `asrs_canvas::text::dom`.
+//!
+//! Each painted fragment becomes a cached glyph-run image keyed by font, string, colour, the
+//! origin's sub-pixel position and the scale, so a frame that repaints known text only blits.
+//! Each window keeps its own cache, evicted least recently used first past a byte or entry
+//! budget, and evicted images leave that window's sprite atlas on its next text paint.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use asrs_canvas::text::dom::{self, Layout, Lu};
+use asrs_canvas::text::font::FontKey;
+use asrs_canvas::text::lut::MaskGammaLut;
+use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
+use gpui_kit::{
+    App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, SharedString,
+    Style, StyleRefinement, Styled, Window, WindowId, point, px, size,
+};
+use image::{Frame, RgbaImage};
+
+pub use asrs_canvas::text::FontSpec;
+pub use asrs_canvas::text::dom::{
+    Align, Direction, LineHeight, Overflow, Style as TextStyle, WhiteSpace,
+};
+
+/// The default budget of one window's glyph-run cache.
+pub const CACHE_BYTES: usize = 32 << 20;
+pub const CACHE_ENTRIES: usize = 4096;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct RunKey {
+    font: FontKey,
+    text: String,
+    color: [u8; 3],
+    fraction: Lu,
+    scale: u32,
+}
+
+struct Run {
+    image: Option<(i32, i32, Arc<RenderImage>)>,
+    bytes: usize,
+    used: u64,
+}
+
+#[derive(Default)]
+struct RunCache {
+    runs: HashMap<RunKey, Run>,
+    bytes: usize,
+    evicted: Vec<Arc<RenderImage>>,
+}
+
+/// Counts of one window's glyph-run cache.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CacheStats {
+    pub entries: usize,
+    pub bytes: usize,
+    pub rasterized: u64,
+    pub evicted: u64,
+}
+
+pub struct TextSystem {
+    backend: Box<dyn TextBackend>,
+    lut: MaskGammaLut,
+    windows: HashMap<WindowId, (RunCache, CacheStats)>,
+    clock: u64,
+    budget: (usize, usize),
+}
+
+impl Default for TextSystem {
+    fn default() -> Self {
+        TextSystem {
+            backend: platform_backend().unwrap_or_else(|| Box::new(FixedAdvance)),
+            lut: MaskGammaLut::embedded().unwrap_or_else(MaskGammaLut::identity),
+            windows: HashMap::new(),
+            clock: 0,
+            budget: (CACHE_BYTES, CACHE_ENTRIES),
+        }
+    }
+}
+
+impl Global for TextSystem {}
+
+impl TextSystem {
+    /// Changes the per-window cache budget, for tests that exercise eviction.
+    pub fn set_budget(cx: &mut App, bytes: usize, entries: usize) {
+        cx.default_global::<TextSystem>().budget = (bytes, entries);
+    }
+
+    pub fn stats(cx: &mut App, window: WindowId) -> CacheStats {
+        let system = cx.default_global::<TextSystem>();
+        system
+            .windows
+            .get(&window)
+            .map_or_else(CacheStats::default, |(cache, stats)| CacheStats {
+                entries: cache.runs.len(),
+                bytes: cache.bytes,
+                ..*stats
+            })
+    }
+
+    fn evict(&mut self, window: WindowId) {
+        let (bytes, entries) = self.budget;
+        let Some((cache, stats)) = self.windows.get_mut(&window) else {
+            return;
+        };
+        if cache.bytes <= bytes && cache.runs.len() <= entries {
+            return;
+        }
+        let mut order: Vec<(u64, RunKey)> = cache
+            .runs
+            .iter()
+            .map(|(k, r)| (r.used, k.clone()))
+            .collect();
+        order.sort_unstable_by_key(|(used, _)| *used);
+        let (keep_bytes, keep_entries) = (bytes / 4 * 3, entries / 4 * 3);
+        for (_, key) in order {
+            if cache.bytes <= keep_bytes && cache.runs.len() <= keep_entries {
+                break;
+            }
+            if let Some(run) = cache.runs.remove(&key) {
+                cache.bytes -= run.bytes;
+                stats.evicted += 1;
+                cache.evicted.extend(run.image.map(|(_, _, image)| image));
+            }
+        }
+    }
+
+    fn run(
+        &mut self,
+        window: WindowId,
+        font: &FontSpec,
+        fragment: &dom::Fragment,
+        fraction: Lu,
+        scale: f32,
+        color: [u8; 3],
+    ) -> Option<(i32, i32, Arc<RenderImage>)> {
+        self.clock += 1;
+        let clock = self.clock;
+        let key = RunKey {
+            font: font.key(),
+            text: fragment.text.clone(),
+            color,
+            fraction,
+            scale: scale.to_bits(),
+        };
+        let (cache, stats) = self.windows.entry(window).or_default();
+        if let Some(run) = cache.runs.get_mut(&key) {
+            run.used = clock;
+            return run.image.clone();
+        }
+        let image = dom::rasterize(
+            self.backend.as_mut(),
+            &self.lut,
+            &fragment.glyphs,
+            fraction,
+            scale,
+            color,
+        )
+        .and_then(|run| {
+            let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
+            for &a in &run.alpha {
+                bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+            }
+            let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
+            Some((
+                run.left,
+                run.top,
+                Arc::new(RenderImage::new(vec![Frame::new(buffer)])),
+            ))
+        });
+        let bytes = image.as_ref().map_or(0, |(_, _, i)| {
+            let s = i.size(0);
+            s.width.0 as usize * s.height.0 as usize * 4
+        }) + fragment.text.len()
+            + 64;
+        stats.rasterized += 1;
+        cache.bytes += bytes;
+        cache.runs.insert(
+            key,
+            Run {
+                image: image.clone(),
+                bytes,
+                used: clock,
+            },
+        );
+        self.evict(window);
+        image
+    }
+}
+
+/// Lays `text` out at device scale `scale`, in a content box `available` CSS px wide or at its
+/// max-content width.
+pub fn layout(
+    cx: &mut App,
+    style: &TextStyle,
+    text: &str,
+    scale: f32,
+    available: Option<f32>,
+) -> Layout {
+    let system = cx.default_global::<TextSystem>();
+    let available = available.map(|w| dom::lu_round(w * scale));
+    dom::layout(system.backend.as_mut(), style, text, available, scale)
+}
+
+/// The border-box size Chromium gives a shrink-to-fit block holding `text`, in CSS px.
+pub fn measure(cx: &mut App, style: &TextStyle, text: &str, scale: f32) -> (f64, f64) {
+    let l = layout(cx, style, text, scale, None);
+    (l.width_px(), l.height_px())
+}
+
+/// `v` less its value snapped to the device pixel grid the way GPUI snaps layout: what a
+/// fractional CSS position loses to snapping, for [`Text::subpixel`].
+pub fn snap_remainder(v: f32, scale: f32) -> f32 {
+    v - (v * scale + 0.5).floor() / scale
+}
+
+/// A block box of text, sized like Chromium's shrink-to-fit box unless styled with a width.
+pub struct Text {
+    text: SharedString,
+    style: TextStyle,
+    color: [u8; 3],
+    subpixel: (f32, f32),
+    probe: Option<SharedString>,
+    gpui: StyleRefinement,
+}
+
+impl Text {
+    pub fn new(text: impl Into<SharedString>, style: TextStyle) -> Self {
+        Text {
+            text: text.into(),
+            style,
+            color: [0x22; 3],
+            subpixel: (0.0, 0.0),
+            probe: None,
+            gpui: StyleRefinement::default(),
+        }
+    }
+
+    pub fn color(mut self, rgb: u32) -> Self {
+        self.color = [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8];
+        self
+    }
+
+    /// The part of the box's CSS position, in CSS px, that GPUI's pixel snapping dropped; text
+    /// is painted from the unsnapped position, as Chromium paints it.
+    pub fn subpixel(mut self, dx: f32, dy: f32) -> Self {
+        self.subpixel = (dx, dy);
+        self
+    }
+
+    /// Names the box in parity captures.
+    pub fn probe(mut self, id: impl Into<SharedString>) -> Self {
+        self.probe = Some(id.into());
+        self
+    }
+
+    fn sized(&self) -> bool {
+        self.gpui.size.width.is_some() || self.style.white_space == WhiteSpace::Normal
+    }
+}
+
+impl Styled for Text {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.gpui
+    }
+}
+
+impl IntoElement for Text {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+pub struct Prepaint {
+    layout: Layout,
+    origin: (Lu, Lu),
+}
+
+impl Element for Text {
+    type RequestLayoutState = ();
+    type PrepaintState = Prepaint;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        _: &mut App,
+    ) -> (LayoutId, ()) {
+        let mut style = Style::default();
+        style.refine(&self.gpui);
+        let text = self.text.clone();
+        let text_style = self.style;
+        let wraps = text_style.white_space == WhiteSpace::Normal;
+        let id = window.request_measured_layout(style, move |known, available, window, cx| {
+            let width = known.width.or(match available.width {
+                AvailableSpace::Definite(w) if wraps => Some(w),
+                _ => None,
+            });
+            let scale = window.scale_factor();
+            let l = layout(cx, &text_style, &text, scale, width.map(f32::from));
+            let snap =
+                |v: f64| px(((v * f64::from(scale) + 0.5).floor() / f64::from(scale)) as f32);
+            size(snap(l.width_px()), snap(l.height_px()))
+        });
+        (id, ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Prepaint {
+        let scale = window.scale_factor();
+        let available = self.sized().then(|| f32::from(bounds.size.width));
+        let layout = layout(cx, &self.style, &self.text, scale, available);
+        let origin = (
+            dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
+            dom::lu_round((f32::from(bounds.origin.y) + self.subpixel.1) * scale),
+        );
+        Prepaint { layout, origin }
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        prepaint: &mut Prepaint,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let scale = window.scale_factor();
+        let window_id = window.window_handle().window_id();
+        let system = cx.default_global::<TextSystem>();
+        if let Some((cache, _)) = system.windows.get_mut(&window_id) {
+            for image in cache.evicted.drain(..) {
+                let _ = window.drop_image(image);
+            }
+        }
+        let Prepaint { layout, origin } = prepaint;
+        let mut images = Vec::new();
+        for line in &layout.lines {
+            let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
+            for fragment in &line.fragments {
+                let x = origin.0 + fragment.x;
+                if let Some((left, top, image)) = system.run(
+                    window_id,
+                    &self.style.font,
+                    fragment,
+                    x.rem_euclid(64),
+                    scale,
+                    self.color,
+                ) {
+                    images.push((x.div_euclid(64) + left, baseline + top, image));
+                }
+            }
+        }
+        let clip = (self.style.overflow != Overflow::Visible).then_some(ContentMask { bounds });
+        window.with_content_mask(clip, |window| {
+            let to_px = |v: i32| px(v as f32 / scale);
+            for (x, y, image) in images {
+                let s = image.size(0);
+                let rect = Bounds {
+                    origin: point(to_px(x), to_px(y)),
+                    size: size(to_px(s.width.0), to_px(s.height.0)),
+                };
+                let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+            }
+        });
+        #[cfg(feature = "parity")]
+        if let Some(id) = &self.probe {
+            probe::record(cx, id, bounds, layout, *origin);
+        }
+    }
+}
+
+#[cfg(feature = "parity")]
+pub mod probe {
+    use super::*;
+
+    /// What a [`Text`] painted, in CSS px: its box, its max-content size and each fragment's
+    /// text box (`[x, y, width, height]`, the ellipsis last on its line when present).
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Record {
+        pub id: SharedString,
+        pub bounds: [f32; 4],
+        pub width: f64,
+        pub height: f64,
+        pub fragments: Vec<(String, [f64; 4])>,
+    }
+
+    #[derive(Default)]
+    pub struct Probe(pub Vec<Record>);
+
+    impl Global for Probe {}
+
+    pub(super) fn record(
+        cx: &mut App,
+        id: &SharedString,
+        bounds: Bounds<Pixels>,
+        layout: &Layout,
+        origin: (Lu, Lu),
+    ) {
+        if !cx.has_global::<Probe>() {
+            return;
+        }
+        let px = |lu: Lu| f64::from(lu) / 64.0 / f64::from(layout.scale);
+        let mut fragments = Vec::new();
+        for line in &layout.lines {
+            let top = origin.1 + line.baseline - layout.ascent;
+            for f in &line.fragments {
+                let rect = [
+                    px(origin.0 + f.x),
+                    px(top),
+                    px(f.width),
+                    px(layout.ascent + layout.descent),
+                ];
+                fragments.push((f.text.clone(), rect));
+            }
+        }
+        let record = Record {
+            id: id.clone(),
+            bounds: [
+                f32::from(bounds.origin.x),
+                f32::from(bounds.origin.y),
+                f32::from(bounds.size.width),
+                f32::from(bounds.size.height),
+            ],
+            width: layout.width_px(),
+            height: layout.height_px(),
+            fragments,
+        };
+        cx.global_mut::<Probe>().0.push(record);
+    }
+}

@@ -121,6 +121,9 @@ pub struct Line {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layout {
     pub scale: f32,
+    /// The zoomed font's rounded ascent and descent, the extent of a line's text box.
+    pub ascent: Lu,
+    pub descent: Lu,
     pub lines: Vec<Line>,
     /// Widest line before alignment and truncation: the box's max-content width.
     pub width: Lu,
@@ -255,88 +258,256 @@ fn byte_offset(text: &str, utf16: usize) -> usize {
     text.len()
 }
 
-fn shift(glyphs: &[ShapedGlyph], dx: f32, from: u32) -> Vec<ShapedGlyph> {
-    glyphs
-        .iter()
-        .map(|g| ShapedGlyph {
-            x: g.x - dx,
-            cluster: g.cluster - from,
-            ..*g
+const ELLIPSIS: &str = "\u{2026}";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Class {
+    L,
+    R,
+    En,
+    Es,
+    Et,
+    Cs,
+    Neutral,
+}
+
+/// Bidi classes for the scripts upstream's text uses: Latin, Greek and the like are strong
+/// left-to-right, Hebrew and Arabic strong right-to-left.
+fn class(c: char) -> Class {
+    match c {
+        '0'..='9' => Class::En,
+        '+' | '-' => Class::Es,
+        '#' | '$' | '%' | '\u{b0}' | '\u{b1}' | '\u{2030}' => Class::Et,
+        ',' | '.' | '/' | ':' | '\u{a0}' => Class::Cs,
+        '\u{590}'..='\u{8ff}' | '\u{fb1d}'..='\u{fdff}' | '\u{fe70}'..='\u{feff}' => Class::R,
+        c if c.is_alphabetic() => Class::L,
+        _ => Class::Neutral,
+    }
+}
+
+/// UAX #9 for one paragraph at level 1 without explicit embeddings: rules W4 to W7, N1, N2, I1
+/// and I2, reduced to the classes above. Returns the logical runs as `(byte range, rtl)`; a
+/// right-to-left run is at level 1, a left-to-right one at level 2.
+fn rtl_runs(text: &str) -> Vec<(std::ops::Range<usize>, bool)> {
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let mut t: Vec<Class> = chars.iter().map(|&(_, c)| class(c)).collect();
+    let n = t.len();
+    for i in 1..n.saturating_sub(1) {
+        if matches!(t[i], Class::Cs | Class::Es) && t[i - 1] == Class::En && t[i + 1] == Class::En {
+            t[i] = Class::En;
+        }
+    }
+    for i in 0..n {
+        if t[i] == Class::En {
+            let mut j = i;
+            while j > 0 && t[j - 1] == Class::Et {
+                t[j - 1] = Class::En;
+                j -= 1;
+            }
+            let mut j = i + 1;
+            while j < n && t[j] == Class::Et {
+                t[j] = Class::En;
+                j += 1;
+            }
+        }
+    }
+    for v in &mut t {
+        if matches!(v, Class::Es | Class::Et | Class::Cs) {
+            *v = Class::Neutral;
+        }
+    }
+    let mut strong = Class::R;
+    for v in &mut t {
+        match *v {
+            Class::L | Class::R => strong = *v,
+            Class::En if strong == Class::L => *v = Class::L,
+            _ => {}
+        }
+    }
+    let mut i = 0;
+    while i < n {
+        if t[i] != Class::Neutral {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && t[i] == Class::Neutral {
+            i += 1;
+        }
+        let before = if start == 0 { Class::R } else { t[start - 1] };
+        let after = if i == n { Class::R } else { t[i] };
+        let resolved = if before == Class::L && after == Class::L {
+            Class::L
+        } else {
+            Class::R
+        };
+        for v in &mut t[start..i] {
+            *v = resolved;
+        }
+    }
+    let mut runs: Vec<(std::ops::Range<usize>, bool)> = Vec::new();
+    for (k, &(byte, c)) in chars.iter().enumerate() {
+        let rtl = t[k] == Class::R;
+        let end = byte + c.len_utf8();
+        match runs.last_mut() {
+            Some((range, r)) if *r == rtl => range.end = end,
+            _ => runs.push((byte..end, rtl)),
+        }
+    }
+    runs
+}
+
+fn mirror(c: char) -> char {
+    match c {
+        '(' => ')',
+        ')' => '(',
+        '[' => ']',
+        ']' => '[',
+        '{' => '}',
+        '}' => '{',
+        '<' => '>',
+        '>' => '<',
+        '\u{ab}' => '\u{bb}',
+        '\u{bb}' => '\u{ab}',
+        c => c,
+    }
+}
+
+/// The line's bidi runs in visual order, each as the string it displays left to right.
+fn visual_runs(text: &str, direction: Direction) -> Vec<String> {
+    if direction == Direction::Ltr {
+        return vec![text.to_owned()];
+    }
+    rtl_runs(text)
+        .into_iter()
+        .rev()
+        .map(|(range, rtl)| {
+            let run = &text[range];
+            if rtl {
+                run.chars().rev().map(mirror).collect()
+            } else {
+                run.to_owned()
+            }
         })
         .collect()
 }
 
-const ELLIPSIS: &str = "\u{2026}";
+/// The glyphs of `fragment` whose characters lie in `[from, to)`, moved so the first is at the
+/// origin, as a fragment `width` wide at `x`.
+fn sub_fragment(
+    fragment: &Fragment,
+    at: &[f32],
+    from: usize,
+    to: usize,
+    x: Lu,
+    width: Lu,
+) -> Fragment {
+    let glyphs = fragment
+        .glyphs
+        .iter()
+        .filter(|g| (from..to).contains(&(g.cluster as usize)))
+        .map(|g| ShapedGlyph {
+            x: g.x - at[from],
+            cluster: g.cluster - from as u32,
+            ..*g
+        })
+        .collect();
+    let text = &fragment.text;
+    Fragment {
+        text: text[byte_offset(text, from)..byte_offset(text, to)].to_owned(),
+        x,
+        width,
+        glyphs,
+    }
+}
 
-/// `NGLineTruncator::TruncateLine` for one text item that overflows `available`.
+fn boundaries_of(fragment: &Fragment, width: f32, len: usize) -> Vec<f32> {
+    boundaries(
+        &Shaped {
+            glyphs: fragment.glyphs.clone(),
+            width,
+        },
+        len,
+    )
+}
+
+/// `NGLineTruncator::TruncateLine`: drops what lies past the line end less the ellipsis, cuts the
+/// fragment straddling that point at the last character that fits, and places the ellipsis
+/// against what is left. The line end is the right edge for `ltr` and the left edge for `rtl`.
+/// `fragments` are in visual order with their unsnapped widths.
 fn truncate(
     backend: &mut dyn TextBackend,
     style: &Style,
-    text: &str,
-    shaped: &Shaped,
+    fragments: Vec<(Fragment, f32)>,
     available: Lu,
     scale: f32,
 ) -> Vec<Fragment> {
     let ellipsis = backend.shape(&style.font, ELLIPSIS);
     let ellipsis_width = lu_ceil(ellipsis.width * scale);
-    let room = (available - ellipsis_width) as f32 / 64.0;
-    let len = utf16_len(text);
-    let at = boundaries(shaped, len);
-    let mut fragments = Vec::new();
+    let ellipsis_at = |x: Lu| Fragment {
+        text: ELLIPSIS.to_owned(),
+        x,
+        width: ellipsis_width,
+        glyphs: ellipsis.glyphs.clone(),
+    };
+    let mut out = Vec::new();
     if style.direction == Direction::Ltr {
-        let fit = (0..=len)
-            .rev()
-            .find(|&k| at[k] * scale <= room)
-            .unwrap_or(0);
-        let kept = lu_ceil(at[fit] * scale);
-        if fit > 0 {
-            let glyphs: Vec<ShapedGlyph> = shaped
-                .glyphs
-                .iter()
-                .filter(|g| (g.cluster as usize) < fit)
-                .copied()
-                .collect();
-            fragments.push(Fragment {
-                text: text[..byte_offset(text, fit)].to_owned(),
-                x: 0,
-                width: kept,
-                glyphs,
-            });
+        let limit = available - ellipsis_width;
+        let mut end = 0;
+        for (f, width) in fragments {
+            if f.x + f.width <= limit {
+                end = f.x + f.width;
+                out.push(f);
+                continue;
+            }
+            if f.x < limit {
+                let len = utf16_len(&f.text);
+                let at = boundaries_of(&f, width, len);
+                let room = (limit - f.x) as f32 / 64.0;
+                let fit = (0..=len)
+                    .rev()
+                    .find(|&k| at[k] * scale <= room)
+                    .unwrap_or(0);
+                end = f.x;
+                if fit > 0 {
+                    let kept = lu_ceil(at[fit] * scale);
+                    end += kept;
+                    out.push(sub_fragment(&f, &at, 0, fit, f.x, kept));
+                }
+            }
+            break;
         }
-        fragments.push(Fragment {
-            text: ELLIPSIS.to_owned(),
-            x: if fit > 0 { kept } else { 0 },
-            width: ellipsis_width,
-            glyphs: ellipsis.glyphs,
-        });
+        out.push(ellipsis_at(end));
     } else {
-        let fit = (0..=len)
-            .find(|&k| (shaped.width - at[k]) * scale <= room)
-            .unwrap_or(len);
-        let kept = lu_ceil((shaped.width - at[fit]) * scale);
-        let text_x = available - kept;
-        fragments.push(Fragment {
-            text: ELLIPSIS.to_owned(),
-            x: text_x - ellipsis_width,
-            width: ellipsis_width,
-            glyphs: ellipsis.glyphs,
-        });
-        if fit < len {
-            let glyphs: Vec<ShapedGlyph> = shaped
-                .glyphs
-                .iter()
-                .filter(|g| (g.cluster as usize) >= fit)
-                .copied()
-                .collect();
-            fragments.push(Fragment {
-                text: text[byte_offset(text, fit)..].to_owned(),
-                x: text_x,
-                width: kept,
-                glyphs: shift(&glyphs, at[fit], fit as u32),
-            });
+        let limit = ellipsis_width;
+        let mut start = available;
+        for (f, width) in fragments.into_iter().rev() {
+            if f.x >= limit {
+                start = f.x;
+                out.push(f);
+                continue;
+            }
+            let right = f.x + f.width;
+            if right > limit {
+                let len = utf16_len(&f.text);
+                let at = boundaries_of(&f, width, len);
+                let room = (right - limit) as f32 / 64.0;
+                let fit = (0..=len)
+                    .find(|&k| (width - at[k]) * scale <= room)
+                    .unwrap_or(len);
+                start = right;
+                if fit < len {
+                    let kept = lu_ceil((width - at[fit]) * scale);
+                    start -= kept;
+                    out.push(sub_fragment(&f, &at, fit, len, start, kept));
+                }
+            }
+            break;
         }
+        out.push(ellipsis_at(start - ellipsis_width));
+        out.reverse();
     }
-    fragments
+    out
 }
 
 /// Greedy line breaking of collapsed `white-space: normal` text into lines no wider than
@@ -410,19 +581,32 @@ pub fn layout(
     let mut lines = Vec::with_capacity(texts.len());
     let mut max_width = 0;
     for (i, line_text) in texts.into_iter().enumerate() {
-        let shaped = backend.shape(&style.font, &normalize_space(&line_text));
-        let width = lu_ceil(shaped.width * scale);
+        let mut runs = Vec::new();
+        let mut width = 0;
+        for run in visual_runs(&line_text, style.direction) {
+            let shaped = backend.shape(&style.font, &normalize_space(&run));
+            let run_width = lu_ceil(shaped.width * scale);
+            runs.push((
+                Fragment {
+                    text: run,
+                    x: width,
+                    width: run_width,
+                    glyphs: shaped.glyphs,
+                },
+                shaped.width,
+            ));
+            width += run_width;
+        }
         max_width = max_width.max(width);
         let room = available.unwrap_or(width);
+        let offset = align_offset(style.align, style.direction, room - width);
+        for (f, _) in &mut runs {
+            f.x += offset;
+        }
         let fragments = if style.overflow == Overflow::Ellipsis && width > room {
-            truncate(backend, style, &line_text, &shaped, room, scale)
+            truncate(backend, style, runs, room, scale)
         } else {
-            vec![Fragment {
-                text: line_text,
-                x: align_offset(style.align, style.direction, room - width),
-                width,
-                glyphs: shaped.glyphs,
-            }]
+            runs.into_iter().map(|(f, _)| f).collect()
         };
         let top = i as Lu * line_height;
         lines.push(Line {
@@ -435,6 +619,8 @@ pub fn layout(
     }
     Layout {
         scale,
+        ascent,
+        descent,
         height: lines.len() as Lu * line_height,
         lines,
         width: max_width,
@@ -591,5 +777,39 @@ mod tests {
         assert_eq!(f[1].x, lu_ceil(30.0) - lu_ceil(24.0));
         assert_eq!(f[1].glyphs[0].x, 0.0);
         assert_eq!(f[0].x, f[1].x - lu_ceil(6.0));
+    }
+
+    #[test]
+    fn rtl_paragraphs_move_edge_neutrals() {
+        let runs = |t: &str| visual_runs(t, Direction::Rtl);
+        assert_eq!(runs("/Drive/Pose"), ["Drive/Pose", "/"]);
+        assert_eq!(
+            runs("/Module0/Speed (m/s)"),
+            ["(", "Module0/Speed (m/s", "/"]
+        );
+        assert_eq!(runs("Alerts 3"), ["Alerts 3"]);
+        assert_eq!(runs("12.5 m"), ["m", " ", "12.5"]);
+        assert_eq!(visual_runs("/a", Direction::Ltr), ["/a"]);
+    }
+
+    #[test]
+    fn rtl_ellipsis_keeps_the_trailing_run() {
+        let mut s = style("10px sans-serif");
+        s.overflow = Overflow::Ellipsis;
+        s.white_space = WhiteSpace::NoWrap;
+        s.direction = Direction::Rtl;
+        s.align = Align::Right;
+        let l = layout(&mut FixedAdvance, &s, "/abcdefgh", Some(lu_ceil(30.0)), 1.0);
+        let texts: Vec<(&str, Lu)> = l.lines[0]
+            .fragments
+            .iter()
+            .map(|f| (f.text.as_str(), f.x))
+            .collect();
+        let slash = lu_ceil(30.0) - lu_ceil(6.0);
+        let kept = slash - lu_ceil(18.0);
+        assert_eq!(
+            texts,
+            [(ELLIPSIS, kept - lu_ceil(6.0)), ("fgh", kept), ("/", slash)]
+        );
     }
 }
