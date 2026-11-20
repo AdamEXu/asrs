@@ -17,7 +17,18 @@ commands:
             and hashes; --check regenerates into a scratch directory and fails unless every
             file is byte-identical to the committed manifest
   list [<name>]
-            print case ids and descriptions from the committed manifests";
+            print case ids and descriptions from the committed manifests
+  fuzz [--seed <u32>] [--count <n>] [--check]
+            mutate the generated synthetic corpora (run `corpus gen` first) into
+            target/parity/corpus/fuzz/<seed>/ with list.jsonl naming each mutant's source and
+            mutations; --check runs the fuzzer twice and fails unless both runs are identical
+  fetch [<name>...] [--offline]
+            download the public logs in parity/corpus/public.toml into
+            $ASRS_CACHE/public-logs/, verifying size and sha256; files already present with the
+            right hash are kept; --offline only verifies what is there";
+
+const FUZZ_DEFAULT_SEED: &str = "1";
+const FUZZ_DEFAULT_COUNT: &str = "1000";
 
 const SPEC_SUFFIX: &str = ".spec.json";
 const MANIFEST_SUFFIX: &str = ".manifest.json";
@@ -28,6 +39,8 @@ pub fn run(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("gen") => generate(&paths, rest),
         Some("list") => list(&paths, rest),
+        Some("fuzz") => fuzz(&paths, rest),
+        Some("fetch") => crate::public::fetch(&paths, rest),
         _ => Err(USAGE.to_owned()),
     }
 }
@@ -316,6 +329,96 @@ fn list(paths: &Paths, args: &[String]) -> Result {
             );
         }
     }
+    Ok(())
+}
+
+fn fuzz(paths: &Paths, args: &[String]) -> Result {
+    let mut seed = FUZZ_DEFAULT_SEED.to_owned();
+    let mut count = FUZZ_DEFAULT_COUNT.to_owned();
+    let mut check = false;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--seed" => {
+                seed = rest
+                    .next()
+                    .ok_or("corpus fuzz: --seed needs a value")?
+                    .clone()
+            }
+            "--count" => {
+                count = rest
+                    .next()
+                    .ok_or("corpus fuzz: --count needs a value")?
+                    .clone()
+            }
+            "--check" => check = true,
+            other => return Err(format!("corpus fuzz: unknown argument {other}")),
+        }
+    }
+    let inputs: Vec<PathBuf> = discover(&paths.root)?
+        .iter()
+        .map(|spec| output_dir(&paths.root, &spec.name))
+        .collect();
+    if let Some(missing) = inputs.iter().find(|dir| !dir.is_dir()) {
+        return Err(format!(
+            "corpus fuzz: {} is missing; run `cargo xtask corpus gen` first",
+            missing.display()
+        ));
+    }
+    oracle::build_harness(paths)?;
+    let out = paths.root.join("target/parity/corpus/fuzz").join(&seed);
+    let run = |dir: &Path| -> Result<String> {
+        remove_dir(dir)?;
+        let mut command = oracle::oracle_command(paths, "corpusFuzz")?;
+        command
+            .args(["--seed", &seed, "--count", &count, "--out"])
+            .arg(dir);
+        for input in &inputs {
+            command.arg("--in").arg(input);
+        }
+        let list = oracle::pipe(&mut command, Vec::new())?;
+        let mut digest = String::new();
+        for line in list.lines() {
+            let record = json::parse(line).map_err(|e| format!("corpusFuzz output: {e}"))?;
+            for file in record
+                .get("files")
+                .and_then(Json::as_array)
+                .unwrap_or_default()
+            {
+                let rel = file
+                    .as_str()
+                    .map(|s| s.to_string_lossy())
+                    .unwrap_or_default();
+                digest.push_str(&format!(
+                    "{rel}\0{}\n",
+                    oracle::hash_bytes(&oracle::read(&dir.join(&rel))?)
+                ));
+            }
+        }
+        fs::write(dir.join("list.jsonl"), &list).map_err(|e| format!("{}: {e}", dir.display()))?;
+        Ok(format!(
+            "{}{}",
+            oracle::hash_bytes(list.as_bytes()),
+            oracle::hash_bytes(digest.as_bytes())
+        ))
+    };
+    eprintln!("==> corpus fuzz seed {seed}, {count} mutants");
+    let first = run(&out)?;
+    if check {
+        let again = out.with_file_name(format!(".{seed}.check"));
+        let second = run(&again)?;
+        remove_dir(&again)?;
+        if first != second {
+            return Err(format!(
+                "corpus fuzz --check: seed {seed} produced different output on a rerun"
+            ));
+        }
+        eprintln!("corpus fuzz --check: seed {seed} reproduces byte-identically");
+    }
+    eprintln!(
+        "  -> {}",
+        out.strip_prefix(&paths.root).unwrap_or(&out).display()
+    );
     Ok(())
 }
 

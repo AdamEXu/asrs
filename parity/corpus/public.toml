@@ -1,0 +1,119 @@
+# Public logs for the decode and export suites, fetched by `cargo xtask corpus fetch` into
+# $ASRS_CACHE/public-logs/<file> and verified against sha256 and size. None are committed.
+# URLs are pinned to a commit so the bytes cannot change under the hash.
+#
+# Fields: name (unique id), file (path under the cache directory; files of a .dslog/.dsevents pair
+# share a base name), url, sha256, size (bytes), format, source, license.
+# Optional: merge (logs with the same value record the same match and form a merge pair).
+
+[[log]]
+name = "rar1741-akit-q21"
+file = "rar1741/akit_25-03-15_15-13-09_inkok_q21.wpilog"
+url = "https://media.githubusercontent.com/media/RAR1741/RA25_LogFileArchive/9e71a9c6d921560ca2aacbf390e38dca8bc46eeb/Kokomo/akit_25-03-15_15-13-09_inkok_q21.wpilog"
+sha256 = "bd45830dc93b8e03c0e85c19024d206447b7664f94c3b2063c5fbe0b0582d849"
+size = 11010048
+format = "wpilog"
+source = "FRC 1741 Red Alert, 2025 Kokomo qualification 21, AdvantageKit"
+license = "none stated; fetched at test time only"
+merge = "kokomo-q21"
+
+[[log]]
+name = "rar1741-wpilib-q21"
+file = "rar1741/FRC_20250315_191317_INKOK_Q21.wpilog"
+url = "https://media.githubusercontent.com/media/RAR1741/RA25_LogFileArchive/9e71a9c6d921560ca2aacbf390e38dca8bc46eeb/Kokomo/FRC_20250315_191317_INKOK_Q21.wpilog"
+sha256 = "cd19a6c312c6e7f9ff052a57f0a84ceb838d9385a75f15d44ca94af31242afaf"
+size = 43687633
+format = "wpilog"
+source = "FRC 1741 Red Alert, 2025 Kokomo qualification 21, WPILib DataLogManager with FMS match name"
+license = "none stated; fetched at test time only"
+merge = "kokomo-q21"
+
+[[log]]
+name = "rar1741-akit-q43"
+file = "rar1741/akit_25-03-15_18-23-53_inkok_q43.wpilog"
+url = "https://media.githubusercontent.com/media/RAR1741/RA25_LogFileArchive/9e71a9c6d921560ca2aacbf390e38dca8bc46eeb/Kokomo/akit_25-03-15_18-23-53_inkok_q43.wpilog"
+sha256 = "7f1a2abb864530538b30de6e2ac2f90c672edfd48387d2b4237101c3e7a0d8a0"
+size = 11337728
+format = "wpilog"
+source = "FRC 1741 Red Alert, 2025 Kokomo qualification 43, AdvantageKit"
+license = "none stated; fetched at test time only"
+
+[[log]]
+name = "rar1741-wpilib-practice"
+file = "rar1741/FRC_20250315_171245.wpilog"
+url = "https://media.githubusercontent.com/media/RAR1741/RA25_LogFileArchive/9e71a9c6d921560ca2aacbf390e38dca8bc46eeb/Kokomo/FRC_20250315_171245.wpilog"
+sha256 = "0e6f2bfd7fe8152c215d6055d50faefee114adc1e650891af286288d76d8ef40"
+size = 1162768
+format = "wpilog"
+source = "FRC 1741 Red Alert, 2025 Kokomo, short WPILib DataLogManager log without a match name"
+license = "none stated; fetched at test time only"
+
+[[log]]
+name = "rar1741-wpilib-tbd"
+file = "rar1741/FRC_TBD_272919ccfd2240eb.wpilog"
+url = "https://media.githubusercontent.com/media/RAR1741/RA25_LogFileArchive/9e71a9c6d921560ca2aacbf390e38dca8bc46eeb/Kokomo/FRC_TBD_272919ccfd2240eb.wpilog"
+sha256 = "6d1379cbd3eb18f7e0cd0473883a867d0defd24bcda5f4883346fffbd4a4d424"
+size = 317540
+format = "wpilog"
+source = "FRC 1741 Red Alert, 2025 Kokomo, WPILib log written before the clock was set (FRC_TBD name)"
+license = "none stated; fetched at test time only"
+
+[[log]]
+name = "dslog-reader-2022-02-25"
+file = "dslog-reader/2022_02_25 21_25_39 Fri.dslog"
+url = "https://raw.githubusercontent.com/orangelight/DSLOG-Reader/ab0c36e7fb14d389dd56b3cc278df21c0b05d3f5/DSLOG-Reader%202/DSLOG-Reader-Tests/TestFiles/2022_02_25%2021_25_39%20Fri.dslog"
+sha256 = "7bd835e67e4f9f0a852a9c83f4a490fd1b04b0b74ab5306c037fb95834c96b3f"
+size = 496802
+format = "dslog"
+source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
+license = "MIT"
+
+[[log]]
+name = "dslog-reader-2022-02-25-events"
+file = "dslog-reader/2022_02_25 21_25_39 Fri.dsevents"
+url = "https://raw.githubusercontent.com/orangelight/DSLOG-Reader/ab0c36e7fb14d389dd56b3cc278df21c0b05d3f5/DSLOG-Reader%202/DSLOG-Reader-Tests/TestFiles/2022_02_25%2021_25_39%20Fri.dsevents"
+sha256 = "cd7a1d09efaca1e088cdbd5b1a91857b62e6f9bdd63e69534bc50ab412664285"
+size = 282805
+format = "dsevents"
+source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
+license = "MIT"
+
+[[log]]
+name = "dslog-reader-2022-02-27"
+file = "dslog-reader/2022_02_27 15_17_59 Sun.dslog"
+url = "https://raw.githubusercontent.com/orangelight/DSLOG-Reader/ab0c36e7fb14d389dd56b3cc278df21c0b05d3f5/DSLOG-Reader%202/DSLOG-Reader-Tests/TestFiles/2022_02_27%2015_17_59%20Sun.dslog"
+sha256 = "9af1441c6d639cc7c23f90b10fbac76706ffeb15a9bf7e5dcf35ee366e769a71"
+size = 234926
+format = "dslog"
+source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
+license = "MIT"
+
+[[log]]
+name = "dslog-reader-2022-02-27-events"
+file = "dslog-reader/2022_02_27 15_17_59 Sun.dsevents"
+url = "https://raw.githubusercontent.com/orangelight/DSLOG-Reader/ab0c36e7fb14d389dd56b3cc278df21c0b05d3f5/DSLOG-Reader%202/DSLOG-Reader-Tests/TestFiles/2022_02_27%2015_17_59%20Sun.dsevents"
+sha256 = "93197070f412423f69f52a104b42bb3f366f95e9697f4b18a52003fd1c36f014"
+size = 95539
+format = "dsevents"
+source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
+license = "MIT"
+
+[[log]]
+name = "dslog-reader-2022-02-28"
+file = "dslog-reader/2022_02_28 21_49_43 Mon.dslog"
+url = "https://raw.githubusercontent.com/orangelight/DSLOG-Reader/ab0c36e7fb14d389dd56b3cc278df21c0b05d3f5/DSLOG-Reader%202/DSLOG-Reader-Tests/TestFiles/2022_02_28%2021_49_43%20Mon.dslog"
+sha256 = "b211987144413f07819455dbffa30f5a37897de917538471b6acbf49b3135ad7"
+size = 3100
+format = "dslog"
+source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022, a short log with no .dsevents"
+license = "MIT"
+
+[[log]]
+name = "dslog-reader-2022-03-19"
+file = "dslog-reader/2022_03_19 12_55_56 Sat.dslog"
+url = "https://raw.githubusercontent.com/orangelight/DSLOG-Reader/ab0c36e7fb14d389dd56b3cc278df21c0b05d3f5/DSLOG-Reader%202/DSLOG-Reader-Tests/TestFiles/2022_03_19%2012_55_56%20Sat.dslog"
+sha256 = "5308a61314342f3f37f4a3a4bd02d53e8dc6a8d847b01a6809ed50143d371115"
+size = 604566
+format = "dslog"
+source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022, no .dsevents"
+license = "MIT"

@@ -168,3 +168,32 @@ Corpus A (`src/corpusA.ts`, `src/corpus/`):
 
 Each case draws from its own random stream (the corpus seed mixed with the case id), so adding a case leaves
 the others unchanged.
+
+Corpus B (`src/corpusB.ts`):
+
+- `rlog/*`: R1 and R2 files from `src/corpus/rlog.ts`: every R1 tag and R2 type string, value-length errors,
+  key redeclaration, the timestamp corruption limits and resync scan, bad headers, truncation at every byte of
+  the last cycle, seeded random logs.
+- `dslog/*`: `.dslog` and `.dsevents` files (pairs share a base name): REV and CTRE power blocks, every status
+  mask, battery spikes, 15000-cycle timestamp drift, LabVIEW time edges, tag stripping (including the
+  `slice(-1)` quirk), truncation, and the header-only events file whose worker never responds.
+- `roadrunner/*`: revisions 0 and 1, every schema kind, op mode timestamps, concatenated logs, error and
+  truncation cases.
+- `csv/export*/*`: logs exported by upstream's real `exportWorker` bundle (`src/corpus/exporter.ts`) in both
+  layouts and every sampling mode, one log that survives the round trip and one that does not;
+  `csv/hand/*`: hand-written and broken files.
+- `urcl/*`: WPILOG files with URCL r1, r2 and r3 data; r3 STATUS frames are re-encoded with upstream's
+  `buildCanFramePayload` for the 2025 and 2026 specs.
+- `child/*`: parents with `log:<ext>` fields, chunked, nested, rejected and failing children.
+- `merge/<case>/{target,source}.*`: log pairs for `getMergeOffset`, one per branch of its alignment logic.
+- `fuzz/<family>/*`: six mutants per format from the fuzzer in `src/corpus/fuzz.ts`, so `--check` covers it.
+
+`cargo xtask corpus fuzz [--seed <u32>] [--count <n>] [--check]` runs the same mutator (`src/corpusFuzz.ts`)
+over the generated A and B corpora for `--deep` runs. Output goes to `target/parity/corpus/fuzz/<seed>/` with a
+`list.jsonl` naming each mutant's source, donor and mutation steps; nothing is committed.
+
+## Public corpus
+
+`parity/corpus/public.toml` lists real logs by pinned URL, sha256 and size. `cargo xtask corpus fetch` downloads
+them into `$ASRS_CACHE/public-logs/`, rejects any file whose size or hash differs, and keeps verified files;
+`--offline` only verifies. The logs are never committed.

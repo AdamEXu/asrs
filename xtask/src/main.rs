@@ -6,6 +6,7 @@ mod corpus;
 mod layout;
 mod oracle;
 mod parity;
+mod public;
 mod vectors;
 
 use std::path::{Path, PathBuf};
@@ -20,7 +21,7 @@ commands:
   layout    crate dependency and lint opt-out rules only
   assets    copy upstream assets into assets/
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
-  corpus    synthetic test corpora: gen, list (see `cargo xtask corpus`)
+  corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)";
 
 fn main() -> ExitCode {
