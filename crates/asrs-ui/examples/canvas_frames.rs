@@ -17,6 +17,7 @@ const LOGICAL: (f32, f32) = (1100.0, 650.0);
 const SCALE: f32 = 2.0;
 const PRESENT_P95_MS: f64 = 4.0;
 const RSS_GROWTH_MB: f64 = 64.0;
+const RELEASE_EVERY: usize = 10;
 
 struct Host {
     state: Entity<CanvasState>,
@@ -85,7 +86,7 @@ fn main() -> ExitCode {
         .expect("open window");
     let handle = window.into();
     let cx = capture.context();
-    let state = cx
+    let mut state = cx
         .update_window(handle, |root, _, cx| {
             root.downcast::<Host>()
                 .expect("host")
@@ -108,6 +109,17 @@ fn main() -> ExitCode {
     let mut convert = Vec::with_capacity(frames);
     let mut rss = Vec::new();
     for i in 0..frames {
+        if i % RELEASE_EVERY == RELEASE_EVERY - 1 {
+            state = cx
+                .update_window(handle, |root, _, cx| {
+                    let host = root.downcast::<Host>().expect("host");
+                    host.update(cx, |host, cx| {
+                        host.state = cx.new(CanvasState::new);
+                        host.state.clone()
+                    })
+                })
+                .expect("replace canvas");
+        }
         let source = sources[i % sources.len()].clone();
         let t0 = Instant::now();
         cx.update_window(handle, |_, window, cx| {
@@ -131,7 +143,9 @@ fn main() -> ExitCode {
     let last = *rss.last().expect("samples");
     let p50 = percentile(&present, 0.5);
     let p95 = percentile(&present, 0.95);
-    println!("canvas frames: {frames} frames of {width}x{height} at {SCALE}x");
+    println!(
+        "canvas frames: {frames} frames of {width}x{height} at {SCALE}x, a new canvas every {RELEASE_EVERY}"
+    );
     println!(
         "unpremultiply + swizzle alone: p50 {:.3} ms, p95 {:.3} ms",
         percentile(&swizzle, 0.5),
