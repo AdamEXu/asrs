@@ -214,49 +214,45 @@ function bytes(n: number, f: (i: number) => number): Uint8Array {
   return b;
 }
 
-const VALUES: unknown[] = [
-  null,
-  undefined,
-  true,
-  false,
-  ...NUMBERS,
-  ...STRINGS,
-  bytes(0, () => 0),
-  bytes(1, () => 0xab),
-  bytes(3, (i) => i),
-  bytes(499, (i) => i * 7 + 1),
-  bytes(500, (i) => i * 7 + 1),
-  bytes(501, (i) => i * 7 + 1),
-  bytes(600, (i) => 255 - i),
-  [],
-  [1],
-  [1, 2, 3],
-  [true, "x", 2.5, null, undefined],
-  [NaN, Infinity, -0],
-  [[1, 2], ["a"], []],
-  [new Uint8Array([1, 2])],
-  [{ a: 1 }, {}],
-  [new Date(0), new Date(NaN)],
-  Array.from({ length: 500 }, (_, i) => i),
-  Array.from({ length: 501 }, (_, i) => i),
-  Array.from({ length: 501 }, () => "x"),
-  Array.from({ length: 502 }, (_, i) => [i]),
-  [12n],
-  ["é", "😀", "\ud800"],
-  {},
-  { length: 0 },
-  { length: 2 },
-  { a: 1, b: [2, 3] },
-  { constructor: 1, toString: 2, hasOwnProperty: 3 },
-  JSON.parse('{"__proto__":3}'),
-  { length: 2, 0: 9, 1: 8 },
-  { byteLength: 2, 0: 1, 1: 2 },
-  { byteLength: "2", 0: 1, 1: 2 },
-  new Date(0),
-  new Date(NaN),
-  12n,
-  new ExtData(-1, new Uint8Array([1, 2, 3]))
+// Upstream only hands these helpers values of the field's own type (TableRenderer,
+// NT4Publisher, Log.putData), so each LoggableType gets values of its JS type.
+const BYTES = [0, 1, 3, 499, 500, 501, 600].map((n) => bytes(n, (i) => i * 7 + 1));
+const TYPED_VALUES: unknown[][] = [
+  BYTES,
+  [true, false],
+  NUMBERS,
+  STRINGS,
+  [[], [true], [false, true, true], Array.from({ length: 500 }, (_, i) => i % 3 === 0), Array.from({ length: 501 }, () => false)],
+  [[], [1], NUMBERS, Array.from({ length: 500 }, (_, i) => i), Array.from({ length: 501 }, (_, i) => i / 3), Array.from({ length: 502 }, () => NaN)],
+  [[], ["a"], STRINGS, Array.from({ length: 500 }, () => "x"), Array.from({ length: 501 }, (_, i) => "é" + i)],
+  [null]
 ];
+
+function randomTyped(r: Rng, type: number): unknown {
+  const length = () => r.pick([0, 1, r.below(6), r.below(8) === 0 ? r.range(498, 503) : r.below(30)]);
+  switch (type) {
+    case 0:
+      return bytes(r.below(4) === 0 ? r.range(495, 505) : r.below(40), () => r.below(256));
+    case 1:
+      return r.bool();
+    case 2:
+      return r.pick(NUMBERS);
+    case 3:
+      return r.pick(STRINGS);
+    case 4:
+      return Array.from({ length: length() }, () => r.bool());
+    case 5:
+      return Array.from({ length: length() }, () => r.pick(NUMBERS));
+    case 6:
+      return Array.from({ length: length() }, () => r.pick(STRINGS));
+    default:
+      return null;
+  }
+}
+
+const copyValue = (v: unknown): unknown =>
+  v instanceof Uint8Array ? new Uint8Array(v) : Array.isArray(v) ? [...v] : v;
+
 
 function randomValue(r: Rng, depth: number): unknown {
   switch (r.below(depth > 2 ? 8 : 12)) {
@@ -334,54 +330,13 @@ function pureMatrix() {
       }
     }
   }
-  for (const type of [0, 1, 2, 3, 4, 5, 6, 7, 8, -1]) {
-    for (const value of VALUES) {
-      call("shared/log/LogUtil:getLogValueText", [value, type]);
+  TYPED_VALUES.forEach((values, type) => {
+    for (const value of values) call("shared/log/LogUtil:getLogValueText", [value, type]);
+    for (const a of values) {
+      for (const b of values) call("shared/log/LogUtil:logValuesEqual", [type, a, b]);
+      call("shared/log/LogUtil:logValuesEqual", [type, a, copyValue(a)]);
     }
-  }
-  const pairs: [unknown, unknown][] = [
-    [null, null],
-    [undefined, undefined],
-    [null, undefined],
-    [true, true],
-    [true, false],
-    [NaN, NaN],
-    [-0, 0],
-    [2, 2],
-    ["a", "a"],
-    ["a", "b"],
-    [[], []],
-    [[1], [1]],
-    [[1, 2], [1, 3]],
-    [[1, 2], [1]],
-    [[1, 2], "ab"],
-    ["ab", [97, 98]],
-    [5, 5],
-    [5, 6],
-    [[1], undefined],
-    [undefined, [1]],
-    [null, []],
-    [bytes(2, () => 1), bytes(2, () => 1)],
-    [bytes(2, () => 1), bytes(2, () => 2)],
-    [bytes(2, () => 1), bytes(3, () => 1)],
-    [bytes(0, () => 0), bytes(0, () => 0)],
-    [bytes(2, () => 1), [1, 1]],
-    [bytes(2, () => 1), { byteLength: 2, 0: 1, 1: 1 }],
-    [bytes(2, () => 1), { byteLength: 2, 0: 1, 1: 5 }],
-    [{ byteLength: 2, 0: 1, 1: 2 }, bytes(2, (i) => i + 1)],
-    [{ byteLength: "2", 0: 1, 1: 2 }, bytes(2, (i) => i + 1)],
-    [{ byteLength: 0 }, bytes(0, () => 0)],
-    ["ab", "ab"],
-    ["ab", "cd"],
-    [[12n], [12n]],
-    [[12n], [13n]],
-    [undefined, null]
-  ];
-  for (const type of [0, 1, 2, 3, 4, 5, 6, 7]) {
-    for (const [a, b] of pairs) {
-      call("shared/log/LogUtil:logValuesEqual", [type, a, b]);
-    }
-  }
+  });
 }
 
 function pureRandom(r: Rng) {
@@ -409,10 +364,7 @@ function pureRandom(r: Rng) {
       ]);
       break;
     case 4:
-      call("shared/log/LogKeyUtils:applyKeyPrefix", [
-        r.below(5) === 0 ? anyArg() : r.pick(PREFIXES),
-        anyArg()
-      ]);
+      call("shared/log/LogKeyUtils:applyKeyPrefix", [r.below(5) === 0 ? key() : r.pick(PREFIXES), key()]);
       break;
     case 5:
       call("shared/log/LogKeyUtils:splitLogKey", [anyArg()]);
@@ -426,18 +378,16 @@ function pureRandom(r: Rng) {
       ]);
       break;
     case 7:
-    case 8:
-      call("shared/log/LogUtil:getLogValueText", [
-        randomValue(r, 0),
-        r.pick([0, 1, 2, 3, 4, 5, 6, 7, 8, -1])
-      ]);
+    case 8: {
+      const type = r.below(8);
+      call("shared/log/LogUtil:getLogValueText", [randomTyped(r, type), type]);
       break;
-    default:
-      call("shared/log/LogUtil:logValuesEqual", [
-        r.pick([0, 1, 2, 3, 4, 5, 6, 7, 8, -1]),
-        randomValue(r, 1),
-        randomValue(r, 1)
-      ]);
+    }
+    default: {
+      const type = r.below(8);
+      const a = randomTyped(r, type);
+      call("shared/log/LogUtil:logValuesEqual", [type, a, r.below(3) === 0 ? copyValue(a) : randomTyped(r, type)]);
+    }
   }
 }
 

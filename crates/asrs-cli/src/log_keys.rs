@@ -1,15 +1,16 @@
 //! `fn` names for `asrs_log::log::log_key_utils` and the `LogUtil` value helpers. Wrappers
-//! convert the CVE-1 arguments to the port's `JsString`/`JsValue` inputs; where upstream
+//! convert the CVE-1 arguments to the port's `JsString` and typed value inputs; where upstream
 //! would hit a string method or `RegExp.test` on a non-string they produce the same
 //! `TypeError` V8 throws.
 
 use asrs_js::string::JsString;
-use asrs_log::log::{LoggableType, log_key_utils as keys, log_util};
+use asrs_log::log::log_util::{self, LogValueText};
+use asrs_log::log::{LogValue, LoggableType, log_key_utils as keys};
 use asrs_parity::{Response, Value};
 
 use crate::functions::{arg, to_units, type_error};
-use crate::js_json::{self, to_js};
-use crate::log_field::{array, js_string, loggable_type_opt, string_value};
+use crate::log_field::{self, array, js_string, loggable_type, number, string_value};
+use crate::log_run::bytes;
 
 fn ok(v: impl FnOnce() -> Value) -> Response {
     Response::Ok(v())
@@ -135,11 +136,8 @@ fn remove_merge_prefix(a: &[Value]) -> Response {
 }
 
 fn apply_key_prefix(a: &[Value]) -> Response {
-    match (to_js(&arg(a, 0)), to_js(&arg(a, 1))) {
-        (Ok(p), Ok(k)) => match keys::apply_key_prefix_value(&p, &k) {
-            Ok(v) => Response::Ok(js_json::from_js(&v)),
-            Err(e) => Response::Throw(Value::Error(e.name.into(), e.message.into())),
-        },
+    match (js_string(&arg(a, 0)), js_string(&arg(a, 1))) {
+        (Ok(p), Ok(k)) => string(keys::apply_key_prefix(&p, &k)),
         (Err(e), _) | (_, Err(e)) => Response::Error(e),
     }
 }
@@ -174,32 +172,43 @@ fn filter_by_prefixes(a: &[Value]) -> Response {
 }
 
 fn log_value_text(a: &[Value]) -> Response {
-    let value = match to_js(&arg(a, 0)) {
-        Ok(v) => v,
-        Err(e) => return Response::Error(e),
-    };
-    // Only `type === LoggableType.Raw` branches upstream; any other index behaves as a
-    // non-Raw type.
-    let ty = loggable_type_opt(&arg(a, 1)).unwrap_or(LoggableType::Empty);
-    match log_util::get_log_value_text(&value, ty) {
-        Ok(Some(text)) => Response::Ok(Value::String(text.into())),
-        Ok(None) => Response::Ok(Value::Undefined),
-        Err(e) => Response::Throw(Value::Error(e.name.into(), e.message.into())),
+    fn text<T: LogValueText>(v: &Value, item: impl Fn(&Value) -> Result<T, String>) -> Response {
+        match item(v) {
+            Ok(x) => Response::Ok(Value::String(log_util::get_log_value_text(&x).into())),
+            Err(e) => Response::Error(e),
+        }
+    }
+    let v = &arg(a, 0);
+    match loggable_type(&arg(a, 1)) {
+        Ok(LoggableType::Raw) => text(v, bytes),
+        Ok(LoggableType::Boolean) => text(v, log_field::boolean),
+        Ok(LoggableType::Number) => text(v, number),
+        Ok(LoggableType::String) => text(v, js_string),
+        Ok(LoggableType::BooleanArray) => text(v, |x| array(x, log_field::boolean)),
+        Ok(LoggableType::NumberArray) => text(v, |x| array(x, number)),
+        Ok(LoggableType::StringArray) => text(v, |x| array(x, js_string)),
+        Ok(LoggableType::Empty) => text(v, |_| Ok(())),
+        Err(e) => Response::Error(e),
     }
 }
 
 fn log_values_equal(a: &[Value]) -> Response {
-    // A non-index `type` hits upstream's `default:` arm and returns false.
-    let ty = loggable_type_opt(&arg(a, 0));
-    match (to_js(&arg(a, 1)), to_js(&arg(a, 2))) {
-        (Ok(x), Ok(y)) => match ty {
-            Some(ty) => match log_util::log_values_equal(ty, &x, &y) {
-                Ok(b) => boolean(b),
-                Err(e) => Response::Throw(Value::Error(e.name.into(), e.message.into())),
-            },
-            None => boolean(false),
-        },
-        (Err(e), _) | (_, Err(e)) => Response::Error(e),
+    fn equal<T: LogValue>(a: &[Value], item: impl Fn(&Value) -> Result<T, String>) -> Response {
+        match (item(&arg(a, 1)), item(&arg(a, 2))) {
+            (Ok(x), Ok(y)) => boolean(log_util::log_values_equal(&x, &y)),
+            (Err(e), _) | (_, Err(e)) => Response::Error(e),
+        }
+    }
+    match loggable_type(&arg(a, 0)) {
+        Ok(LoggableType::Raw) => equal(a, bytes),
+        Ok(LoggableType::Boolean) => equal(a, log_field::boolean),
+        Ok(LoggableType::Number) => equal(a, number),
+        Ok(LoggableType::String) => equal(a, js_string),
+        Ok(LoggableType::BooleanArray) => equal(a, |x| array(x, log_field::boolean)),
+        Ok(LoggableType::NumberArray) => equal(a, |x| array(x, number)),
+        Ok(LoggableType::StringArray) => equal(a, |x| array(x, js_string)),
+        Ok(LoggableType::Empty) => equal(a, |_| Ok(())),
+        Err(e) => Response::Error(e),
     }
 }
 

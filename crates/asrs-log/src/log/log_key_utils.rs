@@ -1,15 +1,11 @@
 //! `shared/log/LogKeyUtils.ts`: the key constants and helpers, plus
 //! `ProtoDecoder.getFriendlySchemaType`, the one ProtoDecoder member it uses.
 
-use asrs_js::number;
 use asrs_js::regex::sites;
-use asrs_js::string::{JsError, JsString};
-use asrs_js::time::{NamedZone, date_to_string};
-use asrs_js::value::JsValue;
+use asrs_js::string::JsString;
 use indexmap::IndexSet;
 
 use super::Log;
-use super::log_util::{join_element, js_strict_eq, length_prop};
 
 pub const STRUCT_PREFIX: &str = "struct:";
 pub const PROTO_PREFIX: &str = "proto:";
@@ -169,45 +165,6 @@ pub fn apply_key_prefix(prefix: &JsString, key: &JsString) -> JsString {
     }
     out.push_str(key);
     out
-}
-
-/// `ToString` of the primitive an operand to `+` coerces to. `+` with a string side is
-/// always string concatenation, and CVE-1-representable objects have no custom
-/// `valueOf`/`toString`, so every non-string lands on a fixed text.
-fn concat_operand(v: &JsValue) -> JsString {
-    match v {
-        JsValue::Undefined => ascii("undefined"),
-        JsValue::Null => ascii("null"),
-        JsValue::Bool(b) => ascii(if *b { "true" } else { "false" }),
-        JsValue::Number(x) => JsString::from(number::to_string(*x)),
-        JsValue::String(s) => s.clone(),
-        JsValue::BigInt(b) => JsString::from(format!("{b}")),
-        JsValue::Array(_) | JsValue::Bytes(_) => join_element(v).unwrap_or_default(),
-        JsValue::Date(t) => JsString::from(date_to_string(*t, &NamedZone::system())),
-        JsValue::Object(_) | JsValue::ExtData(..) => ascii("[object Object]"),
-    }
-}
-
-/// `applyKeyPrefix` on raw JS values: `length` reads throw on `null`/`undefined`, and
-/// `key.startsWith` requires a real string while `prefix + "/" + key` coerces.
-pub fn apply_key_prefix_value(prefix: &JsValue, key: &JsValue) -> Result<JsValue, JsError> {
-    if js_strict_eq(&length_prop(prefix)?, &JsValue::Number(0.0)) {
-        return Ok(key.clone());
-    }
-    if js_strict_eq(&length_prop(key)?, &JsValue::Number(0.0))
-        || js_strict_eq(key, &JsValue::string("/"))
-    {
-        return Ok(prefix.clone());
-    }
-    let JsValue::String(key) = key else {
-        return Err(JsError::type_error("key.startsWith is not a function"));
-    };
-    let mut out = concat_operand(prefix);
-    if key.units().first() != Some(&SLASH) {
-        out.push_unit(SLASH);
-    }
-    out.push_str(key);
-    Ok(JsValue::String(out))
 }
 
 /// `splitLogKey`: splits on `/` and `:`, and also on `_` when the unmerged key is a Phoenix 6
