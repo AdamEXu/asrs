@@ -10,14 +10,16 @@ pub enum Verb {
     Line,
     Quad,
     Conic,
+    Cubic,
     Close,
 }
 
 impl Verb {
-    fn points(self) -> usize {
+    pub fn points(self) -> usize {
         match self {
             Verb::Move | Verb::Line => 1,
             Verb::Quad | Verb::Conic => 2,
+            Verb::Cubic => 3,
             Verb::Close => 0,
         }
     }
@@ -33,13 +35,19 @@ pub struct SkPath {
     convex: Option<bool>,
 }
 
-/// One segment of [`SkPath::edges`]: its points (2 for a line, 3 for a quad or conic) and the
-/// conic weight.
+/// One segment of [`SkPath::edges`]: its points (2 for a line, 3 for a quad or conic, 4 for a
+/// cubic; the rest repeat the last) and the conic weight.
 #[derive(Clone, Copy, Debug)]
 pub struct Edge {
     pub verb: Verb,
-    pub pts: [P; 3],
+    pub pts: [P; 4],
     pub weight: f32,
+}
+
+impl Edge {
+    pub fn quad_pts(&self) -> [P; 3] {
+        [self.pts[0], self.pts[1], self.pts[2]]
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -149,6 +157,13 @@ impl SkPath {
         self.pts.extend([p1, p2]);
     }
 
+    pub fn cubic_to(&mut self, p1: P, p2: P, p3: P) {
+        self.inject_move();
+        self.convex = None;
+        self.verbs.push(Verb::Cubic);
+        self.pts.extend([p1, p2, p3]);
+    }
+
     /// `SkPathBuilder::conicTo`: weight 1 is a quad, a non-finite or non-positive weight a line.
     pub fn conic_to(&mut self, p1: P, p2: P, w: f32) {
         if w == 1.0 {
@@ -178,7 +193,7 @@ impl SkPath {
                 tiny_skia::PathSegment::MoveTo(a) => out.move_to(p(a)),
                 tiny_skia::PathSegment::LineTo(a) => out.line_to(p(a)),
                 tiny_skia::PathSegment::QuadTo(a, b) => out.quad_to(p(a), p(b)),
-                tiny_skia::PathSegment::CubicTo(..) => {}
+                tiny_skia::PathSegment::CubicTo(a, b, c) => out.cubic_to(p(a), p(b), p(c)),
                 tiny_skia::PathSegment::Close => out.close(),
             }
         }
@@ -217,6 +232,12 @@ impl SkPath {
                     last = pts[2];
                     pi += 2;
                     wi += 1;
+                }
+                Verb::Cubic => {
+                    let (c1, c2, e) = (self.pts[pi], self.pts[pi + 1], self.pts[pi + 2]);
+                    b.cubic_to(c1.x, c1.y, c2.x, c2.y, e.x, e.y);
+                    last = e;
+                    pi += 3;
                 }
                 Verb::Close => b.close(),
             }
@@ -284,7 +305,7 @@ impl SkPath {
         let close_line = |out: &mut Vec<Edge>, last: P, first: P| {
             out.push(Edge {
                 verb: Verb::Line,
-                pts: [last, first, first],
+                pts: [last, first, first, first],
                 weight: 1.0,
             });
         };
@@ -307,8 +328,11 @@ impl SkPath {
                 _ => {
                     let n = verb.points();
                     let start = self.pts[pi - 1];
-                    let mut pts = [start; 3];
+                    let mut pts = [start; 4];
                     pts[1..=n].copy_from_slice(&self.pts[pi..pi + n]);
+                    for i in n + 1..4 {
+                        pts[i] = pts[n];
+                    }
                     let weight = if verb == Verb::Conic {
                         wi += 1;
                         self.weights[wi - 1]
@@ -422,7 +446,7 @@ impl SkPath {
                     }
                     line_start = line_end;
                 }
-                Verb::Quad | Verb::Conic => return None,
+                Verb::Quad | Verb::Conic | Verb::Cubic => return None,
                 Verb::Move => {
                     if corners == 0 {
                         first_pt = Some(pi);

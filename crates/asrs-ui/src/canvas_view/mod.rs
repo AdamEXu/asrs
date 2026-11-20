@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use asrs_canvas::raster::CanvasError;
 use asrs_canvas::text::lut::MaskGammaLut;
 use asrs_canvas::text::{TextBackend, platform_backend};
-use asrs_canvas::{Canvas2d, Pixmap, Raster, TextRaster};
+use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, TextRaster};
 use gpui_kit::{App, Bounds, Context, Entity, Global, Pixels, Point, Window, canvas};
 
 use geometry::{bitmap_side, client_rect_coord, client_size, mouse_client, valid_bitmap};
@@ -86,16 +86,22 @@ impl Default for CanvasText {
 impl Global for CanvasText {}
 
 /// The pixmap a display list draws through the app's canvas text stack, or `None` for a canvas
-/// Chromium would leave blank (an invalid size or a failed allocation).
+/// Chromium would leave blank (an invalid size or a failed allocation). `state` is what the
+/// canvas's earlier frames left and receives what this one leaves.
 pub fn rasterize(
     frame: &Canvas2d,
     images: &HashMap<String, Pixmap>,
+    state: &mut RasterState,
     cx: &mut App,
 ) -> Option<(Pixmap, Vec<(usize, CanvasError)>)> {
-    if !valid_bitmap(frame.width, frame.height) {
+    let raster = valid_bitmap(frame.width, frame.height)
+        .then(|| Raster::new(frame.width, frame.height))
+        .flatten();
+    let Some(raster) = raster else {
+        *state = RasterState::default();
         return None;
-    }
-    let mut raster = Raster::new(frame.width, frame.height)?;
+    };
+    let mut raster = raster.with_state(*state);
     for (id, pixmap) in images {
         raster.add_image(id, pixmap.clone());
     }
@@ -104,6 +110,7 @@ pub fn rasterize(
         raster = raster.with_text(TextRaster { backend, lut });
     }
     raster.run(&frame.calls);
+    *state = raster.state();
     let errors = raster.errors().to_vec();
     Some((raster.into_pixmap(), errors))
 }
@@ -113,6 +120,7 @@ pub fn rasterize(
 /// upstream renderers do by comparing `JSON.stringify` of their render state.
 pub struct CanvasState {
     presenter: FramePresenter,
+    raster: RasterState,
     frame: Option<Canvas2d>,
     images: HashMap<String, Pixmap>,
     images_changed: bool,
@@ -127,6 +135,7 @@ impl CanvasState {
             .detach();
         CanvasState {
             presenter: FramePresenter::default(),
+            raster: RasterState::default(),
             frame: None,
             images: HashMap::new(),
             images_changed: false,
@@ -175,7 +184,7 @@ impl CanvasState {
         }
         self.images_changed = false;
         self.draws += 1;
-        match rasterize(&frame, &self.images, cx) {
+        match rasterize(&frame, &self.images, &mut self.raster, cx) {
             None => {
                 self.errors.clear();
                 self.presenter.clear(window, cx);
