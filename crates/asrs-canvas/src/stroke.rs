@@ -1,10 +1,11 @@
-//! Skia's stroker (`SkStroke.cpp`, `SkStrokerPriv.cpp`, Chromium m142) for lines, quads and
-//! conics. Round caps and joins are emitted as conics, which the scan converter later splits
+//! Skia's stroker (`SkStroke.cpp`, `SkStrokerPriv.cpp`) for lines, quads, conics and
+//! cubics. Round caps and joins are emitted as conics, which the scan converter later splits
 //! into quads in device space, exactly as Chromium does; tiny-skia's port splits them in user
 //! space and so produces different curves.
 
 use tiny_skia::{LineCap, LineJoin};
 
+use crate::geometry::{self, find_unit_quad_roots};
 use crate::hairline::P;
 use crate::skpath::{SkPath, Verb};
 
@@ -143,54 +144,6 @@ fn find_quad_max_curvature(src: &[P; 3]) -> f32 {
     numer / denom
 }
 
-fn valid_unit_divide(numer: f32, denom: f32) -> Option<f32> {
-    let (numer, denom) = if numer < 0.0 {
-        (-numer, -denom)
-    } else {
-        (numer, denom)
-    };
-    if denom == 0.0 || numer == 0.0 || numer >= denom {
-        return None;
-    }
-    let r = numer / denom;
-    if r.is_nan() || r == 0.0 {
-        return None;
-    }
-    Some(r)
-}
-
-/// `SkFindUnitQuadRoots`.
-fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> Vec<f32> {
-    if a == 0.0 {
-        return valid_unit_divide(-c, b).into_iter().collect();
-    }
-    let dr = f64::from(b) * f64::from(b) - 4.0 * f64::from(a) * f64::from(c);
-    if dr < 0.0 {
-        return Vec::new();
-    }
-    let r = dr.sqrt() as f32;
-    if !r.is_finite() {
-        return Vec::new();
-    }
-    let q = if b < 0.0 {
-        -(b - r) / 2.0
-    } else {
-        -(b + r) / 2.0
-    };
-    let mut roots: Vec<f32> = [valid_unit_divide(q, a), valid_unit_divide(c, q)]
-        .into_iter()
-        .flatten()
-        .collect();
-    if roots.len() == 2 {
-        if roots[0] > roots[1] {
-            roots.swap(0, 1);
-        } else if roots[0] == roots[1] {
-            roots.pop();
-        }
-    }
-    roots
-}
-
 #[derive(Clone, Copy, Default)]
 struct QuadConstruct {
     quad: [P; 3],
@@ -278,6 +231,10 @@ impl SkPath {
                     wi -= 1;
                     self.conic_to(path.pts[pi], path.pts[pi - 1], path.weights[wi]);
                 }
+                Verb::Cubic => {
+                    pi -= 3;
+                    self.cubic_to(path.pts[pi + 1], path.pts[pi], path.pts[pi - 1]);
+                }
                 Verb::Close => {}
             }
         }
@@ -337,11 +294,17 @@ struct Stroker {
     outer: SkPath,
     stroke_type: f32,
     recursion_depth: i32,
+    found_tangents: bool,
     join_completed: bool,
+    cusper: SkPath,
 }
 
-const QUAD_RECURSIVE_LIMIT: i32 = 33;
-const CONIC_RECURSIVE_LIMIT: i32 = 33;
+/// `kRecursiveLimits` as Chromium m142 ships them, indexed tangent, cubic, conic, quad.
+const RECURSIVE_LIMITS: [i32; 4] = [5 * 3, 24, 11 * 3, 11 * 3];
+const TANGENT_LIMIT: usize = 0;
+const CUBIC_LIMIT: usize = 1;
+const CONIC_LIMIT: usize = 2;
+const QUAD_LIMIT: usize = 3;
 
 impl Stroker {
     fn new(radius: f32, miter_limit: f32, cap: LineCap, join: LineJoin, res_scale: f32) -> Stroker {
@@ -378,7 +341,9 @@ impl Stroker {
             outer: SkPath::new(),
             stroke_type: 1.0,
             recursion_depth: 0,
+            found_tangents: false,
             join_completed: false,
+            cusper: SkPath::new(),
         }
     }
 
@@ -618,6 +583,10 @@ impl Stroker {
                 );
                 self.outer.close();
             }
+            if !self.cusper.is_empty() {
+                let cusper = std::mem::take(&mut self.cusper);
+                self.outer.append(&cusper);
+            }
         }
         self.inner = SkPath::new();
         self.segment_count = -1;
@@ -711,11 +680,9 @@ impl Stroker {
         };
         let curve = Curve { pts, w: weight };
         let mut quad = QuadConstruct::default();
-        self.stroke_type = 1.0;
-        quad.init(0.0, 1.0);
+        self.init(1.0, &mut quad, 0.0, 1.0);
         self.curve_stroke(&curve, &mut quad);
-        self.stroke_type = -1.0;
-        quad.init(0.0, 1.0);
+        self.init(-1.0, &mut quad, 0.0, 1.0);
         self.curve_stroke(&curve, &mut quad);
         let (normal_bc, unit_bc) = self
             .set_normal_unit_normal(pts[1], pts[2])
@@ -748,7 +715,15 @@ impl Stroker {
         (t_pt, on, tangent)
     }
 
-    fn intersect_ray(&self, q: &mut QuadConstruct) -> ResultType {
+    /// `SkPathStroker::init`.
+    fn init(&mut self, stroke_type: f32, q: &mut QuadConstruct, start: f32, end: f32) {
+        self.stroke_type = stroke_type;
+        self.found_tangents = false;
+        q.init(start, end);
+    }
+
+    /// `intersectRay`; `set_ctrl` is `kCtrlPt_RayType`.
+    fn intersect_ray(&self, q: &mut QuadConstruct, set_ctrl: bool) -> ResultType {
         let start = q.quad[0];
         let end = q.quad[2];
         let a_len = q.tangent_start;
@@ -772,7 +747,9 @@ impl Stroker {
         }
         numer_a /= denom;
         if numer_a > numer_a - 1.0 {
-            q.quad[1] = add(start, scale(q.tangent_start, numer_a));
+            if set_ctrl {
+                q.quad[1] = add(start, scale(q.tangent_start, numer_a));
+            }
             return ResultType::Quad;
         }
         q.opposite_tangents = dot(a_len, b_len) < 0.0;
@@ -835,7 +812,7 @@ impl Stroker {
             q.tangent_end = tangent;
             q.end_set = true;
         }
-        let result = self.intersect_ray(q);
+        let result = self.intersect_ray(q, true);
         if result != ResultType::Quad {
             return result;
         }
@@ -863,28 +840,300 @@ impl Stroker {
             self.sink().line_to(end);
             return true;
         }
-        self.recursion_depth += 1;
-        let limit = if c.w.is_some() {
-            CONIC_RECURSIVE_LIMIT
+        let limit = RECURSIVE_LIMITS[if c.w.is_some() {
+            CONIC_LIMIT
         } else {
-            QUAD_RECURSIVE_LIMIT
-        };
+            QUAD_LIMIT
+        }];
+        self.split(q, limit, false, |s, half| s.curve_stroke(c, half))
+    }
+
+    fn add_degenerate_line(&mut self, q: &QuadConstruct) {
+        let end = q.quad[2];
+        self.sink().line_to(end);
+    }
+
+    /// The recursive tail shared by `quadStroke`, `conicStroke` and `cubicStroke` in m142: past
+    /// the limit the depth is left raised for the rest of the path, and only cubics stop on a
+    /// failed split.
+    fn split(
+        &mut self,
+        q: &QuadConstruct,
+        limit: i32,
+        cubic: bool,
+        mut stroke: impl FnMut(&mut Self, &mut QuadConstruct) -> bool,
+    ) -> bool {
+        self.recursion_depth += 1;
         if self.recursion_depth > limit {
-            let end = q.quad[2];
-            self.sink().line_to(end);
+            self.add_degenerate_line(q);
             return true;
         }
         let mut half = QuadConstruct::default();
-        half.init_with_start(q);
-        if !self.curve_stroke(c, &mut half) {
+        if !half.init_with_start(q) && cubic {
+            self.add_degenerate_line(q);
+            self.recursion_depth -= 1;
+            return true;
+        }
+        if !stroke(self, &mut half) {
             return false;
         }
-        half.init_with_end(q);
-        if !self.curve_stroke(c, &mut half) {
+        if !half.init_with_end(q) && cubic {
+            self.add_degenerate_line(q);
+            self.recursion_depth -= 1;
+            return true;
+        }
+        if !stroke(self, &mut half) {
             return false;
         }
         self.recursion_depth -= 1;
         true
+    }
+
+    /// `SkPathStroker::CheckCubicLinear`.
+    fn check_cubic_linear(cubic: &[P; 4]) -> CubicReduction {
+        let degenerate_ab = !can_normalize(sub(cubic[1], cubic[0]));
+        let degenerate_bc = !can_normalize(sub(cubic[2], cubic[1]));
+        let degenerate_cd = !can_normalize(sub(cubic[3], cubic[2]));
+        if degenerate_ab && degenerate_bc && degenerate_cd {
+            return CubicReduction::Point;
+        }
+        if u8::from(degenerate_ab) + u8::from(degenerate_bc) + u8::from(degenerate_cd) == 2 {
+            return CubicReduction::Line;
+        }
+        if !cubic_in_line(cubic) {
+            return CubicReduction::Quad(if degenerate_ab { cubic[2] } else { cubic[1] });
+        }
+        let mut reduction = Vec::new();
+        for t in geometry::find_cubic_max_curvature(cubic) {
+            if 0.0 >= t || t >= 1.0 {
+                continue;
+            }
+            let pt = geometry::eval_cubic_pos(cubic, t);
+            if pt != cubic[0] && pt != cubic[3] {
+                reduction.push(pt);
+            }
+        }
+        if reduction.is_empty() {
+            return CubicReduction::Line;
+        }
+        CubicReduction::Degenerate(reduction)
+    }
+
+    /// `SkPathStroker::cubicTo`.
+    fn cubic_to(&mut self, pt1: P, pt2: P, pt3: P) {
+        let cubic = [self.prev_pt, pt1, pt2, pt3];
+        let tangent_pt = match Stroker::check_cubic_linear(&cubic) {
+            CubicReduction::Point | CubicReduction::Line => {
+                self.line_to(pt3, false);
+                return;
+            }
+            CubicReduction::Degenerate(reduction) => {
+                self.line_to(reduction[0], false);
+                let save = self.join;
+                self.join = LineJoin::Round;
+                for &pt in &reduction[1..] {
+                    self.line_to(pt, false);
+                }
+                self.line_to(pt3, false);
+                self.join = save;
+                return;
+            }
+            CubicReduction::Quad(tangent_pt) => tangent_pt,
+        };
+        let Some((normal_ab, unit_ab)) = self.pre_join_to(tangent_pt, false) else {
+            self.line_to(pt3, false);
+            return;
+        };
+        let mut last_t = 0.0;
+        let inflections = geometry::find_cubic_inflections(&cubic);
+        for index in 0..=inflections.len() {
+            let next_t = inflections.get(index).copied().unwrap_or(1.0);
+            let mut quad = QuadConstruct::default();
+            self.init(1.0, &mut quad, last_t, next_t);
+            self.cubic_stroke(&cubic, &mut quad);
+            self.init(-1.0, &mut quad, last_t, next_t);
+            self.cubic_stroke(&cubic, &mut quad);
+            last_t = next_t;
+        }
+        let cusp = geometry::find_cubic_cusp(&cubic);
+        if cusp > 0.0 {
+            let loc = geometry::eval_cubic_pos(&cubic, cusp);
+            self.cusper.add_circle(loc, self.radius);
+        }
+        let (normal_cd, unit_cd) = self.cubic_end_normal(&cubic, normal_ab, unit_ab);
+        self.post_join_to(pt3, normal_cd, unit_cd);
+    }
+
+    /// `setCubicEndNormal`.
+    fn cubic_end_normal(&self, cubic: &[P; 4], normal_ab: P, unit_ab: P) -> (P, P) {
+        let mut ab = sub(cubic[1], cubic[0]);
+        let mut cd = sub(cubic[3], cubic[2]);
+        let mut degenerate_ab = !can_normalize(ab);
+        let mut degenerate_cd = !can_normalize(cd);
+        if degenerate_ab && degenerate_cd {
+            return (normal_ab, unit_ab);
+        }
+        if degenerate_ab {
+            ab = sub(cubic[2], cubic[0]);
+            degenerate_ab = !can_normalize(ab);
+        }
+        if degenerate_cd {
+            cd = sub(cubic[3], cubic[1]);
+            degenerate_cd = !can_normalize(cd);
+        }
+        if degenerate_ab || degenerate_cd {
+            return (normal_ab, unit_ab);
+        }
+        let unit = set_length(cd, 1.0).map_or(p(0.0, 0.0), rotate_ccw);
+        (scale(unit, self.radius), unit)
+    }
+
+    /// `cubicPerpRay`: the point on the cubic at `t`, the stroke point beside it and the tangent.
+    fn cubic_perp_ray(&self, cubic: &[P; 4], t: f32) -> (P, P, P) {
+        let t_pt = geometry::eval_cubic_pos(cubic, t);
+        let mut dxy = geometry::eval_cubic_tangent(cubic, t);
+        if is_zero(dxy) {
+            let mut c_pts = *cubic;
+            if t.abs() <= NEARLY_ZERO {
+                dxy = sub(cubic[2], cubic[0]);
+            } else if (1.0 - t).abs() <= NEARLY_ZERO {
+                dxy = sub(cubic[3], cubic[1]);
+            } else {
+                let chopped = geometry::chop_cubic_at(cubic, t);
+                dxy = sub(chopped[3], chopped[2]);
+                if is_zero(dxy) {
+                    dxy = sub(chopped[3], chopped[1]);
+                    c_pts = [chopped[0], chopped[1], chopped[2], chopped[3]];
+                }
+            }
+            if is_zero(dxy) {
+                dxy = sub(c_pts[3], c_pts[0]);
+            }
+        }
+        let (on, tangent) = self.set_ray_pts(t_pt, dxy);
+        (t_pt, on, tangent)
+    }
+
+    /// `cubicQuadEnds`.
+    fn cubic_quad_ends(&self, cubic: &[P; 4], q: &mut QuadConstruct) {
+        if !q.start_set {
+            let (_, on, tangent) = self.cubic_perp_ray(cubic, q.start_t);
+            q.quad[0] = on;
+            q.tangent_start = tangent;
+            q.start_set = true;
+        }
+        if !q.end_set {
+            let (_, on, tangent) = self.cubic_perp_ray(cubic, q.end_t);
+            q.quad[2] = on;
+            q.tangent_end = tangent;
+            q.end_set = true;
+        }
+    }
+
+    /// `tangentsMeet`.
+    fn tangents_meet(&self, cubic: &[P; 4], q: &mut QuadConstruct) -> ResultType {
+        self.cubic_quad_ends(cubic, q);
+        self.intersect_ray(q, false)
+    }
+
+    /// `compareQuadCubic`.
+    fn compare_quad_cubic(&self, cubic: &[P; 4], q: &mut QuadConstruct) -> ResultType {
+        self.cubic_quad_ends(cubic, q);
+        let result = self.intersect_ray(q, true);
+        if result != ResultType::Quad {
+            return result;
+        }
+        let (t_pt, on, _) = self.cubic_perp_ray(cubic, q.mid_t);
+        self.stroke_close_enough(&q.quad, [on, t_pt], q)
+    }
+
+    /// `cubicMidOnLine`.
+    fn cubic_mid_on_line(&self, cubic: &[P; 4], q: &QuadConstruct) -> bool {
+        let (_, stroke_mid, _) = self.cubic_perp_ray(cubic, q.mid_t);
+        pt_to_line(stroke_mid, q.quad[0], q.quad[2]) < self.inv_res_scale_squared
+    }
+
+    /// `cubicStroke`.
+    fn cubic_stroke(&mut self, cubic: &[P; 4], q: &mut QuadConstruct) -> bool {
+        if !self.found_tangents {
+            let result = self.tangents_meet(cubic, q);
+            if result != ResultType::Quad {
+                if (result == ResultType::Degenerate
+                    || points_within_dist(q.quad[0], q.quad[2], self.inv_res_scale))
+                    && self.cubic_mid_on_line(cubic, q)
+                {
+                    self.add_degenerate_line(q);
+                    return true;
+                }
+            } else {
+                self.found_tangents = true;
+            }
+        }
+        if self.found_tangents {
+            let result = self.compare_quad_cubic(cubic, q);
+            if result == ResultType::Quad {
+                let stroke = q.quad;
+                self.sink().quad_to(stroke[1], stroke[2]);
+                return true;
+            }
+            if result == ResultType::Degenerate && !q.opposite_tangents {
+                self.add_degenerate_line(q);
+                return true;
+            }
+        }
+        if !(q.quad[2].x.is_finite() && q.quad[2].y.is_finite()) {
+            return false;
+        }
+        let limit = RECURSIVE_LIMITS[if self.found_tangents {
+            CUBIC_LIMIT
+        } else {
+            TANGENT_LIMIT
+        }];
+        self.split(q, limit, true, |s, half| s.cubic_stroke(cubic, half))
+    }
+}
+
+enum CubicReduction {
+    Point,
+    Line,
+    Quad(P),
+    Degenerate(Vec<P>),
+}
+
+impl SkPath {
+    /// `SkPathBuilder::addCircle(x, y, r)`: `addOval` clockwise from the right-hand point.
+    fn add_circle(&mut self, c: P, r: f32) {
+        if r < 0.0 {
+            return;
+        }
+        let (l, t, rt, b) = (c.x - r, c.y - r, c.x + r, c.y + r);
+        let mid = |a: f32, b: f32| ((f64::from(a) + f64::from(b)) * 0.5) as f32;
+        let (cx, cy) = (mid(l, rt), mid(t, b));
+        self.move_to(p(rt, cy));
+        self.conic_to(p(rt, b), p(cx, b), ROOT2_OVER2);
+        self.conic_to(p(l, b), p(l, cy), ROOT2_OVER2);
+        self.conic_to(p(l, t), p(cx, t), ROOT2_OVER2);
+        self.conic_to(p(rt, t), p(rt, cy), ROOT2_OVER2);
+        self.close();
+    }
+
+    /// `SkPathBuilder::addPath` in append mode onto a path that does not end in a move.
+    fn append(&mut self, src: &SkPath) {
+        let (mut pi, mut wi) = (0, 0);
+        for &verb in &src.verbs {
+            match verb {
+                Verb::Move => self.move_to(src.pts[pi]),
+                Verb::Line => self.line_to(src.pts[pi]),
+                Verb::Quad => self.quad_to(src.pts[pi], src.pts[pi + 1]),
+                Verb::Conic => {
+                    self.conic_to(src.pts[pi], src.pts[pi + 1], src.weights[wi]);
+                    wi += 1;
+                }
+                Verb::Cubic => self.cubic_to(src.pts[pi], src.pts[pi + 1], src.pts[pi + 2]),
+                Verb::Close => self.close(),
+            }
+            pi += verb.points();
+        }
     }
 }
 
@@ -942,6 +1191,27 @@ fn quad_in_line(quad: &[P; 3]) -> bool {
     pt_to_line(quad[mid], quad[outer1], quad[outer2]) <= line_slop
 }
 
+fn cubic_in_line(cubic: &[P; 4]) -> bool {
+    let mut pt_max = -1.0f32;
+    let (mut outer1, mut outer2) = (0usize, 1usize);
+    for index in 0..3 {
+        for inner in index + 1..4 {
+            let d = sub(cubic[inner], cubic[index]);
+            let test_max = d.x.abs().max(d.y.abs());
+            if pt_max < test_max {
+                outer1 = index;
+                outer2 = inner;
+                pt_max = test_max;
+            }
+        }
+    }
+    let mid1 = (1 + (2 >> outer2)) >> outer1;
+    let mid2 = outer1 ^ outer2 ^ mid1;
+    let line_slop = pt_max * pt_max * 0.000_01;
+    pt_to_line(cubic[mid1], cubic[outer1], cubic[outer2]) <= line_slop
+        && pt_to_line(cubic[mid2], cubic[outer1], cubic[outer2]) <= line_slop
+}
+
 fn points_within_dist(a: P, b: P, limit: f32) -> bool {
     distance_sqd(a, b) <= limit * limit
 }
@@ -975,7 +1245,7 @@ fn intersect_quad_ray(line: [P; 2], quad: &[P; 3]) -> Vec<f32> {
 #[derive(Clone, Copy)]
 struct Rec {
     verb: Verb,
-    pts: [P; 3],
+    pts: [P; 4],
     w: f32,
 }
 
@@ -995,7 +1265,7 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
                 pi += 1;
                 out.push(Rec {
                     verb,
-                    pts: [move_to; 3],
+                    pts: [move_to; 4],
                     w: 1.0,
                 });
             }
@@ -1003,7 +1273,7 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
                 let e = path.pts[pi];
                 out.push(Rec {
                     verb,
-                    pts: [last, e, e],
+                    pts: [last, e, e, e],
                     w: 1.0,
                 });
                 last = e;
@@ -1018,11 +1288,20 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
                 };
                 out.push(Rec {
                     verb,
-                    pts: [last, path.pts[pi], path.pts[pi + 1]],
+                    pts: [last, path.pts[pi], path.pts[pi + 1], path.pts[pi + 1]],
                     w,
                 });
                 last = path.pts[pi + 1];
                 pi += 2;
+            }
+            Verb::Cubic => {
+                out.push(Rec {
+                    verb,
+                    pts: [last, path.pts[pi], path.pts[pi + 1], path.pts[pi + 2]],
+                    w: 1.0,
+                });
+                last = path.pts[pi + 2];
+                pi += 3;
             }
             Verb::Close => {
                 let nan =
@@ -1030,13 +1309,13 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
                 if last != move_to && !nan {
                     out.push(Rec {
                         verb: Verb::Line,
-                        pts: [last, move_to, move_to],
+                        pts: [last, move_to, move_to, move_to],
                         w: 1.0,
                     });
                 }
                 out.push(Rec {
                     verb,
-                    pts: [move_to; 3],
+                    pts: [move_to; 4],
                     w: 1.0,
                 });
                 last = move_to;
@@ -1062,6 +1341,12 @@ fn has_valid_tangent(rest: &[Rec]) -> bool {
                 }
                 return true;
             }
+            Verb::Cubic => {
+                if r.pts[0] == r.pts[1] && r.pts[0] == r.pts[2] && r.pts[0] == r.pts[3] {
+                    continue;
+                }
+                return true;
+            }
         }
     }
     false
@@ -1083,11 +1368,7 @@ pub fn stroke_path(src: &SkPath, style: &Style) -> SkPath {
     if radius.is_nan() || radius <= 0.0 {
         return SkPath::new();
     }
-    // Skia strokes a round-joined rect as an `addRRect` outline, which is not ported; those
-    // rects take the general stroker instead.
-    if let Some((rect, true, cw)) = src.rect_contour()
-        && style.join != LineJoin::Round
-    {
+    if let Some((rect, true, cw)) = src.rect_contour() {
         return stroke_rect(rect, cw, style);
     }
     let mut stroker = Stroker::new(
@@ -1114,6 +1395,10 @@ pub fn stroke_path(src: &SkPath, style: &Style) -> SkPath {
             Verb::Conic => {
                 stroker.curve_to(r.pts[1], r.pts[2], Some(r.w));
                 last_segment = Verb::Conic;
+            }
+            Verb::Cubic => {
+                stroker.cubic_to(r.pts[1], r.pts[2], r.pts[3]);
+                last_segment = Verb::Cubic;
             }
             Verb::Close => {
                 if style.cap != LineCap::Butt {
@@ -1182,6 +1467,7 @@ fn stroke_rect(rect: crate::skpath::Rect, cw: bool, style: &Style) -> SkPath {
             }
             dst.close();
         }
+        LineJoin::Round => add_rrect(&mut dst, outer, radius, cw),
         _ => add_rect(&mut dst, outer, cw),
     }
     if style.width < rw.min(rh) {
@@ -1194,6 +1480,105 @@ fn stroke_rect(rect: crate::skpath::Rect, cw: bool, style: &Style) -> SkPath {
         add_rect(&mut dst, inner, !cw);
     }
     dst
+}
+
+/// `SkPathBuilder::addRRect(SkRRect::MakeRectXY(r, radius, radius), dir)` with its default
+/// start index, including `SkRRect`'s reduction to a rect or an oval.
+fn add_rrect(dst: &mut SkPath, r: crate::skpath::Rect, radius: f32, cw: bool) {
+    let finite = [r.left, r.top, r.right, r.bottom]
+        .iter()
+        .all(|v| v.is_finite());
+    let bounds = if finite {
+        crate::skpath::Rect {
+            left: r.left.min(r.right),
+            top: r.top.min(r.bottom),
+            right: r.left.max(r.right),
+            bottom: r.top.max(r.bottom),
+        }
+    } else {
+        crate::skpath::Rect {
+            left: 0.0,
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+        }
+    };
+    let (w, h) = (bounds.right - bounds.left, bounds.bottom - bounds.top);
+    let index: usize = if cw { 6 } else { 7 };
+    let advance = |i: usize, n: usize| if cw { (i + 1) % n } else { (i + n - 1) % n };
+    let corners = [
+        p(bounds.left, bounds.top),
+        p(bounds.right, bounds.top),
+        p(bounds.right, bounds.bottom),
+        p(bounds.left, bounds.bottom),
+    ];
+    let (mut rx, mut ry) = if radius.is_finite() {
+        (radius, radius)
+    } else {
+        (0.0, 0.0)
+    };
+    if !(w > 0.0 && h > 0.0) || !finite {
+        rx = 0.0;
+    } else if w < rx + rx || h < ry + ry {
+        let scale = (w / (rx + rx)).min(h / (ry + ry));
+        rx *= scale;
+        ry *= scale;
+    }
+    if rx <= 0.0 || ry <= 0.0 {
+        let mut i = index.div_ceil(2) % 4;
+        dst.move_to(corners[i]);
+        for _ in 0..3 {
+            i = advance(i, 4);
+            dst.line_to(corners[i]);
+        }
+        dst.close();
+        return;
+    }
+    let w_conic = std::f32::consts::FRAC_1_SQRT_2;
+    let mut rect_i = (index / 2 + usize::from(!cw)) % 4;
+    if rx >= w / 2.0 && ry >= h / 2.0 {
+        let mid = |a: f32, b: f32| ((f64::from(a) + f64::from(b)) * 0.5) as f32;
+        let (cx, cy) = (
+            mid(bounds.left, bounds.right),
+            mid(bounds.top, bounds.bottom),
+        );
+        let oval = [
+            p(cx, bounds.top),
+            p(bounds.right, cy),
+            p(cx, bounds.bottom),
+            p(bounds.left, cy),
+        ];
+        let mut oval_i = index / 2 % 4;
+        dst.move_to(oval[oval_i]);
+        for _ in 0..4 {
+            rect_i = advance(rect_i, 4);
+            oval_i = advance(oval_i, 4);
+            dst.conic_to(corners[rect_i], oval[oval_i], w_conic);
+        }
+        dst.close();
+        return;
+    }
+    let (l, t, rr, b) = (bounds.left, bounds.top, bounds.right, bounds.bottom);
+    let pts = [
+        p(l + rx, t),
+        p(rr - rx, t),
+        p(rr, t + ry),
+        p(rr, b - ry),
+        p(rr - rx, b),
+        p(l + rx, b),
+        p(l, b - ry),
+        p(l, t + ry),
+    ];
+    let mut i = index % 8;
+    dst.move_to(pts[i]);
+    for _ in 0..4 {
+        i = advance(i, 8);
+        dst.line_to(pts[i]);
+        rect_i = advance(rect_i, 4);
+        i = advance(i, 8);
+        dst.conic_to(corners[rect_i], pts[i], w_conic);
+    }
+    dst.close();
 }
 
 /// `SkPathBuilder::addRect(rect, dir)` from the top-left corner.
@@ -1254,5 +1639,79 @@ mod tests {
         assert_eq!(out.pts[0], p(9.0, 9.0));
         assert_eq!(out.pts[4], p(11.0, 11.0));
         assert_eq!(out.pts[5], p(11.0, 29.0));
+    }
+
+    #[test]
+    fn straight_cubic_strokes_like_its_line() {
+        let mut line = SkPath::new();
+        line.move_to(p(10.0, 10.0));
+        line.line_to(p(70.0, 10.0));
+        let mut cubic = SkPath::new();
+        cubic.move_to(p(10.0, 10.0));
+        cubic.cubic_to(p(30.0, 10.0), p(50.0, 10.0), p(70.0, 10.0));
+        let s = style(6.0, LineCap::Butt);
+        assert_eq!(stroke_path(&cubic, &s), stroke_path(&line, &s));
+    }
+
+    #[test]
+    fn curved_cubic_outline_stays_within_the_radius() {
+        let c = [
+            p(10.0, 100.0),
+            p(40.0, 10.0),
+            p(160.0, 10.0),
+            p(190.0, 100.0),
+        ];
+        let mut src = SkPath::new();
+        src.move_to(c[0]);
+        src.cubic_to(c[1], c[2], c[3]);
+        let out = stroke_path(&src, &style(8.0, LineCap::Butt));
+        let curve: Vec<P> = (0..=2000)
+            .map(|i| geometry::eval_cubic_pos(&c, i as f32 / 2000.0))
+            .collect();
+        let mut on_outline = Vec::new();
+        let mut pi = 0;
+        for &v in &out.verbs {
+            if v == Verb::Quad {
+                let q = [out.pts[pi - 1], out.pts[pi], out.pts[pi + 1]];
+                on_outline.extend([quad_eval(&q, 0.25), quad_eval(&q, 0.5), quad_eval(&q, 0.75)]);
+            }
+            if v != Verb::Close {
+                on_outline.push(out.pts[pi + v.points() - 1]);
+            }
+            pi += v.points();
+        }
+        assert!(out.verbs.iter().filter(|v| **v == Verb::Quad).count() >= 4);
+        for q in &on_outline {
+            let d = curve
+                .iter()
+                .map(|&k| distance_sqd(k, *q).sqrt())
+                .fold(f32::INFINITY, f32::min);
+            assert!(d < 4.0 + 0.3, "{q:?} is {d} from the curve");
+        }
+    }
+
+    #[test]
+    fn cusp_cubic_gets_a_finite_outline_and_a_circle() {
+        let mut src = SkPath::new();
+        src.move_to(p(0.0, 0.0));
+        src.cubic_to(p(100.0, 100.0), p(0.0, 100.0), p(100.0, 0.0));
+        let out = stroke_path(&src, &style(10.0, LineCap::Round));
+        assert!(out.pts.iter().all(|q| q.x.is_finite() && q.y.is_finite()));
+        let moves = out.verbs.iter().filter(|v| **v == Verb::Move).count();
+        assert_eq!(moves, 2);
+        let closes = out.verbs.iter().filter(|v| **v == Verb::Close).count();
+        assert_eq!(closes, 2);
+    }
+
+    #[test]
+    fn closed_cubic_contour_reverses_its_inner_side() {
+        let mut src = SkPath::new();
+        src.move_to(p(10.0, 10.0));
+        src.cubic_to(p(60.0, 0.0), p(60.0, 60.0), p(10.0, 50.0));
+        src.close();
+        let out = stroke_path(&src, &style(4.0, LineCap::Butt));
+        let moves = out.verbs.iter().filter(|v| **v == Verb::Move).count();
+        assert_eq!(moves, 2);
+        assert!(out.pts.iter().all(|q| q.x.is_finite() && q.y.is_finite()));
     }
 }

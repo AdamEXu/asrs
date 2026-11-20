@@ -1,0 +1,25 @@
+{
+  "name": "2026-2027 Field",
+  "locales": {
+    "en-US": "2026-2027 Field",
+    "es-419": "Campo 2026-2027",
+    "fr": "Terrain 2026-2027",
+    "nl": "Veld 2026-2027",
+    "pt-BR": "Campo 2026-2027",
+    "ro": "Teren 2026-2027",
+    "tr": "2026-2027 Sahası",
+    "ru": "Поле 2026-2027",
+    "kk": "2026-2027 алаңы",
+    "he": "מגרש 2026-2027",
+    "ar": "ملعب 2026-2027",
+    "hi": "2026-2027 फील्ड",
+    "zh-CN": "2026-2027 场地",
+    "zh-TW": "2026-2027 場地"
+  },
+  "isFTC": true,
+  "coordinateSystem": "center-rotated",
+  "topLeft": [0, 0],
+  "bottomRight": [2197, 2197],
+  "widthInches": 143.182,
+  "heightInches": 143.182
+}

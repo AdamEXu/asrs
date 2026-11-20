@@ -1,4 +1,4 @@
-//! Skia's `SkLineClipper` and the quad half of `SkEdgeClipper`: device geometry is cut to the
+//! Skia's `SkLineClipper` and the curve half of `SkEdgeClipper`: device geometry is cut to the
 //! clip before the scan converters turn it into fixed point, which overflows a few thousand
 //! pixels off the canvas.
 
@@ -16,6 +16,7 @@ pub struct ClipRect {
 pub enum Piece {
     Line([P; 2]),
     Quad([P; 3]),
+    Cubic([P; 4]),
 }
 
 fn nearly_zero(v: f32) -> bool {
@@ -204,28 +205,49 @@ fn valid_unit_divide(numer: f32, denom: f32) -> Option<f32> {
     (!r.is_nan() && r != 0.0).then_some(r)
 }
 
-/// The smaller root in (0, 1) of `a t^2 + b t + c`, as `SkFindUnitQuadRoots` orders them.
-fn first_unit_quad_root(a: f32, b: f32, c: f32) -> Option<f32> {
+/// `SkFindUnitQuadRoots`: the roots in (0, 1) of `a t^2 + b t + c`, ascending.
+fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> ([f32; 2], usize) {
+    let mut roots = [0.0f32; 2];
     if a == 0.0 {
-        return valid_unit_divide(-c, b);
+        return match valid_unit_divide(-c, b) {
+            Some(r) => ([r, 0.0], 1),
+            None => (roots, 0),
+        };
     }
     let dr = f64::from(b) * f64::from(b) - 4.0 * f64::from(a) * f64::from(c);
     if dr < 0.0 {
-        return None;
+        return (roots, 0);
     }
     let r = dr.sqrt() as f32;
     if !r.is_finite() {
-        return None;
+        return (roots, 0);
     }
     let q = if b < 0.0 {
         -(b - r) / 2.0
     } else {
         -(b + r) / 2.0
     };
-    match (valid_unit_divide(q, a), valid_unit_divide(c, q)) {
-        (Some(x), Some(y)) => Some(x.min(y)),
-        (x, y) => x.or(y),
+    let mut n = 0;
+    for root in [valid_unit_divide(q, a), valid_unit_divide(c, q)]
+        .into_iter()
+        .flatten()
+    {
+        roots[n] = root;
+        n += 1;
     }
+    if n == 2 {
+        if roots[0] > roots[1] {
+            roots.swap(0, 1);
+        } else if roots[0] == roots[1] {
+            n = 1;
+        }
+    }
+    (roots, n)
+}
+
+fn first_unit_quad_root(a: f32, b: f32, c: f32) -> Option<f32> {
+    let (roots, n) = find_unit_quad_roots(a, b, c);
+    (n > 0).then_some(roots[0])
 }
 
 fn chop_mono_quad_at(c0: f32, c1: f32, c2: f32, target: f32) -> Option<f32> {
@@ -406,6 +428,554 @@ pub fn clip_quad_cull(src: [P; 3], clip: ClipRect, cull_right: bool, out: &mut V
     }
 }
 
+/// `SkFindCubicExtrema`.
+fn find_cubic_extrema(a: f32, b: f32, c: f32, d: f32) -> ([f32; 2], usize) {
+    let qa = d - a + 3.0 * (b - c);
+    let qb = 2.0 * (a - b - b + c);
+    let qc = b - a;
+    find_unit_quad_roots(qa, qb, qc)
+}
+
+fn unchecked_mix(a: P, b: P, t: f32) -> P {
+    P {
+        x: (b.x - a.x) * t + a.x,
+        y: (b.y - a.y) * t + a.y,
+    }
+}
+
+/// `SkChopCubicAt` at one `t`.
+fn chop_cubic_at(src: [P; 4], t: f32) -> [P; 7] {
+    if t == 1.0 {
+        return [src[0], src[1], src[2], src[3], src[3], src[3], src[3]];
+    }
+    let ab = unchecked_mix(src[0], src[1], t);
+    let bc = unchecked_mix(src[1], src[2], t);
+    let cd = unchecked_mix(src[2], src[3], t);
+    let abc = unchecked_mix(ab, bc, t);
+    let bcd = unchecked_mix(bc, cd, t);
+    let abcd = unchecked_mix(abc, bcd, t);
+    [src[0], ab, abc, abcd, bcd, cd, src[3]]
+}
+
+/// `SkChopCubicAt` at two `t`s, which Skia evaluates side by side in one SIMD register.
+fn chop_cubic_at2(src: [P; 4], t0: f32, t1: f32) -> [P; 10] {
+    if t1 == 1.0 {
+        let d = chop_cubic_at(src, t0);
+        return [
+            d[0], d[1], d[2], d[3], d[4], d[5], d[6], src[3], src[3], src[3],
+        ];
+    }
+    let at = |t: f32| {
+        let ab = unchecked_mix(src[0], src[1], t);
+        let bc = unchecked_mix(src[1], src[2], t);
+        let cd = unchecked_mix(src[2], src[3], t);
+        let abc = unchecked_mix(ab, bc, t);
+        let bcd = unchecked_mix(bc, cd, t);
+        (ab, bc, cd, abc, bcd, unchecked_mix(abc, bcd, t))
+    };
+    let (ab0, _, _, abc0, bcd0, abcd0) = at(t0);
+    let (_, _, cd1, abc1, bcd1, abcd1) = at(t1);
+    [
+        src[0],
+        ab0,
+        abc0,
+        abcd0,
+        unchecked_mix(abc0, bcd0, t1),
+        unchecked_mix(abc1, bcd1, t0),
+        abcd1,
+        bcd1,
+        cd1,
+        src[3],
+    ]
+}
+
+/// `SkChopCubicAtYExtrema` (`y`) or `SkChopCubicAtXExtrema`.
+fn chop_cubic_at_extrema(src: [P; 4], y: bool) -> Vec<[P; 4]> {
+    let c = src.map(|p| coord(p, y));
+    let (t, n) = find_cubic_extrema(c[0], c[1], c[2], c[3]);
+    let mut dst = [src[0]; 10];
+    match n {
+        0 => return vec![src],
+        1 => dst[..7].copy_from_slice(&chop_cubic_at(src, t[0])),
+        _ => dst = chop_cubic_at2(src, t[0], t[1]),
+    }
+    for i in 0..n {
+        let extremum = coord(dst[i * 3 + 3], y);
+        set_coord(&mut dst[i * 3 + 2], y, extremum);
+        set_coord(&mut dst[i * 3 + 4], y, extremum);
+    }
+    (0..=n)
+        .map(|i| [dst[i * 3], dst[i * 3 + 1], dst[i * 3 + 2], dst[i * 3 + 3]])
+        .collect()
+}
+
+pub fn chop_cubic_at_y_extrema(src: [P; 4]) -> Vec<[P; 4]> {
+    chop_cubic_at_extrema(src, true)
+}
+
+/// `sk_double_nearly_zero`.
+fn double_nearly_zero(a: f64) -> bool {
+    a == 0.0 || a.abs() < f64::from(f32::EPSILON)
+}
+
+fn magnitude(a: f64) -> f64 {
+    f64::from_bits(a.to_bits() & 0x7FF0_0000_0000_0000)
+}
+
+/// `sk_doubles_nearly_equal_ulps` with the default 16 ulps.
+fn doubles_nearly_equal_ulps(a: f64, b: f64) -> bool {
+    let max_magnitude = magnitude(a).max(f64::MIN_POSITIVE).max(magnitude(b));
+    let tolerance = max_magnitude * (f64::EPSILON * 17.0);
+    a == b || (b - a).abs() < tolerance
+}
+
+fn std_max(a: f64, b: f64) -> f64 {
+    if a < b { b } else { a }
+}
+
+fn std_min(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
+}
+
+/// `SkQuads::Discriminant`.
+fn quad_discriminant(a: f64, b: f64, c: f64) -> f64 {
+    let b2 = b * b;
+    let ac = a * c;
+    let rough = b2 - ac;
+    if 3.0 * rough.abs() >= b2 + ac {
+        return rough;
+    }
+    let b2_error = b.mul_add(b, -b2);
+    let ac_error = a.mul_add(c, -ac);
+    (b2 - ac) + (b2_error - ac_error)
+}
+
+/// `SkQuads::RootsReal`.
+fn quad_roots_real(a: f64, b: f64, c: f64, solution: &mut [f64; 2]) -> usize {
+    let close_to_linear = a == 0.0 || (b / a).abs() >= 1.0e16;
+    if close_to_linear {
+        if double_nearly_zero(b) {
+            solution[0] = 0.0;
+            return usize::from(double_nearly_zero(c));
+        }
+        solution[0] = -c / b;
+        return usize::from(solution[0].is_finite());
+    }
+    let half_b = -0.5 * b;
+    let discriminant = quad_discriminant(a, half_b, c);
+    let (root0, root1) = if discriminant == 0.0 {
+        (half_b / a, half_b / a)
+    } else if discriminant > 0.0 {
+        let d = discriminant.sqrt();
+        let r = if half_b > 0.0 { half_b + d } else { half_b - d };
+        (r / a, c / r)
+    } else {
+        (f64::NAN, f64::NAN)
+    };
+    if !discriminant.is_finite() || discriminant < 0.0 {
+        return 0;
+    }
+    let zero_if_tiny = |x: f64| if double_nearly_zero(x) { 0.0 } else { x };
+    let mut n = 0;
+    for r in [zero_if_tiny(root0), zero_if_tiny(root1)] {
+        if r.is_finite() {
+            solution[n] = r;
+            n += 1;
+        }
+    }
+    if n == 2 && doubles_nearly_equal_ulps(solution[0], solution[1]) {
+        n = 1;
+    }
+    n
+}
+
+/// `SkCubics::RootsReal`.
+fn cubic_roots_real(a: f64, b: f64, c: f64, d: f64, solution: &mut [f64; 3]) -> usize {
+    let close_to_a_quadratic = if double_nearly_zero(b) {
+        double_nearly_zero(a)
+    } else {
+        (a / b).abs() < 1.0e-7
+    };
+    let mut two = [0.0f64; 2];
+    if close_to_a_quadratic {
+        let n = quad_roots_real(b, c, d, &mut two);
+        solution[..2].copy_from_slice(&two);
+        return n;
+    }
+    if double_nearly_zero(d) {
+        let mut n = quad_roots_real(a, b, c, &mut two);
+        solution[..2].copy_from_slice(&two);
+        if solution[..n].iter().any(|&s| double_nearly_zero(s)) {
+            return n;
+        }
+        solution[n] = 0.0;
+        n += 1;
+        return n;
+    }
+    if double_nearly_zero(a + b + c + d) {
+        let mut n = quad_roots_real(a, a + b, -d, &mut two);
+        solution[..2].copy_from_slice(&two);
+        if solution[..n]
+            .iter()
+            .any(|&s| doubles_nearly_equal_ulps(s, 1.0))
+        {
+            return n;
+        }
+        solution[n] = 1.0;
+        n += 1;
+        return n;
+    }
+    let inv_a = 1.0 / a;
+    let (a, b, c) = (b * inv_a, c * inv_a, d * inv_a);
+    let a2 = a * a;
+    let q = (a2 - b * 3.0) / 9.0;
+    let r = (2.0 * a2 * a - 9.0 * a * b + 27.0 * c) / 54.0;
+    let r2 = r * r;
+    let q3 = q * q * q;
+    let r2_minus_q3 = r2 - q3;
+    if !r2_minus_q3.is_finite() {
+        return 0;
+    }
+    let adiv3 = a / 3.0;
+    let nearly_equal = |x: f64, y: f64| {
+        if double_nearly_zero(x) {
+            double_nearly_zero(y)
+        } else {
+            doubles_nearly_equal_ulps(x, y)
+        }
+    };
+    let mut n = 0;
+    if r2_minus_q3 < 0.0 {
+        let theta = std_max(-1.0, std_min(r / q3.sqrt(), 1.0)).acos();
+        let neg2_root_q = -2.0 * q.sqrt();
+        solution[n] = neg2_root_q * (theta / 3.0).cos() - adiv3;
+        n += 1;
+        let root = neg2_root_q * ((theta + 2.0 * std::f64::consts::PI) / 3.0).cos() - adiv3;
+        if !nearly_equal(solution[0], root) {
+            solution[n] = root;
+            n += 1;
+        }
+        let root = neg2_root_q * ((theta - 2.0 * std::f64::consts::PI) / 3.0).cos() - adiv3;
+        if !nearly_equal(solution[0], root) && (n == 1 || !nearly_equal(solution[1], root)) {
+            solution[n] = root;
+            n += 1;
+        }
+    } else {
+        let mut big_a = (r.abs() + r2_minus_q3.sqrt()).cbrt();
+        if r > 0.0 {
+            big_a = -big_a;
+        }
+        if !double_nearly_zero(big_a) {
+            big_a += q / big_a;
+        }
+        solution[n] = big_a - adiv3;
+        n += 1;
+        if !double_nearly_zero(r2) && doubles_nearly_equal_ulps(r2, q3) {
+            let root = -big_a / 2.0 - adiv3;
+            if !nearly_equal(solution[0], root) {
+                solution[n] = root;
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// `SkCubics::RootsValidT`.
+fn cubic_roots_valid_t(a: f64, b: f64, c: f64, d: f64, solution: &mut [f64; 3]) -> usize {
+    let mut all = [0.0f64; 3];
+    let real = cubic_roots_real(a, b, c, d, &mut all);
+    let mut found = 0;
+    for &t in &all[..real] {
+        if t <= 1.00005 && (t >= 1.0 || doubles_nearly_equal_ulps(t, 1.0)) {
+            if (found < 1 || !doubles_nearly_equal_ulps(solution[0], 1.0))
+                && (found < 2 || !doubles_nearly_equal_ulps(solution[1], 1.0))
+            {
+                solution[found] = 1.0;
+                found += 1;
+            }
+        } else if t >= -0.00005 && (t <= 0.0 || double_nearly_zero(t)) {
+            if (found < 1 || !double_nearly_zero(solution[0]))
+                && (found < 2 || !double_nearly_zero(solution[1]))
+            {
+                solution[found] = 0.0;
+                found += 1;
+            }
+        } else if t > 0.0 && t < 1.0 {
+            solution[found] = t;
+            found += 1;
+        }
+    }
+    found
+}
+
+/// `SkCubics::EvalAt`.
+fn cubic_eval_at(a: f64, b: f64, c: f64, d: f64, t: f64) -> f64 {
+    t.mul_add(t.mul_add(t.mul_add(a, b), c), d)
+}
+
+fn approximately_zero(x: f64) -> bool {
+    x.abs() < 0.000_000_01
+}
+
+fn cubic_binary_search(a: f64, b: f64, c: f64, d: f64, mut start: f64, mut stop: f64) -> f64 {
+    let left = cubic_eval_at(a, b, c, d, start);
+    if approximately_zero(left) {
+        return start;
+    }
+    let right = cubic_eval_at(a, b, c, d, stop);
+    if !(left.is_finite() && right.is_finite()) {
+        return -1.0;
+    }
+    if (left > 0.0 && right > 0.0) || (left < 0.0 && right < 0.0) {
+        return -1.0;
+    }
+    for _ in 0..1000 {
+        let step = (start + stop) / 2.0;
+        let curr = cubic_eval_at(a, b, c, d, step);
+        if approximately_zero(curr) {
+            return step;
+        }
+        if (curr < 0.0 && left < 0.0) || (curr > 0.0 && left > 0.0) {
+            start = step;
+        } else {
+            stop = step;
+        }
+    }
+    -1.0
+}
+
+/// `SkCubics::BinarySearchRootsValidT`.
+fn cubic_binary_search_roots_valid_t(
+    a: f64,
+    b: f64,
+    c: f64,
+    d: f64,
+    solution: &mut [f64; 3],
+) -> usize {
+    if !(a.is_finite() && b.is_finite() && c.is_finite() && d.is_finite()) {
+        return 0;
+    }
+    let mut regions = [0.0, 0.0, 0.0, 1.0];
+    let mut roots = [0.0f64; 2];
+    let num = quad_roots_real(3.0 * a, 2.0 * b, c, &mut roots);
+    let mut min_max = [0.0f64; 2];
+    let mut extrema = 0;
+    for &t in &roots[..num] {
+        if (0.0..=1.0).contains(&t) {
+            min_max[extrema] = t;
+            extrema += 1;
+        }
+    }
+    let mut start = 2 - extrema;
+    if extrema == 1 {
+        regions[start + 1] = min_max[0];
+    }
+    if extrema == 2 {
+        regions[start + 1] = std_min(min_max[0], min_max[1]);
+        regions[start + 2] = std_max(min_max[0], min_max[1]);
+    }
+    let mut found = 0;
+    while start < 3 {
+        let root = cubic_binary_search(a, b, c, d, regions[start], regions[start + 1]);
+        if root >= 0.0
+            && (found < 1 || !approximately_zero(solution[0] - root))
+            && (found < 2 || !approximately_zero(solution[1] - root))
+        {
+            solution[found] = root;
+            found += 1;
+        }
+        start += 1;
+    }
+    found
+}
+
+/// `first_axis_intersection` of `SkGeometry.cpp`.
+fn first_axis_intersection(p: [f64; 4], intercept: f64) -> Option<f64> {
+    let a = -p[0] + 3.0 * p[1] - 3.0 * p[2] + p[3];
+    let b = 3.0 * p[0] - 6.0 * p[1] + 3.0 * p[2];
+    let c = -3.0 * p[0] + 3.0 * p[1];
+    let d = p[0] - intercept;
+    let mut roots = [0.0f64; 3];
+    let accurate = |roots: &[f64]| {
+        roots
+            .iter()
+            .copied()
+            .find(|&t| cubic_eval_at(a, b, c, d, t).abs() < 0.00001)
+    };
+    let n = cubic_roots_valid_t(a, b, c, d, &mut roots);
+    if n == 0 {
+        return None;
+    }
+    if let Some(t) = accurate(&roots[..n]) {
+        return Some(t);
+    }
+    let n = cubic_binary_search_roots_valid_t(a, b, c, d, &mut roots);
+    accurate(&roots[..n])
+}
+
+/// `SkChopMonoCubicAtY` (`y`) or `SkChopMonoCubicAtX`, falling back to `mono_cubic_closestT`
+/// as `SkEdgeClipper` does.
+fn chop_mono_cubic_at(src: [P; 4], y: bool, value: f32) -> [P; 7] {
+    let c = src.map(|p| f64::from(coord(p, y)));
+    if let Some(t) = first_axis_intersection(c, f64::from(value)) {
+        let interp = |a: f64, b: f64| a + (b - a) * t;
+        let sub = |v: [f64; 4]| {
+            let (v01, v12, v23) = (interp(v[0], v[1]), interp(v[1], v[2]), interp(v[2], v[3]));
+            let (a2, b1) = (interp(v01, v12), interp(v12, v23));
+            [v[0], v01, a2, interp(a2, b1), b1, v23, v[3]]
+        };
+        let xs = sub(src.map(|p| f64::from(p.x)));
+        let ys = sub(src.map(|p| f64::from(p.y)));
+        return std::array::from_fn(|i| P {
+            x: xs[i] as f32,
+            y: ys[i] as f32,
+        });
+    }
+    chop_cubic_at(src, mono_cubic_closest_t(src.map(|p| coord(p, y)), value))
+}
+
+fn mono_cubic_closest_t(src: [f32; 4], x: f32) -> f32 {
+    let mut t = 0.5f32;
+    let mut best_t = 0.0f32;
+    let mut step = 0.25f32;
+    let d = src[0];
+    let a = src[3] + 3.0 * (src[1] - src[2]) - d;
+    let b = 3.0 * (src[2] - src[1] - src[1] + d);
+    let c = 3.0 * (src[1] - d);
+    let x = x - d;
+    let mut closest = f32::MAX;
+    loop {
+        let loc = ((a * t + b) * t + c) * t;
+        let dist = (loc - x).abs();
+        if closest > dist {
+            closest = dist;
+            best_t = t;
+        }
+        let last_t = t;
+        t += if loc < x { step } else { -step };
+        step *= 0.5;
+        if !(closest > 0.25 && last_t != t) {
+            return best_t;
+        }
+    }
+}
+
+fn clamp_ge(v: &mut f32, min: f32) {
+    if *v < min {
+        *v = min;
+    }
+}
+
+fn clamp_le(v: &mut f32, max: f32) {
+    if *v > max {
+        *v = max;
+    }
+}
+
+fn chop_cubic_in_y(pts: &mut [P; 4], clip: ClipRect) {
+    if pts[0].y < clip.top {
+        let mut tmp = chop_mono_cubic_at(*pts, true, clip.top);
+        if tmp[3].y < clip.top && tmp[4].y < clip.top && tmp[5].y < clip.top {
+            tmp = chop_mono_cubic_at([tmp[3], tmp[4], tmp[5], tmp[6]], true, clip.top);
+        }
+        tmp[3].y = clip.top;
+        clamp_ge(&mut tmp[4].y, clip.top);
+        pts[0] = tmp[3];
+        pts[1] = tmp[4];
+        pts[2] = tmp[5];
+    }
+    if pts[3].y > clip.bottom {
+        let mut tmp = chop_mono_cubic_at(*pts, true, clip.bottom);
+        tmp[3].y = clip.bottom;
+        clamp_le(&mut tmp[2].y, clip.bottom);
+        pts[1] = tmp[1];
+        pts[2] = tmp[2];
+        pts[3] = tmp[3];
+    }
+}
+
+fn cubic(pts: [P; 4], reverse: bool) -> Piece {
+    Piece::Cubic(if reverse {
+        [pts[3], pts[2], pts[1], pts[0]]
+    } else {
+        pts
+    })
+}
+
+/// `SkEdgeClipper::clipMonoCubic`.
+fn clip_mono_cubic(src: [P; 4], clip: ClipRect, cull_right: bool, out: &mut Vec<Piece>) {
+    let (mut pts, mut reverse) = if src[0].y > src[3].y {
+        ([src[3], src[2], src[1], src[0]], true)
+    } else {
+        (src, false)
+    };
+    if pts[3].y <= clip.top || pts[0].y >= clip.bottom {
+        return;
+    }
+    chop_cubic_in_y(&mut pts, clip);
+    if pts[0].x > pts[3].x {
+        pts.swap(0, 3);
+        pts.swap(1, 2);
+        reverse = !reverse;
+    }
+    if pts[3].x <= clip.left {
+        out.push(vline(clip.left, pts[0].y, pts[3].y, reverse));
+        return;
+    }
+    if pts[0].x >= clip.right {
+        if !cull_right {
+            out.push(vline(clip.right, pts[0].y, pts[3].y, reverse));
+        }
+        return;
+    }
+    if pts[0].x < clip.left {
+        let mut tmp = chop_mono_cubic_at(pts, false, clip.left);
+        out.push(vline(clip.left, tmp[0].y, tmp[3].y, reverse));
+        tmp[3].x = clip.left;
+        clamp_ge(&mut tmp[4].x, clip.left);
+        pts[0] = tmp[3];
+        pts[1] = tmp[4];
+        pts[2] = tmp[5];
+    }
+    if pts[3].x > clip.right {
+        let mut tmp = chop_mono_cubic_at(pts, false, clip.right);
+        tmp[3].x = clip.right;
+        clamp_le(&mut tmp[2].x, clip.right);
+        out.push(cubic([tmp[0], tmp[1], tmp[2], tmp[3]], reverse));
+        out.push(vline(clip.right, tmp[3].y, tmp[6].y, reverse));
+    } else {
+        out.push(cubic(pts, reverse));
+    }
+}
+
+/// `SkEdgeClipper::clipCubic`. Cubics reaching past 2^22 become their chord, as in Skia.
+pub fn clip_cubic_cull(src: [P; 4], clip: ClipRect, cull_right: bool, out: &mut Vec<Piece>) {
+    let (mut l, mut t, mut r, mut b) = (src[0].x, src[0].y, src[0].x, src[0].y);
+    for p in &src[1..] {
+        l = l.min(p.x);
+        t = t.min(p.y);
+        r = r.max(p.x);
+        b = b.max(p.y);
+    }
+    if !src.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
+        (l, t, r, b) = (0.0, 0.0, 0.0, 0.0);
+    }
+    if !(b > clip.top && t < clip.bottom) {
+        return;
+    }
+    let limit = (1 << 22) as f32;
+    if l < -limit || t < -limit || r > limit || b > limit {
+        clip_line_cull([src[0], src[3]], clip, cull_right, out);
+        return;
+    }
+    for mono_y in chop_cubic_at_extrema(src, true) {
+        for mono in chop_cubic_at_extrema(mono_y, false) {
+            clip_mono_cubic(mono, clip, cull_right, out);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -429,7 +999,7 @@ mod tests {
             .into_iter()
             .map(|piece| match piece {
                 Piece::Line(l) => l,
-                Piece::Quad(_) => panic!("a line clips to lines"),
+                Piece::Quad(_) | Piece::Cubic(_) => panic!("a line clips to lines"),
             })
             .collect();
         let (a, b) = ((10.0f64 / 3.0) as f32, (20.0f64 / 3.0) as f32);
@@ -458,6 +1028,7 @@ mod tests {
             let pts: &[P] = match piece {
                 Piece::Line(l) => l,
                 Piece::Quad(q) => q,
+                Piece::Cubic(c) => c,
             };
             for q in pts {
                 assert!(
@@ -467,5 +1038,74 @@ mod tests {
             }
         }
         assert!(out.iter().any(|piece| matches!(piece, Piece::Quad(_))));
+    }
+
+    fn monotonic(v: [f32; 4]) -> bool {
+        v.windows(2).all(|w| w[0] <= w[1]) || v.windows(2).all(|w| w[0] >= w[1])
+    }
+
+    #[test]
+    fn cubics_chop_into_monotonic_pieces() {
+        let src = [p(0.0, 0.0), p(30.0, 40.0), p(-20.0, -30.0), p(10.0, 5.0)];
+        let pieces = chop_cubic_at_y_extrema(src);
+        assert_eq!(pieces.len(), 3);
+        assert_eq!(pieces[0][0], src[0]);
+        assert_eq!(pieces[2][3], src[3]);
+        for w in pieces.windows(2) {
+            assert_eq!(w[0][3], w[1][0]);
+        }
+        for piece in &pieces {
+            assert!(monotonic(piece.map(|q| q.y)), "{piece:?}");
+            for mono in chop_cubic_at_extrema(*piece, false) {
+                assert!(monotonic(mono.map(|q| q.x)), "{mono:?}");
+                assert!(monotonic(mono.map(|q| q.y)), "{mono:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn cubics_are_cut_at_the_clip() {
+        let mut out = Vec::new();
+        clip_cubic_cull(
+            [p(-5.0, 15.0), p(0.0, -10.0), p(10.0, -10.0), p(15.0, 15.0)],
+            CLIP,
+            false,
+            &mut out,
+        );
+        assert!(out.iter().any(|piece| matches!(piece, Piece::Cubic(_))));
+        for piece in &out {
+            let pts: &[P] = match piece {
+                Piece::Line(l) => l,
+                Piece::Quad(q) => q,
+                Piece::Cubic(c) => c,
+            };
+            for q in pts {
+                assert!(
+                    (0.0..=10.0).contains(&q.x) && (0.0..=10.0).contains(&q.y),
+                    "{q:?}"
+                );
+            }
+        }
+        let mut culled = Vec::new();
+        clip_cubic_cull(
+            [p(12.0, 1.0), p(20.0, 3.0), p(20.0, 6.0), p(12.0, 9.0)],
+            CLIP,
+            true,
+            &mut culled,
+        );
+        assert!(culled.is_empty());
+    }
+
+    #[test]
+    fn huge_cubics_clip_as_their_chord() {
+        let mut out = Vec::new();
+        clip_cubic_cull(
+            [p(-1.0e7, -1.0e7), p(0.0, 5.0), p(5.0, 0.0), p(1.0e7, 1.0e7)],
+            CLIP,
+            false,
+            &mut out,
+        );
+        assert!(out.iter().all(|piece| matches!(piece, Piece::Line(_))));
+        assert!(!out.is_empty());
     }
 }

@@ -1,0 +1,240 @@
+{
+  "name": "2024-2025 Field",
+  "isFTC": true,
+  "coordinateSystem": "center-rotated",
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    },
+    {
+      "axis": "z",
+      "degrees": 180
+    }
+  ],
+  "position": [
+    0,
+    0,
+    -0.013
+  ],
+  "widthInches": 143.182,
+  "heightInches": 143.182,
+  "driverStations": [
+    [
+      2.819,
+      -0.205
+    ],
+    [
+      2.819,
+      0.794
+    ],
+    [
+      -2.819,
+      0.205
+    ],
+    [
+      -2.819,
+      -0.794
+    ]
+  ],
+  "gamePieces": [
+    {
+      "name": "Sample (Neutral)",
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        -0.044,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_1",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_2",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_3",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_4",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_5",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_6",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_7",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_8",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_9",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_10",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_11",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_12",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_13",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_14",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_15",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_16",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_17",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_18",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_19",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_20",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_21",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_22",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_23",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_24",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_25",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_26",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_27",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_28",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_29",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_30",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_31",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_32",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_33",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_34",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_35",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_36",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_37",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_38",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_39",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_40",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_41",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_42",
+        "Neutral_Sample_Scoring_Element_-_am-5401_yellow_43"
+      ]
+    },
+    {
+      "name": "Sample (Red)",
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        -0.044,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Red_Sample_Scoring_Element_-_am-5401_red",
+        "Red_Sample_Scoring_Element_-_am-5401_red_1",
+        "Red_Sample_Scoring_Element_-_am-5401_red_2",
+        "Red_Sample_Scoring_Element_-_am-5401_red_3",
+        "Red_Sample_Scoring_Element_-_am-5401_red_4",
+        "Red_Sample_Scoring_Element_-_am-5401_red_5",
+        "Red_Sample_Scoring_Element_-_am-5401_red_6",
+        "Red_Sample_Scoring_Element_-_am-5401_red_7",
+        "Red_Sample_Scoring_Element_-_am-5401_red_8",
+        "Red_Sample_Scoring_Element_-_am-5401_red_9",
+        "Red_Sample_Scoring_Element_-_am-5401_red_10",
+        "Red_Sample_Scoring_Element_-_am-5401_red_11",
+        "Red_Sample_Scoring_Element_-_am-5401_red_12",
+        "Red_Sample_Scoring_Element_-_am-5401_red_13",
+        "Red_Sample_Scoring_Element_-_am-5401_red_14",
+        "Red_Sample_Scoring_Element_-_am-5401_red_15",
+        "Red_Sample_Scoring_Element_-_am-5401_red_16",
+        "Red_Sample_Scoring_Element_-_am-5401_red_17",
+        "Red_Sample_Scoring_Element_-_am-5401_red_18",
+        "Red_Sample_Scoring_Element_-_am-5401_red_19",
+        "Red_Sample_Scoring_Element_-_am-5401_red_20",
+        "Red_Sample_Scoring_Element_-_am-5401_red_21"
+      ]
+    },
+    {
+      "name": "Sample (Blue)",
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        -0.044,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Blue_Sample_Scoring_Element_-_am-5401_blue",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_1",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_2",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_3",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_4",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_5",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_6",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_7",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_8",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_9",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_10",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_11",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_12",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_13",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_14",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_15",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_16",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_17",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_18",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_19",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_20",
+        "Blue_Sample_Scoring_Element_-_am-5401_blue_21"
+      ]
+    },
+    {
+      "name": "Clip",
+      "rotations": [
+        {
+          "axis": "x",
+          "degrees": 90
+        },
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "position": [
+        0.019,
+        -0.013,
+        0
+      ],
+      "stagedObjects": [
+        "CLIP_-_am-5402",
+        "CLIP_-_am-5402_1",
+        "CLIP_-_am-5402_2",
+        "CLIP_-_am-5402_3",
+        "CLIP_-_am-5402_4",
+        "CLIP_-_am-5402_5",
+        "CLIP_-_am-5402_6",
+        "CLIP_-_am-5402_7",
+        "CLIP_-_am-5402_8",
+        "CLIP_-_am-5402_9",
+        "CLIP_-_am-5402_10",
+        "CLIP_-_am-5402_11",
+        "CLIP_-_am-5402_12",
+        "CLIP_-_am-5402_13",
+        "CLIP_-_am-5402_14",
+        "CLIP_-_am-5402_15",
+        "CLIP_-_am-5402_16",
+        "CLIP_-_am-5402_17",
+        "CLIP_-_am-5402_18",
+        "CLIP_-_am-5402_19",
+        "CLIP_-_am-5402_20",
+        "CLIP_-_am-5402_21",
+        "CLIP_-_am-5402_22",
+        "CLIP_-_am-5402_23",
+        "CLIP_-_am-5402_24",
+        "CLIP_-_am-5402_25",
+        "CLIP_-_am-5402_26",
+        "CLIP_-_am-5402_27",
+        "CLIP_-_am-5402_28",
+        "CLIP_-_am-5402_29",
+        "CLIP_-_am-5402_30",
+        "CLIP_-_am-5402_31",
+        "CLIP_-_am-5402_32",
+        "CLIP_-_am-5402_33",
+        "CLIP_-_am-5402_34",
+        "CLIP_-_am-5402_35",
+        "CLIP_-_am-5402_36",
+        "CLIP_-_am-5402_37",
+        "CLIP_-_am-5402_38",
+        "CLIP_-_am-5402_39",
+        "CLIP_-_am-5402_40",
+        "CLIP_-_am-5402_41"
+      ]
+    }
+  ]
+}

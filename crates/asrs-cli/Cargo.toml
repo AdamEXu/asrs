@@ -16,6 +16,7 @@ asrs-formats = { path = "../asrs-formats" }
 asrs-js = { path = "../asrs-js" }
 asrs-live = { path = "../asrs-live" }
 asrs-log = { path = "../asrs-log" }
+asrs-model = { path = "../asrs-model" }
 asrs-parity = { path = "../asrs-parity" }
 asrs-services = { path = "../asrs-services" }
 asrs-tabs = { path = "../asrs-tabs" }

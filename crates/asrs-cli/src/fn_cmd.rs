@@ -2,7 +2,7 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use asrs_parity::{Request, Response};
 
-use crate::{functions, geometry, live_base, robot_state, shared, units};
+use crate::{assets, functions, geometry, live_base, robot_state, shared, units};
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--list") {
@@ -13,6 +13,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             .chain(geometry::FUNCTIONS)
             .chain(robot_state::FUNCTIONS)
             .chain(live_base::FUNCTIONS)
+            .chain(assets::FUNCTIONS)
         {
             println!("{name}");
         }
@@ -55,6 +56,7 @@ fn handle(line: &str) -> Response {
             .chain(geometry::FUNCTIONS)
             .chain(robot_state::FUNCTIONS)
             .chain(live_base::FUNCTIONS)
+            .chain(assets::FUNCTIONS)
             .find(|(n, _)| *n == request.name)
             .map(|(_, f)| *f)
     }) {
