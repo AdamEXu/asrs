@@ -2,8 +2,8 @@ use asrs_js::number::{self, IntlOptions, SignDisplay};
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::{
-    js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time, log_field, log_run,
-    log_struct, photon,
+    js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time, log_field, log_keys,
+    log_run, log_struct, photon, tabs_console,
 };
 
 pub type Function = fn(&[Value]) -> Response;
@@ -32,12 +32,13 @@ pub fn lookup(name: &str) -> Option<Function> {
         .chain(js_time::FUNCTIONS)
         .chain(js_color::FUNCTIONS)
         .chain(js_json::FUNCTIONS)
-        .chain(js_regex::FUNCTIONS)
+        .chain(log_keys::FUNCTIONS)
         .chain(js_msgpack::FUNCTIONS)
         .chain(log_struct::FUNCTIONS)
         .chain(log_field::FUNCTIONS)
         .chain(log_run::FUNCTIONS)
         .chain(photon::FUNCTIONS)
+        .chain(tabs_console::FUNCTIONS)
         .find(|(n, _)| *n == name)
         .map(|(_, f)| *f)
 }
@@ -53,6 +54,7 @@ fn oracle_call(args: &[Value]) -> Response {
         .iter()
         .chain(js_time::CALLS)
         .chain(js_regex::CALLS)
+        .chain(tabs_console::CALLS)
         .find(|(s, _)| *s == source)
     {
         Some((_, f)) => f(&args[1..]),

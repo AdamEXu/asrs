@@ -19,6 +19,7 @@ asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-parity = { path = "../asrs-parity" }
 asrs-services = { path = "../asrs-services" }
+asrs-tabs = { path = "../asrs-tabs" }
 
 [lints]
 workspace = true

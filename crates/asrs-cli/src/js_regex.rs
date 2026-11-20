@@ -1,28 +1,12 @@
-//! `fn` names for `asrs_js::regex`. The regex vector tests include this file too, so the
-//! committed vectors and `cargo xtask parity fn` exercise the same dispatch.
+//! `oracle:call` sources for `asrs_js::regex`. The regex vector tests include this file too,
+//! so the committed vectors and `cargo xtask parity fn` exercise the same dispatch. The
+//! `LogKeyUtils` regex sites in `regex/sites` go through `log_keys`, the real port.
 
 use asrs_js::regex::{Match, RegExp, sites};
 use asrs_js::string::JsString;
 use asrs_parity::{Response, Utf16String, Value};
 
 pub type Function = fn(&[Value]) -> Response;
-
-pub const FUNCTIONS: &[(&str, Function)] = &[
-    ("shared/log/LogKeyUtils:isSchema", |a| {
-        with_str(a, 0, |s| Value::Bool(sites::schema_type(&s).is_some()))
-    }),
-    ("shared/log/LogKeyUtils:getSchemaType", |a| {
-        with_str(a, 0, |s| opt_string(sites::schema_type(&s)))
-    }),
-    ("shared/log/LogKeyUtils:isMergePrefix", |a| {
-        with_str(a, 0, |s| Value::Bool(sites::merge_prefix(&s).is_some()))
-    }),
-    ("shared/log/LogKeyUtils:extractMergePrefix", |a| {
-        with_str(a, 0, |s| {
-            string(sites::merge_prefix(&s).unwrap_or_default())
-        })
-    }),
-];
 
 const EXEC: &str = r#"(p, f, s) => { const r = new RegExp(p, f); const out = []; for (let i = 0; i < 40; i++) { const m = r.exec(s); if (m === null) { out.push(r.lastIndex); break; } out.push([m.index, r.lastIndex, ...m]); if (!r.global && !r.sticky) break; if (m[0].length === 0) r.lastIndex++; } return out; }"#;
 const SPLIT: &str = r#"(p, f, s, n) => s.split(new RegExp(p, f), n)"#;
