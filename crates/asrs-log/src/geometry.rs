@@ -182,8 +182,6 @@ pub const APRIL_TAG_36H11_COUNT: f64 = 587.0;
 pub const APRIL_TAG_16H5_COUNT: f64 = 30.0;
 pub const HEATMAP_DT: f64 = 0.25;
 
-// FORMAT CONVERSION UTILITIES
-
 pub fn translation_2d_to_3d(input: Translation2d) -> Translation3d {
     [input[0], input[1], 0.0]
 }
@@ -193,12 +191,10 @@ pub fn translation_3d_to_2d(input: Translation3d) -> Translation2d {
 }
 
 pub fn rotation_2d_to_3d(input: Rotation2d) -> Rotation3d {
-    // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Euler_angles_to_quaternion_conversion
     [math::cos(input * 0.5), 0.0, 0.0, math::sin(input * 0.5)]
 }
 
 pub fn rotation_3d_to_2d(input: Rotation3d) -> Rotation2d {
-    // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles#Quaternion_to_Euler_angles_(in_3-2-1_sequence)_conversion
     math::atan2(
         2.0 * (input[0] * input[3] + input[1] * input[2]),
         1.0 - 2.0 * (input[2] * input[2] + input[3] * input[3]),
@@ -333,8 +329,6 @@ pub fn annotated_pose_3d_to_2d(input: AnnotatedPose3d) -> AnnotatedPose2d {
     }
 }
 
-// COORDINATE SYSTEM CONVERSION
-
 /// What `convertFromCoordinateSystem` can transform: a `Pose2d`, an
 /// `AnnotatedPose2d`, or an array of either.
 pub trait ConvertPose {
@@ -431,8 +425,6 @@ pub fn convert_from_coordinate_system<P: ConvertPose>(
 ) -> P {
     pose.convert_from_coordinate_system(source, alliance, field_length, field_width)
 }
-
-// LOG READING UTILITIES
 
 fn number_or(log: &Log, key: JsString, timestamp: f64, uuid: Option<&str>) -> f64 {
     get_or_default(log, &key, timestamp, 0.0, uuid)
@@ -690,11 +682,8 @@ pub fn grab_translation_2d_array(
     timestamp: f64,
     uuid: Option<&str>,
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
-    // Read directly from the raw WPILib struct byte array when present
-    // (#477 workaround for large game piece pose arrays).
     if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
-        // A Translation2d WPILib struct is 2 little-endian doubles (16 bytes).
         let mut i = 0usize;
         while i + 16 <= raw_data.len() {
             poses.push(AnnotatedPose3d {
@@ -735,7 +724,6 @@ pub fn grab_translation_3d_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
-        // A Translation3d WPILib struct is 3 little-endian doubles (24 bytes).
         let mut i = 0usize;
         while i + 24 <= raw_data.len() {
             poses.push(AnnotatedPose3d {
@@ -844,7 +832,6 @@ pub fn grab_pose_2d_array(
     timestamp: f64,
     uuid: Option<&str>,
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
-    // A Pose2d/Transform2d WPILib struct is 3 little-endian doubles (24 bytes).
     if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
         let mut i = 0usize;
@@ -900,7 +887,6 @@ pub fn grab_pose_3d_array(
     timestamp: f64,
     uuid: Option<&str>,
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
-    // A Pose3d/Transform3d WPILib struct is 7 little-endian doubles (56 bytes).
     if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
         let mut i = 0usize;
