@@ -719,6 +719,8 @@ Steps:
 | `{"advance": ms}`, `{"frames": n}` | runs timers and frames for `ms`, or `n * framePeriod`, milliseconds |
 | `{"eval": "expression"}` | evaluates JavaScript in the page (`window` is the hub's) |
 | `{"event": {"target", "index", "kind", "type", "init"}}` | dispatches `new window[kind](type, {bubbles: true, cancelable: true, ...init})` on the `index`th match of the selector `target` (or `"window"`, `"document"`); `kind` defaults to `Event` |
+| `{"selection": [method, ...args]}` | calls `window.selection[method](...args)` with CVE-1 arguments; `setLiveConnected` connects a scripted supplier that returns the last `liveTime` step's value |
+| `{"liveTime": <cve1>}` | sets the scripted live timestamp the `setLiveConnected` supplier returns |
 | `{"capture": [...], "label": ...}` | writes a `{"capture": label, "time": ms}` line, then each capture below |
 
 Captures (a string or `{"kind": ..., ...}`):
@@ -729,7 +731,7 @@ Captures (a string or `{"kind": ..., ...}`):
 | `commands` | `{"command": {index, type, title, uuid}, "value": <command>}` for every tab whose renderer was called since the last `commands` capture, with the command it was last given (snapshotted when `render` was called) |
 | `canvas` | `{"canvas": "<class>#<n>", "frame", "width", "height", "calls": [...]}` for every 2D canvas drawn since the last `canvas` capture; `selector` limits it to matching canvases |
 | `dom` | `{"dom": selector, "nodes": [...]}`: for the first match (`"all": true` for every match), each element in document order as `[depth, tag, class, hidden, text, extra]`, where `text` joins the element's own non-blank text nodes and `extra` holds the `attributes` asked for (default `title`) plus `value` of form controls and `checked` of checkboxes and radios |
-| `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom}}` |
+| `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom, buttons}}` where `buttons` records each control button's `hidden` flag and the inline `--show-lock-buttons` value |
 | `eval` | `{"eval": expr, "value": <result>}` or `"throw"` |
 | `measure` | `{"measure": {font, align, baseline, text}, "metrics": {...}}` per string of `texts`, from the recording canvas (`null` when the font is invalid) |
 

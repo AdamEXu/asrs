@@ -1,0 +1,147 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "show"
+    ],
+    "steps": [
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "idle-default-range"
+      },
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          3
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "static-mid"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "playing"
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          100
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "static-past-end"
+      },
+      {
+        "liveTime": 8
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "locked"
+      },
+      {
+        "liveTime": 4
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "live-behind-log"
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "win32",
+          "platformRelease": "10.0.0",
+          "platformArch": "x64",
+          "appVersion": "27.0.0"
+        }
+      },
+      {
+        "frames": 3
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "win32-silent"
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "darwin",
+          "platformRelease": "25.0.0",
+          "platformArch": "arm64",
+          "appVersion": "27.0.0"
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "darwin-again"
+      }
+    ]
+  }
+}

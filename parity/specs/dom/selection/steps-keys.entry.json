@@ -1,0 +1,231 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          1
+        ]
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "arrow-right"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowLeft"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "arrow-left"
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "steps-forward"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "space-play"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "arrow-while-playing"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "space-pause"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight",
+            "ctrlKey": true
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "arrow-ctrl"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "space-in-input"
+      },
+      {
+        "main": "new-tab",
+        "data": 3
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "KeyL"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "keyl-field3d-plain"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "KeyL",
+            "metaKey": true
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "keyl-field3d-meta"
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "win32",
+          "platformRelease": "10.0.0",
+          "platformArch": "x64",
+          "appVersion": "27.0.0"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight",
+            "metaKey": true
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowRight",
+            "ctrlKey": true
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "win32-modifiers"
+      }
+    ]
+  }
+}
