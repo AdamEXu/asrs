@@ -99,9 +99,11 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
     ("Date.prototype.toString", |a| {
         date_method(a, "toString", time::date_to_string)
     }),
-    ("Date.prototype.getTimezoneOffset", |a| match date_arg(a, 0) {
-        Ok(t) => ok_number(time::get_timezone_offset(t, &zone())),
-        Err(r) => r,
+    ("Date.prototype.getTimezoneOffset", |a| {
+        match date_arg(a, 0) {
+            Ok(t) => ok_number(time::get_timezone_offset(t, &zone())),
+            Err(r) => r,
+        }
     }),
     ("new Date", new_date_fn),
     ("oracle:withRandom", with_random_fn),

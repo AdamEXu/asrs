@@ -16,8 +16,7 @@ pub fn hex_rgb(hex: &str) -> [u8; 3] {
     for start in 0..bytes.len() {
         let rest = &bytes[start..];
         if rest.len() >= 6 && rest[..6].iter().all(|b| b.is_ascii_hexdigit()) {
-            let n =
-                u32::from_str_radix(str::from_utf8(&rest[..6]).unwrap_or("0"), 16).unwrap_or(0);
+            let n = u32::from_str_radix(str::from_utf8(&rest[..6]).unwrap_or("0"), 16).unwrap_or(0);
             return [(n >> 16) as u8, (n >> 8) as u8, n as u8];
         }
         if rest.len() >= 3 && rest[..3].iter().all(|b| b.is_ascii_hexdigit()) {
@@ -84,7 +83,11 @@ pub fn hsl_rgb(hsl: [f64; 3]) -> [f64; 3] {
         let val = l * 255.0;
         return [val, val, val];
     }
-    let t2 = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let t2 = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let t1 = 2.0 * l - t2;
     let mut rgb = [0.0; 3];
     for (i, slot) in rgb.iter_mut().enumerate() {

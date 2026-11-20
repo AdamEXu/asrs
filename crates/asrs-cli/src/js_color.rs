@@ -13,43 +13,50 @@ use crate::functions::{arg, array_join, ok_string, to_number, type_error};
 pub type Function = fn(&[Value]) -> Response;
 
 pub const FUNCTIONS: &[(&str, Function)] = &[
-    ("npm:color-convert:hex.rgb", |a| hex_to(a, |t| {
-        rgb_response(color::hex_rgb(t))
-    })),
-    ("npm:color-convert:hex.rgb.raw", |a| hex_to(a, |t| {
-        rgb_response(color::hex_rgb(t))
-    })),
-    ("npm:color-convert:hex.hsl", |a| hex_to(a, |t| {
-        arr_response(color::hex_hsl(t))
-    })),
-    ("npm:color-convert:hex.hsl.raw", |a| hex_to(a, |t| {
-        arr_response(color::hex_hsl_raw(t))
-    })),
-    ("npm:color-convert:rgb.hsl", |a| channels_to(a, true, |c| {
-        arr_response(color::rgb_hsl(c).map(math::round))
-    })),
-    ("npm:color-convert:rgb.hsl.raw", |a| channels_to(a, true, |c| {
-        arr_response(color::rgb_hsl(c))
-    })),
-    ("npm:color-convert:rgb.hex", |a| channels_to(a, false, |c| {
-        ok_string(color::rgb_hex(c))
-    })),
-    ("npm:color-convert:rgb.hex.raw", |a| channels_to(a, false, |c| {
-        ok_string(color::rgb_hex(c))
-    })),
-    ("npm:color-convert:hsl.rgb", |a| channels_to(a, true, |c| {
-        arr_response(color::hsl_rgb(c).map(math::round))
-    })),
-    ("npm:color-convert:hsl.rgb.raw", |a| channels_to(a, true, |c| {
-        arr_response(color::hsl_rgb(c))
-    })),
-    ("npm:color-convert:hsl.hex", |a| channels_to(a, true, |c| {
-        ok_string(color::hsl_hex(c))
-    })),
-    ("npm:color-convert:hsl.hex.raw", |a| channels_to(a, true, |c| {
-        ok_string(color::hsl_hex(c))
-    })),
-    ("shared/Colors:ensureThemeContrast", ensure_theme_contrast_fn),
+    ("npm:color-convert:hex.rgb", |a| {
+        hex_to(a, |t| rgb_response(color::hex_rgb(t)))
+    }),
+    ("npm:color-convert:hex.rgb.raw", |a| {
+        hex_to(a, |t| rgb_response(color::hex_rgb(t)))
+    }),
+    ("npm:color-convert:hex.hsl", |a| {
+        hex_to(a, |t| arr_response(color::hex_hsl(t)))
+    }),
+    ("npm:color-convert:hex.hsl.raw", |a| {
+        hex_to(a, |t| arr_response(color::hex_hsl_raw(t)))
+    }),
+    ("npm:color-convert:rgb.hsl", |a| {
+        channels_to(a, true, |c| {
+            arr_response(color::rgb_hsl(c).map(math::round))
+        })
+    }),
+    ("npm:color-convert:rgb.hsl.raw", |a| {
+        channels_to(a, true, |c| arr_response(color::rgb_hsl(c)))
+    }),
+    ("npm:color-convert:rgb.hex", |a| {
+        channels_to(a, false, |c| ok_string(color::rgb_hex(c)))
+    }),
+    ("npm:color-convert:rgb.hex.raw", |a| {
+        channels_to(a, false, |c| ok_string(color::rgb_hex(c)))
+    }),
+    ("npm:color-convert:hsl.rgb", |a| {
+        channels_to(a, true, |c| {
+            arr_response(color::hsl_rgb(c).map(math::round))
+        })
+    }),
+    ("npm:color-convert:hsl.rgb.raw", |a| {
+        channels_to(a, true, |c| arr_response(color::hsl_rgb(c)))
+    }),
+    ("npm:color-convert:hsl.hex", |a| {
+        channels_to(a, true, |c| ok_string(color::hsl_hex(c)))
+    }),
+    ("npm:color-convert:hsl.hex.raw", |a| {
+        channels_to(a, true, |c| ok_string(color::hsl_hex(c)))
+    }),
+    (
+        "shared/Colors:ensureThemeContrast",
+        ensure_theme_contrast_fn,
+    ),
 ];
 
 /// `wrapRaw`'s effective `args`: `arg0` itself when its `length` exceeds 1
@@ -67,12 +74,9 @@ fn wrapped(args: &[Value]) -> Wrapped {
         Value::Undefined | Value::Null => Wrapped::Nullish,
         Value::String(s) if s.units().len() > 1 => Wrapped::Text(s.units().to_vec()),
         Value::Array(items) if items.len() > 1 => Wrapped::Items(items),
-        Value::Bytes(bytes) if bytes.len() > 1 => Wrapped::Items(
-            bytes
-                .iter()
-                .map(|&b| Value::number(f64::from(b)))
-                .collect(),
-        ),
+        Value::Bytes(bytes) if bytes.len() > 1 => {
+            Wrapped::Items(bytes.iter().map(|&b| Value::number(f64::from(b))).collect())
+        }
         Value::TypedArray(_, items) if items.len() > 1 => Wrapped::Items(items),
         _ => Wrapped::Items(args.to_vec()),
     }
@@ -84,9 +88,7 @@ fn hex_text(args: &[Value]) -> Result<Option<String>, Response> {
     Ok(match wrapped(args) {
         Wrapped::Nullish => None,
         Wrapped::Text(units) => Some(JsString::from_units(units).to_string_lossy()),
-        Wrapped::Items(items) => Some(
-            JsString::from_units(array_join(&items)).to_string_lossy(),
-        ),
+        Wrapped::Items(items) => Some(JsString::from_units(array_join(&items)).to_string_lossy()),
     })
 }
 
@@ -106,9 +108,7 @@ fn channels(args: &[Value], arith: bool) -> Result<Option<[f64; 3]>, Response> {
                 } else {
                     type_error("Cannot convert a BigInt value to a number")
                 }),
-                Value::Symbol(_) => {
-                    Err(type_error("Cannot convert a Symbol value to a number"))
-                }
+                Value::Symbol(_) => Err(type_error("Cannot convert a Symbol value to a number")),
                 Value::Undefined | Value::Hole => Ok(f64::NAN),
                 Value::Date(bits) => Ok(f64::from_bits(*bits)),
                 other => to_number(other),
@@ -138,11 +138,7 @@ fn hex_to(args: &[Value], f: impl Fn(&str) -> Response) -> Response {
     }
 }
 
-fn channels_to(
-    args: &[Value],
-    arith: bool,
-    f: impl Fn([f64; 3]) -> Response,
-) -> Response {
+fn channels_to(args: &[Value], arith: bool, f: impl Fn([f64; 3]) -> Response) -> Response {
     match channels(args, arith) {
         Ok(Some(c)) => f(c),
         Ok(None) => Response::Ok(args.first().cloned().unwrap_or(Value::Undefined)),
@@ -177,9 +173,7 @@ fn ensure_theme_contrast_fn(args: &[Value]) -> Response {
                 .slice(1.0, None)
                 .into_units(),
         )),
-        Value::Array(items) => {
-            Value::Array(items.get(1..).unwrap_or_default().to_vec())
-        }
+        Value::Array(items) => Value::Array(items.get(1..).unwrap_or_default().to_vec()),
         _ => return type_error("color2.slice is not a function"),
     };
     let dark = match arg(args, 1) {

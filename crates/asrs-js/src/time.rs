@@ -239,7 +239,9 @@ impl NamedZone {
         } else if year < -9999 {
             Some(jiff::Timestamp::MIN)
         } else {
-            jiff::Timestamp::from_millisecond(epoch_ms).ok().or_else(clamped)
+            jiff::Timestamp::from_millisecond(epoch_ms)
+                .ok()
+                .or_else(clamped)
         }
     }
 
@@ -291,7 +293,11 @@ fn nth_weekday(year: i64, month: i64, weekday: i64, n: i64) -> i64 {
 
 /// Day of month of the last `weekday` (0 = Sunday) in `month`.
 fn last_weekday(year: i64, month: i64, weekday: i64) -> i64 {
-    let (y, m) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    let (y, m) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
     let last = days_from_civil_i64(y, m, 1) - 1;
     let w = (last + 4).rem_euclid(7);
     let dom = days_from_civil_i64(y, m, 1) - days_from_civil_i64(year, month, 1);
@@ -326,7 +332,7 @@ impl LocalZone for NamedZone {
                 return instant
                     .abbreviation
                     .clone()
-                    .unwrap_or_else(|| "GMT".to_owned())
+                    .unwrap_or_else(|| "GMT".to_owned());
             }
         };
         name.to_owned()
@@ -346,7 +352,11 @@ impl LocalZone for NamedZone {
                 .seconds();
             return ms as f64 - f64::from(offset) * 1000.0;
         }
-        let cycles = if year > 9999 { (year - 9999 + 399) / 400 } else { 0 };
+        let cycles = if year > 9999 {
+            (year - 9999 + 399) / 400
+        } else {
+            0
+        };
         let shifted = ms - cycles * CYCLE_MS;
         let Some(dt) = civil_datetime(shifted) else {
             return f64::NAN;
@@ -470,7 +480,11 @@ pub fn format_time_with_ms(time: f64) -> String {
     let padded = ms
         .pad_start(3.0, Some(&crate::string::JsString::from("0")))
         .unwrap_or_else(|_| crate::string::JsString::new());
-    format!("{}.{}", number::to_string(seconds), padded.to_string_lossy())
+    format!(
+        "{}.{}",
+        number::to_string(seconds),
+        padded.to_string_lossy()
+    )
 }
 
 /// `Date.prototype.toLocaleTimeString()` with the locale fixed to `en-US`:
@@ -497,7 +511,11 @@ const MONTHS: [&str; 12] = [
 fn gmt_offset(offset_ms: f64) -> String {
     let sign = if offset_ms < 0.0 { '-' } else { '+' };
     let magnitude = (offset_ms / 1000.0).abs() as u64;
-    format!("GMT{sign}{:02}{:02}", magnitude / 3600, magnitude % 3600 / 60)
+    format!(
+        "GMT{sign}{:02}{:02}",
+        magnitude / 3600,
+        magnitude % 3600 / 60
+    )
 }
 
 /// `Date.prototype.toString()` under `en-US`:
@@ -615,9 +633,8 @@ fn days_from_civil(y: f64, m: f64, d: f64) -> f64 {
     let y = if m <= 2.0 { y - 1.0 } else { y };
     let era = math::floor(y / 400.0);
     let yoe = y - era * 400.0;
-    let doy = math::floor((153.0 * (if m > 2.0 { m - 3.0 } else { m + 9.0 }) + 2.0) / 5.0)
-        + d
-        - 1.0;
+    let doy =
+        math::floor((153.0 * (if m > 2.0 { m - 3.0 } else { m + 9.0 }) + 2.0) / 5.0) + d - 1.0;
     let doe = yoe * 365.0 + math::floor(yoe / 4.0) - math::floor(yoe / 100.0) + doy;
     era * 146_097.0 + doe - 719_468.0
 }
