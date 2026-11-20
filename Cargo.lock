@@ -317,6 +317,7 @@ dependencies = [
  "asrs-canvas",
  "asrs-formats",
  "asrs-js",
+ "asrs-live",
  "asrs-log",
  "asrs-parity",
  "asrs-services",
@@ -363,6 +364,11 @@ dependencies = [
 [[package]]
 name = "asrs-live"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-log",
+ "tokio",
+]
 
 [[package]]
 name = "asrs-log"
