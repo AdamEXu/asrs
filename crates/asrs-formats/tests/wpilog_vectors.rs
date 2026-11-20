@@ -81,33 +81,31 @@ fn public_logs_dir() -> PathBuf {
     target.join("cache").join("public-logs")
 }
 
-fn compare_blocks(actual: &Json, expected: &Json, data: &[u8], case: &str) -> Result<(), String> {
-    let Some(expected_str) = expected.as_str() else {
-        return Err(format!("{case}.blocks: not a string"));
+fn compare_blocks(actual: &Json, expected: &Json, case: &str) -> Result<(), String> {
+    let digests = |json: Option<&Json>| -> Vec<Vec<u8>> {
+        json.and_then(Json::as_str)
+            .map(|s| {
+                s.to_string_lossy()
+                    .as_bytes()
+                    .chunks(16)
+                    .map(<[u8]>::to_vec)
+                    .collect()
+            })
+            .unwrap_or_default()
     };
-    let Some(actual_str) = actual.get("blocks").and_then(Json::as_str) else {
-        return Err(format!("{case}.blocks: missing in port output"));
-    };
-    if actual_str == expected_str {
+    let (expected, actual) = (digests(Some(expected)), digests(actual.get("blocks")));
+    let Some(i) = (0..expected.len().max(actual.len())).find(|&i| expected.get(i) != actual.get(i))
+    else {
         return Ok(());
-    }
-    let Some(blocks) = harness::block_digests(data) else {
-        return Err(format!("{case}: indexer traps but vector lists records"));
     };
-    let expected_str = expected_str.to_string_lossy();
-    for (i, digest) in blocks.iter().enumerate() {
-        let expected = expected_str.get(16 * i..16 * i + 16).unwrap_or("<missing>");
-        if digest != expected {
-            let first = i * 512;
-            return Err(format!(
-                "{case}.blocks: block {i} differs (records {first}.., oracle {expected}, port {digest})"
-            ));
-        }
-    }
+    let show = |d: Option<&Vec<u8>>| {
+        d.map_or("<none>".into(), |d| String::from_utf8_lossy(d).into_owned())
+    };
     Err(format!(
-        "{case}.blocks: block counts differ (oracle {}, port {})",
-        expected_str.len() / 16,
-        blocks.len()
+        "{case}.blocks: block {i} (records {}..) differs: oracle {}, port {}",
+        i * 512,
+        show(expected.get(i)),
+        show(actual.get(i))
     ))
 }
 
@@ -139,7 +137,7 @@ record_vectors!(public, "wpilog/public", |record: &Record| {
     let actual = harness::summary_public(&data);
     compare_fields(&actual, record, &["header", "index", "sample"], &case)?;
     if let Some(expected_blocks) = record.field("blocks") {
-        compare_blocks(&actual, expected_blocks, &data, &case)?;
+        compare_blocks(&actual, expected_blocks, &case)?;
     }
     Ok(())
 });

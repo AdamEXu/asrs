@@ -271,25 +271,6 @@ pub fn summary_public(data: &[u8]) -> Json {
     Json::Object(pairs)
 }
 
-/// The 512-record block digest list `summary_public` packs into one string; used
-/// to locate a mismatching block by index.
-pub fn block_digests(data: &[u8]) -> Option<Vec<String>> {
-    let indexed = wpilog::index(data).ok()?;
-    let decoder = WpilogDecoder::new(data);
-    let total = indexed.records.len();
-    let mut blocks = Vec::new();
-    let mut block_text = String::new();
-    for (i, &(entry, position)) in indexed.records.iter().enumerate() {
-        let json = record_at(&decoder, entry, position, false);
-        block_text.push_str(&json.to_compact());
-        if i % BLOCK == BLOCK - 1 || i + 1 == total {
-            blocks.push(fnv1a64(&block_text));
-            block_text.clear();
-        }
-    }
-    Some(blocks)
-}
-
 fn fnv1a64(text: &str) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for unit in text.encode_utf16() {
@@ -301,20 +282,12 @@ fn fnv1a64(text: &str) -> String {
 
 pub fn run(args: &[String]) -> Result<(), String> {
     let public = args.iter().any(|a| a == "--public");
-    let blocks = args.iter().any(|a| a == "--blocks");
     let files: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
     if files.is_empty() {
-        return Err("usage: asrs-cli wpilog [--public | --blocks] <log.wpilog>".to_owned());
+        return Err("usage: asrs-cli wpilog [--public] <log.wpilog>".to_owned());
     }
     for file in files {
         let data = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
-        if blocks {
-            match block_digests(&data) {
-                Some(digests) => println!("{}", digests.join("")),
-                None => println!("{}", index_throw().to_compact()),
-            }
-            continue;
-        }
         let summary = if public {
             summary_public(&data)
         } else {
