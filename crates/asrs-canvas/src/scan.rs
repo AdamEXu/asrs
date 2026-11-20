@@ -189,6 +189,30 @@ impl Edges {
     }
 
     fn quad(&mut self, p0: P, p1: P, p2: P) {
+        if self.snap {
+            let denom = p0.y - 2.0 * p1.y + p2.y;
+            let t = if denom != 0.0 {
+                (p0.y - p1.y) / denom
+            } else {
+                0.0
+            };
+            if t > 0.0 && t < 1.0 {
+                let lerp = |a: P, b: P| P {
+                    x: a.x + (b.x - a.x) * t,
+                    y: a.y + (b.y - a.y) * t,
+                };
+                let (mut a, mut b) = (lerp(p0, p1), lerp(p1, p2));
+                let mid = lerp(a, b);
+                // SkChopQuadAtYExtrema flattens both halves onto the extremum.
+                a.y = mid.y;
+                b.y = mid.y;
+                self.monotonic_quad(p0, a, mid);
+                self.monotonic_quad(mid, b, p2);
+            } else {
+                self.monotonic_quad(p0, p1, p2);
+            }
+            return;
+        }
         let dd = ((p0.x - 2.0 * p1.x + p2.x).powi(2) + (p0.y - 2.0 * p1.y + p2.y).powi(2)).sqrt();
         let n = ((dd / (8.0 * FLATTEN_TOLERANCE)).sqrt().ceil() as usize).clamp(1, 256);
         let mut last = p0;
@@ -201,6 +225,85 @@ impl Edges {
             };
             self.line(last, p);
             last = p;
+        }
+    }
+
+    /// `SkAnalyticQuadraticEdge`: a y-monotonic quad stepped in `1 << shift` lines whose
+    /// interior vertices snap to quarter pixels, or to whole pixels for steps two or more
+    /// pixels tall (sliding x along the step).
+    fn monotonic_quad(&mut self, p0: P, p1: P, p2: P) {
+        let dot8 = |v: f32| (v * 256.0) as i32;
+        let (x0, y0, x1, y1, x2, y2) = (
+            dot8(p0.x),
+            dot8(p0.y),
+            dot8(p1.x),
+            dot8(p1.y),
+            dot8(p2.x),
+            dot8(p2.y),
+        );
+        if (y0.min(y2) + 32) >> 6 == (y0.max(y2) + 32) >> 6 {
+            return;
+        }
+        let dx = (((x1 << 1) - x0 - x2) >> 2).abs();
+        let dy = (((y1 << 1) - y0 - y2) >> 2).abs();
+        let dist = if dx > dy {
+            dx + (dy >> 1)
+        } else {
+            dy + (dx >> 1)
+        };
+        let dist = (dist + (1 << 4)) >> 5;
+        let shift = ((32 - dist.leading_zeros()) >> 1).clamp(1, 6);
+        let steps = 1u32 << shift;
+        let (down, a, b, c) = if p0.y <= p2.y {
+            (true, p0, p1, p2)
+        } else {
+            (false, p2, p1, p0)
+        };
+        let fixed = |v: f32| f64::from(dot8(v)) / 256.0;
+        let eval = |t: f32| {
+            let mt = 1.0 - t;
+            P {
+                x: mt * mt * a.x + 2.0 * mt * t * b.x + t * t * c.x,
+                y: mt * mt * a.y + 2.0 * mt * t * b.y + t * t * c.y,
+            }
+        };
+        let quarter = |v: f64| (v * 4.0 + 0.5).floor() / 4.0;
+        let last_y = quarter(fixed(c.y));
+        let mut vertices = vec![(fixed(a.x), quarter(fixed(a.y)))];
+        let mut raw_prev = a;
+        for i in 1..steps {
+            let p = eval(i as f32 / steps as f32);
+            let (px, py) = (fixed(p.x), fixed(p.y));
+            let &(sx, sy) = vertices.last().expect("seeded");
+            let vertex = if (p.y - raw_prev.y).abs() >= 2.0 {
+                let snapped = py.round().min(last_y);
+                let slope = if py != sy { (px - sx) / (py - sy) } else { 0.0 };
+                (px - slope * (py - snapped), snapped)
+            } else {
+                (px, quarter(py).min(last_y))
+            };
+            vertices.push(vertex);
+            raw_prev = p;
+        }
+        vertices.push((fixed(c.x), last_y));
+        for w in vertices.windows(2) {
+            let ((xa, ya), (xb, yb)) = (w[0], w[1]);
+            if ya == yb {
+                continue;
+            }
+            let (x0, y0, x1, y1) = if ya < yb {
+                (xa, ya, xb, yb)
+            } else {
+                (xb, yb, xa, ya)
+            };
+            let flipped = ya > yb;
+            self.edges.push(Edge {
+                x0,
+                y0,
+                x1,
+                y1,
+                dir: if down != flipped { 1 } else { -1 },
+            });
         }
     }
 
@@ -469,6 +572,22 @@ mod tests {
         b.push_rect(Rect::from_ltrb(1.0, 0.0, 3.0, 1.0).unwrap());
         let c = rasterize(&b.finish().unwrap(), 3, 1).unwrap();
         assert_eq!(row(&c, 0), [255, 255, 255]);
+    }
+
+    #[test]
+    fn overlapping_partial_contours_cover_their_union_once() {
+        let mut b = PathBuilder::new();
+        b.push_rect(Rect::from_ltrb(0.0, 0.5, 2.0, 1.0).unwrap());
+        b.push_rect(Rect::from_ltrb(1.0, 0.5, 3.0, 1.0).unwrap());
+        let c = rasterize(&b.finish().unwrap(), 3, 1).unwrap();
+        assert_eq!(row(&c, 0), [128, 128, 128]);
+    }
+
+    #[test]
+    fn analytic_edges_snap_to_quarter_pixels() {
+        let band = rect(0.0, 0.3, 4.0, 1.0);
+        assert_eq!(row(&rasterize(&band, 4, 1).unwrap(), 0)[0], 179);
+        assert_eq!(row(&rasterize_analytic(&band, 4, 1).unwrap(), 0)[0], 192);
     }
 
     #[test]
