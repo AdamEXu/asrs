@@ -30,7 +30,9 @@ const SHA256: &str = "29db89613527079737f53752eab27fb65c9a7dd94979256c65a0e590c9
 const VENDOR_DIR: &str = "vendor/gpui-pre";
 const PATCH: &str = "patches/gpui-pre-0.3.12.patch";
 const NOT_VENDORED: &[&str] = &["examples/"];
-const TEST_SUPPORT_MARKERS: &[&str] = &["HeadlessAppContext", "TestPlatform"];
+// rlib metadata lists the names of cfg-stripped items (`TestPlatform`, `VisualTestPlatform`, ...)
+// even without test-support, so markers must be names and literals that only compiled code carries.
+const TEST_SUPPORT_MARKERS: &[&str] = &["HeadlessAppContext", "no HeadlessRenderer configured"];
 
 pub fn run(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
@@ -333,19 +335,15 @@ fn hunk_header(header: &str) -> Option<(usize, usize, usize)> {
 
 pub fn check_features() -> Result {
     let normal = enabled_features(&["--workspace"])?;
-    let leaks: Vec<&String> = normal
+    let leaks: Vec<&str> = normal
         .iter()
         .filter(|(_, features)| features.iter().any(|f| f == "test-support"))
-        .map(|(package, _)| package)
+        .map(|(package, _)| package.as_str())
         .collect();
     if !leaks.is_empty() {
         return Err(format!(
             "test-support is enabled in a normal workspace build for: {}",
-            leaks
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+            leaks.join(", ")
         ));
     }
     let parity = enabled_features(&["-p", "asrs-app", "--features", "parity"])?;
