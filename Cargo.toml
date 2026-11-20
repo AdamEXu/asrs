@@ -50,3 +50,9 @@ opt-level = 3
 
 [profile.dev.package.asrs-log]
 opt-level = 1
+
+[profile.dev.package.asrs-canvas]
+opt-level = 3
+
+[profile.dev.package.tiny-skia]
+opt-level = 3
