@@ -40,7 +40,10 @@ const ODD_TYPES = [
   "proto:FileDescriptorProto",
   "photonstruct:Missing",
   "photonstructschema",
-  "rawBytes"
+  "rawBytes",
+  "JSON",
+  "MessagePack",
+  "log:Hoot"
 ];
 
 const INT64_EXTREMES: bigint[] = [
