@@ -5,6 +5,12 @@ use crate::{Result, workspace_root};
 
 const OPT_OUT: &str = "#![allow(clippy::disallowed_methods)]";
 const GPUI_CRATE: &str = "asrs-ui";
+const UNSAFE_ROOTS: &[&str] = &[
+    "asrs-ui/src/platform/",
+    "asrs-canvas/src/text/mac",
+    "asrs-canvas/src/text/win",
+    "asrs-canvas/src/text/linux",
+];
 
 struct Rule {
     name: &'static str,
@@ -204,7 +210,50 @@ fn check_crate(rule: &Rule, dir: &Path, problems: &mut Vec<String>) -> Result {
             rule.name
         ));
     }
+
+    for extra in ["tests", "examples", "benches", "build.rs"] {
+        let path = dir.join(extra);
+        if path.is_dir() {
+            collect_rs(&path, &mut sources)?;
+        } else if path.is_file() {
+            sources.push(path);
+        }
+    }
+    for path in &sources {
+        let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
+        if lifts_unsafe_lint(&text) && !unsafe_allowed(rule.name, dir, path) {
+            problems.push(format!(
+                "{}: unsafe_code may only be allowed under {} ({})",
+                rule.name,
+                UNSAFE_ROOTS.join(", "),
+                path.display()
+            ));
+        }
+    }
     Ok(())
+}
+
+fn lifts_unsafe_lint(text: &str) -> bool {
+    let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    ["allow(", "expect(", "warn("].iter().any(|level| {
+        compact.match_indices(level).any(|(i, _)| {
+            compact[i + level.len()..]
+                .split(')')
+                .next()
+                .is_some_and(|lints| lints.split(',').any(|l| l == "unsafe_code"))
+        })
+    })
+}
+
+fn unsafe_allowed(crate_name: &str, crate_dir: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(crate_dir) else {
+        return false;
+    };
+    let relative = format!(
+        "{crate_name}/{}",
+        relative.to_string_lossy().replace('\\', "/")
+    );
+    UNSAFE_ROOTS.iter().any(|root| relative.starts_with(root))
 }
 
 fn dependencies(manifest: &str) -> Vec<(String, bool)> {

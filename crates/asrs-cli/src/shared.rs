@@ -100,7 +100,7 @@ fn zone() -> NamedZone {
         .unwrap_or_else(NamedZone::system)
 }
 
-fn cannot_read(v: &Value, key: &str) -> Response {
+pub(crate) fn cannot_read(v: &Value, key: &str) -> Response {
     let what = match v {
         Value::Null => "null",
         _ => "undefined",
@@ -158,7 +158,7 @@ fn byte_length(v: &Value) -> Result<Value, Response> {
 /// The property key `ToPropertyKey(v)` produces for reads on plain
 /// containers. Numbers become their canonical string form (`-0` reads `"0"`,
 /// `NaN` reads `"NaN"`); symbols never match a string-keyed container.
-fn prop_key(v: &Value) -> Vec<u16> {
+pub(crate) fn prop_key(v: &Value) -> Vec<u16> {
     match v {
         Value::Number(bits) => number::to_string(f64::from_bits(*bits))
             .encode_utf16()
@@ -178,7 +178,7 @@ fn prop_key(v: &Value) -> Vec<u16> {
 
 /// `container[name]` for the containers this harness models: arrays (and
 /// typed arrays) by canonical index, strings by index, objects by name.
-fn get_prop(container: &Value, name: &[u16]) -> Result<Value, Response> {
+pub(crate) fn get_prop(container: &Value, name: &[u16]) -> Result<Value, Response> {
     let at_index = |len: usize, f: &dyn Fn(usize) -> Value| -> Value {
         match array_index(name) {
             Some(i) if (i as usize) < len => f(i as usize),
@@ -218,7 +218,7 @@ fn get_prop_num(container: &Value, i: f64) -> Result<Value, Response> {
 /// `===` strict equality: same tag, numbers by IEEE value (`NaN` never
 /// equal, `-0` equals `+0`), strings by code units, BigInts by digits, and
 /// reference equality for everything else (never true across CVE-1 values).
-fn strict_equal(a: &Value, b: &Value) -> bool {
+pub(crate) fn strict_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Undefined | Value::Hole, Value::Undefined | Value::Hole) => true,
         (Value::Null, Value::Null) => true,

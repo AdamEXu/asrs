@@ -74,7 +74,7 @@ fn electron(paths: &Paths, args: &[String]) -> Result {
     electron_with(paths, &[], args)
 }
 
-fn electron_with(paths: &Paths, flags: &[String], args: &[String]) -> Result {
+pub(crate) fn electron_with(paths: &Paths, flags: &[String], args: &[String]) -> Result {
     let main = paths.dist.join("canvasMain.mjs");
     if !main.exists() {
         return Err(format!(
@@ -250,16 +250,33 @@ fn measure(paths: &Paths, check: bool) -> Result {
     Ok(())
 }
 
-fn write(path: &Path, bytes: &[u8]) -> Result {
+pub(crate) fn write(path: &Path, bytes: &[u8]) -> Result {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn read_json(path: &Path) -> Result<Json> {
+pub(crate) fn read_json(path: &Path) -> Result<Json> {
     let text = String::from_utf8(oracle::read(path)?).map_err(|e| e.to_string())?;
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+pub(crate) fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
+    let path = vectors_dir(paths).join(format!("{platform}.json"));
+    let mut fields: Vec<(String, Json)> = match read_json(&path) {
+        Ok(Json::Object(pairs)) => pairs
+            .into_iter()
+            .map(|(k, v)| (k.to_string_lossy(), v))
+            .collect(),
+        _ => Vec::new(),
+    };
+    match fields.iter_mut().find(|(name, _)| name == key) {
+        Some(slot) => slot.1 = value,
+        None => fields.push((key.to_owned(), value)),
+    }
+    let json = Json::object(fields.iter().map(|(k, v)| (k.as_str(), v.clone())));
+    write(&path, format!("{}\n", json.to_pretty()).as_bytes())
 }
 
 fn update_manifest(paths: &Paths, info: &Path, key: &str, entry: Json) -> Result {

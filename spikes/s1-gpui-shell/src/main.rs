@@ -2,6 +2,9 @@ mod frames;
 mod headless;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(not(target_os = "macos"))]
+#[path = "portable.rs"]
+mod mac;
 mod shell;
 
 use std::path::PathBuf;

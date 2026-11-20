@@ -24,6 +24,9 @@ mod js_string;
 #[path = "../../asrs-cli/src/js_time.rs"]
 #[allow(dead_code)]
 mod js_time;
+#[path = "../../asrs-cli/src/log_field.rs"]
+#[allow(dead_code)]
+mod log_field;
 #[path = "../../asrs-cli/src/photon.rs"]
 #[allow(dead_code)]
 mod photon;
@@ -51,6 +54,11 @@ fn dispatch(case: &FnCase<'_>) -> Response {
 #[test]
 fn util_utc() {
     check_fn_vectors("log/util", dispatch);
+}
+
+#[test]
+fn log_field_sequences() {
+    check_fn_vectors("log/field", dispatch);
 }
 
 fn n(x: f64) -> Value {

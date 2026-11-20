@@ -40,6 +40,8 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
     }
   },
 
+  logFieldRun: async (type: number, ops: any[][]) => (await import("./logFieldRun")).run(type, ops),
+
   flushAnimationFrames: (time: number) => flushAnimationFrames(time),
 
   // A PhotonStructDecoder session on a fresh decoder; each op result is {ok|throw} so a
