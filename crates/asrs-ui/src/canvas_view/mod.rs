@@ -198,8 +198,10 @@ impl CanvasState {
 }
 
 /// The element for a canvas. During prepaint it measures its box, hands the metrics to `painter`
-/// (the upstream renderer's `render`, which returns `None` where upstream returns early), and
-/// draws what it returns; during paint it shows the current frame.
+/// (the upstream renderer's `render`), and draws what it returns; during paint it shows the
+/// current frame. `painter` returns `None` only where upstream returns before assigning
+/// `canvas.width`: an early return after that assignment (Field2d's unloaded field image) leaves
+/// a cleared canvas, so it returns the display list drawn so far.
 pub fn canvas_view(
     state: Entity<CanvasState>,
     painter: impl FnOnce(&CanvasMetrics, &mut App) -> Option<Canvas2d> + 'static,
