@@ -494,14 +494,14 @@ impl SourceList {
             uses: usize,
         }
         let parent_type_key = match parent_index {
-            None => None,
-            Some(i) => Some(
+            Some(i) if !self.config.types.is_empty() => Some(
                 self.state
                     .get(i)
                     .ok_or_else(|| SourceListError::type_error("undefined", "type"))?
                     .item_type
                     .clone(),
             ),
+            _ => None,
         };
         let parent_key = parent_type_key
             .as_ref()
@@ -712,7 +712,7 @@ impl SourceList {
             _ if !same_list => {}
             _ => {
                 for _ in 0..item_count {
-                    if start_index >= self.state.len() {
+                    if end_index != start_index && start_index >= self.state.len() {
                         return Err(remove_error());
                     }
                     if end_index < start_index {
@@ -1024,8 +1024,9 @@ impl SourceList {
             return Ok(());
         };
         if now - item.last_click < DOUBLE_CLICK_MS {
-            item.last_click = 0.0;
-            self.toggle_hidden(env, index)
+            self.toggle_hidden(env, index)?;
+            self.items[index].last_click = 0.0;
+            Ok(())
         } else {
             item.last_click = now;
             Ok(())

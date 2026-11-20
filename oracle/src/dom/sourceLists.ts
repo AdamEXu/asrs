@@ -37,6 +37,7 @@ function supplemental(sl: any): unknown {
 function idOf(sl: any): number {
   let id = lists.indexOf(sl);
   if (id !== -1) return id;
+  if (sl.state.length !== 0) throw new Error("sourceLists: a list with items was registered late");
   id = lists.length;
   lists.push(sl);
   write({
