@@ -1,0 +1,22 @@
+{
+  "name": "Mountain Mayhem",
+  "sourceUrl": "https://cad.onshape.com/documents/96a67694c959c5256ba3888e/w/d53a317a26ca35360c404af6/e/cd4bd5a4145918ba604ba612",
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    }
+  ],
+  "widthInches": 95.25,
+  "heightInches": 51.5,
+  "defaultOrigin": "blue",
+  "driverStations": [
+    [-1.5, 0.6],
+    [-1.5, 0],
+    [-1.5, -0.6],
+    [1.5, -0.6],
+    [1.5, 0],
+    [1.5, 0.6]
+  ],
+  "gamePieces": []
+}

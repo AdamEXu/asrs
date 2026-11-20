@@ -1,0 +1,129 @@
+{
+  "name": "2022 Field",
+  "locales": {
+    "en-US": "2022 Field",
+    "es-419": "Campo 2022",
+    "fr": "Terrain 2022",
+    "nl": "Veld 2022",
+    "pt-BR": "Campo 2022",
+    "ro": "Teren 2022",
+    "tr": "2022 Sahası",
+    "ru": "Поле 2022",
+    "kk": "2022 алаңы",
+    "he": "מגרש 2022",
+    "ar": "ملعب 2022",
+    "hi": "2022 फील्ड",
+    "zh-CN": "2022 场地",
+    "zh-TW": "2022 場地"
+  },
+  "isFTC": false,
+  "coordinateSystem": "wall-alliance",
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    },
+    {
+      "axis": "z",
+      "degrees": 180
+    }
+  ],
+  "widthInches": 648,
+  "heightInches": 324,
+  "driverStations": [
+    [
+      8.23,
+      -2.341
+    ],
+    [
+      8.23,
+      -0.512
+    ],
+    [
+      8.23,
+      1.317
+    ],
+    [
+      -8.23,
+      2.341
+    ],
+    [
+      -8.23,
+      0.512
+    ],
+    [
+      -8.23,
+      -1.317
+    ]
+  ],
+  "gamePieces": [
+    {
+      "name": "Blue Cargo",
+      "locales": {
+        "en-US": "Blue Cargo",
+        "es-419": "Cargo azul",
+        "fr": "Cargo bleu",
+        "nl": "Blauwe Cargo",
+        "pt-BR": "Cargo azul",
+        "ro": "Cargo albastru",
+        "tr": "Mavi Kargo",
+        "ru": "Синий Cargo",
+        "kk": "Көк Cargo",
+        "he": "Cargo כחול",
+        "ar": "شحنة زرقاء",
+        "hi": "नीला कार्गो",
+        "zh-CN": "蓝色 Cargo",
+        "zh-TW": "藍色 Cargo"
+      },
+      "rotations": [],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Tennis_Ball___Blue",
+        "Tennis_Ball___Blue_1",
+        "Tennis_Ball___Blue_2",
+        "Tennis_Ball___Blue_3",
+        "Tennis_Ball___Blue_4",
+        "Tennis_Ball___Blue_5",
+        "Tennis_Ball___Blue_7"
+      ]
+    },
+    {
+      "name": "Red Cargo",
+      "locales": {
+        "en-US": "Red Cargo",
+        "es-419": "Cargo rojo",
+        "fr": "Cargo rouge",
+        "nl": "Rode Cargo",
+        "pt-BR": "Cargo vermelho",
+        "ro": "Cargo roșu",
+        "tr": "Kırmızı Kargo",
+        "ru": "Красный Cargo",
+        "kk": "Қызыл Cargo",
+        "he": "Cargo אדום",
+        "ar": "شحنة حمراء",
+        "hi": "लाल कार्गो",
+        "zh-CN": "红色 Cargo",
+        "zh-TW": "紅色 Cargo"
+      },
+      "rotations": [],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "stagedObjects": [
+        "Tennis_Ball___Red",
+        "Tennis_Ball___Red_1",
+        "Tennis_Ball___Red_2",
+        "Tennis_Ball___Red_3",
+        "Tennis_Ball___Red_4",
+        "Tennis_Ball___Red_5",
+        "Tennis_Ball___Red_6"
+      ]
+    }
+  ]
+}

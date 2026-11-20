@@ -1,0 +1,32 @@
+{
+  "name": "2025 Field (AndyMark)",
+  "locales": {
+    "en-US": "2025 Field (AndyMark)",
+    "es-419": "Campo 2025 (AndyMark)",
+    "fr": "Terrain 2025 (AndyMark)",
+    "nl": "Veld 2025 (AndyMark)",
+    "pt-BR": "Campo 2025 (AndyMark)",
+    "ro": "Teren 2025 (AndyMark)",
+    "tr": "2025 Sahası (AndyMark)",
+    "ru": "Поле 2025 (AndyMark)",
+    "kk": "2025 алаңы (AndyMark)",
+    "he": "מגרש 2025 (AndyMark)",
+    "ar": "ملعب 2025 (AndyMark)",
+    "hi": "2025 फील्ड (AndyMark)",
+    "zh-CN": "2025 场地 (AndyMark)",
+    "zh-TW": "2025 場地 (AndyMark)"
+  },
+  "isFTC": false,
+  "coordinateSystem": "wall-blue",
+  "sourceUrl": "https://www.chiefdelphi.com/t/4k-field-image-2025-reefscape/478797",
+  "topLeft": [
+    421,
+    91
+  ],
+  "bottomRight": [
+    3352,
+    1437
+  ],
+  "widthInches": 690.875,
+  "heightInches": 316.614
+}

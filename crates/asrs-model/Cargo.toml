@@ -11,6 +11,7 @@ wpilib = []
 
 [dependencies]
 asrs-js = { path = "../asrs-js" }
+asrs-log = { path = "../asrs-log" }
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }

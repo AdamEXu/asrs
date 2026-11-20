@@ -1,0 +1,178 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "eval": "window.tabs.setSelected(2)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "loaded"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 400,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "timeline-hover"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousedown",
+          "init": {
+            "clientX": 400,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 400,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "click",
+          "init": {
+            "clientX": 400,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "timeline-click"
+      },
+      {
+        "eval": "window.selection.play()"
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "playing"
+      },
+      {
+        "eval": "window.selection.pause()"
+      },
+      {
+        "eval": "window.selection.stepCycle(true)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          "commands"
+        ],
+        "label": "paused-step"
+      },
+      {
+        "eval": "window.selection.applyTimelineScroll(0, -200, 780)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoomed"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "index": 0,
+          "kind": "MouseEvent",
+          "type": "click"
+        }
+      },
+      {
+        "eval": "(() => { const input = document.querySelector('input.side-bar-search'); input.value = 'velo'; input.dispatchEvent(new window.Event('input', { bubbles: true })); })()"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.search-results"
+          }
+        ],
+        "label": "sidebar"
+      }
+    ]
+  }
+}

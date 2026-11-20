@@ -1,0 +1,15 @@
+{
+  "name": "2025-2026 Field",
+  "isFTC": true,
+  "coordinateSystem": "center-rotated",
+  "topLeft": [
+    0,
+    0
+  ],
+  "bottomRight": [
+    2445,
+    2445
+  ],
+  "widthInches": 143.182,
+  "heightInches": 143.182
+}

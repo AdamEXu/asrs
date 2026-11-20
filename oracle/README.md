@@ -22,8 +22,12 @@ upstream's `rolldown -c`, emsdk 4.0.12 plus upstream's `wasmCompile.mjs`, `npm c
 package in `target/oracle/harness`, and the esbuild harness build into `target/oracle/dist`.
 It finishes by running `selftest` and `smoke`.
 
-Downloads go to `$ASRS_CACHE` (default: `<real target dir>/../cache` when `target/` is a
-symlink, otherwise `target/cache`): `npm/`, `electron/`, `emsdk/`.
+Downloads go to `$ASRS_CACHE`: `npm/`, `electron/`, `emsdk/`, `public-logs/`. Without the
+variable the cache is `<real target dir>/../cache` of the main checkout when its `target/` is a
+symlink (on the dev machine `/Volumes/T9/asrs/cache`), otherwise its `target/cache`. A linked
+worktree resolves the main checkout through its `.git` file, so worktrees share one cache
+whatever their own `target/` points at. xtask passes the resolved directory to every oracle
+process as `ASRS_CACHE`; Rust tests resolve it with `asrs_parity::cache`.
 
 Setup ends by writing `target/oracle/install.json` (upstream commit, Electron version, whether
 it was built or unpacked, and the host). `gen` and `corpus gen` refuse to run unless that
@@ -100,6 +104,18 @@ Names:
 | upstream module | `shared/util:cleanFloat`, `shared/units:Units.convert`, `shared/log/Log:default` | module id is the path under `src/` without `.ts` |
 | npm package | `npm:color-convert:hex.hsl` | resolved from upstream's `node_modules` |
 | helper | `oracle:numberFormat` | see `src/helpers.ts` |
+| lazy helper | `oracle:robotStateRun` | the `run` export of `src/lazyHelpers/robotStateRun.ts` |
+
+New helpers that drive a whole upstream subsystem (the `*Run` modules behind an entry
+generator) go in `src/lazyHelpers/<name>.ts`, not in `src/helpers.ts`. `build.mjs` bundles each
+one separately to `dist/lazyHelpers/<name>.mjs`, and the registry imports it through a computed
+URL the first time `oracle:<name>` is called, so it is in no other bundle. Adding or editing one
+therefore leaves the generator hash of `fn`, and of every generator that imports
+`src/helpers.ts`, unchanged; only its own generator and any `fn` spec whose requests name
+`"oracle:<name>"` go stale (xtask adds those helpers' inputs to that spec's hash). A lazy
+helper must have no load-time side effects and must not rely on module state shared with the
+`fn` bundle: it gets its own copy of every module it imports, upstream ones included.
+`geometryRun` and `logFieldRun` predate this and are still in `src/helpers.ts`.
 
 Every `.ts` file under `src/shared` and `src/hub` is bundled except `hub/hub.ts` and worker
 entry points; modules load lazily on first use, so one with load-time side effects does not
@@ -159,7 +175,8 @@ different lines.
 A generator hash covers only what that vector's generator uses: the harness files its entry
 point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
 as paths under `oracle/`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
-`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page), `build.mjs`
+`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page, `dom` evaluates
+the hub page bundle), `build.mjs`
 and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
 Files are hashed with CRLF as LF. Upstream sources, upstream's bundles and workers, the
 Electron version and the environment policy are not in the per-vector hash: the manifest
@@ -169,10 +186,15 @@ file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of th
 
 - `<id>.jsonl`: `fn` requests, run under UTC. Each vector line is the request with the
   oracle's `ok` or `throw` key appended. An `error` response fails generation.
-- `<id>.entry.json`: `{"entry": "<name>", "args": [...], "zones": [...]}`. The entry's stdout
-  lines are the vector, so an entry can build values JSON cannot express.
+- `<id>.entry.json`: `{"entry": "<name>", "args": [...], "zones": [...], "inputs": [...]}`. The
+  entry's stdout lines are the vector, so an entry can build values JSON cannot express. The
+  entry runs with `ASRS_ORACLE_SPEC` set to the spec's path, so it may read data from the spec
+  itself (the `dom` entry does). `inputs` lists other files the entry reads, relative to the
+  spec; they join the generator hash.
 - `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
   a sibling file (`*.requests.jsonl` files are never specs themselves).
+- `<id>.session.json`: a live session (see Live sessions), run by the `liveSession` entry
+  under UTC. The session file is the spec, so adding one needs no other edit.
 
 `zones` is optional and lists policy zones. Without it a spec makes one UTC vector `<id>`;
 with it, one oracle process per zone makes vector `<id>/<zone>`, for example
@@ -411,3 +433,293 @@ comparing. `cmds` is a display list replayed call for call:
 A port renderer for `cargo xtask canvas run` is called as
 `<program> <args>... <scenes dir> <out dir> [<scene>...]` and writes `<out dir>/<scene>.png` in
 the same straight-alpha form.
+
+## Live sessions
+
+`src/liveSession.ts` runs upstream's real live sources (`NT4Source` with `NT4_Client`,
+`NT4Publisher`, `NT4Tuner`, `RLOGServerSource` with the main-process TCP code transcribed in
+`src/live/rlogMain.ts`, `PhoenixDiagnosticsSource`, `FTCDashboardSource`) against a scripted
+mock server, entirely in process on a fake clock, and prints a trace. Each session is one file,
+`parity/specs/live/<protocol>/<name>.session.json`, which makes vector `live/<protocol>/<name>`.
+`cargo xtask oracle run liveSession <file>` prints a trace without writing a vector.
+
+Adding a session (the N units): write the file, run `cargo xtask oracle gen --stale`, commit
+the session, its vector and the new `MANIFEST.json` line. No code or other spec changes: xtask
+discovers session files, and the Rust test
+`crates/asrs-parity/tests/live_sessions.rs` replays every one of them against the Rust mocks
+(below). The manifest is the one shared file; a conflict there after merging main is resolved
+by rerunning `oracle gen --stale`. A session that needs a mock or harness feature that does not
+exist yet is a harness change, not a session.
+
+### Session format
+
+```json
+{
+  "protocol": "nt4",
+  "seed": 6328,
+  "epochMs": 1700000000000,
+  "latencyMs": 2,
+  "endMs": 3200,
+  "client": { "source": "nt4", "mode": "default", "address": "127.0.0.1", "prefs": {}, "tabs": [], "sidebar": [] },
+  "server": { "version": "4.1", "topics": [] },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "server": ["set", "/SmartDashboard/speed", 2.75] }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `protocol` | `nt4`, `rlog`, `phoenix` or `ftc`: which mock serves the session |
+| `seed` | at least 1 (V8 treats 0 as no seed); `Math.random` is V8's own generator under `--random-seed=<seed>` (`src/live/random.ts`; the port uses `asrs_js::time::V8MathRandom::from_seed`). It is installed before the source is built, so the source UUID, NT4 uids and the msgpack key-cache evictions all draw from it |
+| `epochMs` | `Date.now()` at session time 0 (default 1700000000000) |
+| `latencyMs` | one-way network delay, an integer of at least 1 (default 1) |
+| `endMs` | the session stops after this time; a final `dump` is recorded then |
+| `client.source` | `nt4` (needs `mode`: `default`, `akit`, `systemcore`, `ds`), `nt4-publisher` (`mode`: `sim` or `robot`), `rlog`, `phoenix`, `ftc` |
+| `client.address` | what `connect` passes to the source (default `127.0.0.1`); the publisher derives its own |
+| `client.prefs` | merged over upstream's `DEFAULT_PREFS` into `window.preferences`; `null` makes it `null` |
+| `client.tabs`, `client.sidebar` | what `window.tabs.getActiveFields()` and `window.sidebar.getActiveFields()` return |
+| `client.platform` | `window.platform` (default `darwin`) |
+| `server` | the mock's configuration (per protocol, below) |
+| `steps` | `{"t": <ms>, "client": [op, ...]}` or `{"t": <ms>, "server": [op, ...]}`, in non-decreasing time order |
+
+Client ops, applied the way `hub.ts` does:
+
+| Op | Effect |
+|---|---|
+| `["connect"]` | `startLive`: stops the previous source and publisher, builds the source and calls `connect(address, status, output)`; the output callback sets `window.log`. For `nt4-publisher` it builds a new `NT4Publisher` |
+| `["stop"]` | `stop()` on the source and the publisher |
+| `["prefs", {...} \| null]` | merges into `window.preferences` (from the defaults when it is `null`), or sets it to `null` |
+| `["fields", tabs, sidebar]` | replaces the active field lists |
+| `["log", method, ...args]` | calls `window.log[method](...args)`, args in CVE-1 (bare numbers allowed); used to build the publisher's log |
+| `["select", selected, hovered]` | `window.selection.getSelectedTime()` and `getHoveredTime()` (numbers or `null`) |
+| `["tune", key, value]`, `["untune", key]` | `getTuner().publish` and `unpublish` |
+| `["dump"]` | records the canonical dump of `window.log` |
+
+Server ops shared by every mock: `["up"]`; `["down", "refuse" \| "hang"]` (new connections and
+requests are refused or never answered, open ones stay); `["mute", bool]` (pushes on open
+connections are dropped; handshakes and HTTP replies still go out); `["drop"]` (the server closes every open
+connection, websockets first, each in opening order). Per protocol (each server class documents
+its own behaviour in detail):
+
+| Protocol | Config | Steps |
+|---|---|---|
+| `nt4` (`src/live/nt4Server.ts`) | `version` (`4.1` or `4.0`), `ports` ([5810]), `offsetUs` (server time is `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}]) | `announce`, `unannounce`, `properties`, `set`, `batch`, `setraw`, `text`, `binary` |
+| `rlog` (`RLOGServer`) | `port` (5800) | `["send", hex]` (one length-prefixed frame), `["sendraw", hex]` |
+| `phoenix` (`PhoenixServer`) | `devices` ([{device, signals, values}]), `busUtil`, `startUs`, `points`, `stepUs` | `["devices", [...]]`, `["error", action, code]` |
+| `ftc` (`FTCServer`) | `status` | `["status", {...}]`, `["send", json]`, `["sendtext", text]` |
+
+NT4 values are packed by topic type (`double` is always float64, `float` float32, `int` the
+smallest integer form, arrays element-wise, any other type takes a hex string as `bin`). Every
+JSON value a mock writes must be safe integers or non-integers with magnitude in [1e-6, 1e21),
+because JS and Rust print other numbers differently; the mocks reject anything else, and both
+order object keys as `JSON.parse` does.
+
+### Timing and network model
+
+One loop (`src/live/loop.ts`) runs everything, in integer milliseconds. At each time it runs,
+in order: the server (every client message arriving now in send order, then the server steps
+for now in file order); the client steps for now (file order); then client tasks until none is
+due, where a delivery (server message, IPC message, socket event) due now goes before any
+timer, oldest first, and timers follow Blink's rules (see `src/live/clock.ts` and
+`asrs_live::timers`). The emulated main process shares that one timer queue and those rules, so its heartbeat
+interval and socket timers order against the renderer's by creation. Every task is followed by a
+full microtask drain. `requestIdleCallback`
+fires at its `timeout`, `requestAnimationFrame` 16 ms later, both as ordinary timers. IPC
+between the renderer and the emulated main process is a delivery with no delay.
+
+Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
+client `latencyMs` later. Connection and request ids count up from 1 across websockets, HTTP
+requests and TCP sockets. Websockets behave like the browser's: `send` while connecting
+throws, a refused handshake fires `error` then `close`, a server drop fires `close` (1006),
+`close()` fires `close` a round trip later, and messages arriving when not open are dropped.
+`fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
+`http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
+go out on connect, `setTimeout` is an idle timer refreshed by connecting, reads and writes, a
+refusal emits `error` then `close`; `error` is emitted at once and `close` as a later
+delivery, as Node emits it from the handle's close callback.
+
+### Trace
+
+Each line is `{"t":<ms>,"ev":<event>,"id":<connection>,"v":<CVE-1>}`, with `id` and `v` left out
+where an event has none, in the order things happen.
+
+| From | Events (`v`) |
+|---|---|
+| client | `ws-open` ([url, [protocols]]), `ws-send` (string or bytes), `ws-close`, `http-get` (url), `http-abort`, `tcp-open` ([host, port]), `tcp-send` (bytes), `tcp-close` |
+| server | `ws-accept` (protocol, `""` for none), `ws-reject`, `ws-push` (string or bytes), `ws-drop`, `http-reply` ([status, body]), `http-refuse`, `tcp-accept`, `tcp-refuse`, `tcp-push` (bytes), `tcp-drop` |
+| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string) |
+
+Log indexes number the distinct `Log` objects in the order the harness first sees them; 0 is
+the hub's initial log. TCP chunk boundaries are recorded as written, but only the byte stream
+is protocol-relevant.
+
+### Rust side
+
+`asrs_parity::live` mirrors the mocks: `Session::load` parses a session (objects in
+`JSON.parse` order), `ServerHost` is the sans-IO server on the same clock (`arrive(sent_at,
+event)`, `next_time()`, `process(t)` returning server events), `ClientEvent::line` and
+`ServerEvent::line` write trace lines, and `replay` checks a recorded trace's server events
+against the Rust mock line for line. A port's live test feeds its client's traffic to
+`ServerHost`, delivers the returned events `latencyMs` later under the loop rules above, and
+compares its own trace with the vector.
+
+## DOM harness
+
+`src/dom.ts` (entry `dom`) is the oracle for the hub's models, controllers and renderers: it
+loads upstream's `www/hub.html` in jsdom 27 and evaluates `domPage.js` inside that window.
+`domPage.js` is a browser bundle of `src/dom/page.ts`, which installs `src/dom/env.ts` and then
+imports upstream's real `src/hub/hub.ts`, so `Tabs`, `Sidebar`, `SelectionImpl`, `Timeline`,
+every controller with its `SourceList`, and every renderer run unmodified. The one substitute
+is `Field3dRendererImpl` (WebGL), replaced by `src/dom/field3dStub.ts`; the 3D command is still
+recorded. The driver plays main's part over the hub's `MessagePort`: it sends the same start-up
+messages `main.ts` sends on `dom-ready`, then the fixture's steps.
+
+```sh
+cargo xtask oracle run dom <spec or fixture file>     # vector lines on stdout
+cargo xtask oracle gen dom/tabs/line-graph            # regenerate one committed vector
+```
+
+### What is deterministic
+
+- Time: `Date`, `Date.now()` and `performance.now()` read a fake clock that starts at
+  `startTime` (default `1767225600000`, 2026-01-01T00:00:00Z) and moves only in `advance` and
+  `frames` steps. `setTimeout`, `setInterval` and `requestAnimationFrame` are queued and run in
+  time order by those steps: a timer due at or before the next frame runs first, frames come
+  every `framePeriod` ms (default 16). Microtasks settle after each callback and each step.
+- `Math.random` is mulberry32 seeded with `seed` (default 1), returning `u32 / 2^32`, so tab
+  UUIDs and everything else drawn from it repeat exactly. `crypto.getRandomValues` and
+  `crypto.randomUUID` draw from the same stream (one byte per draw).
+- Layout: nothing reads CSS. `getBoundingClientRect`, `client*`, `offset*` and `scroll*` sizes
+  come from layout rules, fixture rules first, then `src/dom/layout.json` (a 1100x650 window
+  with the hub's main regions). The first rule whose selector matches an element decides:
+  `"rect": [x, y, w, h]`, `"parent": true` (the parent's rect), or `"text": <px>` (width from
+  the shared advance table at that size, height `round(1.25 * px)`, at the parent's origin).
+  Unmatched, hidden (`hidden` attribute or inline `display: none` on it or an ancestor; CSS
+  classes are not consulted) and detached elements are `0x0`. `innerWidth`, `innerHeight` and
+  `devicePixelRatio` come from `window`; the default rules assume 1100x650, so a fixture with
+  another window size overrides the region rules too.
+- `matchMedia` answers `prefers-color-scheme` from `window.theme`; everything else is false.
+- `innerText` (jsdom has none) sets text nodes with `<br>` for line breaks and reads them back.
+- Images never load. An `<img>` whose `src` is a key of `images` reports that `[w, h]` as its
+  natural size and fires `load` on the next timer turn; any other image stays incomplete at 0x0.
+- Every 2D context is a recording context (`src/dom/recordingCanvas.ts`); WebGL contexts are
+  `null`.
+
+### The recording canvas
+
+Each call and assignment is recorded in the form `asrs_canvas::trace` decodes
+(`asrs_canvas::trace::call_from_value`): `[method, ...args]` and `["=", property, value]`.
+Gradients assigned to a style are recorded as `{"linearGradient" | "radialGradient" |
+"conicGradient": [...], "stops": [[offset, colour], ...]}` with the stops present at assignment
+(the port's trace has no conic gradients yet), patterns as `{"pattern": "@<src>", "repetition"}`, images as `"@<src>"`,
+canvases as `"@canvas:<id>"`, `getImageData` as `[..., "r<n>"]` naming a register that a later
+`putImageData` refers to. Trailing `undefined` arguments are dropped, as WebIDL does for
+optional arguments. Queries (`measureText`, `isPointInPath`, `getLineDash`, ...) and factories
+(`create*Gradient`, `createPattern`, `createImageData`) are not recorded. Calls the port's
+`Call` enum does not know (`setTransform`, shadows, ...) are recorded all the same, so a painter
+the port cannot express yet shows up in its trace. Property reads return the last assigned
+value, not Chromium's normalized one.
+
+Setting the canvas `width` or `height`, or calling `reset()`, resets the context and starts a
+new frame, so a trace is
+the display list since the last reset, and `frame` counts resets.
+
+`measureText` uses the advance table in `src/canvas/fixedAdvance.json`, which
+`asrs_canvas::text::FixedAdvance` embeds too: per UTF-16 code unit (tabs, newlines and NBSP
+first become spaces), the first `[first, last, em]` range or `defaultAdvance`; code units in
+`blank` have no ink; others ink `[0, inkTop, advance, inkBottom]` em; ascent and descent are
+`round(ascent * size)` and `round(descent * size)`. All arithmetic is f32, step for step with
+`asrs_canvas::text::measure_text`, and the font size follows `FontSpec::parse` (an invalid
+`font` is ignored). Vector `dom/canvas/fixed-advance` pins the two sides together
+(`crates/asrs-canvas/tests/dom_harness.rs`).
+
+### Fixtures
+
+A fixture is a spec `parity/specs/dom/<area>/<case>.entry.json`. Adding one never touches a
+shared file: the spec holds the fixture, and its vector is `dom/<area>/<case>`.
+
+```json
+{
+  "entry": "dom",
+  "inputs": ["../logs/robot.json", "../assets/minimal.json"],
+  "fixture": {
+    "window": { "width": 1100, "height": 650, "devicePixelRatio": 1, "theme": "light", "framePeriod": 16 },
+    "seed": 1,
+    "startTime": 1767225600000,
+    "assets": "../assets/minimal.json",
+    "preferences": { "theme": "dark" },
+    "images": { "bundledAssets/Field2d_2026FRCFieldV1/image.png": [3900, 1800] },
+    "layout": [{ "selector": "div.renderer-content", "rect": [300, 92, 800, 358] }],
+    "steps": [
+      { "log": "../logs/robot.json" },
+      { "main": "new-tab", "data": 1 },
+      { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.addField('/Drive/LeftVelocity')" },
+      { "advance": 100 },
+      { "capture": ["commands", "state", "canvas"], "label": "after-add" }
+    ]
+  }
+}
+```
+
+Fixture keys, all optional:
+
+| Key | Meaning |
+|---|---|
+| `window` | viewport size, device pixel ratio, colour scheme and frame period (defaults above) |
+| `seed`, `startTime` | `Math.random` seed and the clock's start |
+| `version` | the `set-version` data (default darwin `25.0.0` arm64, upstream's version) |
+| `preferences` | merged onto `DEFAULT_PREFS` with upstream's `mergePreferences` before `set-preferences` |
+| `assets` | the `set-assets` data (default `null`); `parity/specs/dom/assets/minimal.json` has one 2D field, one 3D field and one robot |
+| `typeMemory`, `state` | sent as `restore-type-memory` and `restore-state` at start-up when present |
+| `boot` | replaces the whole start-up message list, as `[[name, data], ...]` |
+| `images` | natural sizes by `src` |
+| `layout` | layout rules tried before the defaults |
+| `ignoreMain` | hub-to-main message names not to record (default `save-state`, `save-type-memory`, `update-touch-bar-slider`, which repeat on timers; capture `state` instead) |
+| `steps` | run in order after start-up |
+
+`assets`, `preferences`, `state`, `typeMemory` and a `log` step may be a path to a JSON file,
+relative to the spec, instead of the value; the file must be listed in `inputs` or the run
+fails, so the generator hash always covers it. Shared files live in `parity/specs/dom/logs/`
+and `parity/specs/dom/assets/` (plain `.json`, never taken for specs).
+
+Steps:
+
+| Step | Effect |
+|---|---|
+| `{"log": [[method, ...args], ...]}` | calls `window.log[method](...args)` with CVE-1 arguments (bare JSON numbers, strings, booleans and arrays are fine), then `sidebar.refresh()` and `tabs.refresh()` as the hub does after a decode (`"newFields": false` skips the tabs) |
+| `{"main": name, "data": value}` | delivers a main-to-hub message (`"cve1": value` instead of `data` for values JSON cannot express) |
+| `{"advance": ms}`, `{"frames": n}` | runs timers and frames for `ms`, or `n * framePeriod`, milliseconds |
+| `{"eval": "expression"}` | evaluates JavaScript in the page (`window` is the hub's) |
+| `{"event": {"target", "index", "kind", "type", "init"}}` | dispatches `new window[kind](type, {bubbles: true, cancelable: true, ...init})` on the `index`th match of the selector `target` (or `"window"`, `"document"`); `kind` defaults to `Event` |
+| `{"capture": [...], "label": ...}` | writes a `{"capture": label, "time": ms}` line, then each capture below |
+
+Captures (a string or `{"kind": ..., ...}`):
+
+| Capture | Lines written |
+|---|---|
+| `state` | `{"state": {sidebar, tabs}}`, the hub's `saveState()` |
+| `commands` | `{"command": {index, type, title, uuid}, "value": <command>}` for every tab whose renderer was called since the last `commands` capture, with the command it was last given (snapshotted when `render` was called) |
+| `canvas` | `{"canvas": "<class>#<n>", "frame", "width", "height", "calls": [...]}` for every 2D canvas drawn since the last `canvas` capture; `selector` limits it to matching canvases |
+| `dom` | `{"dom": selector, "nodes": [...]}`: for the first match (`"all": true` for every match), each element in document order as `[depth, tag, class, hidden, text, extra]`, where `text` joins the element's own non-blank text nodes and `extra` holds the `attributes` asked for (default `title`) plus `value` of form controls and `checked` of checkboxes and radios |
+| `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom}}` |
+| `eval` | `{"eval": expr, "value": <result>}` or `"throw"` |
+| `measure` | `{"measure": {font, align, baseline, text}, "metrics": {...}}` per string of `texts`, from the recording canvas (`null` when the font is invalid) |
+
+Also written as they happen: `{"main": name, "data": ...}` for every hub-to-main message not
+ignored, and `{"exception": where, "error": "<name>: <message>"}` when upstream code throws in
+a timer, frame, event listener (reported by jsdom, `where` is `event`), message handler or
+`eval`, or a promise rejection goes unhandled (the run goes on, as a page would). Every value
+is CVE-1 inside a plain JSON object, so Rust reads it with `asrs_parity::record_vectors!` and
+`Record::value`.
+
+Baseline vectors: `dom/tabs/<tab>` (one per tab type, each with the robot log, the minimal
+assets and a few fields: commands, state, canvas traces, selection and DOM text of the
+renderer and controls at a selected time and again while hovering), `dom/hub/selection-sidebar`
+(timeline hover and click, playback, step, zoom, sidebar expand, collapse and search) and
+`dom/canvas/fixed-advance`.
+
+Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
+workers and historical or live sources (logs are built with `log` steps), drag sessions other
+than through dispatched events, the documentation iframe's content, and 3D rendering.

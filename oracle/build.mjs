@@ -20,6 +20,7 @@ const NPM_PACKAGES = [
 ];
 
 const MODULE_ROOTS = ["shared", "hub"];
+const MODULE_FILES = ["main/assetUtil.ts"];
 
 function isExcludedModule(id) {
   return id === "hub/hub" || /Worker$/.test(id) || id.startsWith("shared/renderers/field3d/workers/");
@@ -49,6 +50,10 @@ function listUpstreamModules(srcDir) {
     }
   };
   MODULE_ROOTS.forEach((root) => visit(path.join(srcDir, root)));
+  for (const file of MODULE_FILES) {
+    const id = file.slice(0, -3);
+    if (!isExcludedModule(id)) ids.push(id);
+  }
   return ids.sort();
 }
 
@@ -111,17 +116,29 @@ const entries = fs
   .readdirSync(path.join(here, "src"), { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts"))
   .map((entry) => entry.name.slice(0, -3))
+  .concat(
+    fs
+      .readdirSync(path.join(here, "src/lazyHelpers"))
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".d.ts"))
+      .map((name) => "lazyHelpers/" + name.slice(0, -3))
+  )
   .sort();
 
 const realHere = fs.realpathSync(here);
+fs.mkdirSync(args.out, { recursive: true });
+const realOut = fs.realpathSync(args.out);
 const harnessInputs = {};
 function recordInputs(metafile) {
   for (const [outPath, output] of Object.entries(metafile.outputs)) {
     if (!output.entryPoint) continue;
-    const name = path.basename(outPath).replace(/\.m?js$/, "");
+    const name = path
+      .relative(realOut, fs.realpathSync(path.resolve(here, outPath)))
+      .replace(/\.m?js$/, "")
+      .split(path.sep)
+      .join("/");
     const files = new Set(harnessInputs[name] ?? []);
     for (const input of Object.keys(output.inputs)) {
-      if (/^[\w-]+:/.test(input) && !path.isAbsolute(input)) continue;
+      if (/^([\w-]+|\(disabled\)):/.test(input) && !path.isAbsolute(input)) continue;
       const full = fs.realpathSync(path.resolve(here, input));
       const rel = path.relative(realHere, full);
       if (rel.startsWith("..") || path.isAbsolute(rel) || rel.split(path.sep).includes("node_modules")) continue;
@@ -144,7 +161,7 @@ recordInputs(
       platform: "node",
       sourcemap: "linked",
       nodePaths: [path.join(args.upstream, "node_modules")],
-      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream) },
+      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream), __HARNESS_DIR__: JSON.stringify(args.harness) },
       banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; const require = __oracleCreateRequire(import.meta.url);' },
       external: ["electron"],
       plugins: [oraclePlugin],
@@ -182,6 +199,28 @@ for (const [entry, outfile] of [
     ).metafile
   );
 }
+// The DOM harness evaluates the real hub inside a jsdom window, so it is a browser bundle of
+// upstream sources with the WebGL-only 3D renderer replaced by a stub.
+const field3dStub = {
+  name: "field3d-stub",
+  setup(build) {
+    build.onResolve({ filter: /\/Field3dRendererImpl$/ }, () => ({ path: path.join(here, "src/dom/field3dStub.ts") }));
+  }
+};
+recordInputs(
+  (
+    await esbuild.build({
+      ...common,
+      entryPoints: [path.join(here, "src/dom/page.ts")],
+      outfile: path.join(args.out, "domPage.js"),
+      format: "iife",
+      platform: "browser",
+      nodePaths: [path.join(args.upstream, "node_modules")],
+      plugins: [field3dStub, oraclePlugin],
+      logOverride: { "direct-eval": "silent", "equals-negative-zero": "silent" }
+    })
+  ).metafile
+);
 fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
 fs.writeFileSync(
   path.join(args.out, "canvasPage.html"),
@@ -193,7 +232,8 @@ fs.writeFileSync(
 // inputs, so `oracle gen` invalidates its vectors when they change.
 const runtimeLoads = {
   protoRenderer: ["rendererMain", "rendererPage", "src/renderer/renderer.html"],
-  canvasMain: ["canvasPage"]
+  canvasMain: ["canvasPage"],
+  dom: ["domPage"]
 };
 const inputs = {};
 for (const name of entries) {

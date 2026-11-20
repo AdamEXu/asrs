@@ -1,0 +1,186 @@
+{
+  "name": "Duck Bot",
+  "locales": {
+    "en-US": "Duck Bot",
+    "es-419": "Bot Pato",
+    "fr": "Bot Canard",
+    "nl": "Eend Bot",
+    "pt-BR": "Bot Pato",
+    "ro": "Bot Rață",
+    "tr": "Ördek Bot",
+    "ru": "Бот-утка",
+    "kk": "Үйрек бот",
+    "he": "בוט ברווז",
+    "ar": "بوت البطة",
+    "hi": "बत्तख बोट",
+    "zh-CN": "鸭子机器人",
+    "zh-TW": "鴨子機器人"
+  },
+  "isFTC": false,
+  "rotations": [
+    {
+      "axis": "z",
+      "degrees": 90
+    }
+  ],
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "cameras": [
+    {
+      "name": "Front Camera",
+      "locales": {
+        "en-US": "Front Camera",
+        "es-419": "Cámara frontal",
+        "fr": "Caméra avant",
+        "nl": "Camera voor",
+        "pt-BR": "Câmera frontal",
+        "ro": "Cameră frontală",
+        "tr": "Ön Kamera",
+        "ru": "Передняя камера",
+        "kk": "Алдыңғы камера",
+        "he": "מצלמה קדמית",
+        "ar": "كاميرا أمامية",
+        "hi": "सामने का कैमरा",
+        "zh-CN": "前置相机",
+        "zh-TW": "前置攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        }
+      ],
+      "position": [
+        0.2,
+        0,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Back Camera",
+      "locales": {
+        "en-US": "Back Camera",
+        "es-419": "Cámara trasera",
+        "fr": "Caméra arrière",
+        "nl": "Camera achter",
+        "pt-BR": "Câmera traseira",
+        "ro": "Cameră spate",
+        "tr": "Arka Kamera",
+        "ru": "Задняя камера",
+        "kk": "Артқы камера",
+        "he": "מצלמה אחורית",
+        "ar": "كاميرا خلفية",
+        "hi": "पीछे का कैमरा",
+        "zh-CN": "后置相机",
+        "zh-TW": "後置攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        },
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "position": [
+        -0.2,
+        0,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Left Camera",
+      "locales": {
+        "en-US": "Left Camera",
+        "es-419": "Cámara izquierda",
+        "fr": "Caméra gauche",
+        "nl": "Camera links",
+        "pt-BR": "Câmera esquerda",
+        "ro": "Cameră stânga",
+        "tr": "Sol Kamera",
+        "ru": "Левая камера",
+        "kk": "Сол жақ камера",
+        "he": "מצלמה שמאלית",
+        "ar": "كاميرا يسارية",
+        "hi": "बायां कैमरा",
+        "zh-CN": "左侧相机",
+        "zh-TW": "左側攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        },
+        {
+          "axis": "z",
+          "degrees": 90
+        }
+      ],
+      "position": [
+        0,
+        0.2,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    },
+    {
+      "name": "Right Camera",
+      "locales": {
+        "en-US": "Right Camera",
+        "es-419": "Cámara derecha",
+        "fr": "Caméra droite",
+        "nl": "Camera rechts",
+        "pt-BR": "Câmera direita",
+        "ro": "Cameră dreapta",
+        "tr": "Sağ Kamera",
+        "ru": "Правая камера",
+        "kk": "Оң жақ камера",
+        "he": "מצלמה ימנית",
+        "ar": "كاميرا يمينية",
+        "hi": "दायां कैमरा",
+        "zh-CN": "右侧相机",
+        "zh-TW": "右側攝影機"
+      },
+      "rotations": [
+        {
+          "axis": "y",
+          "degrees": 20
+        },
+        {
+          "axis": "z",
+          "degrees": -90
+        }
+      ],
+      "position": [
+        0,
+        -0.2,
+        0.8
+      ],
+      "resolution": [
+        960,
+        720
+      ],
+      "fov": 90
+    }
+  ],
+  "components": []
+}

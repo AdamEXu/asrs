@@ -13,6 +13,10 @@ const FN_SPEC: &str = ".jsonl";
 const FN_ZONED_SPEC: &str = ".fn.json";
 const REQUESTS: &str = ".requests.jsonl";
 const ENTRY_SPEC: &str = ".entry.json";
+const SESSION_SPEC: &str = ".session.json";
+const SESSION_ENTRY: &str = "liveSession";
+/// Names the spec file for an entry run, so an entry can read its fixture from the spec itself.
+const SPEC_VARIABLE: &str = "ASRS_ORACLE_SPEC";
 const REGENERATE: &str = "regenerate with `cargo xtask oracle gen` and commit the result";
 
 pub(crate) fn specs_dir(root: &Path) -> PathBuf {
@@ -20,8 +24,14 @@ pub(crate) fn specs_dir(root: &Path) -> PathBuf {
 }
 
 enum Kind {
-    Fn { requests: PathBuf },
-    Entry { entry: String, args: Vec<String> },
+    Fn {
+        requests: PathBuf,
+    },
+    Entry {
+        entry: String,
+        args: Vec<String>,
+        inputs: Vec<PathBuf>,
+    },
 }
 
 struct Spec {
@@ -43,7 +53,10 @@ impl Spec {
     fn inputs(&self) -> Vec<&Path> {
         match &self.kind {
             Kind::Fn { requests } if requests != &self.path => vec![&self.path, requests],
-            _ => vec![&self.path],
+            Kind::Entry { inputs, .. } => std::iter::once(self.path.as_path())
+                .chain(inputs.iter().map(PathBuf::as_path))
+                .collect(),
+            Kind::Fn { .. } => vec![&self.path],
         }
     }
 
@@ -326,6 +339,7 @@ fn spec_rel(paths: &Paths, spec: &Spec) -> String {
 
 const SHARED_INPUTS: &[&str] = &["build.mjs", "package-lock.json"];
 const ENTRY_INPUTS: &str = "inputs.json";
+const LAZY_HELPER_PREFIX: &str = "lazyHelpers/";
 
 fn read_entry_inputs(dist: &Path) -> Result<Vec<(String, Vec<String>)>> {
     let path = dist.join(ENTRY_INPUTS);
@@ -383,11 +397,31 @@ fn generator_hash(entry_hashes: &[(String, String)], vector: &Vector<'_>) -> Res
             )
         })?;
     let mut parts = vec![entry_hash.clone()];
+    let mut spec_text = String::new();
     for input in vector.spec.inputs() {
-        parts.push(oracle::hash_text(&oracle::read(input)?));
+        let text = oracle::read(input)?;
+        parts.push(oracle::hash_text(&text));
+        spec_text.push_str(&String::from_utf8_lossy(&text));
+    }
+    if entry == "fn" {
+        parts.extend(lazy_helper_hashes(entry_hashes, &spec_text));
     }
     parts.push(vector.zone.clone());
     Ok(oracle::hash_bytes(parts.join(":").as_bytes()))
+}
+
+/// `oracle:<name>` helpers that `fn` loads at runtime from `lazyHelpers/<name>` are not in the
+/// `fn` bundle, so a `fn` spec that calls one also depends on that bundle's inputs.
+fn lazy_helper_hashes(entry_hashes: &[(String, String)], spec_text: &str) -> Vec<String> {
+    entry_hashes
+        .iter()
+        .filter_map(|(name, hash)| {
+            let helper = name.strip_prefix(LAZY_HELPER_PREFIX)?;
+            spec_text
+                .contains(&format!("\"oracle:{helper}\""))
+                .then(|| hash.clone())
+        })
+        .collect()
 }
 
 /// Copies the vectors a render host just generated for its own platform, with their manifest
@@ -597,7 +631,19 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
         if rel.ends_with(REQUESTS) {
             continue;
         }
-        if let Some(id) = rel.strip_suffix(ENTRY_SPEC) {
+        if let Some(id) = rel.strip_suffix(SESSION_SPEC) {
+            found.push(Spec {
+                id: id.to_owned(),
+                zones: None,
+                platforms: None,
+                kind: Kind::Entry {
+                    entry: SESSION_ENTRY.to_owned(),
+                    args: vec![path.to_string_lossy().into_owned()],
+                    inputs: Vec::new(),
+                },
+                path,
+            });
+        } else if let Some(id) = rel.strip_suffix(ENTRY_SPEC) {
             let json = read_json(&path)?;
             let entry = json
                 .get("entry")
@@ -612,12 +658,22 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 .map(|a| a.as_str().map(|s| s.to_string_lossy()))
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| format!("{}: \"args\" must be strings", path.display()))?;
+            let dir = path.parent().expect("spec has a directory");
+            let inputs = string_list(&path, &json, "inputs", |_| Ok(()))?
+                .unwrap_or_default()
+                .into_iter()
+                .map(|input| dir.join(input))
+                .collect();
             let (zones, platforms) = variants(&path, &json)?;
             found.push(Spec {
                 id: id.to_owned(),
                 zones,
                 platforms,
-                kind: Kind::Entry { entry, args },
+                kind: Kind::Entry {
+                    entry,
+                    args,
+                    inputs,
+                },
                 path,
             });
         } else if let Some(id) = rel.strip_suffix(FN_ZONED_SPEC) {
@@ -724,10 +780,11 @@ fn string_list(
 fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
     let zone = &vector.zone;
     match &vector.spec.kind {
-        Kind::Entry { entry, args } => {
+        Kind::Entry { entry, args, .. } => {
             let text = oracle::pipe(
                 oracle::oracle_command_in(paths, entry, zone)?
                     .args(args)
+                    .env(SPEC_VARIABLE, &vector.spec.path)
                     .current_dir(&paths.root),
                 Vec::new(),
             )?;
@@ -1001,7 +1058,9 @@ mod tests {
         }
 
         fn write(&self, rel: &str, text: &str) {
-            fs::write(self.0.join(rel), text).unwrap();
+            let path = self.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
         }
     }
 
@@ -1074,6 +1133,21 @@ mod tests {
     }
 
     #[test]
+    fn session_files_are_live_session_specs() {
+        let dir = harness("sessions");
+        dir.write("live/nt4/a.session.json", r#"{"protocol": "nt4"}"#);
+        let specs = discover(&dir.0).unwrap();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].id, "live/nt4/a");
+        assert_eq!(specs[0].entry(), SESSION_ENTRY);
+        match &specs[0].kind {
+            Kind::Entry { args, .. } => assert_eq!(args, &[specs[0].path.display().to_string()]),
+            Kind::Fn { .. } => panic!("a session is an entry spec"),
+        }
+        assert_eq!(specs[0].inputs(), vec![specs[0].path.as_path()]);
+    }
+
+    #[test]
     fn generator_hash_covers_entry_spec_and_zone() {
         let dir = harness("generator-hash");
         dir.write("a.entry.json", r#"{"entry": "genA"}"#);
@@ -1139,6 +1213,44 @@ mod tests {
                 .unwrap_err()
                 .contains("genMissing")
         );
+    }
+
+    #[test]
+    fn fn_specs_follow_only_the_lazy_helpers_they_call() {
+        let dir = harness("lazy-helpers");
+        fs::create_dir_all(dir.0.join("src/lazyHelpers")).unwrap();
+        dir.write("src/lazyHelpers/aRun.ts", "a");
+        dir.write("src/lazyHelpers/bRun.ts", "b");
+        dir.write("a.jsonl", r#"{"fn":"oracle:aRun","args":[]}"#);
+        dir.write("plain.jsonl", r#"{"fn":"oracle:identity","args":[1]}"#);
+        let mut inputs = inputs();
+        for helper in ["aRun", "bRun"] {
+            inputs.push((
+                format!("{LAZY_HELPER_PREFIX}{helper}"),
+                vec![format!("src/lazyHelpers/{helper}.ts")],
+            ));
+        }
+        let specs = discover(&dir.0).unwrap();
+        let vectors: Vec<Vector<'_>> = specs.iter().flat_map(Spec::vectors).collect();
+        let hashes = || -> Vec<String> {
+            let entries = entry_hashes(&dir.0, &inputs).unwrap();
+            vectors
+                .iter()
+                .map(|v| generator_hash(&entries, v).unwrap())
+                .collect()
+        };
+        let before = hashes();
+        dir.write("src/lazyHelpers/bRun.ts", "b2");
+        assert_eq!(before, hashes());
+        dir.write("src/lazyHelpers/aRun.ts", "a2");
+        let after = hashes();
+        let changed: Vec<&str> = vectors
+            .iter()
+            .zip(before.iter().zip(&after))
+            .filter(|(_, (b, a))| b != a)
+            .map(|(v, _)| v.id.as_str())
+            .collect();
+        assert_eq!(changed, ["a"]);
     }
 
     #[test]

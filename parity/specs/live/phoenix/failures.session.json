@@ -1,0 +1,34 @@
+{
+  "protocol": "phoenix",
+  "seed": 3,
+  "latencyMs": 1,
+  "endMs": 9000,
+  "client": {
+    "source": "phoenix",
+    "address": "127.0.0.1",
+    "tabs": ["Phoenix6/Pigeon2-4/Yaw"]
+  },
+  "server": {
+    "devices": [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 4, "Model": "Pigeon 2", "Name": "Pigeon 2 (Device ID 4)", "IsPROApplication": true },
+        "signals": [{ "Id": 1, "Name": "Yaw", "Summary": "Yaw", "Units": "deg" }],
+        "values": { "1": [10, 20] }
+      }
+    ]
+  },
+  "steps": [
+    { "t": 0, "server": ["down", "refuse"] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 1500, "server": ["up"] },
+    { "t": 1500, "server": ["error", "getsignals", 3] },
+    { "t": 2600, "server": ["error", "getsignals", 0] },
+    { "t": 3100, "client": ["dump"] },
+    { "t": 3200, "server": ["error", "plotpro", 2] },
+    { "t": 3500, "server": ["error", "plotpro", 0] },
+    { "t": 3800, "server": ["down", "hang"] },
+    { "t": 7000, "client": ["dump"] },
+    { "t": 7000, "server": ["up"] },
+    { "t": 8500, "client": ["dump"] }
+  ]
+}

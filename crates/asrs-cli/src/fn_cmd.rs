@@ -2,17 +2,26 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use asrs_parity::{Request, Response};
 
-use crate::{functions, geometry, live_base, shared, units};
+use crate::{assets, functions, geometry, live_base, robot_state, shared, units};
+
+type Table = &'static [(&'static str, functions::Function)];
+
+const TABLES: [Table; 6] = [
+    shared::FUNCTIONS,
+    units::FUNCTIONS,
+    geometry::FUNCTIONS,
+    robot_state::FUNCTIONS,
+    live_base::FUNCTIONS,
+    assets::FUNCTIONS,
+];
+
+fn table_entries() -> impl Iterator<Item = &'static (&'static str, functions::Function)> {
+    TABLES.into_iter().flatten()
+}
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--list") {
-        for (name, _) in functions::FUNCTIONS
-            .iter()
-            .chain(shared::FUNCTIONS)
-            .chain(units::FUNCTIONS)
-            .chain(geometry::FUNCTIONS)
-            .chain(live_base::FUNCTIONS)
-        {
+        for (name, _) in functions::FUNCTIONS.iter().chain(table_entries()) {
             println!("{name}");
         }
         return Ok(());
@@ -42,21 +51,34 @@ pub fn run(args: &[String]) -> Result<(), String> {
     output.flush().map_err(|e| e.to_string())
 }
 
+fn lookup(name: &str) -> Option<functions::Function> {
+    functions::lookup(name).or_else(|| table_entries().find(|(n, _)| *n == name).map(|(_, f)| *f))
+}
+
 fn handle(line: &str) -> Response {
     let request = match Request::parse(line) {
         Ok(request) => request,
         Err(message) => return Response::Error(message),
     };
-    match functions::lookup(&request.name).or_else(|| {
-        shared::FUNCTIONS
-            .iter()
-            .chain(units::FUNCTIONS)
-            .chain(live_base::FUNCTIONS)
-            .find(|(n, _)| *n == request.name)
-            .map(|(_, f)| *f)
-    }) {
+    match lookup(&request.name) {
         Some(function) => function(&request.args),
         None => units::table_read(&request.name, &request.args)
             .unwrap_or_else(|| Response::Error(format!("unknown function {:?}", request.name))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_listed_function_is_routed() {
+        for (name, _) in functions::FUNCTIONS.iter().chain(table_entries()) {
+            let response = handle(&format!(r#"{{"fn":"{name}","args":[]}}"#));
+            assert!(
+                !matches!(&response, Response::Error(m) if m.starts_with("unknown function")),
+                "{name} is listed but not routed"
+            );
+        }
     }
 }

@@ -453,7 +453,7 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
         None => return Err(Abort::Threw),
     }
     post(Response::Initial {
-        log: log.to_serialized(),
+        log: Box::new(log.to_serialized()),
         is_partial: false,
     });
     Ok(())

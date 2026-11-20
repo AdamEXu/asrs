@@ -69,8 +69,8 @@ Every command runs `ELECTRON_RUN_AS_NODE=1 <electron> <bundle>`, so V8 and ICU a
 shipped app's own, with TZ=<zone> (UTC unless --zone names one of America/Los_Angeles,
 Asia/Kolkata, Pacific/Auckland) and LANG=LC_ALL=en_US.UTF-8 overriding the caller's values.
 Every entry exits non-zero if the zone or locale it resolves differs. Downloads (npm,
-Electron, emsdk) go to $ASRS_CACHE, which defaults to <real target dir>/../cache when
-target/ is a symlink and to target/cache otherwise.";
+Electron, emsdk) go to $ASRS_CACHE, which defaults to <real target dir>/../cache of the main
+checkout (worktrees share it) when its target/ is a symlink and to target/cache otherwise.";
 
 pub(crate) const DEFAULT_ZONE: &str = "UTC";
 pub(crate) const ZONES: &[&str] = &[
@@ -149,15 +149,7 @@ impl Paths {
     pub(crate) fn new() -> Result<Self> {
         let root = workspace_root();
         let target = root.join("target");
-        let cache = match std::env::var_os("ASRS_CACHE") {
-            Some(dir) => PathBuf::from(dir),
-            None if target.is_symlink() => {
-                let real = fs::canonicalize(&target).map_err(|e| format!("target/: {e}"))?;
-                real.parent()
-                    .map_or_else(|| target.join("cache"), |p| p.join("cache"))
-            }
-            None => target.join("cache"),
-        };
+        let (cache, _) = asrs_parity::cache::cache_dir();
         let out = target.join("oracle");
         Ok(Self {
             reference: root.join("reference/AdvantageScope"),
@@ -619,7 +611,10 @@ pub(crate) fn oracle_command_in(paths: &Paths, entry: &str, zone: &str) -> Resul
         ));
     }
     let mut command = Command::new(paths.electron()?);
-    command.arg(bundle).env("ELECTRON_RUN_AS_NODE", "1");
+    command
+        .arg(bundle)
+        .env("ELECTRON_RUN_AS_NODE", "1")
+        .env("ASRS_CACHE", &paths.cache);
     pin_environment(&mut command, zone);
     Ok(command)
 }

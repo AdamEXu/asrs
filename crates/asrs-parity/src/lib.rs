@@ -1,8 +1,10 @@
 #![allow(clippy::disallowed_methods)]
 
+pub mod cache;
 pub mod cve1;
 pub mod diff;
 pub mod json;
+pub mod live;
 pub mod pixel;
 pub mod pixel3d;
 pub mod protocol;
