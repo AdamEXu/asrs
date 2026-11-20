@@ -43,6 +43,29 @@ interface Connection {
   announced: Set<string>;
 }
 
+function binaryPieces(spec: unknown): Uint8Array {
+  if (typeof spec === "string") return hexToBytes(spec);
+  if (!Array.isArray(spec)) throw new Error("nt4: binary needs hex or a list of pieces");
+  const parts: Uint8Array[] = [];
+  for (const piece of spec) {
+    if (typeof piece === "string") {
+      parts.push(hexToBytes(piece));
+    } else if (Array.isArray(piece) && typeof piece[0] === "string" && Number.isSafeInteger(piece[1]) && piece[1] >= 0) {
+      const bytes = hexToBytes(piece[0]);
+      for (let i = 0; i < piece[1]; i++) parts.push(bytes);
+    } else {
+      throw new Error(`nt4: bad binary piece ${JSON.stringify(piece)}`);
+    }
+  }
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.length;
+  }
+  return out;
+}
+
 function isObject(value: unknown): value is { [key: string]: any } {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -99,14 +122,17 @@ function packValue(type: string, value: any, where: string): Packed {
  * `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}], announced
  * before the session starts). Steps: `["announce", name, type, properties?]`,
  * `["unannounce", name]`, `["properties", name, update]`, `["set", name, value, tsUs?]`,
- * `["batch", [[name, value, tsUs?], ...]]` (one frame), `["setraw", name, hex, tsUs?]` (value
- * bytes as given), `["text", json]` and `["binary", hex]` (sent verbatim to every main
- * connection).
+ * `["batch", [[name, value, tsUs?], ...]]` (one frame), `["httpStatus", status]` (the alive check's
+ * reply status from now on, 200 at first), `["setraw", name, hex, tsUs?]` (value
+ * bytes as given), `["text", json]`, `["textraw", string]` and `["binary", hex | pieces]` (sent
+ * verbatim to every main connection; `pieces` is a list of hex strings and `[hex, count]` repeats,
+ * concatenated).
  */
 export class NT4Server extends MockServer {
   private version: string;
   private serverPorts: number[];
   private offsetUs: number;
+  private httpStatus = 200;
   private topics: Topic[] = [];
   private nextTopicId = 1;
   private conns = new Map<number, Connection>();
@@ -136,7 +162,7 @@ export class NT4Server extends MockServer {
   }
 
   protected http(_url: string): [number, string] {
-    return [200, ""];
+    return [this.httpStatus, ""];
   }
 
   protected acceptWs(_url: string, protocols: string[]): string | null {
@@ -337,9 +363,19 @@ export class NT4Server extends MockServer {
         checkJsonNumbers(op[1], "nt4 text");
         for (const [id] of this.mainConns()) this.pushWs(id, JSON.stringify(op[1]));
         break;
-      case "binary":
-        for (const [id] of this.mainConns()) this.pushWs(id, hexToBytes(op[1]));
+      case "httpStatus":
+        if (!Number.isSafeInteger(op[1])) throw new Error("nt4: httpStatus needs an integer");
+        this.httpStatus = op[1];
         break;
+      case "textraw":
+        if (typeof op[1] !== "string") throw new Error("nt4: textraw needs a string");
+        for (const [id] of this.mainConns()) this.pushWs(id, op[1]);
+        break;
+      case "binary": {
+        const bytes = binaryPieces(op[1]);
+        for (const [id] of this.mainConns()) this.pushWs(id, bytes);
+        break;
+      }
       default:
         throw new Error(`nt4: unknown step ${JSON.stringify(op[0])}`);
     }

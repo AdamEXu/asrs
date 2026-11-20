@@ -338,9 +338,11 @@ pub struct Session {
 type Builder = fn(&Json, f64) -> Result<Box<dyn server::Protocol>, String>;
 
 const PROTOCOLS: [(&str, &[&str], Builder); 4] = [
-    ("nt4", &["nt4", "nt4-publisher"], |c, epoch| {
-        Ok(Box::new(nt4::Nt4::new(c, epoch)?))
-    }),
+    (
+        "nt4",
+        &["nt4", "nt4-publisher", "nt4-client"],
+        |c, epoch| Ok(Box::new(nt4::Nt4::new(c, epoch)?)),
+    ),
     ("rlog", &["rlog"], |c, _| {
         Ok(Box::new(simple::Rlog::new(c)?))
     }),

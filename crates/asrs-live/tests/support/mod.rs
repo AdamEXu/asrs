@@ -1,0 +1,460 @@
+//! The client side of `oracle/src/live/loop.ts` and `net.ts`: one fake-clock loop running the
+//! mock server, the session's client steps, deliveries and timers, and browser `WebSocket` and
+//! `fetch` semantics over the in-memory network. Drivers stand in for upstream's sources.
+
+#![allow(dead_code)]
+
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
+use asrs_js::time::{Clock, V8MathRandom};
+use asrs_live::nt4::{
+    Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage,
+};
+use asrs_live::{ManualClock, Thrown, TimerId, TimerQueue};
+use asrs_log::msgpack::KeyCache;
+use asrs_parity::Value;
+use asrs_parity::json::Json;
+use asrs_parity::live::{ClientEvent, Payload, ServerEvent, ServerHost, Session, trace_line};
+
+#[path = "../../../asrs-cli/src/js_json.rs"]
+#[allow(dead_code, clippy::all)]
+pub mod js_json;
+
+#[derive(Clone, Default)]
+pub struct Trace(Rc<RefCell<Vec<String>>>);
+
+impl Trace {
+    pub fn push(&self, line: String) {
+        self.0.borrow_mut().push(line);
+    }
+
+    pub fn app(&self, t: f64, ev: &str, v: Option<&Value>) {
+        self.push(trace_line(t, ev, None, v));
+    }
+
+    pub fn lines(&self) -> Vec<String> {
+        self.0.borrow().clone()
+    }
+}
+
+/// `Date.now()`: the session epoch plus loop time.
+pub struct WallClock {
+    pub loop_clock: ManualClock,
+    pub epoch_ms: f64,
+}
+
+impl Clock for WallClock {
+    fn now(&self) -> f64 {
+        self.epoch_ms + self.loop_clock.now()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Delivery {
+    WsAccepted(u32, String),
+    WsFailed(u32),
+    WsReceived(u32, WsMessage),
+    WsDropped(u32),
+    WsCloseDone(u32, bool),
+    HttpSettled(u32, Option<f64>),
+}
+
+/// An event a delivery raises on the client, in dispatch order.
+#[derive(Clone, Debug)]
+pub enum Notify {
+    WsOpen(SocketId, String),
+    WsMessage(SocketId, WsMessage),
+    WsError(SocketId),
+    WsClose(SocketId),
+    FetchResponse(RequestId, f64, String),
+    FetchFailed(RequestId),
+}
+
+struct FakeSocket {
+    ready: ReadyState,
+    protocol: String,
+}
+
+struct FakeRequest {
+    url: String,
+    done: bool,
+}
+
+pub struct FakeNet {
+    pub host: ServerHost,
+    clock: ManualClock,
+    latency_ms: f64,
+    trace: Trace,
+    next_id: u32,
+    sockets: BTreeMap<u32, FakeSocket>,
+    requests: BTreeMap<u32, FakeRequest>,
+    tasks: Vec<(f64, u64, Delivery)>,
+    seq: u64,
+}
+
+fn payload(data: &WsMessage) -> Payload {
+    match data {
+        WsMessage::Text(s) => Payload::Text(s.clone()),
+        WsMessage::Binary(b) => Payload::Binary(b.clone()),
+    }
+}
+
+/// `new URL(url).href` for the URLs the sources build.
+fn href(url: &str) -> String {
+    let after_scheme = url.find("://").map_or(0, |i| i + 3);
+    if url[after_scheme..].contains('/') {
+        url.to_owned()
+    } else {
+        format!("{url}/")
+    }
+}
+
+impl FakeNet {
+    fn now(&self) -> f64 {
+        self.clock.now()
+    }
+
+    fn to_server(&mut self, event: ClientEvent) {
+        let now = self.now();
+        self.trace.push(event.line(now));
+        self.host.arrive(now, event);
+    }
+
+    pub fn deliver(&mut self, delay: f64, delivery: Delivery) {
+        self.tasks.push((self.now() + delay, self.seq, delivery));
+        self.seq += 1;
+    }
+
+    fn next_task_due(&self) -> Option<f64> {
+        self.tasks.iter().map(|t| t.0).reduce(f64::min)
+    }
+
+    fn take_task(&mut self, now: f64) -> Option<Delivery> {
+        let i = self
+            .tasks
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.0 <= now)
+            .min_by(|(_, a), (_, b)| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+            .map(|(i, _)| i)?;
+        Some(self.tasks.remove(i).2)
+    }
+
+    fn server_events(&mut self, t: f64) -> Result<(), String> {
+        for event in self.host.process(t)? {
+            self.trace.push(event.line(t));
+            let delivery = match event {
+                ServerEvent::WsAccept { id, protocol } => Delivery::WsAccepted(id, protocol),
+                ServerEvent::WsReject { id } => Delivery::WsFailed(id),
+                ServerEvent::WsPush { id, data } => Delivery::WsReceived(
+                    id,
+                    match data {
+                        Payload::Text(s) => WsMessage::Text(s),
+                        Payload::Binary(b) => WsMessage::Binary(b),
+                    },
+                ),
+                ServerEvent::WsDrop { id } => Delivery::WsDropped(id),
+                ServerEvent::HttpReply { id, status, .. } => {
+                    Delivery::HttpSettled(id, Some(status))
+                }
+                ServerEvent::HttpRefuse { id } => Delivery::HttpSettled(id, None),
+                other => return Err(format!("unexpected server event {other:?}")),
+            };
+            self.deliver(self.latency_ms, delivery);
+        }
+        Ok(())
+    }
+
+    /// Applies a delivery to the browser state and returns the events it dispatches.
+    pub fn apply(&mut self, delivery: Delivery) -> Vec<Notify> {
+        match delivery {
+            Delivery::WsAccepted(id, protocol) => match self.sockets.get_mut(&id) {
+                Some(s) if s.ready == ReadyState::Connecting => {
+                    s.ready = ReadyState::Open;
+                    s.protocol = protocol.clone();
+                    vec![Notify::WsOpen(SocketId(id), protocol)]
+                }
+                _ => Vec::new(),
+            },
+            Delivery::WsFailed(id) => match self.sockets.get_mut(&id) {
+                Some(s) if s.ready != ReadyState::Closed => {
+                    s.ready = ReadyState::Closed;
+                    vec![Notify::WsError(SocketId(id)), Notify::WsClose(SocketId(id))]
+                }
+                _ => Vec::new(),
+            },
+            Delivery::WsReceived(id, data) => match self.sockets.get(&id) {
+                Some(s) if s.ready == ReadyState::Open => {
+                    vec![Notify::WsMessage(SocketId(id), data)]
+                }
+                _ => Vec::new(),
+            },
+            Delivery::WsDropped(id) => match self.sockets.get_mut(&id) {
+                Some(s) if s.ready != ReadyState::Closed => {
+                    s.ready = ReadyState::Closed;
+                    vec![Notify::WsClose(SocketId(id))]
+                }
+                _ => Vec::new(),
+            },
+            Delivery::WsCloseDone(id, was_connecting) => match self.sockets.get_mut(&id) {
+                Some(s) if s.ready != ReadyState::Closed => {
+                    s.ready = ReadyState::Closed;
+                    if was_connecting {
+                        vec![Notify::WsError(SocketId(id)), Notify::WsClose(SocketId(id))]
+                    } else {
+                        vec![Notify::WsClose(SocketId(id))]
+                    }
+                }
+                _ => Vec::new(),
+            },
+            Delivery::HttpSettled(id, status) => match self.requests.get_mut(&id) {
+                Some(r) if !r.done => {
+                    r.done = true;
+                    match status {
+                        Some(status) => {
+                            vec![Notify::FetchResponse(RequestId(id), status, href(&r.url))]
+                        }
+                        None => vec![Notify::FetchFailed(RequestId(id))],
+                    }
+                }
+                _ => Vec::new(),
+            },
+        }
+    }
+}
+
+impl Nt4Transport for FakeNet {
+    fn ws_open(&mut self, url: &str, protocols: &[&str]) -> Result<SocketId, Thrown> {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.sockets.insert(
+            id,
+            FakeSocket {
+                ready: ReadyState::Connecting,
+                protocol: String::new(),
+            },
+        );
+        self.to_server(ClientEvent::WsOpen {
+            id,
+            url: url.to_owned(),
+            protocols: protocols.iter().map(|p| (*p).to_owned()).collect(),
+        });
+        Ok(SocketId(id))
+    }
+
+    fn ws_ready_state(&self, id: SocketId) -> ReadyState {
+        self.sockets
+            .get(&id.0)
+            .map_or(ReadyState::Closed, |s| s.ready)
+    }
+
+    fn ws_send(&mut self, id: SocketId, data: WsMessage) -> Result<(), Thrown> {
+        match self.ws_ready_state(id) {
+            ReadyState::Connecting => Err(Thrown::error(
+                "InvalidStateError",
+                "Still in CONNECTING state.",
+            )),
+            ReadyState::Open => {
+                self.to_server(ClientEvent::WsSend {
+                    id: id.0,
+                    data: payload(&data),
+                });
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn ws_close(&mut self, id: SocketId) {
+        let Some(socket) = self.sockets.get_mut(&id.0) else {
+            return;
+        };
+        if matches!(socket.ready, ReadyState::Closing | ReadyState::Closed) {
+            return;
+        }
+        let was_connecting = socket.ready == ReadyState::Connecting;
+        socket.ready = ReadyState::Closing;
+        self.to_server(ClientEvent::WsClose { id: id.0 });
+        self.deliver(
+            2.0 * self.latency_ms,
+            Delivery::WsCloseDone(id.0, was_connecting),
+        );
+    }
+
+    fn fetch(&mut self, url: &str) -> RequestId {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.requests.insert(
+            id,
+            FakeRequest {
+                url: url.to_owned(),
+                done: false,
+            },
+        );
+        self.to_server(ClientEvent::HttpGet {
+            id,
+            url: url.to_owned(),
+        });
+        RequestId(id)
+    }
+
+    fn fetch_abort(&mut self, id: RequestId) {
+        let Some(request) = self.requests.get_mut(&id.0) else {
+            return;
+        };
+        if request.done {
+            return;
+        }
+        request.done = true;
+        self.to_server(ClientEvent::HttpAbort { id: id.0 });
+    }
+}
+
+/// Everything a driver can reach: the renderer's timers, the browser network, `Date`,
+/// `Math.random`, the realm's msgpack key cache and the trace.
+pub struct Env {
+    pub timers: TimerQueue,
+    pub net: FakeNet,
+    pub wall: WallClock,
+    pub rng: V8MathRandom,
+    pub keys: KeyCache,
+    pub trace: Trace,
+}
+
+impl Env {
+    pub fn now(&self) -> f64 {
+        self.wall.loop_clock.now()
+    }
+
+    pub fn cx(&mut self) -> Nt4Context<'_> {
+        Nt4Context {
+            timers: &mut self.timers,
+            net: &mut self.net,
+            clock: &self.wall,
+            rng: &mut self.rng,
+            keys: &mut self.keys,
+        }
+    }
+
+    pub fn app(&self, ev: &str, v: Option<&Value>) {
+        self.trace.app(self.now(), ev, v);
+    }
+}
+
+pub trait Driver {
+    fn op(&mut self, op: &[Json], env: &mut Env) -> Result<(), Thrown>;
+    fn notify(&mut self, event: Notify, env: &mut Env);
+    fn timer(&mut self, id: TimerId, env: &mut Env);
+    fn finish(&mut self, _env: &mut Env) {}
+}
+
+/// Runs a session the way `LiveLoop.run` does and returns the trace.
+pub fn run(
+    session: &Session,
+    make: impl FnOnce(&mut Env) -> Box<dyn Driver>,
+) -> Result<Vec<String>, String> {
+    let clock = ManualClock::new(0.0);
+    let trace = Trace::default();
+    let mut env = Env {
+        timers: TimerQueue::new(Rc::new(clock.clone())),
+        net: FakeNet {
+            host: ServerHost::new(session)?,
+            clock: clock.clone(),
+            latency_ms: session.latency_ms,
+            trace: trace.clone(),
+            next_id: 1,
+            sockets: BTreeMap::new(),
+            requests: BTreeMap::new(),
+            tasks: Vec::new(),
+            seq: 0,
+        },
+        wall: WallClock {
+            loop_clock: clock.clone(),
+            epoch_ms: session.epoch_ms,
+        },
+        rng: V8MathRandom::from_seed(session.seed),
+        keys: KeyCache::new(),
+        trace: trace.clone(),
+    };
+    let mut driver = make(&mut env);
+    let steps = &session.client_steps;
+    let mut next_step = 0;
+    loop {
+        let candidates = [
+            env.net.host.next_time(),
+            steps.get(next_step).map(|s| s.t),
+            env.net.next_task_due(),
+            env.timers.next_due(),
+        ];
+        let Some(t) = candidates.into_iter().flatten().reduce(f64::min) else {
+            break;
+        };
+        if t > session.end_ms {
+            break;
+        }
+        if t > clock.now() {
+            clock.set(t);
+        }
+        let now = clock.now();
+        if env.net.host.next_time() == Some(now) {
+            env.net.server_events(now)?;
+        }
+        while let Some(step) = steps.get(next_step).filter(|s| s.t <= now) {
+            next_step += 1;
+            if let Err(e) = driver.op(&step.op, &mut env) {
+                env.app("throw", Some(&Value::string(&e.0)));
+            }
+        }
+        loop {
+            if let Some(delivery) = env.net.take_task(now) {
+                for event in env.net.apply(delivery) {
+                    driver.notify(event, &mut env);
+                }
+                continue;
+            }
+            if let Some(id) = env.timers.fire_next() {
+                driver.timer(id, &mut env);
+                continue;
+            }
+            break;
+        }
+    }
+    if session.end_ms > clock.now() {
+        clock.set(session.end_ms);
+    }
+    driver.finish(&mut env);
+    Ok(trace.lines())
+}
+
+pub fn js_arg(json: &Json) -> Result<asrs_js::value::JsValue, Thrown> {
+    js_json::to_js(&Value::from_json_lenient(json)).map_err(Thrown)
+}
+
+pub fn js_value(value: &asrs_js::value::JsValue) -> Value {
+    js_json::from_js(value)
+}
+
+/// Hands a browser event to the client's listener; exceptions escaping it are dropped.
+pub fn dispatch(
+    client: &mut Nt4Client,
+    event: Notify,
+    h: &mut dyn Nt4Handler,
+    cx: &mut Nt4Context<'_>,
+) {
+    match event {
+        Notify::WsOpen(id, protocol) => {
+            let _ = client.on_ws_open(id, &protocol, h, cx);
+        }
+        Notify::WsMessage(id, data) => {
+            let _ = client.on_ws_message(id, &data, h, cx);
+        }
+        Notify::WsError(id) => client.on_ws_error(id, cx),
+        Notify::WsClose(id) => {
+            let _ = client.on_ws_close(id, h, cx);
+        }
+        Notify::FetchResponse(id, status, url) => client.on_fetch_response(id, status, &url, cx),
+        Notify::FetchFailed(id) => client.on_fetch_failed(id, cx),
+    }
+}

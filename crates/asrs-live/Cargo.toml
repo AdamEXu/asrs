@@ -11,5 +11,8 @@ asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 tokio = { version = "=1.54.1", default-features = false, features = ["net", "rt-multi-thread", "sync", "time"] }
 
+[dev-dependencies]
+asrs-parity = { path = "../asrs-parity" }
+
 [lints]
 workspace = true
