@@ -250,7 +250,7 @@ fn encode_value(v: &JsValue, out: &mut String) {
 }
 
 fn unhex(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if !s.len().is_multiple_of(2) || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(format!("bad hex {s:?}"));
     }
     (0..s.len() / 2)

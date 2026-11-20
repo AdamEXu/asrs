@@ -1,9 +1,9 @@
 //! Exact-area coverage for device-space paths under the nonzero rule. Chromium's CPU canvas
-//! fills with Skia's analytic AA, which computes the covered area of every pixel of the union;
-//! tiny-skia only has Skia's older 4x supersampler, which quantizes thin and near-axis edges to
-//! quarter pixels.
+//! fills every antialiased path with Skia's analytic AA, which computes the covered area of each
+//! pixel of the union (after snapping edge end points); tiny-skia only has Skia's retired 4x
+//! supersampler, which quantizes thin and near-axis edges to quarter pixels.
 
-use tiny_skia::{FillRule, Mask, PathSegment, Pixmap, Transform};
+use tiny_skia::{PathSegment, Pixmap};
 
 const FLATTEN_TOLERANCE: f32 = 0.02;
 
@@ -384,64 +384,6 @@ fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<
         width: w,
         height: h,
         alpha,
-    })
-}
-
-fn is_rect(path: &tiny_skia::Path) -> bool {
-    let mut points = Vec::new();
-    for (i, segment) in path.segments().enumerate() {
-        match (i, segment) {
-            (0, PathSegment::MoveTo(p)) => points.push(p),
-            (1..=4, PathSegment::LineTo(p)) => points.push(p),
-            (4 | 5, PathSegment::Close) => {}
-            _ => return false,
-        }
-    }
-    if points.len() == 5 && points[4] == points[0] {
-        points.pop();
-    }
-    points.len() == 4
-        && (0..4).all(|i| {
-            let (a, b) = (points[i], points[(i + 1) % 4]);
-            (a.x == b.x) != (a.y == b.y)
-        })
-}
-
-/// Skia's `ShouldUseAAA`: rects and paths with few points for their size get analytic coverage;
-/// denser paths (dashes, round caps, long polylines) go to the 4x supersampler. `skia_like`
-/// holds about as many points as the device path Skia itself would fill.
-pub fn should_use_analytic(path: &tiny_skia::Path, skia_like: &tiny_skia::Path) -> bool {
-    if is_rect(path) {
-        return true;
-    }
-    let b = path.bounds();
-    (skia_like.points().len() as f32) < b.width().max(b.height()) / 2.0 - 10.0
-}
-
-/// Skia's supersampling scan converter (`SkScan_AntiPath`), which tiny-skia ports.
-pub fn rasterize_supersampled(path: &tiny_skia::Path, width: u32, height: u32) -> Option<Coverage> {
-    let b = path.bounds();
-    let left = b.left().floor().max(0.0);
-    let top = b.top().floor().max(0.0);
-    let right = b.right().ceil().min(width as f32);
-    let bottom = b.bottom().ceil().min(height as f32);
-    if !(left < right && top < bottom) {
-        return None;
-    }
-    let (w, h) = ((right - left) as u32, (bottom - top) as u32);
-    let mut mask = Mask::new(w, h)?;
-    mask.fill_path(
-        path,
-        FillRule::Winding,
-        true,
-        Transform::from_translate(-left, -top),
-    );
-    Some(Coverage {
-        x: left as i32,
-        y: top as i32,
-        width: w as usize,
-        height: h as usize,
-        alpha: mask.data().to_vec(),
     })
 }
 

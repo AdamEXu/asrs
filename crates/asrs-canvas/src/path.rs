@@ -158,22 +158,6 @@ impl Path {
         self.verbs.is_empty()
     }
 
-    pub fn has_conics(&self) -> bool {
-        self.verbs.iter().any(|v| matches!(v, Verb::Conic(..)))
-    }
-
-    /// `SkPath::countPoints`: a conic stores its control and end points like a quad.
-    pub fn skia_point_count(&self) -> usize {
-        self.verbs
-            .iter()
-            .map(|v| match v {
-                Verb::Move(_) | Verb::Line(_) => 1,
-                Verb::Conic(..) => 2,
-                Verb::Close => 0,
-            })
-            .sum()
-    }
-
     fn last_point(&self) -> Option<Pt> {
         self.verbs.iter().rev().find_map(|v| match *v {
             Verb::Move(p) | Verb::Line(p) | Verb::Conic(_, p, _) => Some(p),
