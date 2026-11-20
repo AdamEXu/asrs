@@ -66,7 +66,9 @@ Windows the symlinks under upstream's `lite/` are skipped.
 
 xtask runs every oracle process with `TZ=<zone>`, `LANG=en_US.UTF-8`, `LC_ALL=en_US.UTF-8`
 and `ASRS_ORACLE_ZONE=<zone>`, overwriting whatever the caller has set, and clears
-`LANGUAGE`, `NODE_OPTIONS` and `NODE_ICU_DATA`. The zone is `UTC` unless a spec or `--zone`
+`LANGUAGE`, `NODE_OPTIONS`, `NODE_ICU_DATA`, `ICU_DATA` and `ICU_TIMEZONE_FILES_DIR` (Electron's
+ICU loads time zone rules from that directory, which would change offsets without changing the
+zone name the startup check sees). The zone is `UTC` unless a spec or `--zone`
 names one of `America/Los_Angeles`, `Asia/Kolkata` or `Pacific/Auckland`; no other zone is
 accepted. `src/environment.ts`, imported first by `src/shims.ts`, checks at startup that the
 variables are set that way, that the default `Intl` zone resolves to the expected one, and

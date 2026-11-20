@@ -66,7 +66,13 @@ pub(crate) const ZONES: &[&str] = &[
 const POSIX_LOCALE: &str = "en_US.UTF-8";
 const APP_SWITCHES: &[&str] = &["--lang=en-US"];
 const ZONE_VARIABLE: &str = "ASRS_ORACLE_ZONE";
-const CLEARED_VARIABLES: &[&str] = &["LANGUAGE", "NODE_OPTIONS", "NODE_ICU_DATA"];
+const CLEARED_VARIABLES: &[&str] = &[
+    "LANGUAGE",
+    "NODE_OPTIONS",
+    "NODE_ICU_DATA",
+    "ICU_DATA",
+    "ICU_TIMEZONE_FILES_DIR",
+];
 
 pub(crate) fn environment_policy() -> Json {
     Json::object([
