@@ -1,0 +1,660 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "steps": [
+      {
+        "capture": [
+          {
+            "kind": "measure",
+            "font": "12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont",
+            "align": "start",
+            "baseline": "alphabetic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont",
+            "align": "center",
+            "baseline": "middle",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont",
+            "align": "right",
+            "baseline": "top",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont",
+            "align": "end",
+            "baseline": "bottom",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont",
+            "align": "left",
+            "baseline": "hanging",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "12px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont",
+            "align": "center",
+            "baseline": "ideographic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "200 14px system-ui",
+            "align": "start",
+            "baseline": "alphabetic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "200 14px system-ui",
+            "align": "center",
+            "baseline": "middle",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "200 14px system-ui",
+            "align": "right",
+            "baseline": "top",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "200 14px system-ui",
+            "align": "end",
+            "baseline": "bottom",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "200 14px system-ui",
+            "align": "left",
+            "baseline": "hanging",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "200 14px system-ui",
+            "align": "center",
+            "baseline": "ideographic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "bold 13.5px sans-serif",
+            "align": "start",
+            "baseline": "alphabetic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "bold 13.5px sans-serif",
+            "align": "center",
+            "baseline": "middle",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "bold 13.5px sans-serif",
+            "align": "right",
+            "baseline": "top",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "bold 13.5px sans-serif",
+            "align": "end",
+            "baseline": "bottom",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "bold 13.5px sans-serif",
+            "align": "left",
+            "baseline": "hanging",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "bold 13.5px sans-serif",
+            "align": "center",
+            "baseline": "ideographic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "italic small-caps 600 12pt/1.5 \"Helvetica\", serif",
+            "align": "start",
+            "baseline": "alphabetic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "italic small-caps 600 12pt/1.5 \"Helvetica\", serif",
+            "align": "center",
+            "baseline": "middle",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "italic small-caps 600 12pt/1.5 \"Helvetica\", serif",
+            "align": "right",
+            "baseline": "top",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "italic small-caps 600 12pt/1.5 \"Helvetica\", serif",
+            "align": "end",
+            "baseline": "bottom",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "italic small-caps 600 12pt/1.5 \"Helvetica\", serif",
+            "align": "left",
+            "baseline": "hanging",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "italic small-caps 600 12pt/1.5 \"Helvetica\", serif",
+            "align": "center",
+            "baseline": "ideographic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "10px",
+            "align": "start",
+            "baseline": "alphabetic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "10px",
+            "align": "center",
+            "baseline": "middle",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "10px",
+            "align": "right",
+            "baseline": "top",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "10px",
+            "align": "end",
+            "baseline": "bottom",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "10px",
+            "align": "left",
+            "baseline": "hanging",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "10px",
+            "align": "center",
+            "baseline": "ideographic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "0px sans-serif",
+            "align": "start",
+            "baseline": "alphabetic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "0px sans-serif",
+            "align": "center",
+            "baseline": "middle",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "0px sans-serif",
+            "align": "right",
+            "baseline": "top",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "0px sans-serif",
+            "align": "end",
+            "baseline": "bottom",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "0px sans-serif",
+            "align": "left",
+            "baseline": "hanging",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          },
+          {
+            "kind": "measure",
+            "font": "0px sans-serif",
+            "align": "center",
+            "baseline": "ideographic",
+            "texts": [
+              "",
+              "a",
+              "a 1",
+              "0123456789",
+              "+12s",
+              "Scroll timeline to zoom",
+              "x,y.z:w",
+              "tab\there",
+              "nbsp x",
+              "é中😀"
+            ]
+          }
+        ],
+        "label": "fixed-advance"
+      }
+    ]
+  }
+}

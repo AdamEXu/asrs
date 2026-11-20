@@ -22,8 +22,12 @@ upstream's `rolldown -c`, emsdk 4.0.12 plus upstream's `wasmCompile.mjs`, `npm c
 package in `target/oracle/harness`, and the esbuild harness build into `target/oracle/dist`.
 It finishes by running `selftest` and `smoke`.
 
-Downloads go to `$ASRS_CACHE` (default: `<real target dir>/../cache` when `target/` is a
-symlink, otherwise `target/cache`): `npm/`, `electron/`, `emsdk/`.
+Downloads go to `$ASRS_CACHE`: `npm/`, `electron/`, `emsdk/`, `public-logs/`. Without the
+variable the cache is `<real target dir>/../cache` of the main checkout when its `target/` is a
+symlink (on the dev machine `/Volumes/T9/asrs/cache`), otherwise its `target/cache`. A linked
+worktree resolves the main checkout through its `.git` file, so worktrees share one cache
+whatever their own `target/` points at. xtask passes the resolved directory to every oracle
+process as `ASRS_CACHE`; Rust tests resolve it with `asrs_parity::cache`.
 
 Setup ends by writing `target/oracle/install.json` (upstream commit, Electron version, whether
 it was built or unpacked, and the host). `gen` and `corpus gen` refuse to run unless that
@@ -159,7 +163,8 @@ different lines.
 A generator hash covers only what that vector's generator uses: the harness files its entry
 point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
 as paths under `oracle/`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
-`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page), `build.mjs`
+`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page, `dom` evaluates
+the hub page bundle), `build.mjs`
 and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
 Files are hashed with CRLF as LF. Upstream sources, upstream's bundles and workers, the
 Electron version and the environment policy are not in the per-vector hash: the manifest
@@ -169,8 +174,11 @@ file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of th
 
 - `<id>.jsonl`: `fn` requests, run under UTC. Each vector line is the request with the
   oracle's `ok` or `throw` key appended. An `error` response fails generation.
-- `<id>.entry.json`: `{"entry": "<name>", "args": [...], "zones": [...]}`. The entry's stdout
-  lines are the vector, so an entry can build values JSON cannot express.
+- `<id>.entry.json`: `{"entry": "<name>", "args": [...], "zones": [...], "inputs": [...]}`. The
+  entry's stdout lines are the vector, so an entry can build values JSON cannot express. The
+  entry runs with `ASRS_ORACLE_SPEC` set to the spec's path, so it may read data from the spec
+  itself (the `dom` entry does). `inputs` lists other files the entry reads, relative to the
+  spec; they join the generator hash.
 - `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
   a sibling file (`*.requests.jsonl` files are never specs themselves).
 
@@ -411,3 +419,162 @@ comparing. `cmds` is a display list replayed call for call:
 A port renderer for `cargo xtask canvas run` is called as
 `<program> <args>... <scenes dir> <out dir> [<scene>...]` and writes `<out dir>/<scene>.png` in
 the same straight-alpha form.
+
+## DOM harness
+
+`src/dom.ts` (entry `dom`) is the oracle for the hub's models, controllers and renderers: it
+loads upstream's `www/hub.html` in jsdom 27 and evaluates `domPage.js` inside that window.
+`domPage.js` is a browser bundle of `src/dom/page.ts`, which installs `src/dom/env.ts` and then
+imports upstream's real `src/hub/hub.ts`, so `Tabs`, `Sidebar`, `SelectionImpl`, `Timeline`,
+every controller with its `SourceList`, and every renderer run unmodified. The one substitute
+is `Field3dRendererImpl` (WebGL), replaced by `src/dom/field3dStub.ts`; the 3D command is still
+recorded. The driver plays main's part over the hub's `MessagePort`: it sends the same start-up
+messages `main.ts` sends on `dom-ready`, then the fixture's steps.
+
+```sh
+cargo xtask oracle run dom <spec or fixture file>     # vector lines on stdout
+cargo xtask oracle gen dom/tabs/line-graph            # regenerate one committed vector
+```
+
+### What is deterministic
+
+- Time: `Date`, `Date.now()` and `performance.now()` read a fake clock that starts at
+  `startTime` (default `1767225600000`, 2026-01-01T00:00:00Z) and moves only in `advance` and
+  `frames` steps. `setTimeout`, `setInterval` and `requestAnimationFrame` are queued and run in
+  time order by those steps: a timer due at or before the next frame runs first, frames come
+  every `framePeriod` ms (default 16). Microtasks settle after each callback and each step.
+- `Math.random` is mulberry32 seeded with `seed` (default 1), returning `u32 / 2^32`, so tab
+  UUIDs and everything else drawn from it repeat exactly. `crypto.getRandomValues` and
+  `crypto.randomUUID` draw from the same stream (one byte per draw).
+- Layout: nothing reads CSS. `getBoundingClientRect`, `client*`, `offset*` and `scroll*` sizes
+  come from layout rules, fixture rules first, then `src/dom/layout.json` (a 1100x650 window
+  with the hub's main regions). The first rule whose selector matches an element decides:
+  `"rect": [x, y, w, h]`, `"parent": true` (the parent's rect), or `"text": <px>` (width from
+  the shared advance table at that size, height `round(1.25 * px)`, at the parent's origin).
+  Unmatched, hidden (`hidden` attribute or inline `display: none` on it or an ancestor; CSS
+  classes are not consulted) and detached elements are `0x0`. `innerWidth`, `innerHeight` and
+  `devicePixelRatio` come from `window`; the default rules assume 1100x650, so a fixture with
+  another window size overrides the region rules too.
+- `matchMedia` answers `prefers-color-scheme` from `window.theme`; everything else is false.
+- `innerText` (jsdom has none) sets text nodes with `<br>` for line breaks and reads them back.
+- Images never load. An `<img>` whose `src` is a key of `images` reports that `[w, h]` as its
+  natural size and fires `load` on the next timer turn; any other image stays incomplete at 0x0.
+- Every 2D context is a recording context (`src/dom/recordingCanvas.ts`); WebGL contexts are
+  `null`.
+
+### The recording canvas
+
+Each call and assignment is recorded in the form `asrs_canvas::trace` decodes
+(`asrs_canvas::trace::call_from_value`): `[method, ...args]` and `["=", property, value]`.
+Gradients assigned to a style are recorded as `{"linearGradient" | "radialGradient" |
+"conicGradient": [...], "stops": [[offset, colour], ...]}` with the stops present at assignment
+(the port's trace has no conic gradients yet), patterns as `{"pattern": "@<src>", "repetition"}`, images as `"@<src>"`,
+canvases as `"@canvas:<id>"`, `getImageData` as `[..., "r<n>"]` naming a register that a later
+`putImageData` refers to. Trailing `undefined` arguments are dropped, as WebIDL does for
+optional arguments. Queries (`measureText`, `isPointInPath`, `getLineDash`, ...) and factories
+(`create*Gradient`, `createPattern`, `createImageData`) are not recorded. Calls the port's
+`Call` enum does not know (`setTransform`, shadows, ...) are recorded all the same, so a painter
+the port cannot express yet shows up in its trace. Property reads return the last assigned
+value, not Chromium's normalized one.
+
+Setting the canvas `width` or `height`, or calling `reset()`, resets the context and starts a
+new frame, so a trace is
+the display list since the last reset, and `frame` counts resets.
+
+`measureText` uses the advance table in `src/canvas/fixedAdvance.json`, which
+`asrs_canvas::text::FixedAdvance` embeds too: per UTF-16 code unit (tabs, newlines and NBSP
+first become spaces), the first `[first, last, em]` range or `defaultAdvance`; code units in
+`blank` have no ink; others ink `[0, inkTop, advance, inkBottom]` em; ascent and descent are
+`round(ascent * size)` and `round(descent * size)`. All arithmetic is f32, step for step with
+`asrs_canvas::text::measure_text`, and the font size follows `FontSpec::parse` (an invalid
+`font` is ignored). Vector `dom/canvas/fixed-advance` pins the two sides together
+(`crates/asrs-canvas/tests/dom_harness.rs`).
+
+### Fixtures
+
+A fixture is a spec `parity/specs/dom/<area>/<case>.entry.json`. Adding one never touches a
+shared file: the spec holds the fixture, and its vector is `dom/<area>/<case>`.
+
+```json
+{
+  "entry": "dom",
+  "inputs": ["../logs/robot.json", "../assets/minimal.json"],
+  "fixture": {
+    "window": { "width": 1100, "height": 650, "devicePixelRatio": 1, "theme": "light", "framePeriod": 16 },
+    "seed": 1,
+    "startTime": 1767225600000,
+    "assets": "../assets/minimal.json",
+    "preferences": { "theme": "dark" },
+    "images": { "bundledAssets/Field2d_2026FRCFieldV1/image.png": [3900, 1800] },
+    "layout": [{ "selector": "div.renderer-content", "rect": [300, 92, 800, 358] }],
+    "steps": [
+      { "log": "../logs/robot.json" },
+      { "main": "new-tab", "data": 1 },
+      { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.addField('/Drive/LeftVelocity')" },
+      { "advance": 100 },
+      { "capture": ["commands", "state", "canvas"], "label": "after-add" }
+    ]
+  }
+}
+```
+
+Fixture keys, all optional:
+
+| Key | Meaning |
+|---|---|
+| `window` | viewport size, device pixel ratio, colour scheme and frame period (defaults above) |
+| `seed`, `startTime` | `Math.random` seed and the clock's start |
+| `version` | the `set-version` data (default darwin `25.0.0` arm64, upstream's version) |
+| `preferences` | merged onto `DEFAULT_PREFS` with upstream's `mergePreferences` before `set-preferences` |
+| `assets` | the `set-assets` data (default `null`); `parity/specs/dom/assets/minimal.json` has one 2D field, one 3D field and one robot |
+| `typeMemory`, `state` | sent as `restore-type-memory` and `restore-state` at start-up when present |
+| `boot` | replaces the whole start-up message list, as `[[name, data], ...]` |
+| `images` | natural sizes by `src` |
+| `layout` | layout rules tried before the defaults |
+| `ignoreMain` | hub-to-main message names not to record (default `save-state`, `save-type-memory`, `update-touch-bar-slider`, which repeat on timers; capture `state` instead) |
+| `steps` | run in order after start-up |
+
+`assets`, `preferences`, `state`, `typeMemory` and a `log` step may be a path to a JSON file,
+relative to the spec, instead of the value; the file must be listed in `inputs` or the run
+fails, so the generator hash always covers it. Shared files live in `parity/specs/dom/logs/`
+and `parity/specs/dom/assets/` (plain `.json`, never taken for specs).
+
+Steps:
+
+| Step | Effect |
+|---|---|
+| `{"log": [[method, ...args], ...]}` | calls `window.log[method](...args)` with CVE-1 arguments (bare JSON numbers, strings, booleans and arrays are fine), then `sidebar.refresh()` and `tabs.refresh()` as the hub does after a decode (`"newFields": false` skips the tabs) |
+| `{"main": name, "data": value}` | delivers a main-to-hub message (`"cve1": value` instead of `data` for values JSON cannot express) |
+| `{"advance": ms}`, `{"frames": n}` | runs timers and frames for `ms`, or `n * framePeriod`, milliseconds |
+| `{"eval": "expression"}` | evaluates JavaScript in the page (`window` is the hub's) |
+| `{"event": {"target", "index", "kind", "type", "init"}}` | dispatches `new window[kind](type, {bubbles: true, cancelable: true, ...init})` on the `index`th match of the selector `target` (or `"window"`, `"document"`); `kind` defaults to `Event` |
+| `{"capture": [...], "label": ...}` | writes a `{"capture": label, "time": ms}` line, then each capture below |
+
+Captures (a string or `{"kind": ..., ...}`):
+
+| Capture | Lines written |
+|---|---|
+| `state` | `{"state": {sidebar, tabs}}`, the hub's `saveState()` |
+| `commands` | `{"command": {index, type, title, uuid}, "value": <command>}` for every tab whose renderer was called since the last `commands` capture, with the command it was last given (snapshotted when `render` was called) |
+| `canvas` | `{"canvas": "<class>#<n>", "frame", "width", "height", "calls": [...]}` for every 2D canvas drawn since the last `canvas` capture; `selector` limits it to matching canvases |
+| `dom` | `{"dom": selector, "nodes": [...]}`: for the first match (`"all": true` for every match), each element in document order as `[depth, tag, class, hidden, text, extra]`, where `text` joins the element's own non-blank text nodes and `extra` holds the `attributes` asked for (default `title`) plus `value` of form controls and `checked` of checkboxes and radios |
+| `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom}}` |
+| `eval` | `{"eval": expr, "value": <result>}` or `"throw"` |
+| `measure` | `{"measure": {font, align, baseline, text}, "metrics": {...}}` per string of `texts`, from the recording canvas (`null` when the font is invalid) |
+
+Also written as they happen: `{"main": name, "data": ...}` for every hub-to-main message not
+ignored, and `{"exception": where, "error": "<name>: <message>"}` when upstream code throws in
+a timer, frame, event listener (reported by jsdom, `where` is `event`), message handler or
+`eval`, or a promise rejection goes unhandled (the run goes on, as a page would). Every value
+is CVE-1 inside a plain JSON object, so Rust reads it with `asrs_parity::record_vectors!` and
+`Record::value`.
+
+Baseline vectors: `dom/tabs/<tab>` (one per tab type, each with the robot log, the minimal
+assets and a few fields: commands, state, canvas traces, selection and DOM text of the
+renderer and controls at a selected time and again while hovering), `dom/hub/selection-sidebar`
+(timeline hover and click, playback, step, zoom, sidebar expand, collapse and search) and
+`dom/canvas/fixed-advance`.
+
+Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
+workers and historical or live sources (logs are built with `log` steps), drag sessions other
+than through dispatched events, the documentation iframe's content, and 3D rendering.

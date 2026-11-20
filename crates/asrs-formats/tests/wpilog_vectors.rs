@@ -1,9 +1,8 @@
 use std::fs;
-use std::path::PathBuf;
 
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
-use asrs_parity::vectors::{self, Record};
+use asrs_parity::vectors::Record;
 use asrs_parity::{diff, record_vectors};
 
 #[path = "../../asrs-cli/src/wpilog.rs"]
@@ -66,21 +65,6 @@ record_vectors!(corpus, "wpilog/corpus", |record: &Record| {
     )
 });
 
-fn public_logs_dir() -> PathBuf {
-    let root = vectors::workspace_root();
-    if let Some(dir) = std::env::var_os("ASRS_CACHE") {
-        return PathBuf::from(dir).join("public-logs");
-    }
-    let target = root.join("target");
-    if target.is_symlink()
-        && let Ok(real) = fs::canonicalize(&target)
-        && let Some(parent) = real.parent()
-    {
-        return parent.join("cache").join("public-logs");
-    }
-    target.join("cache").join("public-logs")
-}
-
 fn compare_blocks(actual: &Json, expected: &Json, case: &str) -> Result<(), String> {
     let digests = |json: Option<&Json>| -> Vec<Vec<u8>> {
         json.and_then(Json::as_str)
@@ -119,13 +103,8 @@ record_vectors!(public, "wpilog/public", |record: &Record| {
         .and_then(Json::as_str)
         .map(|s| s.to_string_lossy())
         .ok_or_else(|| format!("{case}: no file"))?;
-    let path = public_logs_dir().join(&file);
-    let data = fs::read(&path).map_err(|e| {
-        format!(
-            "{case}: {}: {e} (fetch with `cargo xtask corpus fetch`)",
-            path.display()
-        )
-    })?;
+    let path = asrs_parity::cache::public_log(&file).map_err(|e| format!("{case}: {e}"))?;
+    let data = fs::read(&path).map_err(|e| format!("{case}: {}: {e}", path.display()))?;
     let size = info.get("size").and_then(Json::as_f64).unwrap_or(-1.0);
     if data.len() as f64 != size {
         return Err(format!(
@@ -138,6 +117,57 @@ record_vectors!(public, "wpilog/public", |record: &Record| {
     compare_fields(&actual, record, &["header", "index", "sample"], &case)?;
     if let Some(expected_blocks) = record.field("blocks") {
         compare_blocks(&actual, expected_blocks, &case)?;
+    }
+    Ok(())
+});
+
+record_vectors!(search_key_sets, "log/search", |record: &Record| {
+    let case = record.string("case").unwrap_or_default();
+    let Some(file) = record
+        .field("source")
+        .and_then(|s| s.get("file"))
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy())
+    else {
+        return Ok(());
+    };
+    let path = asrs_parity::cache::public_log(&file).map_err(|e| format!("{case}: {e}"))?;
+    let data = fs::read(&path).map_err(|e| format!("{case}: {}: {e}", path.display()))?;
+    let mut names = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut error = None;
+    asrs_formats::wpilog::WpilogDecoder::new(&data)
+        .for_each(|r, _| {
+            if !r.is_start() || error.is_some() {
+                return;
+            }
+            match r.start_data() {
+                Ok(start) => {
+                    if seen.insert(start.name.clone()) {
+                        names.push(start.name);
+                    }
+                }
+                Err(e) => error = Some(e),
+            }
+        })
+        .map_err(|e| format!("{case}: {e:?}"))?;
+    if let Some(e) = error {
+        return Err(format!("{case}: start record: {e:?}"));
+    }
+    let expected: Vec<Vec<u16>> = record
+        .field("in")
+        .and_then(Json::as_array)
+        .ok_or_else(|| format!("{case}: no key list"))?
+        .iter()
+        .map(|k| k.as_str().map(|s| s.units().to_vec()).unwrap_or_default())
+        .collect();
+    let actual: Vec<Vec<u16>> = names.iter().map(|n| n.units().to_vec()).collect();
+    if actual != expected {
+        return Err(format!(
+            "{case}: entry names differ ({} port, {} oracle)",
+            actual.len(),
+            expected.len()
+        ));
     }
     Ok(())
 });

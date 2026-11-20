@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::{FontSpec, Mask, Shaped, TextBackend, baseline_offset};
+use super::{FontSpec, Mask, Shaped, TextBackend, baseline_offset, relax};
 
 /// Blink's `TextRun::SetNormalizeSpace`: tabs, newlines and no-break spaces shape as spaces.
 pub fn normalize_space(text: &str) -> Cow<'_, str> {
@@ -46,9 +46,9 @@ fn pre_scale_x([a, b, c, d, e, f]: Matrix, s: f32) -> Matrix {
 
 /// The glyph masks `fillText(text, x, y, maxWidth)` paints under the device matrix `ctm`, at
 /// integer device positions: Blink's `DrawTextInternal` (float location, alignment, baseline,
-/// `maxWidth` as a horizontal scale about the location) followed by Skia's glyph placement
-/// (quarter-pixel x phase, rounded y when the matrix keeps axes, quarter phases on both axes
-/// otherwise).
+/// `maxWidth` as a horizontal scale with the location divided by it) followed by Skia's glyph
+/// placement (quarter-pixel phases along the axis the baseline maps to, the other axis rounded,
+/// quarter phases on both axes when it maps to neither).
 #[allow(clippy::too_many_arguments)]
 pub fn place_text(
     backend: &mut dyn TextBackend,
@@ -83,33 +83,32 @@ pub fn place_text(
     };
     let mut matrix = ctm.map(|v| v as f32);
     if use_max_width {
-        matrix = pre_translate(matrix, location.0, location.1);
-        let x_scale = if font_width > 0.0 {
-            (width / font_width) as f32
-        } else {
-            0.0
-        };
+        let x_scale = (width / font_width) as f32;
         matrix = pre_scale_x(matrix, x_scale);
-        location = (0.0, 0.0);
+        location.0 /= x_scale;
     }
     let matrix = pre_translate(matrix, location.0, location.1);
     let [a, b, c, d, e, f] = matrix;
     let axis_aligned = b == 0.0 && c == 0.0 && a > 0.0 && d > 0.0;
+    let (round_x, round_y, keep_x, keep_y) = if relax(b) == 0.0 {
+        (0.125, 0.5, true, false)
+    } else if relax(a) == 0.0 {
+        (0.5, 0.125, false, true)
+    } else {
+        (0.125, 0.125, true, true)
+    };
+    let (e, f) = (e + round_x, f + round_y);
     let mut placed = Vec::with_capacity(shaped.glyphs.len());
     for glyph in &shaped.glyphs {
-        let device_x = a * glyph.x + e;
-        let device_y = b * glyph.x + f;
-        let (ix, iy, mask) = if axis_aligned {
-            let (ix, iy, phase) = subpixel(device_x, device_y);
+        let (ix, phase_x) = subpixel(glyph.x * a + e);
+        let (iy, phase_y) = subpixel(glyph.x * b + f);
+        let (phase_x, phase_y) = (phase_x * u8::from(keep_x), phase_y * u8::from(keep_y));
+        let mask = if axis_aligned {
             let scale = f64::from(d);
-            let mask = backend.raw_mask(glyph.glyph, scale, f64::from(a) / scale, phase);
-            (ix, iy, mask)
+            backend.raw_mask(glyph.glyph, scale, f64::from(a) / scale, phase_x)
         } else {
-            let (ix, _, phase_x) = subpixel(device_x, 0.0);
-            let (iy, _, phase_y) = subpixel(device_y, 0.0);
             let m = [a, b, c, d].map(f64::from);
-            let mask = backend.raw_mask_transformed(glyph.glyph, m, (phase_x, phase_y));
-            (ix, iy, mask)
+            backend.raw_mask_transformed(glyph.glyph, m, (phase_x, phase_y))
         };
         if let Some(mask) = mask {
             placed.push(Placed { x: ix, y: iy, mask });
@@ -118,13 +117,12 @@ pub fn place_text(
     placed
 }
 
-/// Skia's `SkGlyphPositionRoundingSpec` for four x samples: the integer pixel and the quarter
-/// phase of `x + 1/8`, and `y` rounded.
-fn subpixel(x: f32, y: f32) -> (i32, i32, u8) {
-    let biased = x + 0.125;
-    let ix = biased.floor();
-    let phase = (((biased - ix) * 4.0).floor() as u8).min(3);
-    (ix as i32, (y + 0.5).floor() as i32, phase)
+/// Skia's direct-mask placement of a position already offset by the rounding spec's half sample
+/// frequency: the floored pixel, and the quarter phase `SkPackedGlyphID` packs from it.
+fn subpixel(v: f32) -> (i32, u8) {
+    let floor = v.floor();
+    let frac = (v - floor) + 1.0;
+    (floor as i32, ((frac * 4.0) as i32 & 3) as u8)
 }
 
 #[cfg(test)]
@@ -133,11 +131,12 @@ mod tests {
 
     #[test]
     fn subpixel_matches_skia_rounding() {
-        assert_eq!(subpixel(10.0, 4.49), (10, 4, 0));
-        assert_eq!(subpixel(10.12, 4.5), (10, 5, 0));
-        assert_eq!(subpixel(10.13, 0.0), (10, 0, 1));
-        assert_eq!(subpixel(10.875, 0.0), (11, 0, 0));
-        assert_eq!(subpixel(-0.3, -0.5), (-1, 0, 3));
+        assert_eq!(subpixel(10.125), (10, 0));
+        assert_eq!(subpixel(10.255), (10, 1));
+        assert_eq!(subpixel(11.0), (11, 0));
+        assert_eq!(subpixel(-0.175), (-1, 3));
+        assert_eq!(subpixel(0.249_999_99), (0, 1));
+        assert_eq!(subpixel(0.249_999), (0, 0));
     }
 
     #[test]

@@ -1,0 +1,47 @@
+{
+  "field2ds": [
+    {
+      "name": "2026 Field",
+      "path": "bundledAssets/Field2d_2026FRCFieldV1/image.png",
+      "id": "FRC:2026",
+      "isFTC": false,
+      "coordinateSystem": "wall-blue",
+      "useGrid": false,
+      "topLeft": [100, 120],
+      "bottomRight": [3800, 1700],
+      "widthInches": 651.22,
+      "heightInches": 317.69
+    }
+  ],
+  "field3ds": [
+    {
+      "name": "2026 Field",
+      "path": "bundledAssets/Field3d_2026FRCFieldV1/model.glb",
+      "id": "FRC:2026",
+      "isFTC": false,
+      "coordinateSystem": "wall-blue",
+      "useGrid": false,
+      "rotations": [],
+      "position": [0, 0, 0],
+      "widthInches": 651.22,
+      "heightInches": 317.69,
+      "driverStations": [[-8.1, 1.9], [-8.1, 0], [-8.1, -1.9], [8.1, 1.9], [8.1, 0], [8.1, -1.9]],
+      "gamePieces": [],
+      "aprilTags": []
+    }
+  ],
+  "robots": [
+    {
+      "name": "KitBot",
+      "path": "bundledAssets/Robot_KitBot/model.glb",
+      "isFTC": false,
+      "disableSimplification": false,
+      "rotations": [{ "axis": "z", "degrees": 90 }],
+      "position": [0, 0, 0],
+      "cameras": [],
+      "components": []
+    }
+  ],
+  "joysticks": [],
+  "loadFailures": []
+}
