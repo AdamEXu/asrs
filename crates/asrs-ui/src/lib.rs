@@ -8,8 +8,13 @@ pub mod gpui {
     };
 }
 
+pub mod button;
 #[cfg(feature = "parity")]
 pub mod capture;
+pub mod filter;
+pub mod icon;
+pub mod symbols;
+pub mod theme;
 
 use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};
 

@@ -11,6 +11,7 @@ mod oracle;
 mod pack;
 mod parity;
 mod public;
+mod ui;
 mod vectors;
 
 use std::path::{Path, PathBuf};
@@ -28,7 +29,8 @@ commands:
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
-  canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)";
+  canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
+  ui        UI theme scenes: icon tints, buttons, gates against Electron (see `cargo xtask ui`)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -41,6 +43,7 @@ fn main() -> ExitCode {
         Some("gpui") => gpui::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
+        Some("ui") => ui::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {

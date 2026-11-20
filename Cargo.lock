@@ -381,9 +381,12 @@ name = "asrs-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "asrs-parity",
  "gpui-kit",
  "gpui-pre",
  "gpui-pre-platform",
+ "image",
+ "resvg 0.46.0",
 ]
 
 [[package]]
