@@ -1,0 +1,33 @@
+{
+  "protocol": "nt4",
+  "seed": 5203,
+  "latencyMs": 1,
+  "endMs": 2600,
+  "client": {
+    "source": "nt4",
+    "mode": "default",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "low-bandwidth" },
+    "tabs": [],
+    "sidebar": []
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 5000000,
+    "topics": [
+      { "name": "/URCL", "type": "URCL", "value": "0a000000060000000126170101020000c1e658210000000002261800fffe0000c2e65921000000000326190200070000c3e65921000000010426190000010000c4e63412000000000526190000010000c6e6582100000000e903000041180000000000ba7ad7e803000001185ce4bc6f41b8a500ea0300008118000030c0706721d3eb030000c11824f75139354bd1e7ec0300000119e83563050984bd4bed03000041197dc1cf6eeda31f52" },
+      { "name": "/Other/value", "type": "double", "value": 1 }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 600, "client": ["dump"] },
+    { "t": 700, "server": ["set", "/URCL", "0100"] },
+    { "t": 800, "server": ["set", "/URCL", "0a000000060000000126170101020000c1e658210000000002261800fffe0000c2e65921000000000326190200070000c3e65921000000010426190000010000c4e63412000000000526190000010000c6e6582100000000e903000041180000000000ba7ad7e803000001185ce4bc6f41b8a500ea0300008118000030c0706721d3eb030000c11824f75139354bd1e7ec0300000119e83563050984bd4bed03000041197dc1cf6eeda31f52"] },
+    { "t": 1000, "client": ["dump"] },
+    { "t": 1100, "client": ["tune", "NT:/URCL/SparkMax-1/BusVoltage", 12.5] },
+    { "t": 1200, "client": ["tune", "NT:/Other/value", 2] },
+    { "t": 1400, "client": ["dump"] },
+    { "t": 2400, "client": ["stop"] }
+  ]
+}
