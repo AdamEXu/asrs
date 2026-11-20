@@ -82,6 +82,7 @@
     "live/nt4/v41-default-lowbandwidth": {"cases":50,"content":"98b710c98e09ba0c","generator":"1c9c74fb59a228ef","spec":"parity/specs/live/nt4/v41-default-lowbandwidth.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/nt4/v41-ds": {"cases":51,"content":"f14539c0851d74d9","generator":"59fa099c0cc263c2","spec":"parity/specs/live/nt4/v41-ds.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/nt4/v41-ds-logging": {"cases":41,"content":"1387ebc3ac81aabb","generator":"0e858bb475b258df","spec":"parity/specs/live/nt4/v41-ds-logging.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "live/nt4/v41-frame-abort": {"cases":32,"content":"af496809dc43f280","generator":"95dbf2003003ae1d","spec":"parity/specs/live/nt4/v41-frame-abort.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/nt4/v41-large-discard": {"cases":106,"content":"633cd1a139c7d041","generator":"f6e08f2d96ec7a12","spec":"parity/specs/live/nt4/v41-large-discard.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/nt4/v41-logging": {"cases":90,"content":"407dcdc5d196ec09","generator":"3bdd40379ccf4d5d","spec":"parity/specs/live/nt4/v41-logging.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/nt4/v41-schema-after-data": {"cases":62,"content":"581371a76738af35","generator":"dff12f5878dfa534","spec":"parity/specs/live/nt4/v41-schema-after-data.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
