@@ -39,6 +39,7 @@ for (const c of cases) {
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asrs-renderer-"));
 let renderer: string[];
+let pageEnvironment: string;
 try {
   const requestPath = path.join(scratch, "request.json");
   fs.writeFileSync(
@@ -53,11 +54,14 @@ try {
     console.error(run.stderr);
     throw new Error(`Electron renderer run exited with ${run.status ?? run.signal}`);
   }
-  renderer = run.stdout.split("\n").filter((l) => l.length > 0);
+  [pageEnvironment, ...renderer] = run.stdout.split("\n").filter((l) => l.length > 0);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }
 
+if (pageEnvironment !== encode({ processType: "undefined" })) {
+  throw new Error(`the renderer page has Node globals: ${pageEnvironment}`);
+}
 if (renderer.length !== harness.length) throw new Error(`renderer returned ${renderer.length} of ${harness.length} cases`);
 for (let k = 0; k < harness.length; k++) {
   if (renderer[k] !== harness[k]) {
@@ -68,7 +72,7 @@ for (let k = 0; k < harness.length; k++) {
 
 const header = encode({
   bundle: "bundles/wpilogWorker.js",
-  runtime: "Electron renderer, module web worker",
+  runtime: "Electron renderer, module web worker, no Node integration",
   electron: process.versions.electron,
   harnessIdentical: true
 });

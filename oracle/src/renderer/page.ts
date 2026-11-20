@@ -14,7 +14,7 @@ function fromBase64(text: string): Uint8Array {
 }
 
 (window as any).runWorkerCheck = async (request: PageRequest): Promise<string[]> => {
-  const lines: string[] = [];
+  const lines: string[] = [encode({ processType: typeof (globalThis as any).process })];
   for (const item of request.cases) {
     const responses = await runWpilogWorker(request.workerUrl, fromBase64(item.base64));
     lines.push(encode({ case: item.id, responses }));

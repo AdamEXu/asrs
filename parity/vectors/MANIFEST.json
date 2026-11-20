@@ -66,8 +66,8 @@
     },
     "log/proto-renderer": {
       "cases": 8,
-      "content": "49e49f7147530133",
-      "generator": "5b0370b78a13713a",
+      "content": "2b67d7217af978f6",
+      "generator": "12784cb1780c7b05",
       "spec": "parity/specs/log/proto-renderer.entry.json"
     },
     "number/numberformat": {

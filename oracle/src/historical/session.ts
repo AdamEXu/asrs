@@ -1,7 +1,10 @@
 import { HistoricalDataSource, HistoricalDataSourceStatus } from "@upstream/hub/dataSources/HistoricalDataSource";
 import WorkerManager from "@upstream/hub/WorkerManager";
 import Log from "@upstream/shared/log/Log";
-import { setWorkerRouter } from "../shims";
+import LoggableType from "@upstream/shared/log/LoggableType";
+import { AKIT_TIMESTAMP_KEYS } from "@upstream/shared/log/RobotState";
+import { cleanFloat, upperBound } from "@upstream/shared/util";
+import { terminatedWorkersExited, setWorkerRouter } from "../shims";
 import { dumpLog } from "./dump";
 import { MainProcess } from "./mainProcess";
 import { Scheduler } from "./scheduler";
@@ -10,6 +13,38 @@ import { FakeTimers, realClearTimeout, realSetTimeout } from "./timers";
 const g = globalThis as any;
 
 const EXPORT_STALL_MS = 600_000;
+const MCAP_CHUNK_SIZE = 1024 * 1024;
+const MCAP_TYPES = [
+  LoggableType.Boolean,
+  LoggableType.Number,
+  LoggableType.String,
+  LoggableType.BooleanArray,
+  LoggableType.NumberArray
+];
+
+/**
+ * An upper bound on the bytes the MCAP chunk holds when sampled export finishes: 2048 for the
+ * schema records, then for every field of an MCAP type (a superset of what is exported) 64 plus
+ * the key's UTF-8 length for its channel record, and 31 plus the UTF-8 length of
+ * `JSON.stringify({ value })` for every timestamp that has a value at or before it.
+ */
+function mcapChunkBound(log: Log, timestamps: number[]): number {
+  const encoder = new TextEncoder();
+  let bound = 2048;
+  for (const key of log.getFieldKeys()) {
+    const type = log.getType(key);
+    if (type === null || !MCAP_TYPES.includes(type)) continue;
+    bound += 64 + encoder.encode(key).length;
+    const data = log.getRange(key, -Infinity, Infinity);
+    if (data === undefined) continue;
+    let next = 0;
+    for (const timestamp of timestamps) {
+      next = upperBound(data.timestamps, timestamp, next);
+      if (next !== 0) bound += 31 + encoder.encode(JSON.stringify({ value: data.values[next - 1] })).length;
+    }
+  }
+  return bound;
+}
 
 export interface ExportOptions {
   format: "csv-table" | "csv-list" | "wpilog" | "mcap";
@@ -66,7 +101,7 @@ export class HistoricalSession {
       await session.scheduler.settle();
       if (main.unhandled.length > 0) throw new Error(`unexpected main messages: ${main.unhandled.join(", ")}`);
     } catch (error) {
-      session.close();
+      await session.close();
       throw error;
     }
     return session;
@@ -106,8 +141,13 @@ export class HistoricalSession {
   /**
    * Runs the real export worker on `log.toSerialized()`, as the hub's `prepare-export` does, and
    * returns the bytes main would write: a string result as UTF-8, a byte result as is.
-   * Fixed-period sampling over a range that would take more than `fixedSampleLimit` samples, or
-   * whose step vanishes in float precision (upstream would not finish), is skipped.
+   *
+   * Two option sets are skipped because upstream would not finish:
+   * - fixed sampling over a range needing more than `fixedSampleLimit` samples, or whose step
+   *   vanishes in float precision;
+   * - MCAP with fixed or AdvantageKit sampling once `mcapChunkBound` exceeds the writer's
+   *   1 MiB chunk size. That branch calls `addMessage` without awaiting it, so after the
+   *   threshold every message starts another `finalizeChunk` on an ever larger chunk.
    */
   async export(options: ExportOptions, fixedSampleLimit: number): Promise<ExportOutcome> {
     if (options.samplingMode === "fixed") {
@@ -116,6 +156,12 @@ export class HistoricalSession {
       const samples = (range[1] - range[0]) / step;
       if (!(samples <= fixedSampleLimit) || !(range[0] + step > range[0]) || !(range[1] + step > range[1])) {
         return { outcome: "skipped", reason: "fixed sampling range too large" };
+      }
+    }
+    if (options.format === "mcap" && options.samplingMode !== "changes") {
+      const timestamps = this.sampleTimestamps(options);
+      if (timestamps !== undefined && mcapChunkBound(this.log, timestamps) > MCAP_CHUNK_SIZE) {
+        return { outcome: "skipped", reason: "unawaited MCAP writes past one chunk" };
       }
     }
     // One worker and no page timers: messages can be delivered as they arrive. Routing them
@@ -141,15 +187,30 @@ export class HistoricalSession {
       return { outcome: "failed" };
     } finally {
       realClearTimeout(timer);
+      await terminatedWorkersExited();
     }
   }
 
-  close(): void {
+  /** The export worker's timestamp list for fixed or AdvantageKit sampling. */
+  private sampleTimestamps(options: ExportOptions): number[] | undefined {
+    if (options.samplingMode === "fixed") {
+      const step = options.samplingPeriod / 1000;
+      const range = this.log.getTimestampRange();
+      const timestamps: number[] = [];
+      for (let timestamp = range[0]; timestamp <= range[1]; timestamp += step) timestamps.push(cleanFloat(timestamp));
+      return timestamps;
+    }
+    const key = this.log.getFieldKeys().find((k) => AKIT_TIMESTAMP_KEYS.includes(k));
+    return key === undefined ? undefined : this.log.getNumber(key, -Infinity, Infinity)?.timestamps;
+  }
+
+  async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     this.source.stop();
     this.scheduler.terminateAll();
     setWorkerRouter(null);
     this.timers.uninstall();
+    await terminatedWorkersExited();
   }
 }

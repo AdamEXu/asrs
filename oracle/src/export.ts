@@ -38,6 +38,6 @@ try {
     code = result.outcome === "failed" ? 3 : 4;
   }
 } finally {
-  session.close();
+  await session.close();
 }
 process.exitCode = code;

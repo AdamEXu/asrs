@@ -132,6 +132,9 @@ export class OracleWorker {
     this.thread.on("error", (error) => this.emit("error", { message: String(error), error }));
     this.thread.on("exit", () => {
       this.exited = true;
+      if (stoppingThreads.delete(this) && stoppingThreads.size === 0) {
+        exitWaiters.splice(0).forEach((resolve) => resolve());
+      }
       if (router) router.received(this, EXITED);
     });
     router?.created(this);
@@ -189,9 +192,24 @@ export class OracleWorker {
   }
 
   terminate(): void {
+    if (this.terminated) return;
     this.terminated = true;
+    if (!this.exited) stoppingThreads.add(this);
     void this.thread.terminate();
   }
+}
+
+const stoppingThreads = new Set<OracleWorker>();
+const exitWaiters: (() => void)[] = [];
+
+/**
+ * Resolves once every terminated worker thread has exited. Starting a worker while a terminated
+ * one is still being torn down can abort the process (Node asserts `!flush_tasks_` in
+ * `PerIsolatePlatformData`), so harnesses that create many workers wait here in between.
+ */
+export function terminatedWorkersExited(): Promise<void> {
+  if (stoppingThreads.size === 0) return Promise.resolve();
+  return new Promise((resolve) => exitWaiters.push(resolve));
 }
 
 /** Marker a router receives when a worker thread has exited. */

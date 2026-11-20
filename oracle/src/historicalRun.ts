@@ -89,6 +89,6 @@ for (const input of inputs) {
   } catch (error) {
     process.stdout.write(JSON.stringify({ input, error: String((error as Error)?.stack ?? error) }) + "\n");
   } finally {
-    session?.close();
+    await session?.close();
   }
 }

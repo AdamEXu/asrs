@@ -21,5 +21,5 @@ try {
   lines.push(...session.dump("full"));
   process.stdout.write(lines.map((l) => l + "\n").join(""));
 } finally {
-  session.close();
+  await session.close();
 }
