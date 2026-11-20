@@ -61,10 +61,7 @@ pub fn to_fixed(value: f64, fraction_digits: f64) -> Result<String, &'static str
 }
 
 /// `Number.prototype.toExponential`. `None` is an undefined argument.
-pub fn to_exponential(
-    value: f64,
-    fraction_digits: Option<f64>,
-) -> Result<String, &'static str> {
+pub fn to_exponential(value: f64, fraction_digits: Option<f64>) -> Result<String, &'static str> {
     if let Some(f) = fraction_digits
         && !(0.0..=100.0).contains(&f)
     {
@@ -95,7 +92,12 @@ pub fn to_exponential(
             (d, p, keep)
         }
     };
-    Ok(format_exponential(&digits, point - 1, significant, negative))
+    Ok(format_exponential(
+        &digits,
+        point - 1,
+        significant,
+        negative,
+    ))
 }
 
 /// `Number.prototype.toPrecision`. `None` is an undefined argument.
@@ -198,10 +200,7 @@ pub fn intl_format(value: f64, options: IntlOptions) -> String {
     let negative = value.is_sign_negative();
     let abs = value.abs();
     if abs.is_infinite() {
-        return format!(
-            "{}∞",
-            sign_prefix(negative, false, options.sign_display)
-        );
+        return format!("{}∞", sign_prefix(negative, false, options.sign_display));
     }
     let (digits, point) = shortest_digits(abs);
     let (digits, point) = round_at(&digits, point, point + options.max_fraction as i32);
@@ -225,7 +224,7 @@ pub fn intl_format(value: f64, options: IntlOptions) -> String {
     }
     if options.grouping {
         for (i, c) in written.chars().enumerate() {
-            if i > 0 && (written.len() - i) % 3 == 0 {
+            if i > 0 && (written.len() - i).is_multiple_of(3) {
                 out.push(',');
             }
             out.push(c);
@@ -280,7 +279,7 @@ fn digit(c: u16, radix: i32) -> Option<u32> {
         c if (b'A' as u16..=b'Z' as u16).contains(&c) => (c - b'A' as u16) as i32 + 10,
         _ => return None,
     };
-    (d < radix).then(|| d as u32)
+    (d < radix).then_some(d as u32)
 }
 
 /// V8 `InternalStringToIntDouble` for radix 2, 4, 8, 16, 32.
@@ -376,10 +375,7 @@ fn base_ten(u: &[u16], start: usize) -> f64 {
     if count >= 310 {
         return f64::INFINITY;
     }
-    let s: String = u[start..end]
-        .iter()
-        .map(|&c| c as u8 as char)
-        .collect();
+    let s: String = u[start..end].iter().map(|&c| c as u8 as char).collect();
     s.parse().unwrap_or(f64::NAN)
 }
 
@@ -529,7 +525,10 @@ fn scan_decimal(u: &[u16], start: usize) -> Option<(usize, String)> {
         _ => {}
     }
     let int_start = i;
-    while u.get(i).is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+    while u
+        .get(i)
+        .is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c))
+    {
         i += 1;
     }
     let int = &u[int_start..i];
@@ -537,7 +536,10 @@ fn scan_decimal(u: &[u16], start: usize) -> Option<(usize, String)> {
     if u.get(i) == Some(&(b'.' as u16)) {
         i += 1;
         let fs = i;
-        while u.get(i).is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+        while u
+            .get(i)
+            .is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c))
+        {
             i += 1;
         }
         if int.is_empty() && i == fs {
@@ -572,7 +574,10 @@ fn scan_decimal(u: &[u16], start: usize) -> Option<(usize, String)> {
             _ => "",
         };
         let ds = j;
-        while u.get(j).is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+        while u
+            .get(j)
+            .is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c))
+        {
             j += 1;
         }
         if j > ds {
@@ -715,24 +720,22 @@ fn radix_string(value: f64, radix: i32) -> String {
             buffer[fraction_cursor] = RADIX_CHARS[digit];
             fraction_cursor += 1;
             fraction -= digit as f64;
-            if fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0) {
-                if fraction + delta > 1.0 {
-                    loop {
-                        fraction_cursor -= 1;
-                        if fraction_cursor == mid {
-                            integer += 1.0;
-                            break;
-                        }
-                        let c = buffer[fraction_cursor];
-                        let d = if c > b'9' { c - b'a' + 10 } else { c - b'0' };
-                        if d + 1 < radix as u8 {
-                            buffer[fraction_cursor] = RADIX_CHARS[(d + 1) as usize];
-                            fraction_cursor += 1;
-                            break;
-                        }
+            if (fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0)) && fraction + delta > 1.0 {
+                loop {
+                    fraction_cursor -= 1;
+                    if fraction_cursor == mid {
+                        integer += 1.0;
+                        break;
                     }
-                    break;
+                    let c = buffer[fraction_cursor];
+                    let d = if c > b'9' { c - b'a' + 10 } else { c - b'0' };
+                    if d + 1 < radix as u8 {
+                        buffer[fraction_cursor] = RADIX_CHARS[(d + 1) as usize];
+                        fraction_cursor += 1;
+                        break;
+                    }
                 }
+                break;
             }
             if fraction < delta {
                 break;
@@ -840,18 +843,17 @@ fn exact_digits(x: f64) -> (Vec<u8>, i32) {
         return (vec![b'0'], 1);
     }
     let mut n = BigUint::from_u64(mantissa);
-    let digits;
-    let point;
-    if e >= 0 {
+    let (mut digits, point) = if e >= 0 {
         n.shl(e as u32);
-        digits = n.to_decimal();
-        point = digits.len() as i32;
+        let digits = n.to_decimal();
+        let point = digits.len() as i32;
+        (digits, point)
     } else {
         n.mul_pow5((-e) as u32);
-        digits = n.to_decimal();
-        point = digits.len() as i32 + e;
-    }
-    let mut digits = digits;
+        let digits = n.to_decimal();
+        let point = digits.len() as i32 + e;
+        (digits, point)
+    };
     while digits.last() == Some(&b'0') {
         digits.pop();
     }
