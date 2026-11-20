@@ -316,7 +316,7 @@ fn utf8_len(first: u8) -> usize {
 }
 
 /// The object literal assigned to `export const <name>` in the source.
-fn named_object<'a>(source: &'a str, name: &str) -> Result<Lit> {
+fn named_object(source: &str, name: &str) -> Result<Lit> {
     let marker = format!("export const {name}");
     let start = source
         .find(&marker)
