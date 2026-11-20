@@ -689,7 +689,7 @@ impl<'a> Raster<'a> {
             Fill::Color(c) => {
                 let a = modulate(c.a * alpha);
                 Some(Source::Solid(
-                    [c.r * a, c.g * a, c.b * a, a].map(|v| (v * 255.0 + 0.5) as u8),
+                    [c.r, c.g, c.b, a].map(|v| (v * 255.0 + 0.5) as u8),
                 ))
             }
             Fill::Linear(_, s) | Fill::Radial(_, s) if s.is_empty() => None,
@@ -807,7 +807,7 @@ impl<'a> Raster<'a> {
     fn paint_spans(&mut self, spans: &Spans, source: &Source) {
         let shader = match source {
             Source::Solid(color) => {
-                scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |_, _| *color);
+                scan::blit_spans_solid(&mut self.pixmap, spans, *color);
                 return;
             }
             Source::Device(pixmap) => {
@@ -1057,8 +1057,8 @@ impl<'a> Raster<'a> {
                 f64::from(r) - f64::from(l),
                 f64::from(b) - f64::from(t),
             ];
-            if let Some(coverage) = self.rect_coverage(rect, true) {
-                self.paint(&coverage, &source);
+            if let Some(spans) = self.rect_spans(rect, true) {
+                self.paint_spans(&spans, &source);
             }
         }
         true
@@ -1254,7 +1254,26 @@ impl<'a> Raster<'a> {
         path
     }
 
-    /// Coverage of a user rect: exact area when antialiased, Skia's rounded edges otherwise.
+    /// The blits `SkDraw::drawRect` makes to fill a user rect: `AntiFillRect` when the transform
+    /// keeps it axis-aligned, an analytic AA path fill otherwise; without antialiasing, Skia's
+    /// rounded edges.
+    fn rect_spans(&self, rect: [f64; 4], anti_alias: bool) -> Option<Spans> {
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        if !anti_alias {
+            return self
+                .rect_coverage(rect, false)
+                .map(|c| c.to_spans(w, h));
+        }
+        if let Some(device) = self.device_rect(rect) {
+            let r = [device.left(), device.top(), device.right(), device.bottom()];
+            return Some(scan::anti_fill_rect(r, w, h));
+        }
+        let device = self.rect_path(rect).to_sk(Some(&self.state.transform));
+        let mut spans = Spans::new(w, h);
+        aaa::fill_path(&device, w, h, false, &mut spans);
+        Some(spans)
+    }
+
     fn rect_coverage(&self, rect: [f64; 4], anti_alias: bool) -> Option<Coverage> {
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
         if !anti_alias && let Some(device) = self.device_rect(rect) {
@@ -1272,6 +1291,7 @@ impl<'a> Raster<'a> {
                 width: cw,
                 height: ch,
                 alpha: vec![255; cw * ch],
+                pair: false,
             });
         }
         let ctm = self.state.transform;
@@ -1298,10 +1318,8 @@ impl<'a> Raster<'a> {
             return;
         }
         let fill = self.state.fill.clone();
-        if let (Some(source), Some(coverage)) =
-            (self.source(&fill, 256), self.rect_coverage(rect, true))
-        {
-            self.paint(&coverage, &source);
+        if let (Some(source), Some(spans)) = (self.source(&fill, 256), self.rect_spans(rect, true)) {
+            self.paint_spans(&spans, &source);
         }
     }
 
@@ -1545,8 +1563,8 @@ impl<'a> Raster<'a> {
             quality,
             opacity: self.state.alpha as f32,
         };
-        if let Some(coverage) = self.rect_coverage(dst, anti_alias) {
-            self.paint(&coverage, &source);
+        if let Some(spans) = self.rect_spans(dst, anti_alias) {
+            self.paint_spans(&spans, &source);
         }
     }
 }

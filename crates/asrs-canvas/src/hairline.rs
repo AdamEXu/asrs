@@ -187,6 +187,7 @@ struct Plot {
     width: usize,
     height: usize,
     alpha: Vec<u8>,
+    pair: bool,
 }
 
 impl Plot {
@@ -239,6 +240,7 @@ fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, plot: &mut Plot) {
     } else {
         (64 - (major0 & 63), major1 & 63)
     };
+    plot.pair |= slope != 0;
     let mut f = cap(plot, horizontal, istart, fstart, scale_start) + slope;
     let full = istop - istart - 1 - i32::from(scale_stop > 0);
     for major in istart + 1..istart + 1 + full.max(0) {
@@ -305,6 +307,7 @@ pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
         width: w,
         height: h,
         alpha: vec![0; w * h],
+        pair: false,
     };
     anti_hairline(dot6(a.x), dot6(a.y), dot6(b.x), dot6(b.y), &mut plot);
     Some(Coverage {
@@ -313,6 +316,7 @@ pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
         width: w,
         height: h,
         alpha: plot.alpha,
+        pair: plot.pair,
     })
 }
 

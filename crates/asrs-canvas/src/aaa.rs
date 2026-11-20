@@ -975,7 +975,7 @@ fn blit_two_alphas(c: &mut Ctx<'_>, y: i32, x: i32, a1: u8, a2: u8, full: u8, ma
         c.mask_add(x, y, a1, true);
         c.mask_add(x + 1, y, a2, true);
     } else if full == 0xFF && !no_real {
-        c.out.anti_h(x, y, &[a1, a2]);
+        c.out.anti_h2(x, y, a1, a2);
     } else {
         c.add_anti_hn(x, y, 1, a1);
         c.add_anti_hn(x + 1, y, 1, a2);
@@ -1093,6 +1093,15 @@ fn blit_trapezoid_row(
     mask: bool,
     no_real: bool,
 ) {
+    if std::env::var("AAA_DEBUG").is_ok_and(|v| v == y.to_string()) {
+        eprintln!(
+            "trap y={y} ul={} ur={} ll={} lr={} ldy={l_dy} rdy={r_dy} full={full} mask={mask} noreal={no_real}",
+            ul as f64 / 65536.0,
+            ur as f64 / 65536.0,
+            ll as f64 / 65536.0,
+            lr as f64 / 65536.0
+        );
+    }
     if ul > ur {
         return;
     }
@@ -1716,7 +1725,7 @@ pub fn fill_path(path: &SkPath, width: u32, height: u32, even_odd: bool, out: &m
         return;
     }
     let contained = clip[0] <= ir[0] && clip[1] <= ir[1] && clip[2] >= ir[2] && clip[3] >= ir[3];
-    let convex = path.is_convex();
+    let convex = path.is_convex() && std::env::var("AAA_CONCAVE").is_err();
     let (iw, ih) = (ir[2] - ir[0], ir[3] - ir[1]);
     let can_mask = iw <= 32 && i64::from((iw + 3) & !3) * i64::from(ih) <= 1024;
     if can_mask {

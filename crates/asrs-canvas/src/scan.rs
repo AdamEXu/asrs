@@ -17,6 +17,8 @@ pub struct Coverage {
     pub width: usize,
     pub height: usize,
     pub alpha: Vec<u8>,
+    /// Blitted pixel pair by pixel pair (`blitAntiH2`, `blitAntiV2`), as slanted hairlines are.
+    pub pair: bool,
 }
 
 struct Accumulator {
@@ -520,6 +522,7 @@ fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<
         width: w,
         height: h,
         alpha,
+        pair: false,
     })
 }
 
@@ -527,11 +530,16 @@ impl Coverage {
     pub fn to_spans(&self, width: u32, height: u32) -> crate::blit::Spans {
         let mut spans = crate::blit::Spans::new(width, height);
         for row in 0..self.height {
-            spans.anti_h(
-                self.x,
-                self.y + row as i32,
-                &self.alpha[row * self.width..(row + 1) * self.width],
-            );
+            let alphas = &self.alpha[row * self.width..(row + 1) * self.width];
+            if self.pair {
+                for (i, &a) in alphas.iter().enumerate() {
+                    if a != 0 {
+                        spans.anti_v2(self.x + i as i32, self.y + row as i32, a, 0);
+                    }
+                }
+            } else {
+                spans.anti_h(self.x, self.y + row as i32, alphas);
+            }
         }
         spans
     }
@@ -540,6 +548,140 @@ impl Coverage {
 /// Skia's NEON `div255`, the exact `(v + 127) / 255`.
 pub fn div255(v: u32) -> u32 {
     (v + ((v + 128) >> 8) + 128) >> 8
+}
+
+/// `SkScan::AntiFillRect` (`antifilldot8`) for a device rect, clipped to the canvas.
+pub fn anti_fill_rect(r: [f32; 4], width: u32, height: u32) -> crate::blit::Spans {
+    let mut out = crate::blit::Spans::new(width, height);
+    let l = r[0].max(0.0);
+    let t = r[1].max(0.0);
+    let rr = r[2].min(width as f32);
+    let b = r[3].min(height as f32);
+    if !(l < rr && t < b) {
+        return out;
+    }
+    let dot8 = |v: f32| ((v * 65536.0) as i32).wrapping_add(0x80) >> 8;
+    let (l, t, r, b) = (dot8(l), dot8(t), dot8(rr), dot8(b));
+    if l >= r || t >= b {
+        return out;
+    }
+    let scanline = |out: &mut crate::blit::Spans, top: i32, alpha: i32| {
+        let mul = |a: i32, b: i32| ((a * b) >> 8) as u8;
+        if l >> 8 == (r - 1) >> 8 {
+            out.v(l >> 8, top, 1, mul(alpha, r - l));
+            return;
+        }
+        let mut left = l >> 8;
+        if l & 0xFF != 0 {
+            out.v(left, top, 1, mul(alpha, 256 - (l & 0xFF)));
+            left += 1;
+        }
+        let rite = r >> 8;
+        if rite - left > 0 {
+            out.anti_h(left, top, &vec![alpha as u8; (rite - left) as usize]);
+        }
+        if r & 0xFF != 0 {
+            out.v(rite, top, 1, mul(alpha, r & 0xFF));
+        }
+    };
+    let mut top = t >> 8;
+    if top == (b - 1) >> 8 {
+        scanline(&mut out, top, b - t - 1);
+        return out;
+    }
+    if t & 0xFF != 0 {
+        scanline(&mut out, top, 256 - (t & 0xFF));
+        top += 1;
+    }
+    let bot = b >> 8;
+    let h = bot - top;
+    if h > 0 {
+        let mut left = l >> 8;
+        if left == (r - 1) >> 8 {
+            out.v(left, top, h, (r - l - 1) as u8);
+        } else {
+            if l & 0xFF != 0 {
+                out.v(left, top, h, (256 - (l & 0xFF)) as u8);
+                left += 1;
+            }
+            let rite = r >> 8;
+            if rite - left > 0 {
+                out.rect(left, top, rite - left, h);
+            }
+            if r & 0xFF != 0 {
+                out.v(rite, top, h, (r & 0xFF) as u8);
+            }
+        }
+    }
+    if b & 0xFF != 0 {
+        scanline(&mut out, bot, b & 0xFF);
+    }
+    out
+}
+
+/// `SkPreMultiplyColor`.
+pub fn premultiply_color(c: [u8; 4]) -> [u8; 4] {
+    let a = u32::from(c[3]);
+    let mul = |v: u8| {
+        if a == 255 {
+            return v;
+        }
+        let prod = u32::from(v) * a + 128;
+        ((prod + (prod >> 8)) >> 8) as u8
+    };
+    [mul(c[0]), mul(c[1]), mul(c[2]), c[3]]
+}
+
+/// Blends an unpremultiplied solid colour through `spans` the way Chromium's CPU canvas does:
+/// with Skia's legacy ARGB32 blitters (`SkBlitter_ARGB32.cpp`), whose `blitAntiH`, `blitV` and
+/// `blitMask` scale by `alpha + 1` and shift, and whose `blitAntiH2`/`blitAntiV2` interpolate.
+pub fn blit_spans_solid(pixmap: &mut Pixmap, spans: &crate::blit::Spans, color: [u8; 4]) {
+    if color[3] == 0 {
+        return;
+    }
+    let pm = premultiply_color(color);
+    let black = color == [0, 0, 0, 255];
+    let opaque = color[3] == 255;
+    let stride = pixmap.width() as usize;
+    let data = pixmap.data_mut();
+    for (x0, y, alphas, pair) in spans.iter_kinds() {
+        let row = y as usize * stride;
+        for (i, &c) in alphas.iter().enumerate() {
+            if c == 0 {
+                continue;
+            }
+            let k = (row + x0 as usize + i) * 4;
+            let dst = &mut data[k..k + 4];
+            let c = u32::from(c);
+            if pair && !black {
+                if opaque {
+                    let scale = c + (c >> 7);
+                    for (d, &s) in dst.iter_mut().zip(&pm) {
+                        *d = ((u32::from(s) * scale + (256 - scale) * u32::from(*d)) >> 8) as u8;
+                    }
+                } else {
+                    let src_scale = c + 1;
+                    let prod = 0xFFFF - u32::from(pm[3]) * src_scale;
+                    let dst_scale = (prod + (prod >> 8)) >> 8;
+                    for (d, &s) in dst.iter_mut().zip(&pm) {
+                        *d = ((u32::from(s) * src_scale + u32::from(*d) * dst_scale) >> 8) as u8;
+                    }
+                }
+                continue;
+            }
+            let sc = pm.map(|s| ((u32::from(s) * (c + 1)) >> 8) as u8);
+            match sc[3] {
+                0 => {}
+                255 => dst.copy_from_slice(&sc),
+                a => {
+                    let inv = 256 - u32::from(a);
+                    for (d, &s) in dst.iter_mut().zip(&sc) {
+                        *d = (((u32::from(*d) * inv) >> 8) + u32::from(s)) as u8;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Blends a premultiplied source through `spans` in blit order with Skia's 8-bit pipeline
