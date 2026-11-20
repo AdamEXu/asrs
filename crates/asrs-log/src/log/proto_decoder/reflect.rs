@@ -97,7 +97,6 @@ pub(super) struct Field {
     pub name: JsString,
     pub id: f64,
     pub ty: JsString,
-    pub rule: Option<JsString>,
     pub repeated: bool,
     pub required: bool,
     pub extend: Option<JsString>,
@@ -122,7 +121,6 @@ impl Field {
             name,
             id,
             ty,
-            rule: None,
             repeated: false,
             required: false,
             extend: None,
@@ -663,7 +661,6 @@ impl Reflection {
             declaring.id,
             declaring.ty.clone(),
         );
-        sister.rule = declaring.rule.clone();
         sister.repeated = declaring.repeated;
         sister.default = declaring.default.clone();
         sister.proto3_optional = declaring.proto3_optional;

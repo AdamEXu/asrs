@@ -702,19 +702,20 @@ function matrix(seed: number) {
           { name: "In", field: [f("a", 1, T.INT32), msg("deep", 2, ".m.o.In")] },
           {
             name: "O",
-            oneofDecl: [{ name: "zeta" }, { name: "7" }, { name: "" }, { name: "_opt" }],
+            oneofDecl: [{ name: "zeta" }, { name: "seven" }, { name: "" }, { name: "_opt" }, { name: "3" }],
             field: [
-              f("s", 1, T.STRING, { oneofIndex: 1 }),
-              f("i", 2, T.INT32, { oneofIndex: 1 }),
-              msg("m", 3, ".m.o.In", { oneofIndex: 1 }),
-              f("a", 4, T.INT64, { oneofIndex: 0 }),
-              rep("rr", 5, T.INT32, { oneofIndex: 0 }),
+              f("s", 1, T.STRING, { oneofIndex: 2 }),
+              f("i", 2, T.INT32, { oneofIndex: 2 }),
+              msg("m", 3, ".m.o.In", { oneofIndex: 2 }),
+              f("a", 4, T.INT64, { oneofIndex: 1 }),
+              rep("rr", 5, T.INT32, { oneofIndex: 1 }),
               f("plain", 6, T.INT32),
-              f("opt", 7, T.DOUBLE, { oneofIndex: 3, proto3Optional: true }),
-              f("third", 8, T.BOOL, { oneofIndex: 2 }),
+              f("opt", 7, T.DOUBLE, { oneofIndex: 4, proto3Optional: true }),
+              f("third", 8, T.BOOL, { oneofIndex: 3 }),
               f("bare", 9, T.UINT32, { proto3Optional: true })
             ]
           },
+          { name: "Digit", oneofDecl: [{ name: "zeta" }, { name: "7" }], field: [f("s", 1, T.STRING, { oneofIndex: 0 }), f("t", 2, T.INT32, { oneofIndex: 1 })] },
           { name: "Bad", oneofDecl: [{ name: "x" }], field: [f("y", 1, T.INT32, { oneofIndex: 3 })] }
         ]
       })
@@ -736,7 +737,8 @@ function matrix(seed: number) {
             m.vint(4, r.u64());
             break;
           case 4:
-            m.vint(5, r.range(0, 9));
+            if (r.bool()) m.vint(5, r.range(0, 9));
+            else m.packed(5, pb().raw(Pb.varint(r.range(0, 9))).raw(Pb.varint(r.range(0, 9))));
             break;
           case 5:
             m.vint(6, r.range(0, 9));
@@ -754,6 +756,9 @@ function matrix(seed: number) {
       }
       s.data("m.o.O", m.finish());
     }
+    s.data("m.o.O", pb().vint(4, 5).packed(5, pb().raw([1, 2])).finish());
+    s.data("m.o.O", pb().packed(5, pb().raw([1])).vint(4, 5).vint(5, 3).finish());
+    s.data("m.o.Digit", pb().len(1, "s").finish());
   });
 
   add("nesting", (s, r) => {

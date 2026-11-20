@@ -60,8 +60,8 @@ pub enum ProtoError {
         offset: f64,
     },
     MissingRequired(JsString),
-    InvalidEncoding,
-    /// A protobufjs behaviour this port does not reproduce; see the variant's text.
+    /// A protobufjs behaviour this port does not reproduce; see the variant's text. Upstream
+    /// throws something else here, so its JS name is one upstream never produces.
     Unmodeled(&'static str),
 }
 
@@ -88,6 +88,7 @@ impl ProtoError {
             Syntax(_) => "SyntaxError",
             IndexOutOfRange { .. } => "RangeError",
             MissingRequired(_) => "ProtocolError",
+            Unmodeled(_) => "UnmodeledError",
             _ => "Error",
         }
     }
@@ -162,7 +163,6 @@ impl ProtoError {
                 n(*offset)
             ))]),
             MissingRequired(name) => cat(&[S("missing required '"), J(name), S("'")]),
-            InvalidEncoding => cat(&[S("invalid encoding")]),
             Unmodeled(what) => cat(&[S(what)]),
         }
     }

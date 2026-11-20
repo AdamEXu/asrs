@@ -9,6 +9,7 @@ use asrs_js::value::{JsObject, JsValue};
 use super::error::{ProtoError, SyntaxKind};
 use super::reflect::{FieldId, Kind, NodeId, Reflection, js, js_eq};
 use super::value::{JsDefault, Long, Message, Val, long_key_to_string};
+use super::{child_key, friendly_schema_type as friendly};
 
 const RECURSION_LIMIT: u32 = 100;
 
@@ -448,6 +449,15 @@ pub(super) fn property_syntax_error(name: &JsString) -> Option<SyntaxKind> {
     })
 }
 
+/// How a generated decoder `case` ends: `break` to the unknown-field path, run the oneof
+/// setter, or `continue` straight away (the packed branch, which skips the setter).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Case {
+    Break,
+    Set,
+    Continue,
+}
+
 const UNMODELED_NAMES: [&str; 2] = ["$type", "$unknowns"];
 
 impl Reflection {
@@ -606,12 +616,14 @@ impl Reflection {
                 .iter()
                 .copied()
                 .find(|&f| self.fields[f].id == f64::from(number));
-            let handled = match field {
+            let case = match field {
                 Some(f) => self.decode_field(f, &mut m, r, wire, depth)?,
-                None => false,
+                None => Case::Break,
             };
-            if handled {
-                if let (Some(f), Some(o)) = (field, field.and_then(|f| self.fields[f].part_of)) {
+            if case != Case::Break {
+                if let (Case::Set, Some(f), Some(o)) =
+                    (case, field, field.and_then(|f| self.fields[f].part_of))
+                {
                     let keep = self.fields[f].name.clone();
                     for name in self.oneofs[o].oneof.clone() {
                         if name != keep {
@@ -632,8 +644,7 @@ impl Reflection {
         Ok(m)
     }
 
-    /// One `case` of the generated decoder. Returns false where the case `break`s to the
-    /// unknown-field path.
+    /// One `case` of the generated decoder.
     fn decode_field(
         &mut self,
         f: FieldId,
@@ -641,13 +652,13 @@ impl Reflection {
         r: &mut Reader<'_>,
         wire: u32,
         depth: u32,
-    ) -> Result<bool, ProtoError> {
+    ) -> Result<Case, ProtoError> {
         let ty = self.field_ty_name(f);
         let name = self.fields[f].name.clone();
         let basic = basic_wire(&ty);
         if let Some(key_ty) = self.fields[f].map_key.clone() {
             if wire != 2 {
-                return Ok(false);
+                return Ok(Case::Break);
             }
             if !matches!(m.own.get_key(&name), Some(Val::Map(_))) {
                 m.own.insert(name.clone(), Val::Map(JsObject::new()));
@@ -704,7 +715,7 @@ impl Reflection {
             if let Some(Val::Map(map)) = m.own.get_units_mut(name.units()) {
                 map.insert(key, value);
             }
-            return Ok(true);
+            return Ok(Case::Set);
         }
         if self.fields[f].repeated {
             let reset = |m: &mut Message| {
@@ -719,10 +730,10 @@ impl Reflection {
                     let v = r.read(&ty)?;
                     push(m, &name, v);
                 }
-                return Ok(true);
+                return Ok(Case::Continue);
             }
             if wire != basic.unwrap_or(2) {
-                return Ok(false);
+                return Ok(Case::Break);
             }
             reset(m);
             let v = match basic {
@@ -734,12 +745,12 @@ impl Reflection {
                 }
             };
             push(m, &name, v);
-            return Ok(true);
+            return Ok(Case::Set);
         }
         match basic {
             None => {
                 if wire != 2 {
-                    return Ok(false);
+                    return Ok(Case::Break);
                 }
                 let vt = self.message_type(f).ok_or(ProtoError::ReadNull("decode"))?;
                 let len = u64::from(r.uint32()?);
@@ -766,13 +777,13 @@ impl Reflection {
             }
             Some(w) => {
                 if wire != w {
-                    return Ok(false);
+                    return Ok(Case::Break);
                 }
                 let v = r.read(&ty)?;
                 m.own.insert(name, v);
             }
         }
-        Ok(true)
+        Ok(Case::Set)
     }
 
     /// `Type#toObject(message, {defaults: true})`.
@@ -959,28 +970,4 @@ fn push(m: &mut Message, name: &JsString, v: Val) {
     if let Some(Val::Array(items)) = m.own.get_units_mut(name.units()) {
         items.push(v);
     }
-}
-
-pub(super) fn child_key(key: &JsString, child: &JsString) -> JsString {
-    let mut out = key.clone();
-    out.push_unit(u16::from(b'/'));
-    out.push_str(child);
-    out
-}
-
-/// `ProtoDecoder.getFriendlySchemaType`.
-pub(super) fn friendly(schema_type: &JsString) -> JsString {
-    let dot = js(".");
-    let mut result = schema_type.clone();
-    if schema_type.includes(&dot, None) {
-        result = schema_type
-            .split(Some(&dot), None)
-            .pop()
-            .unwrap_or_default();
-    }
-    let prefix = js("Protobuf");
-    if result.starts_with(&prefix, None) {
-        result = result.slice(prefix.len() as f64, None);
-    }
-    result
 }

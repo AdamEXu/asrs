@@ -27,7 +27,7 @@ pub use error::{ProtoError, SyntaxKind};
 
 use descriptor::{Builder, DescriptorSchema};
 use reflect::{Filter, Member, ROOT, Reflection, js, js_eq};
-use wire::{Reader, child_key};
+use wire::Reader;
 
 /// protobufjs's realm-global counters for unnamed descriptor objects.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -212,7 +212,7 @@ impl ProtoDecoder {
                         }
                     }
                 }
-                JsValue::Object(_) | JsValue::Bytes(_) => {
+                JsValue::Object(_) => {
                     self.apply_post_processors(field_type, value, schema_types, &child);
                 }
                 _ => {}
@@ -237,9 +237,28 @@ impl ProtoDecoder {
     }
 }
 
+fn child_key(key: &JsString, child: &JsString) -> JsString {
+    let mut out = key.clone();
+    out.push_unit(u16::from(b'/'));
+    out.push_str(child);
+    out
+}
+
 /// `ProtoDecoder.getFriendlySchemaType`: the last dotted segment without a `Protobuf` prefix.
 pub fn friendly_schema_type(schema_type: &JsString) -> JsString {
-    wire::friendly(schema_type)
+    let dot = js(".");
+    let mut result = schema_type.clone();
+    if schema_type.includes(&dot, None) {
+        result = schema_type
+            .split(Some(&dot), None)
+            .pop()
+            .unwrap_or_default();
+    }
+    let prefix = js("Protobuf");
+    if result.starts_with(&prefix, None) {
+        result = result.slice(prefix.len() as f64, None);
+    }
+    result
 }
 
 fn post_process_control_data(

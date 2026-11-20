@@ -203,9 +203,9 @@
       "generatedOn": "macos-aarch64"
     },
     "log/proto-matrix": {
-      "cases": 773,
-      "content": "fbcf5cf1e7edd3c4",
-      "generator": "0a68efaf5307c648",
+      "cases": 776,
+      "content": "4a7c6f536aa595f6",
+      "generator": "9713c1e4f5cf6e28",
       "spec": "parity/specs/log/proto-matrix.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"

@@ -345,7 +345,6 @@ impl<'a> Builder<'a> {
         }
         let mut field = Field::new(name, number, ty);
         field.repeated = rule.as_ref().is_some_and(|r| js_eq(r, "repeated"));
-        field.rule = rule;
         field.extend = extend;
         field.proto3_optional = desc.bool(d, "proto3Optional");
         let default = desc.str(d, "defaultValue");
