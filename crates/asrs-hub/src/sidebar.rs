@@ -1,0 +1,1761 @@
+//! `src/hub/Sidebar.ts`: the headless sidebar model. Rows live in an arena in creation order;
+//! `roots`/`children` give display order. Geometry-dependent behavior (on-screen checks, drag
+//! offsets, handle widths) takes the rects and coordinates a DOM would produce, so the model is
+//! byte-identical to upstream while staying renderable by any view.
+
+use std::cmp::Ordering;
+use std::collections::HashSet;
+
+use asrs_js::collation::locale_compare_numeric;
+use asrs_js::json;
+use asrs_js::math::{abs, floor, max2, rem, round};
+use asrs_js::number;
+use asrs_js::sort::{array_sort, code_unit_cmp};
+use asrs_js::string::JsString;
+use asrs_js::value::{JsObject, JsValue};
+use asrs_log::log::log_util::{TYPE_KEY, get_value_at};
+use asrs_log::log::{Log, LogFieldTree, LoggableType, search_fields};
+use asrs_log::util::arrays_equal;
+use asrs_model::hub_state::SidebarState;
+use asrs_model::selection::{Selection, SelectionMode};
+use indexmap::IndexSet;
+
+use crate::custom_schemas;
+
+pub const DEFAULT_SIDEBAR_WIDTH: f64 = 300.0;
+pub const INDENT_SIZE_PX: f64 = 20.0;
+pub const FIELD_DRAG_THRESHOLD_PX: f64 = 3.0;
+pub const VALUE_WIDTH_MARGIN_PX: f64 = 12.0;
+pub const MERGED_KEY: &str = "Log";
+pub const KNOWN_KEYS: &[&str] = &[
+    "DriverStation",
+    "NetworkTables",
+    "RealOutputs",
+    "ReplayOutputs",
+    "SystemStats",
+    "PowerDistribution",
+    "Tuning",
+    "NetworkInputs",
+    "DashboardInputs",
+    "RadioStatus",
+    "Timestamp",
+    "AdvantageKit",
+    "DS",
+    "NT",
+    "NTConnection",
+    "messages",
+    "systemTime",
+    "DSLog",
+    "DSEvents",
+];
+pub const HIDDEN_KEYS: &[&str] = &[".schema", "Metadata", "RealMetadata", "ReplayMetadata"];
+pub const OPEN_LOG_TITLE: &str = "Open a log or connect to view data";
+
+const TYPE_WARNING_TEXT: &str = "Values with conflicting types have been written to this field. \
+Only values compatible with the initial type can be viewed and exported.";
+const TUNING_INTERVAL_MS: f64 = 250.0;
+const HIGHLIGHT_TIMEOUT_MS: f64 = 3000.0;
+const HANDLE_DOUBLE_CLICK_MS: f64 = 400.0;
+const SCROLL_BLUR_THRESHOLD: f64 = 50.0;
+
+fn js(text: &str) -> JsString {
+    JsString::from(text)
+}
+
+fn starts_with(key: &JsString, prefix: &str) -> bool {
+    key.starts_with(&js(prefix), None)
+}
+
+fn ends_with(key: &JsString, suffix: &str) -> bool {
+    key.ends_with(&js(suffix), None)
+}
+
+fn is_hidden_key(key: &JsString) -> bool {
+    HIDDEN_KEYS.iter().any(|k| key == &js(k))
+}
+
+/// `DOMRect` reduced to what the model reads.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RowRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl RowRect {
+    pub fn top(&self) -> f64 {
+        self.y
+    }
+
+    pub fn on_screen(&self, inner_height: f64) -> bool {
+        self.height > 0.0
+            && self.width > 0.0
+            && self.top() >= -self.height
+            && self.top() <= inner_height
+    }
+}
+
+/// `window.tuner`.
+pub trait Tuner {
+    fn has_tunable_fields(&self) -> bool;
+    fn is_tunable(&self, key: &JsString) -> bool;
+    fn publish(&self, key: &JsString, value: &JsValue);
+    fn unpublish(&self, key: &JsString);
+}
+
+/// The `window.*` services upstream `Sidebar` reads.
+pub struct SidebarEnv<'a> {
+    pub log: &'a mut Log,
+    pub selection: &'a dyn Selection,
+    pub tuner: Option<&'a dyn Tuner>,
+    pub dark_theme: bool,
+    pub inner_height: f64,
+    /// Whether the view can scroll a row into view (jsdom lacks
+    /// `scrollIntoViewIfNeeded`, so search highlights abort there).
+    pub can_scroll_into_view: bool,
+    pub loading_fields: &'a HashSet<JsString>,
+}
+
+/// An event that surfaced the upstream `scrollIntoViewIfNeeded` throw: jsdom lacks the method,
+/// so any highlight-for-search hits it and aborts the listener mid-way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EventOutcome {
+    Ok,
+    HighlightAborted,
+}
+
+type Aborted = EventOutcome;
+type Attempt<T> = Result<T, Aborted>;
+
+#[derive(Clone, Debug)]
+struct Timer {
+    due: f64,
+    seq: u64,
+    kind: TimerKind,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum TimerKind {
+    TuningPublish,
+    ClearHighlight(u64),
+}
+
+#[derive(Clone, Debug, Default)]
+struct BoolState {
+    fill: Option<JsString>,
+    line_hidden: Option<bool>,
+    tunable: bool,
+    first_update: bool,
+    last_value: Option<bool>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct NumberState {
+    input_value: JsString,
+    input_hidden: bool,
+    span_hidden: bool,
+    span_text: JsString,
+    placeholder: JsString,
+    focused: bool,
+    last_has_value: bool,
+    first_update: bool,
+    last_value: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct TextState {
+    text: JsString,
+    first_update: bool,
+    last_value: Option<JsString>,
+    last_sidebar_width: f64,
+}
+
+#[derive(Clone, Debug)]
+enum ValueState {
+    None,
+    Bool(BoolState),
+    Number(Box<NumberState>),
+    Text(TextState),
+}
+
+impl Default for ValueState {
+    fn default() -> Self {
+        ValueState::None
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Node {
+    id: u64,
+    title: JsString,
+    full_title: JsString,
+    full_key: Option<JsString>,
+    tree_children: JsObject<LogFieldTree>,
+    has_children: bool,
+    children_generated: bool,
+    indent: f64,
+    generated: bool,
+    known_label: bool,
+    label_loading: bool,
+    label_bold: bool,
+    label_title: Option<JsString>,
+    type_label: Option<JsString>,
+    warning_hidden: bool,
+    warning_last_hidden: bool,
+    highlighted: bool,
+    mouse_down: Option<[f64; 4]>,
+    metadata_last: Option<JsString>,
+    expanded: bool,
+    children_materialized: bool,
+    children: Vec<usize>,
+    value_element_hidden: bool,
+    value: ValueState,
+}
+
+/// One row in display order, everything the view needs to render it.
+#[derive(Clone, Debug)]
+pub struct SidebarRow {
+    pub title: JsString,
+    pub full_title: JsString,
+    pub full_key: Option<JsString>,
+    pub indent: f64,
+    pub generated: bool,
+    pub known_label: bool,
+    pub expanded: bool,
+    pub has_children: bool,
+    pub label_loading: bool,
+    pub label_bold: bool,
+    pub label_title: Option<JsString>,
+    pub type_label: Option<JsString>,
+    pub warning_hidden: bool,
+    pub warning_title: JsString,
+    pub highlighted: bool,
+    pub value_hidden: bool,
+    pub value: RowValue,
+}
+
+#[derive(Clone, Debug)]
+pub enum RowValue {
+    None,
+    Bool {
+        fill: Option<JsString>,
+        line_hidden: Option<bool>,
+        tunable: bool,
+    },
+    Number {
+        input_value: JsString,
+        input_hidden: bool,
+        span_hidden: bool,
+        span_text: JsString,
+        placeholder: JsString,
+    },
+    Text {
+        text: JsString,
+    },
+}
+
+/// `#dragItem` contents plus the `startDrag` payload.
+#[derive(Clone, Debug)]
+pub struct DragEvent {
+    pub x: f64,
+    pub y: f64,
+    pub offset_x: f64,
+    pub offset_y: f64,
+    pub fields: Vec<JsString>,
+    pub children: Vec<JsString>,
+    pub text: JsString,
+    pub bold: bool,
+}
+
+pub struct Sidebar {
+    get_filenames: Box<dyn Fn() -> Vec<JsString>>,
+    sidebar_handle_active: bool,
+    sidebar_width: f64,
+    field_count: usize,
+    is_tuning_mode: bool,
+    last_field_keys: Vec<JsString>,
+    expanded_fields: IndexSet<JsString>,
+    active_fields: IndexSet<JsString>,
+    select_group: Vec<JsString>,
+    search_key: Option<JsString>,
+    search_hovered_index: Option<usize>,
+    search_results: Vec<JsString>,
+    search_items_hovered: Vec<bool>,
+    tuning_value_cache: JsObject<JsString>,
+    nodes: Vec<Node>,
+    roots: Vec<usize>,
+    next_node_id: u64,
+    title_text: JsString,
+    search_value: JsString,
+    search_focused: bool,
+    search_results_hidden: bool,
+    search_results_scroll_top: f64,
+    tuning_button_hidden: bool,
+    tuning_button_active: bool,
+    scroll_top: f64,
+    shadow_shown: bool,
+    last_handle_click: f64,
+    menu_active: Vec<bool>,
+    drag_item: Option<DragEvent>,
+    drags: Vec<DragEvent>,
+    main_messages: Vec<(JsString, JsValue)>,
+    timers: Vec<Timer>,
+    next_timer_seq: u64,
+}
+
+impl Sidebar {
+    pub fn new(now: f64, get_filenames: impl Fn() -> Vec<JsString> + 'static) -> Self {
+        let mut sidebar = Sidebar {
+            get_filenames: Box::new(get_filenames),
+            sidebar_handle_active: false,
+            sidebar_width: DEFAULT_SIDEBAR_WIDTH,
+            field_count: 0,
+            is_tuning_mode: false,
+            last_field_keys: Vec::new(),
+            expanded_fields: IndexSet::new(),
+            active_fields: IndexSet::new(),
+            select_group: Vec::new(),
+            search_key: None,
+            search_hovered_index: None,
+            search_results: Vec::new(),
+            search_items_hovered: Vec::new(),
+            tuning_value_cache: JsObject::new(),
+            nodes: Vec::new(),
+            roots: Vec::new(),
+            next_node_id: 0,
+            title_text: js(OPEN_LOG_TITLE),
+            search_value: JsString::new(),
+            search_focused: false,
+            search_results_hidden: true,
+            search_results_scroll_top: 0.0,
+            tuning_button_hidden: true,
+            tuning_button_active: false,
+            scroll_top: 0.0,
+            shadow_shown: false,
+            last_handle_click: 0.0,
+            menu_active: Vec::new(),
+            drag_item: None,
+            drags: Vec::new(),
+            main_messages: Vec::new(),
+            timers: Vec::new(),
+            next_timer_seq: 0,
+        };
+        sidebar.schedule_interval(now, TUNING_INTERVAL_MS, TimerKind::TuningPublish);
+        sidebar
+    }
+
+    fn schedule_interval(&mut self, now: f64, interval: f64, kind: TimerKind) {
+        let seq = self.next_timer_seq;
+        self.next_timer_seq += 1;
+        self.timers.push(Timer { due: now + interval, seq, kind });
+    }
+
+    fn schedule_timeout(&mut self, now: f64, delay: f64, kind: TimerKind) {
+        self.schedule_interval(now, delay, kind);
+    }
+
+    /// Earliest pending timer `due`, if any.
+    pub fn next_timer_due(&self) -> Option<f64> {
+        self.timers.iter().map(|t| t.due).reduce(f64::min)
+    }
+
+    /// Runs every timer due at `now`, in `(due, seq)` order like env.ts.
+    pub fn fire_timers(&mut self, now: f64, env: &mut SidebarEnv<'_>) {
+        loop {
+            let Some(pos) = self
+                .timers
+                .iter()
+                .enumerate()
+                .filter(|(_, t)| t.due <= now)
+                .min_by(|(_, a), (_, b)| {
+                    a.due.partial_cmp(&b.due)
+                        .unwrap_or(Ordering::Equal)
+                        .then(a.seq.cmp(&b.seq))
+                })
+                .map(|(i, _)| i)
+            else {
+                return;
+            };
+            let mut timer = self.timers.remove(pos);
+            match timer.kind {
+                TimerKind::TuningPublish => {
+                    self.tuning_publish_tick(env);
+                    timer.due += TUNING_INTERVAL_MS;
+                    timer.seq = self.next_timer_seq;
+                    self.next_timer_seq += 1;
+                    self.timers.push(timer);
+                }
+                TimerKind::ClearHighlight(id) => {
+                    if let Some(node) = self.nodes.iter_mut().find(|n| n.id == id) {
+                        node.highlighted = false;
+                    }
+                }
+            }
+        }
+    }
+
+    fn send_main(&mut self, name: &str, data: JsValue) {
+        self.main_messages.push((js(name), data));
+    }
+
+    pub fn take_main_messages(&mut self) -> Vec<(JsString, JsValue)> {
+        std::mem::take(&mut self.main_messages)
+    }
+
+    pub fn take_drags(&mut self) -> Vec<DragEvent> {
+        std::mem::take(&mut self.drags)
+    }
+
+    /// `saveState`.
+    pub fn save_state(&self) -> SidebarState {
+        SidebarState {
+            width: self.sidebar_width,
+            expanded: self.expanded_fields.iter().cloned().collect(),
+        }
+    }
+
+    /// `restoreState`.
+    pub fn restore_state(&mut self, env: &mut SidebarEnv<'_>, state: &SidebarState) -> EventOutcome {
+        let width_equal = state.width == self.sidebar_width;
+        let expanded_set: IndexSet<JsString> = state.expanded.iter().cloned().collect();
+        let expanded_equal = self.expanded_fields.len() == expanded_set.len()
+            && self.expanded_fields.iter().all(|k| expanded_set.contains(k));
+        self.sidebar_width = state.width;
+        self.expanded_fields = expanded_set;
+        let _ = width_equal;
+        if !expanded_equal {
+            if let Err(outcome) = self.refresh(env, true) {
+                return outcome;
+            }
+        }
+        EventOutcome::Ok
+    }
+
+    /// `toggleVisible`.
+    pub fn toggle_visible(&mut self) {
+        if self.sidebar_width == 0.0 {
+            self.sidebar_width = DEFAULT_SIDEBAR_WIDTH;
+        } else {
+            self.sidebar_width *= -1.0;
+        }
+    }
+
+    /// `--side-bar-width`, `Math.max(sidebarWidth, 0)`.
+    pub fn applied_width(&self) -> f64 {
+        max2(self.sidebar_width, 0.0)
+    }
+
+    /// `--show-side-bar`.
+    pub fn sidebar_shown(&self) -> bool {
+        self.applied_width() != 0.0
+    }
+
+    // --- Sidebar handle ---
+
+    pub fn handle_mouse_down(&mut self) {
+        self.sidebar_handle_active = true;
+    }
+
+    /// `window.mouseup`.
+    pub fn window_mouse_up(&mut self) {
+        self.sidebar_handle_active = false;
+    }
+
+    /// `window.mousemove`: handle drag, then per-field drag thresholds.
+    pub fn window_mouse_move(&mut self, client_x: f64, client_y: f64) {
+        if self.sidebar_handle_active {
+            let mut width = client_x;
+            if width > 500.0 {
+                width = 500.0;
+            }
+            if (80.0..160.0).contains(&width) {
+                width = 160.0;
+            }
+            if width < 80.0 {
+                if self.sidebar_width > 0.0 {
+                    width = 0.0;
+                } else {
+                    width = self.sidebar_width;
+                }
+            }
+            self.sidebar_width = width;
+        }
+        let ids: Vec<usize> = (0..self.nodes.len()).collect();
+        for id in ids {
+            let Some(down) = self.nodes[id].mouse_down else {
+                continue;
+            };
+            if abs(client_x - down[0]) >= FIELD_DRAG_THRESHOLD_PX
+                || abs(client_y - down[1]) >= FIELD_DRAG_THRESHOLD_PX
+            {
+                self.drag_event(id, down[0], down[1], down[2], down[3]);
+                self.nodes[id].mouse_down = None;
+            }
+        }
+    }
+
+    /// `side-bar-handle` click: toggles on a double click within 400 ms.
+    pub fn handle_click(&mut self, now: f64) {
+        if now - self.last_handle_click < HANDLE_DOUBLE_CLICK_MS {
+            self.toggle_visible();
+            self.last_handle_click = 0.0;
+        } else {
+            self.last_handle_click = now;
+        }
+    }
+
+    /// `side-bar` scroll.
+    pub fn sidebar_scroll(&mut self, scroll_top: f64) {
+        self.scroll_top = scroll_top;
+        self.shadow_shown = scroll_top != 0.0;
+        if scroll_top > SCROLL_BLUR_THRESHOLD && self.search_focused {
+            self.search_focused = false;
+        }
+    }
+
+    // --- Menu bar ---
+
+    pub fn menu_button_click(&mut self, index: usize, rect: RowRect) {
+        if self.menu_active.len() <= index {
+            self.menu_active.resize(index + 1, false);
+        }
+        if self.menu_active[index] {
+            self.menu_active[index] = false;
+            let mut data = JsObject::new();
+            data.insert("index", JsValue::Number(index as f64));
+            self.send_main("close-app-menu", JsValue::Object(data));
+        } else {
+            self.menu_active[index] = true;
+            let mut rect_obj = JsObject::new();
+            rect_obj.insert("x", JsValue::Number(rect.x));
+            rect_obj.insert("y", JsValue::Number(rect.y));
+            rect_obj.insert("width", JsValue::Number(rect.width));
+            rect_obj.insert("height", JsValue::Number(rect.height));
+            let mut data = JsObject::new();
+            data.insert("index", JsValue::Number(index as f64));
+            data.insert("rect", JsValue::Object(rect_obj));
+            self.send_main("open-app-menu", JsValue::Object(data));
+        }
+    }
+
+    pub fn menu_button_mouse_leave(&mut self, index: usize) {
+        if index < self.menu_active.len() {
+            self.menu_active[index] = false;
+        }
+    }
+
+    // --- Search controls ---
+
+    pub fn search_focus(&mut self) {
+        self.search_focused = true;
+    }
+
+    pub fn search_blur(&mut self) {
+        self.search_focused = false;
+    }
+
+    /// `search` input event: the view supplies the element's new `value`.
+    pub fn search_input(&mut self, env: &mut SidebarEnv<'_>, value: JsString) {
+        self.search_value = value;
+        self.update_search_results(env);
+    }
+
+    fn update_search_hovered(&mut self) {
+        for (index, hovered) in self.search_items_hovered.iter_mut().enumerate() {
+            *hovered = Some(index) == self.search_hovered_index;
+        }
+    }
+
+    fn update_search_results(&mut self, env: &SidebarEnv<'_>) {
+        self.search_results = if self.search_value.is_empty() {
+            Vec::new()
+        } else {
+            search_fields(env.log, &self.search_value)
+        };
+        self.search_results.retain(|field| {
+            !HIDDEN_KEYS.iter().any(|hidden| {
+                let hidden = js(hidden);
+                let mut prefixed = js("/");
+                prefixed.push_str(&hidden);
+                if field.starts_with(&prefixed, None) {
+                    return true;
+                }
+                let mut nt = js("NT:");
+                nt.push_str(&prefixed);
+                if field.starts_with(&nt, None) {
+                    return true;
+                }
+                let mut nt_akit = js("NT:/AdvantageKit");
+                nt_akit.push_str(&prefixed);
+                if field.starts_with(&nt_akit, None) {
+                    return true;
+                }
+                let mut ds = js("DS:");
+                ds.push_str(&prefixed);
+                if field.starts_with(&ds, None) {
+                    return true;
+                }
+                let mut middle = prefixed.clone();
+                middle.push_str(&js("/"));
+                if field.includes(&middle, None) {
+                    return true;
+                }
+                field.ends_with(&prefixed, None)
+            })
+        });
+        self.search_items_hovered = vec![false; self.search_results.len()];
+    }
+
+    fn search_periodic(&mut self) {
+        let hidden = !self.search_focused
+            || self.search_value.is_empty()
+            || self.search_results.is_empty();
+        if hidden != self.search_results_hidden {
+            if hidden && !self.search_results_hidden {
+                self.search_results_scroll_top = 0.0;
+                self.search_hovered_index = None;
+                self.update_search_hovered();
+            }
+            self.search_results_hidden = hidden;
+        }
+    }
+
+    /// `search` keydown (`event.code`).
+    pub fn search_key_down(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        code: &str,
+        now: f64,
+    ) -> EventOutcome {
+        let results_count = self.search_results.len();
+        if code == "ArrowDown" {
+            match self.search_hovered_index {
+                None => self.search_hovered_index = Some(0),
+                Some(i) if i >= results_count => self.search_hovered_index = Some(0),
+                Some(i) if i < results_count.saturating_sub(1) => {
+                    self.search_hovered_index = Some(i + 1)
+                }
+                _ => {}
+            }
+            self.update_search_hovered();
+            EventOutcome::Ok
+        } else if code == "ArrowUp" {
+            match self.search_hovered_index {
+                None => self.search_hovered_index = Some(0),
+                Some(i) if i >= results_count => self.search_hovered_index = Some(0),
+                Some(i) if i > 0 => self.search_hovered_index = Some(i - 1),
+                _ => {}
+            }
+            self.update_search_hovered();
+            EventOutcome::Ok
+        } else if code == "Enter" {
+            self.run_search(env, now)
+        } else {
+            EventOutcome::Ok
+        }
+    }
+
+    /// `.search-results-item` mousemove.
+    pub fn search_item_mouse_move(&mut self, index: usize) {
+        if index >= self.search_results.len() {
+            return;
+        }
+        self.search_hovered_index = Some(index);
+        self.update_search_hovered();
+    }
+
+    /// `.search-results-item` mousedown and touchdown.
+    pub fn search_item_activate(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        index: usize,
+        now: f64,
+    ) -> EventOutcome {
+        if index >= self.search_results.len() {
+            return EventOutcome::Ok;
+        }
+        self.search_hovered_index = Some(index);
+        self.run_search(env, now)
+    }
+
+    /// `runSearch`. On `HighlightAborted` the upstream listener threw: `searchKey` stays set,
+    /// remaining callbacks never ran, and the input is not blurred.
+    fn run_search(&mut self, env: &mut SidebarEnv<'_>, now: f64) -> EventOutcome {
+        let Some(hovered) = self.search_hovered_index else {
+            return EventOutcome::Ok;
+        };
+        if hovered >= self.search_results.len() {
+            return EventOutcome::Ok;
+        }
+        self.search_key = Some(self.search_results[hovered].clone());
+        let snapshot = self.nodes.len();
+        for id in 0..snapshot {
+            let node = &self.nodes[id];
+            if node.full_key.is_some() {
+                if let Err(outcome) = self.highlight_for_search(id, now, env.can_scroll_into_view) {
+                    return outcome;
+                }
+            }
+            if self.nodes[id].has_children {
+                if let Err(outcome) = self.expand_for_search(env, id, now) {
+                    return outcome;
+                }
+            }
+        }
+        self.search_key = None;
+        self.search_focused = false;
+        EventOutcome::Ok
+    }
+
+    /// `highlightForSearch`. The throw is `scrollIntoViewIfNeeded`, which runs before the
+    /// `highlight` class and timeout.
+    fn highlight_for_search(&mut self, id: usize, now: f64, can_scroll: bool) -> Attempt<()> {
+        let (Some(key), Some(full_key)) = (&self.search_key, &self.nodes[id].full_key) else {
+            return Ok(());
+        };
+        if full_key != key {
+            return Ok(());
+        }
+        if !can_scroll {
+            return Err(EventOutcome::HighlightAborted);
+        }
+        self.nodes[id].highlighted = true;
+        let node_id = self.nodes[id].id;
+        self.schedule_timeout(now, HIGHLIGHT_TIMEOUT_MS, TimerKind::ClearHighlight(node_id));
+        Ok(())
+    }
+
+    /// `expandForSearch` + `setExpanded` machinery.
+    fn expand_for_search(&mut self, env: &mut SidebarEnv<'_>, id: usize, now: f64) -> Attempt<()> {
+        let Some(key) = self.search_key.clone() else {
+            return Ok(());
+        };
+        if !self.tree_contains_key(&self.nodes[id].tree_children, &key) {
+            return Ok(());
+        }
+        if !self.nodes[id].expanded {
+            self.set_expanded(env, id, true, now)?;
+        }
+        Ok(())
+    }
+
+    fn tree_contains_key(&self, children: &JsObject<LogFieldTree>, key: &JsString) -> bool {
+        for tree in children.values() {
+            if tree.full_key.as_ref() == Some(key) || self.tree_contains_key(&tree.children, key)
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn set_expanded(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        id: usize,
+        expanded: bool,
+        now: f64,
+    ) -> Attempt<()> {
+        self.nodes[id].expanded = expanded;
+        if expanded {
+            self.expanded_fields.insert(self.nodes[id].full_title.clone());
+        } else {
+            self.expanded_fields
+                .shift_remove(&self.nodes[id].full_title.clone());
+        }
+        if !self.nodes[id].children_materialized {
+            self.nodes[id].children_materialized = true;
+            let node = &self.nodes[id];
+            let mut child_keys: Vec<JsString> = node
+                .tree_children
+                .keys()
+                .filter(|key| !is_hidden_key(key))
+                .cloned()
+                .collect();
+            let full_title = &node.full_title;
+            let use_known = full_title == &js("/AdvantageKit")
+                || full_title == &js("/NT")
+                || starts_with(full_title, "/Log");
+            array_sort(&mut child_keys, |a, b| sort_keys(a, b, use_known));
+            for key in child_keys {
+                let child = self.nodes[id]
+                    .tree_children
+                    .get_key(&key)
+                    .expect("key came from tree_children")
+                    .clone();
+                let mut full_title = self.nodes[id].full_title.clone();
+                full_title.push_str(&js("/"));
+                full_title.push_str(&key);
+                self.add_fields(
+                    env,
+                    key,
+                    full_title,
+                    &child,
+                    Some(id),
+                    self.nodes[id].indent + INDENT_SIZE_PX,
+                    self.nodes[id].children_generated,
+                    now,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `closedIcon`/`openIcon` clicks. `slot` 0 expands, 1 collapses, 2 (neutral) does nothing.
+    pub fn icon_click(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        flat_index: usize,
+        slot: usize,
+        now: f64,
+    ) -> EventOutcome {
+        let Some(id) = self.flat_id(flat_index) else {
+            return EventOutcome::Ok;
+        };
+        let result = match slot {
+            0 => self.set_expanded(env, id, true, now),
+            1 => self.set_expanded(env, id, false, now),
+            _ => Ok(()),
+        };
+        match result {
+            Ok(()) => EventOutcome::Ok,
+            Err(outcome) => outcome,
+        }
+    }
+
+    // --- Field labels: drag, select group, context menu ---
+
+    /// `field-item-label` mousedown (only registered on full-key rows upstream).
+    pub fn label_mouse_down(&mut self, flat_index: usize, x: f64, y: f64, ox: f64, oy: f64) {
+        if let Some(id) = self.flat_id(flat_index) {
+            if self.nodes[id].full_key.is_some() {
+                self.nodes[id].mouse_down = Some([x, y, ox, oy]);
+            }
+        }
+    }
+
+    /// `field-item-label` mouseup (only registered on full-key rows upstream).
+    pub fn label_mouse_up(&mut self, flat_index: usize, x: f64, y: f64, ctrl_or_meta: bool) {
+        let Some(id) = self.flat_id(flat_index) else {
+            return;
+        };
+        if self.nodes[id].full_key.is_none() {
+            return;
+        }
+        let Some(down) = self.nodes[id].mouse_down else {
+            return;
+        };
+        if ctrl_or_meta
+            && abs(x - down[0]) < FIELD_DRAG_THRESHOLD_PX
+            && abs(y - down[1]) < FIELD_DRAG_THRESHOLD_PX
+        {
+            let full_key = self.nodes[id]
+                .full_key
+                .clone()
+                .unwrap_or_else(JsString::new);
+            match self.select_group.iter().position(|k| k == &full_key) {
+                None => {
+                    self.select_group.push(full_key);
+                    self.nodes[id].label_bold = true;
+                }
+                Some(index) => {
+                    self.select_group.remove(index);
+                    self.nodes[id].label_bold = false;
+                }
+            }
+        }
+        self.nodes[id].mouse_down = None;
+    }
+
+    /// `field-item-label` contextmenu.
+    pub fn label_context_menu(&mut self, flat_index: usize, x: f64, y: f64) {
+        let Some(id) = self.flat_id(flat_index) else {
+            return;
+        };
+        self.nodes[id].mouse_down = None;
+        let mut data = JsObject::new();
+        data.insert("title", JsValue::String(self.nodes[id].title.clone()));
+        data.insert("fullTitle", JsValue::String(self.nodes[id].full_title.clone()));
+        data.insert(
+            "position",
+            JsValue::Array(vec![JsValue::Number(x), JsValue::Number(y)]),
+        );
+        self.send_main("ask-open-sidebar-context-menu", JsValue::Object(data));
+    }
+
+    /// `field-item-label` touchstart. `rect` is the label's `getBoundingClientRect`.
+    pub fn label_touch_start(&mut self, flat_index: usize, x: f64, y: f64, rect: RowRect) {
+        if let Some(id) = self.flat_id(flat_index) {
+            self.drag_event(id, x, y, x - rect.x, y - rect.y);
+        }
+    }
+
+    /// The label `dragEvent`: fills `#dragItem` and calls `window.startDrag`.
+    fn drag_event(&mut self, id: usize, x: f64, y: f64, offset_x: f64, offset_y: f64) {
+        let node = &self.nodes[id];
+        let Some(full_key) = node.full_key.clone() else {
+            return;
+        };
+        let is_group = self.select_group.contains(&full_key);
+        let mut text = node.title.clone();
+        if is_group {
+            text.push_str(&js("\u{2026}"));
+        }
+        let children = if is_group {
+            Vec::new()
+        } else {
+            node.tree_children
+                .values()
+                .filter_map(|tree| tree.full_key.clone())
+                .filter(|key| !ends_with(key, "/length"))
+                .collect()
+        };
+        let event = DragEvent {
+            x,
+            y,
+            offset_x,
+            offset_y,
+            fields: if is_group {
+                self.select_group.clone()
+            } else {
+                vec![full_key]
+            },
+            children,
+            text,
+            bold: is_group,
+        };
+        self.drag_item = Some(event.clone());
+        self.drags.push(event);
+        if is_group {
+            self.select_group.clear();
+            for node in &mut self.nodes {
+                node.label_bold = false;
+            }
+        }
+    }
+
+    /// Type-warning span click.
+    pub fn warning_click(&mut self, flat_index: usize) {
+        if self.flat_id(flat_index).is_none() {
+            return;
+        }
+        let mut data = JsObject::new();
+        data.insert("title", JsValue::String(js("Conflicting types")));
+        data.insert("content", JsValue::String(js(TYPE_WARNING_TEXT)));
+        self.send_main("alert", JsValue::Object(data));
+    }
+
+    // --- Tuning ---
+
+    /// `tuning-button` click.
+    pub fn tuning_button_click(&mut self, env: &SidebarEnv<'_>) {
+        self.set_tuning_mode_active(env, !self.is_tuning_mode);
+    }
+
+    /// `tuning-button` contextmenu.
+    pub fn tuning_button_context_menu(&mut self, x: f64, y: f64) {
+        let mut keys: Vec<JsString> = self.tuning_value_cache.keys().cloned().collect();
+        array_sort(&mut keys, |a, b| code_unit_cmp(a.units(), b.units()));
+        let mut lines = JsString::new();
+        for (index, key) in keys.iter().enumerate() {
+            if index > 0 {
+                lines.push_str(&js("\n"));
+            }
+            lines.push_str(key);
+            lines.push_str(&js(" = "));
+            lines.push_str(self.tuning_value_cache.get_key(key).unwrap());
+        }
+        let mut data = JsObject::new();
+        data.insert("isTuningMode", JsValue::Bool(self.is_tuning_mode));
+        data.insert("values", JsValue::String(lines));
+        data.insert(
+            "position",
+            JsValue::Array(vec![JsValue::Number(x), JsValue::Number(y)]),
+        );
+        self.send_main("ask-open-tuning-context-menu", JsValue::Object(data));
+    }
+
+    fn set_tuning_mode_active(&mut self, env: &SidebarEnv<'_>, active: bool) {
+        self.is_tuning_mode = active;
+        for node in &mut self.nodes {
+            let Some(full_key) = node.full_key.clone() else {
+                continue;
+            };
+            let tunable = active && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+            match &mut node.value {
+                ValueState::Bool(state) => {
+                    state.tunable = tunable;
+                    if !tunable {
+                        self.tuning_value_cache.remove_key(&full_key);
+                    }
+                }
+                ValueState::Number(state) => {
+                    state.input_hidden = !tunable;
+                    state.span_hidden = tunable;
+                    if !tunable {
+                        self.tuning_value_cache.remove_key(&full_key);
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.tuning_button_active = active;
+    }
+
+    fn update_tuning_button(&mut self, env: &SidebarEnv<'_>) {
+        let tuner_available = env.tuner.is_some_and(|t| t.has_tunable_fields());
+        if self.tuning_button_hidden == tuner_available {
+            self.tuning_button_hidden = !tuner_available;
+            if !tuner_available {
+                self.set_tuning_mode_active(env, false);
+            }
+        }
+    }
+
+    /// Boolean svg click (tuning toggle).
+    pub fn svg_click(&mut self, env: &mut SidebarEnv<'_>, flat_index: usize) {
+        let Some(id) = self.flat_id(flat_index) else {
+            return;
+        };
+        let ValueState::Bool(state) = &mut self.nodes[id].value else {
+            return;
+        };
+        if !state.tunable {
+            return;
+        }
+        let value = state.fill.as_ref() != Some(&js("red"));
+        let Some(live_time) = env.selection.get_current_live_time() else {
+            return;
+        };
+        let full_key = self.nodes[id].full_key.clone().unwrap();
+        self.tuning_value_cache
+            .insert(full_key.clone(), js(if value { "true" } else { "false" }));
+        if let Some(tuner) = env.tuner {
+            tuner.publish(&full_key, &JsValue::Bool(value));
+        }
+        env.log.put_boolean(&full_key, live_time, value);
+    }
+
+    /// Number tuning input focus/blur/value/keydown (the DOM element's own state).
+    pub fn number_input_focus(&mut self, flat_index: usize, focused: bool) {
+        if let Some(id) = self.flat_id(flat_index) {
+            if let ValueState::Number(state) = &mut self.nodes[id].value {
+                state.focused = focused;
+            }
+        }
+    }
+
+    pub fn number_input_value(&mut self, flat_index: usize, value: JsString) {
+        if let Some(id) = self.flat_id(flat_index) {
+            if let ValueState::Number(state) = &mut self.nodes[id].value {
+                state.input_value = value;
+            }
+        }
+    }
+
+    pub fn number_input_key_down(&mut self, flat_index: usize, key: &str) {
+        if key == "Enter" {
+            self.number_input_focus(flat_index, false);
+        }
+    }
+
+    /// The 250 ms tuning-publish interval.
+    fn tuning_publish_tick(&mut self, env: &mut SidebarEnv<'_>) {
+        if !self.is_tuning_mode {
+            return;
+        }
+        for node in &mut self.nodes {
+            let ValueState::Number(state) = &mut node.value else {
+                continue;
+            };
+            if state.focused {
+                continue;
+            }
+            let value = number::to_number(state.input_value.units());
+            let has_value = !state.input_value.is_empty() && value.is_finite();
+            let Some(full_key) = node.full_key.clone() else {
+                continue;
+            };
+            if has_value {
+                self.tuning_value_cache
+                    .insert(full_key.clone(), state.input_value.clone());
+                if let Some(live_time) = env.selection.get_current_live_time() {
+                    if let Some(tuner) = env.tuner {
+                        tuner.publish(&full_key, &JsValue::Number(value));
+                    }
+                    env.log.put_number(&full_key, live_time, value);
+                }
+            } else if state.last_has_value {
+                self.tuning_value_cache.remove_key(&full_key);
+                if let Some(tuner) = env.tuner {
+                    tuner.unpublish(&full_key);
+                }
+            }
+            state.last_has_value = has_value;
+        }
+    }
+
+    // --- Periodic ---
+
+    /// `periodic`: `searchPeriodic`, `updateTitle`, `updateValues`, `updateTuningButton`.
+    /// `rects` are `.field-item` rects in display order (one per materialized row).
+    pub fn periodic(&mut self, env: &mut SidebarEnv<'_>, rects: &[RowRect]) {
+        self.search_periodic();
+        self.update_title(env);
+        self.update_values(env, rects);
+        self.update_tuning_button(env);
+    }
+
+    fn update_title(&mut self, env: &SidebarEnv<'_>) {
+        let mut range = env.log.get_timestamp_range();
+        if let Some(live_time) = env.selection.get_current_live_time() {
+            range[1] = live_time;
+        }
+        let title = if self.field_count == 0 {
+            js(OPEN_LOG_TITLE)
+        } else {
+            let mut runtime = range[1] - range[0];
+            let mut unit = "s";
+            if runtime > 120.0 {
+                runtime /= 60.0;
+                unit = "m";
+            }
+            if runtime > 120.0 {
+                runtime /= 60.0;
+                unit = "h";
+            }
+            let mut title = JsString::from(number::to_string(self.field_count as f64));
+            title.push_str(&js(" field"));
+            if self.field_count != 1 {
+                title.push_str(&js("s"));
+            }
+            title.push_str(&js(", "));
+            title.push_str(&JsString::from(number::to_string(floor(runtime))));
+            title.push_str(&js(unit));
+            title.push_str(&js(" runtime"));
+            title
+        };
+        if title != self.title_text {
+            self.title_text = title;
+        }
+    }
+
+    fn update_values(&mut self, env: &mut SidebarEnv<'_>, rects: &[RowRect]) {
+        let mode = env.selection.get_mode();
+        let hovered = env.selection.get_hovered_time();
+        let selected = env.selection.get_selected_time();
+        let time = if mode == SelectionMode::Playback || mode == SelectionMode::Locked {
+            selected
+        } else if hovered.is_some() {
+            hovered
+        } else {
+            selected
+        };
+        for (flat, id) in self.dfs_ids().into_iter().enumerate() {
+            let Some(rect) = rects.get(flat).copied() else {
+                break;
+            };
+            self.update_value(env, id, time, rect);
+        }
+    }
+
+    fn update_value(&mut self, env: &mut SidebarEnv<'_>, id: usize, time: Option<f64>, rect: RowRect) {
+        if !rect.on_screen(env.inner_height) {
+            return;
+        }
+        let Some(full_key) = self.nodes[id].full_key.clone() else {
+            return;
+        };
+        match &mut self.nodes[id].value {
+            ValueState::Bool(state) => {
+                let value = time.and_then(|t| get_value_at::<bool>(env.log, &full_key, t, None));
+                if !state.first_update && value == state.last_value {
+                    return;
+                }
+                state.first_update = false;
+                state.last_value = value;
+                if let Some(v) = value {
+                    state.fill = Some(js(if v {
+                        if env.dark_theme { "lightgreen" } else { "green" }
+                    } else {
+                        "red"
+                    }));
+                    state.line_hidden = Some(v);
+                }
+                self.nodes[id].value_element_hidden = value.is_none();
+            }
+            ValueState::Number(state) => {
+                let value = time.and_then(|t| get_value_at::<f64>(env.log, &full_key, t, None));
+                if !state.first_update && value == state.last_value {
+                    return;
+                }
+                state.first_update = false;
+                state.last_value = value;
+                let value_str = match value {
+                    None => JsString::new(),
+                    Some(v) if abs(v) < 1e-9 => js("0"),
+                    Some(v) if abs(v) >= 1e5 || abs(v) < 1e-3 => {
+                        number::to_exponential(v, Some(1.0))
+                            .map(|text| {
+                                JsString::from(text)
+                                    .replace(&js("+"), &js(""))
+                                    .unwrap()
+                            })
+                            .unwrap_or_default()
+                    }
+                    Some(v) if rem(v, 1.0) == 0.0 => JsString::from(number::to_string(v)),
+                    Some(v) => JsString::from(number::to_fixed(v, 3.0).unwrap()),
+                };
+                state.placeholder = value_str.clone();
+                state.span_text = value_str;
+            }
+            ValueState::Text(state) => {
+                let value =
+                    time.and_then(|t| get_value_at::<JsString>(env.log, &full_key, t, None));
+                if !state.first_update
+                    && value == state.last_value
+                    && self.sidebar_width == state.last_sidebar_width
+                {
+                    return;
+                }
+                state.first_update = false;
+                state.last_value = value.clone();
+                state.last_sidebar_width = self.sidebar_width;
+                let value_str = match value {
+                    None => JsString::new(),
+                    Some(v) => {
+                        let max_characters = round(self.sidebar_width * 0.03);
+                        if (v.len() as f64) > max_characters {
+                            let mut truncated =
+                                v.substring(0.0, Some(max_characters - 1.0));
+                            truncated.push_str(&js("\u{2026}"));
+                            truncated
+                        } else {
+                            v
+                        }
+                    }
+                };
+                state.text = value_str;
+            }
+            ValueState::None => {}
+        }
+    }
+
+    // --- getActiveFields ---
+
+    /// `getActiveFields`. `rects` are `.field-item` rects in display order.
+    pub fn get_active_fields(&mut self, env: &SidebarEnv<'_>, rects: &[RowRect]) -> IndexSet<JsString> {
+        if self.sidebar_width <= 0.0 {
+            return IndexSet::new();
+        }
+        let dfs_index = self.dfs_index_map();
+        for id in 0..self.nodes.len() {
+            let Some(&flat) = dfs_index.get(&id) else {
+                continue;
+            };
+            let Some(rect) = rects.get(flat).copied() else {
+                continue;
+            };
+            let expanded = rect.height > 0.0;
+            let on_screen = rect.on_screen(env.inner_height);
+            let node = &self.nodes[id];
+            if let Some(full_key) = node.full_key.clone() {
+                let mut is_active = false;
+                let r#type = env.log.get_type(&full_key);
+                let structured_type = env.log.get_structured_type(&full_key);
+                let wpilib_type = env.log.get_wpilib_type(&full_key);
+                if expanded
+                    && (r#type == Some(LoggableType::BooleanArray)
+                        || r#type == Some(LoggableType::NumberArray)
+                        || r#type == Some(LoggableType::StringArray)
+                        || (r#type != Some(LoggableType::Empty) && structured_type.is_some())
+                        || (r#type == Some(LoggableType::Raw)
+                            && wpilib_type.is_some_and(|t| custom_schemas::has(t))))
+                {
+                    is_active = true;
+                }
+                if on_screen
+                    && (r#type == Some(LoggableType::Number)
+                        || r#type == Some(LoggableType::Boolean)
+                        || r#type == Some(LoggableType::String))
+                {
+                    is_active = true;
+                }
+                if is_active {
+                    self.active_fields.insert(full_key);
+                } else {
+                    self.active_fields.shift_remove(&full_key);
+                }
+            }
+            if let Some(type_child) = self.nodes[id].tree_children.get(TYPE_KEY) {
+                if let Some(type_key) = type_child.full_key.clone() {
+                    if expanded {
+                        self.active_fields.insert(type_key);
+                    } else {
+                        self.active_fields.shift_remove(&type_key);
+                    }
+                }
+            }
+        }
+        self.active_fields.clone()
+    }
+
+    // --- refresh & row construction ---
+
+    /// `refresh`.
+    pub fn refresh(&mut self, env: &mut SidebarEnv<'_>, force: bool) -> Attempt<()> {
+        let field_keys = env.log.get_field_keys();
+        let fields_changed = force || !arrays_equal(&field_keys, &self.last_field_keys);
+        self.last_field_keys = field_keys;
+        if !fields_changed {
+            for id in 0..self.nodes.len() {
+                if self.nodes[id].full_key.is_some() {
+                    self.update_type_warning(env, id);
+                }
+            }
+            for id in 0..self.nodes.len() {
+                if self.nodes[id].full_key.is_some() {
+                    self.update_metadata(env, id);
+                }
+            }
+            for id in 0..self.nodes.len() {
+                if self.nodes[id].full_key.is_some() {
+                    self.update_loading(env, id);
+                }
+            }
+            return Ok(());
+        }
+        self.field_count = env.log.get_field_count();
+        self.nodes.clear();
+        self.roots.clear();
+        self.active_fields.clear();
+        let mut tree = env.log.get_field_tree(true, &JsString::new());
+        let root_keys: Vec<JsString> = tree
+            .keys()
+            .filter(|key| !starts_with(key, "."))
+            .cloned()
+            .collect();
+        if root_keys.len() == 1 && tree.get_key(&root_keys[0]).unwrap().full_key.is_none() {
+            tree = tree.get_key(&root_keys[0]).unwrap().children.clone();
+        }
+        let secondary_keys: Vec<JsString> = tree
+            .keys()
+            .filter(|key| !starts_with(key, "."))
+            .cloned()
+            .collect();
+        if secondary_keys.len() == 1
+            && secondary_keys[0] == js("Dscomm")
+            && tree.get_key(&secondary_keys[0]).unwrap().full_key.is_none()
+        {
+            tree = tree.get_key(&secondary_keys[0]).unwrap().children.clone();
+        }
+        let mut keys: Vec<JsString> = tree
+            .keys()
+            .filter(|key| !is_hidden_key(key))
+            .cloned()
+            .collect();
+        array_sort(&mut keys, |a, b| sort_keys(a, b, true));
+        for key in keys {
+            let node = tree.get_key(&key).unwrap().clone();
+            let mut full_title = js("/");
+            full_title.push_str(&key);
+            self.add_fields(env, key, full_title, &node, None, 0.0, false, 0.0)?;
+        }
+        self.update_search_results(env);
+        Ok(())
+    }
+
+    fn update_type_warning(&mut self, env: &SidebarEnv<'_>, id: usize) {
+        let Some(full_key) = self.nodes[id].full_key.clone() else {
+            return;
+        };
+        let hidden = !env.log.get_type_warning(&full_key);
+        let node = &mut self.nodes[id];
+        if hidden != node.warning_last_hidden {
+            node.warning_last_hidden = hidden;
+            node.warning_hidden = hidden;
+        }
+    }
+
+    fn update_metadata(&mut self, env: &SidebarEnv<'_>, id: usize) {
+        let Some(full_key) = self.nodes[id].full_key.clone() else {
+            return;
+        };
+        let metadata = env.log.get_metadata_string(&full_key);
+        if Some(&metadata) == self.nodes[id].metadata_last.as_ref() {
+            return;
+        }
+        self.nodes[id].metadata_last = Some(metadata.clone());
+        // `Object.keys(parsed)` throws for null, enumerates string/array indices, and is
+        // empty for numbers and booleans.
+        let title = match json::parse(&metadata) {
+            Ok(parsed) => {
+                let mut entries: Vec<(JsString, JsValue)> = match &parsed {
+                    JsValue::Object(obj) => obj
+                        .keys()
+                        .map(|key| {
+                            (
+                                key.clone(),
+                                obj.get_key(key).cloned().unwrap_or(JsValue::Undefined),
+                            )
+                        })
+                        .collect(),
+                    JsValue::String(text) => (0..text.len())
+                        .map(|index| {
+                            (
+                                JsString::from(index.to_string()),
+                                JsValue::String(
+                                    text.substring(index as f64, Some(index as f64 + 1.0)),
+                                ),
+                            )
+                        })
+                        .collect(),
+                    JsValue::Array(items) => items
+                        .iter()
+                        .enumerate()
+                        .map(|(index, value)| {
+                            (JsString::from(index.to_string()), value.clone())
+                        })
+                        .collect(),
+                    JsValue::Null | JsValue::Undefined => {
+                        self.nodes[id].label_title = Some(metadata);
+                        return;
+                    }
+                    _ => Vec::new(),
+                };
+                array_sort(&mut entries, |a, b| code_unit_cmp(a.0.units(), b.0.units()));
+                let mut text = JsString::new();
+                for (index, (key, value)) in entries.iter().enumerate() {
+                    if index > 0 {
+                        text.push_str(&js("\n"));
+                    }
+                    text.push_str(key);
+                    text.push_str(&js(": "));
+                    text.push_str(&js_to_string(value));
+                }
+                text
+            }
+            Err(_) => metadata,
+        };
+        self.nodes[id].label_title = Some(title);
+    }
+
+    fn update_loading(&mut self, env: &SidebarEnv<'_>, id: usize) {
+        let Some(full_key) = &self.nodes[id].full_key else {
+            return;
+        };
+        let is_loading = env.loading_fields.contains(full_key);
+        let was_loading = self.nodes[id].label_loading;
+        if is_loading && !was_loading {
+            self.nodes[id].label_loading = true;
+        } else if !is_loading && was_loading {
+            self.nodes[id].label_loading = false;
+        }
+    }
+
+    /// `addFields` (recursive child creation included).
+    fn add_fields(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        title: JsString,
+        full_title: JsString,
+        field: &LogFieldTree,
+        parent: Option<usize>,
+        indent: f64,
+        generated: bool,
+        now: f64,
+    ) -> Attempt<usize> {
+        let has_children = !field.children.is_empty();
+        let children_generated = generated
+            || (field
+                .full_key
+                .as_ref()
+                .is_some_and(|key| env.log.is_generated_parent(key)));
+        let id = self.nodes.len();
+        let node_id = self.next_node_id;
+        self.next_node_id += 1;
+        let node = Node {
+            id: node_id,
+            title: title.clone(),
+            full_title: full_title.clone(),
+            full_key: field.full_key.clone(),
+            tree_children: field.children.clone(),
+            has_children,
+            children_generated,
+            indent,
+            generated,
+            known_label: (indent == 0.0
+                || (indent == INDENT_SIZE_PX
+                    && (starts_with(&full_title, "/AdvantageKit")
+                        || starts_with(&full_title, "/Log"))))
+                && (KNOWN_KEYS.iter().any(|k| title == js(k))
+                    || starts_with(&title, MERGED_KEY)),
+            label_loading: false,
+            label_bold: false,
+            label_title: None,
+            type_label: None,
+            warning_hidden: false,
+            warning_last_hidden: false,
+            highlighted: false,
+            mouse_down: None,
+            metadata_last: None,
+            expanded: false,
+            children_materialized: false,
+            children: Vec::new(),
+            value_element_hidden: false,
+            value: ValueState::None,
+        };
+        self.nodes.push(node);
+        match parent {
+            Some(parent) => self.nodes[parent].children.push(id),
+            None => self.roots.push(id),
+        }
+        if let Some(full_key) = field.full_key.clone() {
+            self.update_type_warning(env, id);
+            if let Some(structured_type) = env.log.get_structured_type(&full_key) {
+                let mut label = js(" \u{2013} ");
+                label.push_str(structured_type);
+                self.nodes[id].type_label = Some(label);
+            }
+            if let Err(outcome) = self.highlight_for_search(id, now, env.can_scroll_into_view) {
+                return Err(outcome);
+            }
+            match env.log.get_type(&full_key) {
+                Some(LoggableType::Boolean) => {
+                    let mut state = BoolState {
+                        first_update: true,
+                        ..Default::default()
+                    };
+                    state.tunable = self.is_tuning_mode
+                        && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    if !state.tunable {
+                        self.tuning_value_cache.remove_key(&full_key);
+                    }
+                    self.nodes[id].value = ValueState::Bool(state);
+                }
+                Some(LoggableType::Number) => {
+                    let mut state = NumberState {
+                        input_hidden: true,
+                        first_update: true,
+                        ..Default::default()
+                    };
+                    let tunable = self.is_tuning_mode
+                        && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    state.input_hidden = !tunable;
+                    state.span_hidden = tunable;
+                    if !tunable {
+                        self.tuning_value_cache.remove_key(&full_key);
+                    }
+                    if let Some(cached) = self.tuning_value_cache.get_key(&full_key) {
+                        state.input_value = cached.clone();
+                    }
+                    self.nodes[id].value = ValueState::Number(Box::new(state));
+                }
+                Some(LoggableType::String) => {
+                    self.nodes[id].value = ValueState::Text(TextState {
+                        first_update: true,
+                        ..Default::default()
+                    });
+                }
+                _ => {}
+            }
+            self.update_metadata(env, id);
+            self.update_loading(env, id);
+        } else if starts_with(&title, MERGED_KEY) && indent == 0.0 {
+            let merge_index = number::to_number(title.slice(3.0, None).units());
+            let filenames = (self.get_filenames)();
+            if merge_index < filenames.len() as f64 && merge_index >= 0.0 {
+                let mut label = js(" \u{2013} ");
+                label.push_str(&filenames[merge_index as usize]);
+                self.nodes[id].type_label = Some(label);
+            }
+        }
+        if has_children {
+            self.expand_for_search(env, id, now)?;
+            if self.expanded_fields.contains(&self.nodes[id].full_title) {
+                self.set_expanded(env, id, true, now)?;
+            }
+        }
+        Ok(id)
+    }
+
+    // --- View data ---
+
+    /// Arena ids in display order (DFS pre-order of materialized rows).
+    fn dfs_ids(&self) -> Vec<usize> {
+        let mut order = Vec::new();
+        let mut stack: Vec<usize> = self.roots.iter().rev().copied().collect();
+        while let Some(id) = stack.pop() {
+            order.push(id);
+            for &child in self.nodes[id].children.iter().rev() {
+                stack.push(child);
+            }
+        }
+        order
+    }
+
+    fn dfs_index_map(&self) -> std::collections::HashMap<usize, usize> {
+        self.dfs_ids().into_iter().enumerate().map(|(flat, id)| (id, flat)).collect()
+    }
+
+    fn flat_id(&self, flat_index: usize) -> Option<usize> {
+        self.dfs_ids().get(flat_index).copied()
+    }
+
+    /// Rows in display order.
+    pub fn rows(&self) -> Vec<SidebarRow> {
+        self.dfs_ids()
+            .into_iter()
+            .map(|id| {
+                let node = &self.nodes[id];
+                SidebarRow {
+                    title: node.title.clone(),
+                    full_title: node.full_title.clone(),
+                    full_key: node.full_key.clone(),
+                    indent: node.indent,
+                    generated: node.generated,
+                    known_label: node.known_label,
+                    expanded: node.expanded,
+                    has_children: node.has_children,
+                    label_loading: node.label_loading,
+                    label_bold: node.label_bold,
+                    label_title: node.label_title.clone(),
+                    type_label: node.type_label.clone(),
+                    warning_hidden: node.warning_hidden,
+                    warning_title: js(TYPE_WARNING_TEXT),
+                    highlighted: node.highlighted,
+                    value_hidden: node.value_element_hidden,
+                    value: match &node.value {
+                        ValueState::None => RowValue::None,
+                        ValueState::Bool(state) => RowValue::Bool {
+                            fill: state.fill.clone(),
+                            line_hidden: state.line_hidden,
+                            tunable: state.tunable,
+                        },
+                        ValueState::Number(state) => RowValue::Number {
+                            input_value: state.input_value.clone(),
+                            input_hidden: state.input_hidden,
+                            span_hidden: state.span_hidden,
+                            span_text: state.span_text.clone(),
+                            placeholder: state.placeholder.clone(),
+                        },
+                        ValueState::Text(state) => RowValue::Text {
+                            text: state.text.clone(),
+                        },
+                    },
+                }
+            })
+            .collect()
+    }
+
+    pub fn title_text(&self) -> &JsString {
+        &self.title_text
+    }
+
+    pub fn search_results_hidden(&self) -> bool {
+        self.search_results_hidden
+    }
+
+    /// `.search-results-item` rows: `(key, hovered)`.
+    pub fn search_items(&self) -> Vec<(JsString, bool)> {
+        self.search_results
+            .iter()
+            .cloned()
+            .zip(self.search_items_hovered.iter().copied())
+            .collect()
+    }
+
+    pub fn search_value(&self) -> &JsString {
+        &self.search_value
+    }
+
+    pub fn search_focused(&self) -> bool {
+        self.search_focused
+    }
+
+    pub fn select_group(&self) -> &[JsString] {
+        &self.select_group
+    }
+
+    pub fn drag_item(&self) -> Option<&DragEvent> {
+        self.drag_item.as_ref()
+    }
+
+    pub fn tuning_button_hidden(&self) -> bool {
+        self.tuning_button_hidden
+    }
+
+    pub fn tuning_button_active(&self) -> bool {
+        self.tuning_button_active
+    }
+
+    pub fn is_tuning_mode(&self) -> bool {
+        self.is_tuning_mode
+    }
+
+    pub fn tuning_value_cache(&self) -> &JsObject<JsString> {
+        &self.tuning_value_cache
+    }
+
+    pub fn expanded_fields(&self) -> &IndexSet<JsString> {
+        &self.expanded_fields
+    }
+
+    pub fn field_count(&self) -> usize {
+        self.field_count
+    }
+
+    pub fn sidebar_width(&self) -> f64 {
+        self.sidebar_width
+    }
+
+    pub fn shadow_shown(&self) -> bool {
+        self.shadow_shown
+    }
+}
+
+/// `sortKeys`.
+pub fn sort_keys(a: &JsString, b: &JsString, use_known: bool) -> Ordering {
+    if use_known {
+        let merged_a = starts_with(a, MERGED_KEY);
+        let merged_b = starts_with(b, MERGED_KEY);
+        if merged_a && !merged_b {
+            return Ordering::Greater;
+        }
+        if !merged_a && merged_b {
+            return Ordering::Less;
+        }
+        let known_a = KNOWN_KEYS.iter().any(|k| a == &js(k));
+        let known_b = KNOWN_KEYS.iter().any(|k| b == &js(k));
+        if known_a && !known_b {
+            return Ordering::Greater;
+        }
+        if !known_a && known_b {
+            return Ordering::Less;
+        }
+    }
+    locale_compare_numeric(a, b)
+}
+
+/// `String(value)` for JSON-shaped values (metadata tooltips).
+fn js_to_string(value: &JsValue) -> JsString {
+    match value {
+        JsValue::Undefined => js("undefined"),
+        JsValue::Null => js("null"),
+        JsValue::Bool(v) => js(if *v { "true" } else { "false" }),
+        JsValue::Number(v) => JsString::from(number::to_string(*v)),
+        JsValue::String(v) => v.clone(),
+        JsValue::Array(items) => {
+            let mut text = JsString::new();
+            for (index, item) in items.iter().enumerate() {
+                if index > 0 {
+                    text.push_str(&js(","));
+                }
+                text.push_str(&js_to_string(item));
+            }
+            text
+        }
+        _ => js("[object Object]"),
+    }
+}
