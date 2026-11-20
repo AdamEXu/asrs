@@ -43,6 +43,10 @@ interface Connection {
   announced: Set<string>;
 }
 
+function isObject(value: unknown): value is { [key: string]: any } {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function packValue(type: string, value: any, where: string): Packed {
   const check = (ok: boolean) => {
     if (!ok) throw new Error(`${where}: ${JSON.stringify(value)} is not a ${type} value`);
@@ -148,6 +152,7 @@ export class NT4Server extends MockServer {
   private addTopic(name: string, type: string, properties: { [key: string]: unknown }): Topic {
     if (typeof name !== "string" || typeof type !== "string") throw new Error("nt4: topic needs a name and a type");
     if (this.topic(name) !== undefined) throw new Error(`nt4: topic ${name} exists`);
+    if (!isObject(properties)) throw new Error(`nt4: topic ${name} properties must be an object`);
     checkJsonNumbers(properties, `nt4 topic ${name} properties`);
     const topic: Topic = { id: this.nextTopicId++, name, type, properties: { ...properties }, value: null };
     this.topics.push(topic);
@@ -183,7 +188,8 @@ export class NT4Server extends MockServer {
   }
 
   private valueArray(topic: Topic, ts: number, packed: Packed): Packed {
-    return { arr: [{ int: topic.id }, number(ts), { int: TYPE_INDEX[topic.type] ?? 5 }, packed] };
+    const index = Object.hasOwn(TYPE_INDEX, topic.type) ? TYPE_INDEX[topic.type] : 5;
+    return { arr: [{ int: topic.id }, number(ts), { int: index }, packed] };
   }
 
   private announceToAll(topic: Topic): void {
@@ -231,9 +237,9 @@ export class NT4Server extends MockServer {
     }
     if (!Array.isArray(messages)) return;
     for (const message of messages) {
-      if (message === null || typeof message !== "object") continue;
+      if (!isObject(message)) continue;
       const params = message.params;
-      if (params === null || typeof params !== "object") continue;
+      if (!isObject(params)) continue;
       switch (message.method) {
         case "subscribe":
           this.subscribe(id, conn, params);
@@ -243,13 +249,13 @@ export class NT4Server extends MockServer {
           break;
         case "publish":
           if (typeof params.name === "string" && typeof params.type === "string" && this.topic(params.name) === undefined) {
-            const properties = params.properties !== null && typeof params.properties === "object" ? params.properties : {};
+            const properties = isObject(params.properties) ? params.properties : {};
             this.announceToAll(this.addTopic(params.name, params.type, properties));
           }
           break;
         case "setproperties": {
           const topic = typeof params.name === "string" ? this.topic(params.name) : undefined;
-          if (topic !== undefined && params.update !== null && typeof params.update === "object") {
+          if (topic !== undefined && isObject(params.update)) {
             this.updateProperties(topic, params.update);
           }
           break;
@@ -260,7 +266,7 @@ export class NT4Server extends MockServer {
 
   private subscribe(id: number, conn: Connection, params: any): void {
     if (typeof params.subuid !== "number" || !Array.isArray(params.topics)) return;
-    const options = params.options !== null && typeof params.options === "object" ? params.options : {};
+    const options = isObject(params.options) ? params.options : {};
     const sub: Subscription = {
       topics: params.topics.filter((t: unknown) => typeof t === "string"),
       prefix: options.prefix === true,
@@ -310,6 +316,7 @@ export class NT4Server extends MockServer {
         break;
       }
       case "properties":
+        if (!isObject(op[2])) throw new Error("nt4: properties needs an update object");
         checkJsonNumbers(op[2], "nt4 properties");
         this.updateProperties(this.known(op[1]), op[2]);
         break;

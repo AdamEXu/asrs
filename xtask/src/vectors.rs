@@ -1014,7 +1014,9 @@ mod tests {
         }
 
         fn write(&self, rel: &str, text: &str) {
-            fs::write(self.0.join(rel), text).unwrap();
+            let path = self.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
         }
     }
 

@@ -61,14 +61,15 @@ export function urlQuery(url: string): Map<string, string> {
 
 /**
  * Rejects JSON numbers that JS and Rust would print differently, so every JSON text a mock
- * server writes is the same on both sides: safe integers, and other finite numbers with
- * magnitude in [1e-6, 1e21). `-0` is out.
+ * server writes is the same on both sides: safe integers, and non-integers with magnitude in
+ * [1e-6, 1e21). `-0` is out.
  */
 export function checkJsonNumbers(value: unknown, where: string): void {
   if (typeof value === "number") {
     const ok =
       !Object.is(value, -0) &&
-      (Number.isSafeInteger(value) || (Number.isFinite(value) && Math.abs(value) >= 1e-6 && Math.abs(value) < 1e21));
+      (Number.isSafeInteger(value) ||
+        (Number.isFinite(value) && !Number.isInteger(value) && Math.abs(value) >= 1e-6 && Math.abs(value) < 1e21));
     if (!ok) throw new Error(`${where}: number ${value} cannot be written identically by both mocks`);
   } else if (Array.isArray(value)) {
     value.forEach((item, i) => checkJsonNumbers(item, `${where}[${i}]`));

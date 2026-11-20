@@ -87,7 +87,11 @@ export class PhoenixServer extends MockServer {
 
   private checkDevices(devices: PhoenixDevice[]): PhoenixDevice[] {
     checkJsonNumbers(devices, "phoenix devices");
-    return devices.map((d) => ({ device: d.device, signals: d.signals ?? [], values: d.values ?? {} }));
+    return devices.map((d) => {
+      const values = d.values ?? {};
+      if (Object.values(values).some((list) => !Array.isArray(list))) throw new Error("phoenix: values must map ids to arrays");
+      return { device: d.device, signals: d.signals ?? [], values };
+    });
   }
 
   protected ports(): number[] {
@@ -133,7 +137,7 @@ export class PhoenixServer extends MockServer {
           if (us < 0) continue;
           const ordinal = Math.floor(us / this.stepUs);
           const signals = known.map((id) => {
-            const list = device.values[id] ?? [];
+            const list = Object.hasOwn(device.values, id) ? device.values[id] : [];
             const value = list.length === 0 ? 0 : list[ordinal % list.length];
             return `${JSON.stringify(id)}:${JSON.stringify(value)}`;
           });
