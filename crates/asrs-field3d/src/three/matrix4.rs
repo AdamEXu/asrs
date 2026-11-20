@@ -538,6 +538,15 @@ impl Matrix4 {
         ])
     }
 
+    /// `PerspectiveCamera.updateProjectionMatrix` without a view offset or film offset.
+    pub fn perspective_camera(fov: f64, aspect: f64, near: f64, far: f64, zoom: f64) -> Self {
+        let top = near * math::tan(super::math_utils::DEG2RAD * 0.5 * fov) / zoom;
+        let height = 2.0 * top;
+        let width = aspect * height;
+        let left = -0.5 * width;
+        Matrix4::make_perspective(left, left + width, top, top - height, near, far)
+    }
+
     pub fn make_orthographic(
         left: f64,
         right: f64,

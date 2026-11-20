@@ -70,11 +70,6 @@ impl Object3D {
         self.set_rotation(Euler::from_quaternion(q, self.rotation.order));
     }
 
-    /// `rotation.setFromRotationMatrix(m)`.
-    pub fn set_rotation_from_matrix_euler(&mut self, m: &Matrix4) {
-        self.set_rotation(Euler::from_rotation_matrix(m, self.rotation.order));
-    }
-
     /// `setRotationFromMatrix(m)`, which writes the quaternion.
     pub fn set_rotation_from_matrix(&mut self, m: &Matrix4) {
         self.set_quaternion(Quaternion::from_rotation_matrix(m));

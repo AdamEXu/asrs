@@ -141,6 +141,39 @@ impl BufferGeometry {
         self
     }
 
+    /// `toNonIndexed`. A geometry without an index is returned unchanged, as three returns
+    /// `this`.
+    pub fn to_non_indexed(&self) -> BufferGeometry {
+        let Some(index) = &self.index else {
+            return self.clone();
+        };
+        let mut out = BufferGeometry::new();
+        for (name, attribute) in &self.attributes {
+            let item_size = attribute.item_size;
+            let source = &attribute.array;
+            let mut array = ArrayData::zeroed(source.kind(), index.array.len() * item_size);
+            let mut index2 = 0;
+            for i in 0..index.array.len() {
+                let start = index.array.get(i) as usize * item_size;
+                for j in 0..item_size {
+                    let value = if start + j < source.len() {
+                        source.get(start + j)
+                    } else {
+                        f64::NAN
+                    };
+                    array.set(index2, value);
+                    index2 += 1;
+                }
+            }
+            out.set_attribute(
+                name,
+                BufferAttribute::new(array, item_size, attribute.normalized),
+            );
+        }
+        out.groups = self.groups.clone();
+        out
+    }
+
     pub fn compute_bounding_box(&mut self) {
         self.bounding_box = Some(match self.attribute("position") {
             Some(position) => Box3::from_buffer_attribute(position),

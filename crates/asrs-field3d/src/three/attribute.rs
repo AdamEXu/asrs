@@ -5,6 +5,7 @@ use super::{Matrix3, Matrix4, Vector3};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArrayKind {
     Float32,
+    Float64,
     Uint8,
     Int8,
     Uint16,
@@ -18,6 +19,7 @@ impl ArrayKind {
     pub fn name(self) -> &'static str {
         match self {
             ArrayKind::Float32 => "Float32Array",
+            ArrayKind::Float64 => "Float64Array",
             ArrayKind::Uint8 => "Uint8Array",
             ArrayKind::Int8 => "Int8Array",
             ArrayKind::Uint16 => "Uint16Array",
@@ -32,6 +34,7 @@ impl ArrayKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArrayData {
     Float32(Vec<f32>),
+    Float64(Vec<f64>),
     Uint8(Vec<u8>),
     Int8(Vec<i8>),
     Uint16(Vec<u16>),
@@ -45,6 +48,7 @@ impl ArrayData {
     pub fn zeroed(kind: ArrayKind, len: usize) -> Self {
         match kind {
             ArrayKind::Float32 => ArrayData::Float32(vec![0.0; len]),
+            ArrayKind::Float64 => ArrayData::Float64(vec![0.0; len]),
             ArrayKind::Uint8 => ArrayData::Uint8(vec![0; len]),
             ArrayKind::Int8 => ArrayData::Int8(vec![0; len]),
             ArrayKind::Uint16 => ArrayData::Uint16(vec![0; len]),
@@ -66,6 +70,7 @@ impl ArrayData {
     pub fn kind(&self) -> ArrayKind {
         match self {
             ArrayData::Float32(_) => ArrayKind::Float32,
+            ArrayData::Float64(_) => ArrayKind::Float64,
             ArrayData::Uint8(_) => ArrayKind::Uint8,
             ArrayData::Int8(_) => ArrayKind::Int8,
             ArrayData::Uint16(_) => ArrayKind::Uint16,
@@ -78,6 +83,7 @@ impl ArrayData {
     pub fn len(&self) -> usize {
         match self {
             ArrayData::Float32(a) => a.len(),
+            ArrayData::Float64(a) => a.len(),
             ArrayData::Uint8(a) => a.len(),
             ArrayData::Int8(a) => a.len(),
             ArrayData::Uint16(a) => a.len(),
@@ -94,6 +100,7 @@ impl ArrayData {
     pub fn get(&self, i: usize) -> f64 {
         match self {
             ArrayData::Float32(a) => f64::from(a[i]),
+            ArrayData::Float64(a) => a[i],
             ArrayData::Uint8(a) => f64::from(a[i]),
             ArrayData::Int8(a) => f64::from(a[i]),
             ArrayData::Uint16(a) => f64::from(a[i]),
@@ -106,6 +113,7 @@ impl ArrayData {
     pub fn set(&mut self, i: usize, v: f64) {
         match self {
             ArrayData::Float32(a) => a[i] = v as f32,
+            ArrayData::Float64(a) => a[i] = v,
             ArrayData::Uint8(a) => a[i] = math::to_uint8(v),
             ArrayData::Int8(a) => a[i] = math::to_int8(v),
             ArrayData::Uint16(a) => a[i] = math::to_uint16(v),
@@ -122,6 +130,7 @@ impl ArrayData {
         }
         match (self, source) {
             (ArrayData::Float32(d), ArrayData::Float32(s)) => copy(d, s, offset),
+            (ArrayData::Float64(d), ArrayData::Float64(s)) => copy(d, s, offset),
             (ArrayData::Uint8(d), ArrayData::Uint8(s)) => copy(d, s, offset),
             (ArrayData::Int8(d), ArrayData::Int8(s)) => copy(d, s, offset),
             (ArrayData::Uint16(d), ArrayData::Uint16(s)) => copy(d, s, offset),
@@ -140,7 +149,7 @@ impl ArrayData {
 /// `MathUtils.denormalize`.
 fn denormalize(value: f64, kind: ArrayKind) -> f64 {
     match kind {
-        ArrayKind::Float32 => value,
+        ArrayKind::Float32 | ArrayKind::Float64 => value,
         ArrayKind::Uint32 => value / 4294967295.0,
         ArrayKind::Uint16 => value / 65535.0,
         ArrayKind::Uint8 => value / 255.0,
@@ -153,7 +162,7 @@ fn denormalize(value: f64, kind: ArrayKind) -> f64 {
 /// `MathUtils.normalize`.
 fn normalize(value: f64, kind: ArrayKind) -> f64 {
     match kind {
-        ArrayKind::Float32 => value,
+        ArrayKind::Float32 | ArrayKind::Float64 => value,
         ArrayKind::Uint32 => math::round(value * 4294967295.0),
         ArrayKind::Uint16 => math::round(value * 65535.0),
         ArrayKind::Uint8 => math::round(value * 255.0),
