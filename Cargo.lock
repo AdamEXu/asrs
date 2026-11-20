@@ -288,6 +288,7 @@ version = "0.1.0"
 name = "asrs-cli"
 version = "0.1.0"
 dependencies = [
+ "asrs-js",
  "asrs-parity",
 ]
 

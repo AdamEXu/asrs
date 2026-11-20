@@ -690,6 +690,13 @@ fn operands(rng: &mut Rng, domains: &[Domain], out: &mut Vec<f64>) {
             _ => first * pick(&[0.5, 2.0, 1e-20, 1e20, 3.0], rng),
         };
     }
+    if rng.below(64) == 0 {
+        for v in &mut out[start..] {
+            if rng.below(2) == 0 {
+                *v = f64::from_bits(0x7ff8_0000_0000_0000 | rng.next_u64() & 0x8007_ffff_ffff_ffff);
+            }
+        }
+    }
 }
 
 fn electron() -> PathBuf {

@@ -15,6 +15,18 @@
       "content": "3bf51e863655d3d2",
       "generator": "03c32aa3f71b8809",
       "spec": "parity/specs/cve1/torture.entry.json"
+    },
+    "js/math": {
+      "cases": 30547,
+      "content": "bc953b36ab0bd1da",
+      "generator": "845f22f0d4165544",
+      "spec": "parity/specs/js/math.jsonl"
+    },
+    "js/math-ops": {
+      "cases": 5311,
+      "content": "237e0009568aa98c",
+      "generator": "c2acf6130eebd08e",
+      "spec": "parity/specs/js/math-ops.jsonl"
     }
   }
 }

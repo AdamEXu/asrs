@@ -633,7 +633,8 @@ pub fn atan2(y: f64, x: f64) -> f64 {
     if (ix as u32 | ((lx | lx.wrapping_neg()) >> 31)) > 0x7FF00000
         || (iy as u32 | ((ly | ly.wrapping_neg()) >> 31)) > 0x7FF00000
     {
-        return x + y;
+        // V8's clang build emits upstream's `x + y` as `y + x`, which decides the NaN payload.
+        return y + x;
     }
     if (hx.wrapping_sub(0x3FF00000) as u32 | lx) == 0 {
         return atan(y);
