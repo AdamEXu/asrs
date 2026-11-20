@@ -6,11 +6,14 @@ mod check;
 mod corpus;
 mod gpui;
 mod historical;
+mod host;
 mod layout;
 mod oracle;
 mod pack;
 mod parity;
 mod public;
+mod tables;
+mod ui;
 mod vectors;
 
 use std::path::{Path, PathBuf};
@@ -26,9 +29,12 @@ commands:
   assets    copy upstream assets into assets/
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
+  host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
-  canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)";
+  canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
+  ui        UI theme scenes: icon tints, buttons, gates against Electron (see `cargo xtask ui`)
+  tables    table generators from upstream TypeScript (see `cargo xtask tables`)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -41,6 +47,9 @@ fn main() -> ExitCode {
         Some("gpui") => gpui::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
+        Some("ui") => ui::run(&args[1..]),
+        Some("host") => host::run(&args[1..]),
+        Some("tables") => tables::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {
@@ -50,6 +59,14 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn workspace_root() -> PathBuf {

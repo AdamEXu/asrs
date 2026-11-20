@@ -10,8 +10,11 @@ mod js_msgpack;
 mod js_regex;
 mod js_string;
 mod js_time;
+mod log_field;
 mod log_struct;
+mod photon;
 mod shared;
+mod units;
 
 use std::process::ExitCode;
 
@@ -19,7 +22,8 @@ const USAGE: &str = "usage: asrs-cli <command>
 
 commands:
   fn [--list]   JSONL fn requests on stdin, CVE-1 responses on stdout (same protocol as the oracle)
-  canvas lut    fit the mask-gamma table from the oracle's calibration scenes";
+  canvas lut    fit the mask-gamma table from the oracle's calibration scenes
+  canvas render rasterize the oracle's canvas scenes with asrs-canvas";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

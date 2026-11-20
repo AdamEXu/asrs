@@ -21,6 +21,13 @@ mod js_string;
 mod js_msgpack {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
 }
+mod photon {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
+mod log_field {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
 
 mod log_struct {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];

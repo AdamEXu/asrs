@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 use asrs_canvas::text::coverage::{TextOp, render_coverage};
 use asrs_canvas::text::lut::{self, MaskGammaLut};
-use asrs_canvas::text::platform_backend;
+use asrs_canvas::text::{TextBackend, platform_backend};
+use asrs_canvas::{Call, ImageDataSource, Pixmap, Raster, TextRaster, pixels, trace};
+use asrs_js::value::JsValue;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel;
 
@@ -11,13 +14,135 @@ const USAGE: &str = "usage: asrs-cli canvas <command>
 
 commands:
   lut <reference dir> <out.bin>   fit the mask-gamma table from the oracle's calibration scenes
-                                  (scenes/calib-<k>.json and ref/calib-<k>.cpu.png)";
+                                  (scenes/calib-<k>.json and ref/calib-<k>.cpu.png)
+  render <scenes dir> <out dir> [<scene>...]
+                                  rasterize scene display lists to <out dir>/<scene>.png, straight
+                                  RGBA as getImageData returns it (`cargo xtask canvas run`)";
 
 pub fn run(args: &[String]) -> Result<(), String> {
     match args {
         [cmd, reference, out] if cmd == "lut" => fit_lut(Path::new(reference), Path::new(out)),
+        [cmd, scenes, out, wanted @ ..] if cmd == "render" => {
+            render_scenes(Path::new(scenes), Path::new(out), wanted)
+        }
         _ => Err(USAGE.to_owned()),
     }
+}
+
+fn js_number(v: Option<&JsValue>, what: &str) -> Result<f64, String> {
+    v.and_then(JsValue::as_f64)
+        .ok_or_else(|| format!("{what} is not a number"))
+}
+
+fn js_text(v: Option<&JsValue>) -> Option<String> {
+    v.and_then(JsValue::as_str).map(|s| s.to_string_lossy())
+}
+
+fn render_scenes(scenes: &Path, out: &Path, wanted: &[String]) -> Result<(), String> {
+    let mut backend =
+        platform_backend().ok_or("no text backend for this platform yet (units R12, R13)")?;
+    let lut = MaskGammaLut::embedded().ok_or("no committed mask-gamma table for this platform")?;
+    let mut names = Vec::new();
+    for entry in fs::read_dir(scenes).map_err(|e| format!("{}: {e}", scenes.display()))? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if let Some(name) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_suffix(".json"))
+            && (wanted.is_empty() || wanted.iter().any(|w| w == name))
+        {
+            names.push(name.to_owned());
+        }
+    }
+    names.sort_unstable();
+    fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    for name in names {
+        let path = scenes.join(format!("{name}.json"));
+        let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let scene = asrs_js::json::parse_str(&text).map_err(|e| format!("{name}: {e:?}"))?;
+        if js_text(scene.get("gate")).as_deref() == Some("calibration") {
+            continue;
+        }
+        let dpr = js_number(scene.get("dpr"), "dpr")?;
+        let width = (js_number(scene.get("width"), "width")? * dpr) as u32;
+        let height = (js_number(scene.get("height"), "height")? * dpr) as u32;
+        let cmds = scene
+            .get("cmds")
+            .and_then(JsValue::as_array)
+            .ok_or("cmds is not an array")?;
+        let mut images = HashMap::new();
+        let pixmap = render_list(width, height, cmds, &mut images, backend.as_mut(), &lut)
+            .map_err(|e| format!("{name}: {e}"))?;
+        let rgba = pixel::Rgba {
+            width,
+            height,
+            data: pixels::to_straight_rgba(&pixmap),
+        };
+        pixel::write_png(&out.join(format!("{name}.png")), &rgba)?;
+    }
+    Ok(())
+}
+
+/// Replays one scene command list. The scene-only commands `image` (a source from straight
+/// RGBA) and `canvas` (a nested canvas) only define sources, so they run before the rest.
+fn render_list(
+    width: u32,
+    height: u32,
+    cmds: &[JsValue],
+    images: &mut HashMap<String, Pixmap>,
+    backend: &mut dyn TextBackend,
+    lut: &MaskGammaLut,
+) -> Result<Pixmap, String> {
+    let mut calls: Vec<Call> = Vec::new();
+    for cmd in cmds {
+        let items = cmd.as_array().ok_or("a command is not an array")?;
+        let name = js_text(items.first()).unwrap_or_default();
+        let id = js_text(items.get(1));
+        let size = || -> Result<(u32, u32), String> {
+            Ok((
+                js_number(items.get(2), "width")? as u32,
+                js_number(items.get(3), "height")? as u32,
+            ))
+        };
+        match name.as_str() {
+            "image" => {
+                let (w, h) = size()?;
+                let spec = JsValue::Object(
+                    [
+                        ("width", JsValue::Number(f64::from(w))),
+                        ("height", JsValue::Number(f64::from(h))),
+                        ("rgba", items.get(4).cloned().unwrap_or_default()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                );
+                let ImageDataSource::Inline(data) = trace::image_data_from(&spec)? else {
+                    return Err("image: no pixels".to_owned());
+                };
+                let pixmap =
+                    pixels::pixmap_from_straight_rgba(w, h, &data.data).ok_or("image: bad size")?;
+                images.insert(id.ok_or("image: no id")?, pixmap);
+            }
+            "canvas" => {
+                let (w, h) = size()?;
+                let inner = items
+                    .get(4)
+                    .and_then(JsValue::as_array)
+                    .ok_or("canvas: no commands")?;
+                let pixmap = render_list(w, h, inner, images, backend, lut)?;
+                images.insert(id.ok_or("canvas: no id")?, pixmap);
+            }
+            _ => calls.push(trace::call_from_value(cmd)?),
+        }
+    }
+    let mut raster = Raster::new(width, height)
+        .ok_or("empty canvas")?
+        .with_text(TextRaster { backend, lut });
+    for (id, pixmap) in images.iter() {
+        raster.add_image(id, pixmap.clone());
+    }
+    raster.run(&calls);
+    Ok(raster.into_pixmap())
 }
 
 struct TextScene {

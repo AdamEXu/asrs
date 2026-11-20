@@ -24,9 +24,15 @@ mod js_string;
 #[path = "../../asrs-cli/src/js_time.rs"]
 #[allow(dead_code)]
 mod js_time;
+#[path = "../../asrs-cli/src/log_field.rs"]
+#[allow(dead_code)]
+mod log_field;
 #[path = "../../asrs-cli/src/log_struct.rs"]
 #[allow(dead_code)]
 mod log_struct;
+#[path = "../../asrs-cli/src/photon.rs"]
+#[allow(dead_code)]
+mod photon;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;
@@ -56,6 +62,11 @@ fn util_utc() {
 #[test]
 fn struct_fn() {
     check_fn_vectors("log/struct", dispatch);
+}
+
+#[test]
+fn log_field_sequences() {
+    check_fn_vectors("log/field", dispatch);
 }
 
 fn n(x: f64) -> Value {
