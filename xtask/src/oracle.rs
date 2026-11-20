@@ -48,7 +48,7 @@ pub(crate) struct Paths {
     harness: PathBuf,
     dist: PathBuf,
     stamps: PathBuf,
-    cache: PathBuf,
+    pub(crate) cache: PathBuf,
 }
 
 impl Paths {
