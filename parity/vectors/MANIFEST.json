@@ -170,6 +170,30 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "msgpack/decode": {
+      "cases": 4131,
+      "content": "2a3cdc6dccf0f705",
+      "generator": "f57564753d4f7a30",
+      "spec": "parity/specs/msgpack/decode.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "msgpack/encode": {
+      "cases": 100193,
+      "content": "b4c663a4660606e0",
+      "generator": "00a5fe7355ddcbeb",
+      "spec": "parity/specs/msgpack/encode.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "msgpack/multi": {
+      "cases": 466,
+      "content": "a5bc36c6bd096eef",
+      "generator": "181e30612d821be1",
+      "spec": "parity/specs/msgpack/multi.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "number/numberformat": {
       "cases": 182,
       "content": "44a96cd7bef54d21",

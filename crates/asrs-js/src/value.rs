@@ -24,6 +24,9 @@ pub enum JsValue {
     BigInt(BigInt),
     /// A `Date`, holding its time value (NaN for an invalid date).
     Date(f64),
+    /// A msgpack `ExtData` instance (`{type, data}` own properties), produced by the
+    /// default extension codec for non-timestamp extension types.
+    ExtData(i8, Vec<u8>),
 }
 
 impl JsValue {
@@ -99,7 +102,8 @@ impl JsValue {
             | JsValue::Array(_)
             | JsValue::Object(_)
             | JsValue::Bytes(_)
-            | JsValue::Date(_) => "object",
+            | JsValue::Date(_)
+            | JsValue::ExtData(..) => "object",
             JsValue::Bool(_) => "boolean",
             JsValue::Number(_) => "number",
             JsValue::String(_) => "string",

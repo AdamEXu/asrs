@@ -36,6 +36,17 @@ pub fn to_js(value: &Value) -> Result<JsValue, String> {
         }
         Value::Bytes(bytes) => JsValue::Bytes(bytes.clone()),
         Value::Date(bits) => JsValue::Date(f64::from_bits(*bits)),
+        Value::Instance(name, pairs) if name.eq_str("ExtData") || name.eq_str("ExtData2") => {
+            let kind = match pairs.iter().find(|(k, _)| k.eq_str("type")) {
+                Some((_, Value::Number(bits))) => f64::from_bits(*bits) as i8,
+                _ => return Err("ExtData needs a numeric type".to_owned()),
+            };
+            let data = match pairs.iter().find(|(k, _)| k.eq_str("data")) {
+                Some((_, Value::Bytes(bytes))) => bytes.clone(),
+                _ => return Err("ExtData needs binary data".to_owned()),
+            };
+            JsValue::ExtData(kind, data)
+        }
         other => return Err(format!("no JsValue for CVE-1 {}", other.kind())),
     })
 }
@@ -54,6 +65,14 @@ pub fn from_js(value: &JsValue) -> Value {
         JsValue::Bytes(bytes) => Value::Bytes(bytes.clone()),
         JsValue::BigInt(b) => Value::BigInt(format!("{b}")),
         JsValue::Date(t) => Value::Date(t.to_bits()),
+        JsValue::ExtData(kind, data) => Value::Instance(
+            // The bundled oracle mangles the class name to `ExtData2`.
+            Utf16String::from("ExtData2"),
+            vec![
+                (Utf16String::from("type"), Value::number(f64::from(*kind))),
+                (Utf16String::from("data"), Value::Bytes(data.clone())),
+            ],
+        ),
     }
 }
 

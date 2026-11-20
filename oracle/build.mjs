@@ -107,7 +107,7 @@ const oraclePlugin = {
   }
 };
 
-const entries = ["fn", "selftest", "cve1Torture", "corpusA", "genCaseData", "genUtf8", "genJson", "genCollation", "genCollationUnsafe", "genSort", "genRegex"];
+const entries = ["fn", "selftest", "cve1Torture", "corpusA", "genCaseData", "genUtf8", "genJson", "genCollation", "genCollationUnsafe", "genSort", "genRegex", "genMsgpack"];
 
 await esbuild.build({
   entryPoints: Object.fromEntries(entries.map((name) => [name, path.join(here, "src", name + ".ts")])),
