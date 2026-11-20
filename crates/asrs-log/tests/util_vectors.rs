@@ -27,6 +27,9 @@ mod js_time;
 #[path = "../../asrs-cli/src/log_field.rs"]
 #[allow(dead_code)]
 mod log_field;
+#[path = "../../asrs-cli/src/log_keys.rs"]
+#[allow(dead_code)]
+mod log_keys;
 #[path = "../../asrs-cli/src/log_run.rs"]
 #[allow(dead_code)]
 mod log_run;
@@ -88,6 +91,21 @@ fn log_field_sequences() {
 #[test]
 fn log_sequences() {
     check_fn_vectors("log/core", dispatch);
+}
+
+#[test]
+fn log_key_utils() {
+    check_fn_vectors("log/key-utils", dispatch);
+}
+
+#[test]
+fn log_util_sequences() {
+    check_fn_vectors("log/util-run", dispatch);
+}
+
+#[test]
+fn regex_sites() {
+    check_fn_vectors("regex/sites", dispatch);
 }
 
 fn n(x: f64) -> Value {

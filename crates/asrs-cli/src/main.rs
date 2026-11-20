@@ -1,5 +1,6 @@
 #![allow(clippy::disallowed_methods)]
 
+mod assets;
 mod canvas_cmd;
 mod decode;
 mod fn_cmd;
@@ -14,12 +15,14 @@ mod js_string;
 mod js_time;
 mod live_base;
 mod log_field;
+mod log_keys;
 mod log_run;
 mod log_struct;
 mod photon;
 mod shared;
 mod tabs_console;
 mod units;
+mod wpilog;
 
 use std::process::ExitCode;
 
@@ -37,6 +40,7 @@ fn main() -> ExitCode {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
+        Some("wpilog") => wpilog::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {

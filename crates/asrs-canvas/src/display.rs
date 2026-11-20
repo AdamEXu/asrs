@@ -112,6 +112,8 @@ pub enum Call {
     ClosePath,
     MoveTo(f64, f64),
     LineTo(f64, f64),
+    QuadraticCurveTo(f64, f64, f64, f64),
+    BezierCurveTo(f64, f64, f64, f64, f64, f64),
     Rect(f64, f64, f64, f64),
     Arc {
         x: f64,
@@ -280,6 +282,14 @@ impl Canvas2d {
 
     pub fn line_to(&mut self, x: f64, y: f64) {
         self.push(Call::LineTo(x, y));
+    }
+
+    pub fn quadratic_curve_to(&mut self, cpx: f64, cpy: f64, x: f64, y: f64) {
+        self.push(Call::QuadraticCurveTo(cpx, cpy, x, y));
+    }
+
+    pub fn bezier_curve_to(&mut self, cp1x: f64, cp1y: f64, cp2x: f64, cp2y: f64, x: f64, y: f64) {
+        self.push(Call::BezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y));
     }
 
     pub fn rect(&mut self, x: f64, y: f64, w: f64, h: f64) {

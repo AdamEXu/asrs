@@ -1,3 +1,4 @@
+pub mod assets;
 pub mod build_constants;
 pub mod hub_state;
 pub mod json_file;

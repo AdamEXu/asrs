@@ -1002,6 +1002,269 @@ function gradientText(dpr: number, dark: boolean): Scene {
   return scene(`gradienttext-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [300, 110], dpr, dark ? DARK : LIGHT, r.cmds);
 }
 
+function curves(dpr: number): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  r.set("fillStyle", "#2b66a2");
+  r.call("beginPath");
+  r.call("moveTo", 10, 60);
+  r.call("bezierCurveTo", 30, -10, 60, 120, 90, 40.5);
+  r.call("bezierCurveTo", 100, 20, 70.3, 90.7, 10, 60);
+  r.call("fill");
+  r.set("fillStyle", "#e48b32");
+  r.call("beginPath");
+  r.call("moveTo", 100.5, 10.25);
+  r.call("quadraticCurveTo", 160, 120, 190.3, 15);
+  r.call("quadraticCurveTo", 150, 40, 100.5, 10.25);
+  r.call("fill");
+  r.set("fillStyle", "#3fa34d");
+  r.call("beginPath");
+  r.call("moveTo", 200, 10);
+  r.call("bezierCurveTo", 260, 80, 190, 80, 250, 10);
+  r.call("closePath");
+  r.call("fill");
+  r.set("fillStyle", "rgba(175, 36, 55, 0.7)");
+  r.call("beginPath");
+  r.call("moveTo", -40, 120);
+  r.call("bezierCurveTo", 60, 300, 30, -150, 120, 190);
+  r.call("lineTo", -30, 190);
+  r.call("fill");
+  r.call("beginPath");
+  r.call("moveTo", 380, 30);
+  r.call("bezierCurveTo", 700, -200, 460, 260, 390, 90);
+  r.call("fill");
+  r.set("strokeStyle", "#222");
+  const strokes: [number, string, string][] = [
+    [1, "butt", "miter"],
+    [0.5, "butt", "miter"],
+    [2.5, "round", "round"],
+    [6, "square", "bevel"],
+    [9, "butt", "miter"],
+    [4, "round", "miter"]
+  ];
+  strokes.forEach(([lw, cap, join], i) => {
+    const x = 270 + (i % 3) * 50;
+    const y = 15 + Math.floor(i / 3) * 60;
+    r.set("lineWidth", lw);
+    r.set("lineCap", cap);
+    r.set("lineJoin", join);
+    r.call("beginPath");
+    r.call("moveTo", x, y + 0.3);
+    r.call("bezierCurveTo", x + 40, y, x - 5, y + 45, x + 35.5, y + 40);
+    r.call("quadraticCurveTo", x + 15, y + 20, x + 38, y + 5);
+    r.call("stroke");
+  });
+  r.set("lineWidth", 3);
+  r.set("lineJoin", "round");
+  r.set("lineCap", "butt");
+  r.call("beginPath");
+  r.call("moveTo", 20, 110);
+  r.call("bezierCurveTo", 80, 170, 20, 170, 80, 110);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", 100, 110);
+  r.call("bezierCurveTo", 160, 110, 100, 110, 160, 110.5);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", 100, 130);
+  r.call("bezierCurveTo", 130, 130, 130, 130, 160, 130);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", 100, 150);
+  r.call("bezierCurveTo", 100, 150, 160, 180, 160, 180);
+  r.call("stroke");
+  r.set("lineWidth", 12);
+  r.set("lineJoin", "miter");
+  r.call("beginPath");
+  r.call("moveTo", 180, 110);
+  r.call("bezierCurveTo", 260, 190, 170, 190, 250, 105);
+  r.call("stroke");
+  r.set("lineWidth", 1.5);
+  r.call("setLineDash", [8, 4]);
+  r.set("lineDashOffset", 2.5);
+  r.call("beginPath");
+  r.call("moveTo", 270, 130);
+  r.call("bezierCurveTo", 320, 60, 360, 220, 410, 130);
+  r.call("quadraticCurveTo", 390, 190, 300, 185);
+  r.call("stroke");
+  r.call("setLineDash", []);
+  r.call("save");
+  r.call("translate", 330, 150);
+  r.call("rotate", 0.4);
+  r.call("scale", 1.3, 0.7);
+  r.set("lineWidth", 2);
+  r.set("strokeStyle", "#af2437");
+  r.call("beginPath");
+  r.call("moveTo", -20, 0);
+  r.call("bezierCurveTo", -10, -30, 10, 30, 20, 0);
+  r.call("stroke");
+  r.call("restore");
+  r.set("lineWidth", 0.8);
+  r.call("beginPath");
+  r.call("bezierCurveTo", 15, 185, 60, 140, 90, 195);
+  r.call("stroke");
+  return scene(`curves-${dpr}x`, "coverage", "pixel", [420, 200], dpr, LIGHT, r.cmds);
+}
+
+function hugeCoords(dpr: number): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  r.set("strokeStyle", "#222");
+  r.set("lineWidth", 2);
+  r.call("beginPath");
+  r.call("moveTo", 10, 10);
+  r.call("lineTo", 1e39, 50);
+  r.call("lineTo", 200, 40);
+  r.call("lineTo", 3e38, 3e38);
+  r.call("lineTo", 280, 15);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", 10, 30);
+  r.call("lineTo", 3e38, 30.5);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", 10, 40.5);
+  r.call("lineTo", 4e37, 40.5);
+  r.call("stroke");
+  r.set("fillStyle", "#2b66a2");
+  r.call("fillRect", 10, 55, 1e39, 10);
+  r.call("fillRect", -1e39, 70, 2e39, 10);
+  r.call("fillRect", 20.5, 85, 4e37, 6);
+  r.call("fillRect", 30.5, 95, 1e-7, 10);
+  r.call("fillRect", 40000.5, 95, -39950, 10);
+  r.call("beginPath");
+  r.call("rect", 100, 95, 1e39, 10);
+  r.call("rect", 120, 112, 30, 8);
+  r.call("fill");
+  r.set("strokeStyle", "#e48b32");
+  r.call("strokeRect", 160.5, 95.5, 1e39, 1e39);
+  r.call("strokeRect", 170.25, 100.5, 50000, 10);
+  r.call("save");
+  r.call("translate", 1e39, 0);
+  r.set("fillStyle", "#3fa34d");
+  r.call("fillRect", -1e39, 60, 30, 20);
+  r.call("restore");
+  r.call("save");
+  r.call("scale", 1e39, 1);
+  r.call("fillRect", 0, 85, 1e-36, 8);
+  r.call("restore");
+  r.set("lineWidth", 1e39);
+  r.call("beginPath");
+  r.call("moveTo", 250, 110);
+  r.call("lineTo", 290, 112);
+  r.call("stroke");
+  r.set("lineWidth", 3);
+  r.set("fillStyle", { linearGradient: [-1e39, 0, 1e39, 0], stops: [[0, "#af2437"], [1, "#3fa34d"]] });
+  r.call("fillRect", 200, 25, 80, 10);
+  r.call("beginPath");
+  r.call("arc", 60, 105, 1e39, 0, 1);
+  r.call("arc", 60, 105, 10, 0, 6);
+  r.call("fill");
+  r.call("beginPath");
+  r.call("moveTo", 80, 100);
+  r.call("bezierCurveTo", 1e39, 0, 90, 110, 95, 118);
+  r.call("quadraticCurveTo", 90, 3e38, 85, 118);
+  r.call("stroke");
+  return scene(`hugecoords-${dpr}x`, "coverage", "pixel", [300, 120], dpr, LIGHT, r.cmds);
+}
+
+function strokeRects(dpr: number): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  r.set("strokeStyle", "#222");
+  const widths = [0.3, 0.75, 1, 1.5, 2.25, 3.7, 7];
+  const joins = ["miter", "round", "bevel"];
+  joins.forEach((join, j) => {
+    r.set("lineJoin", join);
+    widths.forEach((lw, i) => {
+      r.set("lineWidth", lw);
+      const x = 8 + i * 42 + j * 0.25 + i * 0.13;
+      const y = 8 + j * 34 + i * 0.37;
+      r.call("strokeRect", x, y, 30.6, 20.3);
+    });
+  });
+  r.set("strokeStyle", "#2b66a2");
+  r.set("lineJoin", "round");
+  widths.forEach((lw, i) => {
+    r.set("lineWidth", lw);
+    r.call("beginPath");
+    r.call("rect", 8.4 + i * 42, 112.6, 30, 18.5);
+    r.call("stroke");
+  });
+  r.set("lineWidth", 5);
+  r.call("beginPath");
+  r.call("rect", 300, 112, -20, 18);
+  r.call("stroke");
+  r.set("lineWidth", 30);
+  r.call("strokeRect", 320, 110, 12, 10);
+  r.set("lineJoin", "miter");
+  r.set("miterLimit", 1.2);
+  r.set("lineWidth", 4);
+  r.call("strokeRect", 8.5, 145.5, 40, 20);
+  r.set("miterLimit", 10);
+  r.set("strokeStyle", "rgba(175, 36, 55, 0.6)");
+  [0.4, 1.2, 2.6].forEach((lw, i) => {
+    r.set("lineWidth", lw);
+    r.call("strokeRect", 60.3 + i * 45, 145.7, 35.2, 20.1);
+  });
+  r.call("save");
+  r.call("translate", 230, 155);
+  r.call("rotate", 0.3);
+  r.set("lineJoin", "round");
+  r.set("lineWidth", 3);
+  r.call("strokeRect", -15, -8, 30, 16);
+  r.call("restore");
+  r.call("save");
+  r.call("translate", 290.5, 150.25);
+  r.call("scale", 1.5, -0.75);
+  r.set("lineJoin", "round");
+  r.set("lineWidth", 2);
+  r.call("strokeRect", 0, 0, 20, 16);
+  r.call("restore");
+  r.set("lineJoin", "miter");
+  r.set("lineWidth", 1);
+  r.call("strokeRect", 330.5, 145.5, 0.4, 20);
+  return scene(`strokerects-${dpr}x`, "coverage", "pixel", [360, 175], dpr, LIGHT, r.cmds);
+}
+
+function dashedLines(r: Rec, y0: number) {
+  r.set("strokeStyle", "#222");
+  r.set("lineWidth", 2);
+  r.call("setLineDash", [3, 3]);
+  for (let i = 0; i < 8; i++) {
+    r.call("beginPath");
+    r.call("moveTo", 10.3 + i * 0.4, y0 + 10.6 + i * 9);
+    r.call("lineTo", 180.7, y0 + 10.6 + i * 9);
+    r.call("stroke");
+    r.call("beginPath");
+    r.call("moveTo", 195.6 + i * 12, y0 + 5.2 + i * 0.3);
+    r.call("lineTo", 195.6 + i * 12, y0 + 80.4);
+    r.call("stroke");
+  }
+  r.call("setLineDash", []);
+}
+
+function multiFrame(dpr: number, mode: "" | "-single" | "-resized"): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  r.set("fillStyle", "#2b66a2");
+  for (let i = 0; i < 6; i++) {
+    r.call("beginPath");
+    r.call("rect", 10 + i * 20, 10, 12, 12);
+    r.call("fill");
+  }
+  if (mode !== "-single") {
+    r.call("frame");
+    if (mode === "-resized") {
+      r.call("resize", 300 * dpr + 1, 100 * dpr);
+      r.call("resize", 300 * dpr, 100 * dpr);
+    }
+    r.call("scale", dpr, dpr);
+  }
+  dashedLines(r, 0);
+  return scene(`multiframe${mode}-${dpr}x`, "coverage", "pixel", [300, 100], dpr, LIGHT, r.cmds);
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -1019,6 +1282,7 @@ export function allScenes(): Scene[] {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));
     out.push(gradients(dpr), images(dpr), imageData(dpr), heatmap(dpr), textStyles(dpr, false), textStyles(dpr, true));
     out.push(offCanvas(dpr), gradientText(dpr, false), gradientText(dpr, true));
+    out.push(curves(dpr), hugeCoords(dpr), strokeRects(dpr), multiFrame(dpr, ""), multiFrame(dpr, "-single"), multiFrame(dpr, "-resized"));
   }
   return out;
 }

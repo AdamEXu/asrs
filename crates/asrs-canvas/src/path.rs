@@ -6,6 +6,30 @@ use crate::hairline::P;
 
 const NEARLY_ZERO: f32 = 1.0 / 4096.0;
 
+/// `base::saturated_cast<float>`, which `CanvasPath` applies to every argument: out of range is
+/// infinite, so the call is then ignored.
+pub fn sat32(v: f64) -> f32 {
+    if v > f64::from(f32::MAX) {
+        f32::INFINITY
+    } else if v < f64::from(f32::MIN) {
+        f32::NEG_INFINITY
+    } else {
+        v as f32
+    }
+}
+
+/// Blink's `ClampTo<float>`, which rect, transform and style setters apply: out of range is
+/// `FLT_MAX`.
+pub fn clamp32(v: f64) -> f32 {
+    if v >= f64::from(f32::MAX) {
+        f32::MAX
+    } else if v <= f64::from(f32::MIN) {
+        f32::MIN
+    } else {
+        v as f32
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pt {
     pub x: f32,
@@ -138,7 +162,9 @@ impl Affine {
 enum Verb {
     Move(Pt),
     Line(Pt),
+    Quad(Pt, Pt),
     Conic(Pt, Pt, f32),
+    Cubic(Pt, Pt, Pt),
     Close,
 }
 
@@ -162,7 +188,11 @@ impl Path {
 
     fn last_point(&self) -> Option<Pt> {
         self.verbs.iter().rev().find_map(|v| match *v {
-            Verb::Move(p) | Verb::Line(p) | Verb::Conic(_, p, _) => Some(p),
+            Verb::Move(p)
+            | Verb::Line(p)
+            | Verb::Quad(_, p)
+            | Verb::Conic(_, p, _)
+            | Verb::Cubic(_, _, p) => Some(p),
             Verb::Close => None,
         })
     }
@@ -199,20 +229,39 @@ impl Path {
     }
 
     pub fn move_to(&mut self, x: f64, y: f64) {
-        if x.is_finite() && y.is_finite() {
-            self.sk_move_to(pt(x as f32, y as f32));
+        let p = pt(sat32(x), sat32(y));
+        if p.x.is_finite() && p.y.is_finite() {
+            self.sk_move_to(p);
         }
     }
 
     pub fn line_to(&mut self, x: f64, y: f64) {
-        if !x.is_finite() || !y.is_finite() {
+        let p = pt(sat32(x), sat32(y));
+        if !(p.x.is_finite() && p.y.is_finite()) {
             return;
         }
-        let p = pt(x as f32, y as f32);
         if self.is_empty() {
             self.sk_move_to(p);
         }
         self.sk_line_to(p);
+    }
+
+    /// `CanvasPath::quadraticCurveTo` after its finiteness check.
+    pub fn quad_to(&mut self, cp: Pt, p: Pt) {
+        if self.is_empty() {
+            self.sk_move_to(cp);
+        }
+        self.inject_move();
+        self.verbs.push(Verb::Quad(cp, p));
+    }
+
+    /// `CanvasPath::bezierCurveTo` after its finiteness check.
+    pub fn cubic_to(&mut self, cp1: Pt, cp2: Pt, p: Pt) {
+        if self.is_empty() {
+            self.sk_move_to(cp1);
+        }
+        self.inject_move();
+        self.verbs.push(Verb::Cubic(cp1, cp2, p));
     }
 
     pub fn close(&mut self) {
@@ -224,12 +273,21 @@ impl Path {
         }
     }
 
+    /// `CanvasPath::rect`: an empty rect is a `moveTo`, the far corner is summed in f32.
     pub fn rect(&mut self, x: f64, y: f64, w: f64, h: f64) {
+        let [x, y, w, h] = [x, y, w, h].map(sat32);
         if ![x, y, w, h].iter().all(|v| v.is_finite()) {
             return;
         }
-        let (x0, y0) = (x as f32, y as f32);
-        let (x1, y1) = ((x + w) as f32, (y + h) as f32);
+        if w == 0.0 && h == 0.0 {
+            self.sk_move_to(pt(x, y));
+            return;
+        }
+        self.add_rect_ltrb([x, y, x + w, y + h]);
+    }
+
+    /// `SkPathBuilder::addRect` of an unsorted LTRB rect, clockwise from its first corner.
+    pub fn add_rect_ltrb(&mut self, [x0, y0, x1, y1]: [f32; 4]) {
         self.sk_move_to(pt(x0, y0));
         self.sk_line_to(pt(x1, y0));
         self.sk_line_to(pt(x1, y1));
@@ -238,11 +296,10 @@ impl Path {
     }
 
     pub fn arc(&mut self, x: f64, y: f64, radius: f64, start: f64, end: f64, ccw: bool) {
-        if ![x, y, radius, start, end].iter().all(|v| v.is_finite()) || radius < 0.0 {
+        let [x, y, r, mut start, mut end] = [x, y, radius, start, end].map(sat32);
+        if ![x, y, r, start, end].iter().all(|v| v.is_finite()) || r < 0.0 {
             return;
         }
-        let (x, y, r) = (x as f32, y as f32, radius as f32);
-        let (mut start, mut end) = (start as f32, end as f32);
         if r == 0.0 || start == end {
             self.line_to(
                 f64::from(x + r * start.cos()),
@@ -267,14 +324,11 @@ impl Path {
         end: f64,
         ccw: bool,
     ) {
-        if ![x, y, rx, ry, rotation, start, end]
-            .iter()
-            .all(|v| v.is_finite())
-            || rx < 0.0
-            || ry < 0.0
-        {
+        let v = [x, y, rx, ry, rotation, start, end].map(sat32);
+        if !v.iter().all(|v| v.is_finite()) || v[2] < 0.0 || v[3] < 0.0 {
             return;
         }
+        let [x, y, rx, ry, rotation, start, end] = v.map(f64::from);
         let (mut s, mut e) = (start as f32, end as f32);
         canonicalize_angle(&mut s, &mut e);
         let e = adjust_end_angle(s, e, ccw);
@@ -452,9 +506,14 @@ impl Path {
         for v in &mut self.verbs {
             match v {
                 Verb::Move(p) | Verb::Line(p) => *p = m.map32(*p),
-                Verb::Conic(p1, p2, _) => {
+                Verb::Quad(p1, p2) | Verb::Conic(p1, p2, _) => {
                     *p1 = m.map32(*p1);
                     *p2 = m.map32(*p2);
+                }
+                Verb::Cubic(p1, p2, p3) => {
+                    *p1 = m.map32(*p1);
+                    *p2 = m.map32(*p2);
+                    *p3 = m.map32(*p3);
                 }
                 Verb::Close => {}
             }
@@ -475,7 +534,9 @@ impl Path {
             match *v {
                 Verb::Move(p) => out.move_to(map(p)),
                 Verb::Line(p) => out.line_to(map(p)),
+                Verb::Quad(p1, p2) => out.quad_to(map(p1), map(p2)),
                 Verb::Conic(p1, p2, w) => out.conic_to(map(p1), map(p2), w),
+                Verb::Cubic(p1, p2, p3) => out.cubic_to(map(p1), map(p2), map(p3)),
                 Verb::Close => out.close(),
             }
         }
@@ -510,6 +571,16 @@ impl Path {
                         builder.quad_to(q[0].x, q[0].y, q[1].x, q[1].y);
                     }
                     last = p2;
+                }
+                Verb::Quad(p1, p2) => {
+                    let (p1, p2) = (map(p1), map(p2));
+                    builder.quad_to(p1.x, p1.y, p2.x, p2.y);
+                    last = p2;
+                }
+                Verb::Cubic(p1, p2, p3) => {
+                    let (p1, p2, p3) = (map(p1), map(p2), map(p3));
+                    builder.cubic_to(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+                    last = p3;
                 }
                 Verb::Close => builder.close(),
             }

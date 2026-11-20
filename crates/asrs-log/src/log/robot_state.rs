@@ -61,12 +61,16 @@ pub struct RobotStateRange {
     pub mode: RobotMode,
 }
 
+fn js_strings(keys: &[&str]) -> Vec<JsString> {
+    keys.iter().map(|&k| JsString::from(k)).collect()
+}
+
 fn ends_with(key: &JsString, suffix: &str) -> bool {
     key.ends_with(&JsString::from(suffix), None)
 }
 
 pub fn get_enabled_key(log: &Log) -> Option<JsString> {
-    find_key(log, ENABLED_KEYS)
+    find_key(log, &js_strings(ENABLED_KEYS))
 }
 
 /// `getEnabledData`: boolean enabled series, or null when no key or no samples.
@@ -102,7 +106,7 @@ pub fn get_enabled_data(log: &Log) -> Option<LogValueSetBoolean> {
 }
 
 pub fn get_autonomous_key(log: &Log) -> Option<JsString> {
-    find_key(log, AUTONOMOUS_KEYS)
+    find_key(log, &js_strings(AUTONOMOUS_KEYS))
 }
 
 /// `getAutonomousData`: boolean autonomous series, or null when no key or no samples.
@@ -154,7 +158,7 @@ pub fn get_autonomous_data(log: &Log) -> Option<LogValueSetBoolean> {
 }
 
 pub fn get_utility_key(log: &Log) -> Option<JsString> {
-    find_key(log, UTILITY_KEYS)
+    find_key(log, &js_strings(UTILITY_KEYS))
 }
 
 /// `getUtilityData`: boolean utility series, or null when no key or no samples.
