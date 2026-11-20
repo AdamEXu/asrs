@@ -243,8 +243,8 @@ fn encode_value(v: &JsValue, out: &mut String) {
             hex(bytes, out);
             out.push_str("\"}");
         }
-        JsValue::BigInt(_) | JsValue::Date(_) => {
-            unreachable!("canvas calls carry no BigInt or Date")
+        JsValue::BigInt(_) | JsValue::Date(_) | JsValue::ExtData(..) => {
+            unreachable!("canvas calls carry no BigInt, Date or ExtData")
         }
     }
 }
