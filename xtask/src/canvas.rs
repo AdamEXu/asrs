@@ -624,9 +624,7 @@ fn heatmap(paths: &Paths) -> Result {
                 Ok(delta) => {
                     max_channel = max_channel.max(delta);
                     if delta > HEATMAP_MAX_CHANNEL {
-                        failures.push(format!(
-                            "{name} update {i}: max channel delta {delta}"
-                        ));
+                        failures.push(format!("{name} update {i}: max channel delta {delta}"));
                     }
                 }
                 Err(e) => failures.push(format!("{name} update {i}: {e}")),
@@ -657,8 +655,7 @@ fn heatmap_channel_delta(reference: &Path, port: &Path) -> Result<u8> {
             a.width, a.height, b.width, b.height
         ));
     }
-    Ok(a
-        .data
+    Ok(a.data
         .iter()
         .zip(&b.data)
         .map(|(x, y)| x.abs_diff(*y))

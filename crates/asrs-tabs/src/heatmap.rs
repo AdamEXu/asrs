@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use asrs_canvas::display::ImageDataSource;
 use asrs_canvas::raster::CanvasError;
 use asrs_canvas::{Call, Canvas2d, Gradient, ImageData, Pixmap, Property, Raster};
-use asrs_js::math::int::{to_uint8_clamp, to_uint32};
 use asrs_js::math;
+use asrs_js::math::int::{to_uint8_clamp, to_uint32};
 use asrs_js::number::{self, to_int32};
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue};
@@ -113,7 +113,7 @@ fn js_key(key: &JsString) -> String {
 /// Counting arithmetically reproduces the throw without running the doomed loop.
 fn grid_len_would_throw(bound: f64, step: f64) -> bool {
     const ARRAY_LENGTH_MAX: f64 = 4294967295.0;
-    if !(0.0 < bound) {
+    if bound.is_nan() || bound <= 0.0 {
         return false;
     }
     if step.is_nan() {
@@ -210,8 +210,10 @@ impl Heatmap {
 
             let rows = grid.first().map_or(0, Vec::len) as f64;
             for translation in translations {
-                let grid_x = ((translation[0] + field_dimensions[0] / 2.0) / grid_size_meters).floor();
-                let grid_y = ((translation[1] + field_dimensions[1] / 2.0) / grid_size_meters).floor();
+                let grid_x =
+                    ((translation[0] + field_dimensions[0] / 2.0) / grid_size_meters).floor();
+                let grid_y =
+                    ((translation[1] + field_dimensions[1] / 2.0) / grid_size_meters).floor();
                 if grid_x >= 0.0 && grid_y >= 0.0 && grid_x < grid.len() as f64 && grid_y < rows {
                     grid[grid_x as usize][grid_y as usize] += 1.0;
                 }
@@ -312,7 +314,10 @@ fn translations_str(translations: &[[f64; 2]]) -> String {
             .map(|t| JsValue::Array(vec![JsValue::Number(t[0]), JsValue::Number(t[1])]))
             .collect(),
     );
-    asrs_js::json::stringify(&value).ok().flatten().unwrap_or_default()
+    asrs_js::json::stringify(&value)
+        .ok()
+        .flatten()
+        .unwrap_or_default()
 }
 
 /// One `data` entry of the `setData` argument.
@@ -385,11 +390,13 @@ impl H337 {
 
     fn canvas_image_data(&mut self) -> Result<ImageData, CanvasError> {
         let (w, h) = self.renderer.canvas_size();
-        self.renderer.canvas.get_image_data(0.0, 0.0, w as f64, h as f64)
+        self.renderer
+            .canvas
+            .get_image_data(0.0, 0.0, w as f64, h as f64)
     }
 
     fn shadow_image_data(&mut self) -> Result<ImageData, CanvasError> {
-        let (w, h) = (self.renderer.width as f64, self.renderer.height as f64);
+        let (w, h) = (self.renderer.width, self.renderer.height);
         self.renderer.shadow.get_image_data(0.0, 0.0, w, h)
     }
 }
@@ -529,7 +536,13 @@ impl Layer {
     }
 
     /// `getImageData`, propagating the exception upstream throws instead of recording it.
-    fn get_image_data(&mut self, sx: f64, sy: f64, sw: f64, sh: f64) -> Result<ImageData, CanvasError> {
+    fn get_image_data(
+        &mut self,
+        sx: f64,
+        sy: f64,
+        sw: f64,
+        sh: f64,
+    ) -> Result<ImageData, CanvasError> {
         match self.raster.as_mut() {
             Some(raster) => {
                 let call = Call::GetImageData {
@@ -658,8 +671,10 @@ impl Renderer {
     }
 
     fn render_all(&mut self, data: &InternalData<'_>) -> Result<(), CanvasError> {
-        self.shadow.apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
-        self.canvas.apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
+        self.shadow
+            .apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
+        self.canvas
+            .apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
         if array_length(data.data) > 0 {
             self.draw_alpha(&prepare_data(data));
             self.colorize()?;
@@ -689,9 +704,12 @@ impl Renderer {
                 self.templates.insert(key.clone(), template);
             }
             let alpha = (value - min) / (max - min);
-            self.shadow.apply(&Call::Set(Property::GlobalAlpha(
-                if alpha < 0.01 { 0.01 } else { alpha },
-            )));
+            self.shadow
+                .apply(&Call::Set(Property::GlobalAlpha(if alpha < 0.01 {
+                    0.01
+                } else {
+                    alpha
+                })));
             self.shadow.apply(&Call::DrawImage {
                 image: key.clone(),
                 args: vec![rect_x, rect_y],
@@ -784,7 +802,12 @@ fn prepare_data<'a>(data: &InternalData<'a>) -> Prepared<'a> {
                 .and_then(|r| r.get(&js_key(y)))
                 .copied()
                 .unwrap_or(f64::NAN);
-            points.push(PreparedPoint { x, y, value, radius });
+            points.push(PreparedPoint {
+                x,
+                y,
+                value,
+                radius,
+            });
         }
     }
     Prepared {
@@ -832,14 +855,7 @@ fn point_template(radius: f64, blur: f64) -> Option<Pixmap> {
         list.set_fill_style("rgba(0,0,0,1)");
         list.fill();
     } else {
-        let mut gradient = Gradient::radial(
-            radius,
-            radius,
-            radius * blur,
-            radius,
-            radius,
-            radius,
-        );
+        let mut gradient = Gradient::radial(radius, radius, radius * blur, radius, radius, radius);
         gradient.add_color_stop(0.0, "rgba(0,0,0,1)");
         gradient.add_color_stop(1.0, "rgba(0,0,0,0)");
         list.set_fill_style(gradient);

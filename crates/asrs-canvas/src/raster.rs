@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
-    FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
-    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
+    FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Paint, PathBuilder, Pattern,
+    Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
 };
 
 use crate::aaa;
@@ -732,10 +732,12 @@ impl<'a> Raster<'a> {
                 if x0 == x1 && y0 == y1 {
                     return None;
                 }
-                if coverage_scale >= 256 && alpha >= 1.0 && s.iter().all(|c| c.1.a >= 1.0) {
-                    if let Some(p) = self.dithered_linear([*x0, *y0, *x1, *y1], s) {
-                        return Some(Source::Device(p));
-                    }
+                if coverage_scale >= 256
+                    && alpha >= 1.0
+                    && s.iter().all(|c| c.1.a >= 1.0)
+                    && let Some(p) = self.dithered_linear([*x0, *y0, *x1, *y1], s)
+                {
+                    return Some(Source::Device(p));
                 }
                 LinearGradient::new(
                     point(*x0, *y0),
@@ -1618,7 +1620,10 @@ impl<'a> Raster<'a> {
     fn blit_decal_image(&mut self, image: &Pixmap, src: [f64; 4], e: f64, f: f64) {
         let (il, it, ir, ib) = (src[0], src[1], src[0] + src[2], src[1] + src[3]);
         let (e, f) = (e as f32 as f64, f as f32 as f64);
-        let (pw, ph) = (i64::from(self.pixmap.width()), i64::from(self.pixmap.height()));
+        let (pw, ph) = (
+            i64::from(self.pixmap.width()),
+            i64::from(self.pixmap.height()),
+        );
         let (x0, y0) = (
             ((e + il - 0.5).floor() as i64 + 1).max(0),
             ((f + it - 0.5).floor() as i64 + 1).max(0),
@@ -1637,9 +1642,8 @@ impl<'a> Raster<'a> {
         let (il, it, ir, ib) = (il as i64, it as i64, ir as i64, ib as i64);
         let iw = i64::from(image.width());
         let data = image.data();
-        let tap = |x: i64, y: i64, c: usize| -> i64 {
-            i64::from(data[((y * iw + x) * 4) as usize + c])
-        };
+        let tap =
+            |x: i64, y: i64, c: usize| -> i64 { i64::from(data[((y * iw + x) * 4) as usize + c]) };
         let dst = self.pixmap.data_mut();
         for y in y0..=y1 {
             let v16 = ((y as f64 - f) * 65536.0).round() as i64;
@@ -1733,8 +1737,6 @@ fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
     }
     stops[stops.len() - 1].1
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -80,7 +80,9 @@ fn pair(value: &Value, key: &str) -> Result<[f64; 2], String> {
         .ok_or_else(|| format!("{key} is not a pair"))?;
     let mut out = [0.0; 2];
     for (i, v) in pair.iter().enumerate().take(2) {
-        out[i] = v.as_f64().ok_or_else(|| format!("{key}[{i}] is not a number"))?;
+        out[i] = v
+            .as_f64()
+            .ok_or_else(|| format!("{key}[{i}] is not a number"))?;
     }
     Ok(out)
 }
@@ -97,7 +99,9 @@ fn translations(value: &Value) -> Result<Vec<[f64; 2]>, String> {
                 .ok_or_else(|| "translation is not a pair".to_owned())?;
             let mut out = [0.0; 2];
             for (i, v) in xy.iter().enumerate().take(2) {
-                out[i] = v.as_f64().ok_or_else(|| "translation is not a number".to_owned())?;
+                out[i] = v
+                    .as_f64()
+                    .ok_or_else(|| "translation is not a number".to_owned())?;
             }
             Ok(out)
         })
@@ -108,10 +112,7 @@ fn translations(value: &Value) -> Result<Vec<[f64; 2]>, String> {
 /// store, throw}` record fields as a CVE-1 value pair. `args` is the CVE-1 object the
 /// vector records under `args`; `json_args` accepts the same fields as plain-JSON keys
 /// holding CVE-1 trees, which is what canvasMain writes into `*.fixture.json`.
-pub fn update_record(
-    heatmap: &mut Heatmap,
-    args: &Value,
-) -> Result<(Value, Value), String> {
+pub fn update_record(heatmap: &mut Heatmap, args: &Value) -> Result<(Value, Value), String> {
     let t = translations(args)?;
     let pixel = pair(args, "pixelDimensions")?;
     let field = pair(args, "fieldDimensions")?;
@@ -120,17 +121,17 @@ pub fn update_record(
         ("created", Value::Bool(outcome.created)),
         (
             "setData",
-            outcome.set_data.as_ref().map_or(Value::Null, set_data_value),
+            outcome
+                .set_data
+                .as_ref()
+                .map_or(Value::Null, set_data_value),
         ),
         (
             "store",
             heatmap.get_data().as_ref().map_or(Value::Null, store_value),
         ),
     ]);
-    let throw = outcome
-        .error
-        .as_ref()
-        .map_or(Value::Null, |e| error_value(e));
+    let throw = outcome.error.as_ref().map_or(Value::Null, error_value);
     Ok((ok, throw))
 }
 
@@ -140,7 +141,10 @@ pub fn json_args(update: &Json) -> Result<Value, String> {
         let json = update
             .get(key)
             .ok_or_else(|| format!("update has no {key}"))?;
-        fields.push((key.into(), Value::from_json(json).map_err(|e| format!("{key}: {e}"))?));
+        fields.push((
+            key.into(),
+            Value::from_json(json).map_err(|e| format!("{key}: {e}"))?,
+        ));
     }
     Ok(Value::Object(fields))
 }
@@ -165,16 +169,16 @@ fn run_fixture(fixture: &Path, out: &Path) -> Result<(), String> {
     let mut heatmap = Heatmap::new();
     let mut records = Vec::new();
     for (i, update) in updates.iter().enumerate() {
-        let args = json_args(update)
-            .map_err(|e| format!("{}: update {i}: {e}", fixture.display()))?;
+        let args =
+            json_args(update).map_err(|e| format!("{}: update {i}: {e}", fixture.display()))?;
         let (ok, throw) = update_record(&mut heatmap, &args)
             .map_err(|e| format!("{}: update {i}: {e}", fixture.display()))?;
         let (size, mut read_error) = (heatmap.canvas_size(), Value::Null);
-        if std::env::var("ASRS_SHADOW_DUMP").is_ok() {
-            if let Ok(Some(image)) = heatmap.shadow_image_data() {
-                fs::write(out.join(format!("{name}.{i}.shadow")), image.data)
-                    .map_err(|e| format!("{e}"))?;
-            }
+        if std::env::var("ASRS_SHADOW_DUMP").is_ok()
+            && let Ok(Some(image)) = heatmap.shadow_image_data()
+        {
+            fs::write(out.join(format!("{name}.{i}.shadow")), image.data)
+                .map_err(|e| format!("{e}"))?;
         }
         match heatmap.image_data() {
             Ok(Some(image)) => pixel::write_png(
