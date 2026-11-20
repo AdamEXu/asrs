@@ -26,7 +26,8 @@ driven over SSH; neither has GPU acceleration, so Chromium and native code rende
             Checkout ~/asrs, oracle pack ~/asrs-pack.tar.zst.
 
 ASRS_HOST_DIR=<name> replaces `asrs` in those host paths (and suffixes the Windows .sync and
-.gui directories and the desktop task), so agents sharing a VM keep separate checkouts.
+.gui directories, the desktop task and the local sync state in target/hosts), so agents sharing
+a VM keep separate checkouts.
 
 The dev machine has 16 GB of memory; the Windows VM takes 8 GB and the Linux VM 6 GB (plus 8 GB
 of swap inside it), so avoid heavy builds on both at once. The Windows VM is shared with other
@@ -230,6 +231,14 @@ impl Host {
                 "{}: remote script failed ({})",
                 self.name, output.status
             ))
+        }
+    }
+
+    fn state_dir(&self, paths: &Paths) -> PathBuf {
+        let hosts = paths.root.join("target/hosts");
+        match host_dir().as_str() {
+            "asrs" => hosts.join(self.name),
+            dir => hosts.join(format!("{}-{dir}", self.name)),
         }
     }
 
@@ -440,7 +449,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
     }
 
     fn sync(&self, paths: &Paths) -> Result {
-        let state = paths.root.join("target/hosts").join(self.name);
+        let state = self.state_dir(paths);
         fs::create_dir_all(&state).map_err(|e| format!("{}: {e}", state.display()))?;
         let files = checkout_files(&paths.root)?;
         let listing = state.join("synced.txt");
@@ -547,7 +556,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
         } else {
             format!("parity/{dir}")
         };
-        let state = paths.root.join("target/hosts").join(self.name);
+        let state = self.state_dir(paths);
         fs::create_dir_all(&state).map_err(|e| format!("{}: {e}", state.display()))?;
         let tarball = state.join("fetch.tar.gz");
         match self.os {
@@ -613,7 +622,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
             Os::Windows => format!("{}/parity/vectors", self.checkout()),
             Os::Linux => format!("{}/parity/vectors", host_dir()),
         };
-        let state = paths.root.join("target/hosts").join(self.name);
+        let state = self.state_dir(paths);
         fs::create_dir_all(&state).map_err(|e| format!("{}: {e}", state.display()))?;
         let manifest = state.join("MANIFEST.json");
         self.scp(
