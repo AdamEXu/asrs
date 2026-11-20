@@ -718,11 +718,20 @@ impl<'a> Raster<'a> {
             }
             return;
         }
-        let Some(outline) = stroke_outline(&user, &self.stroke_style(), res_scale) else {
+        let style = self.stroke_style();
+        let Some(outline) = stroke_outline(&user, &style, res_scale) else {
             return;
         };
+        // Skia strokes conics directly, so its outline is about as dense as stroking one quad
+        // per conic; the finely split quads drawn here would overstate it.
+        let points = if path.has_conics() {
+            path.to_skia(None, f32::INFINITY)
+                .and_then(|coarse| stroke_outline(&coarse, &style, res_scale))
+                .map_or(outline.points().len(), |p| p.points().len())
+        } else {
+            outline.points().len()
+        };
         if let Some(device) = outline.transform(ctm) {
-            let points = device.points().len();
             self.fill_device(&device, &stroke, Some(points));
         }
     }

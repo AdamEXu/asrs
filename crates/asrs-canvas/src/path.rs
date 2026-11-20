@@ -158,6 +158,10 @@ impl Path {
         self.verbs.is_empty()
     }
 
+    pub fn has_conics(&self) -> bool {
+        self.verbs.iter().any(|v| matches!(v, Verb::Conic(..)))
+    }
+
     /// `SkPath::countPoints`: a conic stores its control and end points like a quad.
     pub fn skia_point_count(&self) -> usize {
         self.verbs
