@@ -24,9 +24,9 @@ suites:
   decode [<log file>...] [--timeout SECS]
         decode log files with both sides and compare the canonical dumps: every
         .dslog/.dsevents file under the corpus b tree, the public log cache and the
-        fuzz corpora, or just the files listed. A side that does not finish in time
-        reports 'never completes'; that verdict must agree and completed dumps must
-        be byte-identical.
+        fuzz corpora, or just the files listed. An oracle that does not finish in time
+        and an asrs-cli that exits with code 3 mean 'never completes'; that verdict
+        must agree, completed dumps must be byte-identical, and anything else fails.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
         anything else byte by byte
@@ -244,13 +244,16 @@ fn decode_suite(args: &[String]) -> Result {
                         return;
                     }
                     let path = &cases[i];
-                    let oracle = run_decode(
+                    let oracle = DecodeVerdict::oracle(run_decode(
                         oracle::oracle_command(&paths, "decode")
                             .expect("oracle decode command")
                             .arg(path),
                         timeout,
-                    );
-                    let rust = run_decode(Command::new(&target).arg("decode").arg(path), timeout);
+                    ));
+                    let rust = DecodeVerdict::port(run_decode(
+                        Command::new(&target).arg("decode").arg(path),
+                        timeout,
+                    ));
                     *results[i].lock().expect("decode result poisoned") = Some((oracle, rust));
                 }
             });
@@ -326,27 +329,53 @@ fn collect_paths(dir: &Path, keep: &dyn Fn(&Path) -> bool, out: &mut Vec<PathBuf
     }
 }
 
+const NEVER_COMPLETES: i32 = 3;
+
+enum DecodeRun {
+    Exited(Option<i32>, Vec<u8>),
+    TimedOut,
+}
+
 enum DecodeVerdict {
     Dump(Vec<u8>),
     NeverCompletes,
+    Broken(String),
 }
 
 impl DecodeVerdict {
+    /// The oracle never completes when its worker loops, so a timeout is that verdict there.
+    fn oracle(run: DecodeRun) -> Self {
+        match run {
+            DecodeRun::Exited(Some(0), out) => DecodeVerdict::Dump(out),
+            DecodeRun::Exited(code, _) => DecodeVerdict::Broken(format!("exited with {code:?}")),
+            DecodeRun::TimedOut => DecodeVerdict::NeverCompletes,
+        }
+    }
+
+    /// asrs-cli detects the loop and says so with its own exit code; it must never time out.
+    fn port(run: DecodeRun) -> Self {
+        match run {
+            DecodeRun::Exited(Some(0), out) => DecodeVerdict::Dump(out),
+            DecodeRun::Exited(Some(NEVER_COMPLETES), _) => DecodeVerdict::NeverCompletes,
+            DecodeRun::Exited(code, _) => DecodeVerdict::Broken(format!("exited with {code:?}")),
+            DecodeRun::TimedOut => DecodeVerdict::Broken("timed out".to_owned()),
+        }
+    }
+
     fn describe(&self) -> String {
         match self {
             DecodeVerdict::Dump(bytes) => format!("dumped {} bytes", bytes.len()),
             DecodeVerdict::NeverCompletes => "never completes".to_owned(),
+            DecodeVerdict::Broken(why) => why.clone(),
         }
     }
 }
 
-/// A process that exits zero produced its dump; anything else - a timeout from an entry loop
-/// that never ends or a fast nonzero exit - is "never completes".
-fn run_decode(command: &mut Command, timeout: Duration) -> DecodeVerdict {
+fn run_decode(command: &mut Command, timeout: Duration) -> DecodeRun {
     use std::io::Read as _;
     let mut child = match command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
         Ok(child) => child,
-        Err(_) => return DecodeVerdict::NeverCompletes,
+        Err(_) => return DecodeRun::Exited(None, Vec::new()),
     };
     let mut pipe = child.stdout.take().expect("stdout is piped");
     let reader = std::thread::spawn(move || {
@@ -363,22 +392,14 @@ fn run_decode(command: &mut Command, timeout: Duration) -> DecodeVerdict {
             Err(_) => break None,
         }
     };
+    if status.is_none() {
+        let _ = child.kill();
+    }
+    let _ = child.wait();
+    let out = reader.join().unwrap_or_default();
     match status {
-        Some(status) if status.success() => {
-            let stdout = reader.join().unwrap_or_default();
-            DecodeVerdict::Dump(stdout)
-        }
-        Some(_) => {
-            let _ = child.wait();
-            let _ = reader.join();
-            DecodeVerdict::NeverCompletes
-        }
-        _ => {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = reader.join();
-            DecodeVerdict::NeverCompletes
-        }
+        Some(status) => DecodeRun::Exited(status.code(), out),
+        None => DecodeRun::TimedOut,
     }
 }
 

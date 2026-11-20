@@ -1,21 +1,22 @@
-//! The worker half of `HistoricalDataSource`: what a format's `onmessage` can post back
-//! after the `{type: "progress", value: 1}` message every one of them sends first.
+//! Worker-side messages of `HistoricalDataSource_WorkerResponse`. F02 adds `Fields`, the request
+//! side and the `DecodeWorker` trait; F09 runs workers on their decode threads.
 
 use asrs_log::log::SerializedLog;
 
-/// Any JS throw inside a reader or worker body: a DataView RangeError on a truncated read,
-/// the unsupported-version string, or a TypeError from a missing slot's `undefined` data.
-pub struct Thrown;
-
-pub enum Outcome {
-    /// `{type: "initial", log, isPartial}`.
+pub enum Response {
+    Progress(f64),
     Initial {
         log: SerializedLog,
         is_partial: bool,
     },
-    /// `{type: "failed"}`.
     Failed,
-    /// The message handler threw, so the worker posts nothing: the source stays in
-    /// DecodingInitial with an empty log.
+}
+
+/// How a worker's `onmessage` ends without returning. Either way the hub receives nothing more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Abort {
+    /// Any JS throw: a DataView RangeError, a thrown string, a TypeError on an `undefined` slot.
     Threw,
+    /// Upstream loops forever. The port detects the cycle and stops instead of spinning.
+    NeverReturns,
 }

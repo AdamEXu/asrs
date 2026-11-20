@@ -1,74 +1,21 @@
-//! `asrs-cli decode <log file>`: opens the file the way the hub opens a historical log and
-//! prints the canonical CVE-1 Log dump for the "initial" and "full" phases, matching
-//! `oracle decode` (oracle/src/decode.ts and oracle/src/historical/dump.ts). The session side
-//! is `HistoricalDataSource.openFile` and `handleMainMessage`; a worker that never answers
-//! leaves the command running, exactly as it leaves the source stuck in DecodingInitial.
+//! `asrs-cli decode <log file>`: opens the file as the hub opens a historical log and prints the
+//! canonical CVE-1 dump for the "initial" and "full" phases, matching `oracle decode`
+//! (oracle/src/decode.ts, oracle/src/historical/dump.ts). Where upstream's worker never returns,
+//! nothing is printed and the exit code is `NEVER_COMPLETES`, the oracle's timeout.
 
-mod dslog;
+use std::process::ExitCode;
 
-use std::fs;
-
-use asrs_formats::worker;
+use asrs_formats::historical::HistoricalDataSource;
+use asrs_formats::worker::Abort;
 use asrs_js::string::JsString;
 use asrs_log::log::{Log, SerializedLog};
 use asrs_parity::Value;
+use asrs_services::historical_start;
 
 use crate::log_field::{serialized_value, string_value};
 
 const USAGE: &str = "usage: asrs-cli decode <log file>";
-
-type Worker = fn(&[Option<Vec<u8>>]) -> worker::Outcome;
-
-/// `HistoricalDataSource.WORKER_NAMES`: the last extension that matches wins, so later
-/// entries shadow earlier ones.
-const WORKERS: &[(&str, Worker)] = &[(".dslog", dslog::run)];
-
-fn worker_for(path: &str) -> Option<Worker> {
-    WORKERS
-        .iter()
-        .rev()
-        .find(|(extension, _)| path.ends_with(extension))
-        .map(|(_, worker)| *worker)
-}
-
-fn read_or_null(path: &str) -> Option<Vec<u8>> {
-    fs::read(path).ok()
-}
-
-/// The `files` list `historical-start` builds: a `.dslog` path also pulls in the sibling
-/// `.dsevents`; anything else is a single slot.
-fn read_input_files(path: &str) -> Vec<Option<Vec<u8>>> {
-    if path.ends_with(".dslog") {
-        vec![
-            read_or_null(path),
-            read_or_null(&format!("{}dsevents", &path[..path.len() - 5])),
-        ]
-    } else {
-        vec![read_or_null(path)]
-    }
-}
-
-fn open(path: &str) -> (&'static str, Log) {
-    let mut log = Log::new(true);
-    let files = read_input_files(path);
-    if files.iter().all(Option::is_none) {
-        return ("Error", log);
-    }
-    let Some(worker) = worker_for(path) else {
-        return ("Error", log);
-    };
-    match worker(&files) {
-        worker::Outcome::Initial { log: payload, .. } => {
-            // `mergeWith(Log.fromSerialized(payload), "")` into an empty log: the fields are
-            // rebuilt from `source.toSerialized()` and the range, zero and generated parents
-            // carry over, so this is the payload serialized a second time.
-            log = Log::from_serialized(Log::from_serialized(payload).to_serialized());
-            ("Idle", log)
-        }
-        worker::Outcome::Failed => ("Error", log),
-        worker::Outcome::Threw => ("DecodingInitial", log),
-    }
-}
+const NEVER_COMPLETES: u8 = 3;
 
 fn dump_log(
     serialized: &SerializedLog,
@@ -147,24 +94,34 @@ fn dump_log(
     lines
 }
 
-pub fn run(args: &[String]) -> Result<(), String> {
+pub fn run(args: &[String]) -> ExitCode {
     let [path] = args else {
-        return Err(USAGE.to_owned());
+        eprintln!("{USAGE}");
+        return ExitCode::FAILURE;
     };
-    let mut path = path.as_str();
-    let rewritten;
-    if path.ends_with(".dsevents") {
-        rewritten = format!("{}dslog", &path[..path.len() - 8]);
-        path = &rewritten;
+    let mut source = HistoricalDataSource::open_file(path);
+    let mut log = Log::new(true);
+    let files = historical_start::read_files(source.path());
+    match source.handle_main_message(&mut log, &files) {
+        Ok(Some(Abort::NeverReturns)) => {
+            eprintln!("{path}: upstream's worker never returns");
+            return ExitCode::from(NEVER_COMPLETES);
+        }
+        Ok(_) => {}
+        Err(unported) => {
+            eprintln!("{path}: {:?} worker is not ported yet", unported.0);
+            return ExitCode::FAILURE;
+        }
     }
-    let (status, log) = open(path);
+    let serialized = log.to_serialized();
+    let status = source.status().name();
     let mut out = String::new();
     for phase in ["initial", "full"] {
-        for line in dump_log(&log.to_serialized(), phase, status, &[]) {
+        for line in dump_log(&serialized, phase, status, &[]) {
             out.push_str(&line);
             out.push('\n');
         }
     }
     print!("{out}");
-    Ok(())
+    ExitCode::SUCCESS
 }

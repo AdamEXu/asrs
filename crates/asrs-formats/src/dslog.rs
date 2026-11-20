@@ -1,33 +1,35 @@
 //! src/hub/dataSources/dslog/*: the .dslog v4 and .dsevents v4 readers plus the
 //! dsLogWorker logic that writes their records into a Log.
 
+use std::collections::BTreeSet;
+
 use asrs_js::math;
 use asrs_js::string::{JsString, TextDecoder};
 use asrs_log::log::Log;
 
-use crate::worker::{Outcome, Thrown};
+use crate::worker::{Abort, Response};
 
 const HEADER_SIZE: i64 = 4 + 8 + 8;
 const PERIOD_SECS: f64 = 0.02;
 
-fn u8_at(data: &[u8], position: i64) -> Result<u8, Thrown> {
-    data.get(usize::try_from(position).map_err(|_| Thrown)?)
+fn u8_at(data: &[u8], position: i64) -> Result<u8, Abort> {
+    data.get(usize::try_from(position).map_err(|_| Abort::Threw)?)
         .copied()
-        .ok_or(Thrown)
+        .ok_or(Abort::Threw)
 }
 
-fn i8_at(data: &[u8], position: i64) -> Result<i8, Thrown> {
+fn i8_at(data: &[u8], position: i64) -> Result<i8, Abort> {
     Ok(u8_at(data, position)? as i8)
 }
 
-fn u16_be_at(data: &[u8], position: i64) -> Result<u16, Thrown> {
+fn u16_be_at(data: &[u8], position: i64) -> Result<u16, Abort> {
     Ok(u16::from_be_bytes([
         u8_at(data, position)?,
         u8_at(data, position + 1)?,
     ]))
 }
 
-fn i32_be_at(data: &[u8], position: i64) -> Result<i32, Thrown> {
+fn i32_be_at(data: &[u8], position: i64) -> Result<i32, Abort> {
     let mut bytes = [0u8; 4];
     for (i, byte) in bytes.iter_mut().enumerate() {
         *byte = u8_at(data, position + i as i64)?;
@@ -35,7 +37,7 @@ fn i32_be_at(data: &[u8], position: i64) -> Result<i32, Thrown> {
     Ok(i32::from_be_bytes(bytes))
 }
 
-fn i64_be_at(data: &[u8], position: i64) -> Result<i64, Thrown> {
+fn i64_be_at(data: &[u8], position: i64) -> Result<i64, Abort> {
     let mut bytes = [0u8; 8];
     for (i, byte) in bytes.iter_mut().enumerate() {
         *byte = u8_at(data, position + i as i64)?;
@@ -43,7 +45,7 @@ fn i64_be_at(data: &[u8], position: i64) -> Result<i64, Thrown> {
     Ok(i64::from_be_bytes(bytes))
 }
 
-fn u64_be_at(data: &[u8], position: i64) -> Result<u64, Thrown> {
+fn u64_be_at(data: &[u8], position: i64) -> Result<u64, Abort> {
     Ok(i64_be_at(data, position)? as u64)
 }
 
@@ -115,15 +117,15 @@ impl<'a> DsLogReader<'a> {
         DsLogReader { data }
     }
 
-    pub fn version(&self) -> Result<i32, Thrown> {
+    pub fn version(&self) -> Result<i32, Abort> {
         i32_be_at(self.data, 0)
     }
 
-    pub fn is_supported_version(&self) -> Result<bool, Thrown> {
+    pub fn is_supported_version(&self) -> Result<bool, Abort> {
         Ok(self.version()? == 4)
     }
 
-    pub fn timestamp(&self) -> Result<f64, Thrown> {
+    pub fn timestamp(&self) -> Result<f64, Abort> {
         Ok(convert_lv_time(
             i64_be_at(self.data, 4)?,
             u64_be_at(self.data, 12)?,
@@ -132,15 +134,15 @@ impl<'a> DsLogReader<'a> {
 
     /// `forEach`: the record loop's try/catch swallows a truncated read and keeps every entry
     /// already delivered; only the version check throws out of the function.
-    pub fn for_each(&self, callback: &mut impl FnMut(DsLogEntry)) -> Result<(), Thrown> {
+    pub fn for_each(&self, callback: &mut impl FnMut(DsLogEntry)) -> Result<(), Abort> {
         if !self.is_supported_version()? {
-            return Err(Thrown);
+            return Err(Abort::Threw);
         }
         let _ = self.records(callback);
         Ok(())
     }
 
-    fn records(&self, callback: &mut impl FnMut(DsLogEntry)) -> Result<(), Thrown> {
+    fn records(&self, callback: &mut impl FnMut(DsLogEntry)) -> Result<(), Abort> {
         let mut position = HEADER_SIZE;
         let mut timestamp = 0.0f64;
         let mut last_battery_volts = 0.0f64;
@@ -273,30 +275,35 @@ impl<'a> DsEventsReader<'a> {
         }
     }
 
-    pub fn version(&self) -> Result<i32, Thrown> {
+    pub fn version(&self) -> Result<i32, Abort> {
         i32_be_at(self.data, 0)
     }
 
-    pub fn is_supported_version(&self) -> Result<bool, Thrown> {
+    pub fn is_supported_version(&self) -> Result<bool, Abort> {
         Ok(self.version()? == 4)
     }
 
-    pub fn timestamp(&self) -> Result<f64, Thrown> {
+    pub fn timestamp(&self) -> Result<f64, Abort> {
         Ok(convert_lv_time(
             i64_be_at(self.data, 4)?,
             u64_be_at(self.data, 12)?,
         ))
     }
 
-    /// `forEach`: a negative or corrupt entry length can cycle `position` forever. The loop
-    /// is left faithful, so such input spins exactly the way upstream's worker does.
-    pub fn for_each(&self, callback: &mut impl FnMut(DsEventsEntry)) -> Result<(), Thrown> {
+    /// `forEach`. `position` is the loop's only state, so a negative length that brings it back
+    /// to a position already read means upstream spins forever; that ends in
+    /// `Abort::NeverReturns` instead.
+    pub fn for_each(&self, callback: &mut impl FnMut(DsEventsEntry)) -> Result<(), Abort> {
         if !self.is_supported_version()? {
-            return Err(Thrown);
+            return Err(Abort::Threw);
         }
         let mut position = HEADER_SIZE;
         let start_time = self.timestamp()?;
+        let mut visited = BTreeSet::new();
         loop {
+            if !visited.insert(position) {
+                return Err(Abort::NeverReturns);
+            }
             let timestamp = convert_lv_time(
                 i64_be_at(self.data, position)?,
                 u64_be_at(self.data, position + 8)?,
@@ -347,21 +354,21 @@ impl<'a> DsEventsReader<'a> {
     }
 }
 
-/// dsLogWorker's `onmessage`. `files` is `request.data`: a `null` slot is skipped and an
-/// absent slot reads `undefined`, which passes the `!== null` check and throws inside the
-/// reader constructor.
-pub fn run_worker(files: &[Option<&[u8]>]) -> Outcome {
+/// dsLogWorker's `onmessage` for its `start` request. `files` is `request.data`: a `null` slot
+/// is skipped and an absent slot reads `undefined`, which passes the `!== null` check and
+/// throws inside the reader constructor.
+pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> Result<(), Abort> {
+    post(Response::Progress(1.0));
     let mut log = Log::new(true);
     match files.first().copied() {
         Some(None) => {}
         Some(Some(data)) => {
             let ds_log = DsLogReader::new(data);
-            match ds_log.is_supported_version() {
-                Err(_) => return Outcome::Threw,
-                Ok(false) => return Outcome::Failed,
-                Ok(true) => {}
+            if !ds_log.is_supported_version()? {
+                post(Response::Failed);
+                return Ok(());
             }
-            let _ = ds_log.for_each(&mut |entry| {
+            ds_log.for_each(&mut |entry| {
                 log.put_number(
                     &JsString::from("/DSLog/TripTimeMS"),
                     entry.timestamp,
@@ -427,32 +434,69 @@ pub fn run_worker(files: &[Option<&[u8]>]) -> Outcome {
                     entry.timestamp,
                     entry.power_distribution_currents,
                 );
-            });
+            })?;
         }
-        None => return Outcome::Threw,
+        None => return Err(Abort::Threw),
     }
     match files.get(1).copied() {
         Some(None) => {}
         Some(Some(data)) => {
             let ds_events = DsEventsReader::new(data);
-            match ds_events.is_supported_version() {
-                Err(_) => return Outcome::Threw,
-                Ok(false) => return Outcome::Failed,
-                Ok(true) => {}
+            if !ds_events.is_supported_version()? {
+                post(Response::Failed);
+                return Ok(());
             }
-            if ds_events
-                .for_each(&mut |entry| {
-                    log.put_string(&JsString::from("/DSEvents"), entry.timestamp, entry.text);
-                })
-                .is_err()
-            {
-                return Outcome::Threw;
-            }
+            ds_events.for_each(&mut |entry| {
+                log.put_string(&JsString::from("/DSEvents"), entry.timestamp, entry.text);
+            })?;
         }
-        None => return Outcome::Threw,
+        None => return Err(Abort::Threw),
     }
-    Outcome::Initial {
+    post(Response::Initial {
         log: log.to_serialized(),
         is_partial: false,
+    });
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn events(records: &[(i32, &[u8])]) -> Vec<u8> {
+        let mut bytes = 4i32.to_be_bytes().to_vec();
+        bytes.extend([0; 16]);
+        for &(length, text) in records {
+            bytes.extend([0; 16]);
+            bytes.extend(length.to_be_bytes());
+            bytes.extend(text);
+        }
+        bytes
+    }
+
+    fn worker_end(dsevents: &[u8]) -> (Result<(), Abort>, usize) {
+        let mut replies = 0;
+        let end = run_worker(&[None, Some(dsevents)], &mut |_| replies += 1);
+        (end, replies)
+    }
+
+    #[test]
+    fn a_length_that_returns_to_a_read_position_never_returns() {
+        assert_eq!(
+            worker_end(&events(&[(-20, b"")])),
+            (Err(Abort::NeverReturns), 1)
+        );
+        let two_cycle = events(&[(2, b"ab"), (-42, b"")]);
+        assert_eq!(worker_end(&two_cycle), (Err(Abort::NeverReturns), 1));
+    }
+
+    #[test]
+    fn a_length_that_leaves_the_file_throws() {
+        assert_eq!(worker_end(&events(&[(-60, b"")])), (Err(Abort::Threw), 1));
+    }
+
+    #[test]
+    fn records_that_reach_the_end_complete() {
+        assert_eq!(worker_end(&events(&[(0, b""), (1, b"x")])), (Ok(()), 2));
     }
 }

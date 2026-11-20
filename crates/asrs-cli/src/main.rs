@@ -32,7 +32,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("fn") => fn_cmd::run(&args[1..]),
-        Some("decode") => decode::run(&args[1..]),
+        Some("decode") => return decode::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
