@@ -8,7 +8,7 @@
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 
-use asrs_formats::custom_schemas;
+use asrs_formats::custom_schemas::{self, SchemaError};
 use asrs_js::json;
 use asrs_js::math;
 use asrs_js::string::JsString;
@@ -20,7 +20,7 @@ use asrs_log::log::log_key_utils::{
 use asrs_log::log::log_util::get_urcl_keys;
 use asrs_log::log::log_value_sets::RawValue;
 use asrs_log::log::robot_state::{AUTONOMOUS_KEYS, ENABLED_KEYS, UTILITY_KEYS};
-use asrs_log::log::{Log, LoggableType};
+use asrs_log::log::{Log, LogError, LoggableType};
 
 use super::client::{
     NT4_PORTS_DEFAULT, NT4_PORTS_DS, NT4_PORTS_SYSTEMCORE, Nt4Client, Nt4Context, Nt4Handler,
@@ -654,9 +654,10 @@ fn put_topic_value(
         )?;
     } else {
         log.put_raw(key, timestamp, RawValue::from(bytes.clone()))?;
-        if custom_schemas::has(ty) {
-            if let Some(parser) = custom_schemas::get(ty) {
-                let _ = parser(log, key, timestamp, bytes);
+        if let Some(parser) = custom_schemas::get(ty) {
+            match parser(log, key, timestamp, bytes) {
+                Ok(()) | Err(SchemaError::Threw) | Err(SchemaError::Log(LogError::Proto(_))) => {}
+                Err(SchemaError::Log(error)) => return Err(error.into()),
             }
             log.set_generated_parent(key);
         }

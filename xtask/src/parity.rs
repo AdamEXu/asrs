@@ -31,8 +31,7 @@ suites:
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
-        output up to that point must be a prefix of the oracle's. Requests for fields
-        whose custom schema type the port cannot decode yet are skipped on both sides.
+        output up to that point must be a prefix of the oracle's.
         --plant flips a bit in the first asrs-cli dump, so the run fails on purpose.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
@@ -238,21 +237,6 @@ fn decode_suite(args: &[String]) -> Result {
         .unwrap_or_else(|| crate::workspace_root().join("target"))
         .join("debug")
         .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
-    let unported = String::from_utf8(
-        Command::new(&target)
-            .args(["decode-worker", "--unported-types"])
-            .output()
-            .map_err(|e| format!("asrs-cli decode-worker --unported-types: {e}"))?
-            .stdout,
-    )
-    .map_err(|e| format!("asrs-cli decode-worker --unported-types: {e}"))?
-    .trim()
-    .to_owned();
-    let skip_flags: Vec<String> = if unported.is_empty() {
-        Vec::new()
-    } else {
-        vec!["--skip-types".to_owned(), unported.clone()]
-    };
     let mut cases = Vec::new();
     for file in &files {
         let partial = file.extension().is_some_and(|e| e == "wpilog");
@@ -277,7 +261,7 @@ fn decode_suite(args: &[String]) -> Result {
                         return;
                     }
                     let (path, mode) = &cases[i];
-                    let flags = mode.flags(&skip_flags);
+                    let flags = mode.flags();
                     let mut oracle_command = oracle::oracle_command(&paths, mode.oracle_entry())
                         .expect("oracle decode command");
                     oracle_command.args(&flags).arg(path);
@@ -292,7 +276,6 @@ fn decode_suite(args: &[String]) -> Result {
     });
     let mut failures = Vec::new();
     let mut never = 0;
-    let mut skipped = 0;
     let mut unmodeled = Vec::new();
     let mut planted = !plant;
     for (i, (path, mode)) in cases.iter().enumerate() {
@@ -304,12 +287,6 @@ fn decode_suite(args: &[String]) -> Result {
         let name = format!("{} ({})", path.display(), mode.cli_command());
         if let DecodeVerdict::NeverCompletes(_) = oracle {
             never += 1;
-        }
-        if let DecodeVerdict::Dump(out) | DecodeVerdict::NeverCompletes(out) = &oracle {
-            skipped += out
-                .windows(SKIPPED_MARK.len())
-                .filter(|w| *w == SKIPPED_MARK)
-                .count();
         }
         if !planted {
             planted = rust.plant();
@@ -348,11 +325,6 @@ fn decode_suite(args: &[String]) -> Result {
         cases.len(),
         unmodeled.len()
     );
-    if skipped > 0 {
-        eprintln!(
-            "  {skipped} field requests skipped for unported custom schema types ({unported})"
-        );
-    }
     for name in &unmodeled {
         eprintln!("  not modeled: {name}");
     }
@@ -379,11 +351,11 @@ impl DecodeMode {
         }
     }
 
-    fn flags(&self, skip_flags: &[String]) -> Vec<String> {
+    fn flags(&self) -> Vec<String> {
         match self {
             DecodeMode::Decode { partial: true } => vec!["--initial".to_owned()],
             DecodeMode::Decode { partial: false } => Vec::new(),
-            DecodeMode::Worker => skip_flags.to_vec(),
+            DecodeMode::Worker => Vec::new(),
         }
     }
 }
@@ -425,7 +397,6 @@ fn collect_paths(dir: &Path, keep: &dyn Fn(&Path) -> bool, out: &mut Vec<PathBuf
 
 const NEVER_COMPLETES: i32 = 3;
 const UNMODELED: i32 = 4;
-const SKIPPED_MARK: &[u8] = b"[\"skipped\",true]";
 
 enum DecodeRun {
     Exited(Option<i32>, Vec<u8>),

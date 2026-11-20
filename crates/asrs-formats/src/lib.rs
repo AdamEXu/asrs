@@ -2,6 +2,7 @@ pub mod custom_schemas;
 pub mod dslog;
 pub mod historical;
 pub mod spark;
+pub mod urcl;
 pub mod worker;
 pub mod wpilog;
 pub mod wpilog_worker;

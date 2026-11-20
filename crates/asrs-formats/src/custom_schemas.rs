@@ -4,29 +4,33 @@
 use asrs_js::string::JsString;
 use asrs_log::log::{Log, LogError};
 
+use crate::urcl;
+
+#[derive(Debug)]
 pub enum SchemaError {
     /// The parser threw. The worker catches it, so only the writes made before the throw remain.
     Threw,
     Log(LogError),
 }
 
+impl From<LogError> for SchemaError {
+    fn from(error: LogError) -> Self {
+        SchemaError::Log(error)
+    }
+}
+
 pub type SchemaParser = fn(&mut Log, &JsString, f64, &[u8]) -> Result<(), SchemaError>;
 
-/// The keys of upstream's registry (`CustomSchemas.has`).
-pub const NAMES: [&str; 3] = ["URCL", "URCLr2_periodic", "URCLr3_periodic"];
+const REGISTRY: [(&str, SchemaParser); 3] = [
+    ("URCL", urcl::parse_urcl_r1),
+    ("URCLr2_periodic", urcl::parse_urcl_r2),
+    ("URCLr3_periodic", urcl::parse_urcl_r3),
+];
 
-pub fn has(type_: &JsString) -> bool {
-    NAMES.iter().any(|name| *type_ == JsString::from(*name))
-}
-
-/// `CustomSchemas.get`. `None` for a registered name means its parser is not ported yet
-/// (URCL arrives with unit F08).
-pub fn get(_type: &JsString) -> Option<SchemaParser> {
-    None
-}
-
-pub fn unported() -> impl Iterator<Item = &'static str> {
-    NAMES
-        .into_iter()
-        .filter(|name| get(&JsString::from(*name)).is_none())
+/// `CustomSchemas.get`; `None` where `CustomSchemas.has` is false.
+pub fn get(type_: &JsString) -> Option<SchemaParser> {
+    REGISTRY
+        .iter()
+        .find(|(name, _)| *type_ == JsString::from(*name))
+        .map(|&(_, parser)| parser)
 }

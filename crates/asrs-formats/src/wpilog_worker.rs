@@ -290,12 +290,7 @@ impl WpilogWorker {
                     ));
                 }
                 caught(log.put_raw(key, timestamp, raw.clone()))?;
-                if custom_schemas::has(type_) {
-                    let Some(parser) = custom_schemas::get(type_) else {
-                        return Err(Abort::Unmodeled(
-                            "custom schema parsers are not ported yet (unit F08)",
-                        ));
-                    };
+                if let Some(parser) = custom_schemas::get(type_) {
                     match parser(log, key, timestamp, &raw) {
                         Ok(()) | Err(SchemaError::Threw) => {}
                         Err(SchemaError::Log(error)) => caught(Err(error))?,
