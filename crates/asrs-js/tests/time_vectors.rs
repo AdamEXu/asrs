@@ -29,8 +29,17 @@ mod log_field {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
 }
 
+mod log_keys {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
 mod log_run {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
 }
 
 mod log_struct {

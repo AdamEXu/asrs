@@ -13,7 +13,9 @@ pub use log_core::{Log, SerializedLog, TimestampDisplay};
 pub use log_field::{LogField, SerializedLogField};
 pub use log_field_tree::LogFieldTree;
 pub use log_key_utils::find_key;
-pub use log_util::get_or_default;
+pub use log_util::{
+    ARRAY_TEXT_SIZE_LIMIT, LogFieldIterator, MAX_SEARCH_RESULTS, TYPE_KEY, get_or_default,
+};
 pub use log_value_sets::{
     LogValue, LogValueSet, LogValueSetAny, LogValueSetBoolean, LogValueSetBooleanArray,
     LogValueSetNumber, LogValueSetNumberArray, LogValueSetRaw, LogValueSetString,
