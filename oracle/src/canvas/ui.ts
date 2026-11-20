@@ -10,6 +10,7 @@ export interface UiButton {
   size: number;
   icon: string;
   state: ButtonState;
+  fit?: { max: number; scale: number };
 }
 
 export interface UiProbe {
@@ -74,7 +75,17 @@ function iconScene(upstream: string, dark: boolean): UiScene {
   const odd = ["add.svg", "play.svg", "tbalamp.svg", "fastforwardcircle.svg", "sourceList/360.svg"];
   [20, 25, 31, 40].forEach((size, row) => {
     odd.forEach((icon, i) => {
-      buttons.push({ x: 10 + i * 48 + row * 0.5, y: y + 0.5 * (i % 2), size, icon, state: "normal" });
+      buttons.push({ x: 10 + i * 48 + row, y: y + (i % 2), size, icon, state: "normal" });
+    });
+    y += size + 6;
+  });
+  const fits = [
+    { size: 28, fit: { max: 1, scale: 0.9 } },
+    { size: 40, fit: { max: 0.5, scale: 1.2 } }
+  ];
+  fits.forEach(({ size, fit }) => {
+    odd.forEach((icon, i) => {
+      buttons.push({ x: 10 + i * 48 + (i % 2), y, size, icon, state: "normal", fit });
     });
     y += size + 6;
   });
@@ -134,6 +145,12 @@ function attr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
+function imgStyle(btn: UiButton): string {
+  if (btn.fit === undefined) return "";
+  const { max, scale } = btn.fit;
+  return ` style="max-width:${Math.round(max * 100)}%;max-height:${Math.round(max * 100)}%;transform:translate(-50%, -50%) scale(${Math.round(scale * 100)}%)"`;
+}
+
 export function uiHtml(scene: UiScene, upstream: string): string {
   const href = (rel: string) => pathToFileURL(path.join(upstream, rel)).href;
   const [r, g, b] = scene.background;
@@ -143,7 +160,7 @@ export function uiHtml(scene: UiScene, upstream: string): string {
     const disabled = btn.state === "disabled" ? " disabled" : "";
     parts.push(
       `<button${cls}${disabled} style="position:absolute;left:${btn.x}px;top:${btn.y}px;width:${btn.size}px;height:${btn.size}px">` +
-        `<img src="${href(`www/symbols/${btn.icon}`)}"></button>`
+        `<img${imgStyle(btn)} src="${href(`www/symbols/${btn.icon}`)}"></button>`
     );
   }
   for (const probe of scene.probes) {

@@ -20,6 +20,7 @@ struct Button {
     size: f32,
     icon: Symbol,
     state: String,
+    fit: IconFit,
 }
 
 struct Probe {
@@ -98,6 +99,10 @@ fn load(path: &Path) -> Scene {
                 size: num(b, "size") as f32,
                 icon: Symbol::named(&text(b, "icon")).expect("embedded symbol"),
                 state: text(b, "state"),
+                fit: b.get("fit").map_or(IconFit::BUTTON, |f| IconFit::Centered {
+                    max: num(f, "max"),
+                    scale: num(f, "scale"),
+                }),
             })
             .collect(),
         probes: list(&j, "probes")
@@ -144,7 +149,8 @@ impl Render for View {
                 .size(b.size, b.size)
                 .appearance(scene.appearance)
                 .blurred(b.state == "blurred")
-                .disabled(b.state == "disabled");
+                .disabled(b.state == "disabled")
+                .fit(b.fit);
             root = root.child(
                 div()
                     .absolute()
@@ -241,8 +247,12 @@ fn render(scene: &Arc<Scene>, scale: f32, out: &Path) {
             ])
         })
         .collect();
-    let buttons = scene
-        .buttons
+    let sampled: &[Button] = if scene.pointer.is_some() {
+        &scene.buttons
+    } else {
+        &[]
+    };
+    let buttons = sampled
         .iter()
         .map(|b| at(&shot, scale, b.x + b.size / 2.0, b.y + 1.0))
         .collect();

@@ -89,7 +89,14 @@ pub struct Raster {
 
 /// Draws `tree` into the device-space rectangle `(x, y, w, h)` with anti-aliasing, then runs
 /// `chain` over every pixel on unpremultiplied colour, as Chromium paints a filtered `<img>`.
-pub fn rasterize(tree: &usvg::Tree, rect: [f64; 4], chain: &FilterChain) -> Option<Raster> {
+/// With a `viewport` (CSS px), the tree is first fitted into it centred with uniform scale
+/// (`preserveAspectRatio` `xMidYMid meet`) and the viewport is then stretched onto the rectangle.
+pub fn rasterize(
+    tree: &usvg::Tree,
+    rect: [f64; 4],
+    viewport: Option<[f64; 2]>,
+    chain: &FilterChain,
+) -> Option<Raster> {
     let [x, y, w, h] = rect;
     if !(w > 0.0 && h > 0.0) {
         return None;
@@ -99,13 +106,27 @@ pub fn rasterize(tree: &usvg::Tree, rect: [f64; 4], chain: &FilterChain) -> Opti
     let height = ((y + h).ceil() - y0) as u32;
     let mut pixmap = Pixmap::new(width, height)?;
     let size = tree.size();
+    let (tw, th) = (f64::from(size.width()), f64::from(size.height()));
+    let [sx, sy, ox, oy] = match viewport {
+        None => [w / tw, h / th, 0.0, 0.0],
+        Some([cw, ch]) => {
+            let fit = (cw / tw).min(ch / th);
+            let (kx, ky) = (w / cw, h / ch);
+            [
+                kx * fit,
+                ky * fit,
+                kx * (cw - tw * fit) * 0.5,
+                ky * (ch - th * fit) * 0.5,
+            ]
+        }
+    };
     let transform = Transform::from_row(
-        (w / f64::from(size.width())) as f32,
+        sx as f32,
         0.0,
         0.0,
-        (h / f64::from(size.height())) as f32,
-        (x - x0) as f32,
-        (y - y0) as f32,
+        sy as f32,
+        (x - x0 + ox) as f32,
+        (y - y0 + oy) as f32,
     );
     resvg::render(tree, transform, &mut pixmap.as_mut());
     let mut bgra = Vec::with_capacity(pixmap.data().len());
@@ -161,7 +182,7 @@ mod tests {
     fn opaque_square_takes_the_filtered_colour() {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#000000"/></svg>"##;
         let chain = FilterChain::parse(crate::theme::chains::BUTTON_LIGHT).unwrap();
-        let r = rasterize(&parse(svg).unwrap(), [0.0, 0.0, 4.0, 4.0], &chain).unwrap();
+        let r = rasterize(&parse(svg).unwrap(), [0.0, 0.0, 4.0, 4.0], None, &chain).unwrap();
         assert_eq!((r.width, r.height), (4, 4));
         assert_eq!(&r.bgra[..4], &[84, 84, 84, 255]);
     }

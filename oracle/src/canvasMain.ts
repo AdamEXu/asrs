@@ -193,7 +193,7 @@ async function ui(out: string, scaleArg: string) {
       if (got !== p.color) throw new Error(`colour patch ${p.color} captured as ${got}; start Electron with --force-color-profile=srgb`);
     }
     const probes = scene.probes.map((p) => ({ chain: p.chain, input: p.input, opacity: p.opacity, rgba: shot.at(p.x + p.size / 2, p.y + p.size / 2) }));
-    const buttons = scene.buttons.map((b) => shot.at(b.x + b.size / 2, b.y + 1));
+    const buttons = (scene.pointer === null ? [] : scene.buttons).map((b) => shot.at(b.x + b.size / 2, b.y + 1));
     const base = path.join(out, "ref", `${scene.name}@${scale}x`);
     fs.mkdirSync(path.dirname(base), { recursive: true });
     fs.writeFileSync(`${base}.png`, encodePng(shot.size.width, shot.size.height, shot.rgba));
