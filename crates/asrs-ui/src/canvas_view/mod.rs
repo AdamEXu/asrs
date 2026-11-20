@@ -7,9 +7,7 @@ use asrs_canvas::raster::CanvasError;
 use asrs_canvas::text::lut::MaskGammaLut;
 use asrs_canvas::text::{TextBackend, platform_backend};
 use asrs_canvas::{Canvas2d, Pixmap, Raster, TextRaster};
-use gpui_kit::{
-    App, Bounds, Context, Entity, Global, Pixels, Point, Window, canvas,
-};
+use gpui_kit::{App, Bounds, Context, Entity, Global, Pixels, Point, Window, canvas};
 
 use geometry::{bitmap_side, client_rect_coord, client_size, mouse_client, valid_bitmap};
 pub use presenter::FramePresenter;
@@ -57,10 +55,7 @@ impl CanvasMetrics {
 
     /// The bitmap for a canvas sized to its own client box, as most renderers do.
     pub fn client_bitmap_size(&self) -> (u32, u32) {
-        self.bitmap_size(
-            f64::from(self.client_width),
-            f64::from(self.client_height),
-        )
+        self.bitmap_size(f64::from(self.client_width), f64::from(self.client_height))
     }
 
     /// `event.clientX - rect.x` and `event.clientY - rect.y` for a mouse event at `position`.
@@ -187,7 +182,7 @@ impl CanvasState {
             }
             Some((pixmap, errors)) => {
                 self.errors = errors;
-                self.presenter.present(&pixmap, window, cx);
+                self.presenter.present(pixmap, window, cx);
             }
         }
         self.frame = Some(frame);
@@ -195,7 +190,7 @@ impl CanvasState {
     }
 
     /// Shows a frame drawn elsewhere (a 3D readback, a video frame), bypassing the display list.
-    pub fn present_pixmap(&mut self, pixmap: &Pixmap, window: &mut Window, cx: &mut App) {
+    pub fn present_pixmap(&mut self, pixmap: Pixmap, window: &mut Window, cx: &mut App) {
         self.frame = None;
         self.errors.clear();
         self.presenter.present(pixmap, window, cx);

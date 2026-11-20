@@ -61,7 +61,11 @@ pub fn bitmap_side(value: f64, default: u32) -> u32 {
         return 0;
     }
     let side = value.trunc().rem_euclid(4_294_967_296.0) as u32;
-    if side > i32::MAX as u32 { default } else { side }
+    if side > i32::MAX as u32 {
+        default
+    } else {
+        side
+    }
 }
 
 /// `CanvasRenderingContextHost::IsValidImageSize`: an invalid canvas draws nothing.

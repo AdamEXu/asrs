@@ -122,3 +122,12 @@ required-features = ["parity"]
 name = "icon_capture"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "canvas_view"
+harness = false
+required-features = ["parity"]
+
+[[example]]
+name = "canvas_frames"
+required-features = ["parity"]

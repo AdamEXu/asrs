@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use asrs_canvas::Pixmap;
 use asrs_canvas::pixels::unpremultiply;
@@ -7,27 +7,55 @@ use image::{Frame, RgbaImage};
 
 use super::geometry::device_snap;
 
-/// Straight-alpha BGRA of a premultiplied pixmap, equal to `asrs_canvas::pixels::to_straight_bgra`
-/// with the opaque and clear pixels that dominate canvas frames taken without the divide.
-pub fn straight_bgra(pixmap: &Pixmap) -> Vec<u8> {
-    let data = pixmap.data();
-    let mut out = vec![0u8; data.len()];
-    for (dst, src) in out
-        .as_chunks_mut::<4>()
-        .0
-        .iter_mut()
-        .zip(data.as_chunks::<4>().0)
-    {
-        *dst = match src[3] {
-            255 => [src[2], src[1], src[0], 255],
+fn unpremultiply_table() -> &'static [[u8; 256]; 256] {
+    static TABLE: OnceLock<Box<[[u8; 256]; 256]>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table = Box::new([[0u8; 256]; 256]);
+        for (a, row) in table.iter_mut().enumerate() {
+            for (v, out) in row.iter_mut().enumerate() {
+                *out = unpremultiply([v as u8, 0, 0, a as u8])[0];
+            }
+        }
+        table
+    })
+}
+
+fn convert_in_place(pixels: &mut [u8], table: &[[u8; 256]; 256]) {
+    for p in pixels.as_chunks_mut::<4>().0 {
+        *p = match p[3] {
+            255 => [p[2], p[1], p[0], 255],
             0 => [0; 4],
-            _ => {
-                let [r, g, b, a] = unpremultiply(*src);
-                [b, g, r, a]
+            a => {
+                let row = &table[a as usize];
+                [
+                    row[p[2] as usize],
+                    row[p[1] as usize],
+                    row[p[0] as usize],
+                    a,
+                ]
             }
         };
     }
-    out
+}
+
+/// Turns a premultiplied pixmap into straight-alpha BGRA in place, byte-equal to
+/// `asrs_canvas::pixels::to_straight_bgra` but table-driven and split across threads.
+pub fn into_straight_bgra(pixmap: Pixmap) -> Vec<u8> {
+    const BAND_BYTES: usize = 1 << 20;
+    let mut data = pixmap.take();
+    let table = unpremultiply_table();
+    if data.len() <= BAND_BYTES {
+        convert_in_place(&mut data, table);
+        return data;
+    }
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8));
+    let band = data.len().div_ceil(threads).next_multiple_of(4);
+    std::thread::scope(|scope| {
+        for chunk in data.chunks_mut(band) {
+            scope.spawn(move || convert_in_place(chunk, table));
+        }
+    });
+    data
 }
 
 /// Holds the one `RenderImage` a canvas shows. Every replacement removes the previous image from
@@ -51,8 +79,9 @@ impl FramePresenter {
         })
     }
 
-    pub fn present(&mut self, pixmap: &Pixmap, window: &mut Window, cx: &mut App) {
-        self.present_bgra(pixmap.width(), pixmap.height(), straight_bgra(pixmap), window, cx);
+    pub fn present(&mut self, pixmap: Pixmap, window: &mut Window, cx: &mut App) {
+        let (width, height) = (pixmap.width(), pixmap.height());
+        self.present_bgra(width, height, into_straight_bgra(pixmap), window, cx);
     }
 
     /// Shows `bgra`, straight alpha, `width` x `height` device pixels.
@@ -125,9 +154,11 @@ mod tests {
                 pixels.extend_from_slice(&[c, a - c, c / 2, a]);
             }
         }
+        pixels.resize(pixels.len() * 40, 0);
         let count = pixels.len() / 4;
         let mut pixmap = Pixmap::new(count as u32, 1).expect("pixmap");
         pixmap.data_mut().copy_from_slice(&pixels);
-        assert_eq!(straight_bgra(&pixmap), to_straight_bgra(&pixmap));
+        let want = to_straight_bgra(&pixmap);
+        assert_eq!(into_straight_bgra(pixmap), want);
     }
 }
