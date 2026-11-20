@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use asrs_canvas::text::layout::place_text;
 use asrs_canvas::text::lut::{self, MaskGammaLut};
 use asrs_canvas::text::{FontSpec, TextMetrics, measure_text, platform_backend};
 use asrs_parity::vectors;
@@ -130,5 +131,28 @@ fn text_metrics_are_bit_exact_against_chromium() {
         if s2_fonts.iter().any(|f| key.starts_with(f)) && key.ends_with("/ width") {
             assert_eq!(e.flips, 0, "{key}");
         }
+    }
+}
+
+#[test]
+fn zero_size_font_measures_and_draws_nothing() {
+    let mut backend = platform_backend().unwrap();
+    for css in ["0px sans-serif", "0px system-ui", "200 0px system-ui"] {
+        let font = FontSpec::parse(css).unwrap();
+        let m = measure_text(backend.as_mut(), &font, "center", "top", "Robot");
+        assert_eq!(m, TextMetrics::default(), "{css}");
+        let identity = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        let placed = place_text(
+            backend.as_mut(),
+            &font,
+            "left",
+            "alphabetic",
+            "Robot",
+            10.0,
+            10.0,
+            None,
+            identity,
+        );
+        assert!(placed.is_empty(), "{css}");
     }
 }

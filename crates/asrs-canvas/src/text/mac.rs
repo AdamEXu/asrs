@@ -82,6 +82,7 @@ fn path_bounds(font: &CTFont, glyph: CGGlyph) -> Option<CGRect> {
     }
 }
 
+/// CoreText reads a size of 0 as its default of 12 pt, so a zero-size spec never reaches it.
 fn create_font(spec: &FontSpec) -> Face {
     let size = f64::from(spec.size);
     let mut traits = 0;
@@ -350,6 +351,12 @@ impl CoreText {
 
 impl TextBackend for CoreText {
     fn shape(&mut self, spec: &FontSpec, text: &str) -> Shaped {
+        if spec.size <= 0.0 {
+            return Shaped {
+                glyphs: Vec::new(),
+                width: 0.0,
+            };
+        }
         let primary = self.primary(spec);
         let mut glyphs = Vec::new();
         let mut width = 0.0f32;
@@ -360,6 +367,13 @@ impl TextBackend for CoreText {
     }
 
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {
+        if spec.size <= 0.0 {
+            return FontMetrics {
+                ascent: 0.0,
+                descent: 0.0,
+                typo: None,
+            };
+        }
         let primary = self.primary(spec);
         let font = &self.faces[primary as usize].font;
         let mut ascent = round(font.ascent() as f32);
