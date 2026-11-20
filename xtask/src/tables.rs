@@ -32,13 +32,12 @@ pub fn run(args: &[String]) -> Result {
 
 fn units(root: &Path, check: bool) -> Result {
     let source_path = root.join("reference/AdvantageScope/src/shared/units.ts");
-    let source = fs::read_to_string(&source_path)
-        .map_err(|e| format!("{}: {e}", source_path.display()))?;
-    let text = generate(&source)?;
+    let source =
+        fs::read_to_string(&source_path).map_err(|e| format!("{}: {e}", source_path.display()))?;
+    let text = rustfmt(&generate(&source)?)?;
     let out = root.join("crates/asrs-log/src/units/tables.rs");
     if check {
-        let committed =
-            fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+        let committed = fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
         return if committed == text {
             eprintln!("{}: up to date", out.display());
             Ok(())
@@ -54,6 +53,36 @@ fn units(root: &Path, check: bool) -> Result {
     fs::write(&out, &text).map_err(|e| format!("{}: {e}", out.display()))?;
     eprintln!("{}: written", out.display());
     Ok(())
+}
+
+/// Formats generated code the way `cargo fmt --all --check` expects, so the
+/// committed file compares equal before and after a workspace fmt pass.
+fn rustfmt(text: &str) -> Result<String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("rustfmt")
+        .args(["--edition", "2024"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("rustfmt: {e}"))?;
+    child
+        .stdin
+        .as_mut()
+        .expect("piped stdin")
+        .write_all(text.as_bytes())
+        .map_err(|e| format!("rustfmt stdin: {e}"))?;
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("rustfmt: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "rustfmt failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    String::from_utf8(out.stdout).map_err(|e| format!("rustfmt output: {e}"))
 }
 
 enum Lit {
@@ -83,8 +112,7 @@ impl<'a> Parser<'a> {
                 }
                 (b'/', b'*') => {
                     self.pos += 2;
-                    while self.pos < self.text.len()
-                        && !(self.at(0) == b'*' && self.at(1) == b'/')
+                    while self.pos < self.text.len() && !(self.at(0) == b'*' && self.at(1) == b'/')
                     {
                         self.pos += 1;
                     }
@@ -97,7 +125,11 @@ impl<'a> Parser<'a> {
     }
 
     fn fail<T>(&self, what: &str) -> Result<T> {
-        let line = self.text[..self.pos].iter().filter(|c| **c == b'\n').count() + 1;
+        let line = self.text[..self.pos]
+            .iter()
+            .filter(|c| **c == b'\n')
+            .count()
+            + 1;
         Err(format!("units.ts:{line}: {what}"))
     }
 
@@ -127,9 +159,7 @@ impl<'a> Parser<'a> {
                             let cp = u32::from_str_radix(hex, 16)
                                 .map_err(|e| format!("bad \\u{hex}: {e}"))?;
                             self.pos += 4;
-                            out.push(
-                                char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER),
-                            );
+                            out.push(char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER));
                         }
                         b'x' => {
                             let hex = self
@@ -140,9 +170,7 @@ impl<'a> Parser<'a> {
                             let cp = u32::from_str_radix(hex, 16)
                                 .map_err(|e| format!("bad \\x{hex}: {e}"))?;
                             self.pos += 2;
-                            out.push(
-                                char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER),
-                            );
+                            out.push(char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER));
                         }
                         b'n' => out.push('\n'),
                         b'r' => out.push('\r'),
@@ -375,7 +403,7 @@ fn rust_expr(expr: &str) -> Result<String> {
     if trimmed.is_empty() {
         return Err("units.ts: empty value expression".to_owned());
     }
-    if trimmed.contains(|c: char| !(c.is_ascii() )) {
+    if trimmed.contains(|c: char| !(c.is_ascii())) {
         return Err(format!("units.ts: value expression {expr:?} is not ASCII"));
     }
     Ok(trimmed)
@@ -394,7 +422,11 @@ fn unit_config(props: &Lit, unit: &str) -> Result<String> {
     };
     let value = match get("value")? {
         Lit::Raw(expr) => rust_expr(expr)?,
-        _ => return Err(format!("units.ts: unit {unit:?} value is not an expression")),
+        _ => {
+            return Err(format!(
+                "units.ts: unit {unit:?} value is not an expression"
+            ));
+        }
     };
     let suffix = rust_string(str_value(get("suffix")?, "suffix")?);
     let pluralize = match get("pluralizeSuffix")? {

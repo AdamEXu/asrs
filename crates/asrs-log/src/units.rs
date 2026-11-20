@@ -283,9 +283,7 @@ pub fn get_suffix_for_filter(suffix: &JsString, filter: LineGraphFilter) -> JsSt
                 let mut out = JsString::from_units(units[..units.len() - 1].to_vec());
                 out.push_str(&"³".into());
                 out
-            } else if suffix.ends_with(&"ps".into(), None)
-                || suffix.ends_with(&"/s".into(), None)
-            {
+            } else if suffix.ends_with(&"ps".into(), None) || suffix.ends_with(&"/s".into(), None) {
                 let mut out = suffix.clone();
                 out.push_str(&"²".into());
                 out
@@ -445,10 +443,7 @@ pub fn get_unit_for_field(field_key: &JsString) -> Option<&'static str> {
             && lowercase.ends_with(&suffix.lowercase, None)
             && !lowercase.ends_with(&suffix.slash_lowercase, None)
             && (suffix.separated
-                || util::char_is_capital(
-                    field_key,
-                    (field_key.len() - suffix.key.len()) as f64,
-                ))
+                || util::char_is_capital(field_key, (field_key.len() - suffix.key.len()) as f64))
         {
             matched.push(suffix);
             max_len = max_len.max(suffix.key.len());

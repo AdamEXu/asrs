@@ -5,9 +5,7 @@ use asrs_log::{line_graph_filter::LineGraphFilter, units};
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{arg, ok_number, to_number, type_error};
-use crate::shared::{
-    Function, cannot_read, get_prop, prop_key, strict_equal,
-};
+use crate::shared::{Function, cannot_read, get_prop, prop_key, strict_equal};
 
 pub const FUNCTIONS: &[(&str, Function)] = &[
     ("shared/units:Units.convert", convert_fn),
@@ -101,9 +99,7 @@ fn convert_with_preset_fn(args: &[Value]) -> Response {
         Ok(v) => v,
         Err(r) => return r,
     };
-    let field = |v: &Value, to: bool| {
-        (!matches!(v, Value::Undefined)).then(|| unit_ref(v, to))
-    };
+    let field = |v: &Value, to: bool| (!matches!(v, Value::Undefined)).then(|| unit_ref(v, to));
     if let (Some((from, from_temp)), Some((to, to_temp))) =
         (field(&from_v, false), field(&to_v, true))
     {

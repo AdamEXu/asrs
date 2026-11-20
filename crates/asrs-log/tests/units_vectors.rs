@@ -1,5 +1,8 @@
 #![allow(clippy::disallowed_methods)]
 
+#[path = "../../asrs-cli/src/units.rs"]
+#[allow(dead_code)]
+mod cli_units;
 #[path = "../../asrs-cli/src/functions.rs"]
 #[allow(dead_code)]
 mod functions;
@@ -27,9 +30,6 @@ mod js_time;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;
-#[path = "../../asrs-cli/src/units.rs"]
-#[allow(dead_code)]
-mod cli_units;
 
 use std::collections::HashSet;
 
