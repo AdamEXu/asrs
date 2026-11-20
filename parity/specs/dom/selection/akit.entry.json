@@ -1,0 +1,134 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/akit.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "steps": [
+      {
+        "log": "../logs/akit.json"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0.03
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "akit-step-forward"
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "akit-step-end"
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "akit-step-past-end"
+      },
+      {
+        "selection": [
+          "stepCycle",
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "akit-step-back"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "akit-step-past-start"
+      },
+      {
+        "log": [
+          [
+            "deleteField",
+            "/Timestamp"
+          ]
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "no-akit-step"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "NT:/AdvantageKit/Timestamp",
+            9,
+            9
+          ]
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "nt-akit-step"
+      }
+    ]
+  }
+}

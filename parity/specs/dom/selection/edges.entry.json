@@ -1,0 +1,159 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/single.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "steps": [
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "empty-log"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "play-empty"
+      },
+      {
+        "log": "../logs/single.json"
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "single-sample"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -50,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-single"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          {
+            "n": "7ff8000000000000"
+          }
+        ]
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -50,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "nan-hover-zoom"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          null
+        ]
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          {
+            "n": "7ff0000000000000"
+          }
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "infinite-selected"
+      },
+      {
+        "selection": [
+          "stepCycle",
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "infinite-step"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          {
+            "n": "fff0000000000000"
+          }
+        ]
+      },
+      {
+        "selection": [
+          "stepCycle",
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "neg-infinite-step"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          {
+            "n": "7ff8000000000000"
+          },
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "nan-scroll"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          -5
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "negative-selected"
+      }
+    ]
+  }
+}

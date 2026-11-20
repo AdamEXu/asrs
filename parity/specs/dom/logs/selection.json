@@ -1,0 +1,15 @@
+[
+  ["putBoolean", "/DriverStation/Enabled", 0.0, false],
+  ["putBoolean", "/DriverStation/Enabled", 1.0, true],
+  ["putBoolean", "/DriverStation/Enabled", 3.0, true],
+  ["putBoolean", "/DriverStation/Enabled", 6.0, false],
+  ["putNumber", "/Drive/LeftVelocity", 0.0, 0.0],
+  ["putNumber", "/Drive/LeftVelocity", 1.5, 0.7],
+  ["putNumber", "/Drive/LeftVelocity", 3.0, 1.4],
+  ["putNumber", "/Drive/LeftVelocity", 4.5, 0.9],
+  ["putNumber", "/Drive/LeftVelocity", 6.0, 0.0],
+  ["putNumber", "/Drive/RightVelocity", 0.0, 0.0],
+  ["putNumber", "/Drive/RightVelocity", 2.0, 0.8],
+  ["putNumber", "/Drive/RightVelocity", 4.0, 1.1],
+  ["putNumber", "/Drive/RightVelocity", 6.0, 0.0]
+]

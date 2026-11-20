@@ -1,0 +1,161 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "liveTime": 8
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "connected-locked"
+      },
+      {
+        "liveTime": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "live-10"
+      },
+      {
+        "liveTime": 12
+      },
+      {
+        "log": [
+          [
+            "clearBeforeTime",
+            5,
+            false
+          ]
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "discarded"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          -40,
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "scroll-away-unlock"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          40,
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "scroll-right-relock"
+      },
+      {
+        "liveTime": 14
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "reconnected"
+      },
+      {
+        "selection": [
+          "unlock"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "unlocked"
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "play-live"
+      },
+      {
+        "advance": 20000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "playback-past-live"
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "disconnected"
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "disconnected-twice"
+      }
+    ]
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "initial"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "playing"
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "after-500ms"
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "paused"
+      },
+      {
+        "selection": [
+          "goIdle"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "idle"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 200
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          2
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "static-2"
+      },
+      {
+        "selection": [
+          "togglePlayback"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "replaying"
+      },
+      {
+        "selection": [
+          "togglePlayback"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "re-paused"
+      },
+      {
+        "selection": [
+          "lock"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "lock-no-live"
+      },
+      {
+        "selection": [
+          "unlock"
+        ]
+      },
+      {
+        "selection": [
+          "toggleLock"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "lock-no-ops"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          3.5
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "hovered"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          null
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "hover-cleared"
+      }
+    ]
+  }
+}
