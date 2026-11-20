@@ -97,6 +97,55 @@ pub struct SerializedLog {
     pub queued_protos: Vec<QueuedStructure>,
 }
 
+/// A `Map`-producing decoder's message value, for `put_unknown_map`. `Map` entries keep
+/// insertion order where `JsValue::Object` would reorder array-index keys first.
+#[derive(Clone, Debug)]
+pub enum MapValue {
+    /// `undefined`: `putUnknownStruct` writes nothing for it.
+    Undefined,
+    Bool(bool),
+    Number(f64),
+    BigInt(i64),
+    Text(JsString),
+    Map(Vec<(JsString, MapValue)>),
+    Array(Vec<MapValue>),
+}
+
+impl MapValue {
+    /// `typeof value` as `checkArrayType` sees it.
+    fn type_of(&self) -> &'static str {
+        match self {
+            MapValue::Undefined => "undefined",
+            MapValue::Bool(_) => "boolean",
+            MapValue::Number(_) => "number",
+            MapValue::BigInt(_) => "bigint",
+            MapValue::Text(_) => "string",
+            MapValue::Map(_) | MapValue::Array(_) => "object",
+        }
+    }
+
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            MapValue::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    fn as_f64(&self) -> Option<f64> {
+        match self {
+            MapValue::Number(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    fn as_text(&self) -> Option<&JsString> {
+        match self {
+            MapValue::Text(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 impl Default for Log {
     fn default() -> Self {
         Log::new(true)
@@ -848,6 +897,84 @@ impl Log {
                 .put_number(timestamp, items.len() as f64);
             for (i, item) in items.iter().enumerate() {
                 self.put_unknown_struct(&child_key(key, &format!("{i}")), timestamp, item, true)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `putUnknownStruct` for a `Map`-shaped input: `Map.entries()` iterates in insertion
+    /// order, where `JsValue::Object` would reorder array-index keys first.
+    pub fn put_unknown_map(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: &MapValue,
+        allow_root_write: bool,
+    ) -> Result<(), LogError> {
+        match value {
+            MapValue::Bool(b) => {
+                if allow_root_write {
+                    self.put_boolean(key, timestamp, *b);
+                }
+            }
+            MapValue::Number(x) => {
+                if allow_root_write {
+                    self.put_number(key, timestamp, *x);
+                }
+            }
+            MapValue::Text(s) => {
+                if allow_root_write {
+                    self.put_string(key, timestamp, s.clone());
+                }
+            }
+            MapValue::Map(entries) => {
+                for (name, item) in entries {
+                    self.put_unknown_map(&child_key_js(key, name), timestamp, item, true)?;
+                }
+            }
+            MapValue::Array(items) => {
+                self.put_unknown_map_array(key, timestamp, items, allow_root_write)?
+            }
+            MapValue::Undefined | MapValue::BigInt(_) => {}
+        }
+        Ok(())
+    }
+
+    fn put_unknown_map_array(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        items: &[MapValue],
+        allow_root_write: bool,
+    ) -> Result<(), LogError> {
+        let existing_type = self.get_type(key);
+        let uniform = |type_name: &str, array_type: LoggableType| {
+            if items.is_empty() {
+                existing_type == Some(array_type)
+            } else {
+                items.iter().all(|item| item.type_of() == type_name)
+            }
+        };
+        if allow_root_write && uniform("boolean", LoggableType::BooleanArray) {
+            let values = items.iter().filter_map(MapValue::as_bool).collect();
+            self.put_boolean_array(key, timestamp, values);
+        } else if allow_root_write && uniform("number", LoggableType::NumberArray) {
+            let values = items.iter().filter_map(MapValue::as_f64).collect();
+            self.put_number_array(key, timestamp, values);
+        } else if allow_root_write && uniform("string", LoggableType::StringArray) {
+            let values = items
+                .iter()
+                .filter_map(|item| item.as_text().cloned())
+                .collect();
+            self.put_string_array(key, timestamp, values);
+        } else {
+            let length_key = child_key(key, "length");
+            self.create_blank_field(&length_key, LoggableType::Number);
+            self.process_timestamp(&length_key, timestamp);
+            self.field_mut_existing(&length_key)
+                .put_number(timestamp, items.len() as f64);
+            for (i, item) in items.iter().enumerate() {
+                self.put_unknown_map(&child_key(key, &format!("{i}")), timestamp, item, true)?;
             }
         }
         Ok(())
