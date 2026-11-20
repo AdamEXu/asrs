@@ -25,6 +25,9 @@ driven over SSH; neither has GPU acceleration, so Chromium and native code rende
             /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519 (override with ASRS_LINUX_KEYS).
             Checkout ~/asrs, oracle pack ~/asrs-pack.tar.zst.
 
+ASRS_HOST_DIR=<name> replaces `asrs` in those host paths (and suffixes the Windows .sync and
+.gui directories and the desktop task), so agents sharing a VM keep separate checkouts.
+
 The dev machine has 16 GB of memory; the Windows VM takes 8 GB and the Linux VM 6 GB (plus 8 GB
 of swap inside it), so avoid heavy builds on both at once. The Windows VM is shared with other
 projects: do not stop it while someone else is using it.
@@ -68,8 +71,6 @@ commands on the machine itself (cargo xtask host local ...):
 Results land in target/parity/host/ on the machine that ran them.";
 
 const WINDOWS_NODE: &str = r"C:\tools\node-v24.18.0-win-arm64";
-const GUI_DIR: &str = "C:/work/.gui";
-const SYNC_DIR: &str = "C:/work/.sync";
 const LINUX_VM: &str = "asrs-linux";
 const COLOUR_SWITCHES: &[&str] = &["--force-color-profile=srgb", "--lang=en-US"];
 const S1_TIMEOUT: Duration = Duration::from_secs(120);
@@ -228,17 +229,17 @@ impl Host {
         }
     }
 
-    fn checkout(&self) -> &'static str {
+    fn checkout(&self) -> String {
         match self.os {
-            Os::Windows => "C:/work/asrs",
-            Os::Linux => "$HOME/asrs",
+            Os::Windows => format!("C:/work/{}", host_dir()),
+            Os::Linux => format!("$HOME/{}", host_dir()),
         }
     }
 
-    fn pack_path(&self) -> &'static str {
+    fn pack_path(&self) -> String {
         match self.os {
-            Os::Windows => "C:/work/asrs-pack.tar.zst",
-            Os::Linux => "asrs-pack.tar.zst",
+            Os::Windows => format!("C:/work/{}-pack.tar.zst", host_dir()),
+            Os::Linux => format!("{}-pack.tar.zst", host_dir()),
         }
     }
 
@@ -273,36 +274,38 @@ impl Host {
                 self.checkout()
             ),
             Os::Windows => {
-                let gui = GUI_DIR.replace('/', "\\");
+                let gui_dir = windows_aux_dir("gui");
+                let task = gui_task();
+                let gui = gui_dir.replace('/', "\\");
                 let batch = format!(
                     "@echo off\r\nset PATH={WINDOWS_NODE};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
                     self.checkout().replace('/', "\\")
                 );
                 format!(
                     r#"$ErrorActionPreference = 'Stop'
-New-Item -Force -ItemType Directory {GUI_DIR} | Out-Null
-Remove-Item -Force -ErrorAction SilentlyContinue {GUI_DIR}/exit.txt, {GUI_DIR}/last.log
-Set-Content -NoNewline -Encoding ascii {GUI_DIR}/run.cmd @'
+New-Item -Force -ItemType Directory {gui_dir} | Out-Null
+Remove-Item -Force -ErrorAction SilentlyContinue {gui_dir}/exit.txt, {gui_dir}/last.log
+Set-Content -NoNewline -Encoding ascii {gui_dir}/run.cmd @'
 {batch}
 '@
 $action = New-ScheduledTaskAction -Execute "{gui}\run.cmd" -WorkingDirectory "{gui}"
 $principal = New-ScheduledTaskPrincipal -UserId dev -LogonType Interactive -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 4) -AllowStartIfOnBatteries
-Register-ScheduledTask -TaskName asrs-gui -Action $action -Principal $principal -Settings $settings -Force | Out-Null
-Start-ScheduledTask -TaskName asrs-gui
+Register-ScheduledTask -TaskName {task} -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+Start-ScheduledTask -TaskName {task}
 $idle = 0
-while (-not (Test-Path {GUI_DIR}/exit.txt)) {{
+while (-not (Test-Path {gui_dir}/exit.txt)) {{
     Start-Sleep -Milliseconds 500
-    if ((Get-ScheduledTask -TaskName asrs-gui).State -eq 'Ready') {{ $idle++ }} else {{ $idle = 0 }}
-    if ($idle -ge 20 -and -not (Test-Path {GUI_DIR}/exit.txt)) {{
-        Get-Content -ErrorAction SilentlyContinue {GUI_DIR}/last.log
+    if ((Get-ScheduledTask -TaskName {task}).State -eq 'Ready') {{ $idle++ }} else {{ $idle = 0 }}
+    if ($idle -ge 20 -and -not (Test-Path {gui_dir}/exit.txt)) {{
+        Get-Content -ErrorAction SilentlyContinue {gui_dir}/last.log
         [Console]::Error.WriteLine('the desktop task stopped without an exit code (is dev logged in to the desktop?)')
         exit 1
     }}
 }}
 Start-Sleep -Milliseconds 200
-Get-Content {GUI_DIR}/last.log
-exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
+Get-Content {gui_dir}/last.log
+exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
                 )
             }
         };
@@ -415,8 +418,9 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
                 self.script("bash $HOME/asrs-provision.sh")
             }
             Os::Windows => {
+                let sync_dir = windows_aux_dir("sync");
                 self.script(&format!(
-                    "New-Item -Force -ItemType Directory {SYNC_DIR} | Out-Null"
+                    "New-Item -Force -ItemType Directory {sync_dir} | Out-Null"
                 ))?;
                 self.scp(
                     &paths
@@ -424,9 +428,9 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
                         .join("xtask/hosts/windows/provision.ps1")
                         .display()
                         .to_string(),
-                    &format!(":{SYNC_DIR}/provision.ps1"),
+                    &format!(":{sync_dir}/provision.ps1"),
                 )?;
-                self.script(&format!("& {SYNC_DIR}/provision.ps1\nexit $LASTEXITCODE"))
+                self.script(&format!("& {sync_dir}/provision.ps1\nexit $LASTEXITCODE"))
             }
         }
     }
@@ -473,16 +477,17 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
                 }
             }
             Os::Windows => {
+                let sync_dir = windows_aux_dir("sync");
                 self.script(&format!(
-                    "New-Item -Force -ItemType Directory {}, {SYNC_DIR} | Out-Null",
+                    "New-Item -Force -ItemType Directory {}, {sync_dir} | Out-Null",
                     self.checkout()
                 ))?;
                 self.scp(
                     &tarball.display().to_string(),
-                    &format!(":{SYNC_DIR}/asrs.tar.gz"),
+                    &format!(":{sync_dir}/asrs.tar.gz"),
                 )?;
                 let mut body = format!(
-                    "tar.exe -xzf {SYNC_DIR}/asrs.tar.gz -C {}\nif ($LASTEXITCODE) {{ exit $LASTEXITCODE }}\nRemove-Item {SYNC_DIR}/asrs.tar.gz\n",
+                    "tar.exe -xzf {sync_dir}/asrs.tar.gz -C {}\nif ($LASTEXITCODE) {{ exit $LASTEXITCODE }}\nRemove-Item {sync_dir}/asrs.tar.gz\n",
                     self.checkout()
                 );
                 for file in &removed {
@@ -550,12 +555,13 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
                 fs::write(&tarball, bytes).map_err(|e| format!("{}: {e}", tarball.display()))?;
             }
             Os::Windows => {
+                let sync_dir = windows_aux_dir("sync");
                 self.script(&format!(
-                    "New-Item -Force -ItemType Directory {SYNC_DIR} | Out-Null\ntar.exe -czf {SYNC_DIR}/fetch.tar.gz -C {}/target {source}\nexit $LASTEXITCODE",
+                    "New-Item -Force -ItemType Directory {sync_dir} | Out-Null\ntar.exe -czf {sync_dir}/fetch.tar.gz -C {}/target {source}\nexit $LASTEXITCODE",
                     self.checkout()
                 ))?;
                 self.scp(
-                    &format!(":{SYNC_DIR}/fetch.tar.gz"),
+                    &format!(":{sync_dir}/fetch.tar.gz"),
                     &tarball.display().to_string(),
                 )?;
             }
@@ -659,6 +665,27 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
         } else {
             Err(format!("{}: {failed} checks failed", self.name))
         }
+    }
+}
+
+fn host_dir() -> String {
+    std::env::var("ASRS_HOST_DIR")
+        .ok()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| "asrs".to_owned())
+}
+
+fn windows_aux_dir(kind: &str) -> String {
+    match host_dir().as_str() {
+        "asrs" => format!("C:/work/.{kind}"),
+        dir => format!("C:/work/.{kind}-{dir}"),
+    }
+}
+
+fn gui_task() -> String {
+    match host_dir().as_str() {
+        "asrs" => "asrs-gui".to_owned(),
+        dir => format!("asrs-gui-{dir}"),
     }
 }
 
