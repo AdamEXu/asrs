@@ -26,10 +26,89 @@ resvg = { version = "=0.46.0", default-features = false }
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "=0.6.2"
+objc2 = "=0.6.5"
+raw-window-handle = "=0.6.2"
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
+version = "=0.3.2"
+default-features = false
+features = [
+    "std",
+    "block2",
+    "objc2-core-foundation",
+    "objc2-core-graphics",
+    "objc2-quartz-core",
+    "NSApplication",
+    "NSBitmapImageRep",
+    "NSCell",
+    "NSEvent",
+    "NSGraphics",
+    "NSImage",
+    "NSImageRep",
+    "NSMenu",
+    "NSMenuItem",
+    "NSPanel",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSView",
+    "NSVisualEffectView",
+    "NSWindow",
+]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-core-foundation]
+version = "=0.3.2"
+default-features = false
+features = ["std", "CFArray", "CFCGTypes", "CFData", "CFDictionary", "CFNumber", "CFString"]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-core-graphics]
+version = "=0.3.2"
+default-features = false
+features = [
+    "std",
+    "libc",
+    "objc2",
+    "CGColorSpace",
+    "CGDataProvider",
+    "CGError",
+    "CGEvent",
+    "CGEventSource",
+    "CGEventTypes",
+    "CGImage",
+    "CGRemoteOperation",
+    "CGWindow",
+]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-foundation]
+version = "=0.3.2"
+default-features = false
+features = [
+    "std",
+    "objc2-core-foundation",
+    "NSArray",
+    "NSGeometry",
+    "NSObjCRuntime",
+    "NSObject",
+    "NSRunLoop",
+    "NSString",
+    "NSValue",
+]
+
+[target.'cfg(target_os = "macos")'.dependencies.objc2-quartz-core]
+version = "=0.3.2"
+default-features = false
+features = ["std", "objc2-core-foundation", "objc2-core-graphics", "CALayer", "CAMetalLayer"]
+
 [[test]]
 name = "headless_capture"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "platform_mac"
+harness = false
 
 [lints]
 workspace = true
