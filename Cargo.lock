@@ -386,6 +386,11 @@ version = "0.1.0"
 [[package]]
 name = "asrs-tabs"
 version = "0.1.0"
+dependencies = [
+ "asrs-canvas",
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-ui"
