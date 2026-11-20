@@ -982,7 +982,24 @@ function gradientText(dpr: number, dark: boolean): Scene {
   r.call("fillText", "Radial gradient Wg", 30, 50);
   r.set("globalAlpha", 0.6);
   r.call("fillText", "with globalAlpha", 30, 72, 100);
-  return scene(`gradienttext-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [300, 90], dpr, dark ? DARK : LIGHT, r.cmds);
+  r.set("globalAlpha", 1);
+  const fg = dark ? "#eeeeee" : "#222222";
+  const odd = dark ? "#000000" : "#ffffff";
+  r.set("fillStyle", {
+    linearGradient: [10, 0, 290, 0],
+    stops: [
+      [0, fg],
+      [0.5, fg],
+      [0.5, odd],
+      [0.5, odd],
+      [0.5, odd],
+      [0.5, fg],
+      [1, fg]
+    ]
+  });
+  r.set("font", `16px ${SYSTEM_FONT}`);
+  r.call("fillText", "Duplicate stops 0123", 10, 96);
+  return scene(`gradienttext-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [300, 110], dpr, dark ? DARK : LIGHT, r.cmds);
 }
 
 function curves(dpr: number): Scene {

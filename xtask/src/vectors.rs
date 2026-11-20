@@ -15,6 +15,8 @@ const REQUESTS: &str = ".requests.jsonl";
 const ENTRY_SPEC: &str = ".entry.json";
 const SESSION_SPEC: &str = ".session.json";
 const SESSION_ENTRY: &str = "liveSession";
+/// Names the spec file for an entry run, so an entry can read its fixture from the spec itself.
+const SPEC_VARIABLE: &str = "ASRS_ORACLE_SPEC";
 const REGENERATE: &str = "regenerate with `cargo xtask oracle gen` and commit the result";
 
 pub(crate) fn specs_dir(root: &Path) -> PathBuf {
@@ -22,8 +24,14 @@ pub(crate) fn specs_dir(root: &Path) -> PathBuf {
 }
 
 enum Kind {
-    Fn { requests: PathBuf },
-    Entry { entry: String, args: Vec<String> },
+    Fn {
+        requests: PathBuf,
+    },
+    Entry {
+        entry: String,
+        args: Vec<String>,
+        inputs: Vec<PathBuf>,
+    },
 }
 
 struct Spec {
@@ -45,7 +53,10 @@ impl Spec {
     fn inputs(&self) -> Vec<&Path> {
         match &self.kind {
             Kind::Fn { requests } if requests != &self.path => vec![&self.path, requests],
-            _ => vec![&self.path],
+            Kind::Entry { inputs, .. } => std::iter::once(self.path.as_path())
+                .chain(inputs.iter().map(PathBuf::as_path))
+                .collect(),
+            Kind::Fn { .. } => vec![&self.path],
         }
     }
 
@@ -607,6 +618,7 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 kind: Kind::Entry {
                     entry: SESSION_ENTRY.to_owned(),
                     args: vec![path.to_string_lossy().into_owned()],
+                    inputs: Vec::new(),
                 },
                 path,
             });
@@ -625,12 +637,22 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 .map(|a| a.as_str().map(|s| s.to_string_lossy()))
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| format!("{}: \"args\" must be strings", path.display()))?;
+            let dir = path.parent().expect("spec has a directory");
+            let inputs = string_list(&path, &json, "inputs", |_| Ok(()))?
+                .unwrap_or_default()
+                .into_iter()
+                .map(|input| dir.join(input))
+                .collect();
             let (zones, platforms) = variants(&path, &json)?;
             found.push(Spec {
                 id: id.to_owned(),
                 zones,
                 platforms,
-                kind: Kind::Entry { entry, args },
+                kind: Kind::Entry {
+                    entry,
+                    args,
+                    inputs,
+                },
                 path,
             });
         } else if let Some(id) = rel.strip_suffix(FN_ZONED_SPEC) {
@@ -737,10 +759,11 @@ fn string_list(
 fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
     let zone = &vector.zone;
     match &vector.spec.kind {
-        Kind::Entry { entry, args } => {
+        Kind::Entry { entry, args, .. } => {
             let text = oracle::pipe(
                 oracle::oracle_command_in(paths, entry, zone)?
                     .args(args)
+                    .env(SPEC_VARIABLE, &vector.spec.path)
                     .current_dir(&paths.root),
                 Vec::new(),
             )?;

@@ -1,5 +1,6 @@
 #![allow(clippy::disallowed_methods)]
 
+pub mod cache;
 pub mod cve1;
 pub mod diff;
 pub mod json;

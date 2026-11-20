@@ -4,6 +4,7 @@
   "description": "Parity oracle: runs upstream AdvantageScope TypeScript inside Electron's runtime",
   "license": "BSD-3-Clause",
   "devDependencies": {
-    "esbuild": "0.25.0"
+    "esbuild": "0.25.0",
+    "jsdom": "27.0.1"
   }
 }
