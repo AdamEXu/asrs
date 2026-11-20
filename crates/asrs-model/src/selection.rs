@@ -1,5 +1,7 @@
 //! `src/shared/Selection.ts`: the selection interface tab renderers and controllers use.
 
+use std::rc::Rc;
+
 use asrs_js::value::{JsValue, ToJs};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -43,7 +45,7 @@ impl ToJs for SelectionMode {
     }
 }
 
-pub type TimeSupplier = Box<dyn Fn() -> f64>;
+pub type TimeSupplier = Rc<dyn Fn() -> f64>;
 
 pub trait Selection {
     fn get_mode(&self) -> SelectionMode;
@@ -52,8 +54,9 @@ pub trait Selection {
 
     fn set_hovered_time(&mut self, value: Option<f64>);
 
-    /// The selected time for the current mode.
-    fn get_selected_time(&self) -> Option<f64>;
+    /// The selected time for the current mode. Upstream's getter mutates: playback can
+    /// loop, lock or fall out to static inside this call.
+    fn get_selected_time(&mut self) -> Option<f64>;
 
     fn set_selected_time(&mut self, time: f64);
 
@@ -83,7 +86,8 @@ pub trait Selection {
     fn get_current_live_time(&self) -> Option<f64>;
 
     /// The time views that can only show a single sample should display.
-    fn get_render_time(&self) -> Option<f64>;
+    /// Reads the selected time, which can mutate.
+    fn get_render_time(&mut self) -> Option<f64>;
 
     fn set_playback_speed(&mut self, speed: f64);
 
@@ -97,7 +101,8 @@ pub trait Selection {
     /// Ends an in-progress grab zoom and applies it.
     fn finish_grab_zoom(&mut self);
 
-    fn get_timeline_range(&self) -> [f64; 2];
+    /// Upstream's getter applies a scroll pass first and can un-lock.
+    fn get_timeline_range(&mut self) -> [f64; 2];
 
     /// Whether the timeline is locked to max zoom.
     fn get_timeline_is_max_zoom(&self) -> bool;
