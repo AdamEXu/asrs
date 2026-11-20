@@ -21,7 +21,7 @@
     "cve1/identity": {
       "cases": 7,
       "content": "c50fd3a6eb87c9e4",
-      "generator": "900357a36f4855d5",
+      "generator": "7311b8726508a6b3",
       "spec": "parity/specs/cve1/identity.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -29,7 +29,7 @@
     "cve1/torture": {
       "cases": 471,
       "content": "3bf51e863655d3d2",
-      "generator": "dd365f7ab2e93362",
+      "generator": "a7c643a1bf7d144c",
       "spec": "parity/specs/cve1/torture.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -37,7 +37,7 @@
     "field3d/camera-controls-mac": {
       "cases": 125,
       "content": "c7d8fe04bfba0a08",
-      "generator": "d6c7ea16a4b4f583",
+      "generator": "e29bffbff015abe1",
       "spec": "parity/specs/field3d/camera-controls-mac.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -45,7 +45,7 @@
     "field3d/camera-controls-other": {
       "cases": 45,
       "content": "21e8591091fed7ce",
-      "generator": "cff27b4b82366023",
+      "generator": "529bd2077bdd6471",
       "spec": "parity/specs/field3d/camera-controls-other.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -53,7 +53,7 @@
     "field3d/three": {
       "cases": 9460,
       "content": "df05db1732c3129d",
-      "generator": "b5bc9945e9903023",
+      "generator": "a79c676af522e5cd",
       "spec": "parity/specs/field3d/three.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -61,7 +61,7 @@
     "js/collation": {
       "cases": 5002,
       "content": "87628654f82c6a0f",
-      "generator": "02d13dda3ef44f3e",
+      "generator": "7a261d32a7b2b4ac",
       "spec": "parity/specs/js/collation.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -69,7 +69,7 @@
     "js/collation-unsafe": {
       "cases": 2,
       "content": "d83814ebe2b5110b",
-      "generator": "08f271e59c1ad9e6",
+      "generator": "357a1129cdcb3b10",
       "spec": "parity/specs/js/collation-unsafe.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -77,7 +77,7 @@
     "js/color": {
       "cases": 269,
       "content": "e69f617d0af8da11",
-      "generator": "edc01b7cb7541a10",
+      "generator": "ff9a42b3f947af5e",
       "spec": "parity/specs/js/color.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -85,7 +85,7 @@
     "js/math": {
       "cases": 30547,
       "content": "bc953b36ab0bd1da",
-      "generator": "759479c10b0693f1",
+      "generator": "46d2463350b75a6f",
       "spec": "parity/specs/js/math.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -93,7 +93,7 @@
     "js/math-ops": {
       "cases": 4386,
       "content": "8da33629a4276780",
-      "generator": "75e24917ea4095e4",
+      "generator": "157d7b8c3d4f476e",
       "spec": "parity/specs/js/math-ops.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -109,7 +109,7 @@
     "js/math-rem/macos-aarch64": {
       "cases": 980,
       "content": "5001d446f16a7017",
-      "generator": "46ec0df78612708f",
+      "generator": "e9b1a61e59a5cb55",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -125,7 +125,7 @@
     "js/sort": {
       "cases": 10000,
       "content": "37813dd4a2a30954",
-      "generator": "858ea1babc3391ae",
+      "generator": "3e0934b7ab6f4918",
       "spec": "parity/specs/js/sort.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -133,7 +133,7 @@
     "js/time": {
       "cases": 29,
       "content": "ef1e569718d27e3a",
-      "generator": "5179561a98b5dfde",
+      "generator": "0b43e4e84cd7ae54",
       "spec": "parity/specs/js/time.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -141,7 +141,7 @@
     "js/time-zones/America/Los_Angeles": {
       "cases": 146,
       "content": "2580ce5d5f3e42a2",
-      "generator": "bceb613be9fe99d2",
+      "generator": "ca3f063d4708323c",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "America/Los_Angeles",
       "generatedOn": "macos-aarch64"
@@ -149,7 +149,7 @@
     "js/time-zones/Asia/Kolkata": {
       "cases": 146,
       "content": "e0f4993d7a66247e",
-      "generator": "d68ce251d67beb97",
+      "generator": "59878613e8ae86fd",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "Asia/Kolkata",
       "generatedOn": "macos-aarch64"
@@ -157,7 +157,7 @@
     "js/time-zones/Pacific/Auckland": {
       "cases": 146,
       "content": "f114b45007c2414e",
-      "generator": "cc20eb8ff8e99492",
+      "generator": "f7089ecb38fcf5a0",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "Pacific/Auckland",
       "generatedOn": "macos-aarch64"
@@ -165,7 +165,7 @@
     "js/time-zones/UTC": {
       "cases": 146,
       "content": "eab17d3ef494eb09",
-      "generator": "c6ecda100cf1ef03",
+      "generator": "96a86a404a2c73e5",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -173,7 +173,7 @@
     "json/docs": {
       "cases": 20000,
       "content": "a7b43de9d1d50a6c",
-      "generator": "477a5f2467334717",
+      "generator": "a13903c8208b8c05",
       "spec": "parity/specs/json/docs.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -181,7 +181,7 @@
     "json/invalid": {
       "cases": 10000,
       "content": "2393f89877fc1cad",
-      "generator": "df2ffb9a2884a948",
+      "generator": "e2ce46b97e0de2b2",
       "spec": "parity/specs/json/invalid.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -189,7 +189,7 @@
     "json/values": {
       "cases": 9039,
       "content": "e9c6fb788248c26b",
-      "generator": "aacc2a5083eaf46f",
+      "generator": "29235043fc33358d",
       "spec": "parity/specs/json/values.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -197,7 +197,7 @@
     "jstring/case-data": {
       "cases": 86933,
       "content": "0a510602f8e9ea46",
-      "generator": "8c8aafb6dd92aedb",
+      "generator": "1013db0ce142abb5",
       "spec": "parity/specs/jstring/case-data.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -205,7 +205,7 @@
     "jstring/ops": {
       "cases": 408,
       "content": "6fc7fdfcfc585eee",
-      "generator": "21cb2d36b10cccc9",
+      "generator": "36d9108b4bb4be3f",
       "spec": "parity/specs/jstring/ops.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -213,7 +213,7 @@
     "jstring/utf8": {
       "cases": 12844,
       "content": "8e595ceab22ed01c",
-      "generator": "7b4356594648bdc8",
+      "generator": "908a60ecdc1abd42",
       "spec": "parity/specs/jstring/utf8.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -221,7 +221,7 @@
     "log/core": {
       "cases": 2509,
       "content": "778ae44fe606577c",
-      "generator": "9a5898e748c3b6e1",
+      "generator": "ca9174bb4aabf7cf",
       "spec": "parity/specs/log/core.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -229,7 +229,7 @@
     "log/field": {
       "cases": 4000,
       "content": "b8fd74d1b4a65179",
-      "generator": "ba6943c74c6905e4",
+      "generator": "6ea7090556412fde",
       "spec": "parity/specs/log/field.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -237,7 +237,7 @@
     "log/geometry": {
       "cases": 179,
       "content": "efe04e0bfa72c886",
-      "generator": "08e27052d5a6894b",
+      "generator": "82d802cdc7ccfbd9",
       "spec": "parity/specs/log/geometry.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -245,7 +245,7 @@
     "log/geometry-math": {
       "cases": 45746,
       "content": "ed8412b2876a5543",
-      "generator": "48a554a3340088a0",
+      "generator": "3f2d39671fcfa102",
       "spec": "parity/specs/log/geometry-math.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -253,7 +253,7 @@
     "log/photon": {
       "cases": 81,
       "content": "13c35c892c2c7d87",
-      "generator": "1e1134d371fa75ed",
+      "generator": "1f2d194e37b1751b",
       "spec": "parity/specs/log/photon.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -261,7 +261,7 @@
     "log/proto-renderer": {
       "cases": 8,
       "content": "2b67d7217af978f6",
-      "generator": "41895774a36592e7",
+      "generator": "7cfdd03bcb747921",
       "spec": "parity/specs/log/proto-renderer.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -269,7 +269,7 @@
     "log/struct": {
       "cases": 5,
       "content": "5b842ffa1a277c13",
-      "generator": "d8040e49ea247ed9",
+      "generator": "053ad8a28c84fcaf",
       "spec": "parity/specs/log/struct.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -277,7 +277,7 @@
     "log/struct-fuzz": {
       "cases": 2369,
       "content": "31b82a923741b434",
-      "generator": "a5e382cc61de0f31",
+      "generator": "124f3a00e554a03f",
       "spec": "parity/specs/log/struct-fuzz.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -285,7 +285,7 @@
     "log/struct-replay": {
       "cases": 363,
       "content": "b247e6a9d54a9c8f",
-      "generator": "e4888d0e8ac6a523",
+      "generator": "ca65aa7204318edd",
       "spec": "parity/specs/log/struct-replay.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -293,7 +293,7 @@
     "log/units": {
       "cases": 34289,
       "content": "b1a121bb7b5161a3",
-      "generator": "3b94ce54a98cc21d",
+      "generator": "fb880d8f3bf11a83",
       "spec": "parity/specs/log/units.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -301,7 +301,7 @@
     "log/util": {
       "cases": 7139,
       "content": "b98e32d82d477de1",
-      "generator": "edca52080540c753",
+      "generator": "d26e14f57ff99b05",
       "spec": "parity/specs/log/util.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -317,7 +317,7 @@
     "log/util-rem/macos-aarch64": {
       "cases": 2,
       "content": "64415ee47e101ad0",
-      "generator": "0cea6a1c056c88d1",
+      "generator": "4e89c6bb984a3cd3",
       "spec": "parity/specs/log/util-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -333,7 +333,7 @@
     "msgpack/decode": {
       "cases": 7131,
       "content": "6ef775b5fdf738d5",
-      "generator": "9dae6a722eedf60f",
+      "generator": "e9cdf024a50df6c5",
       "spec": "parity/specs/msgpack/decode.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -341,7 +341,7 @@
     "msgpack/encode": {
       "cases": 100193,
       "content": "b4c663a4660606e0",
-      "generator": "6dfbe3d18d9286bc",
+      "generator": "130f0bf2708c873e",
       "spec": "parity/specs/msgpack/encode.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -349,7 +349,7 @@
     "msgpack/multi": {
       "cases": 766,
       "content": "d1cae0b634ef8bf3",
-      "generator": "e34f45af762ece55",
+      "generator": "fef9a7b84db17b93",
       "spec": "parity/specs/msgpack/multi.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -357,7 +357,7 @@
     "number/numberformat": {
       "cases": 182,
       "content": "44a96cd7bef54d21",
-      "generator": "db107cc9a26e68ae",
+      "generator": "efd8a20ba888e0ec",
       "spec": "parity/specs/number/numberformat.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -365,7 +365,7 @@
     "number/parse": {
       "cases": 569,
       "content": "495136adba4d37f3",
-      "generator": "942b4233cd8b3f4c",
+      "generator": "ea2bdc77c1f0e912",
       "spec": "parity/specs/number/parse.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -373,7 +373,7 @@
     "number/toexponential": {
       "cases": 880,
       "content": "2ab4522ddb392cc2",
-      "generator": "addaef3277e43ead",
+      "generator": "6648f457606fc573",
       "spec": "parity/specs/number/toexponential.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -381,7 +381,7 @@
     "number/tofixed": {
       "cases": 1033,
       "content": "fa7343e79bca3fb7",
-      "generator": "ba7f901f9e5f0323",
+      "generator": "909381692481566d",
       "spec": "parity/specs/number/tofixed.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -389,7 +389,7 @@
     "number/toprecision": {
       "cases": 1104,
       "content": "f658c6cab73cb999",
-      "generator": "06c7d2c77dc7aff2",
+      "generator": "dee5bebe7d6c9c08",
       "spec": "parity/specs/number/toprecision.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -397,7 +397,7 @@
     "number/tostring": {
       "cases": 970,
       "content": "059629bdb39b45e3",
-      "generator": "dbddcc93bef55b02",
+      "generator": "fc7bd87ee3f65790",
       "spec": "parity/specs/number/tostring.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -405,7 +405,7 @@
     "oracle/environment": {
       "cases": 9,
       "content": "c81349e4328e1864",
-      "generator": "eed38065991a6063",
+      "generator": "470d6988e9dd5bdd",
       "spec": "parity/specs/oracle/environment.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -413,7 +413,7 @@
     "oracle/zones/America/Los_Angeles": {
       "cases": 20,
       "content": "142943aab1921b94",
-      "generator": "b05062ef4ebda7e9",
+      "generator": "14bf2f56d5e4f527",
       "spec": "parity/specs/oracle/zones.fn.json",
       "zone": "America/Los_Angeles",
       "generatedOn": "macos-aarch64"
@@ -421,7 +421,7 @@
     "oracle/zones/Asia/Kolkata": {
       "cases": 20,
       "content": "9d6f982b1323735f",
-      "generator": "0c5ab092e6324fea",
+      "generator": "5b509be91d4ad964",
       "spec": "parity/specs/oracle/zones.fn.json",
       "zone": "Asia/Kolkata",
       "generatedOn": "macos-aarch64"
@@ -429,7 +429,7 @@
     "oracle/zones/Pacific/Auckland": {
       "cases": 20,
       "content": "fa0a6f3f5b83a239",
-      "generator": "96aa926e16842d8f",
+      "generator": "8edcf71195b80801",
       "spec": "parity/specs/oracle/zones.fn.json",
       "zone": "Pacific/Auckland",
       "generatedOn": "macos-aarch64"
@@ -437,7 +437,7 @@
     "oracle/zones/UTC": {
       "cases": 20,
       "content": "c66de66de1d609b3",
-      "generator": "06ae36bb738784e0",
+      "generator": "9871fbe2633e343e",
       "spec": "parity/specs/oracle/zones.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -445,7 +445,7 @@
     "regex/engine": {
       "cases": 30000,
       "content": "e40a050ba624ab32",
-      "generator": "ebcc079ec3ce83c9",
+      "generator": "ba920a3c561740a3",
       "spec": "parity/specs/regex/engine.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -453,7 +453,7 @@
     "regex/sites": {
       "cases": 29428,
       "content": "094e81eb7469edfa",
-      "generator": "2088e4c51d3b72dc",
+      "generator": "c181e9aa2fdc35be",
       "spec": "parity/specs/regex/sites.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -461,7 +461,7 @@
     "tabs/heatmap": {
       "cases": 31,
       "content": "a4ef466ab9216eb2",
-      "generator": "bf39114ecad2fe55",
+      "generator": "982d07badefcdf1f",
       "spec": "parity/specs/tabs/heatmap.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
