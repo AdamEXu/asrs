@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
