@@ -233,7 +233,7 @@ function recordCases(corpus: Corpus) {
   for (const [name, time] of times) add(`header/${name}`, `header LabVIEW time ${time.seconds} + ${time.fraction}/2^64`, dslog(time, [quietRecord(0xff)]));
   add("header/version-3", "version 3 is unsupported: the worker reports failure", dslog(t0, [quietRecord(0xff)], 3));
   add("header/only", "a header with no records: the first read throws, is caught, and nothing is logged", dslog(t0, []));
-  add("header/short", "a 12-byte file: reading the header time throws", hex("00 00 00 04 00 00 00 00 e2 1e 9f 60"));
+  add("header/short", "a 12-byte file: the worker never reads the header time, the first record read throws, is caught, and nothing is logged", hex("00 00 00 04 00 00 00 00 e2 1e 9f 60"));
 }
 
 function truncationCases(corpus: Corpus) {

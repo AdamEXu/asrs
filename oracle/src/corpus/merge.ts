@@ -5,14 +5,14 @@ import { WpilogBuilder, payload } from "./wpilog";
 
 const SECOND = 1000000;
 
-/** One robot-state timeline: [seconds, enabled, autonomous] transitions. */
-type Timeline = [number, boolean, boolean][];
+/** One robot-state timeline: [seconds, enabled, autonomous, test] transitions. */
+type Timeline = [number, boolean, boolean, boolean?][];
 
 interface Side {
   timeline: Timeline;
   span: [number, number];
   shift?: number;
-  keys?: "akit" | "akit-nt" | "datalog" | "none";
+  keys?: "akit" | "akit-nt" | "akit-test" | "datalog" | "fms" | "robot-mode" | "none";
   modeInfo?: boolean;
 }
 
@@ -30,12 +30,26 @@ function wpilogSide(side: Side): Uint8Array {
   b.start(us(side.span[0]), 1, "/Battery", "double", "");
   b.record(1, us(side.span[0]), payload.double(12.5));
   b.record(1, us(side.span[1]), payload.double(12.1));
-  if (keys !== "none") {
+  if (keys === "fms") {
+    b.start(us(side.span[0]), 2, "NT:/FMSInfo/FMSControlData", "int64", "");
+    for (const [t, enabled, auto, test] of side.timeline) {
+      b.record(2, us(t), payload.int64((enabled ? 1 : 0) | (auto ? 2 : 0) | (test ? 4 : 0) | 0x20));
+    }
+  } else if (keys === "robot-mode") {
+    b.start(us(side.span[0]), 2, "/DriverStation/Enabled", "boolean", "");
+    b.start(us(side.span[0]), 3, "/DriverStation/RobotMode", "string", "");
+    for (const [t, enabled, auto, test] of side.timeline) {
+      b.record(2, us(t), payload.boolean(enabled));
+      b.record(3, us(t), payload.string(auto ? "Autonomous" : test ? "TEST" : "teleop"));
+    }
+  } else if (keys !== "none") {
     b.start(us(side.span[0]), 2, enabledKey, "boolean", "");
     if (side.modeInfo !== false) b.start(us(side.span[0]), 3, autoKey, "boolean", "");
-    for (const [t, enabled, auto] of side.timeline) {
+    if (keys === "akit-test") b.start(us(side.span[0]), 4, "/DriverStation/Test", "boolean", "");
+    for (const [t, enabled, auto, test] of side.timeline) {
       b.record(2, us(t), payload.boolean(enabled));
       if (side.modeInfo !== false) b.record(3, us(t), payload.boolean(auto));
+      if (keys === "akit-test") b.record(4, us(t), payload.boolean(test === true));
     }
   }
   return b.bytes();
@@ -68,12 +82,23 @@ const MATCH: Timeline = [
   [173, false, false]
 ];
 
+const MATCH_WITH_TEST: Timeline = [
+  [10, false, false, false],
+  [20, true, true, false],
+  [35, false, true, false],
+  [38, true, false, false],
+  [100, true, false, true],
+  [120, false, false, false],
+  [125, true, false, false],
+  [173, false, false, false]
+];
+
 function shifted(timeline: Timeline, by: number): Timeline {
-  return timeline.map(([t, e, a]) => [t + by, e, a]);
+  return timeline.map(([t, ...state]) => [t + by, ...state]);
 }
 
 function jittered(timeline: Timeline, rng: Rng, amount: number): Timeline {
-  return timeline.map(([t, e, a]) => [t + (rng.unit() * 2 - 1) * amount, e, a]);
+  return timeline.map(([t, ...state]) => [t + (rng.unit() * 2 - 1) * amount, ...state]);
 }
 
 export function mergeMatrix(corpus: Corpus): void {
@@ -132,10 +157,28 @@ export function mergeMatrix(corpus: Corpus): void {
     { timeline: MATCH, span },
     { timeline: [[8, true, false], [140, false, false]], span: [0, 150] }
   );
-  pair("no-overlap", "enabled periods can never overlap: coarse alignment fails and the fallback is used", { timeline: [[0, false, false], [1, true, false], [2, false, false]], span: [0, 3] }, { timeline: [[0, true, true]], span: [0, 1] });
+  pair("no-overlap", "a target teleop pulse against a source in auto for its whole range: no transition pairs, only interval-boundary candidates, scored as a mode mismatch", { timeline: [[0, false, false], [1, true, false], [2, false, false]], span: [0, 3] }, { timeline: [[0, true, true]], span: [0, 1] });
   pair("ties", "two identical enable pulses: equal scores tie-break toward rising edges", { timeline: [[0, false, false], [10, true, false], [20, false, false], [30, true, false], [40, false, false]], span: [0, 50] }, { timeline: [[0, false, false], [5, true, false], [15, false, false]], span: [0, 20] });
   pair("nt-keys", "NT-logged AdvantageKit keys on the source", { timeline: MATCH, span }, { timeline: shifted(MATCH, 6), span, keys: "akit-nt" });
   pair("datalog-keys", "plain WPILib DataLog DS: keys on the source", { timeline: MATCH, span }, { timeline: shifted(MATCH, -7.5), span, keys: "datalog" });
+  pair(
+    "fms-control-word",
+    "an NT:/FMSInfo/FMSControlData int64 control word (enabled, auto and test bits) is the source's only state key",
+    { timeline: MATCH, span },
+    { timeline: shifted(MATCH_WITH_TEST, 3), span, keys: "fms" }
+  );
+  pair(
+    "robot-mode",
+    "post-2027 /DriverStation/RobotMode strings in mixed case (Autonomous, TEST, teleop) on both sides, with a test-mode period",
+    { timeline: MATCH_WITH_TEST, span, keys: "robot-mode" },
+    { timeline: shifted(MATCH_WITH_TEST, -5.5), span, keys: "robot-mode" }
+  );
+  pair(
+    "test-mode",
+    "pre-2027 /DriverStation/Test on both sides: teleop-to-test transitions pair only with each other",
+    { timeline: MATCH_WITH_TEST, span, keys: "akit-test" },
+    { timeline: shifted(MATCH_WITH_TEST, 9.25), span, keys: "akit-test" }
+  );
   pair("dslog-source", "a Driver Station log merged into an AdvantageKit log", { timeline: MATCH, span }, { timeline: shifted(MATCH, -8), span: [0, 175] }, "dslog");
 
   for (let i = 0; i < 6; i++) {
