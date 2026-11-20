@@ -1,8 +1,9 @@
 //! Skia's dasher (`SkDashPath::InternalFilter` over `SkContourMeasure`, Chromium m142) for
-//! paths of lines, quads and conics. Conics are measured and cut as conics, as Skia does.
+//! paths of lines, quads, conics and cubics. Conics are measured and cut as conics, as Skia does.
 
 use tiny_skia::LineCap;
 
+use crate::geometry::{chop_cubic_at, eval_cubic_pos};
 use crate::hairline::P;
 use crate::skpath::{Rect, SkPath, Verb};
 
@@ -130,6 +131,7 @@ enum SegType {
     Line,
     Quad,
     Conic,
+    Cubic,
 }
 
 #[derive(Clone, Copy)]
@@ -156,6 +158,25 @@ fn quad_too_curvy(pts: &[P; 3], tol: f32) -> bool {
 fn conic_too_curvy(first: P, mid: P, last: P, tol: f32) -> bool {
     let me = p((first.x + last.x) * 0.5, (first.y + last.y) * 0.5);
     (mid.x - me.x).abs().max((mid.y - me.y).abs()) > tol
+}
+
+fn cheap_dist_exceeds_limit(pt: P, x: f32, y: f32, tol: f32) -> bool {
+    (x - pt.x).abs().max((y - pt.y).abs()) > tol
+}
+
+fn cubic_too_curvy(pts: &[P; 4], tol: f32) -> bool {
+    let (one_third, two_thirds) = (1.0f32 / 3.0, 1.0f32 * 2.0 / 3.0);
+    cheap_dist_exceeds_limit(
+        pts[1],
+        interp(pts[0].x, pts[3].x, one_third),
+        interp(pts[0].y, pts[3].y, one_third),
+        tol,
+    ) || cheap_dist_exceeds_limit(
+        pts[2],
+        interp(pts[0].x, pts[3].x, two_thirds),
+        interp(pts[0].y, pts[3].y, two_thirds),
+        tol,
+    )
 }
 
 struct Builder {
@@ -200,6 +221,32 @@ impl Builder {
             self.quad_segs([tmp[2], tmp[3], tmp[4]], d, half, maxt, idx, depth + 1)
         } else {
             self.push(length(pts[0], pts[2]), distance, idx, SegType::Quad, maxt)
+        }
+    }
+
+    fn cubic_segs(
+        &mut self,
+        pts: [P; 4],
+        distance: f32,
+        mint: i32,
+        maxt: i32,
+        idx: usize,
+        depth: i32,
+    ) -> f32 {
+        if depth < 8 && (maxt - mint) >> 10 != 0 && cubic_too_curvy(&pts, self.tol) {
+            let tmp = chop_cubic_at(&pts, 0.5);
+            let half = (mint + maxt) >> 1;
+            let d = self.cubic_segs(
+                [tmp[0], tmp[1], tmp[2], tmp[3]],
+                distance,
+                mint,
+                half,
+                idx,
+                depth + 1,
+            );
+            self.cubic_segs([tmp[3], tmp[4], tmp[5], tmp[6]], d, half, maxt, idx, depth + 1)
+        } else {
+            self.push(length(pts[0], pts[3]), distance, idx, SegType::Cubic, maxt)
         }
     }
 
@@ -286,7 +333,17 @@ fn contours(path: &SkPath, res_scale: f32) -> Vec<Contour> {
             seen_move = false;
         }
         match verb {
-            Verb::Cubic => todo!("cubic contour measure"),
+            Verb::Cubic => {
+                let c = [last, path.pts[pi], path.pts[pi + 1], path.pts[pi + 2]];
+                pi += 3;
+                let prev = dist;
+                dist = b.cubic_segs(c, dist, 0, MAX_T, idx as usize, 0);
+                if dist > prev {
+                    pts.extend([c[1], c[2], c[3]]);
+                    idx += 3;
+                }
+                last = c[3];
+            }
             Verb::Move => {
                 last = path.pts[pi];
                 pi += 1;
@@ -392,6 +449,7 @@ impl Contour {
                 w: pts[1].x,
             }
             .eval(t),
+            SegType::Cubic => eval_cubic_pos(&[pts[0], pts[1], pts[2], pts[3]], t),
         }
     }
 
@@ -454,6 +512,28 @@ impl Contour {
                 } else {
                     let c = conic.chop_between(start_t, stop_t);
                     dst.conic_to(c.pts[1], c.pts[2], c.w);
+                }
+            }
+            SegType::Cubic => {
+                let c = [pts[0], pts[1], pts[2], pts[3]];
+                if start_t == 0.0 {
+                    if stop_t == 1.0 {
+                        dst.cubic_to(c[1], c[2], c[3]);
+                    } else {
+                        let t = chop_cubic_at(&c, stop_t);
+                        dst.cubic_to(t[1], t[2], t[3]);
+                    }
+                } else {
+                    let t0 = chop_cubic_at(&c, start_t);
+                    if stop_t == 1.0 {
+                        dst.cubic_to(t0[4], t0[5], t0[6]);
+                    } else {
+                        let t1 = chop_cubic_at(
+                            &[t0[3], t0[4], t0[5], t0[6]],
+                            (stop_t - start_t) / (1.0 - start_t),
+                        );
+                        dst.cubic_to(t1[1], t1[2], t1[3]);
+                    }
                 }
             }
         }
@@ -831,5 +911,50 @@ mod tests {
         assert!(!out.filled);
         let moves = out.path.verbs.iter().filter(|v| **v == Verb::Move).count();
         assert_eq!(moves, 31);
+    }
+
+    fn arch() -> SkPath {
+        let mut src = SkPath::new();
+        src.move_to(p(10.0, 100.0));
+        src.cubic_to(p(40.0, 10.0), p(160.0, 10.0), p(190.0, 100.0));
+        src
+    }
+
+    #[test]
+    fn cubic_length_matches_a_dense_polyline() {
+        let c = [p(10.0, 100.0), p(40.0, 10.0), p(160.0, 10.0), p(190.0, 100.0)];
+        let mut dense = 0.0f64;
+        let mut prev = c[0];
+        for i in 1..=10_000 {
+            let q = eval_cubic_pos(&c, i as f32 / 10_000.0);
+            dense += f64::from(length(prev, q));
+            prev = q;
+        }
+        let measured = contours(&arch(), 1.0)[0].length;
+        assert!((f64::from(measured) / dense - 1.0).abs() < 0.002, "{measured} vs {dense}");
+    }
+
+    #[test]
+    fn dashing_a_cubic_cuts_it_into_cubics() {
+        let len = contours(&arch(), 1.0)[0].length;
+        let dash = Dash {
+            intervals: vec![10.0, 10.0],
+            phase: 0.0,
+        };
+        let rec = StrokeRec {
+            width: 4.0,
+            hairline: false,
+            cap: LineCap::Butt,
+            miter: None,
+            res_scale: 1.0,
+        };
+        let out = dash_path(&arch(), &dash, &rec, None).unwrap();
+        let moves = out.path.verbs.iter().filter(|v| **v == Verb::Move).count();
+        assert_eq!(moves, (len / 20.0).ceil() as usize);
+        assert!(out.path.verbs.iter().all(|v| matches!(v, Verb::Move | Verb::Cubic)));
+        let end = *out.path.pts.last().unwrap();
+        let c = [p(10.0, 100.0), p(40.0, 10.0), p(160.0, 10.0), p(190.0, 100.0)];
+        let on_curve = (0..=1000).any(|i| length(eval_cubic_pos(&c, i as f32 / 1000.0), end) < 0.5);
+        assert!(on_curve);
     }
 }

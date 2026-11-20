@@ -17,112 +17,227 @@ pub struct P {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Kind {
+enum Verb {
     Move,
-    Draw,
+    Line,
+    Quad,
+    Cubic,
     Close,
 }
 
-struct Piece {
-    kind: Kind,
-    points: Vec<P>,
+fn finite(p: P) -> bool {
+    p.x.is_finite() && p.y.is_finite()
 }
 
-fn quad_lines(p0: P, p1: P, p2: P) -> Vec<P> {
-    let dx = ((p0.x + p2.x) * 0.5 - p1.x).abs().ceil() as i32 as u32;
-    let dy = ((p0.y + p2.y) * 0.5 - p1.y).abs().ceil() as i32 as u32;
-    let dist = if dx > dy {
-        dx + (dy >> 1)
+/// `compute_int_quad_dist` and `compute_quad_level`.
+fn quad_level(pts: &[P; 3]) -> u32 {
+    let dx = ((pts[0].x + pts[2].x) / 2.0 - pts[1].x).abs();
+    let dy = ((pts[0].y + pts[2].y) / 2.0 - pts[1].y).abs();
+    let (idx, idy) = (dx.ceil() as i32 as u32, dy.ceil() as i32 as u32);
+    let dist = if idx > idy {
+        idx + (idy >> 1)
     } else {
-        dy + (dx >> 1)
+        idy + (idx >> 1)
     };
-    let level = ((33 - dist.leading_zeros()) >> 1).min(5);
-    let lines = 1u32 << level;
-    (0..=lines)
-        .map(|i| {
-            let t = i as f32 / lines as f32;
-            let mt = 1.0 - t;
-            P {
-                x: mt * mt * p0.x + 2.0 * mt * t * p1.x + t * t * p2.x,
-                y: mt * mt * p0.y + 2.0 * mt * t * p1.y + t * t * p2.y,
-            }
-        })
-        .collect()
+    ((33 - dist.leading_zeros()) >> 1).min(5)
 }
 
-fn cubic_lines(p0: P, p1: P, p2: P, p3: P) -> Vec<P> {
-    let third = |a: f32, b: f32| a / 3.0 + b * (2.0 / 3.0);
-    let diff = [
-        (p1.x - third(p3.x, p0.x)).abs(),
-        (p1.y - third(p3.y, p0.y)).abs(),
-        (p2.x - third(p0.x, p3.x)).abs(),
-        (p2.y - third(p0.y, p3.y)).abs(),
-    ]
-    .into_iter()
-    .fold(0.0f32, f32::max);
-    let mut tol = 1.0 / 8.0;
-    let mut lines = 1u32 << 9;
-    for i in 0..9 {
+/// `hair_quad`: the polyline through `1 << level` steps of `SkQuadCoeff`, or nothing if a step
+/// is not finite.
+fn quad_lines(pts: &[P; 3], level: u32) -> Vec<P> {
+    let c = pts[0];
+    let b = P {
+        x: (pts[1].x - c.x) + (pts[1].x - c.x),
+        y: (pts[1].y - c.y) + (pts[1].y - c.y),
+    };
+    let a = P {
+        x: pts[2].x - (pts[1].x + pts[1].x) + c.x,
+        y: pts[2].y - (pts[1].y + pts[1].y) + c.y,
+    };
+    let lines = 1u32 << level;
+    let dt = 1.0 / lines as f32;
+    let mut t = 0.0f32;
+    let mut out = vec![pts[0]];
+    for _ in 1..lines {
+        t += dt;
+        let q = P {
+            x: (a.x * t + b.x) * t + c.x,
+            y: (a.y * t + b.y) * t + c.y,
+        };
+        if !finite(q) {
+            return Vec::new();
+        }
+        out.push(q);
+    }
+    out.push(pts[2]);
+    out
+}
+
+const MAX_CUBIC_SUBDIVIDE_LEVEL: u32 = 9;
+
+/// `compute_cubic_segs` in `SkScan_Hairline.cpp`.
+fn cubic_segs(pts: &[P; 4]) -> u32 {
+    let (one_third, two_third) = (1.0f32 / 3.0, 2.0f32 / 3.0);
+    let p13 = |a: f32, b: f32| one_third * a + two_third * b;
+    let diff_x = (pts[1].x - p13(pts[3].x, pts[0].x))
+        .abs()
+        .max((pts[2].x - p13(pts[0].x, pts[3].x)).abs());
+    let diff_y = (pts[1].y - p13(pts[3].y, pts[0].y))
+        .abs()
+        .max((pts[2].y - p13(pts[0].y, pts[3].y)).abs());
+    let diff = diff_x.max(diff_y);
+    let mut tol = 1.0f32 / 8.0;
+    for i in 0..MAX_CUBIC_SUBDIVIDE_LEVEL {
         if diff < tol {
-            lines = 1 << i;
-            break;
+            return 1 << i;
         }
         tol *= 4.0;
     }
-    (0..=lines)
-        .map(|i| {
-            let t = i as f32 / lines as f32;
-            let mt = 1.0 - t;
-            let (a, b, c, d) = (mt * mt * mt, 3.0 * mt * mt * t, 3.0 * mt * t * t, t * t * t);
-            P {
-                x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-                y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-            }
-        })
-        .collect()
+    1 << MAX_CUBIC_SUBDIVIDE_LEVEL
 }
 
-/// `extend_pts`: moves the open ends of a piece outward along its end tangents.
-fn extend(points: &mut [P], at_start: bool, at_end: bool, outset: f32) {
-    let n = points.len();
-    let tangent = |from: P, to: P| {
-        let (x, y) = (from.x - to.x, from.y - to.y);
-        let len = (x * x + y * y).sqrt();
-        (len > 0.0).then(|| (x / len, y / len))
+/// `hair_cubic`: the polyline through `SkCubicCoeff` steps, or nothing if a step is not finite.
+fn cubic_lines(pts: &[P; 4]) -> Vec<P> {
+    let lines = cubic_segs(pts);
+    if lines == 1 {
+        return vec![pts[0], pts[3]];
+    }
+    let coeff = crate::geometry::CubicCoeff::new(pts);
+    let dt = 1.0 / lines as f32;
+    let mut t = 0.0f32;
+    let mut out = vec![pts[0]];
+    for _ in 1..lines {
+        t += dt;
+        let q = coeff.eval(t);
+        if !finite(q) {
+            return Vec::new();
+        }
+        out.push(q);
+    }
+    out.push(pts[3]);
+    out
+}
+
+fn lt_90(p0: P, pivot: P, p2: P) -> bool {
+    (p0.x - pivot.x) * (p2.x - pivot.x) + (p0.y - pivot.y) * (p2.y - pivot.y) >= 0.0
+}
+
+/// `haircubic`: cubics whose controls stray outside their ends are first cut at their points of
+/// maximum curvature.
+fn hair_cubic(pts: &[P; 4], out: &mut Vec<Vec<P>>) {
+    let nice = lt_90(pts[1], pts[0], pts[3])
+        && lt_90(pts[2], pts[0], pts[3])
+        && lt_90(pts[1], pts[3], pts[0])
+        && lt_90(pts[2], pts[3], pts[0]);
+    if nice {
+        out.push(cubic_lines(pts));
+    } else {
+        for c in crate::geometry::chop_cubic_at_max_curvature(pts) {
+            out.push(cubic_lines(&c));
+        }
+    }
+}
+
+/// `SkPoint::normalize`, computed in double.
+fn normalize(v: P) -> P {
+    let (x, y) = (f64::from(v.x), f64::from(v.y));
+    let scale = 1.0 / (x * x + y * y).sqrt();
+    let n = P {
+        x: (x * scale) as f32,
+        y: (y * scale) as f32,
     };
-    if at_start {
-        let t = (1..n).find_map(|i| tangent(points[0], points[i]));
-        match t {
-            Some((tx, ty)) => {
-                points[0].x += tx * outset;
-                points[0].y += ty * outset;
+    if !finite(n) || (n.x == 0.0 && n.y == 0.0) {
+        return P::default();
+    }
+    n
+}
+
+/// `extend_pts`: moves the open ends of a segment's control points outward along their end
+/// tangents, dragging along controls that coincide with the end.
+fn extend(prev: Option<Verb>, next: Option<Verb>, pts: &mut [P], outset: f32) {
+    let n = pts.len();
+    let is_zero = |v: P| v.x == 0.0 && v.y == 0.0;
+    if prev == Some(Verb::Move) {
+        let mut ctrl = 0;
+        let mut controls = n - 1;
+        let mut tangent;
+        loop {
+            ctrl += 1;
+            tangent = P {
+                x: pts[0].x - pts[ctrl].x,
+                y: pts[0].y - pts[ctrl].y,
+            };
+            controls -= 1;
+            if !(is_zero(tangent) && controls > 0) {
+                break;
             }
-            None => {
-                for p in &mut points[..n - 1] {
-                    p.x += outset;
-                }
+        }
+        controls += 1;
+        if is_zero(tangent) {
+            tangent = P { x: 1.0, y: 0.0 };
+            controls = n - 1;
+        } else {
+            tangent = normalize(tangent);
+        }
+        let mut i = 0;
+        loop {
+            pts[i].x += tangent.x * outset;
+            pts[i].y += tangent.y * outset;
+            i += 1;
+            controls += 1;
+            if controls >= n {
+                break;
             }
         }
     }
-    if at_end {
-        let t = (0..n - 1)
-            .rev()
-            .find_map(|i| tangent(points[n - 1], points[i]));
-        match t {
-            Some((tx, ty)) => {
-                points[n - 1].x += tx * outset;
-                points[n - 1].y += ty * outset;
+    if matches!(next, None | Some(Verb::Move) | Some(Verb::Close)) {
+        let mut ctrl = n - 1;
+        let mut controls = n - 1;
+        let mut tangent;
+        loop {
+            ctrl -= 1;
+            tangent = P {
+                x: pts[n - 1].x - pts[ctrl].x,
+                y: pts[n - 1].y - pts[ctrl].y,
+            };
+            controls -= 1;
+            if !(is_zero(tangent) && controls > 0) {
+                break;
             }
-            None => {
-                for p in &mut points[1..] {
-                    p.x -= outset;
-                }
+        }
+        controls += 1;
+        if is_zero(tangent) {
+            tangent = P { x: -1.0, y: 0.0 };
+            controls = n - 1;
+        } else {
+            tangent = normalize(tangent);
+        }
+        let mut i = n - 1;
+        loop {
+            pts[i].x += tangent.x * outset;
+            pts[i].y += tangent.y * outset;
+            controls += 1;
+            if controls >= n {
+                break;
             }
+            i -= 1;
         }
     }
 }
 
-/// The line segments Skia blits for a device-space hairline path.
+/// `is_next_contour_closed`, from the move at `i`.
+fn contour_closed(verbs: &[(Verb, Vec<P>)], i: usize) -> bool {
+    for (verb, _) in &verbs[i + 1..] {
+        match verb {
+            Verb::Close => return true,
+            Verb::Move => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// `hair_path`: the line segments Skia's antialiased hairline blits for a device-space path.
 pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
     let outset = match cap {
         LineCap::Butt => None,
@@ -130,54 +245,76 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
         LineCap::Round => Some(PI / 8.0),
     };
     let point = |p: tiny_skia::Point| P { x: p.x, y: p.y };
-    let mut pieces: Vec<Piece> = Vec::new();
-    let (mut first, mut last) = (P { x: 0.0, y: 0.0 }, P { x: 0.0, y: 0.0 });
+    let mut verbs: Vec<(Verb, Vec<P>)> = Vec::new();
+    let mut last = P::default();
     for segment in path.segments() {
-        let (kind, points) = match segment {
-            PathSegment::MoveTo(p) => {
-                first = point(p);
-                last = first;
-                (Kind::Move, Vec::new())
-            }
-            PathSegment::LineTo(p) => (Kind::Draw, vec![last, point(p)]),
-            PathSegment::QuadTo(p1, p2) => (Kind::Draw, quad_lines(last, point(p1), point(p2))),
+        let (verb, pts) = match segment {
+            PathSegment::MoveTo(p) => (Verb::Move, vec![point(p)]),
+            PathSegment::LineTo(p) => (Verb::Line, vec![last, point(p)]),
+            PathSegment::QuadTo(p1, p2) => (Verb::Quad, vec![last, point(p1), point(p2)]),
             PathSegment::CubicTo(p1, p2, p3) => (
-                Kind::Draw,
-                cubic_lines(last, point(p1), point(p2), point(p3)),
+                Verb::Cubic,
+                vec![last, point(p1), point(p2), point(p3)],
             ),
-            PathSegment::Close => (Kind::Close, vec![last, first]),
+            PathSegment::Close => (Verb::Close, Vec::new()),
         };
-        if let Some(&end) = points.last() {
+        if let Some(&end) = pts.last() {
             last = end;
         }
-        pieces.push(Piece { kind, points });
+        verbs.push((verb, pts));
     }
-    let mut out = Vec::new();
-    for i in 0..pieces.len() {
-        let prev = if i == 0 {
-            Kind::Move
-        } else {
-            pieces[i - 1].kind
-        };
-        let next = pieces.get(i + 1).map_or(Kind::Move, |p| p.kind);
-        let piece = &pieces[i];
-        let mut points = piece.points.clone();
-        if points.len() < 2 {
-            continue;
+    let mut polylines: Vec<Vec<P>> = Vec::new();
+    let (mut first, mut last_pt) = (P::default(), P::default());
+    let mut closed = false;
+    let mut prev: Option<Verb> = None;
+    for (i, (verb, src)) in verbs.iter().enumerate() {
+        let verb = *verb;
+        let next = verbs.get(i + 1).map(|v| v.0);
+        let mut pts = src.clone();
+        let all_equal = |pts: &[P]| pts.iter().all(|&q| q == pts[0]);
+        match verb {
+            Verb::Move => {
+                first = pts[0];
+                last_pt = first;
+                closed = outset.is_some() && contour_closed(&verbs, i);
+            }
+            Verb::Line | Verb::Quad | Verb::Cubic => {
+                if let Some(outset) = outset
+                    && (!closed || all_equal(&pts))
+                {
+                    extend(prev, next, &mut pts, outset);
+                }
+                match verb {
+                    Verb::Line => polylines.push(pts.clone()),
+                    Verb::Quad => {
+                        let q = [pts[0], pts[1], pts[2]];
+                        polylines.push(quad_lines(&q, quad_level(&q)));
+                    }
+                    _ => hair_cubic(&[pts[0], pts[1], pts[2], pts[3]], &mut polylines),
+                }
+                last_pt = pts[pts.len() - 1];
+            }
+            Verb::Close => {
+                pts = vec![last_pt, first];
+                if let Some(outset) = outset
+                    && prev == Some(Verb::Move)
+                {
+                    extend(prev, next, &mut pts, outset);
+                }
+                polylines.push(pts.clone());
+            }
         }
-        if let Some(outset) = outset {
-            let (start, end) = match piece.kind {
-                Kind::Close => (prev == Kind::Move, prev == Kind::Move),
-                _ => (
-                    prev == Kind::Move,
-                    next == Kind::Move || (next == Kind::Close && prev == Kind::Move),
-                ),
-            };
-            extend(&mut points, start, end, outset);
+        if outset.is_some() {
+            if prev == Some(Verb::Move) && matches!(verb, Verb::Line | Verb::Quad | Verb::Cubic) {
+                first = pts[0];
+            }
+            prev = Some(verb);
         }
-        out.extend(points.windows(2).map(|w| (w[0], w[1])));
     }
-    out
+    polylines
+        .iter()
+        .flat_map(|pts| pts.windows(2).map(|w| (w[0], w[1])))
+        .collect()
 }
 
 /// Coverage of one segment, clipped to the canvas; one segment never touches a pixel twice.
@@ -338,11 +475,24 @@ mod tests {
     }
 
     #[test]
-    fn huge_quads_subdivide_without_overflow() {
-        assert_eq!(
-            quad_lines(P::default(), P { x: 3e38, y: 3e38 }, P::default()).len(),
-            33
-        );
+    fn huge_quads_are_dropped_without_overflow() {
+        let q = [P::default(), P { x: 3e38, y: 3e38 }, P::default()];
+        assert_eq!(quad_level(&q), 5);
+        assert!(quad_lines(&q, quad_level(&q)).is_empty());
+    }
+
+    #[test]
+    fn flat_cubic_is_one_segment_and_curved_cubic_many() {
+        let mut b = PathBuilder::new();
+        b.move_to(0.0, 0.0);
+        b.cubic_to(10.0, 0.0, 20.0, 0.0, 30.0, 0.0);
+        assert_eq!(segments(&b.finish().unwrap(), LineCap::Butt).len(), 1);
+        let mut b = PathBuilder::new();
+        b.move_to(0.0, 0.0);
+        b.cubic_to(10.0, 40.0, 20.0, 40.0, 30.0, 0.0);
+        let segs = segments(&b.finish().unwrap(), LineCap::Butt);
+        assert_eq!(segs.len(), 32);
+        assert_eq!(segs[31].1, P { x: 30.0, y: 0.0 });
     }
 
     #[test]

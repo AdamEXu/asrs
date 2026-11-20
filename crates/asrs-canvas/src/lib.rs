@@ -6,6 +6,7 @@ pub mod clip;
 pub mod color;
 pub mod dash;
 pub mod display;
+pub mod geometry;
 pub mod hairline;
 pub mod path;
 pub mod pixels;
