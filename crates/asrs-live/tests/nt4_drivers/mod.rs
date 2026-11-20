@@ -27,7 +27,9 @@ use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::Session;
 
-use crate::support::{self, Driver, Env, Notify, Trace, js_arg};
+use asrs_live::nt4::NetEvent;
+
+use crate::support::{self, Driver, Env, Trace, js_arg};
 
 const WPILOG_PREFIX: &str = "NT:";
 const DS_PREFIX: &str = "DS:";
@@ -743,10 +745,10 @@ impl Driver for SourceDriver {
         Ok(())
     }
 
-    fn notify(&mut self, event: Notify, env: &mut Env) {
+    fn notify(&mut self, event: NetEvent, env: &mut Env) {
         for source in &mut self.sources {
             if let Some(client) = source.client.as_mut() {
-                support::dispatch(client, event.clone(), &mut source.state, &mut env.cx());
+                support::dispatch(client, &event, &mut source.state, &mut env.cx());
             }
         }
     }
@@ -1105,14 +1107,14 @@ impl Driver for PublisherDriver {
         Ok(())
     }
 
-    fn notify(&mut self, event: Notify, env: &mut Env) {
+    fn notify(&mut self, event: NetEvent, env: &mut Env) {
         for p in &mut self.publishers {
             let mut handler = PublisherHandler {
                 stopped: p.stopped,
                 trace: &p.trace,
                 now: env.now(),
             };
-            support::dispatch(&mut p.client, event.clone(), &mut handler, &mut env.cx());
+            support::dispatch(&mut p.client, &event, &mut handler, &mut env.cx());
         }
     }
 

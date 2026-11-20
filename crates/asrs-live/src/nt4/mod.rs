@@ -2,6 +2,7 @@
 
 mod client;
 mod js;
+mod tokio_transport;
 mod transport;
 
 pub use client::{
@@ -9,4 +10,5 @@ pub use client::{
     Nt4Handler, Nt4Subscription, Nt4SubscriptionOptions, Nt4Topic, PROTOCOL_RTT, PROTOCOL_V40,
     PROTOCOL_V41,
 };
-pub use transport::{Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+pub use tokio_transport::TokioTransport;
+pub use transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};

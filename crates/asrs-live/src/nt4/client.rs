@@ -16,7 +16,7 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_log::msgpack::{self, KeyCache, MultiDecoder};
 
 use super::js;
-use super::transport::{Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
 use crate::thrown::Thrown;
 use crate::timers::{TimerId, TimerQueue};
 
@@ -1051,6 +1051,33 @@ impl Nt4Client {
         }
         self.sockets.push((ws, rtt_ws));
         Ok(())
+    }
+
+    /// Hands a browser event to the listener upstream registers for it. An exception escaping
+    /// the listener comes back as the error; a browser reports it and carries on.
+    pub fn handle_net_event(
+        &mut self,
+        event: &NetEvent,
+        handler: &mut dyn Nt4Handler,
+        cx: &mut Nt4Context<'_>,
+    ) -> Result<(), Thrown> {
+        match event {
+            NetEvent::WsOpen(id, protocol) => self.on_ws_open(*id, protocol, handler, cx),
+            NetEvent::WsMessage(id, data) => self.on_ws_message(*id, data, handler, cx),
+            NetEvent::WsError(id) => {
+                self.on_ws_error(*id, cx);
+                Ok(())
+            }
+            NetEvent::WsClose(id) => self.on_ws_close(*id, handler, cx),
+            NetEvent::FetchResponse(id, status, url) => {
+                self.on_fetch_response(*id, f64::from(*status), url, cx);
+                Ok(())
+            }
+            NetEvent::FetchFailed(id) => {
+                self.on_fetch_failed(*id, cx);
+                Ok(())
+            }
+        }
     }
 
     /// Runs a fired timer if it is one of the client's. Returns `None` for any other id.

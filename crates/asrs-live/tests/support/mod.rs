@@ -10,7 +10,8 @@ use std::rc::Rc;
 
 use asrs_js::time::{Clock, V8MathRandom};
 use asrs_live::nt4::{
-    Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage,
+    NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId,
+    WsMessage,
 };
 use asrs_live::{ManualClock, Thrown, TimerId, TimerQueue};
 use asrs_log::msgpack::KeyCache;
@@ -61,17 +62,6 @@ pub enum Delivery {
     HttpSettled(u32, Option<f64>),
 }
 
-/// An event a delivery raises on the client, in dispatch order.
-#[derive(Clone, Debug)]
-pub enum Notify {
-    WsOpen(SocketId, String),
-    WsMessage(SocketId, WsMessage),
-    WsError(SocketId),
-    WsClose(SocketId),
-    FetchResponse(RequestId, f64, String),
-    FetchFailed(RequestId),
-}
-
 struct FakeSocket {
     ready: ReadyState,
     protocol: String,
@@ -116,7 +106,7 @@ impl FakeNet {
         self.clock.now()
     }
 
-    fn to_server(&mut self, event: ClientEvent) {
+    fn send_to_server(&mut self, event: ClientEvent) {
         let now = self.now();
         self.trace.push(event.line(now));
         self.host.arrive(now, event);
@@ -168,33 +158,36 @@ impl FakeNet {
     }
 
     /// Applies a delivery to the browser state and returns the events it dispatches.
-    pub fn apply(&mut self, delivery: Delivery) -> Vec<Notify> {
+    pub fn apply(&mut self, delivery: Delivery) -> Vec<NetEvent> {
         match delivery {
             Delivery::WsAccepted(id, protocol) => match self.sockets.get_mut(&id) {
                 Some(s) if s.ready == ReadyState::Connecting => {
                     s.ready = ReadyState::Open;
                     s.protocol = protocol.clone();
-                    vec![Notify::WsOpen(SocketId(id), protocol)]
+                    vec![NetEvent::WsOpen(SocketId(id), protocol)]
                 }
                 _ => Vec::new(),
             },
             Delivery::WsFailed(id) => match self.sockets.get_mut(&id) {
                 Some(s) if s.ready != ReadyState::Closed => {
                     s.ready = ReadyState::Closed;
-                    vec![Notify::WsError(SocketId(id)), Notify::WsClose(SocketId(id))]
+                    vec![
+                        NetEvent::WsError(SocketId(id)),
+                        NetEvent::WsClose(SocketId(id)),
+                    ]
                 }
                 _ => Vec::new(),
             },
             Delivery::WsReceived(id, data) => match self.sockets.get(&id) {
                 Some(s) if s.ready == ReadyState::Open => {
-                    vec![Notify::WsMessage(SocketId(id), data)]
+                    vec![NetEvent::WsMessage(SocketId(id), data)]
                 }
                 _ => Vec::new(),
             },
             Delivery::WsDropped(id) => match self.sockets.get_mut(&id) {
                 Some(s) if s.ready != ReadyState::Closed => {
                     s.ready = ReadyState::Closed;
-                    vec![Notify::WsClose(SocketId(id))]
+                    vec![NetEvent::WsClose(SocketId(id))]
                 }
                 _ => Vec::new(),
             },
@@ -202,9 +195,12 @@ impl FakeNet {
                 Some(s) if s.ready != ReadyState::Closed => {
                     s.ready = ReadyState::Closed;
                     if was_connecting {
-                        vec![Notify::WsError(SocketId(id)), Notify::WsClose(SocketId(id))]
+                        vec![
+                            NetEvent::WsError(SocketId(id)),
+                            NetEvent::WsClose(SocketId(id)),
+                        ]
                     } else {
-                        vec![Notify::WsClose(SocketId(id))]
+                        vec![NetEvent::WsClose(SocketId(id))]
                     }
                 }
                 _ => Vec::new(),
@@ -214,9 +210,13 @@ impl FakeNet {
                     r.done = true;
                     match status {
                         Some(status) => {
-                            vec![Notify::FetchResponse(RequestId(id), status, href(&r.url))]
+                            vec![NetEvent::FetchResponse(
+                                RequestId(id),
+                                status as u16,
+                                href(&r.url),
+                            )]
                         }
-                        None => vec![Notify::FetchFailed(RequestId(id))],
+                        None => vec![NetEvent::FetchFailed(RequestId(id))],
                     }
                 }
                 _ => Vec::new(),
@@ -236,7 +236,7 @@ impl Nt4Transport for FakeNet {
                 protocol: String::new(),
             },
         );
-        self.to_server(ClientEvent::WsOpen {
+        self.send_to_server(ClientEvent::WsOpen {
             id,
             url: url.to_owned(),
             protocols: protocols.iter().map(|p| (*p).to_owned()).collect(),
@@ -257,7 +257,7 @@ impl Nt4Transport for FakeNet {
                 "Still in CONNECTING state.",
             )),
             ReadyState::Open => {
-                self.to_server(ClientEvent::WsSend {
+                self.send_to_server(ClientEvent::WsSend {
                     id: id.0,
                     data: payload(&data),
                 });
@@ -276,7 +276,7 @@ impl Nt4Transport for FakeNet {
         }
         let was_connecting = socket.ready == ReadyState::Connecting;
         socket.ready = ReadyState::Closing;
-        self.to_server(ClientEvent::WsClose { id: id.0 });
+        self.send_to_server(ClientEvent::WsClose { id: id.0 });
         self.deliver(
             2.0 * self.latency_ms,
             Delivery::WsCloseDone(id.0, was_connecting),
@@ -293,7 +293,7 @@ impl Nt4Transport for FakeNet {
                 done: false,
             },
         );
-        self.to_server(ClientEvent::HttpGet {
+        self.send_to_server(ClientEvent::HttpGet {
             id,
             url: url.to_owned(),
         });
@@ -308,7 +308,7 @@ impl Nt4Transport for FakeNet {
             return;
         }
         request.done = true;
-        self.to_server(ClientEvent::HttpAbort { id: id.0 });
+        self.send_to_server(ClientEvent::HttpAbort { id: id.0 });
     }
 }
 
@@ -345,7 +345,7 @@ impl Env {
 
 pub trait Driver {
     fn op(&mut self, op: &[Json], env: &mut Env) -> Result<(), Thrown>;
-    fn notify(&mut self, event: Notify, env: &mut Env);
+    fn notify(&mut self, event: NetEvent, env: &mut Env);
     fn timer(&mut self, id: TimerId, env: &mut Env);
     fn finish(&mut self, _env: &mut Env) {}
 }
@@ -439,22 +439,9 @@ pub fn js_value(value: &asrs_js::value::JsValue) -> Value {
 /// Hands a browser event to the client's listener; exceptions escaping it are dropped.
 pub fn dispatch(
     client: &mut Nt4Client,
-    event: Notify,
+    event: &NetEvent,
     h: &mut dyn Nt4Handler,
     cx: &mut Nt4Context<'_>,
 ) {
-    match event {
-        Notify::WsOpen(id, protocol) => {
-            let _ = client.on_ws_open(id, &protocol, h, cx);
-        }
-        Notify::WsMessage(id, data) => {
-            let _ = client.on_ws_message(id, &data, h, cx);
-        }
-        Notify::WsError(id) => client.on_ws_error(id, cx),
-        Notify::WsClose(id) => {
-            let _ = client.on_ws_close(id, h, cx);
-        }
-        Notify::FetchResponse(id, status, url) => client.on_fetch_response(id, status, &url, cx),
-        Notify::FetchFailed(id) => client.on_fetch_failed(id, cx),
-    }
+    let _ = client.handle_net_event(event, h, cx);
 }

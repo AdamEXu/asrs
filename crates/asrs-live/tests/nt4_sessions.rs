@@ -19,7 +19,8 @@ use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
 use asrs_parity::vectors;
 
-use support::{Driver, Env, Notify, js_arg, js_value};
+use asrs_live::nt4::NetEvent;
+use support::{Driver, Env, js_arg, js_value};
 
 struct Recorder<'a> {
     trace: &'a support::Trace,
@@ -250,11 +251,11 @@ impl Driver for ClientDriver {
         }
     }
 
-    fn notify(&mut self, event: Notify, env: &mut Env) {
+    fn notify(&mut self, event: NetEvent, env: &mut Env) {
         let Some(client) = self.client.as_mut() else {
             return;
         };
-        with_handler(env, |h, cx| support::dispatch(client, event, h, cx));
+        with_handler(env, |h, cx| support::dispatch(client, &event, h, cx));
     }
 
     fn timer(&mut self, id: TimerId, env: &mut Env) {
@@ -346,9 +347,26 @@ fn nt4_sessions() -> Vec<(String, Session)> {
 fn every_nt4_session_matches_the_oracle_trace() {
     let sessions = nt4_sessions();
     assert!(sessions.len() >= 3);
-    let failures: Vec<String> = sessions
-        .iter()
-        .filter_map(|(id, session)| replay(id, session).err())
-        .collect();
+    let mut failures = Vec::new();
+    for (id, session) in &sessions {
+        match replay(id, session) {
+            Ok(lines) => {
+                assert!(lines > 10, "{id}: only {lines} lines");
+                eprintln!("{id}: {lines} lines equal");
+            }
+            Err(e) => failures.push(e),
+        }
+    }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+#[test]
+fn a_one_millisecond_clock_skew_is_caught() {
+    let (id, mut session) = nt4_sessions()
+        .into_iter()
+        .find(|(id, _)| id == "live/nt4/client-v41-api")
+        .expect("session");
+    session.epoch_ms += 1.0;
+    let error = replay(&id, &session).unwrap_err();
+    assert!(error.contains("differs"), "{error}");
 }

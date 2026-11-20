@@ -25,6 +25,20 @@ pub enum WsMessage {
     Binary(Vec<u8>),
 }
 
+/// A browser event for the client, in dispatch order. A failed handshake is `WsError` then
+/// `WsClose`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NetEvent {
+    WsOpen(SocketId, String),
+    WsMessage(SocketId, WsMessage),
+    WsError(SocketId),
+    WsClose(SocketId),
+    /// `fetch` fulfilled: the response status and `response.url`.
+    FetchResponse(RequestId, u16, String),
+    /// `fetch` rejected with a network error.
+    FetchFailed(RequestId),
+}
+
 pub trait Nt4Transport {
     /// `new WebSocket(url, protocols)`.
     fn ws_open(&mut self, url: &str, protocols: &[&str]) -> Result<SocketId, Thrown>;
