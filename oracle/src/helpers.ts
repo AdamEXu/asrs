@@ -1,9 +1,46 @@
+import StructDecoder from "@upstream/shared/log/StructDecoder";
 import { flushAnimationFrames } from "./shims";
 
 const indirectEval = eval;
 
 export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   identity: (value: unknown) => value,
+
+  // Drives a fresh upstream StructDecoder through an op list:
+  //   ["addSchema", name, bytes]              -> toSerialized() snapshot
+  //   ["decode", name, bytes]                 -> {data, schemaTypes}
+  //   ["decodeArray", name, bytes, length?]   -> {data, schemaTypes}
+  //   ["toSerialized"]                        -> serialized state
+  //   ["fromSerialized", serialized]          -> serialized state after restore
+  // Each element comes back as {ok: ...} or {throw: ...}.
+  struct: (ops: unknown[][]) => {
+    let decoder = new StructDecoder();
+    return ops.map((item) => {
+      try {
+        const [kind, ...args] = item as [string, ...unknown[]];
+        switch (kind) {
+          case "addSchema":
+            decoder.addSchema(args[0] as string, args[1] as Uint8Array);
+            return { ok: decoder.toSerialized() };
+          case "decode":
+            return {
+              ok: decoder.decode(args[0] as string, args[1] as Uint8Array, args[2] as number | undefined)
+            };
+          case "decodeArray":
+            return { ok: decoder.decodeArray(args[0] as string, args[1] as Uint8Array, args[2] as number | undefined) };
+          case "toSerialized":
+            return { ok: decoder.toSerialized() };
+          case "fromSerialized":
+            decoder = StructDecoder.fromSerialized(args[0]);
+            return { ok: decoder.toSerialized() };
+          default:
+            throw new Error(`oracle:struct: unknown op ${String(kind)}`);
+        }
+      } catch (e) {
+        return { throw: e };
+      }
+    });
+  },
 
   typeof: (value: unknown) => typeof value,
 
