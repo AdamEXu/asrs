@@ -1,0 +1,32 @@
+{
+  "name": "2022 Field",
+  "locales": {
+    "en-US": "2022 Field",
+    "es-419": "Campo 2022",
+    "fr": "Terrain 2022",
+    "nl": "Veld 2022",
+    "pt-BR": "Campo 2022",
+    "ro": "Teren 2022",
+    "tr": "2022 Sahası",
+    "ru": "Поле 2022",
+    "kk": "2022 алаңы",
+    "he": "מגרש 2022",
+    "ar": "ملعب 2022",
+    "hi": "2022 फील्ड",
+    "zh-CN": "2022 场地",
+    "zh-TW": "2022 場地"
+  },
+  "isFTC": false,
+  "coordinateSystem": "wall-alliance",
+  "sourceUrl": "https://www.chiefdelphi.com/t/2022-top-down-field-renders/399031",
+  "topLeft": [
+    884,
+    148
+  ],
+  "bottomRight": [
+    6160,
+    2786
+  ],
+  "widthInches": 648,
+  "heightInches": 324
+}

@@ -20,6 +20,7 @@ const NPM_PACKAGES = [
 ];
 
 const MODULE_ROOTS = ["shared", "hub"];
+const MODULE_FILES = ["main/assetUtil.ts"];
 
 function isExcludedModule(id) {
   return id === "hub/hub" || /Worker$/.test(id) || id.startsWith("shared/renderers/field3d/workers/");
@@ -49,6 +50,10 @@ function listUpstreamModules(srcDir) {
     }
   };
   MODULE_ROOTS.forEach((root) => visit(path.join(srcDir, root)));
+  for (const file of MODULE_FILES) {
+    const id = file.slice(0, -3);
+    if (!isExcludedModule(id)) ids.push(id);
+  }
   return ids.sort();
 }
 

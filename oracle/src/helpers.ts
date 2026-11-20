@@ -1,5 +1,6 @@
 import StructDecoder from "@upstream/shared/log/StructDecoder";
 import PhotonStructDecoder from "@upstream/shared/log/PhotonStructDecoder";
+import { run as logRun } from "./logRun";
 import ConsoleRenderer from "@upstream/shared/renderers/ConsoleRenderer";
 import { AnsiUp } from "ansi_up";
 import { consoleExport } from "./consoleExport";
@@ -61,6 +62,10 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   },
 
   typeof: (value: unknown) => typeof value,
+
+  // Drives a fresh upstream Log through an op list (see logRun.ts).
+  logRun: (enableTimestampSetCache: boolean, ops: unknown[][]) =>
+    logRun(enableTimestampSetCache, ops as any[][]),
 
   // ConsoleRenderer.formatValue is private upstream; the prototype method is the real
   // implementation, it just does not read `this`.

@@ -3,18 +3,19 @@ use std::sync::Arc;
 use asrs_js::string::JsString;
 use asrs_js::value::JsObject;
 use asrs_log::log::{
-    Log, LogFieldTree, LogValue, LogValues, LoggableType, SerializedLogField, TimestampDisplay,
+    Log, LogFieldIterator, LogFieldTree, LogValue, LogValueSet, LogValueSetAny, LogValues,
+    LoggableType, SerializedLogField, TimestampDisplay, log_key_utils, log_util,
 };
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{self, arg};
 use crate::js_json;
 use crate::log_field::{
-    ToValue, any_set_value, array, boolean, index, js_string, loggable_type, number, numbers,
-    serialized_value, set_value, string_value, type_string,
+    ToValue, any_set_value, array, boolean, index, js_string, loggable_type, loggable_type_opt,
+    number, numbers, serialized_value, set_value, string_value, type_string,
 };
 
-fn bytes(v: &Value) -> Result<Arc<[u8]>, String> {
+pub(crate) fn bytes(v: &Value) -> Result<Arc<[u8]>, String> {
     match v {
         Value::Bytes(b) => Ok(Arc::from(b.as_slice())),
         other => Err(format!("expected bytes, got {}", other.kind())),
@@ -298,10 +299,93 @@ pub(crate) fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Re
         "displayOffset" => results.push(Value::number(
             log.get_timestamp_display_offset(display(&arg(op, 1))?),
         )),
+        "findKey" => {
+            let search = array(&arg(op, 1), js_string)?;
+            results.push(
+                log_key_utils::find_key(log, &search)
+                    .map_or(Value::Undefined, |key| string_value(&key)),
+            );
+        }
+        "getOrDefault" => {
+            let key = js_string(&arg(op, 1))?;
+            let timestamp = number(&arg(op, 3))?;
+            let uuid = optional_uuid(&arg(op, 5))?;
+            let found = match loggable_type_opt(&arg(op, 2)) {
+                Some(ty) => typed_value(log, &key, ty, timestamp, uuid.as_deref()),
+                None => None,
+            };
+            results.push(found.unwrap_or_else(|| arg(op, 4)));
+        }
+        "urclKeys" => results.push(strings(log_util::get_urcl_keys(log).iter())),
+        "iterator" => {
+            let key = js_string(&arg(op, 1))?;
+            let times = array(&arg(op, 2), number)?;
+            let set = log.get_range(&key, f64::NEG_INFINITY, f64::INFINITY, None);
+            results.push(Value::Array(iterator_values(&set, &times)));
+        }
+        "valueText" => {
+            let key = js_string(&arg(op, 1))?;
+            let set = log.get_range(&key, f64::NEG_INFINITY, f64::INFINITY, None);
+            let text = set
+                .as_ref()
+                .and_then(|set| log_util::get_log_value_text_at(set, set.len().checked_sub(1)?));
+            results.push(text.map_or(Value::Null, |text| Value::String(text.into())));
+        }
         "dump" => results.push(dump(log)),
         other => return Err(format!("logRun: unknown op {other:?}")),
     }
     Ok(())
+}
+
+fn typed_value(
+    log: &Log,
+    key: &JsString,
+    ty: LoggableType,
+    timestamp: f64,
+    uuid: Option<&str>,
+) -> Option<Value> {
+    fn get<T: LogValue + ToValue>(
+        log: &Log,
+        key: &JsString,
+        timestamp: f64,
+        uuid: Option<&str>,
+    ) -> Option<Value> {
+        log_util::get_value_at::<T>(log, key, timestamp, uuid).map(|v| v.to_value())
+    }
+    match ty {
+        LoggableType::Raw => get::<Arc<[u8]>>(log, key, timestamp, uuid),
+        LoggableType::Boolean => get::<bool>(log, key, timestamp, uuid),
+        LoggableType::Number => get::<f64>(log, key, timestamp, uuid),
+        LoggableType::String => get::<JsString>(log, key, timestamp, uuid),
+        LoggableType::BooleanArray => get::<Vec<bool>>(log, key, timestamp, uuid),
+        LoggableType::NumberArray => get::<Vec<f64>>(log, key, timestamp, uuid),
+        LoggableType::StringArray => get::<Vec<JsString>>(log, key, timestamp, uuid),
+        LoggableType::Empty => get::<()>(log, key, timestamp, uuid),
+    }
+}
+
+fn iterator_values(set: &Option<LogValueSetAny>, times: &[f64]) -> Vec<Value> {
+    fn run<T: ToValue>(set: Option<&LogValueSet<T>>, times: &[f64]) -> Vec<Value> {
+        let mut iter = LogFieldIterator::new(set);
+        times
+            .iter()
+            .map(|&t| {
+                iter.get_at_time(t)
+                    .map_or(Value::Undefined, ToValue::to_value)
+            })
+            .collect()
+    }
+    match set {
+        Some(LogValueSetAny::Raw(s)) => run(Some(s), times),
+        Some(LogValueSetAny::Boolean(s)) => run(Some(s), times),
+        Some(LogValueSetAny::Number(s)) => run(Some(s), times),
+        Some(LogValueSetAny::String(s)) => run(Some(s), times),
+        Some(LogValueSetAny::BooleanArray(s)) => run(Some(s), times),
+        Some(LogValueSetAny::NumberArray(s)) => run(Some(s), times),
+        Some(LogValueSetAny::StringArray(s)) => run(Some(s), times),
+        Some(LogValueSetAny::Empty(s)) => run(Some(s), times),
+        None => run::<()>(None, times),
+    }
 }
 
 /// Replays the logRun op list and returns the resulting log alongside the

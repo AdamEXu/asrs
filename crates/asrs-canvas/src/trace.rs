@@ -104,6 +104,10 @@ pub fn call_to_value(call: &Call) -> JsValue {
         Call::ClosePath => named("closePath", &[]),
         Call::MoveTo(x, y) => named("moveTo", &[*x, *y]),
         Call::LineTo(x, y) => named("lineTo", &[*x, *y]),
+        Call::QuadraticCurveTo(cx, cy, x, y) => named("quadraticCurveTo", &[*cx, *cy, *x, *y]),
+        Call::BezierCurveTo(c1x, c1y, c2x, c2y, x, y) => {
+            named("bezierCurveTo", &[*c1x, *c1y, *c2x, *c2y, *x, *y])
+        }
         Call::Rect(x, y, w, h) => named("rect", &[*x, *y, *w, *h]),
         Call::Arc {
             x,
@@ -467,6 +471,14 @@ pub fn call_from_value(v: &JsValue) -> Result<Call, String> {
             "lineTo" => {
                 let [x, y] = nums(args)?;
                 Call::LineTo(x, y)
+            }
+            "quadraticCurveTo" => {
+                let [cx, cy, x, y] = nums(args)?;
+                Call::QuadraticCurveTo(cx, cy, x, y)
+            }
+            "bezierCurveTo" => {
+                let [c1x, c1y, c2x, c2y, x, y] = nums(args)?;
+                Call::BezierCurveTo(c1x, c1y, c2x, c2y, x, y)
             }
             "rect" => {
                 let [x, y, w, h] = nums(args)?;

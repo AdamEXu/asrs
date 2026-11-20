@@ -1,0 +1,1129 @@
+[
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2018FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2018FieldV1.zip",
+  "sha256": "124ddc09904fa2f08e06da60fd9e58b48bb2070ca1f245fd40e6b2845c050166",
+  "folder": "Field2d_2018FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2019FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2019FieldV1.zip",
+  "sha256": "4564598c34ac24767f867157e82bc94d836e7bc9aa129ddaa3132503e88c934e",
+  "folder": "Field2d_2019FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2020FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2020FieldV1.zip",
+  "sha256": "9d1910f696487a7ef26cf63f6bf39665d7de8939f2868a12441eaa2164537e4b",
+  "folder": "Field2d_2020FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2022FRCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2022FRCFieldV2.zip",
+  "sha256": "079777a9ae053be7ea5ca51b0c7a9bee15d884dce774786454bbbb6f1e8403d8",
+  "folder": "Field2d_2022FRCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2022FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2022FRCFieldV3.zip",
+  "sha256": "18b3a44f308696deba1478daa193d83bb7a81c97fa1e93490bc0063d2d87b683",
+  "folder": "Field2d_2022FRCFieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2022FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2022FieldV1.zip",
+  "sha256": "8827c87a590f88c8b89eaa30eca2284ba6222cc937a0b718b7e1ab18736c5932",
+  "folder": "Field2d_2022FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2023FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2023FRCFieldV3.zip",
+  "sha256": "6a05b1ad1403b544353bed13d63bce4623e07d9e30aaf41d1fb2004082c4f8ad",
+  "folder": "Field2d_2023FRCFieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2023FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2023FRCFieldV4.zip",
+  "sha256": "62f1e2ed04de6b1701506d784c0df37a6e45a837ad81b64aa8cd8c6ac9a34fd7",
+  "folder": "Field2d_2023FRCFieldV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2023FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2023FieldV2.zip",
+  "sha256": "d01865cdc5e0f4fa6b454e0502cdf2a60972c74ef798a483e2c6e639b1dd5081",
+  "folder": "Field2d_2023FieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_20242025FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_20242025FTCFieldV1.zip",
+  "sha256": "6e85e032e9ead13d2a8ba12ead06843707a070c1ad541579cc2a4162885013ba",
+  "folder": "Field2d_20242025FTCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_20242025FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_20242025FTCFieldV2.zip",
+  "sha256": "a2011b780a3dc30c42acffdb7498e4c8e7aee848980b0a3b1cfcf0ee95379389",
+  "folder": "Field2d_20242025FTCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2024FRCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2024FRCFieldV2.zip",
+  "sha256": "2cad718c6dc8bac3122b4e94c035965e2982b8c7bb1e8571076ceb0fa7f71627",
+  "folder": "Field2d_2024FRCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2024FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2024FRCFieldV3.zip",
+  "sha256": "d5e62ff37d312042bbbfc59484cb8a47dfb6130866660a5852361ab12ead4f1e",
+  "folder": "Field2d_2024FRCFieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2024FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2024FieldV1.zip",
+  "sha256": "7cceb0bb842f83cb14f316b0e20b904d584fb7e1c9b9f1258aee0d587f1cd04b",
+  "folder": "Field2d_2024FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_20252026FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_20252026FTCFieldV1.zip",
+  "sha256": "847389fc5b258da26e58a960208054285efb436fac7bb1bd1b66d46270918636",
+  "folder": "Field2d_20252026FTCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_20252026FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_20252026FTCFieldV2.zip",
+  "sha256": "cd8f780fa45ab7be8685002a348779aa8b49a53989186115da6b88deea819dfa",
+  "folder": "Field2d_20252026FTCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FRCFieldAndyMarkV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FRCFieldAndyMarkV2.zip",
+  "sha256": "e79c02f165aa94f3fda224fb15a0ba58f699e5c7011b26bf15ac051f1db608b7",
+  "folder": "Field2d_2025FRCFieldAndyMarkV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FRCFieldAndyMarkV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FRCFieldAndyMarkV3.zip",
+  "sha256": "558c7075d13a21a808a4f1a117f2bc22aa5e20dec502d515b541cd33050eb067",
+  "folder": "Field2d_2025FRCFieldAndyMarkV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FRCFieldWeldedV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FRCFieldWeldedV2.zip",
+  "sha256": "bb3a955d023f5f51007e90d59c0b88f6f557a201a3f9b1bbc012323f10a23c9a",
+  "folder": "Field2d_2025FRCFieldWeldedV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FRCFieldWeldedV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FRCFieldWeldedV3.zip",
+  "sha256": "bb4ac0c582b2b9d4b144ec61c2d89eb8c8c310a69eebec76346f72c7c611aa39",
+  "folder": "Field2d_2025FRCFieldWeldedV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FieldAndyMarkV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FieldAndyMarkV1.zip",
+  "sha256": "85763bd03f4d9745172447b0fef31dca3dbedae4dbe64e3cdcb35b5360e72bab",
+  "folder": "Field2d_2025FieldAndyMarkV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FieldV1.zip",
+  "sha256": "2faa7baed6b3eddd74b1ae3f5ff91c3d63e787f07225a64cd6c1f2872f6b1f62",
+  "folder": "Field2d_2025FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2025FieldWeldedV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2025FieldWeldedV1.zip",
+  "sha256": "cfb103185892802635a3017931f0b63f34d192b28490c3f5d223e85ffbe52b48",
+  "folder": "Field2d_2025FieldWeldedV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_20262027FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_20262027FTCFieldV1.zip",
+  "sha256": "41215ccc90e604a80f6b8f48daf5f0a9151cdbe7a6b64f970f35773a033849c3",
+  "folder": "Field2d_20262027FTCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2026FRCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2026FRCFieldV1.zip",
+  "sha256": "49e045ef4971e627e02a9c1818b656fc977f72cc0935541d1eec3b2279710170",
+  "folder": "Field2d_2026FRCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field2d_2026FRCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field2d_2026FRCFieldV2.zip",
+  "sha256": "78e5d1371e4b6a193ab97dde57c4573df01a8ec6212b7841a43575305af7f5d5",
+  "folder": "Field2d_2026FRCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2021FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2021FieldV1.zip",
+  "sha256": "cdb418150362b53bfaff8aafb99c6bff6db327c4c5e7e70c7f83c33b3984d979",
+  "folder": "Field3d_2021FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2021FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2021FieldV2.zip",
+  "sha256": "4ce1ba60aad14c5dc59235588d566dae75337b3cf053edc46c1cd3d3a7f7ed95",
+  "folder": "Field3d_2021FieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2022FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2022FRCFieldV3.zip",
+  "sha256": "a3df37b8be2d9ea05b5bed7b52e97c01cfd90e206ef18883f8d098c2409c34f0",
+  "folder": "Field3d_2022FRCFieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2022FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2022FRCFieldV4.zip",
+  "sha256": "80f716e1895fe715401cf0adcdd94472d6aa03827a614e77a8fc93523cea6f21",
+  "folder": "Field3d_2022FRCFieldV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2022FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2022FieldV1.zip",
+  "sha256": "e5a0af797a182c5bd0c25a6c496ad59f763bef5fb81ffd3807fb2a0e1a705880",
+  "folder": "Field3d_2022FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2022FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2022FieldV2.zip",
+  "sha256": "472d60b384a801e01413f848098e8283ca67c8dc65156b63d5a2cc49eb84c363",
+  "folder": "Field3d_2022FieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2023FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2023FRCFieldV4.zip",
+  "sha256": "ded67ce126955431c8d4580567796c45351845b02fc705a9dca33ff4ac25b6e2",
+  "folder": "Field3d_2023FRCFieldV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2023FRCFieldV5.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2023FRCFieldV5.zip",
+  "sha256": "ffd6141541d280380b9749065b197edbcd920fe1f2b1f2853adb8df9aa4015f9",
+  "folder": "Field3d_2023FRCFieldV5"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2023FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2023FieldV2.zip",
+  "sha256": "8b421bc27abfccc75ba419efcb35ccc8778a46ba69e8ad898ba42cf1134b9d4f",
+  "folder": "Field3d_2023FieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2023FieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2023FieldV3.zip",
+  "sha256": "97fbc2ee4b3e4a7fc0ee945d443e1f05af6255258f09f5f49df9fc10abd72907",
+  "folder": "Field3d_2023FieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_20242025FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_20242025FTCFieldV1.zip",
+  "sha256": "665f7a7166029781fa5bfeba85c663e2b502ef9f04a32f7a48adb69b1d80bb03",
+  "folder": "Field3d_20242025FTCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_20242025FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_20242025FTCFieldV2.zip",
+  "sha256": "e33cd7b0e1b5d9ae102f02a880f95c39199861e351759c6c22436d98c70c68ce",
+  "folder": "Field3d_20242025FTCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_20242025FTCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_20242025FTCFieldV3.zip",
+  "sha256": "89d79730729b83ac674e380d6d0946a6daa223ece5e2341f3134567128dc70a2",
+  "folder": "Field3d_20242025FTCFieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2024FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2024FRCFieldV3.zip",
+  "sha256": "a0cc07054fda706fc621c525819218a485fe14ff48235773e1475f726f7d432a",
+  "folder": "Field3d_2024FRCFieldV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2024FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2024FRCFieldV4.zip",
+  "sha256": "eb396d336351d155c099af7d483ce306d5541c0ad0d4823d81128775d2a7c203",
+  "folder": "Field3d_2024FRCFieldV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2024FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2024FieldV1.zip",
+  "sha256": "57b966a15c8ed20d18c92318fadccbae262035fbf60cb2b01955365d808c24e9",
+  "folder": "Field3d_2024FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2024FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2024FieldV2.zip",
+  "sha256": "4ce6ee691b751a02118d452fe00b651076115c7b896b4d2e374f6ef2f9f2edf1",
+  "folder": "Field3d_2024FieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_20252026FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_20252026FTCFieldV1.zip",
+  "sha256": "2f7b38589e2648445e6539f08c3a69a951071cc51904820d2a644b33b75dd07f",
+  "folder": "Field3d_20252026FTCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_20252026FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_20252026FTCFieldV2.zip",
+  "sha256": "c2ca10756410904dd5b8266478b4ceb78659054cdda75fb5f30db3a71d34658d",
+  "folder": "Field3d_20252026FTCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FRCFieldAndyMarkV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FRCFieldAndyMarkV2.zip",
+  "sha256": "95581036fdf1485f88ea21da475aeb9a99f7b32351f39de1731516a999f2179d",
+  "folder": "Field3d_2025FRCFieldAndyMarkV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FRCFieldAndyMarkV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FRCFieldAndyMarkV3.zip",
+  "sha256": "7a4837451f9024378afd81210d3985df5f01a151158ff5a946a1f5195c934032",
+  "folder": "Field3d_2025FRCFieldAndyMarkV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FRCFieldWeldedV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FRCFieldWeldedV2.zip",
+  "sha256": "c03f5a7f33ea30fc7de04b07b3bc6abe3e09f2960ecf8cea1c863aca878a492b",
+  "folder": "Field3d_2025FRCFieldWeldedV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FRCFieldWeldedV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FRCFieldWeldedV3.zip",
+  "sha256": "c78963eb4c04e264b0b11cfe5edc66135939849f270401deefc6789187b45dd2",
+  "folder": "Field3d_2025FRCFieldWeldedV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FieldAndyMarkV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FieldAndyMarkV1.zip",
+  "sha256": "21a2f96a032431c979ffa65c8a846e23d473cde2862dfaf4c01345a3b1a068a0",
+  "folder": "Field3d_2025FieldAndyMarkV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FieldV1.zip",
+  "sha256": "251a7a3ced23cbb20c896764cf1e8c490dfafe814329c2dd34954e155f339488",
+  "folder": "Field3d_2025FieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FieldV2.zip",
+  "sha256": "56f6623dd98c702a8d628d7bf2d1b24d99fbc1f8ed453403798a95ea92de2520",
+  "folder": "Field3d_2025FieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2025FieldWeldedV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2025FieldWeldedV1.zip",
+  "sha256": "735aa6e830e3020b3cf0580d783158dbce870ae5e79de7b7b899fc2b4b1431b3",
+  "folder": "Field3d_2025FieldWeldedV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_20262027FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_20262027FTCFieldV1.zip",
+  "sha256": "181229d853a50680ee030d0aaf7af2765a7704a09535fdc138712870d4fbc7bd",
+  "folder": "Field3d_20262027FTCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2026FRCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV1.zip",
+  "sha256": "0f2abde864422367dd1bc3254da23b36a3d82eb727d5dac0a0f2231bdc397e31",
+  "folder": "Field3d_2026FRCFieldV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_2026FRCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_2026FRCFieldV2.zip",
+  "sha256": "4d5f90415f34d218a75df0a9d6098f331d647949c61196313e5ce5f308122fa4",
+  "folder": "Field3d_2026FRCFieldV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Field3d_MountainMayhemV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Field3d_MountainMayhemV1.zip",
+  "sha256": "3754d6800c4ab1e2412bab7153dd404847e97ccbd9613d1cf5aef387d00385a3",
+  "folder": "Field3d_MountainMayhemV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_LogitechF310V1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_LogitechF310V1.zip",
+  "sha256": "eeb5d1fb960365f80efbb2efda3de751735b7deee82265008b3e85976e259dfc",
+  "folder": "Joystick_LogitechF310V1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_LogitechF310V2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_LogitechF310V2.zip",
+  "sha256": "acc8cc14add9d8caff7d0fe50716564bbe978a91b10b6ef4907f1d722c745102",
+  "folder": "Joystick_LogitechF310V2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_LogitechF310V3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_LogitechF310V3.zip",
+  "sha256": "7ceb59296275d239a609f754776a31b1702fa803d281d1774f140d8a5f89e05e",
+  "folder": "Joystick_LogitechF310V3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_PS4ControllerV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_PS4ControllerV1.zip",
+  "sha256": "f2a095b5e21100a5d208ff1ef218a71a8ca2a3268693d32b35a7098b70a5c49f",
+  "folder": "Joystick_PS4ControllerV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_PS4ControllerV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_PS4ControllerV2.zip",
+  "sha256": "07c6f4236c980adfe64293b126741a5b785b5209031857acdaaf1e59fa6e87eb",
+  "folder": "Joystick_PS4ControllerV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_PS4ControllerV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_PS4ControllerV3.zip",
+  "sha256": "6728f4dbdd35f6c6e035e2e7a44337f3d8e22032acda9cb0f6fd9126223a0c5b",
+  "folder": "Joystick_PS4ControllerV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_XboxControllerBlueV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_XboxControllerBlueV1.zip",
+  "sha256": "fd301abcedbeb5684df4a881e259f84ecc9ec8064ff1489b29ce412f846a6808",
+  "folder": "Joystick_XboxControllerBlueV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_XboxControllerBlueV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_XboxControllerBlueV2.zip",
+  "sha256": "31db9942906a6e3c80ced04c6164565dedc40db7030303c121e5604cf7329ed0",
+  "folder": "Joystick_XboxControllerBlueV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_XboxControllerBlueV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_XboxControllerBlueV3.zip",
+  "sha256": "1394def8f60f427e697b0d9b5f96b0b07d7b6f1745dd80c9ea6d6afbc83f53c2",
+  "folder": "Joystick_XboxControllerBlueV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_XboxControllerWhiteV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_XboxControllerWhiteV1.zip",
+  "sha256": "0a998fe847a06e1d48adf4268df54651ad8f797d0d38e66ccccbcedbb72709a1",
+  "folder": "Joystick_XboxControllerWhiteV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_XboxControllerWhiteV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_XboxControllerWhiteV2.zip",
+  "sha256": "f9bba175a9bb153d889d056b071ec45363539a0fec153c329e93869f0cb5ca37",
+  "folder": "Joystick_XboxControllerWhiteV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Joystick_XboxControllerWhiteV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Joystick_XboxControllerWhiteV3.zip",
+  "sha256": "5c471f67faec1064a1499758b995de47efb8967fb4bc82e8c3c15c83634d2c13",
+  "folder": "Joystick_XboxControllerWhiteV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2024FRCKitBotV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2024FRCKitBotV3.zip",
+  "sha256": "53a6b356a97a086c35f36edb0635ae50d5376fa712290507d8ed723309d58943",
+  "folder": "Robot_2024FRCKitBotV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2024FRCKitBotV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2024FRCKitBotV4.zip",
+  "sha256": "e581868c7e787a572ea844a11ddf7311d144032427164b0a3cb8b7e4b6a0a75b",
+  "folder": "Robot_2024FRCKitBotV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2024KitBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2024KitBotV1.zip",
+  "sha256": "bc3d4630344c4457cc65f5ce5d33b8ff270c1d50dc339742a334534c64c389ab",
+  "folder": "Robot_2024KitBotV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2024KitBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2024KitBotV2.zip",
+  "sha256": "4689490366d5b0f62964eb88fb40f7427a3dbeab37e6326ef5c15ad0ad167601",
+  "folder": "Robot_2024KitBotV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2025FRCKitBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2025FRCKitBotV2.zip",
+  "sha256": "9a39460401a4eec12c0dcc89094eb08c866e02db1aa9864b067ae53d2c9dd076",
+  "folder": "Robot_2025FRCKitBotV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2025FRCKitBotV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2025FRCKitBotV3.zip",
+  "sha256": "3caff81627ebb8a5deee2099d9640aec56d403d88283543de9a0b1a65c1b350c",
+  "folder": "Robot_2025FRCKitBotV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2025KitBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2025KitBotV1.zip",
+  "sha256": "48ac3486757c38babb8c7e33f70ed0a8001aa5248231b7ebb993fa938039f827",
+  "folder": "Robot_2025KitBotV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2026FRCKitBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2026FRCKitBotV1.zip",
+  "sha256": "a917c5474512070a2dfd9103c038eb78401a8ee4e0f39f33a81dc5a715f37a20",
+  "folder": "Robot_2026FRCKitBotV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_2026FRCKitBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2026FRCKitBotV2.zip",
+  "sha256": "4372672d8781ec37030a69d341d3c02d840d393ea061bc12b7acd03f012aa312",
+  "folder": "Robot_2026FRCKitBotV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_BananaSplitV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_BananaSplitV2.zip",
+  "sha256": "375caad23260349a3a2c3cdaa5c108893dfb10e2b178c370167007b09c9e8a14",
+  "folder": "Robot_BananaSplitV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_BananaSplitV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_BananaSplitV3.zip",
+  "sha256": "df1143414fb6db7a1b1f9bbc8f64aae8083ee93b347cd59230c0d094307942a3",
+  "folder": "Robot_BananaSplitV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_BananaSplitV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_BananaSplitV4.zip",
+  "sha256": "0aa1e6c64c95e612cca63beceb4dbac04a936581942bee775b6a8024789e2d5a",
+  "folder": "Robot_BananaSplitV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_BotBotAwakensV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_BotBotAwakensV1.zip",
+  "sha256": "df8801a63807ac44131006c281bb9f5b1f6be468c850cde12a1d5a64d04808b9",
+  "folder": "Robot_BotBotAwakensV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_BotBotAwakensV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_BotBotAwakensV2.zip",
+  "sha256": "3a9327e3009fead82fcd34f7f1ef8c8afbb29f34f6e7ef24529834a0bdb8810c",
+  "folder": "Robot_BotBotAwakensV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_BotBotStrikesBackV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_BotBotStrikesBackV1.zip",
+  "sha256": "475f6e840d3756fa9e49038b86fa2950c4bf37c8a474df0d66d0bcc9e2722db7",
+  "folder": "Robot_BotBotStrikesBackV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_CrabBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_CrabBotV1.zip",
+  "sha256": "f8466a448a580453ea05b962846dc22f001f97e4a4f41c2278f64841f2079b9a",
+  "folder": "Robot_CrabBotV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_CrabBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_CrabBotV2.zip",
+  "sha256": "ed38df14ad1c96f53390b1402adaa565a056312c232b00570def482d73571eec",
+  "folder": "Robot_CrabBotV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_CrabBotV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_CrabBotV3.zip",
+  "sha256": "1b5beb726c52be88948e5628154262402b22ae2057f6343978009e4819e96eed",
+  "folder": "Robot_CrabBotV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_CrabBotV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_CrabBotV4.zip",
+  "sha256": "6a8701a2f149aeb59a0cd9970bf5355ec33529fa9d9cc65b743ad6dabb8d2875",
+  "folder": "Robot_CrabBotV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_DarwinV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_DarwinV1.zip",
+  "sha256": "4a03a0ace6318b8d95d44f8a2693e019fa94ac4581950a60860d4e6258035f93",
+  "folder": "Robot_DarwinV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_DuckBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_DuckBotV1.zip",
+  "sha256": "701bc12455c12ae9f068344347ec2fafab132f354a290e6bf5f3ea0a53dde932",
+  "folder": "Robot_DuckBotV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_DuckBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_DuckBotV2.zip",
+  "sha256": "6960573f943258e5a017d6e92a669337ee68d2d7e8170bdcafcc20cbefd3a8e5",
+  "folder": "Robot_DuckBotV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_DuckBotV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_DuckBotV3.zip",
+  "sha256": "95f7e3a6928559ccc72394bc6e00a875ed40585eaba13f4497f1f25c7babc172",
+  "folder": "Robot_DuckBotV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_DuckBotV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_DuckBotV4.zip",
+  "sha256": "b7fe407cc004c4d47aa0cca1b2ad3ebe5d06995e3b22a1140d9fbf46df8fcf3d",
+  "folder": "Robot_DuckBotV4"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_FTCDriveBaseV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_FTCDriveBaseV1.zip",
+  "sha256": "e038952edbdc69e3ab9ceeb0b6e1d27f100ece738aad1dc5676994f0426e57e0",
+  "folder": "Robot_FTCDriveBaseV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_FTCDriveBaseV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_FTCDriveBaseV2.zip",
+  "sha256": "9042da639584680461fdc80f03e55fc65da6e2cff45955f32eea2baea6616e5b",
+  "folder": "Robot_FTCDriveBaseV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_FrogBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_FrogBotV1.zip",
+  "sha256": "cc0d465bf54e95b9cc80167e03eb4da5588eeb4b1bb4ada431ad9c17f8619298",
+  "folder": "Robot_FrogBotV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_FrogBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_FrogBotV2.zip",
+  "sha256": "4bb29caac9ac86a8eb67dcebd3bff280e42a1fa784d4407fce70d78a7c3cc7bf",
+  "folder": "Robot_FrogBotV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_MantaV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_MantaV1.zip",
+  "sha256": "c57efb39308116d8ba52c70cb02669b6279a2e5975f340ae60b96846fba22b68",
+  "folder": "Robot_MantaV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_PrestoV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_PrestoV1.zip",
+  "sha256": "8ba3145a443a705d73def631e5ba98d3cc0b07130523b4a524fbab196c4c11a6",
+  "folder": "Robot_PrestoV1"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_PrestoV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_PrestoV2.zip",
+  "sha256": "06f57c639e8451534a55651b6208852075b2fb3055c3d134f0b65bcd3a667341",
+  "folder": "Robot_PrestoV2"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_PrestoV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_PrestoV3.zip",
+  "sha256": "69701ad0793cc13a67778a3c866a822b2d4fcb020faf490ce9df60c117487c8b",
+  "folder": "Robot_PrestoV3"
+ },
+ {
+  "tag": "archive-v1",
+  "zip": "Robot_XRPV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_XRPV1.zip",
+  "sha256": "15086076716fd63fa6a69b86d6e1b6de5854a270a30822c83014fa4c7b08326c",
+  "folder": "Robot_XRPV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2018FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2018FieldV1.zip",
+  "sha256": "124ddc09904fa2f08e06da60fd9e58b48bb2070ca1f245fd40e6b2845c050166",
+  "folder": "Field2d_2018FieldV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2019FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2019FieldV1.zip",
+  "sha256": "4564598c34ac24767f867157e82bc94d836e7bc9aa129ddaa3132503e88c934e",
+  "folder": "Field2d_2019FieldV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2020FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2020FieldV1.zip",
+  "sha256": "9d1910f696487a7ef26cf63f6bf39665d7de8939f2868a12441eaa2164537e4b",
+  "folder": "Field2d_2020FieldV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2022FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2022FieldV1.zip",
+  "sha256": "8827c87a590f88c8b89eaa30eca2284ba6222cc937a0b718b7e1ab18736c5932",
+  "folder": "Field2d_2022FieldV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2023FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2023FieldV2.zip",
+  "sha256": "d01865cdc5e0f4fa6b454e0502cdf2a60972c74ef798a483e2c6e639b1dd5081",
+  "folder": "Field2d_2023FieldV2"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2024FieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2024FieldV1.zip",
+  "sha256": "7cceb0bb842f83cb14f316b0e20b904d584fb7e1c9b9f1258aee0d587f1cd04b",
+  "folder": "Field2d_2024FieldV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2025FieldAndyMarkV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2025FieldAndyMarkV1.zip",
+  "sha256": "85763bd03f4d9745172447b0fef31dca3dbedae4dbe64e3cdcb35b5360e72bab",
+  "folder": "Field2d_2025FieldAndyMarkV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field2d_2025FieldWeldedV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field2d_2025FieldWeldedV1.zip",
+  "sha256": "cfb103185892802635a3017931f0b63f34d192b28490c3f5d223e85ffbe52b48",
+  "folder": "Field2d_2025FieldWeldedV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field3d_2021FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field3d_2021FieldV2.zip",
+  "sha256": "4ce1ba60aad14c5dc59235588d566dae75337b3cf053edc46c1cd3d3a7f7ed95",
+  "folder": "Field3d_2021FieldV2"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field3d_2022FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field3d_2022FieldV2.zip",
+  "sha256": "472d60b384a801e01413f848098e8283ca67c8dc65156b63d5a2cc49eb84c363",
+  "folder": "Field3d_2022FieldV2"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field3d_2023FieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field3d_2023FieldV3.zip",
+  "sha256": "97fbc2ee4b3e4a7fc0ee945d443e1f05af6255258f09f5f49df9fc10abd72907",
+  "folder": "Field3d_2023FieldV3"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field3d_2024FieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field3d_2024FieldV2.zip",
+  "sha256": "4ce6ee691b751a02118d452fe00b651076115c7b896b4d2e374f6ef2f9f2edf1",
+  "folder": "Field3d_2024FieldV2"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field3d_2025FieldAndyMarkV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field3d_2025FieldAndyMarkV1.zip",
+  "sha256": "21a2f96a032431c979ffa65c8a846e23d473cde2862dfaf4c01345a3b1a068a0",
+  "folder": "Field3d_2025FieldAndyMarkV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Field3d_2025FieldWeldedV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Field3d_2025FieldWeldedV1.zip",
+  "sha256": "735aa6e830e3020b3cf0580d783158dbce870ae5e79de7b7b899fc2b4b1431b3",
+  "folder": "Field3d_2025FieldWeldedV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Joystick_LogitechF310V1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Joystick_LogitechF310V1.zip",
+  "sha256": "eeb5d1fb960365f80efbb2efda3de751735b7deee82265008b3e85976e259dfc",
+  "folder": "Joystick_LogitechF310V1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Joystick_PS4ControllerV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Joystick_PS4ControllerV1.zip",
+  "sha256": "f2a095b5e21100a5d208ff1ef218a71a8ca2a3268693d32b35a7098b70a5c49f",
+  "folder": "Joystick_PS4ControllerV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Joystick_XboxControllerBlueV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Joystick_XboxControllerBlueV1.zip",
+  "sha256": "fd301abcedbeb5684df4a881e259f84ecc9ec8064ff1489b29ce412f846a6808",
+  "folder": "Joystick_XboxControllerBlueV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Joystick_XboxControllerWhiteV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Joystick_XboxControllerWhiteV1.zip",
+  "sha256": "0a998fe847a06e1d48adf4268df54651ad8f797d0d38e66ccccbcedbb72709a1",
+  "folder": "Joystick_XboxControllerWhiteV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Robot_2024KitBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Robot_2024KitBotV2.zip",
+  "sha256": "4689490366d5b0f62964eb88fb40f7427a3dbeab37e6326ef5c15ad0ad167601",
+  "folder": "Robot_2024KitBotV2"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Robot_2025KitBotV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Robot_2025KitBotV1.zip",
+  "sha256": "48ac3486757c38babb8c7e33f70ed0a8001aa5248231b7ebb993fa938039f827",
+  "folder": "Robot_2025KitBotV1"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Robot_CrabBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Robot_CrabBotV2.zip",
+  "sha256": "ed38df14ad1c96f53390b1402adaa565a056312c232b00570def482d73571eec",
+  "folder": "Robot_CrabBotV2"
+ },
+ {
+  "tag": "default-assets-v1",
+  "zip": "Robot_DuckBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v1/Robot_DuckBotV2.zip",
+  "sha256": "6960573f943258e5a017d6e92a669337ee68d2d7e8170bdcafcc20cbefd3a8e5",
+  "folder": "Robot_DuckBotV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_2022FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_2022FRCFieldV3.zip",
+  "sha256": "18b3a44f308696deba1478daa193d83bb7a81c97fa1e93490bc0063d2d87b683",
+  "folder": "Field2d_2022FRCFieldV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_2023FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_2023FRCFieldV4.zip",
+  "sha256": "62f1e2ed04de6b1701506d784c0df37a6e45a837ad81b64aa8cd8c6ac9a34fd7",
+  "folder": "Field2d_2023FRCFieldV4"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_20242025FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_20242025FTCFieldV2.zip",
+  "sha256": "a2011b780a3dc30c42acffdb7498e4c8e7aee848980b0a3b1cfcf0ee95379389",
+  "folder": "Field2d_20242025FTCFieldV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_2024FRCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_2024FRCFieldV3.zip",
+  "sha256": "d5e62ff37d312042bbbfc59484cb8a47dfb6130866660a5852361ab12ead4f1e",
+  "folder": "Field2d_2024FRCFieldV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_20252026FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_20252026FTCFieldV2.zip",
+  "sha256": "cd8f780fa45ab7be8685002a348779aa8b49a53989186115da6b88deea819dfa",
+  "folder": "Field2d_20252026FTCFieldV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_2025FRCFieldAndyMarkV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_2025FRCFieldAndyMarkV3.zip",
+  "sha256": "558c7075d13a21a808a4f1a117f2bc22aa5e20dec502d515b541cd33050eb067",
+  "folder": "Field2d_2025FRCFieldAndyMarkV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_2025FRCFieldWeldedV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_2025FRCFieldWeldedV3.zip",
+  "sha256": "bb4ac0c582b2b9d4b144ec61c2d89eb8c8c310a69eebec76346f72c7c611aa39",
+  "folder": "Field2d_2025FRCFieldWeldedV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_20262027FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_20262027FTCFieldV1.zip",
+  "sha256": "41215ccc90e604a80f6b8f48daf5f0a9151cdbe7a6b64f970f35773a033849c3",
+  "folder": "Field2d_20262027FTCFieldV1"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field2d_2026FRCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field2d_2026FRCFieldV2.zip",
+  "sha256": "78e5d1371e4b6a193ab97dde57c4573df01a8ec6212b7841a43575305af7f5d5",
+  "folder": "Field2d_2026FRCFieldV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_2022FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_2022FRCFieldV4.zip",
+  "sha256": "80f716e1895fe715401cf0adcdd94472d6aa03827a614e77a8fc93523cea6f21",
+  "folder": "Field3d_2022FRCFieldV4"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_2023FRCFieldV5.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_2023FRCFieldV5.zip",
+  "sha256": "ffd6141541d280380b9749065b197edbcd920fe1f2b1f2853adb8df9aa4015f9",
+  "folder": "Field3d_2023FRCFieldV5"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_20242025FTCFieldV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_20242025FTCFieldV3.zip",
+  "sha256": "89d79730729b83ac674e380d6d0946a6daa223ece5e2341f3134567128dc70a2",
+  "folder": "Field3d_20242025FTCFieldV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_2024FRCFieldV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_2024FRCFieldV4.zip",
+  "sha256": "eb396d336351d155c099af7d483ce306d5541c0ad0d4823d81128775d2a7c203",
+  "folder": "Field3d_2024FRCFieldV4"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_20252026FTCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_20252026FTCFieldV2.zip",
+  "sha256": "c2ca10756410904dd5b8266478b4ceb78659054cdda75fb5f30db3a71d34658d",
+  "folder": "Field3d_20252026FTCFieldV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_2025FRCFieldAndyMarkV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_2025FRCFieldAndyMarkV3.zip",
+  "sha256": "7a4837451f9024378afd81210d3985df5f01a151158ff5a946a1f5195c934032",
+  "folder": "Field3d_2025FRCFieldAndyMarkV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_2025FRCFieldWeldedV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_2025FRCFieldWeldedV3.zip",
+  "sha256": "c78963eb4c04e264b0b11cfe5edc66135939849f270401deefc6789187b45dd2",
+  "folder": "Field3d_2025FRCFieldWeldedV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_20262027FTCFieldV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_20262027FTCFieldV1.zip",
+  "sha256": "181229d853a50680ee030d0aaf7af2765a7704a09535fdc138712870d4fbc7bd",
+  "folder": "Field3d_20262027FTCFieldV1"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Field3d_2026FRCFieldV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Field3d_2026FRCFieldV2.zip",
+  "sha256": "4d5f90415f34d218a75df0a9d6098f331d647949c61196313e5ce5f308122fa4",
+  "folder": "Field3d_2026FRCFieldV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Joystick_LogitechF310V3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Joystick_LogitechF310V3.zip",
+  "sha256": "7ceb59296275d239a609f754776a31b1702fa803d281d1774f140d8a5f89e05e",
+  "folder": "Joystick_LogitechF310V3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Joystick_PS4ControllerV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Joystick_PS4ControllerV3.zip",
+  "sha256": "6728f4dbdd35f6c6e035e2e7a44337f3d8e22032acda9cb0f6fd9126223a0c5b",
+  "folder": "Joystick_PS4ControllerV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Joystick_XboxControllerBlueV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Joystick_XboxControllerBlueV3.zip",
+  "sha256": "1394def8f60f427e697b0d9b5f96b0b07d7b6f1745dd80c9ea6d6afbc83f53c2",
+  "folder": "Joystick_XboxControllerBlueV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Joystick_XboxControllerWhiteV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Joystick_XboxControllerWhiteV3.zip",
+  "sha256": "5c471f67faec1064a1499758b995de47efb8967fb4bc82e8c3c15c83634d2c13",
+  "folder": "Joystick_XboxControllerWhiteV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_2024FRCKitBotV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_2024FRCKitBotV4.zip",
+  "sha256": "e581868c7e787a572ea844a11ddf7311d144032427164b0a3cb8b7e4b6a0a75b",
+  "folder": "Robot_2024FRCKitBotV4"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_2025FRCKitBotV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_2025FRCKitBotV3.zip",
+  "sha256": "3caff81627ebb8a5deee2099d9640aec56d403d88283543de9a0b1a65c1b350c",
+  "folder": "Robot_2025FRCKitBotV3"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_2026FRCKitBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_2026FRCKitBotV2.zip",
+  "sha256": "4372672d8781ec37030a69d341d3c02d840d393ea061bc12b7acd03f012aa312",
+  "folder": "Robot_2026FRCKitBotV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_CrabBotV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_CrabBotV4.zip",
+  "sha256": "6a8701a2f149aeb59a0cd9970bf5355ec33529fa9d9cc65b743ad6dabb8d2875",
+  "folder": "Robot_CrabBotV4"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_DuckBotV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_DuckBotV4.zip",
+  "sha256": "b7fe407cc004c4d47aa0cca1b2ad3ebe5d06995e3b22a1140d9fbf46df8fcf3d",
+  "folder": "Robot_DuckBotV4"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_FTCDriveBaseV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_FTCDriveBaseV2.zip",
+  "sha256": "9042da639584680461fdc80f03e55fc65da6e2cff45955f32eea2baea6616e5b",
+  "folder": "Robot_FTCDriveBaseV2"
+ },
+ {
+  "tag": "default-assets-v2",
+  "zip": "Robot_FrogBotV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/default-assets-v2/Robot_FrogBotV2.zip",
+  "sha256": "4bb29caac9ac86a8eb67dcebd3bff280e42a1fa784d4407fce70d78a7c3cc7bf",
+  "folder": "Robot_FrogBotV2"
+ },
+ {
+  "tag": "frc-6328-assets-v1",
+  "zip": "Robot_BananaSplitV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v1/Robot_BananaSplitV3.zip",
+  "sha256": "df1143414fb6db7a1b1f9bbc8f64aae8083ee93b347cd59230c0d094307942a3",
+  "folder": "Robot_BananaSplitV3"
+ },
+ {
+  "tag": "frc-6328-assets-v1",
+  "zip": "Robot_BotBotAwakensV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v1/Robot_BotBotAwakensV1.zip",
+  "sha256": "df8801a63807ac44131006c281bb9f5b1f6be468c850cde12a1d5a64d04808b9",
+  "folder": "Robot_BotBotAwakensV1"
+ },
+ {
+  "tag": "frc-6328-assets-v1",
+  "zip": "Robot_BotBotStrikesBackV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v1/Robot_BotBotStrikesBackV1.zip",
+  "sha256": "475f6e840d3756fa9e49038b86fa2950c4bf37c8a474df0d66d0bcc9e2722db7",
+  "folder": "Robot_BotBotStrikesBackV1"
+ },
+ {
+  "tag": "frc-6328-assets-v1",
+  "zip": "Robot_PrestoV2.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v1/Robot_PrestoV2.zip",
+  "sha256": "06f57c639e8451534a55651b6208852075b2fb3055c3d134f0b65bcd3a667341",
+  "folder": "Robot_PrestoV2"
+ },
+ {
+  "tag": "frc-6328-assets-v2",
+  "zip": "Robot_BananaSplitV4.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v2/Robot_BananaSplitV4.zip",
+  "sha256": "0aa1e6c64c95e612cca63beceb4dbac04a936581942bee775b6a8024789e2d5a",
+  "folder": "Robot_BananaSplitV4"
+ },
+ {
+  "tag": "frc-6328-assets-v2",
+  "zip": "Robot_DarwinV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v2/Robot_DarwinV1.zip",
+  "sha256": "4a03a0ace6318b8d95d44f8a2693e019fa94ac4581950a60860d4e6258035f93",
+  "folder": "Robot_DarwinV1"
+ },
+ {
+  "tag": "frc-6328-assets-v2",
+  "zip": "Robot_MantaV1.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v2/Robot_MantaV1.zip",
+  "sha256": "c57efb39308116d8ba52c70cb02669b6279a2e5975f340ae60b96846fba22b68",
+  "folder": "Robot_MantaV1"
+ },
+ {
+  "tag": "frc-6328-assets-v2",
+  "zip": "Robot_PrestoV3.zip",
+  "url": "https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/frc-6328-assets-v2/Robot_PrestoV3.zip",
+  "sha256": "69701ad0793cc13a67778a3c866a822b2d4fcb020faf490ce9df60c117487c8b",
+  "folder": "Robot_PrestoV3"
+ }
+]

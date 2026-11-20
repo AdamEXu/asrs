@@ -30,6 +30,9 @@ mod js_time;
 #[path = "../../asrs-cli/src/log_field.rs"]
 #[allow(dead_code)]
 mod log_field;
+#[path = "../../asrs-cli/src/log_keys.rs"]
+#[allow(dead_code)]
+mod log_keys;
 #[path = "../../asrs-cli/src/log_run.rs"]
 #[allow(dead_code)]
 mod log_run;
