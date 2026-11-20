@@ -1,7 +1,7 @@
 use asrs_js::number::{self, IntlOptions, SignDisplay};
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::{js_math, js_string};
+use crate::{js_color, js_math, js_string, js_time};
 
 pub type Function = fn(&[Value]) -> Response;
 
@@ -26,6 +26,8 @@ pub fn lookup(name: &str) -> Option<Function> {
         .iter()
         .chain(js_math::FUNCTIONS)
         .chain(js_string::FUNCTIONS)
+        .chain(js_time::FUNCTIONS)
+        .chain(js_color::FUNCTIONS)
         .find(|(n, _)| *n == name)
         .map(|(_, f)| *f)
 }
@@ -37,13 +39,17 @@ fn oracle_call(args: &[Value]) -> Response {
         Some(s) => s.to_string_lossy(),
         None => return Response::Error("oracle:call needs a source string".to_owned()),
     };
-    match js_math::CALLS.iter().find(|(s, _)| *s == source) {
+    match js_math::CALLS
+        .iter()
+        .chain(js_time::CALLS)
+        .find(|(s, _)| *s == source)
+    {
         Some((_, f)) => f(&args[1..]),
         None => Response::Error(format!("oracle:call: no port of {source:?}")),
     }
 }
 
-fn arg(args: &[Value], i: usize) -> Value {
+pub(crate) fn arg(args: &[Value], i: usize) -> Value {
     args.get(i).cloned().unwrap_or(Value::Undefined)
 }
 
@@ -51,15 +57,15 @@ fn identity(args: &[Value]) -> Response {
     Response::Ok(arg(args, 0))
 }
 
-fn ok_number(x: f64) -> Response {
+pub(crate) fn ok_number(x: f64) -> Response {
     Response::Ok(Value::number(x))
 }
 
-fn ok_string(s: String) -> Response {
+pub(crate) fn ok_string(s: String) -> Response {
     Response::Ok(Value::String(Utf16String::from(s)))
 }
 
-fn type_error(message: impl Into<String>) -> Response {
+pub(crate) fn type_error(message: impl Into<String>) -> Response {
     Response::Throw(Value::Error("TypeError".into(), message.into().into()))
 }
 
@@ -69,7 +75,7 @@ fn range_error(message: &str) -> Response {
 
 /// `ToNumber` on a CVE-1 value. Symbols throw; objects reduce to NaN except
 /// arrays, which convert through their ToString join.
-fn to_number(value: &Value) -> Result<f64, Response> {
+pub(crate) fn to_number(value: &Value) -> Result<f64, Response> {
     Ok(match value {
         Value::Undefined => f64::NAN,
         Value::Null => 0.0,
@@ -97,7 +103,7 @@ fn to_integer(value: &Value) -> Result<f64, Response> {
 
 /// `ToString` on a CVE-1 value, with the JS special case that `String(symbol)`
 /// is allowed while other ToString uses throw.
-fn to_units(value: &Value) -> Result<Vec<u16>, Response> {
+pub(crate) fn to_units(value: &Value) -> Result<Vec<u16>, Response> {
     Ok(match value {
         Value::Undefined => "undefined".encode_utf16().collect(),
         Value::Null => "null".encode_utf16().collect(),
@@ -115,7 +121,7 @@ fn to_units(value: &Value) -> Result<Vec<u16>, Response> {
     })
 }
 
-fn array_join(items: &[Value]) -> Vec<u16> {
+pub(crate) fn array_join(items: &[Value]) -> Vec<u16> {
     let mut out: Vec<u16> = Vec::new();
     for (i, item) in items.iter().enumerate() {
         if i > 0 {

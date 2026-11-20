@@ -26,6 +26,19 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   localeSort: (array: string[], numeric = false) =>
     array.sort((a, b) => (numeric ? a.localeCompare(b, undefined, { numeric: true }) : a.localeCompare(b))),
 
+  withRandom: async (values: unknown, name: string, args: unknown[] = []) => {
+    const seq = Array.isArray(values) ? values : [];
+    let index = 0;
+    const real = Math.random;
+    Math.random = () => seq[index++];
+    try {
+      const { invoke } = await import("./registry");
+      return await invoke(name, args);
+    } finally {
+      Math.random = real;
+    }
+  },
+
   flushAnimationFrames: (time: number) => flushAnimationFrames(time),
 
   runtime: () => ({

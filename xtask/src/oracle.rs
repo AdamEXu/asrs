@@ -99,7 +99,7 @@ pub(crate) fn host_tag() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
-fn pin_environment(command: &mut Command, zone: &str) {
+pub(crate) fn pin_environment(command: &mut Command, zone: &str) {
     for name in CLEARED_VARIABLES {
         command.env_remove(name);
     }
