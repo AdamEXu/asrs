@@ -1068,11 +1068,16 @@ fn native_rasterizers() -> Json {
                 ),
                 (
                     "direct3d",
-                    Json::string(if names.contains("Basic Display") || names.is_empty() {
-                        "WARP (Microsoft Basic Render Driver)"
-                    } else {
-                        "hardware"
-                    }),
+                    Json::string(
+                        if names.is_empty()
+                            || names.contains("Basic Display")
+                            || names.contains("DOD")
+                        {
+                            "WARP (no render-capable adapter: display-only driver)"
+                        } else {
+                            "adapter driver"
+                        },
+                    ),
                 ),
             ])
         }
