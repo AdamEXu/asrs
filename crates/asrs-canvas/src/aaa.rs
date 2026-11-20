@@ -102,6 +102,7 @@ fn quick_div(a: i32, b: i32) -> i32 {
 enum Kind {
     Line,
     Quad,
+    Cubic,
 }
 
 #[derive(Clone, Copy)]
@@ -125,6 +126,9 @@ struct Edge {
     qdy: i32,
     qddx: i32,
     qddy: i32,
+    cdddx: i32,
+    cdddy: i32,
+    to_fixed_shift: u8,
     q_last_x: i32,
     q_last_y: i32,
     snapped_x: i32,
@@ -153,6 +157,9 @@ impl Edge {
             qdy: 0,
             qddx: 0,
             qddy: 0,
+            cdddx: 0,
+            cdddy: 0,
+            to_fixed_shift: 0,
             q_last_x: 0,
             q_last_y: 0,
             snapped_x: 0,
@@ -383,13 +390,137 @@ impl Edge {
         success
     }
 
+    /// `SkAnalyticCubicEdge::setCubic`, with `setCubicWithoutUpdate`.
+    fn set_cubic(pts: &[P; 4]) -> Option<Edge> {
+        let scale = (1 << (ACCURACY + 6)) as f32;
+        let i = |v: f32| (v * scale) as i32;
+        let [mut x0, mut x1, mut x2, mut x3] = pts.map(|p| i(p.x));
+        let [mut y0, mut y1, mut y2, mut y3] = pts.map(|p| i(p.y));
+        let mut winding = 1;
+        if y0 > y3 {
+            std::mem::swap(&mut x0, &mut x3);
+            std::mem::swap(&mut x1, &mut x2);
+            std::mem::swap(&mut y0, &mut y3);
+            std::mem::swap(&mut y1, &mut y2);
+            winding = -1;
+        }
+        if (y0.wrapping_add(32) >> 6) == (y3.wrapping_add(32) >> 6) {
+            return None;
+        }
+        let dx = cubic_delta_from_line(x0, x1, x2, x3);
+        let dy = cubic_delta_from_line(y0, y1, y2, y3);
+        let shift = (diff_to_shift(dx, dy, 2) + 1).min(6);
+        let mut up_shift = 6;
+        let mut down_shift = shift + up_shift - 10;
+        if down_shift < 0 {
+            down_shift = 0;
+            up_shift = 10 - shift;
+        }
+        let mut e = Edge::blank();
+        e.winding = winding;
+        e.kind = Kind::Cubic;
+        e.curve_count = (-1i32 << shift) as i8;
+        e.curve_shift = shift as u8;
+        e.to_fixed_shift = down_shift as u8;
+        let up = |v: i32| ((v as u32) << up_shift) as i32;
+        let coeffs = |p0: i32, p1: i32, p2: i32, p3: i32| {
+            let b = up(p1.wrapping_sub(p0).wrapping_mul(3));
+            let c = up(p0
+                .wrapping_sub(p1)
+                .wrapping_sub(p1)
+                .wrapping_add(p2)
+                .wrapping_mul(3));
+            let d = up(p3
+                .wrapping_add(p1.wrapping_sub(p2).wrapping_mul(3))
+                .wrapping_sub(p0));
+            let d3 = (3 * i64::from(d)) >> (shift - 1);
+            (
+                b.wrapping_add(c >> shift).wrapping_add(d >> (2 * shift)),
+                (2 * i64::from(c) + d3) as i32,
+                d3 as i32,
+            )
+        };
+        (e.qdx, e.qddx, e.cdddx) = coeffs(x0, x1, x2, x3);
+        (e.qdy, e.qddy, e.cdddy) = coeffs(y0, y1, y2, y3);
+        e.qx = fdot6_to_fixed(x0) >> ACCURACY;
+        e.qy = snap_y(fdot6_to_fixed(y0) >> ACCURACY);
+        e.qdx >>= ACCURACY;
+        e.qdy >>= ACCURACY;
+        e.qddx >>= ACCURACY;
+        e.qddy >>= ACCURACY;
+        e.cdddx >>= ACCURACY;
+        e.cdddy >>= ACCURACY;
+        e.q_last_x = fdot6_to_fixed(x3) >> ACCURACY;
+        e.q_last_y = snap_y(fdot6_to_fixed(y3) >> ACCURACY);
+        e.snapped_y = e.qy;
+        e.update_cubic().then_some(e)
+    }
+
+    /// `SkAnalyticCubicEdge::updateCubic`.
+    fn update_cubic(&mut self) -> bool {
+        let mut success;
+        let mut count = i32::from(self.curve_count);
+        let (mut oldx, mut oldy) = (self.qx, self.qy);
+        let (mut newx, mut newy);
+        let ddshift = i32::from(self.curve_shift);
+        let dshift = i32::from(self.to_fixed_shift);
+        loop {
+            count += 1;
+            if count < 0 {
+                newx = oldx.wrapping_add(self.qdx >> dshift);
+                self.qdx = self.qdx.wrapping_add(self.qddx >> ddshift);
+                self.qddx = self.qddx.wrapping_add(self.cdddx);
+                newy = oldy.wrapping_add(self.qdy >> dshift);
+                self.qdy = self.qdy.wrapping_add(self.qddy >> ddshift);
+                self.qddy = self.qddy.wrapping_add(self.cdddy);
+            } else {
+                newx = self.q_last_x;
+                newy = self.q_last_y;
+            }
+            if newy < oldy {
+                newy = oldy;
+            }
+            let mut new_snapped_y = snap_y(newy);
+            if self.q_last_y < new_snapped_y {
+                new_snapped_y = self.q_last_y;
+                count = 0;
+            }
+            let diff_y = fixed_to_fdot6(new_snapped_y.wrapping_sub(self.snapped_y));
+            let slope = if diff_y == 0 {
+                i32::MAX
+            } else {
+                fdot6_div(fixed_to_fdot6(newx.wrapping_sub(oldx)), diff_y)
+            };
+            success = self.update_line(oldx, self.snapped_y, newx, new_snapped_y, slope);
+            oldx = newx;
+            oldy = newy;
+            self.snapped_y = new_snapped_y;
+            if !(count < 0 && !success) {
+                break;
+            }
+        }
+        self.qx = newx;
+        self.qy = newy;
+        self.curve_count = count as i8;
+        success
+    }
+
     fn keep_continuous(&mut self) {
-        self.snapped_x = self.x;
+        if self.kind == Kind::Cubic {
+            self.qx = self.x;
+        } else {
+            self.snapped_x = self.x;
+        }
         self.snapped_y = self.y;
     }
 
+    /// `SkAnalyticEdge::update`.
     fn update(&mut self) -> bool {
-        self.curve_count > 0 && self.update_quad()
+        match self.curve_count {
+            0 => false,
+            c if c < 0 => self.update_cubic(),
+            _ => self.update_quad(),
+        }
     }
 }
 
@@ -400,6 +531,23 @@ fn cheap_distance(dx: i32, dy: i32) -> i32 {
     } else {
         dy.wrapping_add(dx >> 1)
     }
+}
+
+fn cubic_delta_from_line(a: i32, b: i32, c: i32, d: i32) -> i32 {
+    let one_third = a
+        .wrapping_mul(8)
+        .wrapping_sub(b.wrapping_mul(15))
+        .wrapping_add(c.wrapping_mul(6))
+        .wrapping_add(d)
+        .wrapping_mul(19)
+        >> 9;
+    let two_third = a
+        .wrapping_add(b.wrapping_mul(6))
+        .wrapping_sub(c.wrapping_mul(15))
+        .wrapping_add(d.wrapping_mul(8))
+        .wrapping_mul(19)
+        >> 9;
+    one_third.wrapping_abs().max(two_third.wrapping_abs())
 }
 
 fn diff_to_shift(dx: i32, dy: i32, shift_aa: i32) -> i32 {
@@ -490,6 +638,12 @@ impl Builder {
         }
     }
 
+    fn add_cubic(&mut self, pts: &[P; 4]) {
+        if let Some(edge) = Edge::set_cubic(pts) {
+            self.edges.push(edge);
+        }
+    }
+
     fn add_piece(&mut self, piece: Piece) -> bool {
         match piece {
             Piece::Line([a, b]) => {
@@ -503,6 +657,12 @@ impl Builder {
                     return false;
                 }
                 self.add_quad(&q);
+            }
+            Piece::Cubic(c) => {
+                if !c.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
+                    return false;
+                }
+                self.add_cubic(&c);
             }
         }
         true
@@ -531,7 +691,24 @@ impl Builder {
                 }
                 Verb::Quad => vec![e.quad_pts()],
                 Verb::Conic => crate::path::conic_to_quads(e.quad_pts(), e.weight, 0.25),
-                Verb::Cubic => todo!("cubic edges"),
+                Verb::Cubic => {
+                    let pts = e.pts;
+                    match clip {
+                        Some(c) => {
+                            pieces.clear();
+                            clip::clip_cubic_cull(pts, c, cull_right, &mut pieces);
+                            for &p in &pieces {
+                                finite &= b.add_piece(p);
+                            }
+                        }
+                        None => {
+                            for mono in clip::chop_cubic_at_y_extrema(pts) {
+                                b.add_cubic(&mono);
+                            }
+                        }
+                    }
+                    continue;
+                }
                 Verb::Move | Verb::Close => continue,
             };
             for q in quads {
@@ -1273,6 +1450,12 @@ impl List {
 
 fn is_smooth_pair(l: &List, this: usize, next: usize) -> bool {
     let t = &l.e[this];
+    if t.curve_count < 0 {
+        let ddshift = i32::from(t.curve_shift);
+        return t.qdx.wrapping_abs() >> 1 >= t.qddx.wrapping_abs() >> ddshift
+            && t.qdy.wrapping_abs() >> 1 >= t.qddy.wrapping_abs() >> ddshift
+            && (t.qdy.wrapping_sub(t.qddy >> ddshift) >> t.to_fixed_shift) >= ONE;
+    }
     if t.curve_count > 0 {
         let shift = i32::from(t.curve_shift);
         return t.qdx.wrapping_abs() >> 1 >= t.qddx.wrapping_abs()
@@ -1716,12 +1899,11 @@ fn walk_edges(
             }
             let next = l.e[curr_e].next;
             while l.e[curr_e].lower_y <= next_y {
-                if l.e[curr_e].curve_count > 0 {
-                    l.e[curr_e].keep_continuous();
-                    if !l.e[curr_e].update_quad() {
-                        break;
-                    }
-                } else {
+                if l.e[curr_e].curve_count == 0 {
+                    break;
+                }
+                l.e[curr_e].keep_continuous();
+                if !l.e[curr_e].update() {
                     break;
                 }
             }
@@ -2026,5 +2208,63 @@ mod tests {
         let px = spans.flatten(8, 8);
         assert_eq!(px[2 * 8 + 4], 127);
         assert_eq!(px[3 * 8 + 4], 255);
+    }
+
+    fn circle_path(cx: f32, cy: f32, r: f32) -> SkPath {
+        let k = r * 0.552_284_8;
+        let p = |x: f32, y: f32| P { x: cx + x, y: cy + y };
+        let mut path = SkPath::new();
+        path.move_to(p(r, 0.0));
+        path.cubic_to(p(r, k), p(k, r), p(0.0, r));
+        path.cubic_to(p(-k, r), p(-r, k), p(-r, 0.0));
+        path.cubic_to(p(-r, -k), p(-k, -r), p(0.0, -r));
+        path.cubic_to(p(k, -r), p(r, -k), p(r, 0.0));
+        path.close();
+        path
+    }
+
+    fn coverage(path: &SkPath, size: u32) -> Vec<u8> {
+        let mut spans = Spans::new(size, size);
+        fill_path(path, size, size, false, &mut spans);
+        spans.flatten(size as usize, size as usize)
+    }
+
+    fn area(px: &[u8]) -> f64 {
+        px.iter().map(|&a| f64::from(a) / 255.0).sum()
+    }
+
+    #[test]
+    fn cubic_circle_has_the_circle_area() {
+        let expected = std::f64::consts::PI * 20.0 * 20.0;
+        let whole = area(&coverage(&circle_path(32.0, 32.0, 20.0), 64));
+        assert!((whole / expected - 1.0).abs() < 0.005, "{whole}");
+        let half = area(&coverage(&circle_path(0.0, 32.0, 20.0), 64));
+        assert!((half / (expected / 2.0) - 1.0).abs() < 0.005, "{half}");
+    }
+
+    #[test]
+    fn straight_cubics_fill_like_their_chords() {
+        let p = |x: f32, y: f32| P { x, y };
+        let fill = |tip: P, curved: bool| {
+            let (a, b) = (p(4.0, 3.0), p(60.0, 10.0));
+            let mut path = SkPath::new();
+            path.move_to(a);
+            if curved {
+                let third = |t: f32| p(a.x + (tip.x - a.x) * t, a.y + (tip.y - a.y) * t);
+                path.cubic_to(third(1.0 / 3.0), third(2.0 / 3.0), tip);
+            } else {
+                path.line_to(tip);
+            }
+            path.line_to(b);
+            path.close();
+            coverage(&path, 64)
+        };
+        for (tip, tolerance) in [(p(4.0, 58.25), 4), (p(40.5, 58.25), 32)] {
+            let (line, curve) = (fill(tip, false), fill(tip, true));
+            let (a, b) = (area(&line), area(&curve));
+            assert!((a - b).abs() < 3.0, "{a} {b}");
+            let worst = line.iter().zip(&curve).map(|(x, y)| x.abs_diff(*y)).max().unwrap();
+            assert!(worst <= tolerance, "{worst}");
+        }
     }
 }

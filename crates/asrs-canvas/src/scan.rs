@@ -183,6 +183,7 @@ impl Edges {
             match piece {
                 Piece::Line([a, b]) => self.push_line(a, b),
                 Piece::Quad([p0, p1, p2]) => self.monotonic_quad(p0, p1, p2),
+                Piece::Cubic(_) => unreachable!("only lines and quads are clipped here"),
             }
         }
     }
