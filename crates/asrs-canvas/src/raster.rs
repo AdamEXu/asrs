@@ -1081,8 +1081,8 @@ fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
     stops[stops.len() - 1].1
 }
 
-/// The image resampled bilinearly (premultiplied, edge-clamped, as Skia's strict source rect
-/// does) at a sub-pixel offset `(fx, fy)` in `[0, 1)`. tiny-skia drops to nearest-neighbour for
+/// The image resampled bilinearly (premultiplied, in Skia's float arithmetic, clamped at the image
+/// edges) at a sub-pixel offset `(fx, fy)` in `[0, 1)`. tiny-skia drops to nearest-neighbour for
 /// any pure translate, so fractional image positions are resolved here instead.
 fn shift_bilinear(image: &Pixmap, fx: f32, fy: f32) -> Pixmap {
     let (w, h) = (image.width() as i64, image.height() as i64);
