@@ -1,0 +1,6 @@
+[
+  ["putNumber", "/T/a", 0.0, 1.0],
+  ["putNumber", "/T/b", 0.0, 2.0],
+  ["putString", "/T/c", 0.0, "s"],
+  ["putNumber", "/V/y", 0.0, 4.0]
+]

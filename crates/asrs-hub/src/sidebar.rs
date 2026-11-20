@@ -233,10 +233,14 @@ struct Node {
     full_title: JsString,
     full_key: Option<JsString>,
     tree_children: JsObject<LogFieldTree>,
-    /// Replaced by a rebuild. Upstream keeps such rows' search callbacks live
-    /// (`searchExpandCallbacks` is never cleared), so they still expand,
-    /// materialize, and throw on detached elements.
+    /// Out of the DOM: replaced by a rebuild, or built later under such a row by a stale
+    /// `searchExpandCallbacks` entry (upstream never clears that list).
     detached: bool,
+    /// The `refresh` whose callback lists this row registered into. Rows built under a
+    /// detached parent still join the current lists, so this is not `!detached`.
+    generation: u64,
+    /// Whether the full-key block finished, registering the metadata and loading callbacks.
+    full_key_built: bool,
     has_children: bool,
     child_span: bool,
     expand_listeners: bool,
@@ -344,6 +348,7 @@ pub struct Sidebar {
     main_messages: Vec<(JsString, JsValue)>,
     timers: Vec<Timer>,
     next_timer_seq: u64,
+    generation: u64,
 }
 
 impl Sidebar {
@@ -381,6 +386,7 @@ impl Sidebar {
             main_messages: Vec::new(),
             timers: Vec::new(),
             next_timer_seq: 0,
+            generation: 0,
         };
         sidebar.schedule_interval(now, TUNING_INTERVAL_MS, TimerKind::TuningPublish);
         sidebar
@@ -999,7 +1005,7 @@ impl Sidebar {
         if is_group {
             self.select_group.clear();
             for node in &mut self.nodes {
-                if !node.detached && node.full_key.is_some() {
+                if node.generation == self.generation && node.full_key.is_some() {
                     node.label_bold = Some(false);
                 }
             }
@@ -1048,7 +1054,7 @@ impl Sidebar {
     fn set_tuning_mode_active(&mut self, env: &SidebarEnv<'_>, active: bool) {
         self.is_tuning_mode = active;
         for id in 0..self.nodes.len() {
-            if self.nodes[id].detached {
+            if self.nodes[id].generation != self.generation {
                 continue;
             }
             let Some(full_key) = self.nodes[id].full_key.clone() else {
@@ -1139,7 +1145,7 @@ impl Sidebar {
             return;
         }
         for node in &mut self.nodes {
-            if node.detached {
+            if node.generation != self.generation {
                 continue;
             }
             let ValueState::Number(state) = &mut node.value else {
@@ -1377,11 +1383,15 @@ impl Sidebar {
         }
         let dfs_index = self.dfs_index_map();
         for id in 0..self.nodes.len() {
-            let Some(&flat) = dfs_index.get(&id) else {
+            if self.nodes[id].generation != self.generation {
                 continue;
-            };
-            let Some(rect) = rects.get(flat).copied() else {
-                continue;
+            }
+            let rect = match dfs_index.get(&id) {
+                Some(&flat) => match rects.get(flat) {
+                    Some(rect) => *rect,
+                    None => continue,
+                },
+                None => RowRect::default(),
             };
             let expanded = rect.height > 0.0;
             let on_screen = rect.on_screen(env.inner_height);
@@ -1434,23 +1444,29 @@ impl Sidebar {
         self.last_field_keys = field_keys;
         if !fields_changed {
             for id in 0..self.nodes.len() {
-                if self.nodes[id].full_key.is_some() && !self.nodes[id].detached {
+                if self.nodes[id]
+                    .full_key
+                    .as_ref()
+                    .is_some_and(|key| !key.is_empty())
+                    && self.nodes[id].generation == self.generation
+                {
                     self.update_type_warning(env, id);
                 }
             }
             for id in 0..self.nodes.len() {
-                if self.nodes[id].full_key.is_some() && !self.nodes[id].detached {
+                if self.nodes[id].full_key_built && self.nodes[id].generation == self.generation {
                     self.update_metadata(env, id);
                 }
             }
             for id in 0..self.nodes.len() {
-                if self.nodes[id].full_key.is_some() && !self.nodes[id].detached {
+                if self.nodes[id].full_key_built {
                     self.update_loading(env, id);
                 }
             }
             return Ok(());
         }
         self.field_count = env.log.get_field_count();
+        self.generation += 1;
         for node in &mut self.nodes {
             node.detached = true;
         }
@@ -1626,6 +1642,8 @@ impl Sidebar {
             full_key: field.full_key.clone(),
             tree_children: field.children.clone(),
             detached,
+            generation: self.generation,
+            full_key_built: false,
             has_children,
             child_span: false,
             expand_listeners: false,
@@ -1660,11 +1678,13 @@ impl Sidebar {
             None => self.roots.push(id),
         }
         if let Some(full_key) = field.full_key.clone() {
-            self.update_type_warning(env, id);
-            if let Some(structured_type) = env.log.get_structured_type(&full_key) {
-                let mut label = js(" \u{2013} ");
-                label.push_str(structured_type);
-                self.nodes[id].type_label = Some(label);
+            if !full_key.is_empty() {
+                self.update_type_warning(env, id);
+                if let Some(structured_type) = env.log.get_structured_type(&full_key) {
+                    let mut label = js(" \u{2013} ");
+                    label.push_str(structured_type);
+                    self.nodes[id].type_label = Some(label);
+                }
             }
             self.search_callbacks.push(SearchCallback::Highlight(id));
             self.highlight_for_search(id, now, env.can_scroll_into_view)?;
@@ -1712,6 +1732,7 @@ impl Sidebar {
             }
             self.update_metadata(env, id);
             self.update_loading(env, id);
+            self.nodes[id].full_key_built = true;
         } else if starts_with(&title, MERGED_KEY) && indent == 0.0 {
             let merge_index = number::to_number(title.slice(MERGED_KEY.len() as f64, None).units());
             let filenames = (self.get_filenames)();

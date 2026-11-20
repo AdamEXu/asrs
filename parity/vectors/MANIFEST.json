@@ -35,6 +35,7 @@
     "dom/sidebar/offscreen": {"cases":5,"content":"b9f5d966f2ba1696","generator":"fe16ce53487ea055","spec":"parity/specs/dom/sidebar/offscreen.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/sidebar/search": {"cases":26,"content":"b0ef86705771a9b0","generator":"bd785c89baf1c791","spec":"parity/specs/dom/sidebar/search.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/sidebar/sort": {"cases":5,"content":"4194e985161aeeff","generator":"e23d57fa3564458b","spec":"parity/specs/dom/sidebar/sort.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "dom/sidebar/stale": {"cases":11,"content":"8a4de1899bcfc340","generator":"98beb9e5cb851c3f","spec":"parity/specs/dom/sidebar/stale.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/sidebar/state": {"cases":16,"content":"7049816464bad38c","generator":"57732c078da43c54","spec":"parity/specs/dom/sidebar/state.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/sidebar/tuning": {"cases":26,"content":"3215d13c5bc6a538","generator":"89a246bd7a8cf76a","spec":"parity/specs/dom/sidebar/tuning.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/sidebar/values": {"cases":16,"content":"b56cfef77f4b0c01","generator":"a7492e6e86816ac7","spec":"parity/specs/dom/sidebar/values.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
