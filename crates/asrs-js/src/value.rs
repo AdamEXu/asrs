@@ -1,7 +1,6 @@
 //! JS values and ordinary objects with V8's own-property order: array-index keys (canonical
 //! decimal integers up to 2^32 - 2) ascending, then every other key in insertion order.
 
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -89,12 +88,10 @@ impl JsValue {
         }
     }
 
-    /// Property lookup on an object value; `None` for missing keys and non-objects.
     pub fn get(&self, key: &str) -> Option<&JsValue> {
         self.as_object()?.get(key)
     }
 
-    /// The `typeof` result.
     pub fn type_of(&self) -> &'static str {
         match self {
             JsValue::Undefined => "undefined",
@@ -156,12 +153,6 @@ impl From<JsObject> for JsValue {
 impl From<BigInt> for JsValue {
     fn from(b: BigInt) -> Self {
         JsValue::BigInt(b)
-    }
-}
-
-impl Borrow<[u16]> for JsString {
-    fn borrow(&self) -> &[u16] {
-        self.units()
     }
 }
 
@@ -272,7 +263,6 @@ impl<V> JsObject<V> {
         self.named.clear();
     }
 
-    /// `Object.entries` order.
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&JsString, &V)> + '_ {
         self.indexed
             .values()
@@ -287,17 +277,14 @@ impl<V> JsObject<V> {
             .chain(self.named.iter_mut())
     }
 
-    /// `Object.keys` order.
     pub fn keys(&self) -> impl DoubleEndedIterator<Item = &JsString> + '_ {
         self.iter().map(|(k, _)| k)
     }
 
-    /// `Object.values` order.
     pub fn values(&self) -> impl DoubleEndedIterator<Item = &V> + '_ {
         self.iter().map(|(_, v)| v)
     }
 
-    /// Keeps the entries for which `f` returns true, preserving order.
     pub fn retain(&mut self, mut f: impl FnMut(&JsString, &mut V) -> bool) {
         self.indexed.retain(|_, (k, v)| f(k, v));
         self.named.retain(|k, v| f(k, v));

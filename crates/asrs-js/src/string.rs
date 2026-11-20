@@ -14,6 +14,7 @@ use case_table::{CASE_IGNORABLE, CASED, LOWER, UPPER};
 pub use encoding::{DecodeError, TextDecoder, text_encode};
 pub use uri::{UriError, decode_uri_component, encode_uri_component};
 
+use std::borrow::Borrow;
 use std::fmt;
 
 /// V8's `String::kMaxLength` on 64-bit (2^29 - 24): producing a longer string is a
@@ -456,6 +457,12 @@ impl JsString {
             }
         }
         Ok(JsString::from_units(units))
+    }
+}
+
+impl Borrow<[u16]> for JsString {
+    fn borrow(&self) -> &[u16] {
+        self.units()
     }
 }
 
