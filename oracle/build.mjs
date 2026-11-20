@@ -125,6 +125,7 @@ const entries = [
   "genStruct",
   "genLogField",
   "genLog",
+  "genLogKeys",
   "genThree",
   "genPhoton",
   "decode",

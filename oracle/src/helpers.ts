@@ -1,5 +1,6 @@
 import StructDecoder from "@upstream/shared/log/StructDecoder";
 import PhotonStructDecoder from "@upstream/shared/log/PhotonStructDecoder";
+import { run as logRun } from "./logRun";
 import { flushAnimationFrames } from "./shims";
 
 const indirectEval = eval;
@@ -58,6 +59,10 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   },
 
   typeof: (value: unknown) => typeof value,
+
+  // Drives a fresh upstream Log through an op list (see logRun.ts).
+  logRun: (enableTimestampSetCache: boolean, ops: unknown[][]) =>
+    logRun(enableTimestampSetCache, ops as any[][]),
 
   call: (source: string, ...args: unknown[]) => {
     const fn = indirectEval(`(${source})`);

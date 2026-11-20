@@ -1,6 +1,8 @@
 import Log from "@upstream/shared/log/Log";
 import LogField from "@upstream/shared/log/LogField";
 import LogFieldTree from "@upstream/shared/log/LogFieldTree";
+import { findKey } from "@upstream/shared/log/LogKeyUtils";
+import { LogFieldIterator, getLogValueText, getOrDefault, getURCLKeys } from "@upstream/shared/log/LogUtil";
 
 // Replays an operation script against a real upstream Log. Writes:
 //   ["putRaw" | "putBoolean" | "putNumber" | "putString" | "putBooleanArray" | "putNumberArray"
@@ -25,6 +27,12 @@ import LogFieldTree from "@upstream/shared/log/LogFieldTree";
 //   ["fieldTree", includeGenerated, prefix]
 //   ["range"]   getTimestampRange() and getLastTimestamp()
 //   ["displayOffset", "start-zero" | "original" | null]
+//   ["findKey", search]   LogKeyUtils.findKey(log, search)
+//   ["getOrDefault", key, type, timestamp, default, uuid]   LogUtil.getOrDefault
+//   ["urclKeys"]   LogUtil.getURCLKeys(log)
+//   ["iterator", key, times]   LogFieldIterator over getRange(-Infinity, Infinity),
+//     getAtTime per element of times
+//   ["valueText", key]   getLogValueText on the field's last sample, or null
 //   ["dump"]   toSerialized() with the field order spelled out
 
 const PUTS = new Set([
@@ -157,6 +165,30 @@ export function run(enableTimestampSetCache: boolean, ops: any[][]): unknown[] {
         } finally {
           g.preferences = saved;
         }
+        break;
+      }
+      case "findKey":
+        results.push(findKey(log, args[0]));
+        break;
+      case "getOrDefault":
+        results.push(getOrDefault(log, args[0], args[1], args[2], args[3], args[4]));
+        break;
+      case "urclKeys":
+        results.push(getURCLKeys(log));
+        break;
+      case "iterator": {
+        const data = log.getRange(args[0], -Infinity, Infinity);
+        const iter = new LogFieldIterator<any>(data);
+        results.push((args[1] as number[]).map((t) => iter.getAtTime(t)));
+        break;
+      }
+      case "valueText": {
+        const data = log.getRange(args[0], -Infinity, Infinity);
+        results.push(
+          data === undefined || data.values.length === 0
+            ? null
+            : getLogValueText(data.values[data.values.length - 1], log.getType(args[0])!)
+        );
         break;
       }
       case "dump":

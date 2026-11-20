@@ -7,6 +7,9 @@ use asrs_parity::{Response, Utf16String, Value};
 
 pub type Function = fn(&[Value]) -> Response;
 
+// `shared/log/LogKeyUtils:*` also lives in `log_keys`, which is chained first in
+// `functions::lookup` and wraps the real port; these wrappers remain for test crates that
+// exercise the regex sites without linking `asrs_log`.
 pub const FUNCTIONS: &[(&str, Function)] = &[
     ("shared/log/LogKeyUtils:isSchema", |a| {
         with_str(a, 0, |s| Value::Bool(sites::schema_type(&s).is_some()))
