@@ -29,8 +29,8 @@ struct Piece {
 }
 
 fn quad_lines(p0: P, p1: P, p2: P) -> Vec<P> {
-    let dx = ((p0.x + p2.x) * 0.5 - p1.x).abs().ceil() as u32;
-    let dy = ((p0.y + p2.y) * 0.5 - p1.y).abs().ceil() as u32;
+    let dx = ((p0.x + p2.x) * 0.5 - p1.x).abs().ceil() as i32 as u32;
+    let dy = ((p0.y + p2.y) * 0.5 - p1.y).abs().ceil() as i32 as u32;
     let dist = if dx > dy {
         dx + (dy >> 1)
     } else {
@@ -335,6 +335,14 @@ mod tests {
             b.close();
         }
         b.finish().unwrap()
+    }
+
+    #[test]
+    fn huge_quads_subdivide_without_overflow() {
+        assert_eq!(
+            quad_lines(P::default(), P { x: 3e38, y: 3e38 }, P::default()).len(),
+            33
+        );
     }
 
     #[test]

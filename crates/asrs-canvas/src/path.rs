@@ -434,13 +434,13 @@ impl Path {
         }
         let user = [(r - l) * 0.5, (b - t) * 0.5, center.x, center.y];
         match build_unit_arc(start_v, stop_v, ccw, user) {
-            Some(conics) => {
+            Some(conics) if !conics.is_empty() => {
                 add_point(self, conics[0].0[0]);
                 for (p, w) in conics {
                     self.sk_conic_to(map(p[1]), map(p[2]), w);
                 }
             }
-            None => add_point(
+            _ => add_point(
                 self,
                 pt(user[0] * stop_v.x + user[2], user[1] * stop_v.y + user[3]),
             ),
@@ -790,6 +790,13 @@ mod tests {
 
     fn verbs(p: &Path) -> &[Verb] {
         &p.verbs
+    }
+
+    #[test]
+    fn arc_without_conics_adds_its_end_point() {
+        let mut p = Path::new();
+        p.arc_to_oval([0.0, 0.0, 10.0, 10.0], 0.0, f32::NAN, false);
+        assert!(matches!(verbs(&p), [Verb::Move(_)]), "{:?}", verbs(&p));
     }
 
     #[test]
