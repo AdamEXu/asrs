@@ -2,7 +2,6 @@
 //! `asrs_log::mechanism_state`.
 
 use asrs_js::string::{JsError, JsString};
-use asrs_js::value::JsValue;
 use asrs_log::log::Log;
 use asrs_log::log::joystick_state::{JoystickState, decode_pov_bitfield, get_joystick_state};
 use asrs_log::log::mechanism_state::{MechanismState, get_mechanism_state, merge_mechanism_states};
@@ -10,7 +9,7 @@ use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{arg, to_number, to_units};
 use crate::log_field::{boolean, js_string};
-use crate::{js_json, log_run, shared::Function};
+use crate::{log_run, shared::Function};
 
 pub const FUNCTIONS: &[(&str, Function)] = &[("oracle:stateRun", state_run)];
 
@@ -93,18 +92,46 @@ fn joystick_value(s: &JoystickState) -> Value {
     ])
 }
 
+fn coords(values: &[Option<f64>]) -> Value {
+    Value::Array(values.iter().map(|x| x.map_or(Value::Null, n)).collect())
+}
+
 fn mechanism_value(s: &MechanismState) -> Value {
     Value::object([
-        ("backgroundColor", js_json::from_js(&s.background_color)),
+        (
+            "backgroundColor",
+            Value::String(Utf16String::from_units(s.background_color.units().to_vec())),
+        ),
         (
             "dimensions",
             Value::Array(s.dimensions.iter().map(|&x| n(x)).collect()),
         ),
         (
             "lines",
-            Value::Array(s.lines.iter().map(js_json::from_js).collect()),
+            Value::Array(
+                s.lines
+                    .iter()
+                    .map(|line| {
+                        Value::object([
+                            ("start", coords(&line.start)),
+                            ("end", coords(&line.end)),
+                            (
+                                "color",
+                                line.color.clone().map_or(n(0.0), |c| {
+                                    Value::String(Utf16String::from_units(c.units().to_vec()))
+                                }),
+                            ),
+                            ("weight", line.weight.map_or(Value::Null, n)),
+                        ])
+                    })
+                    .collect(),
+            ),
         ),
     ])
+}
+
+fn mechanism_or_null(state: Option<MechanismState>) -> Result<Value, Response> {
+    ok(state.as_ref().map_or(Value::Null, mechanism_value))
 }
 
 fn state_call(log: &Log, call: &[Value]) -> Result<Value, Response> {
@@ -119,28 +146,21 @@ fn state_call(log: &Log, call: &[Value]) -> Result<Value, Response> {
         },
         "getMechanismState" => {
             let key = JsString::from_units(to_units(&arg(call, 1))?);
-            match get_mechanism_state(log, &key, num(2)?) {
-                Some(s) => ok(mechanism_value(&s)),
-                None => ok(Value::Null),
-            }
+            mechanism_or_null(get_mechanism_state(log, &key, num(2)?))
         }
         "mergeMechanismStates" => {
-            let states: Vec<JsValue> = match arg(call, 1).as_array() {
-                Some(states) => states
-                    .iter()
-                    .map(js_json::to_js)
-                    .collect::<Result<_, _>>()
-                    .map_err(Response::Error)?,
-                None => {
-                    return Err(Response::Error(
-                        "stateRun: states must be an array".to_owned(),
-                    ));
-                }
+            let Some(keys) = arg(call, 1).as_array().map(<[Value]>::to_vec) else {
+                return Err(Response::Error(
+                    "stateRun: merge keys must be an array".to_owned(),
+                ));
             };
-            match merge_mechanism_states(&states) {
-                Ok(s) => ok(mechanism_value(&s)),
-                Err(e) => throw(e),
+            let time = num(2)?;
+            let mut states = Vec::new();
+            for key in &keys {
+                let key = JsString::from_units(to_units(key)?);
+                states.extend(get_mechanism_state(log, &key, time));
             }
+            mechanism_or_null(merge_mechanism_states(&states))
         }
         "decodePovBitfield" => ok(n(decode_pov_bitfield(num(1)?))),
         other => Ok(Value::object([(

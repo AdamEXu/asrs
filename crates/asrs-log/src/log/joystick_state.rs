@@ -171,7 +171,6 @@ pub fn get_joystick_state(
         return Ok(state);
     }
 
-    // Find joystick table
     let id_text = number::to_string(joystick_id);
     let mut table_prefix = JsString::new();
     let mut source = None;
@@ -221,7 +220,6 @@ pub fn get_joystick_state(
         return Ok(state);
     };
 
-    // Read values
     state.mapping = mapping;
     match source {
         Source::Akit => match mapping {

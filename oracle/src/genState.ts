@@ -359,6 +359,51 @@ function joystickCases() {
     [["getJoystickState", 0, 10]]
   );
 
+  // Every layout with two samples per field, read before, at, between and
+  // after them, with and without the timestamp-set cache; ids 1-5 of the
+  // FIRST DS and NT tables alongside id 0.
+  {
+    const ops: unknown[][] = [
+      ["putNumber", `${AKIT}1/ButtonCount`, 10, 3],
+      ["putNumber", `${AKIT}1/ButtonValues`, 10, 0b101],
+      ["putNumberArray", `${AKIT}1/AxisValues`, 10, [0.5]],
+      ["putNumberArray", `${AKIT}1/POVs`, 10, [90]],
+      ["putNumber", `${AKIT}1/ButtonCount`, 20, 4],
+      ["putNumber", `${AKIT}1/ButtonValues`, 20, 0b1010],
+      ["putNumberArray", `${AKIT}1/AxisValues`, 20, [-0.5, 1]],
+      ["putNumberArray", `${AKIT}1/POVs`, 20, []],
+      ["putBoolean", "DS:opMode", 10, false],
+      ["putBooleanArray", `${DSLOG}3/buttons`, 10, [true]],
+      ["putNumberArray", `${DSLOG}3/axes`, 10, [0.25]],
+      ["putNumberArray", `${DSLOG}3/povs`, 10, [4]],
+      ["putBooleanArray", `${DSLOG}3/buttons`, 20, [false, true]],
+      ["putNumberArray", `${DSLOG}3/axes`, 20, []],
+      ["putNumberArray", `${DSLOG}3/povs`, 20, [8, 3]],
+      ["putNumber", `${NT}2/ButtonsAvailable`, 10, 0b1],
+      ["putNumber", `${NT}2/ButtonValues`, 10, 0b1],
+      ["putNumber", `${NT}2/ButtonValues`, 20, 0b0]
+    ];
+    for (const id of [0, 1, 2, 3, 4, 5]) {
+      ops.push(
+        ["putNumber", `${FIRSTDS}/${id}/AvailableButtons/high`, 10, id],
+        ["putNumber", `${FIRSTDS}/${id}/AvailableButtons/low`, 10, 0xf],
+        ["putNumber", `${FIRSTDS}/${id}/Buttons/high`, 10, 0],
+        ["putNumber", `${FIRSTDS}/${id}/Buttons/low`, 10, 0b0101],
+        ["putNumber", `${FIRSTDS}/${id}/Buttons/high`, 20, id],
+        ["putNumber", `${FIRSTDS}/${id}/Buttons/low`, 20, 0b1010],
+        ["putNumber", `${FIRSTDS}/${id}/POVCount`, 10, 1],
+        ["putNumber", `${FIRSTDS}/${id}/POVs`, 10, id],
+        ["putNumber", `${FIRSTDS}/${id}/POVs`, 20, 0xf]
+      );
+    }
+    const calls: unknown[][] = [];
+    for (const id of [0, 1, 2, 3, 4, 5]) {
+      for (const t of [5, 10, 15, 20, 25]) calls.push(["getJoystickState", id, t]);
+    }
+    emit(ops, calls);
+    emit(ops, calls, false);
+  }
+
   // No joystick data at all, and timestamp ordering across the cache flag.
   emit(
     [["putNumber", "/Other/Value", 10, 1]],
@@ -366,19 +411,6 @@ function joystickCases() {
     false
   );
 }
-
-const mech = (backgroundColor: unknown, dimensions: unknown, lines: unknown) => ({
-  backgroundColor,
-  dimensions,
-  lines
-});
-const line = (start: unknown, end: unknown, color: unknown, weight: unknown, extra: object = {}) => ({
-  start,
-  end,
-  color,
-  weight,
-  ...extra
-});
 
 function mechanismCases() {
   // Nested ligaments under three roots: a `position` root, an `x`/`y` root
@@ -591,83 +623,97 @@ function mechanismCases() {
     [["getMechanismState", "m", 10]]
   );
 
-  // Merges. Holes in `states`/`lines` are skipped by upstream forEach and
-  // cannot be represented in the port's value domain, so the fixtures keep
-  // them out of those two arrays (inner arrays behave identically either
-  // way).
-  const state = (w: number, h: number, lines: unknown[] = [], bg: unknown = "bg") =>
-    mech(bg, [w, h], lines);
-  const s1 = state(2, 1, [line([0, 0], [1, 1], "#fff", 1), line([2, 3], [0, 0], "#0f0", 2)]);
-  const s2 = state(4, 3, [line([1, 1], [2, 2], "#00f", 3)], "#a0a0a0");
-  const s3 = state(1, 0.5, [], "last");
-  emit([], [["mergeMechanismStates", [s1, s2, s3]]]);
-  emit([], [["mergeMechanismStates", [s2]]]);
-  emit([], [["mergeMechanismStates", []]]);
-  emit([], [["mergeMechanismStates", [s1, mech("x", [Infinity, 1], []), state(-Infinity, 0, [])]]]);
-  emit([], [["mergeMechanismStates", [mech("a", [-0, -0], []), mech("b", [0, 0], [])]]]);
+  // Non-finite and signed-zero values: a short or long `position`, NaN and
+  // infinite angle/length/weight, and -0 everywhere. Merging them runs the
+  // lines through jsonCopy, which turns non-finite numbers into null.
+  const edgeOps: unknown[][] = [
+    ["putString", "n/backgroundColor", 10, "#000"],
+    ["putNumberArray", "n/dims", 10, [3, 2]],
+    ["putNumberArray", "n/empty/position", 10, []],
+    ["putNumber", "n/empty/l/angle", 10, 30],
+    ["putNumber", "n/empty/l/length", 10, 1],
+    ["putString", "n/empty/l/color", 10, "a"],
+    ["putNumber", "n/empty/l/weight", 10, -0],
+    ["putNumberArray", "n/one/position", 10, [0.5]],
+    ["putNumber", "n/one/l/angle", 10, 180],
+    ["putNumber", "n/one/l/length", 10, 2],
+    ["putString", "n/one/l/color", 10, "b"],
+    ["putNumber", "n/one/l/weight", 10, NaN],
+    ["putNumberArray", "n/wide/position", 10, [NaN, -0, Infinity]],
+    ["putNumber", "n/wide/l/angle", 10, NaN],
+    ["putNumber", "n/wide/l/length", 10, 1],
+    ["putString", "n/wide/l/color", 10, "c"],
+    ["putNumber", "n/wide/l/weight", 10, Infinity],
+    ["putNumber", "n/wide/l/k/angle", 10, 90],
+    ["putNumber", "n/wide/l/k/length", 10, 1],
+    ["putString", "n/wide/l/k/color", 10, "d"],
+    ["putNumber", "n/wide/l/k/weight", 10, 1],
+    ["putNumber", "n/inf/x", 10, -0],
+    ["putNumber", "n/inf/y", 10, 1e308],
+    ["putNumber", "n/inf/l/angle", 10, 1e300],
+    ["putNumber", "n/inf/l/length", 10, Infinity],
+    ["putNumber", "n/inf/l/weight", 10, 5e-324],
+    ["putNumber", "n/inf/l/color", 10, 7],
+    ["putNumber", "n/neg/x", 10, -1],
+    ["putNumber", "n/neg/y", 10, -2],
+    ["putNumber", "n/neg/l/angle", 10, -720.5],
+    ["putNumber", "n/neg/l/length", 10, -1.5],
+    ["putString", "n/neg/l/color", 10, ""],
+    ["putNumber", "n/neg/l/weight", 10, -3]
+  ];
+  emit(edgeOps, [
+    ["getMechanismState", "n", 10],
+    ["mergeMechanismStates", ["n"], 10]
+  ]);
 
-  // Missing, null and mistyped `dimensions`/`lines`/state.
-  for (const states of [
-    [mech("a", null, [])],
-    [mech("a", undefined, [])],
-    [mech("a", "abc", [])],
-    [mech("a", 42, [])],
-    [mech("a", { 0: 3, 1: 4 }, [line([0, 0], [0, 0], "c", 1)])],
-    [mech("a", [1n], [])],
-    [mech("a", [true, "5"], [line([0, 0], [0, 0], "c", 1)])],
-    [mech("a", [[2], [1, 2]], [line([0, 0], [0, 0], "c", 1)])],
-    [mech("a", null, [])],
-    [null],
-    [5],
-    ["x"],
-    [[]],
-    [mech("a", [1, 2], null)],
-    [mech("a", [1, 2], undefined)],
-    [mech("a", [1, 2], 5)],
-    [mech("a", [1, 2], { 0: line([0, 0], [0, 0], "c", 1) })],
-    [mech("a", [1, 2], "lines")],
-    [mech("a", [1, 2], [null])],
-    [mech("a", [1, 2], [5])],
-    [mech("a", [1, 2], ["x"])],
-    [mech("a", [1, 2], [[1, 2]])],
-    [mech("a", [1, 2], [1n])],
-    [s1, null],
-    [null, s1],
-    [5, s1]
-  ]) {
-    emit([], [["mergeMechanismStates", states]]);
-  }
-
-  // Line shapes through jsonCopy and the `+=` on start/end index 0.
-  for (const states of [
-    [mech("a", [4, 2], [line([NaN, Infinity, -0], [null, "x"], 0, "w")])],
-    [mech("a", [4, 2], [line(["a", 1], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([[1, 2]], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([{ a: 1 }], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([null], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([true], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([undefined], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([], [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line({ 0: 5, 1: 6 }, [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line({ a: 1 }, [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line("ab", [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line("", [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line(5, [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line(true, [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line(null, [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line(undefined, [0, 0], "c", 1)])],
-    [mech("a", [4, 2], [line([0, 0], { 0: 2 }, "c", 1)])],
-    [mech("a", [4, 2], [line([0, 0], null, "c", 1)])],
-    [mech("a", [4, 2], [line([0, 0], [1, 1], undefined, undefined)])],
-    [mech("a", [4, 2], [line([0, 0], [1, 1], { hex: "#fff" }, [2])])],
-    [mech("a", [4, 2], [line([0, 0], [1, 1], "c", 1, { extra: 1, meta: { deep: [true] } })])],
-    [mech("a", [4, 2], [line([0, 0], [1, 1], 1n, 1)])],
-    [mech(5, [4, 2], [line([0, 0], [1, 1], "c", 1)])],
-    [mech(undefined, [4, 2], [line([0, 0], [1, 1], "c", 1)])],
-    [mech("a", [2, 2], []), mech("b", [4, 2], [line([0, 0], [1, 1], "c", 1)])]
-  ]) {
-    emit([], [["mergeMechanismStates", states]]);
-  }
+  // Merges of log-derived states as the Mechanism and 3D Field controllers
+  // run them: differing and degenerate dims, background colors taken from the
+  // first state, absent keys skipped, and no states at all.
+  const mechanism = (key: string, bg: string, dims: number[], t = 10): unknown[][] => [
+    ["putString", `${key}/backgroundColor`, t, bg],
+    ["putNumberArray", `${key}/dims`, t, dims],
+    ["putNumber", `${key}/r/x`, t, 0.25],
+    ["putNumber", `${key}/r/y`, t, 0.5],
+    ["putNumber", `${key}/r/l/angle`, t, 60],
+    ["putNumber", `${key}/r/l/length`, t, 0.75],
+    ["putString", `${key}/r/l/color`, t, `${bg}-line`],
+    ["putNumber", `${key}/r/l/weight`, t, 2],
+    ["putNumber", `${key}/r/l/k/angle`, t, -45],
+    ["putNumber", `${key}/r/l/k/length`, t, 0.5],
+    ["putString", `${key}/r/l/k/color`, t, `${bg}-tip`],
+    ["putNumber", `${key}/r/l/k/weight`, t, 1]
+  ];
+  const mergeOps: unknown[][] = [
+    ...mechanism("a", "#111", [2, 1]),
+    ...mechanism("b", "#222", [4, 3]),
+    ...mechanism("c", "#333", [1, 0.5]),
+    ...mechanism("d", "#444", []),
+    ...mechanism("e", "#555", [NaN, 1]),
+    ...mechanism("f", "#666", [Infinity, -Infinity]),
+    ...mechanism("g", "#777", [-0, -0]),
+    ...mechanism("h", "#888", [5]),
+    ...mechanism("late", "#999", [10, 10], 20),
+    ["putString", "bare/backgroundColor", 10, "bare"],
+    ["putNumberArray", "bare/dims", 10, [6, 6]]
+  ];
+  emit(mergeOps, [
+    ["mergeMechanismStates", ["a", "b", "c"], 10],
+    ["mergeMechanismStates", ["c", "b", "a"], 10],
+    ["mergeMechanismStates", ["b"], 10],
+    ["mergeMechanismStates", ["a", "missing", "bare"], 10],
+    ["mergeMechanismStates", ["a", "d"], 10],
+    ["mergeMechanismStates", ["d", "a"], 10],
+    ["mergeMechanismStates", ["a", "e"], 10],
+    ["mergeMechanismStates", ["a", "f"], 10],
+    ["mergeMechanismStates", ["g"], 10],
+    ["mergeMechanismStates", ["g", "a"], 10],
+    ["mergeMechanismStates", ["h", "a"], 10],
+    ["mergeMechanismStates", ["a", "late"], 10],
+    ["mergeMechanismStates", ["a", "late"], 20],
+    ["mergeMechanismStates", ["missing"], 10],
+    ["mergeMechanismStates", [], 10]
+  ]);
+  emit(mergeOps, [["mergeMechanismStates", ["late", "b", "a"], 25]], false);
 }
 
 if (mode === "joystick") {

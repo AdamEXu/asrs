@@ -7,7 +7,8 @@ import { runWithLog } from "../logRun";
 // {throw: ...}.
 //   ["getJoystickState", joystickId, time]
 //   ["getMechanismState", key, time]
-//   ["mergeMechanismStates", [state, ...]]
+//   ["mergeMechanismStates", [key, ...], time]   merges the non-null
+//     getMechanismState results as MechanismController does, or null if none
 //   ["decodePovBitfield", value]
 
 export function run(enableTimestampSetCache: boolean, ops: any[][], calls: any[][]): unknown[] {
@@ -20,8 +21,12 @@ export function run(enableTimestampSetCache: boolean, ops: any[][], calls: any[]
           return { ok: getJoystickState(log, args[0], args[1]) };
         case "getMechanismState":
           return { ok: getMechanismState(log, args[0], args[1]) };
-        case "mergeMechanismStates":
-          return { ok: mergeMechanismStates(args[0]) };
+        case "mergeMechanismStates": {
+          const states = (args[0] as string[])
+            .map((key) => getMechanismState(log, key, args[1]))
+            .filter((state) => state !== null);
+          return { ok: states.length === 0 ? null : mergeMechanismStates(states) };
+        }
         case "decodePovBitfield":
           return { ok: decodePovBitfield(args[0]) };
         default:
