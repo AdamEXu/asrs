@@ -101,7 +101,7 @@
     "js/math-rem/linux-aarch64": {
       "cases": 980,
       "content": "5001d446f16a7017",
-      "generator": "90d83dcdb33fc9d1",
+      "generator": "98fd4015b7ec116a",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "linux-aarch64"
@@ -293,7 +293,7 @@
     "log/util-rem/linux-aarch64": {
       "cases": 2,
       "content": "64415ee47e101ad0",
-      "generator": "d72e76812093e1cf",
+      "generator": "4902cae26c212e00",
       "spec": "parity/specs/log/util-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "linux-aarch64"
