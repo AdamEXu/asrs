@@ -29,6 +29,20 @@ fn pair(v: &Value) -> Result<[f64; 2], String> {
     }
 }
 
+fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Undefined | Value::Null | Value::Hole => false,
+        Value::Bool(b) => *b,
+        Value::Number(bits) => {
+            let x = f64::from_bits(*bits);
+            x != 0.0 && !x.is_nan()
+        }
+        Value::String(s) => !s.units().is_empty(),
+        Value::BigInt(d) => d != "0" && d != "-0",
+        _ => true,
+    }
+}
+
 fn optional_uuid(v: &Value) -> Result<Option<String>, String> {
     match v {
         Value::Undefined | Value::Null => Ok(None),
@@ -211,7 +225,7 @@ fn display(v: &Value) -> Result<Option<TimestampDisplay>, String> {
     }
 }
 
-fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Result<(), String> {
+pub(crate) fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Result<(), String> {
     let name = js_string(&arg(op, 0))?.to_string_lossy();
     let key = || js_string(&arg(op, 1));
     let timestamp = || number(&arg(op, 2));
@@ -234,7 +248,7 @@ fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Result<(), St
             &key()?,
             timestamp()?,
             &js_json::to_js(&arg(op, 3))?,
-            boolean(&arg(op, 4))?,
+            truthy(&arg(op, 4)),
         ),
         "putPose" => log.put_pose(
             &key()?,
@@ -290,14 +304,24 @@ fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Result<(), St
     Ok(())
 }
 
-fn run(args: &[Value]) -> Result<Value, String> {
-    let mut log = Log::new(boolean(&arg(args, 0))?);
-    let ops = arg(args, 1);
+/// Replays the logRun op list and returns the resulting log alongside the
+/// query results `run` reports.
+pub(crate) fn build_log(cache: bool, ops: &[Value]) -> Result<(Log, Vec<Value>), String> {
+    let mut log = Log::new(cache);
     let mut results = Vec::new();
-    for op in ops.as_array().ok_or("ops must be an array")? {
+    for op in ops {
         let op = op.as_array().ok_or("an op must be an array")?;
         apply(&mut log, op, &mut results)?;
     }
+    Ok((log, results))
+}
+
+fn run(args: &[Value]) -> Result<Value, String> {
+    let ops = arg(args, 1);
+    let (_, results) = build_log(
+        boolean(&arg(args, 0))?,
+        ops.as_array().ok_or("ops must be an array")?,
+    )?;
     Ok(Value::Array(results))
 }
 

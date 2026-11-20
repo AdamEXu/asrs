@@ -316,6 +316,7 @@ dependencies = [
  "asrs-js",
  "asrs-log",
  "asrs-parity",
+ "asrs-services",
 ]
 
 [[package]]
@@ -331,6 +332,7 @@ name = "asrs-formats"
 version = "0.1.0"
 dependencies = [
  "asrs-js",
+ "asrs-log",
  "asrs-parity",
 ]
 
