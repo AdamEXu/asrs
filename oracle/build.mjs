@@ -123,7 +123,8 @@ const entries = [
   "decode",
   "export",
   "historicalRun",
-  "protoRenderer"
+  "protoRenderer",
+  "canvasMain"
 ];
 
 await esbuild.build({
@@ -139,6 +140,7 @@ await esbuild.build({
   nodePaths: [path.join(args.upstream, "node_modules")],
   define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream) },
   banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; const require = __oracleCreateRequire(import.meta.url);' },
+  external: ["electron"],
   plugins: [oraclePlugin],
   logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
 });
@@ -154,16 +156,26 @@ await esbuild.build({
   external: ["electron"],
   logLevel: "warning"
 });
-await esbuild.build({
-  entryPoints: [path.join(here, "src/renderer/page.ts")],
-  outfile: path.join(args.out, "rendererPage.js"),
-  bundle: true,
-  format: "iife",
-  platform: "browser",
-  target: "esnext",
-  logLevel: "warning"
-});
+for (const [entry, outfile] of [
+  ["src/renderer/page.ts", "rendererPage.js"],
+  ["src/canvas/page.ts", "canvasPage.js"]
+]) {
+  await esbuild.build({
+    entryPoints: [path.join(here, entry)],
+    outfile: path.join(args.out, outfile),
+    bundle: true,
+    format: "iife",
+    platform: "browser",
+    target: "esnext",
+    logLevel: "warning"
+  });
+}
 fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
+fs.writeFileSync(
+  path.join(args.out, "canvasPage.html"),
+  '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>' +
+    '<body><script src="canvasPage.js"></script></body></html>\n'
+);
 
 fs.writeFileSync(
   path.join(args.out, "modules.json"),

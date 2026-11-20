@@ -283,11 +283,18 @@ dependencies = [
 [[package]]
 name = "asrs-canvas"
 version = "0.1.0"
+dependencies = [
+ "asrs-parity",
+ "core-foundation 0.10.1",
+ "core-graphics 0.24.0",
+ "core-text",
+]
 
 [[package]]
 name = "asrs-cli"
 version = "0.1.0"
 dependencies = [
+ "asrs-canvas",
  "asrs-js",
  "asrs-parity",
 ]
@@ -332,6 +339,7 @@ version = "0.1.0"
 name = "asrs-parity"
 version = "0.1.0"
 dependencies = [
+ "png 0.18.1",
  "zstd",
 ]
 

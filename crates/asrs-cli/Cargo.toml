@@ -11,6 +11,7 @@ name = "asrs-cli"
 path = "src/main.rs"
 
 [dependencies]
+asrs-canvas = { path = "../asrs-canvas" }
 asrs-js = { path = "../asrs-js" }
 asrs-parity = { path = "../asrs-parity" }
 

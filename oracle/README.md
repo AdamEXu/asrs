@@ -342,3 +342,43 @@ shims. It fails unless both produce identical `initial` and `fields` messages, t
 renderer's. The finding: protobufjs 8.3.0 bundles `long`, so the real renderer decodes 64-bit
 fields as `Long` objects and `putUnknownStruct` expands them into `/low`, `/high` and `/unsigned`
 child fields, exactly as the shim does.
+
+## Canvas harness
+
+`src/canvasMain.ts` runs as a real Electron app (not `ELECTRON_RUN_AS_NODE`) with a hidden
+`BrowserWindow` loading `canvasPage.html`, whose script is `src/canvas/page.ts`. It is driven by
+`cargo xtask canvas` (`cargo xtask oracle canvas` and `oracle canvas-lut` are aliases), which
+starts Electron with `--force-color-profile=srgb --lang=en-US` and, for DOM scenes,
+`--force-device-scale-factor=<1|2>`. These switches must be on the real command line: appended
+from the ESM main they arrive too late and are ignored.
+
+Modes (`electron canvasMain.mjs <mode> <out dir>`):
+
+| Mode | Output |
+|---|---|
+| `canvas [<scene>...]` | `scenes/<scene>.json` and `ref/<scene>.{cpu,gpu}.png`: `getImageData` of the scene on a `willReadFrequently` (CPU) canvas, the reference, and on the default (GPU) canvas |
+| `measure` | `measure.jsonl`: every `TextMetrics` field for each font, string, `textAlign` and `textBaseline` of the label corpus |
+| `canvas-lut` | the calibration scenes `calib-0` to `calib-7` (grey text at each 3-bit luminance) on the CPU canvas |
+| `dom <scale>` | `dom/<scene>@<scale>x.png` from `capturePage`, and `.json` with each row's box and per-character boxes; fails unless the colour patches come back exact |
+| `list` | scene names |
+
+PNGs are straight-alpha RGBA, written with filter 0 and zlib level 9 so equal pixels give equal
+files. `info.json` records the Electron and Chrome versions, platform, architecture and GPU
+feature status.
+
+Scene JSON: `{name, group, gate, width, height, dpr, background, cmds}`. `gate` is `pixel`,
+`text` or `calibration`; `background` is the opaque colour both sides are composited over before
+comparing. `cmds` is a display list replayed call for call:
+
+| Command | Meaning |
+|---|---|
+| `["=", prop, value]` | `ctx[prop] = value`; a value `{"linearGradient": [x0, y0, x1, y1], "stops": [[offset, colour], ...]}` or `{"radialGradient": [x0, y0, r0, x1, y1, r1], "stops": ...}` becomes a gradient |
+| `[method, ...args]` | `ctx[method](...args)`; a string argument `"@id"` is the image source `id` |
+| `["image", id, w, h, rgba]` | defines image source `id` from base64 straight RGBA |
+| `["canvas", id, w, h, cmds]` | replays `cmds` on a new `w`x`h` canvas (same CPU or GPU mode) and keeps it as image source `id` |
+| `["getImageData", sx, sy, sw, sh, "$reg"]` | stores the `ImageData` in register `$reg` |
+| `["putImageData", "$reg" or {width, height, rgba}, dx, dy]` | puts a register or literal `ImageData` |
+
+A port renderer for `cargo xtask canvas run` is called as
+`<program> <args>... <scenes dir> <out dir> [<scene>...]` and writes `<out dir>/<scene>.png` in
+the same straight-alpha form.

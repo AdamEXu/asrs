@@ -1,6 +1,7 @@
 #![allow(clippy::disallowed_methods)]
 
 mod assets;
+mod canvas;
 mod check;
 mod corpus;
 mod historical;
@@ -24,7 +25,8 @@ commands:
   assets    copy upstream assets into assets/
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
-  parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)";
+  parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
+  canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -35,6 +37,7 @@ fn main() -> ExitCode {
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
+        Some("canvas") => canvas::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {
