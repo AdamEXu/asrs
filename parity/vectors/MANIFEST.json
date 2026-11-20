@@ -82,6 +82,14 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "js/math-rem/linux-aarch64": {
+      "cases": 992,
+      "content": "ba4463283dec34b5",
+      "generator": "b571da27906d3dc8",
+      "spec": "parity/specs/js/math-rem.fn.json",
+      "zone": "UTC",
+      "generatedOn": "linux-aarch64"
+    },
     "js/math-rem/macos-aarch64": {
       "cases": 992,
       "content": "ba4463283dec34b5",
@@ -89,6 +97,14 @@
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
+    },
+    "js/math-rem/windows-aarch64": {
+      "cases": 992,
+      "content": "eb029d834dab9cd5",
+      "generator": "b571da27906d3dc8",
+      "spec": "parity/specs/js/math-rem.fn.json",
+      "zone": "UTC",
+      "generatedOn": "windows-aarch64"
     },
     "js/sort": {
       "cases": 10000,
