@@ -25,21 +25,61 @@ It finishes by running `selftest` and `smoke`.
 Downloads go to `$ASRS_CACHE` (default: `<real target dir>/../cache` when `target/` is a
 symlink, otherwise `target/cache`): `npm/`, `electron/`, `emsdk/`.
 
+Setup ends by writing `target/oracle/install.json` (upstream commit, Electron version, whether
+it was built or unpacked, and the host). `gen` and `corpus gen` refuse to run unless that
+record matches the commit and Electron version xtask pins.
+
+### Other hosts: packs
+
+emsdk setup is scripted for macOS and Linux only, and the WASM indexer and JS bundles are
+platform-neutral, so other hosts install from a pack built on the dev machine:
+
+```sh
+cargo xtask oracle pack                          # writes target/oracle/pack.tar.zst
+cargo xtask oracle setup --from-pack <file>      # on the other host
+```
+
+The pack (about 36 MB) is `target/oracle/upstream` without `node_modules`: upstream sources,
+the rolldown bundles, `wpilogIndexer.wasm`, `licenses.json` and the lockfile, plus
+`asrs-oracle-pack.json` naming the commit and Electron version, which `--from-pack` checks
+before unpacking. `--from-pack` then runs only `npm ci --ignore-scripts`, the Electron download
+for that OS, the harness `npm ci` and esbuild build, `selftest` and `smoke`. It needs no
+`reference/` checkout, no emsdk and never runs rolldown. The harness `dist` is not in the pack:
+it embeds absolute paths, so each host builds it from its own checkout of `oracle/`. On
+Windows the symlinks under upstream's `lite/` are skipped.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `cargo xtask oracle fn` | JSONL requests on stdin, CVE-1 responses on stdout (protocol below) |
+| `cargo xtask oracle fn [--zone <zone>]` | JSONL requests on stdin, CVE-1 responses on stdout (protocol below) |
 | `cargo xtask oracle fn --list` | upstream modules, npm packages and helpers callable by `fn` |
-| `cargo xtask oracle run <entry> [args]` | run `target/oracle/dist/<entry>.mjs` under the oracle runtime |
+| `cargo xtask oracle run [--zone <zone>] <entry> [args]` | run `target/oracle/dist/<entry>.mjs` under the oracle runtime |
 | `cargo xtask oracle build` | rebuild the harness bundles only, after editing `oracle/src` |
-| `cargo xtask oracle gen [<id>...] [--check]` | regenerate committed vectors (below); `--check` fails if a rerun differs |
+| `cargo xtask oracle gen [<id>...] [--check]` | regenerate committed vectors (below); `--check` fails if they are stale |
+| `cargo xtask oracle pack` | write the pack for `setup --from-pack` (above) |
 | `cargo xtask oracle selftest` | CVE-1 encoder/decoder self test |
 | `cargo xtask oracle smoke` | `smoke/fn-requests.jsonl` against `smoke/fn-expected.jsonl` |
-| `cargo xtask oracle env` | electron binary, upstream, dist and cache paths as JSON |
+| `cargo xtask oracle env` | electron binary, upstream, dist and cache paths and the environment policy as JSON |
+| `cargo xtask oracle decode <file>` | canonical `Log` dump of one log file (below) |
+| `cargo xtask oracle export <file> --options <json> [--out <file>]` | exact export bytes for one `ExportOptions` |
+| `cargo xtask oracle historical [<corpus>...] [--check] [--jobs N]` | decode dumps and the export matrix over a synthetic corpus |
 
-The runtime is not pinned to a locale or time zone. The default locale on the dev machine is
-`en-US`; set `LC_ALL`/`TZ` on the command when a vector depends on them.
+## Environment policy
+
+xtask runs every oracle process with `TZ=<zone>`, `LANG=en_US.UTF-8`, `LC_ALL=en_US.UTF-8`
+and `ASRS_ORACLE_ZONE=<zone>`, overwriting whatever the caller has set, and clears
+`LANGUAGE`, `NODE_OPTIONS`, `NODE_ICU_DATA`, `ICU_DATA` and `ICU_TIMEZONE_FILES_DIR` (Electron's
+ICU loads time zone rules from that directory, which would change offsets without changing the
+zone name the startup check sees). The zone is `UTC` unless a spec or `--zone`
+names one of `America/Los_Angeles`, `Asia/Kolkata` or `Pacific/Auckland`; no other zone is
+accepted. `src/environment.ts`, imported first by `src/shims.ts`, checks at startup that the
+variables are set that way, that the default `Intl` zone resolves to the expected one, and
+that `Intl.DateTimeFormat`, `Intl.Collator` and `Intl.NumberFormat` resolve `en-US`; otherwise
+it prints what differs and exits with status 78. Running a bundle by hand therefore needs those
+variables too. The Electron app driver adds `--lang=en-US` (`appSwitches` in the policy).
+
+The policy is written into `MANIFEST.json`, so changing it makes every vector stale.
 
 ## `fn` protocol
 
@@ -110,13 +150,35 @@ Signaling NaN bit patterns are outside the contract: V8 may quiet them.
 ## Vectors
 
 Specs live in `parity/specs`, vectors in `parity/vectors/<id>.jsonl.zst`, and
-`parity/vectors/MANIFEST.json` records the upstream commit, Electron version, case count,
-content hash and generator hash (oracle sources plus spec) of each one.
+`parity/vectors/MANIFEST.json` records the upstream commit, Electron version and environment
+policy, and for each vector its case count, content hash, generator hash (oracle sources plus
+spec files plus zone, with CRLF hashed as LF), spec, zone and the `<os>-<arch>` it was
+generated on.
 
-- `<id>.jsonl`: `fn` requests. Each vector line is the request with the oracle's `ok` or
-  `throw` key appended. An `error` response fails generation.
-- `<id>.entry.json`: `{"entry": "<name>", "args": [...]}`. The entry's stdout lines are the
-  vector, so an entry can build values JSON cannot express.
+- `<id>.jsonl`: `fn` requests, run under UTC. Each vector line is the request with the
+  oracle's `ok` or `throw` key appended. An `error` response fails generation.
+- `<id>.entry.json`: `{"entry": "<name>", "args": [...], "zones": [...]}`. The entry's stdout
+  lines are the vector, so an entry can build values JSON cannot express.
+- `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
+  a sibling file (`*.requests.jsonl` files are never specs themselves).
+
+`zones` is optional and lists policy zones. Without it a spec makes one UTC vector `<id>`;
+with it, one oracle process per zone makes vector `<id>/<zone>`, for example
+`oracle/zones/Asia/Kolkata`. Only local-time behaviour (`formatDate`, `new Date(y, m, d)`,
+`toLocaleTimeString`) needs zones; everything else stays UTC. `parity/specs/oracle/` holds
+the policy probes: `environment` (resolved zone and locales, `localeCompare`) and `zones` (the
+local-time sites under all four zones).
+
+`gen` with no ids regenerates every vector and drops manifest entries and files no spec
+produces. `gen <id>...` takes spec or vector ids and refuses to run if the manifest's commit,
+Electron version or policy differs from the current one, since that needs a full run.
+
+`gen --check` works in two stages. First, without running the oracle, it fails if the
+manifest's upstream commit, Electron version or environment policy differs from the current
+one, or if any vector's generator hash, spec, zone or content hash (against the committed
+file) is stale, or a manifest entry has no spec. So an edit to a spec or to the oracle
+sources without a regenerate fails even when it would not change the output. Only then does
+it regenerate in memory and compare content with the differ.
 
 Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
 checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a
@@ -134,6 +196,12 @@ Imported first by every entry point: `window` and `self` alias `globalThis`;
 `worker_threads` thread with a web-worker style `self`, `onmessage` and `postMessage`. Relative
 worker URLs resolve against `target/oracle/upstream/www`, so upstream's
 `new Worker("../bundles/csvWorker.js")` loads the bundle rolldown built.
+
+As in a browser, an exception or rejection in a worker's message handler becomes an `error` event
+on the `Worker` and the worker keeps running. After each handled message (once an async handler
+settles) the thread posts an internal done marker, which `OracleWorker` consumes; `busy` is true
+while a posted message is still being handled. `setWorkerRouter` lets a harness take over message
+delivery (`src/historical/scheduler.ts` does).
 
 ## Build constants
 
@@ -168,3 +236,149 @@ Corpus A (`src/corpusA.ts`, `src/corpus/`):
 
 Each case draws from its own random stream (the corpus seed mixed with the case id), so adding a case leaves
 the others unchanged.
+
+Corpus B (`src/corpusB.ts`):
+
+- `rlog/*`: R1 and R2 files from `src/corpus/rlog.ts`: every R1 tag and R2 type string, value-length errors,
+  key redeclaration, the timestamp corruption limits and resync scan, bad headers, truncation at every byte of
+  the last cycle, seeded random logs.
+- `dslog/*`: `.dslog` and `.dsevents` files (pairs share a base name): REV and CTRE power blocks, every status
+  mask, battery spikes, 15000-cycle timestamp drift, LabVIEW time edges, tag stripping (including the
+  `slice(-1)` quirk), truncation, and the header-only events file whose worker never responds.
+- `roadrunner/*`: revisions 0 and 1, every schema kind, op mode timestamps, concatenated logs, error and
+  truncation cases.
+- `csv/export*/*`: logs exported by upstream's real `exportWorker` bundle (`src/corpus/exporter.ts`) in both
+  layouts and every sampling mode, one log that survives the round trip and one that does not;
+  `csv/hand/*`: hand-written and broken files.
+- `urcl/*`: WPILOG files with URCL r1, r2 and r3 data; r3 STATUS frames are re-encoded with upstream's
+  `buildCanFramePayload` for the 2025 and 2026 specs.
+- `child/*`: parents with `log:<ext>` fields, chunked, nested, rejected and failing children.
+- `merge/<case>/{target,source}.*`: log pairs for `getMergeOffset`, one per branch of its alignment logic.
+- `fuzz/<family>/*`: six mutants per format from the fuzzer in `src/corpus/fuzz.ts`, so `--check` covers it.
+
+`cargo xtask corpus fuzz [--seed <u32>] [--count <n>] [--check]` runs the same mutator (`src/corpusFuzz.ts`)
+over the generated A and B corpora for `--deep` runs. Output goes to `target/parity/corpus/fuzz/<seed>/` with a
+`list.jsonl` naming each mutant's source, donor and mutation steps; nothing is committed.
+
+## Public corpus
+
+`parity/corpus/public.toml` lists real logs by pinned URL, sha256 and size. `cargo xtask corpus fetch` downloads
+them into `$ASRS_CACHE/public-logs/`, rejects any file whose size or hash differs, and keeps verified files;
+`--offline` only verifies. The logs are never committed.
+
+## Historical decode and export
+
+`decode`, `export` and `historicalRun` (`src/historical/`) open a log the way the hub does: a real
+`HistoricalDataSource` from `src/hub/dataSources` on a fresh `Log`, the real worker bundles under the
+`Worker` shim, and `src/historical/mainProcess.ts` standing in for main's `historical-start` and
+`historical-start-raw` (a `.dslog` is read with its `.dsevents` sibling; a child log with a
+`hoot`, `revlog` or `wpilogxz` extension gets a failed conversion, since the oracle has no
+converter; such top-level files are refused).
+
+Nothing depends on thread timing:
+
+- Page timers are fake (`timers.ts`). Timeouts run only when the scheduler runs them, earliest due
+  first, then in scheduling order; the 50 ms field-request intervals fire only on an explicit tick.
+- `Scheduler` delivers worker messages one at a time. After microtasks it runs the next timeout if
+  there is one; otherwise it takes the oldest worker (creation order) that has an undelivered
+  message or is still busy, waits for that worker's next message and delivers it. It stops when no
+  timeout is queued and no worker is busy.
+
+Decode order:
+
+1. `openFile(log, path, "")`, then settle: the `initial` phase.
+2. Fire every source's interval once (no active tab or sidebar fields) and settle; repeat until a
+   round creates no worker and posts no message.
+3. `loadAllFields()` on the root and settle; repeat from step 2 until a whole pass does nothing.
+   Child sources (embedded `log:` fields) go through the same steps. This is the `full` phase.
+
+The dump is CVE-1 JSONL, written for `initial` and then for `full`:
+
+```text
+{"phase", "status", "loadingFields", "fieldCount"}         status: HistoricalDataSourceStatus name
+{"key", "type", "timestamps", "values", "structuredType", "wpilibType", "metadataString",
+ "stripingReference", "typeWarning"}                         one line per field, getFieldKeys() order
+{"generatedParents"}
+{"timestampRange", "timestampZero"}                          raw state; null before any data
+{"structSchemaStrings", "structSchemas"}
+{"protoDescriptors"}
+{"queuedStructs", "queuedStructArrays", "queuedProtos"}
+```
+
+`export` decodes like `decode` (through `full`), then runs the real `exportWorker` bundle through
+upstream's `WorkerManager` on `log.toSerialized()`, as `prepare-export` does, and writes what main's
+`write-export` would: a string as UTF-8 (lone surrogates become U+FFFD), bytes as they are. Exit
+status 3 means the worker rejected (the hub's "Failed to export data"); 4 means the run was
+skipped. Two option sets are skipped because upstream would never finish:
+
+- `fixed` sampling when `(range[1] - range[0]) / (samplingPeriod / 1000)` is not at most the
+  sample limit (100000 by default), or when adding the step to either end of the range leaves it
+  unchanged;
+- `mcap` with `fixed` or `akit` sampling when this bound exceeds 1048576 (the writer's chunk size):
+  2048, plus for every field whose type is Boolean, Number, String, BooleanArray or NumberArray,
+  64 plus the key's UTF-8 length, plus for each sample timestamp with a value at or before it,
+  31 plus the UTF-8 length of `JSON.stringify({ value })`. The sampled MCAP branch calls
+  `addMessage` without awaiting it, so once a chunk fills, every later message re-finalizes an
+  ever larger chunk.
+
+The port's `asrs-cli decode <file>` must print the same dump and `asrs-cli export <file> --options
+<json>` the same bytes, with the same skip rules, so `cargo xtask parity decode` and `export` can
+compare the two with `cmp`.
+
+`cargo xtask oracle historical` runs every log file of a synthetic corpus (extensions with a
+worker; a `.dsevents` only when it has no `.dslog` sibling) through `decode` and the export matrix
+of `parity/corpus/historical.spec.json` (formats x sampling modes x generated on/off x prefix
+sets), in parallel processes. Outputs land in `target/parity/oracle/<corpus>/<input>/` with an
+`index.jsonl` of every output's hash; `parity/corpus/synthetic/<corpus>.historical.json` commits
+one decode hash and one export-set hash per input. `--check` reruns into
+`target/parity/oracle/<corpus>.check` and fails unless every output is byte-identical.
+
+## Renderer check for protobuf int64
+
+`protoRenderer` (vector `log/proto-renderer`) decodes corpus A's `payload/proto/*` files with the
+real `bundles/wpilogWorker.js` twice: in a module web worker of a hidden Electron `BrowserWindow`
+with the hub's default web preferences (no Node in the page or the worker), and under the oracle
+shims. It fails unless both produce identical `initial` and `fields` messages, then records the
+renderer's. The finding: protobufjs 8.3.0 bundles `long`, so the real renderer decodes 64-bit
+fields as `Long` objects and `putUnknownStruct` expands them into `/low`, `/high` and `/unsigned`
+child fields, exactly as the shim does.
+
+## Canvas harness
+
+`src/canvasMain.ts` runs as a real Electron app (not `ELECTRON_RUN_AS_NODE`) with a hidden
+`BrowserWindow` loading `canvasPage.html`, whose script is `src/canvas/page.ts`. It is driven by
+`cargo xtask canvas` (`cargo xtask oracle canvas` and `oracle canvas-lut` are aliases), which
+starts Electron with `--force-color-profile=srgb --lang=en-US` and, for DOM scenes,
+`--force-device-scale-factor=<1|2>`. These switches must be on the real command line: appended
+from the ESM main they arrive too late and are ignored.
+
+Modes (`electron canvasMain.mjs <mode> <out dir>`):
+
+| Mode | Output |
+|---|---|
+| `canvas [<scene>...]` | `scenes/<scene>.json` and `ref/<scene>.{cpu,gpu}.png`: `getImageData` of the scene on a `willReadFrequently` (CPU) canvas, the reference, and on the default (GPU) canvas |
+| `measure` | `measure.jsonl`: every `TextMetrics` field for each font, string, `textAlign` and `textBaseline` of the label corpus |
+| `canvas-lut` | the calibration scenes `calib-0` to `calib-7` (grey text at each 3-bit luminance) on the CPU canvas |
+| `dom <scale>` | `dom/<scene>@<scale>x.png` from `capturePage`, and `.json` with each row's box and per-character boxes; fails unless the colour patches come back exact |
+| `list` | scene names |
+
+PNGs are straight-alpha RGBA, written with filter 0 and zlib level 9 so equal pixels give equal
+files. `info.json` records the Electron and Chrome versions, platform, architecture and GPU
+feature status.
+
+Scene JSON: `{name, group, gate, width, height, dpr, background, cmds}`. `gate` is `pixel`,
+`text` or `calibration`; `background` is the opaque colour both sides are composited over before
+comparing. `cmds` is a display list replayed call for call:
+
+| Command | Meaning |
+|---|---|
+| `["=", prop, value]` | `ctx[prop] = value`; a value `{"linearGradient": [x0, y0, x1, y1], "stops": [[offset, colour], ...]}` or `{"radialGradient": [x0, y0, r0, x1, y1, r1], "stops": ...}` becomes a gradient |
+| `[method, ...args]` | `ctx[method](...args)`; a string argument `"@id"` is the image source `id` |
+| `["image", id, w, h, rgba]` | defines image source `id` from base64 straight RGBA |
+| `["canvas", id, w, h, cmds]` | replays `cmds` on a new `w`x`h` canvas (same CPU or GPU mode) and keeps it as image source `id` |
+| `["getImageData", sx, sy, sw, sh, "$reg"]` | stores the `ImageData` in register `$reg` |
+| `["putImageData", "$reg" or {width, height, rgba}, dx, dy]` | puts a register or literal `ImageData` |
+
+A port renderer for `cargo xtask canvas run` is called as
+`<program> <args>... <scenes dir> <out dir> [<scene>...]` and writes `<out dir>/<scene>.png` in
+the same straight-alpha form.

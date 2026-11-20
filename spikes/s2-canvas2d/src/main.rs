@@ -206,6 +206,9 @@ fn measure(out: &Path) -> Result<()> {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(String::as_str).unwrap_or("all");
+    if cmd == "port" {
+        return port(&args[2..]);
+    }
     let out = PathBuf::from(args.get(2).cloned().unwrap_or_else(|| "/Volumes/T9/asrs/target/spikes/s2-out".into()));
     match cmd {
         "gen" => write_inputs(&out),
@@ -243,6 +246,54 @@ fn probe() -> Result<()> {
     for gl in &s.glyphs {
         let m = g.rasterize(&f, gl.id, 2.0, 0, [0.0, 0.0, 0.0, 1.0]);
         eprintln!("{:?}", m.map(|m| (m.left, m.top, m.width, m.height, m.data.iter().map(|&v| v as u32).sum::<u32>())));
+    }
+    Ok(())
+}
+
+fn unpremultiply(premultiplied: &[u8]) -> Vec<u8> {
+    premultiplied
+        .chunks_exact(4)
+        .flat_map(|p| {
+            let a = p[3] as u32;
+            if a == 0 {
+                return [0, 0, 0, 0];
+            }
+            let un = |c: u8| ((c as u32 * 255 + a / 2) / a).min(255) as u8;
+            [un(p[0]), un(p[1]), un(p[2]), p[3]]
+        })
+        .collect()
+}
+
+fn port(args: &[String]) -> Result<()> {
+    let [lut_path, scenes_dir, out_dir, wanted @ ..] = args else {
+        bail!("usage: s2-canvas2d port <lut.bin> <scenes dir> <out dir> [<scene>...]");
+    };
+    let bytes = fs::read(lut_path)?;
+    let mut lut = Box::new([[0u8; 256]; 8]);
+    for (row, chunk) in lut.iter_mut().zip(bytes.chunks_exact(256)) {
+        row.copy_from_slice(chunk);
+    }
+    let _ = LUTS.set(lut);
+    fs::create_dir_all(out_dir)?;
+    let mut names: Vec<String> = fs::read_dir(scenes_dir)?
+        .filter_map(|e| e.ok()?.file_name().to_str()?.strip_suffix(".json").map(str::to_owned))
+        .filter(|n| wanted.is_empty() || wanted.contains(n))
+        .collect();
+    names.sort();
+    std::panic::set_hook(Box::new(|_| {}));
+    for name in names {
+        let scene: scenes::Scene = serde_json::from_slice(&fs::read(Path::new(scenes_dir).join(format!("{name}.json")))?)?;
+        let rendered = std::panic::catch_unwind(|| {
+            let mut be = backend("ct-lut");
+            Canvas::run(&scene, be.as_mut())
+        });
+        match rendered {
+            Ok(pixmap) => {
+                let img = image::RgbaImage::from_raw(pixmap.width(), pixmap.height(), unpremultiply(pixmap.data())).unwrap();
+                img.save(Path::new(out_dir).join(format!("{name}.png")))?;
+            }
+            Err(_) => eprintln!("{name}: uses calls the spike does not implement, skipped"),
+        }
     }
     Ok(())
 }
