@@ -5,6 +5,10 @@
 //! of the glibc routines V8 bundles under `third_party/glibc` (`v8_use_libm_trig_functions`).
 //! `pow` is the exception: V8 defaults to `--use-std-math-pow`, so it calls the platform C
 //! library's `pow`, and so does [`pow`] here.
+//!
+//! NaN payloads follow the arm64 build (first NaN operand of `fmax`/`fmin`, the operand order
+//! clang chose for upstream's `x + y`); x64 needs its own sweep. Signaling NaN inputs are out of
+//! contract: V8's builtins and optimized code quiet them differently.
 
 pub mod bigint;
 mod bits;
