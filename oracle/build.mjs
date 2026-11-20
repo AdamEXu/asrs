@@ -128,6 +128,7 @@ const entries = [
   "genThree",
   "genPhoton",
   "genCameraControls",
+  "genModel",
   "decode",
   "export",
   "historicalRun",
