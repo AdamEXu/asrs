@@ -4,6 +4,7 @@ mod canvas_cmd;
 mod decode;
 mod fn_cmd;
 mod functions;
+mod geometry;
 mod js_color;
 mod js_json;
 mod js_math;

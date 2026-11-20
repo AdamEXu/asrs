@@ -125,6 +125,7 @@ const entries = [
   "genStruct",
   "genLogField",
   "genLog",
+  "genGeometry",
   "genThree",
   "genPhoton",
   "genCameraControls",
