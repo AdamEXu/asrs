@@ -18,6 +18,46 @@
     ]
   },
   "vectors": {
+    "assets/builtin": {
+      "cases": 11,
+      "content": "24546c58dd38ab92",
+      "generator": "0d9e9846f029f05a",
+      "spec": "parity/specs/assets/builtin.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "assets/bundled": {
+      "cases": 4,
+      "content": "2696e7b72672cdf5",
+      "generator": "8355a934ca9eec4c",
+      "spec": "parity/specs/assets/bundled.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "assets/malformed": {
+      "cases": 400,
+      "content": "93a3c60821a3f221",
+      "generator": "8d70712db57922a0",
+      "spec": "parity/specs/assets/malformed.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "assets/parsers": {
+      "cases": 276,
+      "content": "26217e89b5e279e9",
+      "generator": "72eb041cb36e0688",
+      "spec": "parity/specs/assets/parsers.jsonl",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "assets/release": {
+      "cases": 161,
+      "content": "5cbdc51ca1a98070",
+      "generator": "d71c34f97843ce05",
+      "spec": "parity/specs/assets/release.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "cve1/identity": {
       "cases": 7,
       "content": "c50fd3a6eb87c9e4",
