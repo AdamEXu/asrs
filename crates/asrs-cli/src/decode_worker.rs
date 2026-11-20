@@ -1,7 +1,8 @@
 //! `asrs-cli decode-worker <log file>`: drives the file's decode worker on its own and prints
 //! every message it posts, matching `oracle decodeWorker` (oracle/src/decodeWorker.ts). Where
 //! upstream's worker never returns, the output stops there and the exit code is
-//! `NEVER_COMPLETES`.
+//! `NEVER_COMPLETES`. The worker's `Date` is frozen at `WORKER_NOW` on both sides, so
+//! progress throttled on wall-clock time does not depend on machine load.
 
 use std::io::Write as _;
 use std::process::ExitCode;
@@ -18,11 +19,13 @@ use asrs_log::log::robot_state::{
 use asrs_parity::Value;
 use asrs_services::historical_start;
 
-use crate::decode::{NEVER_COMPLETES, UNMODELED, WORKER_FROZEN_MS, dump_log};
+use crate::decode::{NEVER_COMPLETES, UNMODELED, dump_log};
 use crate::log_field::{serialized_value, string_value};
 
 const USAGE: &str = "usage: asrs-cli decode-worker <log file>";
 const MISSING_KEY: &str = "/asrs-oracle/missing";
+/// `WORKER_NOW` in oracle/src/decodeWorker.ts.
+const WORKER_NOW: f64 = 1_767_225_600_000.0;
 
 fn message_lines(response: Response) -> Vec<String> {
     match response {
@@ -133,7 +136,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut worker = match create_worker(
         name,
         Box::new(V8MathRandom::from_entropy()),
-        Box::new(SetClock(WORKER_FROZEN_MS)),
+        Box::new(SetClock(WORKER_NOW)),
     ) {
         Ok(worker) => worker,
         Err(unported) => {
