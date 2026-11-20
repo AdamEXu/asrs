@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use asrs_js::json;
+use asrs_js::math;
 use asrs_js::number;
 use asrs_js::regex::sites::{is_csv_byte, is_csv_bytes};
 use asrs_js::string::{JsString, TextDecoder};
@@ -37,7 +38,7 @@ fn caught(result: Result<(), LogError>) -> Result<bool, Abort> {
 
 /// `Number.isInteger(byte) && byte >= 0 && byte <= 255`.
 fn is_byte(value: f64) -> bool {
-    value.is_finite() && value.trunc() == value && (0.0..=255.0).contains(&value)
+    value.is_finite() && math::trunc(value) == value && (0.0..=255.0).contains(&value)
 }
 
 /// The `try` block of the multi-byte raw branch; `Err` is the thrown `"Invalid byte"` string.
