@@ -2,9 +2,11 @@
 
 pub mod color;
 pub mod display;
+pub mod hairline;
 pub mod path;
 pub mod pixels;
 pub mod raster;
+pub mod scan;
 pub mod text;
 pub mod trace;
 

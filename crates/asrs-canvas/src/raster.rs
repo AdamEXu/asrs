@@ -2,15 +2,17 @@ use std::collections::HashMap;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
-    BlendMode, FillRule, FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient,
-    Paint, Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Stroke, StrokeDash,
+    FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
+    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Stroke, StrokeDash,
     Transform,
 };
 
 use crate::color::{self, Rgba};
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
+use crate::hairline;
 use crate::path::{Affine, Path};
 use crate::pixels;
+use crate::scan::{self, Blend, Coverage, div255};
 use crate::text::lut::MaskGammaLut;
 use crate::text::{FontSpec, TextBackend, baseline_offset, glyph_origin};
 
@@ -106,8 +108,15 @@ pub struct Raster<'a> {
 }
 
 enum Source {
+    Solid([u8; 4]),
     Shader(Shader<'static>),
-    Pixmap(Pixmap),
+    Device(Pixmap),
+    Image {
+        pixmap: Pixmap,
+        transform: Affine,
+        quality: FilterQuality,
+        opacity: f32,
+    },
 }
 
 /// The only way any stroke reaches the pixmap: dashed, outlined and filled. tiny-skia's
@@ -148,10 +157,6 @@ fn validate_rect(x: f64, y: f64, w: f64, h: f64) -> Option<[f64; 4]> {
 
 fn to_int32(v: f64) -> i64 {
     if v.is_finite() { v.trunc() as i64 } else { 0 }
-}
-
-fn div255(v: u32) -> u32 {
-    (v + ((v + 128) >> 8) + 128) >> 8
 }
 
 impl<'a> Raster<'a> {
@@ -424,14 +429,25 @@ impl<'a> Raster<'a> {
         }
     }
 
-    fn source(&self, fill: &Fill) -> Option<Source> {
+    /// The paint source for `fill` with the paint alpha scaled by `coverage_scale / 256`, the
+    /// way `SkDraw::drawPath` modulates a thin stroke drawn as a hairline.
+    fn source(&self, fill: &Fill, coverage_scale: u32) -> Option<Source> {
         let alpha = self.state.alpha as f32;
         let ctm = self.state.transform;
+        let modulate = |a: f32| {
+            if coverage_scale >= 256 {
+                a
+            } else {
+                let a8 = (a * 255.0 + 0.5) as u32;
+                ((a8 * coverage_scale) >> 8) as f32 / 255.0
+            }
+        };
         let stops = |stops: &[(f32, Rgba)]| -> Vec<GradientStop> {
+            let scale = modulate(1.0);
             stops
                 .iter()
                 .map(|&(offset, c)| {
-                    let c = c.with_alpha_scaled(alpha);
+                    let c = c.with_alpha_scaled(alpha * scale);
                     Some(GradientStop::new(
                         offset,
                         tiny_skia::Color::from_rgba(c.r, c.g, c.b, c.a)?,
@@ -443,10 +459,10 @@ impl<'a> Raster<'a> {
         let point = |x: f64, y: f64| Point::from_xy(x as f32, y as f32);
         match fill {
             Fill::Color(c) => {
-                let c = c.with_alpha_scaled(alpha);
-                Some(Source::Shader(Shader::SolidColor(
-                    tiny_skia::Color::from_rgba(c.r, c.g, c.b, c.a)?,
-                )))
+                let a = modulate(c.a * alpha);
+                Some(Source::Solid(
+                    [c.r * a, c.g * a, c.b * a, a].map(|v| (v * 255.0 + 0.5) as u8),
+                ))
             }
             Fill::Linear(_, s) | Fill::Radial(_, s) if s.is_empty() => None,
             Fill::Linear([x0, y0, x1, y1], s) => {
@@ -494,20 +510,20 @@ impl<'a> Raster<'a> {
                     )
                     .map(Source::Shader);
                 }
-                self.conical_pixmap([x0, y0, r0, x1, y1, r1], s)
-                    .map(Source::Pixmap)
+                self.conical_pixmap([x0, y0, r0, x1, y1, r1], s, modulate(1.0))
+                    .map(Source::Device)
             }
         }
     }
 
     /// The canvas-spec two-point conical gradient evaluated at every device pixel centre, for
     /// the start-radius cases tiny-skia's focal gradient cannot express.
-    fn conical_pixmap(&self, g: [f64; 6], stops: &[(f32, Rgba)]) -> Option<Pixmap> {
+    fn conical_pixmap(&self, g: [f64; 6], stops: &[(f32, Rgba)], scale: f32) -> Option<Pixmap> {
         let inverse = self.state.transform.inverse()?;
         let [x0, y0, r0, x1, y1, r1] = g;
         let (cdx, cdy, dr) = (x1 - x0, y1 - y0, r1 - r0);
         let a = cdx * cdx + cdy * cdy - dr * dr;
-        let alpha = self.state.alpha as f32;
+        let alpha = self.state.alpha as f32 * scale;
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
         let mut out = Pixmap::new(w, h)?;
         let data = out.data_mut();
@@ -552,27 +568,64 @@ impl<'a> Raster<'a> {
         Some(out)
     }
 
-    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, anti_alias: bool) {
-        let Some(source) = self.source(fill) else {
+    /// Blends `source` through `coverage`. Shaders are evaluated over the coverage bounds into
+    /// a scratch pixmap first, then blended with the same 8-bit arithmetic as solid colours.
+    fn paint(&mut self, coverage: &Coverage, source: &Source) {
+        match source {
+            Source::Solid(color) => {
+                scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |_, _| *color)
+            }
+            Source::Device(pixmap) => {
+                let stride = pixmap.width() as usize;
+                let data = pixmap.data();
+                scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |x, y| {
+                    let i = (y * stride + x) * 4;
+                    [data[i], data[i + 1], data[i + 2], data[i + 3]]
+                });
+            }
+            Source::Shader(shader) => {
+                if let Some(scratch) = shade(coverage, shader.clone()) {
+                    self.blit_scratch(coverage, &scratch);
+                }
+            }
+            Source::Image {
+                pixmap,
+                transform,
+                quality,
+                opacity,
+            } => {
+                let shader = Pattern::new(
+                    pixmap.as_ref(),
+                    SpreadMode::Pad,
+                    *quality,
+                    *opacity,
+                    transform.to_skia(),
+                );
+                if let Some(scratch) = shade(coverage, shader) {
+                    self.blit_scratch(coverage, &scratch);
+                }
+            }
+        }
+    }
+
+    fn blit_scratch(&mut self, coverage: &Coverage, scratch: &Pixmap) {
+        let stride = scratch.width() as usize;
+        let data = scratch.data();
+        let (ox, oy) = (coverage.x as usize, coverage.y as usize);
+        scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |x, y| {
+            let i = ((y - oy) * stride + (x - ox)) * 4;
+            [data[i], data[i + 1], data[i + 2], data[i + 3]]
+        });
+    }
+
+    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, coverage_scale: u32) {
+        let Some(source) = self.source(fill, coverage_scale) else {
             return;
         };
-        let shader = match &source {
-            Source::Shader(s) => s.clone(),
-            Source::Pixmap(p) => Pattern::new(
-                p.as_ref(),
-                SpreadMode::Pad,
-                FilterQuality::Nearest,
-                1.0,
-                Transform::identity(),
-            ),
-        };
-        let paint = Paint {
-            shader,
-            anti_alias,
-            ..Paint::default()
-        };
-        self.pixmap
-            .fill_path(path, &paint, FillRule::Winding, Transform::identity(), None);
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        if let Some(coverage) = scan::rasterize(path, w, h) {
+            self.paint(&coverage, &source);
+        }
     }
 
     fn fill_current_path(&mut self) {
@@ -582,27 +635,45 @@ impl<'a> Raster<'a> {
         let ctm = self.state.transform;
         if let Some(path) = self.path.to_skia(Some(&ctm), CONIC_TOLERANCE) {
             let fill = self.state.fill.clone();
-            self.fill_device(&path, &fill, true);
+            self.fill_device(&path, &fill, 256);
         }
+    }
+
+    fn dash(&self) -> Option<StrokeDash> {
+        let s = &self.state;
+        if s.dash.is_empty() {
+            return None;
+        }
+        StrokeDash::new(
+            s.dash.iter().map(|&v| v as f32).collect(),
+            s.dash_offset as f32,
+        )
     }
 
     fn stroke_style(&self) -> Stroke {
         let s = &self.state;
-        let dash = if s.dash.is_empty() {
-            None
-        } else {
-            StrokeDash::new(
-                s.dash.iter().map(|&v| v as f32).collect(),
-                s.dash_offset as f32,
-            )
-        };
         Stroke {
             width: s.line_width as f32,
             miter_limit: s.miter_limit as f32,
             line_cap: s.line_cap,
             line_join: s.line_join,
-            dash,
+            dash: self.dash(),
         }
+    }
+
+    /// `SkDrawTreatAsHairline`: a stroke whose width maps to at most one device pixel on both
+    /// axes is drawn one pixel wide with its alpha scaled by the mean mapped width.
+    fn hairline_coverage(&self) -> Option<f32> {
+        let m = self.state.transform.to_skia();
+        let w = self.state.line_width as f32;
+        let fast_len = |x: f32, y: f32| {
+            let (x, y) = (x.abs(), y.abs());
+            let (big, small) = if x < y { (y, x) } else { (x, y) };
+            big + small * 0.5
+        };
+        let len0 = fast_len(m.sx * w, m.ky * w);
+        let len1 = fast_len(m.kx * w, m.sy * w);
+        (len0 <= 1.0 && len1 <= 1.0).then_some((len0 + len1) * 0.5)
     }
 
     fn stroke_user_path(&mut self, path: &Path) {
@@ -614,12 +685,33 @@ impl<'a> Raster<'a> {
         let Some(user) = path.to_skia(None, CONIC_TOLERANCE / res_scale) else {
             return;
         };
+        let stroke = self.state.stroke.clone();
+        if let Some(coverage) = self.hairline_coverage() {
+            let dashed = match self.dash() {
+                Some(dash) => user.dash(&dash, res_scale),
+                None => Some(user),
+            };
+            let Some(device) = dashed.and_then(|p| p.transform(ctm)) else {
+                return;
+            };
+            let Some(source) = self.source(&stroke, (coverage * 256.0) as u32) else {
+                return;
+            };
+            let (w, h) = (self.pixmap.width(), self.pixmap.height());
+            for (a, b) in hairline::segments(&device, self.state.line_cap) {
+                if let Some(band) = hairline::band(a, b)
+                    && let Some(coverage) = scan::rasterize(&band, w, h)
+                {
+                    self.paint(&coverage, &source);
+                }
+            }
+            return;
+        }
         let Some(outline) = stroke_outline(&user, &self.stroke_style(), res_scale) else {
             return;
         };
         if let Some(device) = outline.transform(ctm) {
-            let stroke = self.state.stroke.clone();
-            self.fill_device(&device, &stroke, true);
+            self.fill_device(&device, &stroke, 256);
         }
     }
 
@@ -646,6 +738,42 @@ impl<'a> Raster<'a> {
         path
     }
 
+    /// Coverage of a user rect: exact area when antialiased, Skia's rounded edges otherwise.
+    fn rect_coverage(&self, rect: [f64; 4], anti_alias: bool) -> Option<Coverage> {
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        if !anti_alias && let Some(device) = self.device_rect(rect) {
+            let round = |v: f32| (v + 0.5).floor().clamp(0.0, 1e9) as i64;
+            let (l, t) = (round(device.left()), round(device.top()));
+            let r = round(device.right()).min(i64::from(w));
+            let b = round(device.bottom()).min(i64::from(h));
+            if l >= r || t >= b {
+                return None;
+            }
+            let (cw, ch) = ((r - l) as usize, (b - t) as usize);
+            return Some(Coverage {
+                x: l as i32,
+                y: t as i32,
+                width: cw,
+                height: ch,
+                alpha: vec![255; cw * ch],
+            });
+        }
+        let ctm = self.state.transform;
+        let path = self.rect_path(rect).to_skia(Some(&ctm), CONIC_TOLERANCE)?;
+        let coverage = scan::rasterize(&path, w, h)?;
+        if anti_alias {
+            return Some(coverage);
+        }
+        Some(Coverage {
+            alpha: coverage
+                .alpha
+                .iter()
+                .map(|&a| if a >= 128 { 255 } else { 0 })
+                .collect(),
+            ..coverage
+        })
+    }
+
     fn fill_rect(&mut self, x: f64, y: f64, w: f64, h: f64) {
         let Some(rect) = validate_rect(x, y, w, h) else {
             return;
@@ -654,34 +782,10 @@ impl<'a> Raster<'a> {
             return;
         }
         let fill = self.state.fill.clone();
-        match self.device_rect(rect) {
-            Some(device) => {
-                let Some(source) = self.source(&fill) else {
-                    return;
-                };
-                let shader = match &source {
-                    Source::Shader(s) => s.clone(),
-                    Source::Pixmap(p) => Pattern::new(
-                        p.as_ref(),
-                        SpreadMode::Pad,
-                        FilterQuality::Nearest,
-                        1.0,
-                        Transform::identity(),
-                    ),
-                };
-                let paint = Paint {
-                    shader,
-                    anti_alias: true,
-                    ..Paint::default()
-                };
-                fill_device_rect(&mut self.pixmap, device, &paint);
-            }
-            None => {
-                let ctm = self.state.transform;
-                if let Some(path) = self.rect_path(rect).to_skia(Some(&ctm), CONIC_TOLERANCE) {
-                    self.fill_device(&path, &fill, true);
-                }
-            }
+        if let (Some(source), Some(coverage)) =
+            (self.source(&fill, 256), self.rect_coverage(rect, true))
+        {
+            self.paint(&coverage, &source);
         }
     }
 
@@ -696,11 +800,62 @@ impl<'a> Raster<'a> {
             path.close();
             path
         } else {
+            if self.frame_rect([x, y, w, h]) {
+                return;
+            }
             self.rect_path([x, y, w, h])
         };
         self.stroke_user_path(&path);
     }
 
+    /// `SkDraw::drawRect` strokes an axis-aligned rect with mitred corners as a frame: the
+    /// exact area between the rect grown and shrunk by half the device stroke size.
+    fn frame_rect(&mut self, rect: [f64; 4]) -> bool {
+        let s = &self.state;
+        if !s.dash.is_empty()
+            || s.line_join != LineJoin::Miter
+            || s.miter_limit < std::f64::consts::SQRT_2
+            || !self.invertible()
+        {
+            return false;
+        }
+        let Some(device) = self.device_rect(rect) else {
+            return false;
+        };
+        let m = s.transform.to_skia();
+        let lw = s.line_width as f32;
+        let (hx, hy) = ((lw * m.sx).abs() * 0.5, (lw * m.sy).abs() * 0.5);
+        let outer = Rect::from_ltrb(
+            device.left() - hx,
+            device.top() - hy,
+            device.right() + hx,
+            device.bottom() + hy,
+        );
+        let mut builder = PathBuilder::new();
+        if let Some(outer) = outer {
+            builder.push_rect(outer);
+        }
+        let (il, it, ir, ib) = (
+            device.left() + hx,
+            device.top() + hy,
+            device.right() - hx,
+            device.bottom() - hy,
+        );
+        if il < ir && it < ib {
+            builder.move_to(il, it);
+            builder.line_to(il, ib);
+            builder.line_to(ir, ib);
+            builder.line_to(ir, it);
+            builder.close();
+        }
+        if let Some(frame) = builder.finish() {
+            let stroke = s.stroke.clone();
+            self.fill_device(&frame, &stroke, 256);
+        }
+        true
+    }
+
+    /// `clearRect` paints with its own flags: clear blend, no antialiasing, no global alpha.
     fn clear_rect(&mut self, x: f64, y: f64, w: f64, h: f64) {
         let Some(rect) = validate_rect(x, y, w, h) else {
             return;
@@ -708,25 +863,8 @@ impl<'a> Raster<'a> {
         if !self.invertible() {
             return;
         }
-        let paint = Paint {
-            blend_mode: BlendMode::Clear,
-            anti_alias: false,
-            ..Paint::default()
-        };
-        match self.device_rect(rect) {
-            Some(device) => fill_device_rect(&mut self.pixmap, device, &paint),
-            None => {
-                let ctm = self.state.transform;
-                if let Some(path) = self.rect_path(rect).to_skia(Some(&ctm), CONIC_TOLERANCE) {
-                    self.pixmap.fill_path(
-                        &path,
-                        &paint,
-                        FillRule::Winding,
-                        Transform::identity(),
-                        None,
-                    );
-                }
-            }
+        if let Some(coverage) = self.rect_coverage(rect, false) {
+            scan::blit(&mut self.pixmap, &coverage, Blend::Clear, |_, _| [0; 4]);
         }
     }
 
@@ -835,24 +973,9 @@ impl<'a> Raster<'a> {
             (clipped[2] - clipped[0]) * kx,
             (clipped[3] - clipped[1]) * ky,
         ];
-        let crop = [
-            clipped[0].floor(),
-            clipped[1].floor(),
-            clipped[2].ceil(),
-            clipped[3].ceil(),
-        ];
-        let Some(sub) = crop_pixmap(
-            image,
-            crop[0] as u32,
-            crop[1] as u32,
-            (crop[2] - crop[0]) as u32,
-            (crop[3] - crop[1]) as u32,
-        ) else {
-            return;
-        };
         let src = [
-            clipped[0] - crop[0],
-            clipped[1] - crop[1],
+            clipped[0],
+            clipped[1],
             clipped[2] - clipped[0],
             clipped[3] - clipped[1],
         ];
@@ -872,23 +995,15 @@ impl<'a> Raster<'a> {
             && m.b == 0.0
             && m.c == 0.0
             && (m.e.fract() != 0.0 || m.f.fract() != 0.0);
-        let (pattern_image, pattern_ts) = if quality == FilterQuality::Bilinear && fractional_shift
-        {
+        let (pixmap, transform) = if quality == FilterQuality::Bilinear && fractional_shift {
             let (fx, fy) = (m.e - m.e.floor(), m.f - m.f.floor());
             (
-                shift_bilinear(&sub, fx as f32, fy as f32),
+                shift_bilinear(image, fx as f32, fy as f32),
                 Affine::translation(m.e.floor(), m.f.floor()),
             )
         } else {
-            (sub, m)
+            (image.clone(), m)
         };
-        let shader = Pattern::new(
-            pattern_image.as_ref(),
-            SpreadMode::Pad,
-            quality,
-            self.state.alpha as f32,
-            pattern_ts.to_skia(),
-        );
         let anti_alias = if ctm.is_scale_translate() {
             dst[2] * ctm.a.abs() < 1.0 || dst[3] * ctm.d.abs() < 1.0
         } else if ctm.a == 0.0 && ctm.d == 0.0 {
@@ -896,45 +1011,30 @@ impl<'a> Raster<'a> {
         } else {
             true
         };
-        let paint = Paint {
-            shader,
-            anti_alias,
-            ..Paint::default()
+        let source = Source::Image {
+            pixmap,
+            transform,
+            quality,
+            opacity: self.state.alpha as f32,
         };
-        match self.device_rect(dst) {
-            Some(device) => fill_device_rect(&mut self.pixmap, device, &paint),
-            None => {
-                if let Some(path) = self.rect_path(dst).to_skia(Some(&ctm), CONIC_TOLERANCE) {
-                    self.pixmap.fill_path(
-                        &path,
-                        &paint,
-                        FillRule::Winding,
-                        Transform::identity(),
-                        None,
-                    );
-                }
-            }
+        if let Some(coverage) = self.rect_coverage(dst, anti_alias) {
+            self.paint(&coverage, &source);
         }
     }
 }
 
-/// Skia rounds each edge of a non-antialiased rect; tiny-skia rounds the width instead.
-fn fill_device_rect(pixmap: &mut Pixmap, rect: Rect, paint: &Paint<'_>) {
-    let rect = if paint.anti_alias {
-        rect
-    } else {
-        let round = |v: f32| (v + 0.5).floor();
-        match Rect::from_ltrb(
-            round(rect.left()),
-            round(rect.top()),
-            round(rect.right()),
-            round(rect.bottom()),
-        ) {
-            Some(r) if r.width() >= 1.0 && r.height() >= 1.0 => r,
-            _ => return,
-        }
+/// Evaluates `shader` (device space) at the pixel centres of the coverage bounds.
+fn shade(coverage: &Coverage, shader: Shader<'_>) -> Option<Pixmap> {
+    let mut scratch = Pixmap::new(coverage.width as u32, coverage.height as u32)?;
+    let (x, y) = (coverage.x as f32, coverage.y as f32);
+    let rect = Rect::from_xywh(x, y, coverage.width as f32, coverage.height as f32)?;
+    let paint = Paint {
+        shader,
+        anti_alias: false,
+        ..Paint::default()
     };
-    pixmap.fill_rect(rect, paint, Transform::identity(), None);
+    scratch.fill_rect(rect, &paint, Transform::from_translate(-x, -y), None);
+    Some(scratch)
 }
 
 fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
@@ -960,21 +1060,6 @@ fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
         }
     }
     stops[stops.len() - 1].1
-}
-
-fn crop_pixmap(image: &Pixmap, x: u32, y: u32, w: u32, h: u32) -> Option<Pixmap> {
-    if x == 0 && y == 0 && w == image.width() && h == image.height() {
-        return Some(image.clone());
-    }
-    let mut out = Pixmap::new(w, h)?;
-    let stride = image.width() as usize * 4;
-    for row in 0..h as usize {
-        let start = (y as usize + row) * stride + x as usize * 4;
-        let dst = row * w as usize * 4;
-        out.data_mut()[dst..dst + w as usize * 4]
-            .copy_from_slice(&image.data()[start..start + w as usize * 4]);
-    }
-    Some(out)
 }
 
 /// The image resampled bilinearly (premultiplied, edge-clamped, as Skia's strict source rect
