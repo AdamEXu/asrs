@@ -107,10 +107,10 @@ fn js_key(key: &JsString) -> String {
     key.as_string().unwrap_or_default()
 }
 
-/// JS `Array#push` throws `RangeError: Invalid array length` once the array would hold
-/// `2^32 - 1` elements, which is where an upstream grid loop ends when the step never
-/// reaches the bound (negative or zero grid size) or needs past `2^32` iterations.
-/// Counting arithmetically reproduces the throw without running the doomed loop.
+/// An upstream grid loop whose step never reaches the bound (negative or zero grid size) or
+/// that needs past `2^32` iterations pushes until V8 throws `RangeError: Invalid array
+/// length`, or, in a renderer with a smaller heap, until it crashes out of memory. The port
+/// reports the RangeError without running the doomed loop.
 fn grid_len_would_throw(bound: f64, step: f64) -> bool {
     const ARRAY_LENGTH_MAX: f64 = 4294967295.0;
     if bound.is_nan() || bound <= 0.0 {

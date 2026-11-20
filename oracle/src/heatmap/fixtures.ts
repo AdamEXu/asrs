@@ -14,6 +14,10 @@ export interface HeatmapUpdate {
 export interface HeatmapFixture {
   name: string;
   updates: HeatmapUpdate[];
+  // A negative field height makes the grid loop push empty columns until V8 gives up: a
+  // RangeError where the heap allows it (the vector), a renderer OOM crash on smaller hosts.
+  // canvasMain leaves these out.
+  nodeOnly?: boolean;
 }
 
 const FIELD: [number, number] = [16.54, 8.21];
@@ -183,6 +187,13 @@ export function heatmapFixtures(): HeatmapFixture[] {
       updates: [
         { translations: [[0, 0]], pixelDimensions: [400, 200], fieldDimensions: [0, 0] },
         { translations: [[0, 0]], pixelDimensions: [400, 200], fieldDimensions: [0, 8.21] },
+        { translations: [[0, 0]], pixelDimensions: [400, 200], fieldDimensions: [NaN, 8.21] }
+      ]
+    },
+    {
+      name: "negative-field-height",
+      nodeOnly: true,
+      updates: [
         { translations: [[0, 0]], pixelDimensions: [400, 200], fieldDimensions: [16.54, -1] },
         { translations: [[0, 0]], pixelDimensions: [400, 200], fieldDimensions: [NaN, 8.21] }
       ]

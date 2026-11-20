@@ -242,6 +242,7 @@ function errorTree(error: PageError | null): unknown {
 async function heatmap(win: BrowserWindow, out: string) {
   const dir = path.join(out, "heatmap");
   for (const [index, fixture] of heatmapFixtures().entries()) {
+    if (fixture.nodeOnly) continue;
     const results: HeatmapResult[] = await win.webContents.executeJavaScript(`heatmapRun(${index})`);
     writeJson(path.join(dir, `${fixture.name}.fixture.json`), {
       name: fixture.name,
