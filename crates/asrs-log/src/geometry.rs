@@ -5,7 +5,9 @@ use asrs_js::math;
 use asrs_js::number;
 use asrs_js::string::JsString;
 
-use crate::log::{Log, LoggableType, RawValue};
+use crate::log::log_util::{get_or_default, get_value_at};
+use crate::log::robot_state::{self, RobotMode};
+use crate::log::{Log, RawValue};
 use crate::units;
 use crate::util;
 
@@ -128,12 +130,13 @@ pub enum Alliance {
     Blue,
 }
 
-/// `"radians" | "degrees"` for `grabPosesAuto`'s `numberRotationUnits`.
-/// Upstream only checks `=== "degrees"`; everything else behaves as radians.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// `grabPosesAuto`'s `numberRotationUnits`. Upstream only checks
+/// `=== "degrees"`, so anything else (including `undefined`) is radians.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RotationUnits {
+    #[default]
+    Radians,
     Degrees,
-    Other,
 }
 
 /// `timeRange` for `grabHeatmapData`.
@@ -431,30 +434,8 @@ pub fn convert_from_coordinate_system<P: ConvertPose>(
 
 // LOG READING UTILITIES
 
-/// `getOrDefault` with the defaults the grab functions use (`0`, `null`,
-/// `undefined`). Kept local so the signatures stay positional like upstream.
 fn number_or(log: &Log, key: JsString, timestamp: f64, uuid: Option<&str>) -> f64 {
-    crate::log::log_util::get_or_default(log, &key, timestamp, 0.0, uuid)
-}
-
-fn number_or_undef(log: &Log, key: JsString, timestamp: f64, uuid: Option<&str>) -> Option<f64> {
-    if log.get_type(&key) == Some(LoggableType::Number)
-        && let Some(data) = log.get::<f64>(&key, timestamp, timestamp, uuid, None)
-        && data.timestamps.first().is_some_and(|t| *t <= timestamp)
-    {
-        return Some(data.values[0]);
-    }
-    None
-}
-
-fn raw_or_null(log: &Log, key: JsString, timestamp: f64, uuid: Option<&str>) -> Option<RawValue> {
-    if log.get_type(&key) == Some(LoggableType::Raw)
-        && let Some(data) = log.get::<RawValue>(&key, timestamp, timestamp, uuid, None)
-        && data.timestamps.first().is_some_and(|t| *t <= timestamp)
-    {
-        return Some(data.values[0].clone());
-    }
-    None
+    get_or_default(log, &key, timestamp, 0.0, uuid)
 }
 
 fn child(key: &JsString, suffix: &str) -> JsString {
@@ -711,7 +692,7 @@ pub fn grab_translation_2d_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     // Read directly from the raw WPILib struct byte array when present
     // (#477 workaround for large game piece pose arrays).
-    if let Some(raw_data) = raw_or_null(log, key.clone(), timestamp, uuid) {
+    if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
         // A Translation2d WPILib struct is 2 little-endian doubles (16 bytes).
         let mut i = 0usize;
@@ -752,7 +733,7 @@ pub fn grab_translation_3d_array(
     timestamp: f64,
     uuid: Option<&str>,
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
-    if let Some(raw_data) = raw_or_null(log, key.clone(), timestamp, uuid) {
+    if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
         // A Translation3d WPILib struct is 3 little-endian doubles (24 bytes).
         let mut i = 0usize;
@@ -864,7 +845,7 @@ pub fn grab_pose_2d_array(
     uuid: Option<&str>,
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     // A Pose2d/Transform2d WPILib struct is 3 little-endian doubles (24 bytes).
-    if let Some(raw_data) = raw_or_null(log, key.clone(), timestamp, uuid) {
+    if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
         let mut i = 0usize;
         while i + 24 <= raw_data.len() {
@@ -920,7 +901,7 @@ pub fn grab_pose_3d_array(
     uuid: Option<&str>,
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     // A Pose3d/Transform3d WPILib struct is 7 little-endian doubles (56 bytes).
-    if let Some(raw_data) = raw_or_null(log, key.clone(), timestamp, uuid) {
+    if let Some(raw_data) = get_value_at::<RawValue>(log, key, timestamp, uuid) {
         let mut poses = Vec::new();
         let mut i = 0usize;
         while i + 56 <= raw_data.len() {
@@ -996,7 +977,7 @@ pub fn grab_april_tag(
         },
         annotation: PoseAnnotations {
             has_april_tag_id: true,
-            april_tag_id: number_or_undef(log, child(key, "/ID"), timestamp, uuid),
+            april_tag_id: get_value_at(log, &child(key, "/ID"), timestamp, uuid),
             is_2d_source: false,
             ..PoseAnnotations::default()
         },
@@ -1034,7 +1015,7 @@ pub fn grab_heatmap_data(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     let mut poses = Vec::new();
     let is_full_log = time_range == HeatmapTimeRange::Full;
-    let state_ranges = (!is_full_log).then(|| crate::log::robot_state::get_robot_state_ranges(log));
+    let state_ranges = (!is_full_log).then(|| robot_state::get_robot_state_ranges(log));
     let is_valid = |timestamp: f64| -> Result<bool, GeometryError> {
         if is_full_log {
             return Ok(true);
@@ -1044,17 +1025,11 @@ pub fn grab_heatmap_data(
         };
         let current = state_ranges.iter().rfind(|range| range.start <= timestamp);
         Ok(match time_range {
-            HeatmapTimeRange::Enabled => {
-                current.map(|r| r.mode) != Some(crate::log::robot_state::RobotMode::Disabled)
-            }
-            HeatmapTimeRange::Auto => {
-                current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Auto)
-            }
-            HeatmapTimeRange::Teleop => {
-                current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Teleop)
-            }
+            HeatmapTimeRange::Enabled => current.map(|r| r.mode) != Some(RobotMode::Disabled),
+            HeatmapTimeRange::Auto => current.map(|r| r.mode) == Some(RobotMode::Auto),
+            HeatmapTimeRange::Teleop => current.map(|r| r.mode) == Some(RobotMode::Teleop),
             HeatmapTimeRange::TeleopNoEndgame => {
-                current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Teleop)
+                current.map(|r| r.mode) == Some(RobotMode::Teleop)
                     && current
                         .and_then(|r| r.end)
                         .is_some_and(|end| end - timestamp > 30.0)
@@ -1081,7 +1056,7 @@ pub fn grab_heatmap_data(
                 log_type,
                 sample_time,
                 uuid,
-                RotationUnits::Other,
+                RotationUnits::Radians,
             )?);
         }
         sample_time += HEATMAP_DT;

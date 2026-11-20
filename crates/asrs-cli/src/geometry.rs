@@ -385,7 +385,7 @@ fn rotation_units(v: &Value) -> RotationUnits {
     if strict_equal(v, &Value::string("degrees")) {
         RotationUnits::Degrees
     } else {
-        RotationUnits::Other
+        RotationUnits::Radians
     }
 }
 
@@ -436,14 +436,8 @@ fn module_velocities(vs: &[ModuleVelocitySample]) -> Value {
     )
 }
 
-/// A thrown error inside a call's `{throw: ...}` slot, like the oracle's
-/// per-call error capture.
-fn throw_named(name: &str, message: &str) -> Value {
-    Value::object([("throw", Value::Error(name.into(), message.into()))])
-}
-
 fn throw(e: GeometryError) -> Value {
-    throw_named(e.name(), e.message())
+    Value::object([("throw", Value::Error(e.name().into(), e.message().into()))])
 }
 
 fn grab_call(log: &Log, call: &[Value]) -> Result<Value, Response> {
@@ -603,30 +597,17 @@ fn grab_call(log: &Log, call: &[Value]) -> Result<Value, Response> {
             uuid(5)?.as_deref(),
         )),
         "grabModuleVelocities" => {
-            let raw = &arg(call, 3);
-            let arrangement = match raw {
+            let arrangement = match &arg(call, 3) {
                 Value::Undefined => None,
-                v => js_string(v).ok(),
+                v => Some(js_string(v).map_err(Response::Error)?),
             };
-            let vs = geometry::grab_module_velocities(
+            ok(module_velocities(&geometry::grab_module_velocities(
                 log,
                 &key()?,
                 ts(2)?,
                 arrangement.as_ref(),
                 uuid(4)?.as_deref(),
-            );
-            match raw {
-                Value::Undefined | Value::String(_) => ok(module_velocities(&vs)),
-                Value::Null if vs.len() == 4 => Ok(throw_named(
-                    "TypeError",
-                    "Cannot read properties of null (reading 'split')",
-                )),
-                _ if vs.len() == 4 => Ok(throw_named(
-                    "TypeError",
-                    "arrangement.split is not a function",
-                )),
-                _ => ok(module_velocities(&vs)),
-            }
+            )))
         }
         "grabRobotVelocities" => {
             let v = geometry::grab_robot_velocities(log, &key()?, ts(2)?, uuid(3)?.as_deref());

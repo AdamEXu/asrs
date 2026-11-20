@@ -383,6 +383,167 @@ const emit = (ops: unknown[][], calls: unknown[][], cache = true) => cases.push(
   );
 }
 
+// Every grabPosesAuto dispatch string against matching child fields.
+{
+  const ops: unknown[][] = [
+    ["putUnknownStruct", "r2", 1, { value: 0.5 }],
+    ["putUnknownStruct", "r3", 1, { q: { w: 0.5, x: 0.5, y: -0.5, z: 0.5 } }],
+    ["putUnknownStruct", "r2s", 1, [{ value: 1 }, { value: -2 }]],
+    ["putUnknownStruct", "r3s", 1, [{ q: { w: 1, x: 0, y: 0, z: 0 } }, { q: { w: 0, x: 0, y: 1, z: 0 } }]],
+    ["putUnknownStruct", "t2", 1, { x: 3, y: 4 }],
+    ["putUnknownStruct", "t3", 1, { x: 3, y: 4, z: 5 }],
+    ["putUnknownStruct", "t2s", 1, [{ x: 1, y: 2 }, { x: 3, y: 4 }]],
+    ["putUnknownStruct", "t3s", 1, [{ x: 1, y: 2, z: 3 }]],
+    ["putUnknownStruct", "p2", 1, pose2(1, 2, 3)],
+    ["putUnknownStruct", "p3", 1, pose3(1, 2, 3, 0, 1, 0, 0)],
+    ["putUnknownStruct", "p2s", 1, [pose2(1, 2, 3)]],
+    ["putUnknownStruct", "p3s", 1, [pose3(1, 2, 3, 0, 1, 0, 0), pose3(4, 5, 6, 1, 0, 0, 0)]]
+  ];
+  const auto = (key: string, type: string) => ["grabPosesAuto", key, type, 1];
+  emit(ops, [
+    auto("r2", "Rotation2d"),
+    auto("r3", "Rotation3d"),
+    auto("r2s", "Rotation2d[]"),
+    auto("r3s", "Rotation3d[]"),
+    auto("t2", "Translation2d"),
+    auto("t3", "Translation3d"),
+    auto("t2s", "Translation2d[]"),
+    auto("t3s", "Translation3d[]"),
+    auto("p2", "Pose2d"),
+    auto("p2", "Transform2d"),
+    auto("p3", "Pose3d"),
+    auto("p3", "Transform3d"),
+    auto("p2s", "Pose2d[]"),
+    auto("p2s", "Transform2d[]"),
+    auto("p3s", "Pose3d[]"),
+    auto("p3s", "Transform3d[]"),
+    auto("p3", "pose3d"),
+    auto("p3", ""),
+    ["grabPose3d", "p3", 1],
+    ["grabChoreoSample", "p3", 1],
+    ["grabTranslation2d", "t3", 1]
+  ]);
+}
+
+// Raw fast paths: every record size with a partial tail, a raw sample later
+// than the read (falls back to /length children), a wrongly typed key, and
+// the uuid argument on the raw read.
+{
+  const ops: unknown[][] = [
+    ["putRaw", "t3tail", 5, new Uint8Array([...pack(1, 2, 3, 4, 5, 6), ...new Uint8Array(23)])],
+    ["putRaw", "t2one", 5, pack(7, 8)],
+    ["putRaw", "late", 50, pack(1, 2, 3, 4, 5, 6, 7)],
+    ["putNumber", "late/length", 5, 1],
+    ["putNumber", "late/0/x", 5, 9],
+    ["putNumber", "late/0/translation/x", 5, 9],
+    ["putNumber", "late/0/translation/z", 5, 10],
+    ["putNumber", "num", 5, 3],
+    ["putNumber", "num/length", 5, 1],
+    ["putRaw", "both", 5, pack(1, 2, 3)],
+    ["putNumber", "both/length", 5, 2],
+    ["putRaw", "twice", 5, pack(1, 2, 3)],
+    ["putRaw", "twice", 6, pack(4, 5, 6, 7, 8, 9)]
+  ];
+  const fns = ["grabTranslation2dArray", "grabTranslation3dArray", "grabPose2dArray", "grabPose3dArray"];
+  emit(ops, [
+    ...fns.flatMap((f) => [
+      [f, "t3tail", 5],
+      [f, "t2one", 5],
+      [f, "late", 10],
+      [f, "late", 60],
+      [f, "num", 5],
+      [f, "both", 5],
+      [f, "twice", 5.5],
+      [f, "twice", 6, "u1"]
+    ]),
+    ["grabPosesAuto", "late", "Pose3d[]", 10],
+    ["grabPosesAuto", "t3tail", "Translation3d[]", 5]
+  ]);
+}
+
+// Heatmap edges: a single-timestamp log never samples (so "visible" without a
+// selection does not throw), an autonomous key of the wrong type empties the
+// state ranges, merge prefixes and the leading-slash rule in findKey, and key
+// priority when several enabled keys exist.
+{
+  emit(
+    [["putUnknownStruct", "pose", 3, pose2(1, 1, 0)]],
+    [
+      ["grabHeatmapData", "pose", "Pose2d", "visible", null],
+      ["grabHeatmapData", "pose", "Pose2d", "full"],
+      ["grabHeatmapData", "pose", "Pose2d", "enabled"]
+    ]
+  );
+  emit([], [["grabHeatmapData", "pose", "Pose2d", "visible", null]]);
+  const pose = ["putUnknownStruct", "pose", 0, pose2(1, 1, 0)];
+  emit(
+    [["putBoolean", "/DriverStation/Enabled", 0, true], ["putNumber", "/DriverStation/Autonomous", 0, 1], ["putNumber", "end", 3, 0], pose],
+    [
+      ["grabHeatmapData", "pose", "Pose2d", "enabled"],
+      ["grabHeatmapData", "pose", "Pose2d", "teleop"],
+      ["grabHeatmapData", "pose", "Pose2d", "auto"]
+    ]
+  );
+  emit(
+    [
+      ["putBoolean", "/Log1/DriverStation/Enabled", 1, true],
+      ["putBoolean", "/Log1/DriverStation/Enabled", 2, false],
+      ["putBoolean", "/Log0/DriverStation/Enabled", 0, false],
+      ["putBoolean", "/Log0/DriverStation/Enabled", 3, true],
+      ["putNumber", "end", 4, 0],
+      pose
+    ],
+    [
+      ["grabHeatmapData", "pose", "Pose2d", "enabled"],
+      ["grabHeatmapData", "pose", "Pose2d", "teleop"]
+    ]
+  );
+  emit(
+    [
+      ["putBoolean", "/RobotEnable", 0, true],
+      ["putBoolean", "/RobotEnable", 2, false],
+      ["putBoolean", "Log2/DS:enabled", 1, true],
+      ["putBoolean", "/DriverStation/Enabled", 3, true],
+      ["putNumber", "end", 4, 0],
+      pose
+    ],
+    [["grabHeatmapData", "pose", "Pose2d", "enabled"]]
+  );
+  emit(
+    [
+      ["putBoolean", "/RobotEnable", 0, true],
+      ["putBoolean", "/RobotEnable", 2, false],
+      ["putBoolean", "Log2/DS:enabled", 1, true],
+      ["putNumber", "end", 4, 0],
+      pose
+    ],
+    [["grabHeatmapData", "pose", "Pose2d", "enabled"]]
+  );
+}
+
+// Module velocity edges: a fractional /length that rounds up to four modules,
+// a NaN /length, and wrongly typed velocity children.
+{
+  const ops: unknown[][] = [
+    ["putNumber", "frac/length", 2, 3.5],
+    ["putNumber", "frac/0/velocity", 2, 1],
+    ["putNumber", "frac/3/velocity", 2, 4],
+    ["putNumber", "frac/3/angle/value", 2, 0.4],
+    ["putNumber", "nan/length", 2, NaN],
+    ["putNumber", "typed/length", 2, 4],
+    ["putString", "typed/0/velocity", 2, "fast"],
+    ["putBoolean", "typed/1/velocity", 2, true],
+    ["putNumber", "typed/2/velocity", 2, 2]
+  ];
+  emit(ops, [
+    ["grabModuleVelocities", "frac", 2],
+    ["grabModuleVelocities", "frac", 2, "3,2,1,0"],
+    ["grabModuleVelocities", "nan", 2, "3,2,1,0"],
+    ["grabModuleVelocities", "typed", 2, "1,2,3,0"],
+    ["grabModuleVelocities", "typed", 1, "1,2,3,0"]
+  ]);
+}
+
 // Seeded random fixtures: putUnknownStruct poses with arbitrary doubles
 // (including NaN, infinities, -0 and huge magnitudes), random timestamps and
 // uuid arguments across the child-path grab* readers.
