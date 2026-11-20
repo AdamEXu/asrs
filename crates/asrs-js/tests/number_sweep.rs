@@ -6,9 +6,9 @@
 //! cargo test --release -p asrs-js --test number_sweep -- --ignored --nocapture
 //! ```
 //!
-//! `ASRS_NUMBER_SWEEP_SAMPLES` (default 2000000 per op), `ASRS_NUMBER_SWEEP_OPS` (comma
-//! separated, default all), `ASRS_NUMBER_SWEEP_SEED` (default 1) and `ASRS_ELECTRON`
-//! tune it.
+//! `ASRS_NUMBER_SWEEP_SAMPLES` (default 5000000 per op, the `js` suite gate per formatter),
+//! `ASRS_NUMBER_SWEEP_OPS` (comma separated, default all), `ASRS_NUMBER_SWEEP_SEED`
+//! (default 1) and `ASRS_ELECTRON` tune it.
 
 #![allow(clippy::disallowed_methods)]
 
@@ -25,7 +25,7 @@ use asrs_parity::random::Rng;
 const CHUNK: usize = 1 << 16;
 const SENTINEL: u64 = 0x7ff8_dead_beef_0000;
 const SHOWN: usize = 8;
-const BOUNDARY: usize = 64;
+const BOUNDARY: usize = 96;
 
 const UPSTREAM_INTL: IntlOptions = IntlOptions {
     min_integer: 1,
@@ -228,13 +228,95 @@ fn random_f64(rng: &mut Rng) -> f64 {
     }
 }
 
-fn fmt_operand(rng: &mut Rng, i: usize) -> (f64, f64) {
-    let a = if i < BOUNDARY {
-        FMT_SPECIALS[i % FMT_SPECIALS.len()]
+fn random_sign(rng: &mut Rng) -> f64 {
+    if rng.below(2) == 0 { 1.0 } else { -1.0 }
+}
+
+fn decimal_len(mut n: u64) -> i64 {
+    let mut len = 1;
+    while n >= 10 {
+        n /= 10;
+        len += 1;
+    }
+    len
+}
+
+/// A value whose exact decimal expansion ends in a 5 one place past the digit count the
+/// returned parameter keeps, so the method has to break an exact tie.
+fn tie_operand(rng: &mut Rng, op: &str) -> (f64, f64) {
+    if op != "tofixed" && rng.below(2) == 0 {
+        let width = 1 + rng.below(14) as u32;
+        let q = 1 + rng.below(10u64.pow(width));
+        let n = 10 * q + 5;
+        let zeros = rng.below(6) as i32;
+        let value = n as f64 * 10f64.powi(zeros) * random_sign(rng);
+        let keep = decimal_len(n) - 1;
+        let param = if op == "toexponential" {
+            keep - 1
+        } else {
+            keep
+        };
+        return (value, param as f64);
+    }
+    let k = if op == "intl" {
+        7
     } else {
-        random_f64(rng)
+        1 + rng.below(40) as i64
     };
-    (a, param(rng))
+    let int_bits = rng.below(if op == "intl" { 24 } else { 54 - k as u64 });
+    let n = (rng.next_u64() >> (64 - (int_bits + k as u64) as u32)) | 1;
+    let value = n as f64 / 2f64.powi(k as i32) * random_sign(rng);
+    let int_digits = if value.abs() >= 1.0 {
+        decimal_len(value.abs() as u64)
+    } else {
+        0
+    };
+    let leading_zeros = if value.abs() >= 1.0 {
+        0
+    } else {
+        let mut z = 0;
+        let mut v = value.abs();
+        while v < 0.1 {
+            v *= 10.0;
+            z += 1;
+        }
+        z
+    };
+    let param = match op {
+        "toprecision" => int_digits + k - 1 - leading_zeros,
+        "toexponential" => int_digits + k - 2 - leading_zeros,
+        _ => k - 1,
+    };
+    (value, param as f64)
+}
+
+fn threshold_operand(rng: &mut Rng) -> f64 {
+    let base = match rng.below(4) {
+        0 => 1e21,
+        1 => 1e-6,
+        2 => 1e-7,
+        _ => 10f64.powi(rng.below(632) as i32 - 323),
+    };
+    let step = rng.below(9) as i64 - 4;
+    f64::from_bits((base.to_bits() as i64 + step) as u64) * random_sign(rng)
+}
+
+fn subnormal_operand(rng: &mut Rng) -> f64 {
+    let mant = rng.next_u64() >> (12 + rng.below(52));
+    f64::from_bits(mant.max(1)) * random_sign(rng)
+}
+
+fn fmt_operand(rng: &mut Rng, i: usize, op: &str) -> (f64, f64) {
+    if i < BOUNDARY {
+        return (FMT_SPECIALS[i % FMT_SPECIALS.len()], param(rng));
+    }
+    let tie_capable = matches!(op, "tofixed" | "toprecision" | "toexponential" | "intl");
+    match rng.below(8) {
+        0 if tie_capable => tie_operand(rng, op),
+        1 => (threshold_operand(rng), param(rng)),
+        2 => (subnormal_operand(rng), param(rng)),
+        _ => (random_f64(rng), param(rng)),
+    }
 }
 
 const PARSE_CORPUS: &[&str] = &[
@@ -288,6 +370,22 @@ const PARSE_CORPUS: &[&str] = &[
     "\u{feff}3",
     "0x000000000000000000000000000000000000001",
     "8888888888888888888",
+    "1__0",
+    "0x1_0",
+    "1e1_0",
+    "\u{180e}1",
+    "1\u{85}",
+    "\u{200b}1",
+    "\u{2028}1\u{2029}",
+    "\u{b}\u{d}1",
+    "infinity",
+    "-0.0e5",
+    "  -0  ",
+    "0x20000000000001",
+    "0x20000000000003",
+    "0x20000000000001000000000001",
+    "0b100000000000000000000000000000000000000000000000000001",
+    "0x1fffffffffffff8",
 ];
 
 fn string_ops(rng: &mut Rng, units: &mut Vec<u16>) {
@@ -334,6 +432,16 @@ fn string_ops(rng: &mut Rng, units: &mut Vec<u16>) {
         0xfeff,
         0x7f,
         0xff,
+        0x0b,
+        0x0d,
+        0x85,
+        0x180e,
+        0x2000,
+        0x200a,
+        0x200b,
+        0x202f,
+        0x205f,
+        b'_' as u16,
     ];
     for _ in 0..len {
         units.push(match rng.below(10) {
@@ -368,7 +476,76 @@ fn string_ops(rng: &mut Rng, units: &mut Vec<u16>) {
     }
 }
 
+/// A run of valid digits for a radix, long enough to cross 2^53 so the rounding of
+/// dropped bits (including exact ties and zero tails) is exercised.
+fn radix_digits(rng: &mut Rng, units: &mut Vec<u16>, radix: u64) {
+    const CHARS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let max = if rng.below(4) == 0 { 400 } else { 70 };
+    let len = 1 + rng.below(max);
+    let tie_tail = rng.below(3) == 0;
+    for k in 0..len {
+        let d = if tie_tail && k > 54 {
+            if rng.below(8) == 0 {
+                rng.below(radix)
+            } else {
+                0
+            }
+        } else {
+            rng.below(radix)
+        };
+        let c = CHARS[d as usize];
+        units.push(if rng.below(4) == 0 {
+            c.to_ascii_uppercase()
+        } else {
+            c
+        } as u16);
+    }
+}
+
+fn prefixed_operand(rng: &mut Rng, parseint: bool) -> (Vec<u16>, f64) {
+    let mut units = Vec::new();
+    if rng.below(4) == 0 {
+        units.push(SPACES[rng.below(SPACES.len() as u64) as usize]);
+    }
+    let (prefix, radix, radix_arg): (&[u8], u64, f64) = if parseint {
+        let r = [2u64, 4, 8, 16, 32, 10, 3, 36, 7][rng.below(9) as usize];
+        let prefix: &[u8] = if r == 16 && rng.below(2) == 0 {
+            b"0x"
+        } else {
+            b""
+        };
+        (prefix, r, r as f64)
+    } else {
+        match rng.below(3) {
+            0 => (b"0x", 16, 0.0),
+            1 => (b"0o", 8, 0.0),
+            _ => (b"0b", 2, 0.0),
+        }
+    };
+    if parseint && rng.below(4) == 0 {
+        units.push(b'-' as u16);
+    }
+    units.extend(prefix.iter().map(|&c| c as u16));
+    radix_digits(rng, &mut units, radix);
+    match rng.below(6) {
+        0 => units.push(SPACES[rng.below(SPACES.len() as u64) as usize]),
+        1 => units.push(b'_' as u16),
+        2 => units.push(b'g' as u16),
+        _ => {}
+    }
+    (units, radix_arg)
+}
+
+const SPACES: &[u16] = &[
+    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0xa0, 0x1680, 0x2000, 0x2005, 0x200a, 0x2028, 0x2029,
+    0x202f, 0x205f, 0x3000, 0xfeff, 0x85, 0x180e, 0x200b,
+];
+
 fn parse_operand(rng: &mut Rng, i: usize, parseint: bool) -> (Vec<u16>, f64) {
+    if i >= BOUNDARY && rng.below(5) == 0 {
+        let (units, radix) = prefixed_operand(rng, parseint);
+        return (units, if parseint { radix } else { f64::NAN });
+    }
     let units = if i < BOUNDARY {
         PARSE_CORPUS[i % PARSE_CORPUS.len()]
             .encode_utf16()
@@ -451,6 +628,7 @@ fn sweep(op: &Op, samples: u64, seed: u64) -> Outcome {
     let parse = op.parse;
     let parseint = op.name == "parseint";
     let has_param = op.has_param;
+    let name = op.name;
     let writer = thread::spawn(move || {
         let mut stdin = BufWriter::with_capacity(1 << 20, stdin);
         let mut rng = Rng::new(name_seed);
@@ -472,7 +650,7 @@ fn sweep(op: &Op, samples: u64, seed: u64) -> Outcome {
                     }
                     chunk.push(Record::Parse { units, radix });
                 } else {
-                    let (a, b) = fmt_operand(&mut rng, i);
+                    let (a, b) = fmt_operand(&mut rng, i, name);
                     bytes.extend_from_slice(&a.to_le_bytes());
                     if has_param {
                         bytes.extend_from_slice(&b.to_le_bytes());
@@ -596,7 +774,7 @@ fn sweep(op: &Op, samples: u64, seed: u64) -> Outcome {
 #[test]
 #[ignore = "deep sweep against the Electron oracle; minutes of CPU"]
 fn number_deep_sweep() {
-    let samples = env_number("ASRS_NUMBER_SWEEP_SAMPLES", 2_000_000);
+    let samples = env_number("ASRS_NUMBER_SWEEP_SAMPLES", 5_000_000);
     let seed = env_number("ASRS_NUMBER_SWEEP_SEED", 1);
     let wanted: Option<Vec<String>> = std::env::var("ASRS_NUMBER_SWEEP_OPS")
         .ok()
