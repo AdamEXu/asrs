@@ -45,8 +45,10 @@ commands on a host (cargo xtask host <name> ...):
   manifest                store the fetched host description (target/parity/<name>/host/host.json)
                           as `host` in parity/vectors/canvas/<os>.json
   check                   the X01 exit criteria: sync, setup (selftest and smoke), selftest,
-                          smoke, `oracle gen --check`, `host local gui-check` (host description,
-                          colour patches at 1x and 2x, real app launch), the S1 spike window, fetch
+                          smoke, `oracle gen --check` (in the desktop session: the proto-renderer
+                          vector opens a BrowserWindow), `host local gui-check` (host description,
+                          colour patches at 1x and 2x, real app launch), the S1 spike window, then
+                          fetch target/parity/host
 
 commands on the machine itself (cargo xtask host local ...):
   describe [--manifest]   write target/parity/host/host.json: OS, Electron, displays, theme,
@@ -611,7 +613,7 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
         let steps: [(&str, bool, &str); 6] = [
             ("selftest", false, "cargo xtask oracle selftest"),
             ("smoke", false, "cargo xtask oracle smoke"),
-            ("gen --check", false, "cargo xtask oracle gen --check"),
+            ("gen --check", true, "cargo xtask oracle gen --check"),
             ("gui-check", true, "cargo xtask host local gui-check"),
             ("s1 build", false, s1_build),
             ("s1 window", true, "cargo xtask host local s1"),
@@ -763,7 +765,6 @@ fn write_tarball(root: &Path, files: &BTreeSet<String>, out: &Path) -> Result {
     let file = File::create(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let encoder = flate2::write::GzEncoder::new(BufWriter::new(file), flate2::Compression::fast());
     let mut builder = tar::Builder::new(encoder);
-    builder.mode(tar::HeaderMode::Deterministic);
     for f in files {
         builder
             .append_path_with_name(root.join(f), f)
@@ -854,7 +855,8 @@ fn build_host_bundle(paths: &Paths) -> Result {
     )
 }
 
-fn electron_host(paths: &Paths, switches: &[&str], args: &[&str]) -> Result {
+fn electron_host(paths: &Paths, switches: &[&str], args: &[&str], result: &Path) -> Result {
+    let _ = fs::remove_file(result);
     let mut command = Command::new(paths.electron()?);
     command
         .args(switches)
@@ -862,37 +864,82 @@ fn electron_host(paths: &Paths, switches: &[&str], args: &[&str]) -> Result {
         .args(args)
         .env_remove("ELECTRON_RUN_AS_NODE");
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
-    exec(&mut command).map_err(|_| format!("hostMain {} failed", args.join(" ")))
+    let status = command
+        .status()
+        .map_err(|e| format!("running Electron: {e}"))?;
+    if !result.exists() {
+        return Err(format!(
+            "hostMain {} wrote no {} ({status})",
+            args.join(" "),
+            result.display()
+        ));
+    }
+    if !status.success() {
+        eprintln!(
+            "warning: hostMain {} wrote its result but Electron exited with {status}",
+            args.join(" ")
+        );
+    }
+    Ok(())
+}
+
+fn read_json_file(path: &Path) -> Result<Json> {
+    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn patch_result(paths: &Paths, dir: &Path, switches: &[&str], scale: &str) -> Result<(f64, f64)> {
+    let file = dir.join(format!("colour-patch@{scale}x.json"));
+    let factor = format!("--force-device-scale-factor={scale}");
+    let switches: Vec<&str> = switches.iter().copied().chain([factor.as_str()]).collect();
+    electron_host(
+        paths,
+        &switches,
+        &["colour-patch", &dir.display().to_string(), scale],
+        &file,
+    )?;
+    let result = read_json_file(&file)?;
+    let number = |k: &str| result.get(k).and_then(Json::as_f64).unwrap_or(f64::NAN);
+    let failures = result
+        .get("failures")
+        .and_then(Json::as_array)
+        .map_or(usize::MAX, <[Json]>::len);
+    if number("patches") != 512.0 || failures != 0 {
+        return Err(format!(
+            "colour-patch@{scale}x: {failures} of {} patches off by more than 1 level ({})",
+            number("patches"),
+            file.display()
+        ));
+    }
+    Ok((number("exact"), number("maxDelta")))
 }
 
 fn colour_patch(paths: &Paths, out: &Path) -> Result {
     build_host_bundle(paths)?;
-    let out_arg = out.display().to_string();
-    let mut gated = Vec::new();
+    let mut failures = Vec::new();
     for scale in ["1", "2"] {
-        let factor = format!("--force-device-scale-factor={scale}");
-        let srgb: Vec<&str> = COLOUR_SWITCHES
-            .iter()
-            .copied()
-            .chain([factor.as_str()])
-            .collect();
-        let result = electron_host(paths, &srgb, &["colour-patch", &out_arg, scale]);
-        gated.push(result);
-        let raw_dir = out.join("raw");
-        let raw_arg = raw_dir.display().to_string();
-        if electron_host(
-            paths,
-            &["--lang=en-US", &factor],
-            &["colour-patch", &raw_arg, scale],
-        )
-        .is_err()
-        {
-            eprintln!(
-                "colour-patch@{scale}x without --force-color-profile=srgb is off by more than 1 level (display profile is not sRGB)"
-            );
+        match patch_result(paths, out, COLOUR_SWITCHES, scale) {
+            Ok((exact, delta)) => {
+                eprintln!(
+                    "colour-patch@{scale}x (sRGB forced): {exact}/512 exact, max delta {delta}"
+                )
+            }
+            Err(e) => failures.push(e),
+        }
+        match patch_result(paths, &out.join("raw"), &["--lang=en-US"], scale) {
+            Ok((exact, delta)) => {
+                eprintln!(
+                    "colour-patch@{scale}x (display profile): {exact}/512 exact, max delta {delta}"
+                )
+            }
+            Err(e) => eprintln!("colour-patch@{scale}x (display profile, not gated): {e}"),
         }
     }
-    gated.into_iter().collect()
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
 }
 
 fn launch(paths: &Paths, out: &Path) -> Result {
@@ -901,6 +948,7 @@ fn launch(paths: &Paths, out: &Path) -> Result {
         paths,
         COLOUR_SWITCHES,
         &["launch", &out.display().to_string()],
+        &out.join("launch.json"),
     )
 }
 
@@ -910,10 +958,9 @@ fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
         paths,
         COLOUR_SWITCHES,
         &["info", &out.display().to_string()],
+        &out.join("electron.json"),
     )?;
-    let electron =
-        json::parse(&fs::read_to_string(out.join("electron.json")).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+    let electron = read_json_file(&out.join("electron.json"))?;
     let pick = |path: &[&str]| {
         path.iter()
             .try_fold(&electron, |v, k| v.get(k))
@@ -998,8 +1045,8 @@ fn native_rasterizers() -> Json {
                 ),
             ),
             (
-                "session",
-                Json::string(&std::env::var("XDG_SESSION_TYPE").unwrap_or_default()),
+                "xServer",
+                line(command_text("xdpyinfo", &[]), "vendor string:"),
             ),
         ]),
         "windows" => {
