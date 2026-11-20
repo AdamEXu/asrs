@@ -107,7 +107,7 @@ const oraclePlugin = {
   }
 };
 
-const entries = ["fn", "selftest", "cve1Torture", "corpusA"];
+const entries = ["fn", "selftest", "cve1Torture", "corpusA", "canvasMain"];
 
 await esbuild.build({
   entryPoints: Object.fromEntries(entries.map((name) => [name, path.join(here, "src", name + ".ts")])),
@@ -122,9 +122,25 @@ await esbuild.build({
   nodePaths: [path.join(args.upstream, "node_modules")],
   define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream) },
   banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; const require = __oracleCreateRequire(import.meta.url);' },
+  external: ["electron"],
   plugins: [oraclePlugin],
   logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
 });
+
+await esbuild.build({
+  entryPoints: [path.join(here, "src/canvas/page.ts")],
+  outfile: path.join(args.out, "canvasPage.js"),
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "esnext",
+  logLevel: "warning"
+});
+fs.writeFileSync(
+  path.join(args.out, "canvasPage.html"),
+  '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>' +
+    '<body><script src="canvasPage.js"></script></body></html>\n'
+);
 
 fs.writeFileSync(
   path.join(args.out, "modules.json"),
