@@ -9,33 +9,38 @@ use asrs_js::string::{JsString, TextDecoder};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_util::{get_or_default, get_value_at};
 use asrs_log::log::log_value_sets::RawValue;
-use asrs_log::log::{Log, LoggableType};
+use asrs_log::log::{Log, LogError, LoggableType};
 
 use crate::spark::{self, Frame, SignalType, SignalValue, tables};
 
-/// An `Error` thrown by the upstream decoder. The worker swallows the thrown value, so only
-/// whether a call throws (and which writes already happened) is observable.
 #[derive(Debug)]
-pub struct UrclError(pub &'static str);
+pub enum SchemaError {
+    /// The parser threw. The wpilog worker catches it, so only the writes made before the
+    /// throw remain.
+    Threw,
+    /// A `Log` write ended the way `LogError` describes.
+    Log(LogError),
+}
 
-impl std::fmt::Display for UrclError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0)
+impl From<LogError> for SchemaError {
+    fn from(error: LogError) -> Self {
+        SchemaError::Log(error)
     }
 }
 
-impl std::error::Error for UrclError {}
+pub type SchemaParser = fn(&mut Log, &JsString, f64, &[u8]) -> Result<(), SchemaError>;
 
 /// `CustomSchemas.get(type)`.
-pub type SchemaParser = fn(&mut Log, &JsString, f64, &[u8]) -> Result<(), UrclError>;
-
-pub fn custom_schema(type_: &str) -> Option<SchemaParser> {
-    match type_ {
-        "URCL" => Some(parse_urcl_r1),
-        "URCLr2_periodic" => Some(parse_urcl_r2),
-        "URCLr3_periodic" => Some(parse_urcl_r3),
-        _ => None,
-    }
+pub fn custom_schema(type_: &JsString) -> Option<SchemaParser> {
+    let parsers: [(&str, SchemaParser); 3] = [
+        ("URCL", parse_urcl_r1),
+        ("URCLr2_periodic", parse_urcl_r2),
+        ("URCLr3_periodic", parse_urcl_r3),
+    ];
+    parsers
+        .into_iter()
+        .find(|(name, _)| *type_ == js(name))
+        .map(|(_, parser)| parser)
 }
 
 const PERSISTENT_SIZE: usize = 8;
@@ -78,36 +83,34 @@ fn child(key: &JsString, suffix: &str) -> JsString {
     out
 }
 
-fn u8_at(v: &[u8], pos: usize) -> Result<u8, UrclError> {
-    v.get(pos)
-        .copied()
-        .ok_or(UrclError("DataView out of bounds"))
+fn u8_at(v: &[u8], pos: usize) -> Result<u8, SchemaError> {
+    v.get(pos).copied().ok_or(SchemaError::Threw)
 }
 
-fn bytes<const N: usize>(v: &[u8], pos: usize) -> Result<[u8; N], UrclError> {
+fn bytes<const N: usize>(v: &[u8], pos: usize) -> Result<[u8; N], SchemaError> {
     v.get(pos..pos + N)
-        .ok_or(UrclError("DataView out of bounds"))?
+        .ok_or(SchemaError::Threw)?
         .try_into()
-        .map_err(|_| UrclError("DataView out of bounds"))
+        .map_err(|_| SchemaError::Threw)
 }
 
-fn u16le(v: &[u8], pos: usize) -> Result<u16, UrclError> {
+fn u16le(v: &[u8], pos: usize) -> Result<u16, SchemaError> {
     Ok(u16::from_le_bytes(bytes(v, pos)?))
 }
 
-fn u16be(v: &[u8], pos: usize) -> Result<u16, UrclError> {
+fn u16be(v: &[u8], pos: usize) -> Result<u16, SchemaError> {
     Ok(u16::from_be_bytes(bytes(v, pos)?))
 }
 
-fn i16le(v: &[u8], pos: usize) -> Result<i16, UrclError> {
+fn i16le(v: &[u8], pos: usize) -> Result<i16, SchemaError> {
     Ok(i16::from_le_bytes(bytes(v, pos)?))
 }
 
-fn u32le(v: &[u8], pos: usize) -> Result<u32, UrclError> {
+fn u32le(v: &[u8], pos: usize) -> Result<u32, SchemaError> {
     Ok(u32::from_le_bytes(bytes(v, pos)?))
 }
 
-fn f32le(v: &[u8], pos: usize) -> Result<f32, UrclError> {
+fn f32le(v: &[u8], pos: usize) -> Result<f32, SchemaError> {
     Ok(f32::from_le_bytes(bytes(v, pos)?))
 }
 
@@ -119,10 +122,11 @@ fn id_key(device_id: u32) -> JsString {
     js(&number_to_string(f64::from(device_id)))
 }
 
-/// `String(v)`, the `+` coercion applied to `devices[deviceId].alias` when it is not a
-/// string. JSON input only yields the ordinary value kinds.
-fn js_to_string(value: &JsValue) -> JsString {
-    match value {
+/// The `+` coercion applied to `devices[deviceId].alias` when it is not a string. JSON input
+/// only yields the ordinary value kinds. An object whose own `toString` key holds data has no
+/// callable `toString`, and `valueOf` returns the object itself, so the coercion throws.
+fn js_to_string(value: &JsValue) -> Result<JsString, SchemaError> {
+    Ok(match value {
         JsValue::Undefined => js("undefined"),
         JsValue::Null => js("null"),
         JsValue::Bool(b) => js(if *b { "true" } else { "false" }),
@@ -134,22 +138,29 @@ fn js_to_string(value: &JsValue) -> JsString {
             .map(|b| number_to_string(f64::from(*b)))
             .collect::<Vec<_>>()
             .join(",")),
-        JsValue::Array(items) => js(&items
-            .iter()
-            .map(|item| match item {
-                JsValue::Null | JsValue::Undefined => String::new(),
-                other => js_to_string(other).to_string_lossy(),
-            })
-            .collect::<Vec<_>>()
-            .join(",")),
+        JsValue::Array(items) => {
+            let mut out = JsString::new();
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(&js(","));
+                }
+                if !matches!(item, JsValue::Null | JsValue::Undefined) {
+                    out.push_str(&js_to_string(item)?);
+                }
+            }
+            out
+        }
+        JsValue::Object(object) if object.contains_key("toString") => {
+            return Err(SchemaError::Threw);
+        }
         JsValue::Object(_) | JsValue::ExtData(..) => js("[object Object]"),
         JsValue::Date(_) => js("Invalid Date"),
-    }
+    })
 }
 
 /// `Object.keys(aliases)` plus the per-key read. `Object.keys` throws on `null` and
 /// `undefined`; strings and arrays yield index keys.
-fn object_entries(value: &JsValue) -> Result<Vec<(JsString, JsValue)>, UrclError> {
+fn object_entries(value: &JsValue) -> Result<Vec<(JsString, JsValue)>, SchemaError> {
     match value {
         JsValue::Object(object) => Ok(object.iter().map(|(k, v)| (k.clone(), v.clone())).collect()),
         JsValue::Array(items) => Ok(items
@@ -168,9 +179,7 @@ fn object_entries(value: &JsValue) -> Result<Vec<(JsString, JsValue)>, UrclError
                 )
             })
             .collect()),
-        JsValue::Null | JsValue::Undefined => {
-            Err(UrclError("Cannot convert undefined or null to object"))
-        }
+        JsValue::Null | JsValue::Undefined => Err(SchemaError::Threw),
         _ => Ok(Vec::new()),
     }
 }
@@ -224,10 +233,10 @@ fn read_aliases(
     log: &Log,
     alias_key: &JsString,
     timestamp: f64,
-) -> Result<Vec<(JsString, JsValue)>, UrclError> {
+) -> Result<Vec<(JsString, JsValue)>, SchemaError> {
     let raw = get_value_at::<RawValue>(log, alias_key, timestamp, None);
     let raw: &[u8] = raw.as_deref().unwrap_or(DEFAULT_ALIASES);
-    let aliases = json::parse(&utf8_decode(raw)).map_err(|_| UrclError("JSON.parse threw"))?;
+    let aliases = json::parse(&utf8_decode(raw)).map_err(|_| SchemaError::Threw)?;
     object_entries(&aliases)
 }
 
@@ -244,7 +253,7 @@ pub fn parse_urcl_r3(
     key: &JsString,
     timestamp: f64,
     value: &[u8],
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let periodic_api_class = tables::STATUS_0_2026.api_class;
     let firmware_spec: &Frame = &tables::GET_FIRMWARE_VERSION_2026;
     let firmware_api = (firmware_spec.api_class << 4) | firmware_spec.api_index;
@@ -255,14 +264,14 @@ pub fn parse_urcl_r3(
     let mut devices: JsObject<Device> = JsObject::new();
     let alias_key = child(&root_key, "Raw/Aliases");
     let persistent_key = child(&root_key, "Raw/Persistent");
-    let get_name = |devices: &JsObject<Device>, device_id: &JsString| -> JsString {
+    let get_name = |devices: &JsObject<Device>, device_id: &JsString| {
         let device = devices.get_key(device_id).expect("getName key exists");
         match &device.alias {
             Some(alias) => js_to_string(alias),
             None => {
                 let mut name = js("Spark-");
                 name.push_str(device_id);
-                name
+                Ok(name)
             }
         }
     };
@@ -295,7 +304,7 @@ pub fn parse_urcl_r3(
             let mut full_message_value = [0u8; 8];
             full_message_value[..message_value.len()].copy_from_slice(message_value);
             let firmware_values = spark::parse_can_frame(firmware_spec, &full_message_value, None)
-                .map_err(|_| UrclError("parseCanFrame threw"))?;
+                .map_err(|_| SchemaError::Threw)?;
             devices
                 .get_units_mut(device_key.units())
                 .expect("just inserted")
@@ -310,7 +319,7 @@ pub fn parse_urcl_r3(
         };
         let device_key = {
             let mut out = root_key.clone();
-            out.push_str(&get_name(&devices, device_id));
+            out.push_str(&get_name(&devices, device_id)?);
             out
         };
         log.put_string(
@@ -343,7 +352,7 @@ pub fn parse_urcl_r3(
             let frame_index = (message_id >> 6) & 0xf;
             let device_log_key = {
                 let mut out = root_key.clone();
-                out.push_str(&get_name(&devices, &device_key));
+                out.push_str(&get_name(&devices, &device_key)?);
                 out
             };
             let frame_key = child(
@@ -355,11 +364,11 @@ pub fn parse_urcl_r3(
             } else {
                 tables::STATUS_2025
             };
-            log.put_raw(&frame_key, message_timestamp, message_value);
+            log.put_raw(&frame_key, message_timestamp, message_value)?;
             if (frame_index as usize) < specs.len() {
                 let frame_spec = specs[frame_index as usize];
                 let frame_values = spark::parse_can_frame(frame_spec, message_value, None)
-                    .map_err(|_| UrclError("parseCanFrame threw"))?;
+                    .map_err(|_| SchemaError::Threw)?;
 
                 let mut applied_output: Option<f64> = None;
                 let mut voltage: Option<f64> = None;
@@ -466,14 +475,14 @@ pub fn parse_urcl_r2(
     key: &JsString,
     timestamp: f64,
     value: &[u8],
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let Some(root_key) = periodic_root(key) else {
         return Ok(());
     };
     let mut devices: JsObject<Device> = JsObject::new();
     let alias_key = child(&root_key, "Raw/Aliases");
     let persistent_key = child(&root_key, "Raw/Persistent");
-    let get_name = |devices: &JsObject<Device>, device_id: &JsString| -> JsString {
+    let get_name = |devices: &JsObject<Device>, device_id: &JsString| {
         let device = devices.get_key(device_id).expect("getName key exists");
         match &device.alias {
             Some(alias) => js_to_string(alias),
@@ -481,7 +490,7 @@ pub fn parse_urcl_r2(
                 let mut name = js(device.model.map_or("undefined", DeviceModel::name));
                 name.push_str(&js("-"));
                 name.push_str(device_id);
-                name
+                Ok(name)
             }
         }
     };
@@ -508,7 +517,7 @@ pub fn parse_urcl_r2(
         };
         let device_key = {
             let mut out = root_key.clone();
-            out.push_str(&get_name(&devices, device_id));
+            out.push_str(&get_name(&devices, device_id)?);
             out
         };
         log.put_string(
@@ -540,14 +549,14 @@ pub fn parse_urcl_r2(
             let frame_index = ((message_id >> 6) & 0xf) as usize;
             let device_log_key = {
                 let mut out = root_key.clone();
-                out.push_str(&get_name(&devices, &device_key));
+                out.push_str(&get_name(&devices, &device_key)?);
                 out
             };
             let frame_key = child(
                 &child(&device_log_key, "/PeriodicFrame/"),
                 &number_to_string(frame_index as f64),
             );
-            log.put_raw(&frame_key, message_timestamp, message_value);
+            log.put_raw(&frame_key, message_timestamp, message_value)?;
             if frame_index < PARSE_PERIODIC.len() {
                 PARSE_PERIODIC[frame_index](
                     log,
@@ -570,7 +579,7 @@ pub fn parse_urcl_r1(
     key: &JsString,
     timestamp: f64,
     value: &[u8],
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let persistent_count = u64::from(u32le(value, 0)?);
     let periodic_count = u64::from(u32le(value, 4)?);
 
@@ -618,7 +627,7 @@ pub fn parse_urcl_r1(
                 &child(&device_log_key, "/PeriodicFrame/"),
                 &number_to_string(frame_index as f64),
             );
-            log.put_raw(&frame_key, message_timestamp, message_value);
+            log.put_raw(&frame_key, message_timestamp, message_value)?;
             if frame_index < PARSE_PERIODIC.len() {
                 PARSE_PERIODIC[frame_index](
                     log,
@@ -648,7 +657,7 @@ fn read_legacy_record(
     persistent: &[u8],
     position: usize,
     devices: &mut JsObject<Device>,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let message_id = u32::from(u16le(persistent, position)?);
     let message_value = slice(persistent, position + 2, position + 8);
     let device_id = message_id & 0x3f;
@@ -674,7 +683,7 @@ fn read_legacy_record(
 fn read_legacy_persistent(
     persistent: &[u8],
     devices: &mut JsObject<Device>,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let mut position = 0;
     while position < persistent.len() {
         read_legacy_record(persistent, position, devices)?;
@@ -683,7 +692,7 @@ fn read_legacy_persistent(
     Ok(())
 }
 
-fn parse_firmware(value: &[u8]) -> Result<FirmwareVersion, UrclError> {
+fn parse_firmware(value: &[u8]) -> Result<FirmwareVersion, SchemaError> {
     Ok(FirmwareVersion {
         major: f64::from(u8_at(value, 0)?),
         minor: f64::from(u8_at(value, 1)?),
@@ -691,7 +700,7 @@ fn parse_firmware(value: &[u8]) -> Result<FirmwareVersion, UrclError> {
     })
 }
 
-fn parse_device_model(value: &[u8]) -> Result<DeviceModel, UrclError> {
+fn parse_device_model(value: &[u8]) -> Result<DeviceModel, SchemaError> {
     let parameter_value = u32le(value, 0)?;
     let success = u8_at(value, 5)? == 0;
     Ok(match (success, parameter_value) {
@@ -711,7 +720,7 @@ fn firmware_string(firmware: FirmwareVersion) -> JsString {
 }
 
 type PeriodicParser =
-    fn(&mut Log, &JsString, f64, &[u8], DeviceModel, FirmwareVersion) -> Result<(), UrclError>;
+    fn(&mut Log, &JsString, f64, &[u8], DeviceModel, FirmwareVersion) -> Result<(), SchemaError>;
 
 const PARSE_PERIODIC: [PeriodicParser; 8] = [
     parse_periodic_0,
@@ -731,7 +740,7 @@ fn parse_periodic_0(
     value: &[u8],
     _model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let applied_output = f64::from(i16le(value, 0)?) / 32767.0;
     let faults = u16le(value, 2)?;
     let sticky_faults = u16le(value, 4)?;
@@ -772,7 +781,7 @@ fn parse_periodic_1(
     value: &[u8],
     _model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let motor_velocity = f64::from(f32le(value, 0)?);
     let motor_temperature = f64::from(u8_at(value, 4)?);
     let motor_voltage_raw = u32::from(u8_at(value, 5)?) | (u32::from(u8_at(value, 6)? & 0x0f) << 8);
@@ -800,7 +809,7 @@ fn parse_periodic_2(
     value: &[u8],
     model: DeviceModel,
     firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let mut motor_position = f64::from(f32le(value, 0)?);
     let mut i_accum: Option<f64> = None;
     if firmware.major < 24.0 {
@@ -828,7 +837,7 @@ fn parse_periodic_3(
     value: &[u8],
     model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let sensor_voltage_raw =
         u32::from(u8_at(value, 0)?) | (u32::from(u8_at(value, 1)? & 0x03) << 8);
     let sensor_voltage = (f64::from(sensor_voltage_raw) / f64::from(1u32 << 8))
@@ -869,7 +878,7 @@ fn parse_periodic_4(
     value: &[u8],
     model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let encoder_velocity = f64::from(f32le(value, 0)?);
     let encoder_position = f64::from(f32le(value, 4)?);
     let name = if model == DeviceModel::SparkFlex {
@@ -897,7 +906,7 @@ fn parse_periodic_5(
     value: &[u8],
     _model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let encoder_position = f64::from(f32le(value, 0)?);
     let encoder_absolute_angle = f64::from(u16le(value, 4)?) / f64::from(1u32 << 16);
     log.put_number(
@@ -920,7 +929,7 @@ fn parse_periodic_6(
     value: &[u8],
     _model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let encoder_velocity = f64::from(f32le(value, 0)?);
     let encoder_frequency = f64::from(u16le(value, 4)?);
     log.put_number(
@@ -943,7 +952,7 @@ fn parse_periodic_7(
     value: &[u8],
     _model: DeviceModel,
     _firmware: FirmwareVersion,
-) -> Result<(), UrclError> {
+) -> Result<(), SchemaError> {
     let i_accum = f64::from(f32le(value, 0)?);
     log.put_number(&child(key, "/IAccum"), timestamp, i_accum);
     Ok(())

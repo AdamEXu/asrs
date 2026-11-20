@@ -1,9 +1,8 @@
 //! Replays the `genUrcl` oracle vectors. Each `case` line holds the wpilog worker's
-//! index-time ops plus the per-key raw records the worker decodes through
-//! `CustomSchemas`; the following `dump` line is the canonical serialized dump of the
-//! real upstream session's hub-side Log. The replay mirrors the worker/hub boundary:
-//! the range and zero timestamp are frozen at the worker's initial response, and
-//! generated parents accumulate in per-response changed-field order.
+//! index-time ops plus the per-key records it decodes; the following `dump` line is the
+//! hub-side Log of a real upstream session. The replay keeps the worker's Log and the hub's
+//! Log apart and moves the `initial` and `fields` responses between them as the decode
+//! thread does.
 
 mod functions {
     use asrs_parity::{Response, Value};
@@ -25,9 +24,11 @@ mod log_field;
 #[allow(dead_code)]
 mod log_run;
 
-use asrs_formats::urcl;
+use asrs_formats::urcl::{self, SchemaError};
 use asrs_js::string::JsString;
-use asrs_log::log::Log;
+use asrs_js::time::V8MathRandom;
+use asrs_log::log::{Log, LogField};
+use asrs_log::realm::JsRealm;
 use asrs_parity::cve1::Value;
 use asrs_parity::diff;
 use asrs_parity::json::Json;
@@ -80,16 +81,15 @@ fn apply_ops(log: &mut Log, ops: &Json) -> Result<(), String> {
     Ok(())
 }
 
-/// The `parseField` type switch for one record, including the CustomSchemas hook.
-/// Errors are reported to the caller, which swallows them like the worker's catch.
+/// The `parseField` type switch for one record. F02's wpilog worker replaces this once merged.
 fn parse_record(
     log: &mut Log,
     key: &JsString,
-    type_: &str,
+    type_: &JsString,
     timestamp: f64,
     v: &Value,
 ) -> Result<(), String> {
-    match type_ {
+    match type_.to_string_lossy().as_str() {
         "boolean" => log.put_boolean(key, timestamp, log_field::boolean(v)?),
         "int" | "int64" | "float" | "double" => {
             log.put_number(key, timestamp, log_field::number(v)?)
@@ -105,17 +105,22 @@ fn parse_record(
             log.put_string_array(key, timestamp, log_field::array(v, log_field::js_string)?)
         }
         "json" => log.put_json(key, timestamp, log_field::js_string(v)?),
-        _ => {
-            if type_.starts_with("struct:")
-                || type_.starts_with("photon:")
-                || type_.starts_with("proto:")
+        other => {
+            if other.starts_with("struct:")
+                || other.starts_with("photon:")
+                || other.starts_with("proto:")
+                || other == "msgpack"
             {
-                return Err(format!("unsupported type {type_}"));
+                return Err(format!("unsupported type {other}"));
             }
             let bytes = log_run::bytes(v)?;
-            log.put_raw(key, timestamp, bytes.as_ref());
+            log.put_raw(key, timestamp, bytes.as_ref())
+                .map_err(|e| format!("putRaw: {e:?}"))?;
             if let Some(parser) = urcl::custom_schema(type_) {
-                let _ = parser(log, key, timestamp, &bytes);
+                match parser(log, key, timestamp, &bytes) {
+                    Ok(()) | Err(SchemaError::Threw) => {}
+                    Err(SchemaError::Log(e)) => return Err(format!("custom schema: {e:?}")),
+                }
                 log.set_generated_parent(key);
             }
         }
@@ -123,24 +128,40 @@ fn parse_record(
     Ok(())
 }
 
-/// Structured-clone canonicalizes NaN payloads across the worker boundary.
-fn canonicalize(v: &mut Value) {
-    match v {
-        Value::Number(bits) if f64::from_bits(*bits).is_nan() => *bits = f64::NAN.to_bits(),
-        Value::Array(items) => items.iter_mut().for_each(canonicalize),
-        Value::Object(pairs) => pairs.iter_mut().for_each(|(_, item)| canonicalize(item)),
-        _ => {}
+/// The worker's `fields` response for `key`, applied to the hub's Log.
+fn post_fields(worker: &mut Log, hub: &mut Log, key: &JsString) {
+    let mut fields = Vec::new();
+    let mut has_root = false;
+    for child in worker.get_changed_fields() {
+        has_root |= child == *key;
+        fields.push(child);
+    }
+    if !has_root && worker.get_field(key).is_some() {
+        fields.push(key.clone());
+    }
+    for child in fields {
+        let field = worker.get_field(&child).expect("changed field exists");
+        hub.set_field(
+            &child,
+            LogField::from_serialized(field.to_serialized().structured_clone()),
+        );
+        if worker.is_generated_parent(&child) {
+            hub.set_generated_parent(&child);
+        }
     }
 }
 
 fn replay(case: &Json) -> Result<Value, String> {
-    let mut log = Log::new(false);
-    apply_ops(&mut log, case.get("ops").ok_or("case has no ops")?)?;
-    log.get_changed_fields();
-    let initial = log.to_serialized();
-    let initial_range = initial.timestamp_range;
-    let initial_zero = initial.timestamp_zero;
-    let mut parents = initial.generated_parents;
+    let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
+    let mut worker = Log::new(false);
+    apply_ops(&mut worker, case.get("ops").ok_or("case has no ops")?)?;
+    worker.get_changed_fields();
+    let initial = Log::from_serialized(worker.to_serialized().structured_clone(), &mut realm)
+        .map_err(|e| format!("fromSerialized: {e:?}"))?;
+    let mut hub = Log::new(true);
+    hub.merge_with(&initial, &JsString::new(), &mut realm, |_, _| 0.0)
+        .map_err(|e| format!("mergeWith: {e:?}"))?;
+
     let requests = case
         .get("requests")
         .and_then(Json::as_array)
@@ -150,60 +171,23 @@ fn replay(case: &Json) -> Result<Value, String> {
     for key_json in requests {
         let key = js(key_json)?;
         let Some(type_) = types.get(&key.to_string_lossy()) else {
-            continue; // the worker warns and skips unknown keys
-        };
-        let type_ = type_
-            .as_str()
-            .ok_or("type must be a string")?
-            .to_string_lossy();
-        let Some(recs) = records.get(&key.to_string_lossy()) else {
             continue;
         };
-        for record in recs.as_array().ok_or("records must be an array")? {
-            if record.get("null").is_some() || record.get("throw").is_some() {
-                continue;
-            }
-            let timestamp = bits(record.get("t").ok_or("record has no t")?)? / 1e6;
-            let v = Value::from_json(record.get("v").ok_or("record has no v")?)
-                .map_err(|e| format!("record value: {}", e.0))?;
-            let _ = parse_record(&mut log, &key, &type_, timestamp, &v);
-        }
-        let mut has_root = false;
-        for child in log.get_changed_fields() {
-            if child == key {
-                has_root = true;
-            }
-            if log.is_generated_parent(&child) && !parents.contains(&child) {
-                parents.push(child);
+        let type_ = js(type_)?;
+        if let Some(recs) = records.get(&key.to_string_lossy()) {
+            for record in recs.as_array().ok_or("records must be an array")? {
+                if record.get("null").is_some() || record.get("throw").is_some() {
+                    continue;
+                }
+                let timestamp = bits(record.get("t").ok_or("record has no t")?)? / 1e6;
+                let v = Value::from_json(record.get("v").ok_or("record has no v")?)
+                    .map_err(|e| format!("record value: {}", e.0))?;
+                parse_record(&mut worker, &key, &type_, timestamp, &v)?;
             }
         }
-        if !has_root
-            && log.get_field(&key).is_some()
-            && log.is_generated_parent(&key)
-            && !parents.contains(&key)
-        {
-            parents.push(key.clone());
-        }
+        post_fields(&mut worker, &mut hub, &key);
     }
-    let mut dump = log_run::dump(&log);
-    if let Value::Object(pairs) = &mut dump {
-        for (k, v) in pairs.iter_mut() {
-            match k.to_string_lossy().as_str() {
-                "generatedParents" => {
-                    *v = Value::Array(parents.iter().map(log_field::string_value).collect());
-                }
-                "timestampRange" => {
-                    *v = initial_range.map_or(Value::Null, |r| log_field::numbers(&r));
-                }
-                "timestampZero" => {
-                    *v = initial_zero.map_or(Value::Null, Value::number);
-                }
-                _ => {}
-            }
-        }
-    }
-    canonicalize(&mut dump);
-    Ok(dump)
+    Ok(log_run::dump(&hub))
 }
 
 #[test]
