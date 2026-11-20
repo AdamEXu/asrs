@@ -31,7 +31,12 @@ use asrs_parity::vectors::check_fn_vectors;
 use asrs_parity::{FnCase, Request, Response, Value};
 
 fn dispatch(case: &FnCase<'_>) -> Response {
-    match functions::lookup(case.name()) {
+    match functions::lookup(case.name()).or_else(|| {
+        shared::FUNCTIONS
+            .iter()
+            .find(|(n, _)| *n == case.name())
+            .map(|(_, f)| *f)
+    }) {
         Some(f) => f(&case.request.args),
         None => Response::Error(format!("no port of {}", case.name())),
     }

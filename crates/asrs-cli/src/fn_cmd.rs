@@ -2,7 +2,7 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use asrs_parity::{Request, Response};
 
-use crate::functions;
+use crate::{functions, shared};
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--list") {
@@ -41,7 +41,12 @@ fn handle(line: &str) -> Response {
         Ok(request) => request,
         Err(message) => return Response::Error(message),
     };
-    match functions::lookup(&request.name) {
+    match functions::lookup(&request.name).or_else(|| {
+        shared::FUNCTIONS
+            .iter()
+            .find(|(n, _)| *n == request.name)
+            .map(|(_, f)| *f)
+    }) {
         Some(function) => function(&request.args),
         None => Response::Error(format!("unknown function {:?}", request.name)),
     }
