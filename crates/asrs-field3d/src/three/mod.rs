@@ -10,6 +10,7 @@
 
 mod attribute;
 mod box3;
+mod camera;
 mod color;
 mod euler;
 mod geometry;
@@ -20,10 +21,12 @@ mod merge;
 mod object3d;
 pub mod primitives;
 mod quaternion;
+mod spherical;
 mod vector3;
 
 pub use attribute::{ArrayData, ArrayKind, BufferAttribute};
 pub use box3::{Box3, Sphere};
+pub use camera::PerspectiveCamera;
 pub use color::Color;
 pub use euler::{Euler, EulerOrder};
 pub use geometry::{BufferGeometry, Group};
@@ -32,4 +35,5 @@ pub use matrix4::Matrix4;
 pub use merge::{MergeError, merge_attributes, merge_geometries};
 pub use object3d::{Graph, Node, Object3D, ObjectId};
 pub use quaternion::Quaternion;
+pub use spherical::Spherical;
 pub use vector3::Vector3;
