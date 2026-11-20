@@ -86,7 +86,8 @@ impl CompLevel {
 
 /// `getElimMatchString`: strings like `sf5m2` for an elimination match, or
 /// `None` where upstream throws (a match number missing from the bracket's
-/// mapping).
+/// mapping). A TBA `playoff_type` that is not a number (`null`) behaves as
+/// NaN does: it equals no `PlayoffType` and takes the standard bracket path.
 pub fn get_elim_match_string(playoff_type: f64, match_number: f64) -> Option<JsString> {
     let comp_level = get_elim_comp_level(playoff_type, match_number)?;
     let (set, m) = get_elim_match_numbers(playoff_type, comp_level, match_number)?;

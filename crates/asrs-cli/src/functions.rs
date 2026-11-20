@@ -88,6 +88,17 @@ fn range_error(message: &str) -> Response {
 
 /// `ToNumber` on a CVE-1 value. Symbols throw; objects reduce to NaN except
 /// arrays, which convert through their ToString join.
+/// Boxing a double as a JS number quiets a signaling NaN (V8 sets bit 51 on
+/// HeapNumber materialization), both for scalars an upstream callee sees and for
+/// outputs the oracle encodes.
+pub(crate) fn quiet_nan(x: f64) -> f64 {
+    if x.is_nan() {
+        f64::from_bits(x.to_bits() | (1 << 51))
+    } else {
+        x
+    }
+}
+
 pub(crate) fn to_number(value: &Value) -> Result<f64, Response> {
     Ok(match value {
         Value::Undefined => f64::NAN,

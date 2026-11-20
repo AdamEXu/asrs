@@ -7,29 +7,18 @@ use asrs_log::log::{Log, LogValueSetBoolean};
 use asrs_log::match_info::MatchInfo;
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::functions::{Function, arg, to_number};
+use crate::functions::{Function, arg, quiet_nan, to_number};
 use crate::log_field::{boolean, js_string, set_value, string_value};
 use crate::log_run;
 
 pub const FUNCTIONS: &[(&str, Function)] = &[("oracle:robotStateRun", robot_state_run)];
 
-/// Boxing a double as a JS number quiets a signaling NaN (V8 sets bit 51 on
-/// HeapNumber materialization). Applies to both directions of this adapter:
-/// scalars the upstream callee would see and outputs the oracle encodes.
-fn quiet(x: f64) -> f64 {
-    if x.is_nan() {
-        f64::from_bits(x.to_bits() | (1 << 51))
-    } else {
-        x
-    }
-}
-
 fn num(v: &Value) -> Result<f64, Response> {
-    to_number(v).map(quiet)
+    to_number(v).map(quiet_nan)
 }
 
 fn n(x: f64) -> Value {
-    Value::number(quiet(x))
+    Value::number(quiet_nan(x))
 }
 
 fn bool_set(set: &Option<LogValueSetBoolean>) -> Value {

@@ -326,6 +326,7 @@ fn spec_rel(paths: &Paths, spec: &Spec) -> String {
 
 const SHARED_INPUTS: &[&str] = &["build.mjs", "package-lock.json"];
 const ENTRY_INPUTS: &str = "inputs.json";
+const LAZY_HELPER_PREFIX: &str = "lazyHelpers/";
 
 fn read_entry_inputs(dist: &Path) -> Result<Vec<(String, Vec<String>)>> {
     let path = dist.join(ENTRY_INPUTS);
@@ -383,11 +384,31 @@ fn generator_hash(entry_hashes: &[(String, String)], vector: &Vector<'_>) -> Res
             )
         })?;
     let mut parts = vec![entry_hash.clone()];
+    let mut spec_text = String::new();
     for input in vector.spec.inputs() {
-        parts.push(oracle::hash_text(&oracle::read(input)?));
+        let text = oracle::read(input)?;
+        parts.push(oracle::hash_text(&text));
+        spec_text.push_str(&String::from_utf8_lossy(&text));
+    }
+    if entry == "fn" {
+        parts.extend(lazy_helper_hashes(entry_hashes, &spec_text));
     }
     parts.push(vector.zone.clone());
     Ok(oracle::hash_bytes(parts.join(":").as_bytes()))
+}
+
+/// `oracle:<name>` helpers that `fn` loads at runtime from `lazyHelpers/<name>` are not in the
+/// `fn` bundle, so a `fn` spec that calls one also depends on that bundle's inputs.
+fn lazy_helper_hashes(entry_hashes: &[(String, String)], spec_text: &str) -> Vec<String> {
+    entry_hashes
+        .iter()
+        .filter_map(|(name, hash)| {
+            let helper = name.strip_prefix(LAZY_HELPER_PREFIX)?;
+            spec_text
+                .contains(&format!("\"oracle:{helper}\""))
+                .then(|| hash.clone())
+        })
+        .collect()
 }
 
 /// Copies the vectors a render host just generated for its own platform, with their manifest
@@ -1139,6 +1160,44 @@ mod tests {
                 .unwrap_err()
                 .contains("genMissing")
         );
+    }
+
+    #[test]
+    fn fn_specs_follow_only_the_lazy_helpers_they_call() {
+        let dir = harness("lazy-helpers");
+        fs::create_dir_all(dir.0.join("src/lazyHelpers")).unwrap();
+        dir.write("src/lazyHelpers/aRun.ts", "a");
+        dir.write("src/lazyHelpers/bRun.ts", "b");
+        dir.write("a.jsonl", r#"{"fn":"oracle:aRun","args":[]}"#);
+        dir.write("plain.jsonl", r#"{"fn":"oracle:identity","args":[1]}"#);
+        let mut inputs = inputs();
+        for helper in ["aRun", "bRun"] {
+            inputs.push((
+                format!("{LAZY_HELPER_PREFIX}{helper}"),
+                vec![format!("src/lazyHelpers/{helper}.ts")],
+            ));
+        }
+        let specs = discover(&dir.0).unwrap();
+        let vectors: Vec<Vector<'_>> = specs.iter().flat_map(Spec::vectors).collect();
+        let hashes = || -> Vec<String> {
+            let entries = entry_hashes(&dir.0, &inputs).unwrap();
+            vectors
+                .iter()
+                .map(|v| generator_hash(&entries, v).unwrap())
+                .collect()
+        };
+        let before = hashes();
+        dir.write("src/lazyHelpers/bRun.ts", "b2");
+        assert_eq!(before, hashes());
+        dir.write("src/lazyHelpers/aRun.ts", "a2");
+        let after = hashes();
+        let changed: Vec<&str> = vectors
+            .iter()
+            .zip(before.iter().zip(&after))
+            .filter(|(_, (b, a))| b != a)
+            .map(|(v, _)| v.id.as_str())
+            .collect();
+        assert_eq!(changed, ["a"]);
     }
 
     #[test]

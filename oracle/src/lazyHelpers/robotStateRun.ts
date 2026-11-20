@@ -1,7 +1,7 @@
 import Log from "@upstream/shared/log/Log";
 import * as robotState from "@upstream/shared/log/RobotState";
 import { getElimMatchString } from "@upstream/shared/MatchInfo";
-import { runWithLog } from "./logRun";
+import { runWithLog } from "../logRun";
 
 // Replays logRun write ops against a real upstream Log, then runs a list of
 // RobotState calls and reports each result as {ok: ...} or {throw: ...}.

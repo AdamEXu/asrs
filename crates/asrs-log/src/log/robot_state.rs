@@ -470,16 +470,9 @@ fn utc_year(epoch_ms: f64) -> f64 {
 /// `getMatchInfo`: match metadata read at the first enabled timestamp, or null
 /// when the robot was never enabled or the log is not a match.
 pub fn get_match_info(log: &Log, clock: &dyn Clock) -> Option<MatchInfo> {
-    let enabled_data = get_enabled_data(log);
-    let mut enabled_time: Option<f64> = None;
-    if let Some(data) = &enabled_data {
-        for (index, &enabled) in data.values.iter().enumerate() {
-            if enabled_time.is_none() && enabled {
-                enabled_time = Some(data.timestamps[index]);
-            }
-        }
-    }
-    let enabled_time = enabled_time?;
+    let enabled_data = get_enabled_data(log)?;
+    let first_enabled = enabled_data.values.iter().position(|&enabled| enabled)?;
+    let enabled_time = enabled_data.timestamps[first_enabled];
 
     let system_time_key = find_key(log, &js_strings(SYSTEM_TIME_KEYS));
     let event_key = find_key(log, &js_strings(EVENT_KEYS));

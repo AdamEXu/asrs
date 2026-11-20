@@ -2,7 +2,7 @@ import "./shims";
 import { toTree } from "./cve1";
 import { Rng } from "./corpus/rng";
 import * as robotState from "@upstream/shared/log/RobotState";
-import { run } from "./robotStateRun";
+import { run } from "./lazyHelpers/robotStateRun";
 
 // Emits `oracle:robotStateRun` ground truth for asrs_log::log::robot_state:
 //   genRobotState <count> <seed>
