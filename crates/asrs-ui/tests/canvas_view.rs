@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use asrs_canvas::{Canvas2d, Pixmap};
+use asrs_canvas::{Canvas2d, Pixmap, RasterState};
 use asrs_ui::canvas_view::geometry::device_snap;
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, rasterize};
 use asrs_ui::capture::{Capture, HeadlessCapture};
@@ -148,7 +148,7 @@ impl Rig {
         let frame = scene(kind, &metrics);
         self.capture
             .context()
-            .update(|cx| rasterize(&frame, &HashMap::new(), cx))
+            .update(|cx| rasterize(&frame, &HashMap::new(), &mut RasterState::default(), cx))
             .expect("rasterized")
             .0
     }

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
-    FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
-    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
+    FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, Pattern,
+    Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
 };
 
 use crate::aaa;
@@ -12,7 +12,7 @@ use crate::color::{self, Rgba};
 use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::hairline;
-use crate::path::{Affine, Path, Pt};
+use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
 use crate::scan::{self, Blend, Coverage};
 use crate::skpath::SkPath;
@@ -47,9 +47,10 @@ fn resolve(style: &Style) -> Option<Fill> {
             let mut order: Vec<usize> = (0..resolved.len()).collect();
             order.sort_by(|&a, &b| resolved[a].0.total_cmp(&resolved[b].0).then(a.cmp(&b)));
             let resolved = order.into_iter().map(|i| resolved[i]).collect();
+            let widen = |v: f64| f64::from(clamp32(v));
             Some(match shape {
-                GradientShape::Linear(p) => Fill::Linear(*p, resolved),
-                GradientShape::Radial(p) => Fill::Radial(*p, resolved),
+                GradientShape::Linear(p) => Fill::Linear(p.map(widen), resolved),
+                GradientShape::Radial(p) => Fill::Radial(p.map(widen), resolved),
             })
         }
     }
@@ -94,6 +95,50 @@ impl Default for State {
     }
 }
 
+/// What one canvas carries from frame to frame: the lines-as-paths counters of its
+/// `cc::RecordPaintCanvas`. Blink keeps that recorder while the canvas keeps its size and makes a
+/// new one when the size changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RasterState {
+    lines_as_paths: bool,
+    draw_path_count: u32,
+    draw_line_count: u32,
+    size: (u32, u32),
+}
+
+impl Default for RasterState {
+    /// Chromium on macOS records with Graphite, which turns the lines-as-paths heuristic off
+    /// (`DisableLineDrawingAsPaths`) even for CPU canvases: measured against the Linux and
+    /// macOS references of the `multiframe` scenes.
+    fn default() -> RasterState {
+        RasterState::new(!cfg!(target_os = "macos"))
+    }
+}
+
+impl RasterState {
+    pub fn new(lines_as_paths: bool) -> RasterState {
+        RasterState {
+            lines_as_paths,
+            draw_path_count: 0,
+            draw_line_count: 0,
+            size: (0, 0),
+        }
+    }
+
+    /// The state for a frame of `width` x `height`: kept when the size is unchanged, fresh
+    /// otherwise.
+    pub fn for_size(self, width: u32, height: u32) -> RasterState {
+        if self.size == (width, height) {
+            self
+        } else {
+            RasterState {
+                size: (width, height),
+                ..RasterState::new(self.lines_as_paths)
+            }
+        }
+    }
+}
+
 /// The text half of the raster: a platform glyph backend plus its mask-gamma table.
 pub struct TextRaster<'a> {
     pub backend: &'a mut dyn TextBackend,
@@ -108,8 +153,7 @@ pub struct Raster<'a> {
     stack: Vec<State>,
     path: Path,
     fast: Fast,
-    draw_path_count: u32,
-    draw_line_count: u32,
+    lines: RasterState,
     images: HashMap<String, Pixmap>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
@@ -140,11 +184,51 @@ enum Source {
     },
 }
 
-fn pt32(x: f64, y: f64) -> Pt {
-    Pt {
-        x: x as f32,
-        y: y as f32,
+/// A `CanvasPath` point argument pair, or `None` when Blink ignores the call.
+fn path_pt(x: f64, y: f64) -> Option<Pt> {
+    let p = Pt {
+        x: sat32(x),
+        y: sat32(y),
+    };
+    (p.x.is_finite() && p.y.is_finite()).then_some(p)
+}
+
+/// `SkPathPriv::TooBigForMath`: `SkDraw` drops device geometry beyond a quarter of `FLT_MAX`.
+fn too_big_for_math(r: &crate::skpath::Rect) -> bool {
+    let max = f32::MAX * 0.25;
+    !(r.left >= -max && r.top >= -max && r.right <= max && r.bottom <= max)
+}
+
+fn sorted([l, t, r, b]: [f32; 4]) -> [f32; 4] {
+    [l.min(r), t.min(b), l.max(r), t.max(b)]
+}
+
+/// What `SkDraw::drawDevPath` accepts: finite device geometry within `TooBigForMath`.
+fn dev_path_drawable(path: &SkPath) -> bool {
+    path.is_finite() && !too_big_for_math(&path.bounds())
+}
+
+fn fits_in_fixed(r: [f32; 4]) -> bool {
+    r.iter().all(|v| v.abs() <= 32767.0)
+}
+
+fn ltrb([left, top, right, bottom]: [f32; 4]) -> crate::skpath::Rect {
+    crate::skpath::Rect {
+        left,
+        top,
+        right,
+        bottom,
     }
+}
+
+/// The `gfx::RectF` Blink builds from a validated rect: each value through `ClampTo<float>`,
+/// and sizes at most `8 * FLT_EPSILON` dropped to zero.
+fn rect32([x, y, w, h]: [f64; 4]) -> [f32; 4] {
+    let size = |v: f64| {
+        let v = clamp32(v);
+        if v > 8.0 * f32::EPSILON { v } else { 0.0 }
+    };
+    [clamp32(x), clamp32(y), size(w), size(h)]
 }
 
 /// What Blink's `CanvasPath` line and arc builders hold besides the general path.
@@ -279,14 +363,25 @@ impl<'a> Raster<'a> {
             stack: Vec::new(),
             path: Path::new(),
             fast: Fast::None,
-            draw_path_count: 0,
-            draw_line_count: 0,
+            lines: RasterState::default().for_size(width, height),
             images: HashMap::new(),
             registers: HashMap::new(),
             text: None,
             errors: Vec::new(),
             calls: 0,
         })
+    }
+
+    /// Continues from the state an earlier frame of the same canvas left; a state from a
+    /// canvas of another size is dropped.
+    pub fn with_state(mut self, state: RasterState) -> Raster<'a> {
+        self.lines = state.for_size(self.pixmap.width(), self.pixmap.height());
+        self
+    }
+
+    /// The state to hand to the next frame of this canvas.
+    pub fn state(&self) -> RasterState {
+        self.lines
     }
 
     pub fn with_text(mut self, text: TextRaster<'a>) -> Raster<'a> {
@@ -336,6 +431,7 @@ impl<'a> Raster<'a> {
             Call::Restore => self.restore(),
             &Call::Scale(x, y) => {
                 if finite(&[x, y]) {
+                    let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
                     self.set_transform(self.state.transform.then(&Affine::scaling(x, y)));
                 }
             }
@@ -346,6 +442,7 @@ impl<'a> Raster<'a> {
             }
             &Call::Translate(x, y) => {
                 if finite(&[x, y]) {
+                    let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
                     self.set_transform(self.state.transform.then(&Affine::translation(x, y)));
                 }
             }
@@ -356,9 +453,9 @@ impl<'a> Raster<'a> {
             Call::ClosePath => self.close_path(),
             &Call::MoveTo(x, y) => {
                 if self.invertible() {
-                    if finite(&[x, y]) {
+                    if let Some(p) = path_pt(x, y) {
                         self.fast = if self.path.is_empty() {
-                            Fast::Start(pt32(x, y))
+                            Fast::Start(p)
                         } else {
                             Fast::None
                         };
@@ -371,10 +468,31 @@ impl<'a> Raster<'a> {
                     self.line_to(x, y);
                 }
             }
+            &Call::QuadraticCurveTo(cx, cy, x, y) => {
+                if self.invertible()
+                    && let (Some(cp), Some(p)) = (path_pt(cx, cy), path_pt(x, y))
+                {
+                    self.fast = Fast::None;
+                    self.path.quad_to(cp, p);
+                }
+            }
+            &Call::BezierCurveTo(c1x, c1y, c2x, c2y, x, y) => {
+                if self.invertible()
+                    && let (Some(c1), Some(c2), Some(p)) =
+                        (path_pt(c1x, c1y), path_pt(c2x, c2y), path_pt(x, y))
+                {
+                    self.fast = Fast::None;
+                    self.path.cubic_to(c1, c2, p);
+                }
+            }
             &Call::Rect(x, y, w, h) => {
                 if self.invertible() {
-                    if finite(&[x, y, w, h]) {
-                        self.fast = Fast::None;
+                    if let (Some(p), Some(size)) = (path_pt(x, y), path_pt(w, h)) {
+                        self.fast = if size.x == 0.0 && size.y == 0.0 && self.path.is_empty() {
+                            Fast::Start(p)
+                        } else {
+                            Fast::None
+                        };
                     }
                     self.path.rect(x, y, w, h);
                 }
@@ -402,9 +520,11 @@ impl<'a> Raster<'a> {
                 anticlockwise,
             } => {
                 if self.invertible() {
-                    if finite(&[x, y, radius_x, radius_y, rotation, start, end])
-                        && radius_x >= 0.0
-                        && radius_y >= 0.0
+                    if [x, y, radius_x, radius_y, rotation, start, end]
+                        .iter()
+                        .all(|&v| sat32(v).is_finite())
+                        && sat32(radius_x) >= 0.0
+                        && sat32(radius_y) >= 0.0
                     {
                         self.fast = Fast::None;
                     }
@@ -518,7 +638,7 @@ impl<'a> Raster<'a> {
             }
             &Property::LineWidth(w) => {
                 if w.is_finite() && w > 0.0 {
-                    s.line_width = w;
+                    s.line_width = f64::from(clamp32(w));
                 }
             }
             Property::LineCap(cap) => match cap.as_str() {
@@ -535,12 +655,12 @@ impl<'a> Raster<'a> {
             },
             &Property::MiterLimit(limit) => {
                 if limit.is_finite() && limit > 0.0 {
-                    s.miter_limit = limit;
+                    s.miter_limit = f64::from(clamp32(limit));
                 }
             }
             &Property::LineDashOffset(offset) => {
                 if offset.is_finite() {
-                    s.dash_offset = offset;
+                    s.dash_offset = f64::from(clamp32(offset));
                 }
             }
             &Property::GlobalAlpha(alpha) => {
@@ -619,10 +739,9 @@ impl<'a> Raster<'a> {
     /// Blink's `CanvasPath::lineTo`: a lone `moveTo` (or nothing) followed by one `lineTo` is
     /// remembered as a line, which `stroke()` draws with `drawLine`.
     fn line_to(&mut self, x: f64, y: f64) {
-        if !finite(&[x, y]) {
+        let Some(p) = path_pt(x, y) else {
             return;
-        }
-        let p = pt32(x, y);
+        };
         self.fast = match self.fast {
             Fast::None if self.path.is_empty() => Fast::Line(p, p),
             Fast::Start(s) => Fast::Line(s, p),
@@ -650,7 +769,7 @@ impl<'a> Raster<'a> {
     /// Blink's `CanvasPath::arc`: an arc of radius at least 1 on an empty path is remembered as
     /// an arc, which `fill()` and `stroke()` draw with `drawArc`.
     fn arc(&mut self, x: f64, y: f64, radius: f64, start: f64, end: f64, ccw: bool) {
-        let v = [x, y, radius, start, end].map(|v| v as f32);
+        let v = [x, y, radius, start, end].map(sat32);
         if !v.iter().all(|v| v.is_finite()) || v[2] < 0.0 {
             return;
         }
@@ -684,10 +803,11 @@ impl<'a> Raster<'a> {
 
     /// `cc::RecordPaintCanvas::drawPath` bookkeeping for its lines-as-paths heuristic.
     fn count_draw_path(&mut self) {
-        if self.draw_path_count != u32::MAX {
-            self.draw_path_count += 1;
-            if self.draw_path_count > 4 {
-                self.draw_line_count = 0;
+        let l = &mut self.lines;
+        if l.lines_as_paths && l.draw_path_count != u32::MAX {
+            l.draw_path_count += 1;
+            if l.draw_path_count > 4 {
+                l.draw_line_count = 0;
             }
         }
     }
@@ -720,6 +840,10 @@ impl<'a> Raster<'a> {
                 .unwrap_or_default()
         };
         let point = |x: f64, y: f64| Point::from_xy(x as f32, y as f32);
+        let clamped = |x: f64, y: f64| {
+            let max = f32::MAX / 1e6;
+            Point::from_xy((x as f32).clamp(-max, max), (y as f32).clamp(-max, max))
+        };
         match fill {
             Fill::Color(c) => {
                 let a = modulate(c.a * alpha);
@@ -733,8 +857,8 @@ impl<'a> Raster<'a> {
                     return None;
                 }
                 LinearGradient::new(
-                    point(*x0, *y0),
-                    point(*x1, *y1),
+                    clamped(*x0, *y0),
+                    clamped(*x1, *y1),
                     stops(s),
                     SpreadMode::Pad,
                     ctm.to_skia(),
@@ -885,6 +1009,9 @@ impl<'a> Raster<'a> {
 
     /// Fills a device path with Skia's analytic AA.
     fn fill_sk(&mut self, path: &SkPath, fill: &Fill) {
+        if !dev_path_drawable(path) {
+            return;
+        }
         let Some(source) = self.source(fill, 256) else {
             return;
         };
@@ -899,17 +1026,6 @@ impl<'a> Raster<'a> {
         self.paint_spans(&spans, &source);
     }
 
-    /// Fills a device-space path with the exact area coverage of Skia's `AntiFrameRect`.
-    fn fill_exact(&mut self, path: &tiny_skia::Path, fill: &Fill) {
-        let Some(source) = self.source(fill, 256) else {
-            return;
-        };
-        let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        if let Some(coverage) = scan::rasterize(path, w, h) {
-            self.paint(&coverage, &source);
-        }
-    }
-
     fn fill_current_path(&mut self) {
         if !self.invertible() {
             return;
@@ -921,6 +1037,9 @@ impl<'a> Raster<'a> {
                 return;
             }
             _ => self.count_draw_path(),
+        }
+        if self.path_rejected(&self.path.to_sk(None), false) {
+            return;
         }
         let ctm = self.state.transform;
         let device = self.path.to_sk(Some(&ctm));
@@ -950,6 +1069,9 @@ impl<'a> Raster<'a> {
         let ctm = self.state.transform.to_skia();
         let res_scale = tiny_skia::PathStroker::compute_resolution_scale(&ctm);
         let user = path.to_sk(None);
+        if self.path_rejected(&user, true) {
+            return;
+        }
         let stroke = self.state.stroke.clone();
         let hairline = self.hairline_coverage();
         let s = &self.state;
@@ -978,7 +1100,11 @@ impl<'a> Raster<'a> {
             None => (user, false),
         };
         if let Some(coverage) = hairline {
-            let Some(device) = source.transformed(&self.state.transform).to_tiny() else {
+            let device = source.transformed(&self.state.transform);
+            if !dev_path_drawable(&device) {
+                return;
+            }
+            let Some(device) = device.to_tiny() else {
                 return;
             };
             let Some(paint) = self.source(&stroke, (coverage * 256.0) as u32) else {
@@ -1057,13 +1183,14 @@ impl<'a> Raster<'a> {
     /// dashed line that `SkDashPathEffect::asPoints` accepts becomes rects. Returns false when
     /// the line is to be stroked as an ordinary path.
     fn stroke_line(&mut self, a: Pt, b: Pt) -> bool {
-        if self.draw_line_count != u32::MAX {
-            self.draw_line_count += 1;
-            if self.draw_line_count > 4 {
-                self.draw_path_count = 0;
+        let l = &mut self.lines;
+        if l.lines_as_paths && l.draw_line_count != u32::MAX {
+            l.draw_line_count += 1;
+            if l.draw_line_count > 4 {
+                l.draw_path_count = 0;
             }
         }
-        if self.draw_path_count > 4 {
+        if l.draw_path_count > 4 {
             return false;
         }
         let Some(points) = self.dash_as_points(a, b) else {
@@ -1093,13 +1220,7 @@ impl<'a> Raster<'a> {
             } else {
                 (p.x + points.size.0, p.y + points.size.1)
             };
-            let rect = [
-                f64::from(l),
-                f64::from(t),
-                f64::from(r) - f64::from(l),
-                f64::from(b) - f64::from(t),
-            ];
-            if let Some(spans) = self.rect_spans(rect, true) {
+            if let Some(spans) = self.rect_spans(sorted([l, t, r, b]), true) {
                 self.paint_spans(&spans, &source);
             }
         }
@@ -1279,48 +1400,85 @@ impl<'a> Raster<'a> {
         Some(out)
     }
 
-    /// The device rect of a user rect under a transform that keeps rects axis-aligned.
-    fn device_rect(&self, [x, y, w, h]: [f64; 4]) -> Option<Rect> {
+    /// The device rect `SkDraw::drawRect` maps a sorted LTRB rect to, when the transform keeps
+    /// rects axis-aligned.
+    fn device_rect(&self, r: [f32; 4]) -> Option<[f32; 4]> {
         let m = self.state.transform.to_skia();
         if m.kx != 0.0 || m.ky != 0.0 {
             return None;
         }
-        let (x0, y0) = (x as f32 * m.sx + m.tx, y as f32 * m.sy + m.ty);
-        let (x1, y1) = ((x + w) as f32 * m.sx + m.tx, (y + h) as f32 * m.sy + m.ty);
-        Rect::from_ltrb(x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1))
+        let (x0, y0) = (r[0] * m.sx + m.tx, r[1] * m.sy + m.ty);
+        let (x1, y1) = (r[2] * m.sx + m.tx, r[3] * m.sy + m.ty);
+        Some([x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)])
     }
 
-    fn rect_path(&self, [x, y, w, h]: [f64; 4]) -> Path {
+    fn rect_path(&self, r: [f32; 4]) -> Path {
         let mut path = Path::new();
-        path.rect(x, y, w, h);
+        path.add_rect_ltrb(r);
         path
     }
 
-    /// The blits `SkDraw::drawRect` makes to fill a user rect: `AntiFillRect` when the transform
-    /// keeps it axis-aligned, an analytic AA path fill otherwise; without antialiasing, Skia's
-    /// rounded edges.
-    fn rect_spans(&self, rect: [f64; 4], anti_alias: bool) -> Option<Spans> {
+    /// `SkCanvas::internalQuickReject` for user bounds outset by `outset` on each side:
+    /// non-finite bounds, before or after the transform, or bounds outside the clip draw nothing.
+    fn quick_reject(&self, r: [f32; 4], outset: f32) -> bool {
+        if !r.iter().all(|v| v.is_finite()) {
+            return true;
+        }
+        let r = [r[0] - outset, r[1] - outset, r[2] + outset, r[3] + outset];
+        let corners = [(r[0], r[1]), (r[2], r[1]), (r[2], r[3]), (r[0], r[3])];
+        let mapped = corners
+            .map(|(x, y)| crate::skpath::map_point(&self.state.transform, hairline::P { x, y }));
+        let l = mapped.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
+        let t = mapped.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+        let rr = mapped.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
+        let b = mapped.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+        if ![l, t, rr, b].iter().all(|v| v.is_finite()) {
+            return true;
+        }
+        let (w, h) = (self.pixmap.width() as f32, self.pixmap.height() as f32);
+        !(l.max(-1.0) < rr.min(w + 1.0) && t.max(-1.0) < b.min(h + 1.0))
+    }
+
+    /// The blits `SkDraw::drawRect` makes to fill a sorted LTRB user rect: `AntiFillRect` when
+    /// the transform keeps it axis-aligned and it fits in fixed point, an analytic AA path fill
+    /// otherwise; without antialiasing, Skia's rounded edges.
+    fn rect_spans(&self, rect: [f32; 4], anti_alias: bool) -> Option<Spans> {
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        if self.quick_reject(rect, 0.0) {
+            return None;
+        }
         if !anti_alias {
             return self.rect_coverage(rect, false).map(|c| c.to_spans(w, h));
         }
-        if let Some(device) = self.device_rect(rect) {
-            let r = [device.left(), device.top(), device.right(), device.bottom()];
-            return Some(scan::anti_fill_rect(r, w, h));
+        if let Some(r) = self.device_rect(rect) {
+            if too_big_for_math(&ltrb(r)) {
+                return None;
+            }
+            if fits_in_fixed(r) {
+                return Some(scan::anti_fill_rect(r, w, h));
+            }
         }
         let device = self.rect_path(rect).to_sk(Some(&self.state.transform));
         let mut spans = Spans::new(w, h);
-        aaa::fill_path(&device, w, h, false, &mut spans);
+        if dev_path_drawable(&device) {
+            aaa::fill_path(&device, w, h, false, &mut spans);
+        }
         Some(spans)
     }
 
-    fn rect_coverage(&self, rect: [f64; 4], anti_alias: bool) -> Option<Coverage> {
+    fn rect_coverage(&self, rect: [f32; 4], anti_alias: bool) -> Option<Coverage> {
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        if self.quick_reject(rect, 0.0) {
+            return None;
+        }
         if !anti_alias && let Some(device) = self.device_rect(rect) {
+            if too_big_for_math(&ltrb(device)) {
+                return None;
+            }
             let round = |v: f32| (v + 0.5).floor().clamp(0.0, 1e9) as i64;
-            let (l, t) = (round(device.left()), round(device.top()));
-            let r = round(device.right()).min(i64::from(w));
-            let b = round(device.bottom()).min(i64::from(h));
+            let (l, t) = (round(device[0]), round(device[1]));
+            let r = round(device[2]).min(i64::from(w));
+            let b = round(device[3]).min(i64::from(h));
             if l >= r || t >= b {
                 return None;
             }
@@ -1357,40 +1515,81 @@ impl<'a> Raster<'a> {
         if !self.invertible() {
             return;
         }
+        let [x, y, w, h] = rect32(rect);
         let fill = self.state.fill.clone();
-        if let (Some(source), Some(spans)) = (self.source(&fill, 256), self.rect_spans(rect, true))
-        {
+        if let (Some(source), Some(spans)) = (
+            self.source(&fill, 256),
+            self.rect_spans(sorted([x, y, x + w, y + h]), true),
+        ) {
             self.paint_spans(&spans, &source);
         }
     }
 
+    /// Blink's `strokeRect`: a rect with one empty side is a closed line path, any other goes
+    /// through `SkDraw::drawRect`.
     fn stroke_rect(&mut self, x: f64, y: f64, w: f64, h: f64) {
-        let Some([x, y, w, h]) = validate_rect(x, y, w, h) else {
+        let Some(rect) = validate_rect(x, y, w, h) else {
             return;
         };
-        let path = if (w > 0.0) != (h > 0.0) {
-            let mut path = Path::new();
-            path.move_to(x, y);
-            path.line_to(x + w, y + h);
-            path.close();
-            path
-        } else {
-            if self.frame_rect([x, y, w, h]) {
-                return;
+        let [x, y, w, h] = rect32(rect);
+        if (w > 0.0) != (h > 0.0) {
+            if self.invertible() {
+                self.count_draw_path();
             }
-            self.rect_path([x, y, w, h])
-        };
+            let mut path = Path::new();
+            path.move_to(f64::from(x), f64::from(y));
+            path.line_to(f64::from(x + w), f64::from(y + h));
+            path.close();
+            self.stroke_user_path(&path);
+            return;
+        }
+        let r = sorted([x, y, x + w, y + h]);
+        if !self.invertible() || self.quick_reject(r, self.stroke_outset()) {
+            return;
+        }
+        if self.frame_rect(r) {
+            return;
+        }
+        let path = self.rect_path(r);
         self.stroke_user_path(&path);
     }
 
-    /// `SkDraw::drawRect` strokes an axis-aligned rect with mitred corners as a frame: the
-    /// exact area between the rect grown and shrunk by half the device stroke size.
-    fn frame_rect(&mut self, rect: [f64; 4]) -> bool {
+    /// `SkStrokeRec::GetInflationRadius` for the stroke paint, in user space.
+    fn stroke_outset(&self) -> f32 {
+        let s = &self.state;
+        let mut multiplier = 1.0f32;
+        if s.line_join == LineJoin::Miter {
+            multiplier = multiplier.max(s.miter_limit as f32);
+        }
+        if s.line_cap == LineCap::Square {
+            multiplier = multiplier.max(std::f32::consts::SQRT_2);
+        }
+        s.line_width as f32 / 2.0 * multiplier
+    }
+
+    /// `SkCanvas::onDrawPath`'s checks on the user path: not finite, or quick-rejected.
+    fn path_rejected(&self, path: &SkPath, stroke: bool) -> bool {
+        if !path.is_finite() {
+            return true;
+        }
+        if path.pts.is_empty() {
+            return false;
+        }
+        let b = path.bounds();
+        let outset = if stroke { self.stroke_outset() } else { 0.0 };
+        self.quick_reject([b.left, b.top, b.right, b.bottom], outset)
+    }
+
+    /// `SkDraw::drawRect` for a stroke with mitred corners on an axis-aligned rect:
+    /// `AntiFrameRect` when it fits in fixed point. Returns false when Skia strokes the rect as a
+    /// path instead.
+    fn frame_rect(&mut self, rect: [f32; 4]) -> bool {
         let s = &self.state;
         if !s.dash.is_empty()
             || s.line_join != LineJoin::Miter
-            || s.miter_limit < std::f64::consts::SQRT_2
-            || !self.invertible()
+            || (s.miter_limit as f32) < std::f32::consts::SQRT_2
+            || rect[0] >= rect[2]
+            || rect[1] >= rect[3]
         {
             return false;
         }
@@ -1399,33 +1598,24 @@ impl<'a> Raster<'a> {
         };
         let m = s.transform.to_skia();
         let lw = s.line_width as f32;
-        let (hx, hy) = ((lw * m.sx).abs() * 0.5, (lw * m.sy).abs() * 0.5);
-        let outer = Rect::from_ltrb(
-            device.left() - hx,
-            device.top() - hy,
-            device.right() + hx,
-            device.bottom() + hy,
-        );
-        let mut builder = PathBuilder::new();
-        if let Some(outer) = outer {
-            builder.push_rect(outer);
+        let size = ((lw * m.sx).abs(), (lw * m.sy).abs());
+        let bbox = [
+            device[0] - size.0 / 2.0,
+            device[1] - size.1 / 2.0,
+            device[2] + size.0 / 2.0,
+            device[3] + size.1 / 2.0,
+        ];
+        if too_big_for_math(&ltrb(bbox)) {
+            return true;
         }
-        let (il, it, ir, ib) = (
-            device.left() + hx,
-            device.top() + hy,
-            device.right() - hx,
-            device.bottom() - hy,
-        );
-        if il < ir && it < ib {
-            builder.move_to(il, it);
-            builder.line_to(il, ib);
-            builder.line_to(ir, ib);
-            builder.line_to(ir, it);
-            builder.close();
+        if !fits_in_fixed(bbox) {
+            return false;
         }
-        if let Some(frame) = builder.finish() {
-            let stroke = s.stroke.clone();
-            self.fill_exact(&frame, &stroke);
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        let spans = scan::anti_frame_rect(device, size, w, h);
+        let stroke = s.stroke.clone();
+        if let Some(source) = self.source(&stroke, 256) {
+            self.paint_spans(&spans, &source);
         }
         true
     }
@@ -1438,7 +1628,8 @@ impl<'a> Raster<'a> {
         if !self.invertible() {
             return;
         }
-        if let Some(coverage) = self.rect_coverage(rect, false) {
+        let [x, y, w, h] = rect32(rect);
+        if let Some(coverage) = self.rect_coverage(sorted([x, y, x + w, y + h]), false) {
             scan::blit(&mut self.pixmap, &coverage, Blend::Clear, |_, _| [0; 4]);
         }
     }
@@ -1456,6 +1647,7 @@ impl<'a> Raster<'a> {
         if !finite(&[x, y]) || !ctm.is_invertible() {
             return;
         }
+        let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
         let state = &self.state;
         let Some(TextRaster { backend, lut }) = self.text.as_mut() else {
             return;
@@ -1568,7 +1760,13 @@ impl<'a> Raster<'a> {
             quality,
             opacity: self.state.alpha as f32,
         };
-        if let Some(spans) = self.rect_spans(dst, anti_alias) {
+        let dst = [
+            dst[0] as f32,
+            dst[1] as f32,
+            (dst[0] + dst[2]) as f32,
+            (dst[1] + dst[3]) as f32,
+        ];
+        if let Some(spans) = self.rect_spans(sorted(dst), anti_alias) {
             self.paint_spans(&spans, &source);
         }
     }
@@ -1882,5 +2080,42 @@ mod dash_tests {
         let p = raster.into_pixmap();
         let row: Vec<u8> = (0..40).map(|x| p.pixel(x, 50).unwrap().alpha()).collect();
         assert!(row.iter().any(|&a| a > 0), "{row:?}");
+    }
+
+    fn dashed_line_frame() -> Canvas2d {
+        let mut c = Canvas2d::new(60, 20);
+        c.set_line_width(2.0);
+        c.set_line_dash(&[3.0, 3.0]);
+        c.begin_path();
+        c.move_to(5.0, 10.6);
+        c.line_to(55.0, 10.6);
+        c.stroke();
+        c
+    }
+
+    fn after(state: RasterState, frame: &Canvas2d) -> (Pixmap, RasterState) {
+        let mut raster = Raster::new(60, 20).unwrap().with_state(state);
+        raster.run(&frame.calls);
+        let state = raster.state();
+        (raster.into_pixmap(), state)
+    }
+
+    #[test]
+    fn lines_as_paths_counters_outlive_a_frame_but_not_a_resize() {
+        let mut paths = Canvas2d::new(60, 20);
+        for i in 0..6 {
+            paths.begin_path();
+            paths.rect(f64::from(i), 0.0, 1.0, 1.0);
+            paths.fill();
+        }
+        let line = dashed_line_frame();
+        let (fresh, _) = after(RasterState::new(true), &line);
+        let (_, counted) = after(RasterState::new(true), &paths);
+        let (persisted, _) = after(counted, &line);
+        assert_ne!(fresh, persisted);
+        let (resized, _) = after(counted.for_size(61, 20), &line);
+        assert_eq!(fresh, resized);
+        let (_, off) = after(RasterState::new(false), &paths);
+        assert_eq!(after(off, &line).0, fresh);
     }
 }
