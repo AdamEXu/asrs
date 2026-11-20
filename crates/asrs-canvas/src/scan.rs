@@ -153,20 +153,33 @@ impl Edge {
     }
 }
 
-#[derive(Default)]
-struct Edges(Vec<Edge>);
+struct Edges {
+    edges: Vec<Edge>,
+    snap: bool,
+}
+
+/// `SkAnalyticEdge::setLine` quantizes x to 1/256 pixel and snaps y to the nearest quarter
+/// pixel (`SnapY`) before computing coverage.
+fn snap(p: P) -> (f64, f64) {
+    let fixed = |v: f32| (((v * 4.0 * 64.0) as i32) << 10) >> 2;
+    let y = fixed(p.y);
+    let y = (((y as u32).wrapping_add(1 << 13)) >> 14 << 14) as i32;
+    (f64::from(fixed(p.x)) / 65536.0, f64::from(y) / 65536.0)
+}
 
 impl Edges {
     fn line(&mut self, a: P, b: P) {
-        let (a, b) = (
-            (f64::from(a.x), f64::from(a.y)),
-            (f64::from(b.x), f64::from(b.y)),
-        );
+        let exact = |p: P| (f64::from(p.x), f64::from(p.y));
+        let (a, b) = if self.snap {
+            (snap(a), snap(b))
+        } else {
+            (exact(a), exact(b))
+        };
         if a.1 == b.1 {
             return;
         }
         let (dir, (x0, y0), (x1, y1)) = if a.1 < b.1 { (1, a, b) } else { (-1, b, a) };
-        self.0.push(Edge {
+        self.edges.push(Edge {
             x0,
             y0,
             x1,
@@ -223,6 +236,15 @@ const EPSILON: f64 = 1e-9;
 /// edges cross, so the filled region is a set of disjoint trapezoids bounded by the edges where
 /// the winding number leaves or returns to zero, and their exact areas are accumulated.
 pub fn rasterize(path: &tiny_skia::Path, width: u32, height: u32) -> Option<Coverage> {
+    sweep(path, width, height, false)
+}
+
+/// Skia's analytic AA proper: [`rasterize`] over edges snapped like `SkAnalyticEdge`.
+pub fn rasterize_analytic(path: &tiny_skia::Path, width: u32, height: u32) -> Option<Coverage> {
+    sweep(path, width, height, true)
+}
+
+fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<Coverage> {
     let b = path.bounds();
     let left = b.left().floor().max(0.0);
     let top = b.top().floor().max(0.0);
@@ -232,7 +254,10 @@ pub fn rasterize(path: &tiny_skia::Path, width: u32, height: u32) -> Option<Cove
         return None;
     }
     let (w, h) = ((right - left) as usize, (bottom - top) as usize);
-    let mut edges = Edges::default();
+    let mut edges = Edges {
+        edges: Vec::new(),
+        snap,
+    };
     let point = |p: tiny_skia::Point| P { x: p.x, y: p.y };
     let (mut start, mut last) = (P { x: 0.0, y: 0.0 }, P { x: 0.0, y: 0.0 });
     for segment in path.segments() {
@@ -264,7 +289,7 @@ pub fn rasterize(path: &tiny_skia::Path, width: u32, height: u32) -> Option<Cove
         }
     }
     edges.line(last, start);
-    let edges = edges.0;
+    let edges = edges.edges;
     let mut acc = Accumulator {
         x0: left,
         y0: top,

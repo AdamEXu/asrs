@@ -619,7 +619,7 @@ impl<'a> Raster<'a> {
     }
 
     /// Fills a device-space path. `skia_points` is the point count Skia's own path would have,
-    /// which picks its scan converter; `None` means a shape Skia always fills analytically.
+    /// which picks its scan converter; `None` means a rect frame, which Skia covers exactly.
     fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, skia_points: Option<usize>) {
         let Some(source) = self.source(fill, 256) else {
             return;
@@ -627,7 +627,11 @@ impl<'a> Raster<'a> {
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
         let analytic = skia_points.is_none_or(|n| scan::should_use_analytic(path, n));
         let coverage = if analytic {
-            scan::rasterize(path, w, h)
+            if skia_points.is_some() {
+                scan::rasterize_analytic(path, w, h)
+            } else {
+                scan::rasterize(path, w, h)
+            }
         } else {
             scan::rasterize_supersampled(path, w, h)
         };
