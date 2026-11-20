@@ -30,8 +30,8 @@ suites:
         is ported (F09). An oracle that does not finish in time and an asrs-cli that
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
-        Exit code 4 from asrs-cli (a path the port does not model yet) is listed and
-        not compared.
+        Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
+        output up to that point must be a prefix of the oracle's.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
         anything else byte by byte
@@ -298,7 +298,20 @@ fn decode_suite(args: &[String]) -> Result {
                     failures.push(format!("{name}: {report}"));
                 }
             }
-            (_, DecodeVerdict::Unmodeled) => unmodeled.push(name),
+            (
+                DecodeVerdict::Dump(want) | DecodeVerdict::NeverCompletes(want),
+                DecodeVerdict::Unmodeled(got),
+            ) => {
+                if want.starts_with(&got) {
+                    unmodeled.push(name);
+                } else if let Some(report) =
+                    diff::report_bytes(&want[..got.len().min(want.len())], &got)
+                {
+                    failures.push(format!("{name}: before the unmodeled step, {report}"));
+                } else {
+                    failures.push(format!("{name}: asrs-cli printed more than the oracle"));
+                }
+            }
             (o, r) => failures.push(format!(
                 "{name}: oracle {} but asrs-cli {}",
                 o.describe(),
@@ -396,7 +409,7 @@ enum DecodeRun {
 enum DecodeVerdict {
     Dump(Vec<u8>),
     NeverCompletes(Vec<u8>),
-    Unmodeled,
+    Unmodeled(Vec<u8>),
     Broken(String),
 }
 
@@ -415,7 +428,7 @@ impl DecodeVerdict {
         match run {
             DecodeRun::Exited(Some(0), out) => DecodeVerdict::Dump(out),
             DecodeRun::Exited(Some(NEVER_COMPLETES), out) => DecodeVerdict::NeverCompletes(out),
-            DecodeRun::Exited(Some(UNMODELED), _) => DecodeVerdict::Unmodeled,
+            DecodeRun::Exited(Some(UNMODELED), out) => DecodeVerdict::Unmodeled(out),
             DecodeRun::Exited(code, _) => DecodeVerdict::Broken(format!("exited with {code:?}")),
             DecodeRun::TimedOut(_) => DecodeVerdict::Broken("timed out".to_owned()),
         }
@@ -435,7 +448,7 @@ impl DecodeVerdict {
         match self {
             DecodeVerdict::Dump(bytes) => format!("dumped {} bytes", bytes.len()),
             DecodeVerdict::NeverCompletes(_) => "never completes".to_owned(),
-            DecodeVerdict::Unmodeled => "does not model it".to_owned(),
+            DecodeVerdict::Unmodeled(_) => "does not model it".to_owned(),
             DecodeVerdict::Broken(why) => why.clone(),
         }
     }
