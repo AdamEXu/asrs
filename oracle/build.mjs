@@ -130,6 +130,7 @@ const entries = [
   "genPhoton",
   "genCameraControls",
   "genLiveBase",
+  "genModel",
   "decode",
   "export",
   "historicalRun",
