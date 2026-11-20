@@ -441,6 +441,22 @@
       "spec": "parity/specs/regex/sites.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
+    },
+    "wpilog/corpus": {
+      "cases": 222,
+      "content": "1893bd0e04348bcb",
+      "generator": "c67f4fab1f772322",
+      "spec": "parity/specs/wpilog/corpus.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
+    "wpilog/public": {
+      "cases": 5,
+      "content": "3a0c9961a122df71",
+      "generator": "a54214126a395a00",
+      "spec": "parity/specs/wpilog/public.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
     }
   }
 }

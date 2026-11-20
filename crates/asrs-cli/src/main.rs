@@ -16,6 +16,7 @@ mod log_struct;
 mod photon;
 mod shared;
 mod units;
+mod wpilog;
 
 use std::process::ExitCode;
 
@@ -31,6 +32,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
+        Some("wpilog") => wpilog::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {

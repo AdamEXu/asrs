@@ -636,7 +636,9 @@ fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
     match &vector.spec.kind {
         Kind::Entry { entry, args } => {
             let text = oracle::pipe(
-                oracle::oracle_command_in(paths, entry, zone)?.args(args),
+                oracle::oracle_command_in(paths, entry, zone)?
+                    .args(args)
+                    .current_dir(&paths.root),
                 Vec::new(),
             )?;
             for (i, line) in text.lines().enumerate() {

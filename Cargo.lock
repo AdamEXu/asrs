@@ -312,6 +312,7 @@ name = "asrs-cli"
 version = "0.1.0"
 dependencies = [
  "asrs-canvas",
+ "asrs-formats",
  "asrs-js",
  "asrs-log",
  "asrs-parity",
@@ -328,6 +329,10 @@ dependencies = [
 [[package]]
 name = "asrs-formats"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-hub"
