@@ -42,11 +42,14 @@ function attempt(f: () => unknown): { ok: Cve1 } | { throw: Cve1 } {
 
 // A fresh Decoder per record: decode errors leave the container stack half-full, and the
 // upstream API the port matches is `new Decoder().decode(...)` per payload.
+// `keyDecoder: null` because the default is a process-global shared cache keyed on the raw
+// key bytes while its utf8DecodeJs reads continuation bytes past the key's own slice, so a
+// malformed key's decoded string depends on which record populated the cache first.
 
 function decodeRecord(bytes: Uint8Array, cse?: string): object {
   const r: Record<string, unknown> = { d: { b: bytesToHex(bytes) } };
   if (cse !== undefined) r.case = cse;
-  return { ...r, ...attempt(() => new Decoder().decode(bytes)) };
+  return { ...r, ...attempt(() => new Decoder({ keyDecoder: null }).decode(bytes)) };
 }
 
 function matrixPayloads(seed: number): [string, Uint8Array][] {
@@ -126,7 +129,7 @@ if (mode === "decode") {
   const emit = (bytes: Uint8Array) => {
     try {
       const trees: Cve1[] = [];
-      const it = new Decoder().decodeMulti(bytes);
+      const it = new Decoder({ keyDecoder: null }).decodeMulti(bytes);
       for (let r = it.next(); !r.done; r = it.next()) trees.push(toTree(r.value));
       out({ m: { b: bytesToHex(bytes) }, ok: trees });
     } catch (e) {

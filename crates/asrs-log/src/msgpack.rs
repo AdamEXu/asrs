@@ -1,9 +1,13 @@
 //! `@msgpack/msgpack` 3.0.0-beta2 `Decoder` and `Encoder` with the default options every
 //! upstream call site uses (`new Decoder()` / `new Encoder()`): numbers decode to f64
-//! (64-bit ints truncate past 2^53, no BigInt), the shared key decoder (a cache with no
-//! observable effect, not ported), the default extension codec (timestamp extension -1 to
-//! `Date`, every other ext to an `ExtData` instance), and no length caps, so the
-//! `maxXxxLength` checks can never fire and are not ported.
+//! (64-bit ints truncate past 2^53, no BigInt), the default extension codec (timestamp
+//! extension -1 to `Date`, every other ext to an `ExtData` instance), and no length caps,
+//! so the `maxXxxLength` checks can never fire and are not ported.
+//!
+//! The default `keyDecoder` is a process-global `CachedKeyDecoder` keyed on the raw key
+//! bytes: a malformed key's string depends on which earlier payload cached those bytes
+//! first (and on `Math.random` evictions), so it is nondeterministic by design. The port
+//! matches `keyDecoder: null`, which is what the vectors generate against.
 //!
 //! The bundled oracle mangles the `DecodeError` class name to `_DecodeError`; the thrown
 //! `name` is part of parity output, so errors use the mangled spelling.
@@ -343,8 +347,8 @@ impl<'a> RawDecoder<'a> {
             return Err(more_data());
         }
         let offset = self.pos + header_offset;
-        // `keyDecoder.canBeCached` strings go through the same utf8DecodeJs, so the cache
-        // has no observable effect and only the length threshold matters.
+        // `keyDecoder.canBeCached` strings go through the same utf8DecodeJs; with the
+        // cache itself not ported, only the length threshold matters here.
         let text = if self.state_is_map_key() && byte_length > 0 && byte_length <= MAX_KEY_LENGTH {
             utf8_decode_js(self.bytes, offset, byte_length)
         } else {
