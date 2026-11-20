@@ -104,6 +104,18 @@ Names:
 | upstream module | `shared/util:cleanFloat`, `shared/units:Units.convert`, `shared/log/Log:default` | module id is the path under `src/` without `.ts` |
 | npm package | `npm:color-convert:hex.hsl` | resolved from upstream's `node_modules` |
 | helper | `oracle:numberFormat` | see `src/helpers.ts` |
+| lazy helper | `oracle:robotStateRun` | the `run` export of `src/lazyHelpers/robotStateRun.ts` |
+
+New helpers that drive a whole upstream subsystem (the `*Run` modules behind an entry
+generator) go in `src/lazyHelpers/<name>.ts`, not in `src/helpers.ts`. `build.mjs` bundles each
+one separately to `dist/lazyHelpers/<name>.mjs`, and the registry imports it through a computed
+URL the first time `oracle:<name>` is called, so it is in no other bundle. Adding or editing one
+therefore leaves the generator hash of `fn`, and of every generator that imports
+`src/helpers.ts`, unchanged; only its own generator and any `fn` spec whose requests name
+`"oracle:<name>"` go stale (xtask adds those helpers' inputs to that spec's hash). A lazy
+helper must have no load-time side effects and must not rely on module state shared with the
+`fn` bundle: it gets its own copy of every module it imports, upstream ones included.
+`geometryRun` and `logFieldRun` predate this and are still in `src/helpers.ts`.
 
 Every `.ts` file under `src/shared` and `src/hub` is bundled except `hub/hub.ts` and worker
 entry points; modules load lazily on first use, so one with load-time side effects does not
