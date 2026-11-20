@@ -87,3 +87,27 @@ fn render_thread_delivers_the_latest_frame_and_wakes() {
     assert!(thread.take().is_none());
     thread.recycle(frame.bgra);
 }
+
+#[test]
+fn an_instanced_mesh_with_no_instances_draws_nothing() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let (mut scene, mut camera) = scene_with_box_at(1.2);
+    let root = scene.root;
+    let geometry = Geometry::new(primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
+    scene.add_mesh(
+        root,
+        Mesh::instanced(geometry, Arc::new(PhongMaterial::new()), 0),
+    );
+    let options = FrameOptions {
+        width: W,
+        height: H,
+        samples: 4,
+    };
+    let frame = build_frame(&mut scene, &mut camera, options);
+    let mut bgra = Vec::new();
+    renderer.render(&frame, &mut bgra);
+    assert_eq!(pixel(&bgra, W / 2, H / 4), [0, 0, 0xff, 0xff]);
+    assert_eq!(pixel(&bgra, W / 2, H * 3 / 4), [0x22, 0x22, 0x22, 0xff]);
+}

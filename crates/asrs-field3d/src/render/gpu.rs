@@ -611,6 +611,9 @@ impl Renderer {
         let mut pass = encoder.begin_render_pass(pass_desc);
         pass.set_bind_group(0, &self.frame_group, &[]);
         for (n, draw) in frame.draws.iter().enumerate() {
+            if draw.instances.as_ref().is_some_and(|m| m.is_empty()) {
+                continue;
+            }
             let geometry = &self.geometries[&draw.geometry.key()];
             pass.set_pipeline(&self.pipelines[&keys[n]]);
             pass.set_bind_group(1, &self.draw_group, &[(n as u64 * DRAW_STRIDE) as u32]);
@@ -628,9 +631,6 @@ impl Renderer {
             if let (Some(offset), Some(matrices), Some(buffer)) =
                 (instance_offsets[n], &draw.instances, &self.instance_buffer)
             {
-                if matrices.is_empty() {
-                    continue;
-                }
                 pass.set_vertex_buffer(
                     4,
                     buffer.slice(offset..offset + matrices.len() as u64 * 64),
