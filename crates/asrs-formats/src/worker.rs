@@ -6,7 +6,7 @@ use asrs_log::log::SerializedLog;
 pub enum Response {
     Progress(f64),
     Initial {
-        log: SerializedLog,
+        log: Box<SerializedLog>,
         is_partial: bool,
     },
     Failed,

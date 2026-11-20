@@ -1,0 +1,53 @@
+{
+  "protocol": "phoenix",
+  "seed": 77,
+  "latencyMs": 3,
+  "endMs": 3500,
+  "client": {
+    "source": "phoenix",
+    "address": "127.0.0.1",
+    "prefs": { "liveDiscard": -1 },
+    "tabs": ["Phoenix6/TalonFXS-21/MotorVoltage", "Phoenix6/TalonFXS-21/DeviceTemp", "Phoenix6/CANrange-2/Distance", "Phoenix6/CANdi-ab/S1State"]
+  },
+  "server": {
+    "startUs": 123456,
+    "points": 2,
+    "stepUs": 5000,
+    "devices": [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 21, "Model": "Talon FXS", "Name": "Talon FXS (Device ID 21)", "IsPROApplication": true },
+        "signals": [
+          { "Id": 30, "Name": "MotorVoltage", "Summary": "Voltage", "Units": "V" },
+          { "Id": 4, "Name": "DeviceTemp", "Summary": "Temp", "Units": "C" }
+        ],
+        "values": { "30": [12.25, 11.5], "4": [30] }
+      }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1100, "server": ["devices", [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 21, "Model": "Talon FXS", "Name": "Talon FXS (Device ID 21)", "IsPROApplication": true },
+        "signals": [
+          { "Id": 30, "Name": "MotorVoltage", "Summary": "Voltage", "Units": "V" },
+          { "Id": 4, "Name": "DeviceTemp", "Summary": "Temp", "Units": "C" }
+        ],
+        "values": { "30": [12.25, 11.5], "4": [30] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 2, "Model": "CANrange", "Name": "CANrange (Device ID 2)", "IsPROApplication": true },
+        "signals": [{ "Id": 9, "Name": "Distance", "Summary": "Distance", "Units": "m" }],
+        "values": { "9": [0.25, 0.5, 0.75] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 3, "Model": "CANdi", "Name": "ab", "IsPROApplication": true },
+        "signals": [{ "Id": 5, "Name": "S1State", "Summary": "State", "Units": "" }],
+        "values": { "5": [1] }
+      }
+    ]] },
+    { "t": 2000, "client": ["dump"] },
+    { "t": 2500, "client": ["fields", ["Phoenix6/TalonFXS-21/DeviceTemp"], []] },
+    { "t": 3200, "client": ["dump"] }
+  ]
+}

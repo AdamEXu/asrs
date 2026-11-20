@@ -13,6 +13,8 @@ const FN_SPEC: &str = ".jsonl";
 const FN_ZONED_SPEC: &str = ".fn.json";
 const REQUESTS: &str = ".requests.jsonl";
 const ENTRY_SPEC: &str = ".entry.json";
+const SESSION_SPEC: &str = ".session.json";
+const SESSION_ENTRY: &str = "liveSession";
 /// Names the spec file for an entry run, so an entry can read its fixture from the spec itself.
 const SPEC_VARIABLE: &str = "ASRS_ORACLE_SPEC";
 const REGENERATE: &str = "regenerate with `cargo xtask oracle gen` and commit the result";
@@ -629,7 +631,19 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
         if rel.ends_with(REQUESTS) {
             continue;
         }
-        if let Some(id) = rel.strip_suffix(ENTRY_SPEC) {
+        if let Some(id) = rel.strip_suffix(SESSION_SPEC) {
+            found.push(Spec {
+                id: id.to_owned(),
+                zones: None,
+                platforms: None,
+                kind: Kind::Entry {
+                    entry: SESSION_ENTRY.to_owned(),
+                    args: vec![path.to_string_lossy().into_owned()],
+                    inputs: Vec::new(),
+                },
+                path,
+            });
+        } else if let Some(id) = rel.strip_suffix(ENTRY_SPEC) {
             let json = read_json(&path)?;
             let entry = json
                 .get("entry")
@@ -1044,7 +1058,9 @@ mod tests {
         }
 
         fn write(&self, rel: &str, text: &str) {
-            fs::write(self.0.join(rel), text).unwrap();
+            let path = self.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
         }
     }
 
@@ -1114,6 +1130,21 @@ mod tests {
         let before = entry_hashes(&dir.0, &inputs()).unwrap();
         dir.write("src/genA.ts", "a\r\nb\r\n");
         assert_eq!(before, entry_hashes(&dir.0, &inputs()).unwrap());
+    }
+
+    #[test]
+    fn session_files_are_live_session_specs() {
+        let dir = harness("sessions");
+        dir.write("live/nt4/a.session.json", r#"{"protocol": "nt4"}"#);
+        let specs = discover(&dir.0).unwrap();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].id, "live/nt4/a");
+        assert_eq!(specs[0].entry(), SESSION_ENTRY);
+        match &specs[0].kind {
+            Kind::Entry { args, .. } => assert_eq!(args, &[specs[0].path.display().to_string()]),
+            Kind::Fn { .. } => panic!("a session is an entry spec"),
+        }
+        assert_eq!(specs[0].inputs(), vec![specs[0].path.as_path()]);
     }
 
     #[test]

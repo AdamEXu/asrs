@@ -193,6 +193,8 @@ file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of th
   spec; they join the generator hash.
 - `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
   a sibling file (`*.requests.jsonl` files are never specs themselves).
+- `<id>.session.json`: a live session (see Live sessions), run by the `liveSession` entry
+  under UTC. The session file is the spec, so adding one needs no other edit.
 
 `zones` is optional and lists policy zones. Without it a spec makes one UTC vector `<id>`;
 with it, one oracle process per zone makes vector `<id>/<zone>`, for example
@@ -431,6 +433,137 @@ comparing. `cmds` is a display list replayed call for call:
 A port renderer for `cargo xtask canvas run` is called as
 `<program> <args>... <scenes dir> <out dir> [<scene>...]` and writes `<out dir>/<scene>.png` in
 the same straight-alpha form.
+
+## Live sessions
+
+`src/liveSession.ts` runs upstream's real live sources (`NT4Source` with `NT4_Client`,
+`NT4Publisher`, `NT4Tuner`, `RLOGServerSource` with the main-process TCP code transcribed in
+`src/live/rlogMain.ts`, `PhoenixDiagnosticsSource`, `FTCDashboardSource`) against a scripted
+mock server, entirely in process on a fake clock, and prints a trace. Each session is one file,
+`parity/specs/live/<protocol>/<name>.session.json`, which makes vector `live/<protocol>/<name>`.
+`cargo xtask oracle run liveSession <file>` prints a trace without writing a vector.
+
+Adding a session (the N units): write the file, run `cargo xtask oracle gen --stale`, commit
+the session, its vector and the new `MANIFEST.json` line. No code or other spec changes: xtask
+discovers session files, and the Rust test
+`crates/asrs-parity/tests/live_sessions.rs` replays every one of them against the Rust mocks
+(below). The manifest is the one shared file; a conflict there after merging main is resolved
+by rerunning `oracle gen --stale`. A session that needs a mock or harness feature that does not
+exist yet is a harness change, not a session.
+
+### Session format
+
+```json
+{
+  "protocol": "nt4",
+  "seed": 6328,
+  "epochMs": 1700000000000,
+  "latencyMs": 2,
+  "endMs": 3200,
+  "client": { "source": "nt4", "mode": "default", "address": "127.0.0.1", "prefs": {}, "tabs": [], "sidebar": [] },
+  "server": { "version": "4.1", "topics": [] },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "server": ["set", "/SmartDashboard/speed", 2.75] }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `protocol` | `nt4`, `rlog`, `phoenix` or `ftc`: which mock serves the session |
+| `seed` | at least 1 (V8 treats 0 as no seed); `Math.random` is V8's own generator under `--random-seed=<seed>` (`src/live/random.ts`; the port uses `asrs_js::time::V8MathRandom::from_seed`). It is installed before the source is built, so the source UUID, NT4 uids and the msgpack key-cache evictions all draw from it |
+| `epochMs` | `Date.now()` at session time 0 (default 1700000000000) |
+| `latencyMs` | one-way network delay, an integer of at least 1 (default 1) |
+| `endMs` | the session stops after this time; a final `dump` is recorded then |
+| `client.source` | `nt4` (needs `mode`: `default`, `akit`, `systemcore`, `ds`), `nt4-publisher` (`mode`: `sim` or `robot`), `rlog`, `phoenix`, `ftc` |
+| `client.address` | what `connect` passes to the source (default `127.0.0.1`); the publisher derives its own |
+| `client.prefs` | merged over upstream's `DEFAULT_PREFS` into `window.preferences`; `null` makes it `null` |
+| `client.tabs`, `client.sidebar` | what `window.tabs.getActiveFields()` and `window.sidebar.getActiveFields()` return |
+| `client.platform` | `window.platform` (default `darwin`) |
+| `server` | the mock's configuration (per protocol, below) |
+| `steps` | `{"t": <ms>, "client": [op, ...]}` or `{"t": <ms>, "server": [op, ...]}`, in non-decreasing time order |
+
+Client ops, applied the way `hub.ts` does:
+
+| Op | Effect |
+|---|---|
+| `["connect"]` | `startLive`: stops the previous source and publisher, builds the source and calls `connect(address, status, output)`; the output callback sets `window.log`. For `nt4-publisher` it builds a new `NT4Publisher` |
+| `["stop"]` | `stop()` on the source and the publisher |
+| `["prefs", {...} \| null]` | merges into `window.preferences` (from the defaults when it is `null`), or sets it to `null` |
+| `["fields", tabs, sidebar]` | replaces the active field lists |
+| `["log", method, ...args]` | calls `window.log[method](...args)`, args in CVE-1 (bare numbers allowed); used to build the publisher's log |
+| `["select", selected, hovered]` | `window.selection.getSelectedTime()` and `getHoveredTime()` (numbers or `null`) |
+| `["tune", key, value]`, `["untune", key]` | `getTuner().publish` and `unpublish` |
+| `["dump"]` | records the canonical dump of `window.log` |
+
+Server ops shared by every mock: `["up"]`; `["down", "refuse" \| "hang"]` (new connections and
+requests are refused or never answered, open ones stay); `["mute", bool]` (pushes on open
+connections are dropped; handshakes and HTTP replies still go out); `["drop"]` (the server closes every open
+connection, websockets first, each in opening order). Per protocol (each server class documents
+its own behaviour in detail):
+
+| Protocol | Config | Steps |
+|---|---|---|
+| `nt4` (`src/live/nt4Server.ts`) | `version` (`4.1` or `4.0`), `ports` ([5810]), `offsetUs` (server time is `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}]) | `announce`, `unannounce`, `properties`, `set`, `batch`, `setraw`, `text`, `binary` |
+| `rlog` (`RLOGServer`) | `port` (5800) | `["send", hex]` (one length-prefixed frame), `["sendraw", hex]` |
+| `phoenix` (`PhoenixServer`) | `devices` ([{device, signals, values}]), `busUtil`, `startUs`, `points`, `stepUs` | `["devices", [...]]`, `["error", action, code]` |
+| `ftc` (`FTCServer`) | `status` | `["status", {...}]`, `["send", json]`, `["sendtext", text]` |
+
+NT4 values are packed by topic type (`double` is always float64, `float` float32, `int` the
+smallest integer form, arrays element-wise, any other type takes a hex string as `bin`). Every
+JSON value a mock writes must be safe integers or non-integers with magnitude in [1e-6, 1e21),
+because JS and Rust print other numbers differently; the mocks reject anything else, and both
+order object keys as `JSON.parse` does.
+
+### Timing and network model
+
+One loop (`src/live/loop.ts`) runs everything, in integer milliseconds. At each time it runs,
+in order: the server (every client message arriving now in send order, then the server steps
+for now in file order); the client steps for now (file order); then client tasks until none is
+due, where a delivery (server message, IPC message, socket event) due now goes before any
+timer, oldest first, and timers follow Blink's rules (see `src/live/clock.ts` and
+`asrs_live::timers`). The emulated main process shares that one timer queue and those rules, so its heartbeat
+interval and socket timers order against the renderer's by creation. Every task is followed by a
+full microtask drain. `requestIdleCallback`
+fires at its `timeout`, `requestAnimationFrame` 16 ms later, both as ordinary timers. IPC
+between the renderer and the emulated main process is a delivery with no delay.
+
+Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
+client `latencyMs` later. Connection and request ids count up from 1 across websockets, HTTP
+requests and TCP sockets. Websockets behave like the browser's: `send` while connecting
+throws, a refused handshake fires `error` then `close`, a server drop fires `close` (1006),
+`close()` fires `close` a round trip later, and messages arriving when not open are dropped.
+`fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
+`http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
+go out on connect, `setTimeout` is an idle timer refreshed by connecting, reads and writes, a
+refusal emits `error` then `close`; `error` is emitted at once and `close` as a later
+delivery, as Node emits it from the handle's close callback.
+
+### Trace
+
+Each line is `{"t":<ms>,"ev":<event>,"id":<connection>,"v":<CVE-1>}`, with `id` and `v` left out
+where an event has none, in the order things happen.
+
+| From | Events (`v`) |
+|---|---|
+| client | `ws-open` ([url, [protocols]]), `ws-send` (string or bytes), `ws-close`, `http-get` (url), `http-abort`, `tcp-open` ([host, port]), `tcp-send` (bytes), `tcp-close` |
+| server | `ws-accept` (protocol, `""` for none), `ws-reject`, `ws-push` (string or bytes), `ws-drop`, `http-reply` ([status, body]), `http-refuse`, `tcp-accept`, `tcp-refuse`, `tcp-push` (bytes), `tcp-drop` |
+| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string) |
+
+Log indexes number the distinct `Log` objects in the order the harness first sees them; 0 is
+the hub's initial log. TCP chunk boundaries are recorded as written, but only the byte stream
+is protocol-relevant.
+
+### Rust side
+
+`asrs_parity::live` mirrors the mocks: `Session::load` parses a session (objects in
+`JSON.parse` order), `ServerHost` is the sans-IO server on the same clock (`arrive(sent_at,
+event)`, `next_time()`, `process(t)` returning server events), `ClientEvent::line` and
+`ServerEvent::line` write trace lines, and `replay` checks a recorded trace's server events
+against the Rust mock line for line. A port's live test feeds its client's traffic to
+`ServerHost`, delivers the returned events `latencyMs` later under the loop rules above, and
+compares its own trace with the vector.
 
 ## DOM harness
 

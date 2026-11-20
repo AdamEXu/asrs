@@ -45,7 +45,7 @@ fn text_decoder() -> TextDecoder {
     TextDecoder::new(None, false, false).expect("utf-8 is always supported")
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Primitive {
     Bool,
     Char,
@@ -108,7 +108,7 @@ impl Primitive {
 
 /// The stored `type` token: a primitive, a nested schema name, or `undefined` when the
 /// declaration had no type token and a schema named "undefined" happened to compile.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum FieldType {
     Primitive(Primitive),
     Named(JsString),
@@ -148,7 +148,7 @@ impl FieldType {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ValueSchema {
     name: JsString,
     ty: FieldType,
@@ -156,7 +156,7 @@ pub struct ValueSchema {
     is_optional: bool,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Schema {
     value_schemas: Vec<ValueSchema>,
 }
@@ -174,7 +174,7 @@ pub struct DecodeResult {
     pub bytes_consumed: usize,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub struct PhotonStructDecoder {
     schema_strings: JsObject<JsString>,
     schemas: JsObject<Schema>,
