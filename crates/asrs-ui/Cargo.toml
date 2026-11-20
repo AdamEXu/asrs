@@ -121,3 +121,8 @@ required-features = ["parity"]
 name = "icon_capture"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "pixel_snap"
+harness = false
+required-features = ["parity"]
