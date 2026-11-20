@@ -485,6 +485,7 @@ pub(super) fn popup_menu(
     });
     // SAFETY: NSObject's designated initializer on a freshly allocated instance.
     let runner: Retained<PopupRunner> = unsafe { msg_send![super(runner), init] };
+    // SAFETY: an immutable NSString constant exported by Foundation.
     let modes = NSArray::from_slice(&[unsafe { NSRunLoopCommonModes }]);
     // SAFETY: `run:` takes one object argument, and the run loop retains the runner until it
     // fires.
@@ -748,7 +749,7 @@ pub(super) mod probe {
             return None;
         }
         let first = pixels.pixel(0, 0);
-        let solid = pixels.rgba.chunks_exact(4).all(|p| p == first);
+        let solid = pixels.rgba.as_chunks::<4>().0.iter().all(|p| *p == first);
         (solid && first[3] == 255).then_some([first[0], first[1], first[2]])
     }
 

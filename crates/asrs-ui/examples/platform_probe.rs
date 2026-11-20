@@ -3,6 +3,8 @@
 //! HID event tap, so leave the machine alone while it runs. Prints one line per check and exits
 //! non-zero if any fails.
 
+#![allow(clippy::disallowed_methods)]
+
 use std::cell::RefCell;
 use std::io::{BufRead, BufReader, Write as _};
 use std::process::{Child, Command, Stdio};
