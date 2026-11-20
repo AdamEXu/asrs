@@ -11,6 +11,7 @@ name = "asrs-cli"
 path = "src/main.rs"
 
 [dependencies]
+asrs-parity = { path = "../asrs-parity" }
 
 [lints]
 workspace = true

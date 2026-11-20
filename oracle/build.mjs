@@ -88,7 +88,7 @@ const oraclePlugin = {
   }
 };
 
-const entries = ["fn", "selftest"];
+const entries = ["fn", "selftest", "cve1Torture"];
 
 await esbuild.build({
   entryPoints: Object.fromEntries(entries.map((name) => [name, path.join(here, "src", name + ".ts")])),
