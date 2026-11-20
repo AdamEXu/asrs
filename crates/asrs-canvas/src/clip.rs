@@ -12,6 +12,7 @@ pub struct ClipRect {
     pub bottom: f32,
 }
 
+#[derive(Clone, Copy)]
 pub enum Piece {
     Line([P; 2]),
     Quad([P; 3]),
@@ -119,6 +120,11 @@ pub fn intersect_line(src: [P; 2], clip: ClipRect) -> Option<[P; 2]> {
 /// `SkLineClipper::ClipLine` without culling to the right: the parts left or right of `clip`
 /// become vertical lines on its edge, so the winding inside is unchanged.
 pub fn clip_line(pts: [P; 2], clip: ClipRect, out: &mut Vec<Piece>) {
+    clip_line_cull(pts, clip, false, out);
+}
+
+/// `SkLineClipper::ClipLine`; with `cull_right`, a segment wholly right of `clip` is dropped.
+pub fn clip_line_cull(pts: [P; 2], clip: ClipRect, cull_right: bool, out: &mut Vec<Piece>) {
     let (i0, i1) = if pts[0].y < pts[1].y { (0, 1) } else { (1, 0) };
     if pts[i1].y <= clip.top || pts[i0].y >= clip.bottom {
         return;
@@ -142,6 +148,9 @@ pub fn clip_line(pts: [P; 2], clip: ClipRect, out: &mut Vec<Piece>) {
         (1, 0, true)
     };
     let mut result = Vec::with_capacity(4);
+    if tmp[i0].x >= clip.right && tmp[i1].x > clip.left && cull_right {
+        return;
+    }
     if tmp[i1].x <= clip.left || tmp[i0].x >= clip.right {
         let x = if tmp[i1].x <= clip.left {
             clip.left
@@ -250,6 +259,10 @@ fn set_coord(p: &mut P, y: bool, v: f32) {
     }
 }
 
+pub fn chop_quad_at_y_extrema(src: [P; 3]) -> Vec<[P; 3]> {
+    chop_quad_at_extrema(src, true)
+}
+
 /// `SkChopQuadAtYExtrema` (`y`) or `SkChopQuadAtXExtrema`.
 fn chop_quad_at_extrema(src: [P; 3], y: bool) -> Vec<[P; 3]> {
     let (a, b, c) = (coord(src[0], y), coord(src[1], y), coord(src[2], y));
@@ -318,7 +331,7 @@ fn chop_quad_in_y(pts: &mut [P; 3], clip: ClipRect) {
 }
 
 /// `SkEdgeClipper::clipMonoQuad` without culling to the right.
-fn clip_mono_quad(src: [P; 3], clip: ClipRect, out: &mut Vec<Piece>) {
+fn clip_mono_quad(src: [P; 3], clip: ClipRect, cull_right: bool, out: &mut Vec<Piece>) {
     let (mut pts, mut reverse) = if src[0].y > src[2].y {
         ([src[2], src[1], src[0]], true)
     } else {
@@ -337,7 +350,9 @@ fn clip_mono_quad(src: [P; 3], clip: ClipRect, out: &mut Vec<Piece>) {
         return;
     }
     if pts[0].x >= clip.right {
-        out.push(vline(clip.right, pts[0].y, pts[2].y, reverse));
+        if !cull_right {
+            out.push(vline(clip.right, pts[0].y, pts[2].y, reverse));
+        }
         return;
     }
     if pts[0].x < clip.left {
@@ -375,6 +390,10 @@ fn clip_mono_quad(src: [P; 3], clip: ClipRect, out: &mut Vec<Piece>) {
 /// `SkEdgeClipper::clipQuad`: x- and y-monotonic quads inside `clip`, plus vertical lines on
 /// its left and right edges for the parts outside.
 pub fn clip_quad(src: [P; 3], clip: ClipRect, out: &mut Vec<Piece>) {
+    clip_quad_cull(src, clip, false, out);
+}
+
+pub fn clip_quad_cull(src: [P; 3], clip: ClipRect, cull_right: bool, out: &mut Vec<Piece>) {
     let top = src[0].y.min(src[1].y).min(src[2].y);
     let bottom = src[0].y.max(src[1].y).max(src[2].y);
     if top >= clip.bottom || bottom <= clip.top {
@@ -382,7 +401,7 @@ pub fn clip_quad(src: [P; 3], clip: ClipRect, out: &mut Vec<Piece>) {
     }
     for mono_y in chop_quad_at_extrema(src, true) {
         for mono in chop_quad_at_extrema(mono_y, false) {
-            clip_mono_quad(mono, clip, out);
+            clip_mono_quad(mono, clip, cull_right, out);
         }
     }
 }

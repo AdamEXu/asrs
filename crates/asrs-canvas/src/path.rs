@@ -2,6 +2,8 @@ use std::f32::consts::{FRAC_1_SQRT_2, PI, TAU};
 
 use tiny_skia::PathBuilder;
 
+use crate::hairline::P;
+
 const NEARLY_ZERO: f32 = 1.0 / 4096.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -358,15 +360,45 @@ impl Path {
         }
     }
 
-    /// `SkPath::arcTo(oval, startAngle, sweepAngle, forceMoveTo = false)`.
     fn arc_to(&mut self, oval: [f32; 4], start: f32, sweep: f32, rotate: Option<Affine>) {
+        let force_move = self.verbs.is_empty() || self.needs_move;
+        self.arc_to_forced(oval, start, sweep, rotate, force_move);
+    }
+
+    /// `SkPathBuilder::arcTo(oval, startAngle, sweepAngle, forceMoveTo)` in degrees.
+    pub fn arc_to_oval(&mut self, oval: [f32; 4], start: f32, sweep: f32, force_move: bool) {
+        let force_move = force_move || self.verbs.is_empty() || self.needs_move;
+        self.arc_to_forced(oval, start, sweep, None, force_move);
+    }
+
+    /// `SkPathBuilder::addOval(oval)`: clockwise from the right-hand point, four quarter conics.
+    pub fn add_oval(&mut self, oval: [f32; 4]) {
+        let [l, t, r, b] = oval;
+        let (cx, cy) = (midpoint(l, r), midpoint(t, b));
+        let w = FRAC_1_SQRT_2;
+        self.sk_move_to(pt(r, cy));
+        self.sk_conic_to(pt(r, b), pt(cx, b), w);
+        self.sk_conic_to(pt(l, b), pt(l, cy), w);
+        self.sk_conic_to(pt(l, t), pt(cx, t), w);
+        self.sk_conic_to(pt(r, t), pt(r, cy), w);
+        self.close();
+    }
+
+    /// `SkPath::arcTo(oval, startAngle, sweepAngle, forceMoveTo)`.
+    fn arc_to_forced(
+        &mut self,
+        oval: [f32; 4],
+        start: f32,
+        sweep: f32,
+        rotate: Option<Affine>,
+        force_move: bool,
+    ) {
         let [l, t, r, b] = oval;
         if r - l < 0.0 || b - t < 0.0 {
             return;
         }
         let map = |p: Pt| rotate.map_or(p, |m| m.map32(p));
         let start = start % 360.0;
-        let force_move = self.verbs.is_empty() || self.needs_move;
         let center = pt(midpoint(l, r), midpoint(t, b));
         let lone = if sweep == 0.0 && (start == 0.0 || start == 360.0) {
             Some(pt(r, center.y))
@@ -432,6 +464,24 @@ impl Path {
         }
     }
 
+    /// The path as an `SkPath`, mapped through `m` first when given.
+    pub fn to_sk(&self, m: Option<&Affine>) -> crate::skpath::SkPath {
+        let map = |p: Pt| {
+            let p = P { x: p.x, y: p.y };
+            m.map_or(p, |m| crate::skpath::map_point(m, p))
+        };
+        let mut out = crate::skpath::SkPath::new();
+        for v in &self.verbs {
+            match *v {
+                Verb::Move(p) => out.move_to(map(p)),
+                Verb::Line(p) => out.line_to(map(p)),
+                Verb::Conic(p1, p2, w) => out.conic_to(map(p1), map(p2), w),
+                Verb::Close => out.close(),
+            }
+        }
+        out
+    }
+
     /// The path as tiny-skia geometry, mapped through `m` first when given, with conics split
     /// into quads to within `conic_tolerance` (Skia uses 0.25 device pixels).
     pub fn to_skia(&self, m: Option<&Affine>, conic_tolerance: f32) -> Option<tiny_skia::Path> {
@@ -468,8 +518,33 @@ impl Path {
     }
 }
 
+/// `SkAutoConicToQuads::computeQuads`: the quads approximating a conic to within `tol`.
+pub fn conic_to_quads(pts: [P; 3], w: f32, tol: f32) -> Vec<[P; 3]> {
+    let conic = Conic {
+        pts: pts.map(|p| pt(p.x, p.y)),
+        w,
+    };
+    let mut start = pts[0];
+    conic
+        .to_quads(tol)
+        .into_iter()
+        .map(|[c, e]| {
+            let q = [start, P { x: c.x, y: c.y }, P { x: e.x, y: e.y }];
+            start = q[2];
+            q
+        })
+        .collect()
+}
+
 fn midpoint(a: f32, b: f32) -> f32 {
     ((f64::from(a) + f64::from(b)) * 0.5) as f32
+}
+
+/// Blink's `CanonicalizeAngle` then `AdjustEndAngle`: the arc's start and end in radians.
+pub fn arc_angles(start: f32, end: f32, ccw: bool) -> (f32, f32) {
+    let (mut s, mut e) = (start, end);
+    canonicalize_angle(&mut s, &mut e);
+    (s, adjust_end_angle(s, e, ccw))
 }
 
 fn canonicalize_angle(start: &mut f32, end: &mut f32) {
@@ -523,11 +598,11 @@ fn angles_to_unit_vectors(start: f32, sweep: f32) -> (Pt, Pt, bool) {
     (start_v, stop_v, sweep <= 0.0)
 }
 
-type ConicPts = ([Pt; 3], f32);
+pub(crate) type ConicPts = ([Pt; 3], f32);
 
 /// `SkConic::BuildUnitArc` followed by the oval's scale and translate (`user` is
 /// `[sx, sy, tx, ty]`).
-fn build_unit_arc(start: Pt, stop: Pt, ccw: bool, user: [f32; 4]) -> Option<Vec<ConicPts>> {
+pub(crate) fn build_unit_arc(start: Pt, stop: Pt, ccw: bool, user: [f32; 4]) -> Option<Vec<ConicPts>> {
     let x = start.x * stop.x + start.y * stop.y;
     let mut y = start.x * stop.y - start.y * stop.x;
     let abs_y = y.abs();
@@ -592,7 +667,7 @@ fn build_unit_arc(start: Pt, stop: Pt, ccw: bool, user: [f32; 4]) -> Option<Vec<
     let (a, b, c, d) = (sx * m00, sx * m01, sy * m10, sy * m11);
     for (pts, _) in &mut conics {
         for p in pts.iter_mut() {
-            *p = pt(a * p.x + b * p.y + tx, c * p.x + d * p.y + ty);
+            *p = pt(tx + a * p.x + b * p.y, ty + c * p.x + d * p.y);
         }
     }
     Some(conics)
@@ -631,22 +706,28 @@ impl Conic {
         pow2
     }
 
+    /// `SkConic::chop` (the non-legacy form Chromium builds): the halves at t = 1/2.
     fn chop(&self) -> [Conic; 2] {
         let scale = 1.0 / (1.0 + self.w);
         let new_w = (0.5 + self.w * 0.5).sqrt();
         let [p0, p1, p2] = self.pts;
-        let wp1 = pt(self.w * p1.x, self.w * p1.y);
-        let m = pt(
-            (p0.x + (wp1.x + wp1.x) + p2.x) * scale * 0.5,
-            (p0.y + (wp1.y + wp1.y) + p2.y) * scale * 0.5,
+        let ws = self.w * scale;
+        let t0 = pt(p0.x * scale, p0.y * scale);
+        let t1 = pt(p1.x * ws, p1.y * ws);
+        let t2 = pt(p2.x * scale, p2.y * scale);
+        let q1 = pt(t0.x + t1.x, t0.y + t1.y);
+        let q3 = pt(t1.x + t2.x, t1.y + t2.y);
+        let q2 = pt(
+            0.5 * t0.x + t1.x + 0.5 * t2.x,
+            0.5 * t0.y + t1.y + 0.5 * t2.y,
         );
         [
             Conic {
-                pts: [p0, pt((p0.x + wp1.x) * scale, (p0.y + wp1.y) * scale), m],
+                pts: [p0, q1, q2],
                 w: new_w,
             },
             Conic {
-                pts: [m, pt((wp1.x + p2.x) * scale, (wp1.y + p2.y) * scale), p2],
+                pts: [q2, q3, p2],
                 w: new_w,
             },
         ]

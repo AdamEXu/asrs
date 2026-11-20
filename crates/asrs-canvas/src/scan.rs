@@ -523,11 +523,64 @@ fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<
     })
 }
 
+impl Coverage {
+    pub fn to_spans(&self, width: u32, height: u32) -> crate::blit::Spans {
+        let mut spans = crate::blit::Spans::new(width, height);
+        for row in 0..self.height {
+            spans.anti_h(
+                self.x,
+                self.y + row as i32,
+                &self.alpha[row * self.width..(row + 1) * self.width],
+            );
+        }
+        spans
+    }
+}
+
 /// Skia's NEON `div255`, the exact `(v + 127) / 255`.
 pub fn div255(v: u32) -> u32 {
     (v + ((v + 128) >> 8) + 128) >> 8
 }
 
+/// Blends a premultiplied source through `spans` in blit order with Skia's 8-bit pipeline
+/// arithmetic.
+pub fn blit_spans(
+    pixmap: &mut Pixmap,
+    spans: &crate::blit::Spans,
+    blend: Blend,
+    source: impl Fn(usize, usize) -> [u8; 4],
+) {
+    let stride = pixmap.width() as usize;
+    let data = pixmap.data_mut();
+    for (x0, y, alphas) in spans.iter() {
+        let y = y as usize;
+        for (i, &c) in alphas.iter().enumerate() {
+            let c = u32::from(c);
+            if c == 0 {
+                continue;
+            }
+            let x = x0 as usize + i;
+            let k = (y * stride + x) * 4;
+            let dst = &mut data[k..k + 4];
+            match blend {
+                Blend::Clear => {
+                    for d in dst.iter_mut() {
+                        *d = div255(u32::from(*d) * (255 - c)) as u8;
+                    }
+                }
+                Blend::SourceOver => {
+                    let s = source(x, y).map(|v| div255(u32::from(v) * c));
+                    let inv = 255 - s[3];
+                    for (d, s) in dst.iter_mut().zip(s) {
+                        *d = (s + div255(u32::from(*d) * inv)).min(255) as u8;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub enum Blend {
     SourceOver,
     Clear,

@@ -10,9 +10,13 @@ use tiny_skia::{
 use crate::color::{self, Rgba};
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::hairline;
-use crate::path::{Affine, Path};
+use crate::path::{Affine, Path, Pt};
 use crate::pixels;
+use crate::aaa;
+use crate::blit::Spans;
 use crate::scan::{self, Blend, Coverage, div255};
+use crate::skpath::SkPath;
+use crate::stroke;
 use crate::text::lut::MaskGammaLut;
 use crate::text::{FontSpec, TextBackend, baseline_offset, glyph_origin};
 
@@ -102,6 +106,9 @@ pub struct Raster<'a> {
     state: State,
     stack: Vec<State>,
     path: Path,
+    fast: Fast,
+    draw_path_count: u32,
+    draw_line_count: u32,
     images: HashMap<String, Pixmap>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
@@ -141,6 +148,121 @@ pub fn stroke_outline(
     path.stroke(&solid, res_scale)
 }
 
+fn pt32(x: f64, y: f64) -> Pt {
+    Pt {
+        x: x as f32,
+        y: y as f32,
+    }
+}
+
+/// What Blink's `CanvasPath` line and arc builders hold besides the general path.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Fast {
+    None,
+    Start(Pt),
+    Line(Pt, Pt),
+    Arc(FastArc),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FastArc {
+    x: f32,
+    y: f32,
+    r: f32,
+    start: f32,
+    sweep: f32,
+    closed: bool,
+}
+
+impl FastArc {
+    /// The path `cc::DrawArcImpl` and `SkDevice::drawArc` draw for this arc.
+    fn path(&self, fill: bool) -> Path {
+        let oval = [
+            self.x - self.r,
+            self.y - self.r,
+            self.x + self.r,
+            self.y + self.r,
+        ];
+        let degrees = |v: f32| {
+            let d = v * 180.0 / std::f32::consts::PI;
+            if d.is_finite() { d } else { 0.0 }
+        };
+        let (mut start, mut sweep) = (degrees(self.start), degrees(self.sweep));
+        let mut path = Path::new();
+        if self.closed {
+            if (sweep.abs() - 360.0).abs() <= 1.0 / 4096.0 {
+                path.add_oval(oval);
+            } else {
+                path.arc_to_oval(oval, start, sweep, false);
+                path.close();
+            }
+            return path;
+        }
+        if oval[2] - oval[0] <= 0.0 || oval[3] - oval[1] <= 0.0 || sweep == 0.0 {
+            return path;
+        }
+        if fill && sweep.abs() >= 360.0 {
+            path.add_oval(oval);
+            return path;
+        }
+        if sweep.abs() > 3600.0 {
+            sweep = 3600.0f32.copysign(sweep) + sweep % 360.0;
+        }
+        let mut force = true;
+        while sweep <= -360.0 {
+            path.arc_to_oval(oval, start, -180.0, force);
+            start -= 180.0;
+            path.arc_to_oval(oval, start, -180.0, false);
+            start -= 180.0;
+            force = false;
+            sweep += 360.0;
+        }
+        while sweep >= 360.0 {
+            path.arc_to_oval(oval, start, 180.0, force);
+            start += 180.0;
+            path.arc_to_oval(oval, start, 180.0, false);
+            start += 180.0;
+            force = false;
+            sweep -= 360.0;
+        }
+        path.arc_to_oval(oval, start, sweep, force);
+        path
+    }
+}
+
+struct DashPoints {
+    first: Option<[f32; 4]>,
+    last: Option<[f32; 4]>,
+    points: Vec<Pt>,
+    size: (f32, f32),
+}
+
+/// `SkDashPath::CalcDashParameters`: the length left in the dash the phase lands in, and its
+/// index.
+fn dash_parameters(intervals: &[f32], phase: f32, len: f32) -> (f32, usize) {
+    let mut phase = phase;
+    if phase < 0.0 {
+        phase = -phase;
+        if phase > len {
+            phase %= len;
+        }
+        phase = len - phase;
+        if phase == len {
+            phase = 0.0;
+        }
+    } else if phase >= len {
+        phase %= len;
+    }
+    for (i, &gap) in intervals.iter().enumerate() {
+        if phase > gap || (phase == gap && gap != 0.0) {
+            phase -= gap;
+        } else {
+            return (gap - phase, i);
+        }
+    }
+    (intervals[0], 0)
+}
+
 fn finite(values: &[f64]) -> bool {
     values.iter().all(|v| v.is_finite())
 }
@@ -166,6 +288,9 @@ impl<'a> Raster<'a> {
             state: State::default(),
             stack: Vec::new(),
             path: Path::new(),
+            fast: Fast::None,
+            draw_path_count: 0,
+            draw_line_count: 0,
             images: HashMap::new(),
             registers: HashMap::new(),
             text: None,
@@ -220,20 +345,33 @@ impl<'a> Raster<'a> {
                     self.set_transform(self.state.transform.then(&Affine::translation(x, y)));
                 }
             }
-            Call::BeginPath => self.path = Path::new(),
-            Call::ClosePath => self.path.close(),
+            Call::BeginPath => {
+                self.path = Path::new();
+                self.fast = Fast::None;
+            }
+            Call::ClosePath => self.close_path(),
             &Call::MoveTo(x, y) => {
                 if self.invertible() {
+                    if finite(&[x, y]) {
+                        self.fast = if self.path.is_empty() {
+                            Fast::Start(pt32(x, y))
+                        } else {
+                            Fast::None
+                        };
+                    }
                     self.path.move_to(x, y);
                 }
             }
             &Call::LineTo(x, y) => {
                 if self.invertible() {
-                    self.path.line_to(x, y);
+                    self.line_to(x, y);
                 }
             }
             &Call::Rect(x, y, w, h) => {
                 if self.invertible() {
+                    if finite(&[x, y, w, h]) {
+                        self.fast = Fast::None;
+                    }
                     self.path.rect(x, y, w, h);
                 }
             }
@@ -246,8 +384,7 @@ impl<'a> Raster<'a> {
                 anticlockwise,
             } => {
                 if self.invertible() {
-                    self.path
-                        .arc(x, y, radius, start, end, anticlockwise.unwrap_or(false));
+                    self.arc(x, y, radius, start, end, anticlockwise.unwrap_or(false));
                 }
             }
             &Call::Ellipse {
@@ -261,6 +398,12 @@ impl<'a> Raster<'a> {
                 anticlockwise,
             } => {
                 if self.invertible() {
+                    if finite(&[x, y, radius_x, radius_y, rotation, start, end])
+                        && radius_x >= 0.0
+                        && radius_y >= 0.0
+                    {
+                        self.fast = Fast::None;
+                    }
                     self.path.ellipse(
                         x,
                         y,
@@ -409,6 +552,9 @@ impl<'a> Raster<'a> {
             return;
         }
         self.state.transform = new;
+        if new.is_invertible() {
+            self.fast = Fast::None;
+        }
         if let Some(inverse) = new.inverse()
             && old.is_invertible()
         {
@@ -421,11 +567,93 @@ impl<'a> Raster<'a> {
             return;
         };
         if self.invertible() {
+            if self.state.transform != Affine::IDENTITY {
+                self.fast = Fast::None;
+            }
             self.path.transform(&self.state.transform);
         }
         self.state = previous;
         if let Some(inverse) = self.state.transform.inverse() {
+            if self.state.transform != Affine::IDENTITY {
+                self.fast = Fast::None;
+            }
             self.path.transform(&inverse);
+        }
+    }
+
+    /// Blink's `CanvasPath::lineTo`: a lone `moveTo` (or nothing) followed by one `lineTo` is
+    /// remembered as a line, which `stroke()` draws with `drawLine`.
+    fn line_to(&mut self, x: f64, y: f64) {
+        if !finite(&[x, y]) {
+            return;
+        }
+        let p = pt32(x, y);
+        self.fast = match self.fast {
+            Fast::None if self.path.is_empty() => Fast::Line(p, p),
+            Fast::Start(s) => Fast::Line(s, p),
+            _ => Fast::None,
+        };
+        self.path.line_to(x, y);
+    }
+
+    fn close_path(&mut self) {
+        match self.fast {
+            Fast::Line(a, b) if a == b => {
+                self.path = Path::new();
+                self.fast = Fast::None;
+                return;
+            }
+            Fast::Arc(mut arc) => {
+                arc.closed = true;
+                self.fast = Fast::Arc(arc);
+            }
+            _ => self.fast = Fast::None,
+        }
+        self.path.close();
+    }
+
+    /// Blink's `CanvasPath::arc`: an arc of radius at least 1 on an empty path is remembered as
+    /// an arc, which `fill()` and `stroke()` draw with `drawArc`.
+    fn arc(&mut self, x: f64, y: f64, radius: f64, start: f64, end: f64, ccw: bool) {
+        let v = [x, y, radius, start, end].map(|v| v as f32);
+        if !v.iter().all(|v| v.is_finite()) || v[2] < 0.0 {
+            return;
+        }
+        let [xf, yf, r, s, e] = v;
+        let was_empty = self.path.is_empty();
+        self.fast = Fast::None;
+        if r == 0.0 || s == e {
+            if was_empty {
+                let p = Pt {
+                    x: xf + r * s.cos(),
+                    y: yf + r * s.sin(),
+                };
+                self.fast = Fast::Line(p, p);
+            }
+            self.path.arc(x, y, radius, start, end, ccw);
+            return;
+        }
+        let (s, e) = crate::path::arc_angles(s, e, ccw);
+        if was_empty && r >= 1.0 {
+            self.fast = Fast::Arc(FastArc {
+                x: xf,
+                y: yf,
+                r,
+                start: s,
+                sweep: e - s,
+                closed: false,
+            });
+        }
+        self.path.arc(x, y, radius, start, end, ccw);
+    }
+
+    /// `cc::RecordPaintCanvas::drawPath` bookkeeping for its lines-as-paths heuristic.
+    fn count_draw_path(&mut self) {
+        if self.draw_path_count != u32::MAX {
+            self.draw_path_count += 1;
+            if self.draw_path_count > 4 {
+                self.draw_line_count = 0;
+            }
         }
     }
 
@@ -568,54 +796,66 @@ impl<'a> Raster<'a> {
         Some(out)
     }
 
-    /// Blends `source` through `coverage`. Shaders are evaluated over the coverage bounds into
-    /// a scratch pixmap first, then blended with the same 8-bit arithmetic as solid colours.
     fn paint(&mut self, coverage: &Coverage, source: &Source) {
-        match source {
+        let spans = coverage.to_spans(self.pixmap.width(), self.pixmap.height());
+        self.paint_spans(&spans, source);
+    }
+
+    /// Blends `source` through `spans` in blit order. Shaders are evaluated over the bounds of
+    /// the spans into a scratch pixmap first, then blended with the same 8-bit arithmetic as
+    /// solid colours.
+    fn paint_spans(&mut self, spans: &Spans, source: &Source) {
+        let shader = match source {
             Source::Solid(color) => {
-                scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |_, _| *color)
+                scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |_, _| *color);
+                return;
             }
             Source::Device(pixmap) => {
                 let stride = pixmap.width() as usize;
                 let data = pixmap.data();
-                scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |x, y| {
+                scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |x, y| {
                     let i = (y * stride + x) * 4;
                     [data[i], data[i + 1], data[i + 2], data[i + 3]]
                 });
+                return;
             }
-            Source::Shader(shader) => {
-                if let Some(scratch) = shade(coverage, shader.clone()) {
-                    self.blit_scratch(coverage, &scratch);
-                }
-            }
+            Source::Shader(shader) => shader.clone(),
             Source::Image {
                 pixmap,
                 transform,
                 quality,
                 opacity,
-            } => {
-                let shader = Pattern::new(
-                    pixmap.as_ref(),
-                    SpreadMode::Pad,
-                    *quality,
-                    *opacity,
-                    transform.to_skia(),
-                );
-                if let Some(scratch) = shade(coverage, shader) {
-                    self.blit_scratch(coverage, &scratch);
-                }
-            }
-        }
-    }
-
-    fn blit_scratch(&mut self, coverage: &Coverage, scratch: &Pixmap) {
+            } => Pattern::new(
+                pixmap.as_ref(),
+                SpreadMode::Pad,
+                *quality,
+                *opacity,
+                transform.to_skia(),
+            ),
+        };
+        let Some(bounds) = spans.bounds() else {
+            return;
+        };
+        let Some(scratch) = shade(bounds, shader) else {
+            return;
+        };
         let stride = scratch.width() as usize;
         let data = scratch.data();
-        let (ox, oy) = (coverage.x as usize, coverage.y as usize);
-        scan::blit(&mut self.pixmap, coverage, Blend::SourceOver, |x, y| {
+        let (ox, oy) = (bounds[0] as usize, bounds[1] as usize);
+        scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |x, y| {
             let i = ((y - oy) * stride + (x - ox)) * 4;
             [data[i], data[i + 1], data[i + 2], data[i + 3]]
         });
+    }
+
+    /// Fills a device path with Skia's analytic AA.
+    fn fill_sk(&mut self, path: &SkPath, fill: &Fill) {
+        let Some(source) = self.source(fill, 256) else {
+            return;
+        };
+        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
+        aaa::fill_path(path, self.pixmap.width(), self.pixmap.height(), false, &mut spans);
+        self.paint_spans(&spans, &source);
     }
 
     /// Fills a device-space path: Skia's analytic AA, or with `snap` off the exact area that
@@ -625,12 +865,14 @@ impl<'a> Raster<'a> {
             return;
         };
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        let coverage = if snap {
-            scan::rasterize_analytic(path, w, h)
-        } else {
-            scan::rasterize(path, w, h)
-        };
-        if let Some(coverage) = coverage {
+        if snap {
+            let spans = {
+                let mut spans = Spans::new(w, h);
+                aaa::fill_path(&SkPath::from_tiny(path), w, h, false, &mut spans);
+                spans
+            };
+            self.paint_spans(&spans, &source);
+        } else if let Some(coverage) = scan::rasterize(path, w, h) {
             self.paint(&coverage, &source);
         }
     }
@@ -639,11 +881,18 @@ impl<'a> Raster<'a> {
         if !self.invertible() {
             return;
         }
-        let ctm = self.state.transform;
-        if let Some(device) = self.path.to_skia(Some(&ctm), CONIC_TOLERANCE) {
-            let fill = self.state.fill.clone();
-            self.fill_device(&device, &fill, true);
+        match self.fast {
+            Fast::Line(..) => return,
+            Fast::Arc(arc) => {
+                self.fill_arc(arc);
+                return;
+            }
+            _ => self.count_draw_path(),
         }
+        let ctm = self.state.transform;
+        let device = self.path.to_sk(Some(&ctm));
+        let fill = self.state.fill.clone();
+        self.fill_sk(&device, &fill);
     }
 
     fn dash(&self) -> Option<StrokeDash> {
@@ -712,20 +961,280 @@ impl<'a> Raster<'a> {
             }
             return;
         }
-        let style = self.stroke_style();
-        let Some(outline) = stroke_outline(&user, &style, res_scale) else {
-            return;
+        let source = match self.dash() {
+            Some(dash) => match user.dash(&dash, res_scale) {
+                Some(dashed) => SkPath::from_tiny(&dashed),
+                None => return,
+            },
+            None => path.to_sk(None),
         };
-        let Some(device) = outline.transform(ctm) else {
-            return;
+        let s = &self.state;
+        let style = stroke::Style {
+            width: s.line_width as f32,
+            miter_limit: s.miter_limit as f32,
+            cap: s.line_cap,
+            join: s.line_join,
+            res_scale,
         };
-        self.fill_device(&device, &stroke, true);
+        let outline = stroke::stroke_path(&source, &style);
+        let device = outline.transformed(&self.state.transform);
+        self.fill_sk(&device, &stroke);
     }
 
     fn stroke_current_path(&mut self) {
+        if self.invertible() {
+            match self.fast {
+                Fast::Line(a, b) => {
+                    if self.stroke_line(a, b) {
+                        return;
+                    }
+                }
+                Fast::Arc(arc) => {
+                    self.stroke_user_path(&arc.path(false));
+                    return;
+                }
+                _ => self.count_draw_path(),
+            }
+        }
         let path = std::mem::take(&mut self.path);
         self.stroke_user_path(&path);
         self.path = path;
+    }
+
+    /// `cc::DrawArcOp` filling: `drawOval` for closed or full circles (`addOval`), otherwise
+    /// `SkPathPriv::CreateDrawArcPath`.
+    fn fill_arc(&mut self, arc: FastArc) {
+        let path = arc.path(true);
+        let device = path.to_sk(Some(&self.state.transform));
+        let fill = self.state.fill.clone();
+        self.fill_sk(&device, &fill);
+    }
+
+    /// `cc::RecordPaintCanvas::drawLine` then `SkDraw::drawPoints`: once more than four paths
+    /// were drawn since the last run of five lines, cc replays the line as a path; otherwise a
+    /// dashed line that `SkDashPathEffect::asPoints` accepts becomes rects. Returns false when
+    /// the line is to be stroked as an ordinary path.
+    fn stroke_line(&mut self, a: Pt, b: Pt) -> bool {
+        if self.draw_line_count != u32::MAX {
+            self.draw_line_count += 1;
+            if self.draw_line_count > 4 {
+                self.draw_path_count = 0;
+            }
+        }
+        if self.draw_path_count > 4 {
+            return false;
+        }
+        let Some(points) = self.dash_as_points(a, b) else {
+            return false;
+        };
+        let stroke = self.state.stroke.clone();
+        let ctm = self.state.transform;
+        for rect in [points.first, points.last].into_iter().flatten() {
+            let mut path = Path::new();
+            path.rect(
+                f64::from(rect[0]),
+                f64::from(rect[1]),
+                f64::from(rect[2] - rect[0]),
+                f64::from(rect[3] - rect[1]),
+            );
+            let device = path.to_sk(Some(&ctm));
+            self.fill_sk(&device, &stroke);
+        }
+        let Some(source) = self.source(&stroke, 256) else {
+            return true;
+        };
+        let width = self.state.line_width as f32;
+        for p in points.points {
+            let (l, t) = (p.x - points.size.0, p.y - points.size.1);
+            let (r, b) = if points.size.0 == points.size.1 {
+                (l + width, t + width)
+            } else {
+                (p.x + points.size.0, p.y + points.size.1)
+            };
+            let rect = [
+                f64::from(l),
+                f64::from(t),
+                f64::from(r) - f64::from(l),
+                f64::from(b) - f64::from(t),
+            ];
+            if let Some(coverage) = self.rect_coverage(rect, true) {
+                self.paint(&coverage, &source);
+            }
+        }
+        true
+    }
+
+    /// `SkDashImpl::onAsPoints` with `cull_line`: an axis-aligned butt-capped line dashed with
+    /// equal integer on and off lengths, as rects centred on `points` plus partial first and
+    /// last rects.
+    fn dash_as_points(&self, a: Pt, b: Pt) -> Option<DashPoints> {
+        let s = &self.state;
+        let intervals: Vec<f32> = s.dash.iter().map(|&v| v as f32).collect();
+        if intervals.len() != 2 || s.line_cap != LineCap::Butt {
+            return None;
+        }
+        let interval_length = intervals[0] + intervals[1];
+        if !(interval_length > 0.0 && interval_length.is_finite()) {
+            return None;
+        }
+        if (intervals[0] - intervals[1]).abs() > 1.0 / 4096.0
+            || intervals[0] != intervals[0].floor()
+            || intervals[1] != intervals[1].floor()
+        {
+            return None;
+        }
+        let m = s.transform.to_skia();
+        let rect_stays = (m.kx == 0.0 && m.ky == 0.0 && m.sx != 0.0 && m.sy != 0.0)
+            || (m.sx == 0.0 && m.sy == 0.0 && m.kx != 0.0 && m.ky != 0.0);
+        if !rect_stays {
+            return None;
+        }
+        let (initial_dash_length, initial_dash_index) =
+            dash_parameters(&intervals, s.dash_offset as f32, interval_length);
+        let width = s.line_width as f32;
+        let mut pts = [a, b];
+        let (dx, dy) = (pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        if (dx != 0.0 && dy != 0.0) || (dx == 0.0 && dy == 0.0) {
+            return None;
+        }
+        let mut radius = width * 0.5;
+        if s.line_join == LineJoin::Miter {
+            radius *= s.miter_limit as f32;
+        }
+        let device = Rect::from_ltrb(
+            -radius,
+            -radius,
+            self.pixmap.width() as f32 + radius,
+            self.pixmap.height() as f32 + radius,
+        )?;
+        let bounds = device.transform(s.transform.inverse()?.to_skia())?;
+        let chop = |lo: f32, hi: f32, min: f32, max: f32| -> Option<(f32, f32)> {
+            if hi <= min || lo >= max {
+                return None;
+            }
+            let lo = if lo < min {
+                min - (min - lo) % interval_length
+            } else {
+                lo
+            };
+            let hi = if hi > max {
+                max + (hi - max) % interval_length
+            } else {
+                hi
+            };
+            Some((lo, hi))
+        };
+        if dx != 0.0 {
+            let (lo, hi) = if dx < 0.0 {
+                (pts[1].x, pts[0].x)
+            } else {
+                (pts[0].x, pts[1].x)
+            };
+            let (lo, hi) = chop(lo, hi, bounds.left(), bounds.right())?;
+            (pts[0].x, pts[1].x) = if dx < 0.0 { (hi, lo) } else { (lo, hi) };
+        } else {
+            let (lo, hi) = if dy < 0.0 {
+                (pts[1].y, pts[0].y)
+            } else {
+                (pts[0].y, pts[1].y)
+            };
+            let (lo, hi) = chop(lo, hi, bounds.top(), bounds.bottom())?;
+            (pts[0].y, pts[1].y) = if dy < 0.0 { (hi, lo) } else { (lo, hi) };
+        }
+        let (tx, ty) = (pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        if tx == 0.0 && ty == 0.0 {
+            return None;
+        }
+        let length = (tx * tx + ty * ty).sqrt();
+        let inv = 1.0 / length;
+        let tangent = (tx * inv, ty * inv);
+        let near = |a: f32, b: f32| (a - b).abs() <= 1.0 / 4096.0;
+        let (size, x_axis) = if near(1.0, tangent.0) || near(-1.0, tangent.0) {
+            ((intervals[0] * 0.5, width * 0.5), true)
+        } else if near(1.0, tangent.1) || near(-1.0, tangent.1) {
+            ((width * 0.5, intervals[0] * 0.5), false)
+        } else {
+            return None;
+        };
+        let clamped_initial = length.min(initial_dash_length);
+        let mut len2 = length;
+        if clamped_initial > 0.0 || initial_dash_index == 0 {
+            if initial_dash_index == 0 {
+                if clamped_initial > 0.0 {
+                    len2 -= clamped_initial;
+                }
+                len2 -= intervals[1];
+                if len2 < 0.0 {
+                    len2 = 0.0;
+                }
+            } else {
+                len2 -= clamped_initial;
+            }
+        }
+        let num_intervals = len2 / interval_length;
+        if !num_intervals.is_finite() || num_intervals > 1_000_000.0 {
+            return None;
+        }
+        let mut mid = num_intervals.floor() as usize;
+        len2 -= mid as f32 * interval_length;
+        let mut partial_last = false;
+        if len2 > 0.0 {
+            if len2 < intervals[0] {
+                partial_last = true;
+            } else {
+                mid += 1;
+            }
+        }
+        let mut out = DashPoints {
+            first: None,
+            last: None,
+            points: Vec::new(),
+            size,
+        };
+        let rect_around = |x: f32, y: f32, along: f32| -> [f32; 4] {
+            let (hw, hh) = if x_axis {
+                (along * 0.5, width * 0.5)
+            } else {
+                (width * 0.5, along * 0.5)
+            };
+            [x - hw, y - hh, x + hw, y + hh]
+        };
+        let mut distance = 0.0f32;
+        if clamped_initial > 0.0 || initial_dash_index == 0 {
+            if initial_dash_index == 0 {
+                if clamped_initial > 0.0 {
+                    let x = pts[0].x + tangent.0 * (clamped_initial * 0.5);
+                    let y = pts[0].y + tangent.1 * (clamped_initial * 0.5);
+                    if clamped_initial < intervals[0] {
+                        out.first = Some(rect_around(x, y, clamped_initial));
+                    } else {
+                        out.points.push(Pt { x, y });
+                    }
+                    distance += clamped_initial;
+                }
+                distance += intervals[1];
+            } else {
+                distance += clamped_initial;
+            }
+        }
+        if mid != 0 {
+            distance += intervals[0] * 0.5;
+            for _ in 0..mid {
+                out.points.push(Pt {
+                    x: pts[0].x + tangent.0 * distance,
+                    y: pts[0].y + tangent.1 * distance,
+                });
+                distance += interval_length;
+            }
+            distance -= intervals[0] * 0.5;
+        }
+        if partial_last {
+            let temp = length - distance;
+            let x = pts[0].x + tangent.0 * (distance + temp * 0.5);
+            let y = pts[0].y + tangent.1 * (distance + temp * 0.5);
+            out.last = Some(rect_around(x, y, temp));
+        }
+        Some(out)
     }
 
     /// The device rect of a user rect under a transform that keeps rects axis-aligned.
@@ -1042,11 +1551,12 @@ impl<'a> Raster<'a> {
     }
 }
 
-/// Evaluates `shader` (device space) at the pixel centres of the coverage bounds.
-fn shade(coverage: &Coverage, shader: Shader<'_>) -> Option<Pixmap> {
-    let mut scratch = Pixmap::new(coverage.width as u32, coverage.height as u32)?;
-    let (x, y) = (coverage.x as f32, coverage.y as f32);
-    let rect = Rect::from_xywh(x, y, coverage.width as f32, coverage.height as f32)?;
+/// Evaluates `shader` (device space) at the pixel centres of `bounds`.
+fn shade(bounds: [i32; 4], shader: Shader<'_>) -> Option<Pixmap> {
+    let (w, h) = ((bounds[2] - bounds[0]) as u32, (bounds[3] - bounds[1]) as u32);
+    let mut scratch = Pixmap::new(w, h)?;
+    let (x, y) = (bounds[0] as f32, bounds[1] as f32);
+    let rect = Rect::from_xywh(x, y, w as f32, h as f32)?;
     let paint = Paint {
         shader,
         anti_alias: false,

@@ -10,7 +10,7 @@ use tiny_skia::{LineCap, PathSegment};
 use crate::clip::{self, ClipRect};
 use crate::scan::Coverage;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct P {
     pub x: f32,
     pub y: f32,
