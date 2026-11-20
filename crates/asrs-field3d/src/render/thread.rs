@@ -87,7 +87,12 @@ impl RenderThread {
     /// The newest finished frame, if one arrived since the last call. An older finished frame
     /// that was never taken has already gone back to the pool.
     pub fn take(&self) -> Option<RenderedFrame> {
-        self.shared.state.lock().expect("render state").latest.take()
+        self.shared
+            .state
+            .lock()
+            .expect("render state")
+            .latest
+            .take()
     }
 
     pub fn recycle(&self, buffer: Vec<u8>) {

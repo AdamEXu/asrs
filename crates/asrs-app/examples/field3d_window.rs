@@ -12,7 +12,9 @@ use std::time::Instant;
 use asrs_field3d::render::{
     FrameOptions, Geometry, Mesh, PhongMaterial, RenderThread, Scene, Side, build_frame,
 };
-use asrs_field3d::three::{Color, Euler, EulerOrder, Object3D, PerspectiveCamera, Vector3, primitives};
+use asrs_field3d::three::{
+    Color, Euler, EulerOrder, Object3D, PerspectiveCamera, Vector3, primitives,
+};
 use asrs_ui::gpui::{
     App, AppContext, Bounds, Context, Corners, IntoElement, ParentElement, Pixels, Render,
     RenderImage, Styled, Window, WindowBounds, WindowOptions, application, canvas, div, px, size,
@@ -22,7 +24,12 @@ fn scene() -> Scene {
     let mut scene = Scene::new();
     scene.background = Some(Color::hex(0x222222 as f64));
     let root = scene.root;
-    scene.add_hemisphere_light(root, Color::hex(0xffffff as f64), Color::hex(0x444444 as f64), 2.0);
+    scene.add_hemisphere_light(
+        root,
+        Color::hex(0xffffff as f64),
+        Color::hex(0x444444 as f64),
+        2.0,
+    );
     let field = scene.add_group(root);
     scene.graph.object_mut(field).set_rotation(Euler::new(
         -std::f64::consts::FRAC_PI_2,
@@ -58,7 +65,12 @@ fn scene() -> Scene {
             let id = scene.add_mesh(field, Mesh::new(post.clone(), rail.clone()));
             let object = scene.graph.object_mut(id);
             object.position = Vector3::new(-8.2 + f64::from(i) * 0.6, side * 4.1, 0.25);
-            object.set_rotation(Euler::new(std::f64::consts::FRAC_PI_2, 0.0, 0.0, EulerOrder::Xyz));
+            object.set_rotation(Euler::new(
+                std::f64::consts::FRAC_PI_2,
+                0.0,
+                0.0,
+                EulerOrder::Xyz,
+            ));
         }
     }
     let robot = Geometry::new(primitives::sphere_geometry(
@@ -130,7 +142,8 @@ impl Field3dWindow {
             height,
             samples: 4,
         };
-        self.thread.submit(build_frame(&mut self.scene, &mut self.camera, options));
+        self.thread
+            .submit(build_frame(&mut self.scene, &mut self.camera, options));
     }
 }
 
@@ -166,9 +179,18 @@ impl Render for Field3dWindow {
                     active / 1e3,
                     self.intervals.len() as f64 / (active / 1e3)
                 );
-                println!("interval between new frames: {}", percentiles(&self.intervals[10..]));
-                println!("render thread render+readback: {}", percentiles(&self.render_ms[10..]));
-                println!("foreground RenderImage build: {}", percentiles(&self.present_ms[10..]));
+                println!(
+                    "interval between new frames: {}",
+                    percentiles(&self.intervals[10..])
+                );
+                println!(
+                    "render thread render+readback: {}",
+                    percentiles(&self.render_ms[10..])
+                );
+                println!(
+                    "foreground RenderImage build: {}",
+                    percentiles(&self.present_ms[10..])
+                );
                 cx.defer(|cx| cx.quit());
             }
             self.submit(width, height);
@@ -181,7 +203,8 @@ impl Render for Field3dWindow {
                 |_, _, _| {},
                 move |bounds: Bounds<Pixels>, _, window, _| {
                     if let Some(image) = image {
-                        let _ = window.paint_image(bounds, bounds, Corners::default(), image, 0, false);
+                        let _ =
+                            window.paint_image(bounds, bounds, Corners::default(), image, 0, false);
                     }
                 },
             )
@@ -191,7 +214,10 @@ impl Render for Field3dWindow {
 }
 
 fn main() {
-    let target = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(1200);
+    let target = std::env::args()
+        .nth(1)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(1200);
     application().run(move |cx: &mut App| {
         asrs_ui::init(cx);
         let bounds = Bounds::centered(None, size(px(1100.0), px(650.0)), cx);

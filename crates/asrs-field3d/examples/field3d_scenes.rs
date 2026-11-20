@@ -3,6 +3,8 @@
 //! `field3d_scenes <scenes dir> <out dir> [<scene>...]`. Writes `<scene>@<n>x-<theme>.png`
 //! (straight RGBA) and `<scene>@<n>x.edges.png` (the gate's edge mask) for scales 1 and 2.
 
+#![allow(clippy::disallowed_methods)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -12,8 +14,8 @@ use asrs_field3d::render::{
     Side, Texture, build_frame, edge_mask, swap_red_blue,
 };
 use asrs_field3d::three::{
-    ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, Object3D,
-    ObjectId, PerspectiveCamera, Vector3, primitives,
+    ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, Object3D, ObjectId,
+    PerspectiveCamera, Vector3, primitives,
 };
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
@@ -23,7 +25,9 @@ fn num(j: &Json, key: &str) -> Option<f64> {
 }
 
 fn text(j: &Json, key: &str) -> Option<String> {
-    j.get(key).and_then(Json::as_str).and_then(|s| s.as_string())
+    j.get(key)
+        .and_then(Json::as_str)
+        .and_then(|s| s.as_string())
 }
 
 fn vec3(j: &Json, key: &str) -> Option<Vector3> {
@@ -39,7 +43,10 @@ fn arg(args: &[Json], i: usize) -> f64 {
 }
 
 fn geometry(spec: &Json) -> Arc<Geometry> {
-    let args = spec.get("args").and_then(Json::as_array).expect("geometry args");
+    let args = spec
+        .get("args")
+        .and_then(Json::as_array)
+        .expect("geometry args");
     let a = |i| arg(args, i);
     let flag = |i| a(i) != 0.0;
     let mut g: BufferGeometry = match text(spec, "type").as_deref() {
@@ -56,12 +63,17 @@ fn geometry(spec: &Json) -> Arc<Geometry> {
         let count = g.attribute("position").map_or(0, BufferAttribute::count);
         let mut colors = vec![0u8; count * 3];
         for i in 0..count {
-            let c = palette[i % palette.len()].as_array().expect("palette colour");
+            let c = palette[i % palette.len()]
+                .as_array()
+                .expect("palette colour");
             for k in 0..3 {
                 colors[i * 3 + k] = c[k].as_f64().expect("channel") as u8;
             }
         }
-        g.set_attribute("color", BufferAttribute::new(ArrayData::Uint8(colors), 3, true));
+        g.set_attribute(
+            "color",
+            BufferAttribute::new(ArrayData::Uint8(colors), 3, true),
+        );
     }
     Geometry::new(g)
 }
@@ -124,7 +136,11 @@ fn material(spec: Option<&Json>) -> Arc<PhongMaterial> {
         m.vertex_colors = v;
     }
     if let Some(map) = spec.get("map") {
-        let mut texture = checker(map.get("checker").and_then(Json::as_array).expect("checker"));
+        let mut texture = checker(
+            map.get("checker")
+                .and_then(Json::as_array)
+                .expect("checker"),
+        );
         if text(map, "filter").as_deref() == Some("nearest") {
             texture.min_filter = MinFilter::Nearest;
             texture.mag_filter = Filter::Nearest;
@@ -164,7 +180,10 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
                 let count = num(node, "count").expect("count") as usize;
                 let geometry = geometry(node.get("geometry").expect("geometry"));
                 let mut mesh = Mesh::instanced(geometry, material(node.get("material")), count);
-                let instances = node.get("instances").and_then(Json::as_array).unwrap_or_default();
+                let instances = node
+                    .get("instances")
+                    .and_then(Json::as_array)
+                    .unwrap_or_default();
                 let data = mesh.instances.as_mut().expect("instances");
                 for i in 0..count {
                     let mut dummy = Object3D::new();
@@ -258,8 +277,15 @@ fn main() -> Result<(), String> {
         let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let spec = json::parse(&text).map_err(|e| e.to_string())?;
         let size = spec.get("size").and_then(Json::as_array).expect("size");
-        let (w, h) = (size[0].as_f64().unwrap_or(0.0), size[1].as_f64().unwrap_or(0.0));
-        let samples = if matches!(spec.get("antialias"), Some(Json::Bool(true))) { 4 } else { 1 };
+        let (w, h) = (
+            size[0].as_f64().unwrap_or(0.0),
+            size[1].as_f64().unwrap_or(0.0),
+        );
+        let samples = if matches!(spec.get("antialias"), Some(Json::Bool(true))) {
+            4
+        } else {
+            1
+        };
         for scale in [1.0, 2.0] {
             let (mut scene, mut camera) = build(&spec);
             camera.aspect = w / h;
@@ -294,7 +320,10 @@ fn main() -> Result<(), String> {
                             .flat_map(|&e| if e { [255; 4] } else { [0, 0, 0, 255] })
                             .collect(),
                     };
-                    pixel::write_png(&Path::new(out_dir).join(format!("{name}@{scale}x.edges.png")), &mask)?;
+                    pixel::write_png(
+                        &Path::new(out_dir).join(format!("{name}@{scale}x.edges.png")),
+                        &mask,
+                    )?;
                 }
             }
         }

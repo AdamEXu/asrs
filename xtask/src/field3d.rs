@@ -50,7 +50,11 @@ fn scenes_dir(paths: &Paths) -> PathBuf {
 fn generator_hash(paths: &Paths) -> Result<String> {
     oracle::hash_tree(
         &paths.root,
-        &["oracle/field3d", "oracle/src/canvas/png.ts", "parity/field3d/scenes"],
+        &[
+            "oracle/field3d",
+            "oracle/src/canvas/png.ts",
+            "parity/field3d/scenes",
+        ],
     )
 }
 
@@ -97,7 +101,15 @@ fn reference(paths: &Paths, scenes: &[String]) -> Result {
 }
 
 fn example(name: &str) -> Result<PathBuf> {
-    cargo(&["build", "--quiet", "--release", "-p", "asrs-field3d", "--example", name])?;
+    cargo(&[
+        "build",
+        "--quiet",
+        "--release",
+        "-p",
+        "asrs-field3d",
+        "--example",
+        name,
+    ])?;
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| crate::workspace_root().join("target"));
@@ -120,12 +132,25 @@ fn scene_names(paths: &Paths, wanted: &[String]) -> Result<Vec<String>> {
 }
 
 fn edges_from_png(image: &Rgba) -> Vec<bool> {
-    image.data.chunks_exact(4).map(|p| p[0] > 127).collect()
+    image
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| p[0] > 127)
+        .collect()
 }
 
 fn diff_image(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Rgba {
     let mut data = Vec::with_capacity(port.data.len());
-    for (i, (a, b)) in reference.data.chunks_exact(4).zip(port.data.chunks_exact(4)).enumerate() {
+    for (i, (a, b)) in reference
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(port.data.as_chunks::<4>().0.iter())
+        .enumerate()
+    {
         let delta = (0..3).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0);
         let grey = ((u32::from(a[0]) + u32::from(a[1]) + u32::from(a[2])) / 12) as u8;
         data.extend_from_slice(&match (delta, edges[i]) {
@@ -171,12 +196,15 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
     );
     for name in scene_names(paths, wanted)? {
         for scale in SCALES {
-            let edges = edges_from_png(&pixel::read_png(&port.join(format!("{name}@{scale}x.edges.png")))?);
+            let edges = edges_from_png(&pixel::read_png(
+                &port.join(format!("{name}@{scale}x.edges.png")),
+            )?);
             for theme in THEMES {
                 let capture = format!("{name}@{scale}x-{theme}");
                 let reference = pixel::read_png(&base.join(format!("ref/{capture}.png")))?;
                 let ours = pixel::read_png(&port.join(format!("{capture}.png")))?;
-                let g = pixel3d::gate4(&reference, &ours, &edges).map_err(|e| format!("{capture}: {e}"))?;
+                let g = pixel3d::gate4(&reference, &ours, &edges)
+                    .map_err(|e| format!("{capture}: {e}"))?;
                 eprintln!(
                     "{capture:<26} {:>8.5} {:>9.3} {:>6} {:>10.4} {:>6} | {}",
                     g.ssim,
@@ -189,12 +217,16 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                 if g.max_delta > 0 {
                     pixel::write_png(
                         &port.join(format!("diff/{capture}.png")),
-                        &diff_image(&reference, &ours, &pixel3d::dilate(
-                            &edges,
-                            ours.width as usize,
-                            ours.height as usize,
-                            pixel3d::EDGE_RADIUS,
-                        )),
+                        &diff_image(
+                            &reference,
+                            &ours,
+                            &pixel3d::dilate(
+                                &edges,
+                                ours.width as usize,
+                                ours.height as usize,
+                                pixel3d::EDGE_RADIUS,
+                            ),
+                        ),
                     )?;
                 }
                 if !g.pass {
@@ -204,15 +236,24 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                     ("capture", Json::string(&capture)),
                     ("ssim", Json::Number(g.ssim)),
                     ("differingPct", Json::Number(g.differing_pct)),
-                    ("interiorMaxDelta", Json::Number(f64::from(g.interior_max_delta))),
-                    ("interiorDifferingPct", Json::Number(g.interior_differing_pct)),
+                    (
+                        "interiorMaxDelta",
+                        Json::Number(f64::from(g.interior_max_delta)),
+                    ),
+                    (
+                        "interiorDifferingPct",
+                        Json::Number(g.interior_differing_pct),
+                    ),
                     ("maxDelta", Json::Number(f64::from(g.max_delta))),
                     ("pass", Json::Bool(g.pass)),
                 ]));
             }
         }
     }
-    write(&port.join("report.json"), Json::Array(rows).to_pretty().as_bytes())?;
+    write(
+        &port.join("report.json"),
+        Json::Array(rows).to_pretty().as_bytes(),
+    )?;
     if failed.is_empty() {
         eprintln!("gate 4: all captures pass");
         Ok(())

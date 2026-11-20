@@ -129,7 +129,13 @@ fn mirrored_objects_flip_the_front_face() {
     let mirrored = add(&mut scene, &material, 1.0);
     scene.graph.object_mut(mirrored).scale = Vector3::new(-1.0, 1.0, 1.0);
     let frame = build_frame(&mut scene, &mut camera(), OPTIONS);
-    let cw = |id| frame.draws.iter().find(|d| d.object == id).map(|d| d.front_face_cw);
+    let cw = |id| {
+        frame
+            .draws
+            .iter()
+            .find(|d| d.object == id)
+            .map(|d| d.front_face_cw)
+    };
     assert_eq!(cw(plain), Some(false));
     assert_eq!(cw(mirrored), Some(true));
 }
@@ -141,8 +147,7 @@ fn light_uniforms_are_in_view_space() {
     scene.add_hemisphere_light(root, Color::hex(16777215.0), Color::hex(4473924.0), 2.0);
     let point = scene.add_point_light(root, Color::hex(16711680.0), 0.5);
     scene.graph.object_mut(point).position = Vector3::new(1.0, 2.0, 3.0);
-    let (spot, target) =
-        scene.create_spot_light(Color::hex(16777215.0), 4.0, 0.0, 0.5, 0.2, 2.0);
+    let (spot, target) = scene.create_spot_light(Color::hex(16777215.0), 4.0, 0.0, 0.5, 0.2, 2.0);
     scene.graph.add(root, spot);
     scene.graph.add(root, target);
     scene.graph.object_mut(target).position = Vector3::new(0.0, 0.0, 0.0);
@@ -156,7 +161,10 @@ fn light_uniforms_are_in_view_space() {
     assert_eq!(lights.point[0].decay, 2.0);
     assert_eq!(lights.spot[0].direction, [0.0, 1.0, 0.0]);
     assert_eq!(lights.spot[0].cone_cos, math::cos(0.5) as f32);
-    assert_eq!(lights.spot[0].penumbra_cos, math::cos(0.5 * (1.0 - 0.2)) as f32);
+    assert_eq!(
+        lights.spot[0].penumbra_cos,
+        math::cos(0.5 * (1.0 - 0.2)) as f32
+    );
 }
 
 #[test]

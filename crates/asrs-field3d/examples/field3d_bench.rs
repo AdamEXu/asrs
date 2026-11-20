@@ -3,6 +3,8 @@
 //! MSAA 4x, the camera orbiting so every frame is new. Usage:
 //! `field3d_bench [width] [height] [frames] [samples]`.
 
+#![allow(clippy::disallowed_methods)]
+
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -10,19 +12,26 @@ use std::time::{Duration, Instant};
 use asrs_field3d::render::{
     FrameOptions, Geometry, Mesh, PhongMaterial, RenderThread, Scene, Side, build_frame,
 };
-use asrs_js::math;
 use asrs_field3d::three::{Color, Euler, EulerOrder, PerspectiveCamera, Vector3, primitives};
+use asrs_js::math;
 
 fn build() -> Scene {
     let mut scene = Scene::new();
     scene.background = Some(Color::hex(0x222222 as f64));
     let root = scene.root;
-    scene.add_hemisphere_light(root, Color::hex(0xffffff as f64), Color::hex(0x444444 as f64), 2.0);
+    scene.add_hemisphere_light(
+        root,
+        Color::hex(0xffffff as f64),
+        Color::hex(0x444444 as f64),
+        2.0,
+    );
     let field = scene.add_group(root);
-    scene
-        .graph
-        .object_mut(field)
-        .set_rotation(Euler::new(-std::f64::consts::FRAC_PI_2, 0.0, std::f64::consts::PI, EulerOrder::Xyz));
+    scene.graph.object_mut(field).set_rotation(Euler::new(
+        -std::f64::consts::FRAC_PI_2,
+        0.0,
+        std::f64::consts::PI,
+        EulerOrder::Xyz,
+    ));
     let light = scene.add_point_light(field, Color::hex(0xffffff as f64), 0.5);
     scene.graph.object_mut(light).position = Vector3::new(0.0, 0.0, 10.0);
 
@@ -41,14 +50,26 @@ fn build() -> Scene {
         ..PhongMaterial::new()
     });
     let post = Geometry::new(primitives::cylinder_geometry(
-        0.02, 0.02, 0.5, 12.0, 1.0, false, 0.0, std::f64::consts::TAU,
+        0.02,
+        0.02,
+        0.5,
+        12.0,
+        1.0,
+        false,
+        0.0,
+        std::f64::consts::TAU,
     ));
     for side in [-1.0, 1.0] {
         for i in 0..28 {
             let id = scene.add_mesh(field, Mesh::new(post.clone(), rail.clone()));
             let object = scene.graph.object_mut(id);
             object.position = Vector3::new(-8.2 + i as f64 * 0.6, side * 4.1, 0.25);
-            object.set_rotation(Euler::new(std::f64::consts::FRAC_PI_2, 0.0, 0.0, EulerOrder::Xyz));
+            object.set_rotation(Euler::new(
+                std::f64::consts::FRAC_PI_2,
+                0.0,
+                0.0,
+                EulerOrder::Xyz,
+            ));
         }
         let glass = PhongMaterial {
             color: Color::hex(0xffffff as f64),
@@ -61,11 +82,22 @@ fn build() -> Scene {
         let id = scene.add_mesh(field, Mesh::new(pane, Arc::new(glass)));
         let object = scene.graph.object_mut(id);
         object.position = Vector3::new(0.0, side * 4.1, 0.25);
-        object.set_rotation(Euler::new(std::f64::consts::FRAC_PI_2, 0.0, 0.0, EulerOrder::Xyz));
+        object.set_rotation(Euler::new(
+            std::f64::consts::FRAC_PI_2,
+            0.0,
+            0.0,
+            EulerOrder::Xyz,
+        ));
     }
 
     let robot = Geometry::new(primitives::sphere_geometry(
-        0.4, 64.0, 52.0, 0.0, std::f64::consts::TAU, 0.0, std::f64::consts::PI,
+        0.4,
+        64.0,
+        52.0,
+        0.0,
+        std::f64::consts::TAU,
+        0.0,
+        std::f64::consts::PI,
     ));
     let body = Arc::new(PhongMaterial {
         color: Color::hex(0x6379a6 as f64),
@@ -103,7 +135,10 @@ fn report(name: &str, mut values: Vec<f64>) {
 }
 
 fn main() -> Result<(), String> {
-    let args: Vec<u32> = std::env::args().skip(1).filter_map(|a| a.parse().ok()).collect();
+    let args: Vec<u32> = std::env::args()
+        .skip(1)
+        .filter_map(|a| a.parse().ok())
+        .collect();
     let width = args.first().copied().unwrap_or(2200);
     let height = args.get(1).copied().unwrap_or(1300);
     let frames = args.get(2).copied().unwrap_or(600) as usize;
@@ -130,11 +165,18 @@ fn main() -> Result<(), String> {
         frame.draws.len()
     );
 
-    let (mut build_ms, mut render_ms, mut gpu_ms, mut copy_ms, mut wake_ms, mut total_ms) =
-        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut build_ms, mut render_ms, mut gpu_ms, mut copy_ms, mut wake_ms, mut total_ms) = (
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
     for i in 0..frames + 10 {
         let angle = i as f64 * 0.01;
-        camera.object.position = Vector3::new(12.37 * math::sin(angle), 6.0, -12.37 * math::cos(angle));
+        camera.object.position =
+            Vector3::new(12.37 * math::sin(angle), 6.0, -12.37 * math::cos(angle));
         camera.look_at(Vector3::new(0.0, 0.5, 0.0));
         let start = Instant::now();
         let frame = build_frame(&mut scene, &mut camera, options);

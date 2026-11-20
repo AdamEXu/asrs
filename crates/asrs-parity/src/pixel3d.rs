@@ -23,7 +23,9 @@ pub struct Gate4 {
 fn luma(image: &Rgba) -> Vec<f64> {
     image
         .data
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|p| 0.299 * f64::from(p[0]) + 0.587 * f64::from(p[1]) + 0.114 * f64::from(p[2]))
         .collect()
 }
@@ -64,7 +66,8 @@ pub fn ssim(a: &Rgba, b: &Rgba) -> f64 {
     let kernel: Vec<f64> = kernel.iter().map(|v| v / sum).collect();
     let x = luma(a);
     let y = luma(b);
-    let product = |p: &[f64], q: &[f64]| -> Vec<f64> { p.iter().zip(q).map(|(a, b)| a * b).collect() };
+    let product =
+        |p: &[f64], q: &[f64]| -> Vec<f64> { p.iter().zip(q).map(|(a, b)| a * b).collect() };
     let mx = blur(&x, w, h, &kernel);
     let my = blur(&y, w, h, &kernel);
     let sxx = blur(&product(&x, &x), w, h, &kernel);
@@ -78,8 +81,8 @@ pub fn ssim(a: &Rgba, b: &Rgba) -> f64 {
         let vx = sxx[i] - mx * mx;
         let vy = syy[i] - my * my;
         let cxy = sxy[i] - mx * my;
-        total += ((2.0 * mx * my + c1) * (2.0 * cxy + c2))
-            / ((mx * mx + my * my + c1) * (vx + vy + c2));
+        total +=
+            ((2.0 * mx * my + c1) * (2.0 * cxy + c2)) / ((mx * mx + my * my + c1) * (vx + vy + c2));
     }
     total / (w * h) as f64
 }
@@ -140,7 +143,13 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
             }
         }
     }
-    let pct = |n: usize, of: usize| if of == 0 { 0.0 } else { n as f64 * 100.0 / of as f64 };
+    let pct = |n: usize, of: usize| {
+        if of == 0 {
+            0.0
+        } else {
+            n as f64 * 100.0 / of as f64
+        }
+    };
     let ssim = ssim(reference, port);
     let differing_pct = pct(differing, w * h);
     let interior_differing_pct = pct(interior_differing, interior);
@@ -170,7 +179,11 @@ mod tests {
                 data.extend_from_slice(&f(x, y));
             }
         }
-        Rgba { width: w, height: h, data }
+        Rgba {
+            width: w,
+            height: h,
+            data,
+        }
     }
 
     #[test]
@@ -185,7 +198,13 @@ mod tests {
     #[test]
     fn interior_difference_fails_and_edge_difference_does_not() {
         let a = image(40, 30, |_, _| [100, 100, 100, 255]);
-        let b = image(40, 30, |x, y| if (x, y) == (20, 15) { [110, 100, 100, 255] } else { [100, 100, 100, 255] });
+        let b = image(40, 30, |x, y| {
+            if (x, y) == (20, 15) {
+                [110, 100, 100, 255]
+            } else {
+                [100, 100, 100, 255]
+            }
+        });
         let mut edges = vec![false; 1200];
         assert!(!gate4(&a, &b, &edges).unwrap().pass);
         edges[15 * 40 + 22] = true;
@@ -200,6 +219,6 @@ mod tests {
         mask[3 * 7 + 3] = true;
         let d = dilate(&mask, 7, 7, 2);
         assert_eq!(d.iter().filter(|v| **v).count(), 25);
-        assert!(d[1 * 7 + 1] && d[5 * 7 + 5] && !d[0]);
+        assert!(d[8] && d[40] && !d[0]);
     }
 }

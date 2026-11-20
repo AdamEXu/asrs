@@ -63,12 +63,6 @@ pub struct Draw {
     pub instances: Option<Arc<Vec<[f32; 16]>>>,
 }
 
-impl Draw {
-    pub fn transparent(&self) -> bool {
-        self.material.transparent
-    }
-}
-
 /// Everything the render thread needs for one frame. It owns its data, so it can be sent across
 /// threads while the scene keeps changing.
 #[derive(Clone, Debug)]

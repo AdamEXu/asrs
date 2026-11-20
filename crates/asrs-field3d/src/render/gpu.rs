@@ -166,9 +166,8 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Result<Self, RenderError> {
-        let instance = wgpu::Instance::new(
-            wgpu::InstanceDescriptor::new_without_display_handle_from_env(),
-        );
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::None,
             force_fallback_adapter: false,
@@ -227,7 +226,11 @@ impl Renderer {
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[Some(&frame_layout), Some(&draw_layout), Some(&texture_layout)],
+            bind_group_layouts: &[
+                Some(&frame_layout),
+                Some(&draw_layout),
+                Some(&texture_layout),
+            ],
             immediate_size: 0,
         });
         let frame_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -278,12 +281,10 @@ impl Renderer {
         let shader = &self.shader;
         let layout = &self.layout;
         self.pipelines.entry(key).or_insert_with(|| {
-            const POSITION: [wgpu::VertexAttribute; 1] =
-                wgpu::vertex_attr_array![0 => Float32x3];
+            const POSITION: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x3];
             const NORMAL: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![1 => Float32x3];
             const COLOR_U8: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![2 => Unorm8x4];
-            const COLOR_F32: [wgpu::VertexAttribute; 1] =
-                wgpu::vertex_attr_array![2 => Float32x4];
+            const COLOR_F32: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![2 => Float32x4];
             const UV: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![3 => Float32x2];
             const INSTANCE: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
                 4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4
@@ -356,7 +357,11 @@ impl Renderer {
                 layout: Some(layout),
                 vertex: wgpu::VertexState {
                     module: shader,
-                    entry_point: Some(if key.instanced { "vs_instanced" } else { "vs_mesh" }),
+                    entry_point: Some(if key.instanced {
+                        "vs_instanced"
+                    } else {
+                        "vs_mesh"
+                    }),
                     compilation_options: Default::default(),
                     buffers: &buffers,
                 },
@@ -531,7 +536,8 @@ impl Renderer {
         let count = frame.draws.len() as u64;
         if count > self.draw_capacity {
             self.draw_capacity = count.next_power_of_two();
-            let (buffer, group) = make_draw_buffer(&self.device, &self.draw_layout, self.draw_capacity);
+            let (buffer, group) =
+                make_draw_buffer(&self.device, &self.draw_layout, self.draw_capacity);
             self.draw_buffer = buffer;
             self.draw_group = group;
         }
@@ -625,7 +631,10 @@ impl Renderer {
                 if matrices.is_empty() {
                     continue;
                 }
-                pass.set_vertex_buffer(4, buffer.slice(offset..offset + matrices.len() as u64 * 64));
+                pass.set_vertex_buffer(
+                    4,
+                    buffer.slice(offset..offset + matrices.len() as u64 * 64),
+                );
                 instance_count = matrices.len() as u32;
             }
             match &geometry.index {
@@ -642,13 +651,20 @@ impl Renderer {
     /// first, which is `gl.readPixels` flipped to image order.
     pub fn render(&mut self, frame: &Frame, out: &mut Vec<u8>) -> Timings {
         let t0 = Instant::now();
-        let FrameOptionsSize { width, height, samples } = frame_size(frame);
+        let FrameOptionsSize {
+            width,
+            height,
+            samples,
+        } = frame_size(frame);
         self.ensure_targets(width, height, samples);
         self.sync_resources(frame);
         let instance_offsets = self.write_uniforms(frame);
         let targets = self.targets.take().expect("targets");
         let resolve_view = targets.resolve.create_view(&Default::default());
-        let msaa_view = targets.msaa.as_ref().map(|t| t.create_view(&Default::default()));
+        let msaa_view = targets
+            .msaa
+            .as_ref()
+            .map(|t| t.create_view(&Default::default()));
         let depth_view = targets.depth.create_view(&Default::default());
         let [r, g, b, a] = frame.clear;
         let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -713,7 +729,13 @@ impl Renderer {
         let t2 = Instant::now();
         {
             let data = slice.get_mapped_range().expect("mapped readback");
-            copy_rows(&data, padded as usize, (width * 4) as usize, height as usize, out);
+            copy_rows(
+                &data,
+                padded as usize,
+                (width * 4) as usize,
+                height as usize,
+                out,
+            );
         }
         targets.readback.unmap();
         self.targets = Some(targets);
@@ -811,22 +833,32 @@ impl Renderer {
             let mut bytes = Vec::new();
             {
                 let data = b.slice(..).get_mapped_range().expect("mapped aux readback");
-                copy_rows(&data, padded as usize, (width * 4) as usize, height as usize, &mut bytes);
+                copy_rows(
+                    &data,
+                    padded as usize,
+                    (width * 4) as usize,
+                    height as usize,
+                    &mut bytes,
+                );
             }
             b.unmap();
             bytes
         };
         let u32s = |bytes: Vec<u8>| -> Vec<u32> {
             bytes
-                .chunks_exact(4)
-                .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_ne_bytes(*c))
                 .collect()
         };
         let opaque_ids = u32s(read(&buffers[0]));
         let transparent_ids = u32s(read(&buffers[1]));
         let depth = read(&buffers[2])
-            .chunks_exact(4)
-            .map(|c| f32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_ne_bytes(*c))
             .collect();
         AuxBuffers {
             width,
@@ -910,10 +942,17 @@ fn draw_uniform(draw: &Draw, color_components: u32) -> DrawU {
     let shininess = asrs_js::math::max2(m.shininess, 1e-4);
     DrawU {
         model_view: draw.model_view,
-        normal_matrix: [n[0], n[1], n[2], 0.0, n[3], n[4], n[5], 0.0, n[6], n[7], n[8], 0.0],
+        normal_matrix: [
+            n[0], n[1], n[2], 0.0, n[3], n[4], n[5], 0.0, n[6], n[7], n[8], 0.0,
+        ],
         diffuse_opacity: [f(m.color.r), f(m.color.g), f(m.color.b), f(m.opacity)],
         emissive: pad3(emissive, 0.0),
-        specular_shininess: [f(m.specular.r), f(m.specular.g), f(m.specular.b), f(shininess)],
+        specular_shininess: [
+            f(m.specular.r),
+            f(m.specular.g),
+            f(m.specular.b),
+            f(shininess),
+        ],
         flags: [
             if m.vertex_colors { color_components } else { 0 },
             u32::from(draw.side == Side::Back),
@@ -941,7 +980,11 @@ fn upload_geometry(device: &wgpu::Device, geometry: &Geometry) -> GpuGeometry {
     let position = g.attribute("position");
     let count = position.map_or(0, BufferAttribute::count);
     let init = |contents: &[u8], usage: wgpu::BufferUsages| {
-        let contents: &[u8] = if contents.is_empty() { &[0; 16] } else { contents };
+        let contents: &[u8] = if contents.is_empty() {
+            &[0; 16]
+        } else {
+            contents
+        };
         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents,
@@ -987,11 +1030,19 @@ fn upload_geometry(device: &wgpu::Device, geometry: &Geometry) -> GpuGeometry {
                 if v.len() % 2 == 1 {
                     v.push(0);
                 }
-                (init(bytemuck::cast_slice(&v), usage), wgpu::IndexFormat::Uint16, index.array.len() as u32)
+                (
+                    init(bytemuck::cast_slice(&v), usage),
+                    wgpu::IndexFormat::Uint16,
+                    index.array.len() as u32,
+                )
             }
             other => {
                 let v: Vec<u32> = (0..other.len()).map(|i| other.get(i) as u32).collect();
-                (init(bytemuck::cast_slice(&v), usage), wgpu::IndexFormat::Uint32, v.len() as u32)
+                (
+                    init(bytemuck::cast_slice(&v), usage),
+                    wgpu::IndexFormat::Uint32,
+                    v.len() as u32,
+                )
             }
         }
     });
@@ -1032,7 +1083,9 @@ fn mip_chain(texture: &Texture) -> Vec<(u32, u32, Vec<u8>)> {
                         let sy = sy.min(ph - 1);
                         u32::from(prev[((sy * pw + sx) * 4 + c) as usize])
                     };
-                    let sum = at(2 * x, 2 * y) + at(2 * x + 1, 2 * y) + at(2 * x, 2 * y + 1)
+                    let sum = at(2 * x, 2 * y)
+                        + at(2 * x + 1, 2 * y)
+                        + at(2 * x, 2 * y + 1)
                         + at(2 * x + 1, 2 * y + 1);
                     next[((y * nw + x) * 4 + c) as usize] = ((sum + 2) / 4) as u8;
                 }

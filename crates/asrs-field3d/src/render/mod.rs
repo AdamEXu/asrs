@@ -22,7 +22,7 @@ pub use thread::{RenderThread, RenderedFrame};
 
 /// BGRA to RGBA in place.
 pub fn swap_red_blue(pixels: &mut [u8]) {
-    for p in pixels.chunks_exact_mut(4) {
+    for p in pixels.as_chunks_mut::<4>().0.iter_mut() {
         p.swap(0, 2);
     }
 }
