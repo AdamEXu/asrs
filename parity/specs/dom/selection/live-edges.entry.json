@@ -185,6 +185,20 @@
       },
       {
         "selection": [
+          "applyTimelineScroll",
+          1000,
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoomed-scroll-right-relocks"
+      },
+      {
+        "selection": [
           "setLiveDisconnected"
         ]
       },
