@@ -885,9 +885,10 @@ impl<'a> Raster<'a> {
             return;
         };
         let ctm = self.state.transform;
-        if !finite(&[x, y]) || !ctm.is_scale_translate() || ctm.a <= 0.0 || ctm.d <= 0.0 {
+        if !finite(&[x, y]) || !ctm.is_invertible() {
             return;
         }
+        let axis_aligned = ctm.is_scale_translate() && ctm.a > 0.0 && ctm.d > 0.0;
         let state = &self.state;
         let Some(TextRaster { backend, lut }) = self.text.as_mut() else {
             return;
@@ -912,12 +913,23 @@ impl<'a> Raster<'a> {
         let (pw, ph) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
         let data = self.pixmap.data_mut();
         for glyph in &shaped.glyphs {
-            let device_x = ctm.a * (x + glyph.x * compress) + ctm.e;
-            let device_y = ctm.d * y + ctm.f;
-            let (ix, iy, phase) = glyph_origin(device_x, device_y);
-            let Some(mask) =
-                backend.raw_mask(&font, glyph.id, ctm.d, ctm.a / ctm.d * compress, phase)
-            else {
+            let gx = x + glyph.x * compress;
+            let device_x = ctm.a * gx + ctm.c * y + ctm.e;
+            let device_y = ctm.b * gx + ctm.d * y + ctm.f;
+            let (ix, iy, mask) = if axis_aligned {
+                let (ix, iy, phase) = glyph_origin(device_x, device_y);
+                let mask =
+                    backend.raw_mask(&font, glyph.id, ctm.d, ctm.a / ctm.d * compress, phase);
+                (ix, iy, mask)
+            } else {
+                let (ix, _, phase_x) = glyph_origin(device_x, 0.0);
+                let (iy, _, phase_y) = glyph_origin(device_y, 0.0);
+                let matrix = [ctm.a * compress, ctm.b * compress, ctm.c, ctm.d];
+                let mask =
+                    backend.raw_mask_transformed(&font, glyph.id, matrix, (phase_x, phase_y));
+                (ix, iy, mask)
+            };
+            let Some(mask) = mask else {
                 continue;
             };
             for row in 0..mask.height as i32 {

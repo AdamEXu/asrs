@@ -77,6 +77,20 @@ pub trait TextBackend {
         x_scale: f64,
         phase: u8,
     ) -> Option<Mask>;
+
+    /// Raw coverage of `glyph` under any device matrix `[a, b, c, d]` (`x' = a x + c y`,
+    /// `y' = b x + d y`, y down), its origin `phase` quarter pixels right of and below the pixel
+    /// grid, as Skia rasterizes text under rotation or flips.
+    fn raw_mask_transformed(
+        &mut self,
+        font: &FontSpec,
+        glyph: u32,
+        matrix: [f64; 4],
+        phase: (u8, u8),
+    ) -> Option<Mask> {
+        let _ = (font, glyph, matrix, phase);
+        None
+    }
 }
 
 pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
