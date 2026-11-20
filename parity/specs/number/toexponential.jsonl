@@ -863,3 +863,18 @@
 {"fn":"Number.prototype.toExponential","args":[{"box":{"n":"3ff8000000000000"}},{"n":"4000000000000000"}]}
 {"fn":"Number.prototype.toExponential","args":["x",{"n":"4000000000000000"}]}
 {"fn":"Number.prototype.toExponential","args":[true,{"n":"4000000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff8000000000000"}, {"n": "bff0000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff8000000000000"}, {"n": "4059400000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff8000000000000"}, {"n": "7e37e43c8800759c"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff8000000000000"}, {"n": "fff0000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff8000000000000"}, {"n": "41f0000000400000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff0000000000000"}, {"n": "bff0000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff0000000000000"}, {"n": "4059400000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff0000000000000"}, {"n": "7e37e43c8800759c"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff0000000000000"}, {"n": "fff0000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "7ff0000000000000"}, {"n": "41f0000000400000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "fff0000000000000"}, {"n": "bff0000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "fff0000000000000"}, {"n": "4059400000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "fff0000000000000"}, {"n": "7e37e43c8800759c"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "fff0000000000000"}, {"n": "fff0000000000000"}]}
+{"fn": "Number.prototype.toExponential", "args": [{"n": "fff0000000000000"}, {"n": "41f0000000400000"}]}

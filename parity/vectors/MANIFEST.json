@@ -59,9 +59,9 @@
       "spec": "parity/specs/number/parse.jsonl"
     },
     "number/toexponential": {
-      "cases": 865,
-      "content": "403ebd0ffa92248e",
-      "generator": "681767dd4916bbca",
+      "cases": 880,
+      "content": "2ab4522ddb392cc2",
+      "generator": "56caeb43678a9203",
       "spec": "parity/specs/number/toexponential.jsonl"
     },
     "number/tofixed": {
