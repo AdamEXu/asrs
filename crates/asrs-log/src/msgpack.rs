@@ -81,7 +81,10 @@ pub fn decode_multi(bytes: &[u8]) -> (Vec<JsValue>, Option<JsError>) {
 }
 
 enum ArrayState {
-    Array { array: Vec<JsValue>, size: u32 },
+    Array {
+        array: Vec<JsValue>,
+        size: u32,
+    },
     Map {
         map: JsObject,
         size: u32,
@@ -173,8 +176,7 @@ impl<'a> RawDecoder<'a> {
                         break 'value self.decode_utf8_string(length, 2)?;
                     }
                     0xdb => {
-                        let length = usize::try_from(self.look_u32()?)
-                            .unwrap_or(usize::MAX);
+                        let length = usize::try_from(self.look_u32()?).unwrap_or(usize::MAX);
                         break 'value self.decode_utf8_string(length, 4)?;
                     }
                     0xdc => {
@@ -222,8 +224,7 @@ impl<'a> RawDecoder<'a> {
                         break 'value self.decode_binary(size, 2)?;
                     }
                     0xc6 => {
-                        let size = usize::try_from(self.look_u32()?)
-                            .unwrap_or(usize::MAX);
+                        let size = usize::try_from(self.look_u32()?).unwrap_or(usize::MAX);
                         break 'value self.decode_binary(size, 4)?;
                     }
                     0xd4 => break 'value self.decode_extension(1, 0)?,
@@ -240,8 +241,7 @@ impl<'a> RawDecoder<'a> {
                         break 'value self.decode_extension(size, 2)?;
                     }
                     0xc9 => {
-                        let size = usize::try_from(self.look_u32()?)
-                            .unwrap_or(usize::MAX);
+                        let size = usize::try_from(self.look_u32()?).unwrap_or(usize::MAX);
                         break 'value self.decode_extension(size, 4)?;
                     }
                     _ => {
@@ -258,8 +258,7 @@ impl<'a> RawDecoder<'a> {
                     ArrayState::Array { array, size } => {
                         array.push(object);
                         if array.len() as u64 == u64::from(*size) {
-                            let Some(ArrayState::Array { array, .. }) = self.stack.pop()
-                            else {
+                            let Some(ArrayState::Array { array, .. }) = self.stack.pop() else {
                                 unreachable!()
                             };
                             object = JsValue::Array(array);
@@ -296,8 +295,7 @@ impl<'a> RawDecoder<'a> {
                         map.insert(key.take().expect("map key set"), object);
                         *read_count += 1;
                         if *read_count == *size {
-                            let Some(ArrayState::Map { map, .. }) = self.stack.pop()
-                            else {
+                            let Some(ArrayState::Map { map, .. }) = self.stack.pop() else {
                                 unreachable!()
                             };
                             object = JsValue::Object(map);
@@ -347,8 +345,7 @@ impl<'a> RawDecoder<'a> {
         let offset = self.pos + header_offset;
         // `keyDecoder.canBeCached` strings go through the same utf8DecodeJs, so the cache
         // has no observable effect and only the length threshold matters.
-        let text = if self.state_is_map_key() && byte_length > 0 && byte_length <= MAX_KEY_LENGTH
-        {
+        let text = if self.state_is_map_key() && byte_length > 0 && byte_length <= MAX_KEY_LENGTH {
             utf8_decode_js(self.bytes, offset, byte_length)
         } else {
             utf8_decode(self.bytes, offset, byte_length)
@@ -357,7 +354,11 @@ impl<'a> RawDecoder<'a> {
         Ok(JsValue::String(text))
     }
 
-    fn decode_binary(&mut self, byte_length: usize, head_offset: usize) -> Result<JsValue, JsError> {
+    fn decode_binary(
+        &mut self,
+        byte_length: usize,
+        head_offset: usize,
+    ) -> Result<JsValue, JsError> {
         if !self.has_remaining(byte_length + head_offset) {
             return Err(more_data());
         }
@@ -568,7 +569,10 @@ fn do_encode(object: &JsValue, depth: usize, out: &mut Vec<u8>) -> Result<(), Js
         JsValue::BigInt(_) => {
             return encode_object_fallback(object);
         }
-        JsValue::Date(_) | JsValue::ExtData(..) | JsValue::Array(_) | JsValue::Bytes(_)
+        JsValue::Date(_)
+        | JsValue::ExtData(..)
+        | JsValue::Array(_)
+        | JsValue::Bytes(_)
         | JsValue::Object(_) => encode_object(object, depth, out)?,
     }
     Ok(())
@@ -584,8 +588,7 @@ fn encode_object_fallback(object: &JsValue) -> Result<(), JsError> {
 
 /// `Number.isSafeInteger` picks the int forms; everything else is float64.
 fn encode_number(object: f64, out: &mut Vec<u8>) {
-    if object.is_finite() && object.trunc() == object && object.abs() <= 9_007_199_254_740_991.0
-    {
+    if object.is_finite() && object.trunc() == object && object.abs() <= 9_007_199_254_740_991.0 {
         if object >= 0.0 {
             if object < 128.0 {
                 out.push(object as u8);

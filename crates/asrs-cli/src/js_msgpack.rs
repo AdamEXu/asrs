@@ -127,9 +127,7 @@ fn decode_multi(args: &[Value]) -> Response {
             let (values, err) = msgpack::decode_multi(&bytes);
             match err {
                 Some(e) => throw(e),
-                None => Response::Ok(Value::Array(
-                    values.iter().map(js_json::from_js).collect(),
-                )),
+                None => Response::Ok(Value::Array(values.iter().map(js_json::from_js).collect())),
             }
         }
         Err(r) => r,

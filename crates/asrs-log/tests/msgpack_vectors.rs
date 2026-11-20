@@ -5,7 +5,7 @@
 mod js_json;
 
 use asrs_js::string::JsError;
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::JsValue;
 use asrs_log::msgpack;
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Record, Utf16String, Value};
@@ -106,7 +106,9 @@ fn outcome(record: &Record) -> Result<Result<Value, Value>, String> {
 fn decode_vectors() {
     check_records("msgpack/decode", |record| {
         let bytes = hex_bytes(record, "d")?;
-        let actual = msgpack::decode(&bytes).map(|v| js_json::from_js(&v)).map_err(thrown);
+        let actual = msgpack::decode(&bytes)
+            .map(|v| js_json::from_js(&v))
+            .map_err(thrown);
         let expected = outcome(record)?;
         if actual != expected {
             return Err(format!("expected {expected:?}\ngot {actual:?}"));
@@ -140,7 +142,9 @@ fn encode_vectors() {
         let actual = msgpack::encode(&value).map(Value::Bytes).map_err(thrown);
         let expected = outcome(record)?;
         if actual != expected {
-            return Err(format!("input {input:?}\nexpected {expected:?}\ngot {actual:?}"));
+            return Err(format!(
+                "input {input:?}\nexpected {expected:?}\ngot {actual:?}"
+            ));
         }
         Ok(())
     });
