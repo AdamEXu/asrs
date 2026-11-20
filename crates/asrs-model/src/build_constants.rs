@@ -53,7 +53,7 @@ pub const VERSION: &str = "27.0.0-alpha-6";
 
 pub const LITE_VERSION: &str = VERSION;
 
-/// Upstream stamps the build time (`new Date().toISOString()`). Release packaging sets
+/// Upstream stamps the build time (`new Date().toISOString()`). A release build passes it in
 /// `ASRS_BUILD_DATE`; other builds use the oracle's pinned value so output stays reproducible.
 pub const BUILD_DATE: &str = match option_env!("ASRS_BUILD_DATE") {
     Some(date) => date,

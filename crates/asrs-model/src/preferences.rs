@@ -353,8 +353,10 @@ fn describe_primitive(value: &JsValue) -> String {
 /// `(basePrefs key, value)`. Throws as the `in` operator does when `newPrefs` is not an object.
 fn accepted_assignments(new_prefs: &JsValue) -> Result<Vec<(&'static str, &JsValue)>, JsError> {
     let object = match new_prefs {
-        JsValue::Object(object) => Some(object),
-        JsValue::Array(_) | JsValue::Bytes(_) | JsValue::Date(_) | JsValue::ExtData(..) => None,
+        JsValue::Object(object) => object,
+        JsValue::Array(_) | JsValue::Bytes(_) | JsValue::Date(_) | JsValue::ExtData(..) => {
+            return Ok(Vec::new());
+        }
         primitive => {
             return Err(JsError::type_error(format!(
                 "Cannot use 'in' operator to search for '{}' in {}",
@@ -362,9 +364,6 @@ fn accepted_assignments(new_prefs: &JsValue) -> Result<Vec<(&'static str, &JsVal
                 describe_primitive(primitive)
             )));
         }
-    };
-    let Some(object) = object else {
-        return Ok(Vec::new());
     };
     Ok(RULES
         .iter()
