@@ -39,10 +39,55 @@ fn scale_value(value: f64, old0: f64, old1: f64, new0: f64, new1: f64) -> f64 {
     ((value - old0) / (old1 - old0)) * (new1 - new0) + new0
 }
 
-/// `+(container.style.width)` where the style was set to `v.toString() + "px"`: the
-/// shortest-round-trip text parses back to the same double except `-0`, which becomes `0`.
-fn style_px(v: f64) -> f64 {
-    number::to_number(JsString::from(number::to_string(v)).units())
+/// Blink's `canvas.width` setter (`unsigned long` + reflected content attribute): the
+/// WebIDL `ToUint32` result is used unless its sign bit is set, which falls back to the
+/// default 300x150 bitmap. `0.5`, NaN and infinities land on 0, `-1` and huge values on 300.
+fn canvas_attr(v: f64) -> u32 {
+    let u = to_uint32(v);
+    if u > i32::MAX as u32 { 300 } else { u }
+}
+
+/// `container.style.width = v + "px"` on a block box in the oracle's document: the
+/// declaration sticks only for finite non-negative lengths (Blink drops "NaNpx",
+/// "Infinitypx" and negatives, keeping the previous value), and an auto width resolves
+/// to the containing block. The containing block is 400 px in `heatmapPage.html` and the
+/// empty container's auto height is 0.
+struct Container {
+    style_width: Option<f64>,
+    style_height: Option<f64>,
+}
+
+const CONTAINING_BLOCK_WIDTH: f64 = 400.0;
+
+impl Container {
+    fn new() -> Container {
+        Container {
+            style_width: None,
+            style_height: None,
+        }
+    }
+
+    fn set_size(&mut self, width: f64, height: f64) {
+        if width.is_finite() && width >= 0.0 {
+            self.style_width = Some(number::to_number(
+                JsString::from(number::to_string(width)).units(),
+            ));
+        }
+        if height.is_finite() && height >= 0.0 {
+            self.style_height = Some(number::to_number(
+                JsString::from(number::to_string(height)).units(),
+            ));
+        }
+    }
+
+    /// `+(getComputedStyle(container).width.replace(/px/,''))`.
+    fn computed_width(&self) -> f64 {
+        self.style_width.unwrap_or(CONTAINING_BLOCK_WIDTH)
+    }
+
+    fn computed_height(&self) -> f64 {
+        self.style_height.unwrap_or(0.0)
+    }
 }
 
 /// The canonical array index a property key names, matching V8's `Array#length` rules.
@@ -62,16 +107,38 @@ fn js_key(key: &JsString) -> String {
     key.as_string().unwrap_or_default()
 }
 
+/// JS `Array#push` throws `RangeError: Invalid array length` once the array would hold
+/// `2^32 - 1` elements, which is where an upstream grid loop ends when the step never
+/// reaches the bound (negative or zero grid size) or needs past `2^32` iterations.
+/// Counting arithmetically reproduces the throw without running the doomed loop.
+fn grid_len_would_throw(bound: f64, step: f64) -> bool {
+    const ARRAY_LENGTH_MAX: f64 = 4294967295.0;
+    if !(0.0 < bound) {
+        return false;
+    }
+    if step.is_nan() {
+        return false;
+    }
+    if step <= 0.0 {
+        return true;
+    }
+    let approx = bound / step;
+    !approx.is_finite() || approx > ARRAY_LENGTH_MAX - 1.0
+}
+
 /// What `Heatmap.update` observably did, for parity recording.
 pub struct UpdateOutcome {
     pub created: bool,
     /// The argument `h337.setData` was called with, when it was called.
     pub set_data: Option<SetData>,
+    /// The exception the call threw, when it did (upstream's `update` propagates them).
+    pub error: Option<CanvasError>,
 }
 
 /// Upstream `Heatmap`: bins translations into a field grid and feeds the h337 instance,
 /// recreating it whenever the pixel or field dimensions change.
 pub struct Heatmap {
+    container: Container,
     heatmap: Option<H337>,
     last_pixel_dimensions: [f64; 2],
     last_field_dimensions: [f64; 2],
@@ -81,6 +148,7 @@ pub struct Heatmap {
 impl Heatmap {
     pub fn new() -> Heatmap {
         Heatmap {
+            container: Container::new(),
             heatmap: None,
             last_pixel_dimensions: [0.0, 0.0],
             last_field_dimensions: [0.0, 0.0],
@@ -93,15 +161,17 @@ impl Heatmap {
         translations: &[[f64; 2]],
         pixel_dimensions: [f64; 2],
         field_dimensions: [f64; 2],
-    ) -> Result<UpdateOutcome, CanvasError> {
+    ) -> UpdateOutcome {
         let created = pixel_dimensions != self.last_pixel_dimensions
             || field_dimensions != self.last_field_dimensions;
         if created {
             self.last_pixel_dimensions = pixel_dimensions;
             self.last_field_dimensions = field_dimensions;
+            self.container
+                .set_size(pixel_dimensions[0], pixel_dimensions[1]);
             self.heatmap = Some(H337::create(Config {
-                width: style_px(pixel_dimensions[0]),
-                height: style_px(pixel_dimensions[1]),
+                width: self.container.computed_width(),
+                height: self.container.computed_height(),
                 radius: Some(pixel_dimensions[1] * RADIUS),
                 max_opacity: Some(0.75),
                 ..Config::default()
@@ -109,10 +179,21 @@ impl Heatmap {
         }
 
         let mut set_data = None;
+        let mut error = None;
         let grid_size_meters = field_dimensions[1] * GRID_SIZE;
         let translations_str = translations_str(translations);
         if translations_str != self.last_translations_str || created {
             self.last_translations_str = translations_str;
+
+            if grid_len_would_throw(field_dimensions[1] + grid_size_meters, grid_size_meters)
+                || grid_len_would_throw(field_dimensions[0] + grid_size_meters, grid_size_meters)
+            {
+                return UpdateOutcome {
+                    created,
+                    set_data,
+                    error: Some(CanvasError::Range("Invalid array length")),
+                };
+            }
 
             let mut grid: Vec<Vec<f64>> = Vec::new();
             let mut x = 0.0;
@@ -176,11 +257,18 @@ impl Heatmap {
                     max: max_value,
                     data: heatmap_data,
                 };
-                heatmap.set_data(&data)?;
+                let result = heatmap.set_data(&data);
                 set_data = Some(data);
+                if let Err(e) = result {
+                    error = Some(e);
+                }
             }
         }
-        Ok(UpdateOutcome { created, set_data })
+        UpdateOutcome {
+            created,
+            set_data,
+            error,
+        }
     }
 
     /// `heatmap.getData()`: the unorganized store contents, `None` before any instance.
@@ -199,6 +287,15 @@ impl Heatmap {
     /// The output canvas's bitmap size, as the element's `width`/`height` report.
     pub fn canvas_size(&self) -> Option<(u32, u32)> {
         self.heatmap.as_ref().map(|h| h.renderer.canvas_size())
+    }
+
+    /// Debug: the shadow canvas's pixels, straight alpha as `getImageData` returns.
+    #[doc(hidden)]
+    pub fn shadow_image_data(&mut self) -> Result<Option<ImageData>, CanvasError> {
+        match self.heatmap.as_mut() {
+            None => Ok(None),
+            Some(heatmap) => heatmap.shadow_image_data().map(Some),
+        }
     }
 }
 
@@ -289,6 +386,11 @@ impl H337 {
     fn canvas_image_data(&mut self) -> Result<ImageData, CanvasError> {
         let (w, h) = self.renderer.canvas_size();
         self.renderer.canvas.get_image_data(0.0, 0.0, w as f64, h as f64)
+    }
+
+    fn shadow_image_data(&mut self) -> Result<ImageData, CanvasError> {
+        let (w, h) = (self.renderer.width as f64, self.renderer.height as f64);
+        self.renderer.shadow.get_image_data(0.0, 0.0, w, h)
     }
 }
 
@@ -520,8 +622,8 @@ struct Renderer {
 impl Renderer {
     fn new(config: &Config) -> Renderer {
         let mut renderer = Renderer {
-            shadow: Layer::new(to_uint32(config.width), to_uint32(config.height)),
-            canvas: Layer::new(to_uint32(config.width), to_uint32(config.height)),
+            shadow: Layer::new(canvas_attr(config.width), canvas_attr(config.height)),
+            canvas: Layer::new(canvas_attr(config.width), canvas_attr(config.height)),
             width: config.width,
             height: config.height,
             palette: color_palette(),
