@@ -1,19 +1,26 @@
 #![allow(clippy::disallowed_methods)]
 
 //! Replays `parity/specs/dom/selection/<case>.entry.json` against the real
-//! `SelectionImpl` and compares the emitted records with the committed
-//! `dom/selection/<case>` vector, line for line. The harness only converts
-//! fixture inputs to method calls and the resulting state back to CVE-1
-//! values; all selection logic lives in `asrs_model::selection_impl`.
+//! `SelectionImpl` and touch bar tick and compares the emitted records with the
+//! committed `dom/selection/<case>` vector, line for line.
+//!
+//! The replay loop stands in for two things the port gets elsewhere: the
+//! oracle's fake-clock event loop (a timer due at or before the next frame runs
+//! first), which GPUI's executor timers and `request_animation_frame` replace in
+//! the app, and the per-frame selection reads of the timeline, sidebar and tab
+//! controllers, which R03, U08 and the tab units own. The getters only mutate as
+//! a function of the clock, so what matters is that each frame reads them.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use asrs_hub::touch_bar;
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_log::log::Log;
@@ -147,6 +154,7 @@ fn selection_value(sel: &mut SelectionImpl) -> Value {
     let grab = sel.get_grab_zoom_range();
     let range = sel.get_timeline_range();
     let max_zoom = sel.get_timeline_is_max_zoom();
+    let controls = sel.controls();
     Value::object([
         ("mode", Value::number(mode.number())),
         ("hoveredTime", nullable(hovered)),
@@ -167,17 +175,18 @@ fn selection_value(sel: &mut SelectionImpl) -> Value {
         (
             "buttons",
             Value::object([
-                ("play", Value::Bool(sel.button_hidden(ControlButton::Play))),
+                ("play", Value::Bool(controls.play_hidden)),
+                ("pause", Value::Bool(controls.pause_hidden)),
+                ("lock", Value::Bool(controls.lock_hidden)),
+                ("unlock", Value::Bool(controls.unlock_hidden)),
                 (
-                    "pause",
-                    Value::Bool(sel.button_hidden(ControlButton::Pause)),
+                    "showLockButtons",
+                    Value::string(match controls.show_lock_buttons {
+                        None => "",
+                        Some(true) => "1",
+                        Some(false) => "0",
+                    }),
                 ),
-                ("lock", Value::Bool(sel.button_hidden(ControlButton::Lock))),
-                (
-                    "unlock",
-                    Value::Bool(sel.button_hidden(ControlButton::Unlock)),
-                ),
-                ("showLockButtons", Value::string(sel.show_lock_buttons())),
             ]),
         ),
     ])
@@ -233,10 +242,16 @@ fn load_json(path: &Path) -> Result<Json, String> {
     asrs_parity::json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// The frame routine, mirroring the hub's per-frame selection reads: the
-/// timeline paint calls `getTimelineRange`/`getHoveredTime`/`getSelectedTime`,
-/// the sidebar reads mode/hovered/selected, and each active tab's command
-/// reads `getRenderTime`/`getSelectedTime`/`getHoveredTime`/`getGrabZoomRange`.
+fn key_target(selector: &str) -> KeyTarget {
+    if selector.starts_with("input") {
+        KeyTarget::Input
+    } else if selector.starts_with("textarea") {
+        KeyTarget::TextArea
+    } else {
+        KeyTarget::Other
+    }
+}
+
 fn frame(sel: &mut SelectionImpl) {
     sel.get_timeline_range();
     sel.get_hovered_time();
@@ -282,6 +297,23 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         .unwrap_or_else(|| "darwin".to_owned());
     sel.set_context(ctx);
 
+    let ignored: HashSet<String> = match fixture.get("ignoreMain").and_then(Json::as_array) {
+        Some(names) => names
+            .iter()
+            .filter_map(Json::as_str)
+            .map(|s| s.to_string_lossy())
+            .collect(),
+        None => ["save-state", "save-type-memory", "update-touch-bar-slider"]
+            .map(str::to_owned)
+            .into(),
+    };
+    if !ignored.contains("show") {
+        return Err(err(
+            "selection fixtures must list `show` in ignoreMain: it is hub boot, not selection",
+        ));
+    }
+    let record_touch_bar = !ignored.contains("update-touch-bar-slider");
+
     let mut emitted = Vec::new();
     let drain_outbox = |sel: &mut SelectionImpl, emitted: &mut Vec<Emit>| {
         for message in sel.take_messages() {
@@ -294,43 +326,37 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         }
     };
 
-    // hub.ts:553's touch-bar interval: setInterval at boot with `1000 / 60`,
-    // dues accumulate in f64 the way `timer.due += interval` does in env.ts.
-    // On darwin it reads `getCurrentLiveTime` and `getSelectedTime`.
-    let touch_bar_period = 1000.0 / 60.0;
-    let mut touch_bar_due = start + touch_bar_period;
+    // The touch bar interval starts at boot; env.ts accumulates dues in f64.
+    let mut touch_bar_due = start + touch_bar::PERIOD_MS;
     let mut last_frame = start;
-    let mut advance = |ms: f64,
-                       sel: &mut SelectionImpl,
-                       emitted: &mut Vec<Emit>,
-                       show_pending: &mut bool| {
+    let tick_log = log.clone();
+    let mut advance = |ms: f64, sel: &mut SelectionImpl, emitted: &mut Vec<Emit>| {
         let end = clock_cell.get() + ms;
         loop {
             let frame_at = last_frame + frame_period;
             if touch_bar_due <= end && touch_bar_due <= frame_at {
                 clock_cell.set(clock_cell.get().max(touch_bar_due));
-                touch_bar_due += touch_bar_period;
-                if sel.context().platform == "darwin" {
-                    sel.get_current_live_time();
-                    sel.get_selected_time();
+                touch_bar_due += touch_bar::PERIOD_MS;
+                let platform = sel.context().platform.clone();
+                let position = touch_bar::tick(&platform, &tick_log.borrow(), sel);
+                if let (Some(position), true) = (position, record_touch_bar) {
+                    emitted.push(Emit {
+                        values: vec![
+                            ("main", Value::string("update-touch-bar-slider")),
+                            ("data", Value::number(position)),
+                        ],
+                    });
                 }
             } else if frame_at <= end {
                 last_frame = frame_at;
                 clock_cell.set(frame_at);
                 frame(sel);
-                if *show_pending {
-                    *show_pending = false;
-                    emitted.push(Emit {
-                        values: vec![("main", Value::string("show")), ("data", Value::Undefined)],
-                    });
-                }
             } else {
                 clock_cell.set(end);
                 break;
             }
         }
     };
-    let mut show_pending = true;
 
     let steps = fixture
         .get("steps")
@@ -424,6 +450,8 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                     let mut ctx = sel.context().clone();
                     ctx.selected_tab_type = TabType::from_number(number(&data)?)
                         .ok_or_else(|| err("new-tab data is a tab type"))?;
+                    // A new VideoController starts unlocked.
+                    ctx.unlocked_video_selected = ctx.selected_tab_type == TabType::Video;
                     sel.set_context(ctx);
                 }
                 "set-version" => {
@@ -471,7 +499,8 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             match (kind.as_str(), etype.as_str()) {
                 ("MouseEvent", "click") => sel.click(button_for(&target)?),
                 ("MouseEvent", "contextmenu") => {
-                    sel.context_menu(button_for(&target)?, event_rect(&target, layout)?)
+                    button_for(&target)?;
+                    sel.context_menu(event_rect(&target, layout)?)
                 }
                 ("KeyboardEvent", "keydown") => {
                     let code = init
@@ -479,12 +508,12 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                         .and_then(Json::as_str)
                         .map(|s| s.to_string_lossy())
                         .unwrap_or_default();
-                    let key_target = if target == "window" || target == "document" {
-                        KeyTarget::Other
-                    } else {
-                        KeyTarget::Input
-                    };
-                    sel.key_down(&code, init_f64("metaKey"), init_f64("ctrlKey"), key_target);
+                    sel.key_down(
+                        &code,
+                        init_f64("metaKey"),
+                        init_f64("ctrlKey"),
+                        key_target(&target),
+                    );
                 }
                 other => return Err(format!("{}: unsupported event {other:?}", where_())),
             }
@@ -493,14 +522,12 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 ms.as_f64().ok_or_else(|| err("advance is a number"))?,
                 &mut sel,
                 &mut emitted,
-                &mut show_pending,
             );
         } else if let Some(n) = step.get("frames") {
             advance(
                 n.as_f64().ok_or_else(|| err("frames is a number"))? * frame_period,
                 &mut sel,
                 &mut emitted,
-                &mut show_pending,
             );
         } else if let Some(capture) = step.get("capture") {
             let label = step

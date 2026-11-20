@@ -1,0 +1,258 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -100000,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-in-past-min"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -100,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-in-at-min"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          1000000,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-out-overflow"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          50,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-out-at-max"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -1000000,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-in-underflow"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          100
+        ]
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          300,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-out-anchor-outside"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          null
+        ]
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            -5,
+            20
+          ],
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "range-wider-than-log"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            4,
+            9
+          ],
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "range-past-right"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          10000,
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "pan-into-right-limit"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            4.5,
+            4.5
+          ],
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zero-span"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -10,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-zero-span"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0,
+            6
+          ],
+          true
+        ]
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            1,
+            2
+          ],
+          false
+        ]
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          10,
+          0,
+          0
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "pan-zero-width"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0,
+            6
+          ],
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "recovered"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          {
+            "n": "8000000000000000"
+          },
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "negative-zero-dy"
+      }
+    ]
+  }
+}

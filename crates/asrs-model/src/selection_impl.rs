@@ -3,9 +3,9 @@
 //! Headless: the log is the shared `window.log` handle, the clock is injected
 //! (`new Date().getTime() / 1000`), and the things upstream reads from
 //! `window.tabs` / `window.platform` / button rects come in through
-//! [`SelectionContext`] and method arguments. Button visibility, the
-//! `--show-lock-buttons` property and the `ask-playback-options` message are
-//! kept as observable state and an outbox so traces see what the DOM sees.
+//! [`SelectionContext`] and method arguments. What `setMode` writes to the DOM is
+//! kept as [`ControlButtons`] for the view to render, and `ask-playback-options`
+//! goes to an outbox the hub drains.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,6 +36,38 @@ pub enum ControlButton {
     Pause,
     Lock,
     Unlock,
+}
+
+/// What `setMode` writes to the DOM: each control button's `hidden` flag and the
+/// inline `--show-lock-buttons` property on the root element.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ControlButtons {
+    pub play_hidden: bool,
+    pub pause_hidden: bool,
+    pub lock_hidden: bool,
+    pub unlock_hidden: bool,
+    /// `None` until the first mode change sets the property; then whether it is "1".
+    pub show_lock_buttons: Option<bool>,
+}
+
+impl ControlButtons {
+    /// `www/hub.html`'s initial `hidden` attributes, before any mode change.
+    const INITIAL: ControlButtons = ControlButtons {
+        play_hidden: false,
+        pause_hidden: true,
+        lock_hidden: true,
+        unlock_hidden: true,
+        show_lock_buttons: None,
+    };
+
+    pub fn hidden(&self, button: ControlButton) -> bool {
+        match button {
+            ControlButton::Play => self.play_hidden,
+            ControlButton::Pause => self.pause_hidden,
+            ControlButton::Lock => self.lock_hidden,
+            ControlButton::Unlock => self.unlock_hidden,
+        }
+    }
 }
 
 /// `event.target` buckets for the keydown guard.
@@ -102,12 +134,7 @@ pub struct SelectionImpl {
     live_connected: bool,
     live_time_supplier: Option<TimeSupplier>,
 
-    play_hidden: bool,
-    pause_hidden: bool,
-    lock_hidden: bool,
-    unlock_hidden: bool,
-    /// The inline `--show-lock-buttons` value: unset ("") until the first mode change.
-    show_lock_buttons: String,
+    controls: ControlButtons,
 
     outbox: Vec<NamedMessage<HubToMain>>,
 }
@@ -130,11 +157,7 @@ impl SelectionImpl {
             playback_looping: false,
             live_connected: false,
             live_time_supplier: None,
-            play_hidden: false,
-            pause_hidden: true,
-            lock_hidden: true,
-            unlock_hidden: true,
-            show_lock_buttons: String::new(),
+            controls: ControlButtons::INITIAL,
             outbox: Vec::new(),
         }
     }
@@ -159,19 +182,8 @@ impl SelectionImpl {
         self.log = log;
     }
 
-    /// `HTMLElement.hidden` on each control button.
-    pub fn button_hidden(&self, button: ControlButton) -> bool {
-        match button {
-            ControlButton::Play => self.play_hidden,
-            ControlButton::Pause => self.pause_hidden,
-            ControlButton::Lock => self.lock_hidden,
-            ControlButton::Unlock => self.unlock_hidden,
-        }
-    }
-
-    /// The inline `--show-lock-buttons` custom property ("" before the first mode change).
-    pub fn show_lock_buttons(&self) -> &str {
-        &self.show_lock_buttons
+    pub fn controls(&self) -> ControlButtons {
+        self.controls
     }
 
     /// Hub-to-main messages this class sends; the hub drains and forwards them.
@@ -189,8 +201,8 @@ impl SelectionImpl {
         }
     }
 
-    /// The play/pause `contextmenu` listener: `ask-playback-options` with the button's rect.
-    pub fn context_menu(&mut self, _button: ControlButton, rect: ElementRect) {
+    /// The play and pause `contextmenu` listener: `ask-playback-options` with the button's rect.
+    pub fn context_menu(&mut self, rect: ElementRect) {
         let mut data = JsObject::new();
         data.insert("speed", JsValue::Number(self.playback_speed));
         data.insert("looping", JsValue::Bool(self.playback_looping));
@@ -252,12 +264,13 @@ impl SelectionImpl {
 
     fn set_mode(&mut self, new_mode: SelectionMode) {
         self.mode = new_mode;
-        self.show_lock_buttons = if self.live_connected { "1" } else { "0" }.to_owned();
-        self.play_hidden =
-            self.mode == SelectionMode::Playback || self.mode == SelectionMode::Locked;
-        self.pause_hidden = self.mode == SelectionMode::Idle || self.mode == SelectionMode::Static;
-        self.lock_hidden = !self.live_connected || self.mode == SelectionMode::Locked;
-        self.unlock_hidden = !self.live_connected || self.mode != SelectionMode::Locked;
+        self.controls = ControlButtons {
+            play_hidden: new_mode == SelectionMode::Playback || new_mode == SelectionMode::Locked,
+            pause_hidden: new_mode == SelectionMode::Idle || new_mode == SelectionMode::Static,
+            lock_hidden: !self.live_connected || new_mode == SelectionMode::Locked,
+            unlock_hidden: !self.live_connected || new_mode != SelectionMode::Locked,
+            show_lock_buttons: Some(self.live_connected),
+        };
     }
 }
 

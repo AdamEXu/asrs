@@ -5,6 +5,12 @@
   ],
   "fixture": {
     "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
     "layout": [
       {
         "selector": "button.tab-control.play",

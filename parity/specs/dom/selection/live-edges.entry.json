@@ -1,0 +1,204 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "liveTime": 8
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "pause-from-locked"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "KeyL"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "keyl-lock"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "KeyboardEvent",
+          "type": "keydown",
+          "init": {
+            "code": "KeyL"
+          }
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "keyl-unlock"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          2
+        ]
+      },
+      {
+        "liveTime": 12
+      },
+      {
+        "log": [
+          [
+            "clearBeforeTime",
+            5,
+            false
+          ]
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "static-below-discard"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "play-from-discarded"
+      },
+      {
+        "selection": [
+          "lock"
+        ]
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            5,
+            6
+          ],
+          false
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "range-while-locked"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -100,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-while-locked"
+      },
+      {
+        "liveTime": 3
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "live-behind-log"
+      },
+      {
+        "liveTime": 20
+      },
+      {
+        "log": [
+          [
+            "clearBeforeTime",
+            15,
+            false
+          ]
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "discard-past-log-end"
+      },
+      {
+        "selection": [
+          "toggleLock"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "toggle-unlock"
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "selection": [
+          "lock"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "lock-after-disconnect"
+      }
+    ]
+  }
+}
