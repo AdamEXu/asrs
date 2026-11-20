@@ -12,7 +12,7 @@ use crate::color::{self, Rgba};
 use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::hairline;
-use crate::path::{Affine, Path, Pt};
+use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
 use crate::scan::{self, Blend, Coverage};
 use crate::skpath::SkPath;
@@ -47,9 +47,10 @@ fn resolve(style: &Style) -> Option<Fill> {
             let mut order: Vec<usize> = (0..resolved.len()).collect();
             order.sort_by(|&a, &b| resolved[a].0.total_cmp(&resolved[b].0).then(a.cmp(&b)));
             let resolved = order.into_iter().map(|i| resolved[i]).collect();
+            let widen = |v: f64| f64::from(clamp32(v));
             Some(match shape {
-                GradientShape::Linear(p) => Fill::Linear(*p, resolved),
-                GradientShape::Radial(p) => Fill::Radial(*p, resolved),
+                GradientShape::Linear(p) => Fill::Linear(p.map(widen), resolved),
+                GradientShape::Radial(p) => Fill::Radial(p.map(widen), resolved),
             })
         }
     }
@@ -140,11 +141,36 @@ enum Source {
     },
 }
 
-fn pt32(x: f64, y: f64) -> Pt {
-    Pt {
-        x: x as f32,
-        y: y as f32,
-    }
+/// A `CanvasPath` point argument pair, or `None` when Blink ignores the call.
+fn path_pt(x: f64, y: f64) -> Option<Pt> {
+    let p = Pt {
+        x: sat32(x),
+        y: sat32(y),
+    };
+    (p.x.is_finite() && p.y.is_finite()).then_some(p)
+}
+
+/// `SkPathPriv::TooBigForMath`: `SkDraw` drops device geometry beyond a quarter of `FLT_MAX`.
+fn too_big_for_math(r: &crate::skpath::Rect) -> bool {
+    let max = f32::MAX * 0.25;
+    !(r.left >= -max && r.top >= -max && r.right <= max && r.bottom <= max)
+}
+
+fn fits_in_fixed(r: &Rect) -> bool {
+    [r.left(), r.top(), r.right(), r.bottom()]
+        .iter()
+        .all(|v| v.abs() <= 32767.0)
+}
+
+/// The `gfx::RectF` Blink builds from a validated rect: each value through `ClampTo<float>`,
+/// sizes at most `8 * FLT_EPSILON` dropped to zero, as LTRB with the far edges summed in f32.
+fn rect32([x, y, w, h]: [f64; 4]) -> [f32; 4] {
+    let size = |v: f64| {
+        let v = clamp32(v);
+        if v > 8.0 * f32::EPSILON { v } else { 0.0 }
+    };
+    let (x, y, w, h) = (clamp32(x), clamp32(y), size(w), size(h));
+    [x, y, x + w, y + h]
 }
 
 /// What Blink's `CanvasPath` line and arc builders hold besides the general path.
@@ -336,6 +362,7 @@ impl<'a> Raster<'a> {
             Call::Restore => self.restore(),
             &Call::Scale(x, y) => {
                 if finite(&[x, y]) {
+                    let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
                     self.set_transform(self.state.transform.then(&Affine::scaling(x, y)));
                 }
             }
@@ -346,6 +373,7 @@ impl<'a> Raster<'a> {
             }
             &Call::Translate(x, y) => {
                 if finite(&[x, y]) {
+                    let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
                     self.set_transform(self.state.transform.then(&Affine::translation(x, y)));
                 }
             }
@@ -356,9 +384,9 @@ impl<'a> Raster<'a> {
             Call::ClosePath => self.close_path(),
             &Call::MoveTo(x, y) => {
                 if self.invertible() {
-                    if finite(&[x, y]) {
+                    if let Some(p) = path_pt(x, y) {
                         self.fast = if self.path.is_empty() {
-                            Fast::Start(pt32(x, y))
+                            Fast::Start(p)
                         } else {
                             Fast::None
                         };
@@ -371,10 +399,31 @@ impl<'a> Raster<'a> {
                     self.line_to(x, y);
                 }
             }
+            &Call::QuadraticCurveTo(cx, cy, x, y) => {
+                if self.invertible()
+                    && let (Some(cp), Some(p)) = (path_pt(cx, cy), path_pt(x, y))
+                {
+                    self.fast = Fast::None;
+                    self.path.quad_to(cp, p);
+                }
+            }
+            &Call::BezierCurveTo(c1x, c1y, c2x, c2y, x, y) => {
+                if self.invertible()
+                    && let (Some(c1), Some(c2), Some(p)) =
+                        (path_pt(c1x, c1y), path_pt(c2x, c2y), path_pt(x, y))
+                {
+                    self.fast = Fast::None;
+                    self.path.cubic_to(c1, c2, p);
+                }
+            }
             &Call::Rect(x, y, w, h) => {
                 if self.invertible() {
-                    if finite(&[x, y, w, h]) {
-                        self.fast = Fast::None;
+                    if let (Some(p), Some(size)) = (path_pt(x, y), path_pt(w, h)) {
+                        self.fast = if size.x == 0.0 && size.y == 0.0 && self.path.is_empty() {
+                            Fast::Start(p)
+                        } else {
+                            Fast::None
+                        };
                     }
                     self.path.rect(x, y, w, h);
                 }
@@ -402,7 +451,9 @@ impl<'a> Raster<'a> {
                 anticlockwise,
             } => {
                 if self.invertible() {
-                    if finite(&[x, y, radius_x, radius_y, rotation, start, end])
+                    if [x, y, radius_x, radius_y, rotation, start, end]
+                        .iter()
+                        .all(|&v| sat32(v).is_finite())
                         && radius_x >= 0.0
                         && radius_y >= 0.0
                     {
@@ -518,7 +569,7 @@ impl<'a> Raster<'a> {
             }
             &Property::LineWidth(w) => {
                 if w.is_finite() && w > 0.0 {
-                    s.line_width = w;
+                    s.line_width = f64::from(clamp32(w));
                 }
             }
             Property::LineCap(cap) => match cap.as_str() {
@@ -535,12 +586,12 @@ impl<'a> Raster<'a> {
             },
             &Property::MiterLimit(limit) => {
                 if limit.is_finite() && limit > 0.0 {
-                    s.miter_limit = limit;
+                    s.miter_limit = f64::from(clamp32(limit));
                 }
             }
             &Property::LineDashOffset(offset) => {
                 if offset.is_finite() {
-                    s.dash_offset = offset;
+                    s.dash_offset = f64::from(clamp32(offset));
                 }
             }
             &Property::GlobalAlpha(alpha) => {
@@ -619,10 +670,9 @@ impl<'a> Raster<'a> {
     /// Blink's `CanvasPath::lineTo`: a lone `moveTo` (or nothing) followed by one `lineTo` is
     /// remembered as a line, which `stroke()` draws with `drawLine`.
     fn line_to(&mut self, x: f64, y: f64) {
-        if !finite(&[x, y]) {
+        let Some(p) = path_pt(x, y) else {
             return;
-        }
-        let p = pt32(x, y);
+        };
         self.fast = match self.fast {
             Fast::None if self.path.is_empty() => Fast::Line(p, p),
             Fast::Start(s) => Fast::Line(s, p),
@@ -650,7 +700,7 @@ impl<'a> Raster<'a> {
     /// Blink's `CanvasPath::arc`: an arc of radius at least 1 on an empty path is remembered as
     /// an arc, which `fill()` and `stroke()` draw with `drawArc`.
     fn arc(&mut self, x: f64, y: f64, radius: f64, start: f64, end: f64, ccw: bool) {
-        let v = [x, y, radius, start, end].map(|v| v as f32);
+        let v = [x, y, radius, start, end].map(sat32);
         if !v.iter().all(|v| v.is_finite()) || v[2] < 0.0 {
             return;
         }
@@ -1456,6 +1506,7 @@ impl<'a> Raster<'a> {
         if !finite(&[x, y]) || !ctm.is_invertible() {
             return;
         }
+        let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
         let state = &self.state;
         let Some(TextRaster { backend, lut }) = self.text.as_mut() else {
             return;

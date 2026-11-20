@@ -286,6 +286,7 @@ fn contours(path: &SkPath, res_scale: f32) -> Vec<Contour> {
             seen_move = false;
         }
         match verb {
+            Verb::Cubic => todo!("cubic contour measure"),
             Verb::Move => {
                 last = path.pts[pi];
                 pi += 1;

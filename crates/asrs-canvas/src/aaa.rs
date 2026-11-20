@@ -529,8 +529,9 @@ impl Builder {
                     }
                     continue;
                 }
-                Verb::Quad => vec![e.pts],
-                Verb::Conic => crate::path::conic_to_quads(e.pts, e.weight, 0.25),
+                Verb::Quad => vec![e.quad_pts()],
+                Verb::Conic => crate::path::conic_to_quads(e.quad_pts(), e.weight, 0.25),
+                Verb::Cubic => todo!("cubic edges"),
                 Verb::Move | Verb::Close => continue,
             };
             for q in quads {

@@ -264,6 +264,7 @@ impl SkPath {
         let mut wi = path.weights.len();
         for &verb in path.verbs.iter().rev() {
             match verb {
+                Verb::Cubic => todo!("cubic stroke"),
                 Verb::Move => return,
                 Verb::Line => {
                     pi -= 1;
@@ -986,6 +987,7 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
     let n = path.verbs.len();
     for (vi, &verb) in path.verbs.iter().enumerate() {
         match verb {
+            Verb::Cubic => todo!("cubic stroke"),
             Verb::Move => {
                 if vi + 1 == n {
                     break;
@@ -1049,6 +1051,7 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
 fn has_valid_tangent(rest: &[Rec]) -> bool {
     for r in rest {
         match r.verb {
+            Verb::Cubic => todo!("cubic stroke"),
             Verb::Move | Verb::Close => return false,
             Verb::Line => {
                 if r.pts[0] == r.pts[1] {
@@ -1101,6 +1104,7 @@ pub fn stroke_path(src: &SkPath, style: &Style) -> SkPath {
     let mut last_segment = Verb::Move;
     for (i, r) in records.iter().enumerate() {
         match r.verb {
+            Verb::Cubic => todo!("cubic stroke"),
             Verb::Move => stroker.move_to(r.pts[0]),
             Verb::Line => {
                 let valid = has_valid_tangent(&records[i + 1..]);
