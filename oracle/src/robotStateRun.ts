@@ -1,5 +1,6 @@
 import Log from "@upstream/shared/log/Log";
 import * as robotState from "@upstream/shared/log/RobotState";
+import { getElimMatchString } from "@upstream/shared/MatchInfo";
 import { runWithLog } from "./logRun";
 
 // Replays logRun write ops against a real upstream Log, then runs a list of
@@ -38,6 +39,7 @@ export function run(enableTimestampSetCache: boolean, ops: any[][], calls: any[]
     try {
       const [name, ...args] = call;
       if (name === "getMatchInfo") return { ok: withNow(args[0] as number, () => robotState.getMatchInfo(log)) };
+      if (name === "getElimMatchString") return { ok: getElimMatchString(args[0] as any, args[1] as number) };
       const fn = (robotState as any)[name];
       if (typeof fn !== "function") throw new Error(`robotStateRun: unknown call ${JSON.stringify(name)}`);
       return { ok: fn(log, ...args) };

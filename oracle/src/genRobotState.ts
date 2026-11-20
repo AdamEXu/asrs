@@ -489,6 +489,18 @@ emit(
   );
 }
 
+// getElimMatchString over every playoff type, unknown type values and match
+// numbers in and out of each bracket's range. Empty ops; the log is unused.
+{
+  const calls: unknown[][] = [];
+  for (const type of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, -1, 12, 99, 1.5, NaN, Infinity]) {
+    for (const n of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 36, 37, 42, 43, 47, 48, 49, 60, -1, 1.5, NaN, Infinity, -Infinity]) {
+      calls.push(["getElimMatchString", type, n]);
+    }
+  }
+  emit([], calls);
+}
+
 // Seeded fixtures: a random key per role with a random type and a random
 // sample series, plus scattered match-info fields and merge prefixes. The
 // RobotState exports are total, so anything goes.

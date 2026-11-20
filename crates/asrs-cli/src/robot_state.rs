@@ -94,6 +94,18 @@ fn state_call(log: &Log, call: &[Value]) -> Result<Value, Response> {
         "getDriverStation" => ok(n(robot_state::get_driver_station(log, time(1)?))),
         "getMatchInfo" => ok(robot_state::get_match_info(log, &SetClock(time(1)?))
             .map_or(Value::Null, |info| match_info_value(&info))),
+        "getElimMatchString" => Ok(
+            match asrs_log::match_info::get_elim_match_string(time(1)?, time(2)?) {
+                Some(text) => Value::object([("ok", string_value(&text))]),
+                None => Value::object([(
+                    "throw",
+                    Value::Error(
+                        "TypeError".into(),
+                        "Cannot read properties of undefined (reading '0')".into(),
+                    ),
+                )]),
+            },
+        ),
         other => Ok(Value::object([(
             "throw",
             Value::Error(
