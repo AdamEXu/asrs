@@ -544,7 +544,6 @@ impl Selection for SelectionImpl {
             available_range[1] = available_range[0] + TIMELINE_ZOOM_BASE;
         }
 
-        // Apply horizontal scroll
         if self.mode == SelectionMode::Locked {
             let zoom = self.timeline_range[1] - self.timeline_range[0];
             self.timeline_range[0] = available_range[1] - zoom;
@@ -558,9 +557,7 @@ impl Selection for SelectionImpl {
             self.timeline_range[1] += dx * secs_per_pixel;
         }
 
-        // Apply vertical scroll
         if dy != 0.0 && (!self.timeline_max_zoom || dy < 0.0) {
-            // If max zoom, ignore positive scroll (no effect, just apply the max zoom)
             let zoom_percent = math::pow(TIMELINE_ZOOM_BASE, dy);
             let mut new_zoom = (self.timeline_range[1] - self.timeline_range[0]) * zoom_percent;
             if new_zoom < TIMELINE_MIN_ZOOM_TIME {
@@ -581,7 +578,6 @@ impl Selection for SelectionImpl {
             self.timeline_range = available_range;
         }
 
-        // Enforce max range
         if self.timeline_range[1] - self.timeline_range[0] > available_range[1] - available_range[0]
         {
             self.timeline_range = available_range;
@@ -589,14 +585,12 @@ impl Selection for SelectionImpl {
         self.timeline_max_zoom = self.timeline_range[1] - self.timeline_range[0]
             == available_range[1] - available_range[0];
 
-        // Enforce left limit
         if self.timeline_range[0] < available_range[0] {
             let shift = available_range[0] - self.timeline_range[0];
             self.timeline_range[0] += shift;
             self.timeline_range[1] += shift;
         }
 
-        // Enforce right limit
         if self.timeline_range[1] > available_range[1] {
             let shift = available_range[1] - self.timeline_range[1];
             self.timeline_range[0] += shift;
