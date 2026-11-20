@@ -4,9 +4,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::{Result, workspace_root};
+use crate::{Result, vectors, workspace_root};
 
-const ELECTRON_VERSION: &str = "39.2.7";
+pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 const EMSDK_VERSION: &str = "4.0.12";
 const EMSDK_REPO: &str = "https://github.com/emscripten-core/emsdk.git";
 
@@ -23,6 +23,10 @@ commands:
                         6. npm ci for oracle/package.json in target/oracle/harness
                         7. esbuild the harness entry points into target/oracle/dist
   build               rebuild only the harness bundles (step 7)
+  gen [<id>...] [--check]
+                      regenerate committed vectors from parity/specs into parity/vectors and
+                      update parity/vectors/MANIFEST.json; --check regenerates in memory and
+                      fails if any committed vector differs
   fn [args]           run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)
   run <entry> [args]  run target/oracle/dist/<entry>.mjs under the oracle runtime
@@ -34,10 +38,10 @@ Every command runs `ELECTRON_RUN_AS_NODE=1 <electron> <bundle>`, so V8 and ICU a
 shipped app's own. Downloads (npm, Electron, emsdk) go to $ASRS_CACHE, which defaults to
 <real target dir>/../cache when target/ is a symlink and to target/cache otherwise.";
 
-struct Paths {
-    root: PathBuf,
-    reference: PathBuf,
-    oracle_src: PathBuf,
+pub(crate) struct Paths {
+    pub(crate) root: PathBuf,
+    pub(crate) reference: PathBuf,
+    pub(crate) oracle_src: PathBuf,
     upstream: PathBuf,
     harness: PathBuf,
     dist: PathBuf,
@@ -46,7 +50,7 @@ struct Paths {
 }
 
 impl Paths {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let root = workspace_root();
         let target = root.join("target");
         let cache = match std::env::var_os("ASRS_CACHE") {
@@ -90,6 +94,7 @@ pub fn run(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("setup") => setup(&paths, rest.iter().any(|a| a == "--force")),
         Some("build") => build_harness(&paths),
+        Some("gen") => vectors::generate(&paths, rest),
         Some("fn") => run_entry(&paths, "fn", rest),
         Some("run") => match rest.split_first() {
             Some((entry, entry_args)) => run_entry(&paths, entry, entry_args),
@@ -290,7 +295,7 @@ fn npm_ci(paths: &Paths, dir: &Path) -> Result {
     )
 }
 
-fn build_harness(paths: &Paths) -> Result {
+pub(crate) fn build_harness(paths: &Paths) -> Result {
     step("build harness");
     exec(
         node()
@@ -304,7 +309,7 @@ fn build_harness(paths: &Paths) -> Result {
     )
 }
 
-fn oracle_command(paths: &Paths, entry: &str) -> Result<Command> {
+pub(crate) fn oracle_command(paths: &Paths, entry: &str) -> Result<Command> {
     let bundle = paths.dist.join(format!("{entry}.mjs"));
     if !bundle.exists() {
         return Err(format!(
@@ -343,22 +348,7 @@ fn smoke(paths: &Paths) -> Result {
     let request_text = String::from_utf8_lossy(&requests).into_owned();
     let expected = String::from_utf8(read(&smoke_dir.join("fn-expected.jsonl"))?)
         .map_err(|e| e.to_string())?;
-    let mut child = oracle_command(paths, "fn")?
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("starting the fn oracle: {e}"))?;
-    let mut stdin = child.stdin.take().expect("stdin is piped");
-    let writer = std::thread::spawn(move || stdin.write_all(&requests));
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
-    writer
-        .join()
-        .map_err(|_| "stdin writer panicked".to_owned())?
-        .map_err(|e| format!("writing requests: {e}"))?;
-    if !output.status.success() {
-        return Err(format!("fn oracle exited with {}", output.status));
-    }
-    let actual = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
+    let actual = pipe(&mut oracle_command(paths, "fn")?, requests)?;
     let request_lines: Vec<&str> = request_text.lines().collect();
     let expected: Vec<&str> = expected.lines().collect();
     let actual: Vec<&str> = actual.lines().collect();
@@ -392,6 +382,27 @@ fn smoke(paths: &Paths) -> Result {
     } else {
         Err(format!("fn smoke: {failures} mismatches"))
     }
+}
+
+/// Runs `command` with `input` on stdin and returns its stdout; stderr passes through.
+pub(crate) fn pipe(command: &mut Command, input: Vec<u8>) -> Result<String> {
+    let program = command.get_program().to_string_lossy().into_owned();
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("starting {program}: {e}"))?;
+    let mut stdin = child.stdin.take().expect("stdin is piped");
+    let writer = std::thread::spawn(move || stdin.write_all(&input));
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    writer
+        .join()
+        .map_err(|_| "stdin writer panicked".to_owned())?
+        .map_err(|e| format!("writing to {program}: {e}"))?;
+    if !output.status.success() {
+        return Err(format!("{program} exited with {}", output.status));
+    }
+    String::from_utf8(output.stdout).map_err(|e| format!("{program} output: {e}"))
 }
 
 fn print_env(paths: &Paths) -> Result {
@@ -438,7 +449,7 @@ fn exec(command: &mut Command) -> Result {
     }
 }
 
-fn read(path: &Path) -> Result<Vec<u8>> {
+pub(crate) fn read(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
@@ -446,7 +457,7 @@ fn shell_quote(path: &Path) -> String {
     format!("'{}'", path.display().to_string().replace('\'', "'\\''"))
 }
 
-fn hash_bytes(bytes: &[u8]) -> String {
+pub(crate) fn hash_bytes(bytes: &[u8]) -> String {
     format!("{:016x}", fnv1a(0xcbf2_9ce4_8422_2325, bytes))
 }
 
@@ -458,7 +469,7 @@ fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
     hash
 }
 
-fn hash_tree(base: &Path, roots: &[&str]) -> Result<String> {
+pub(crate) fn hash_tree(base: &Path, roots: &[&str]) -> Result<String> {
     let mut files = Vec::new();
     for root in roots {
         collect_files(base, &base.join(root), &mut files)?;

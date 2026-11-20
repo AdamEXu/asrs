@@ -31,6 +31,7 @@ symlink, otherwise `target/cache`): `npm/`, `electron/`, `emsdk/`.
 | `cargo xtask oracle fn --list` | upstream modules, npm packages and helpers callable by `fn` |
 | `cargo xtask oracle run <entry> [args]` | run `target/oracle/dist/<entry>.mjs` under the oracle runtime |
 | `cargo xtask oracle build` | rebuild the harness bundles only, after editing `oracle/src` |
+| `cargo xtask oracle gen [<id>...] [--check]` | regenerate committed vectors (below); `--check` fails if a rerun differs |
 | `cargo xtask oracle selftest` | CVE-1 encoder/decoder self test |
 | `cargo xtask oracle smoke` | `smoke/fn-requests.jsonl` against `smoke/fn-expected.jsonl` |
 | `cargo xtask oracle env` | electron binary, upstream, dist and cache paths as JSON |
@@ -92,6 +93,36 @@ Only own enumerable string keys are encoded; symbol keys are dropped. Cycles are
 Every JSON object in CVE-1 is a tag with exactly one key, so the encoding is unambiguous.
 Decoders accept everything except `c` and `fn`; as a convenience they also accept a bare JSON
 number as that number, which canonical output never contains.
+
+Decoding normalizes the way JS does, and the Rust decoder (`asrs-parity`) mirrors each step
+so both sides re-encode identically: `o` and `c` keys are deduplicated (first position, last
+value) and put in property order; `map` and `set` drop SameValueZero duplicates and turn a
+`-0` key into `0`; `d` applies TimeClip; `bi` drops leading zeros; `ta` elements are
+converted to the element type; `box` of a bigint, symbol, null or object becomes what
+`Object(x)` returns; `AggregateError` and `SuppressedError` lose their message. Where the two
+deliberately differ: Rust also decodes `c` and `fn`, and rejects some malformed bodies the TS
+decoder coerces (non-numeric `ta` elements, `bi` that is not `-?[0-9]+`, extra tuple items).
+Signaling NaN bit patterns are outside the contract: V8 may quiet them.
+`parity/vectors/cve1/torture` pins all of this, and `cargo xtask parity cve1` checks it live.
+
+## Vectors
+
+Specs live in `parity/specs`, vectors in `parity/vectors/<id>.jsonl.zst`, and
+`parity/vectors/MANIFEST.json` records the upstream commit, Electron version, case count,
+content hash and generator hash (oracle sources plus spec) of each one.
+
+- `<id>.jsonl`: `fn` requests. Each vector line is the request with the oracle's `ok` or
+  `throw` key appended. An `error` response fails generation.
+- `<id>.entry.json`: `{"entry": "<name>", "args": [...]}`. The entry's stdout lines are the
+  vector, so an entry can build values JSON cannot express.
+
+Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
+checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a
+mismatch panics with the differ's report. `$ASRS_PARITY_VECTORS` overrides the directory.
+
+`cargo xtask parity <suite>` runs both sides live (`cve1`, `fn <spec>`, `diff <a> <b>`; see
+`cargo xtask parity`). The Rust side of `fn` is `asrs-cli fn`, which speaks the same protocol;
+ported functions are registered in `crates/asrs-cli/src/functions.rs` under their oracle name.
 
 ## Shims (`src/shims.ts`)
 

@@ -1,0 +1,7 @@
+{"fn":"oracle:identity","args":[1]}
+{"fn":"oracle:identity","args":[{"n":"8000000000000000"}]}
+{"fn":"oracle:identity","args":["lone \ud800 surrogate"]}
+{"fn":"oracle:identity","args":[{"o":[["b",1],["0",2]]}]}
+{"fn":"oracle:identity","args":[]}
+{"fn":"oracle:identity","args":[{"map":[[{"bi":"1"},{"ta":["Uint8ClampedArray",[300]]}]]}]}
+{"id":"throws","fn":"oracle:call","args":["() => { throw new RangeError('planted') }"]}

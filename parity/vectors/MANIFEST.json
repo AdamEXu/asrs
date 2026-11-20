@@ -1,0 +1,20 @@
+{
+  "format": "CVE-1",
+  "upstreamCommit": "8fc5b89fc93be5dba5a66005ea6111fa16594aa8",
+  "upstreamVersion": "27.0.0-alpha-6",
+  "electron": "39.2.7",
+  "vectors": {
+    "cve1/identity": {
+      "cases": 7,
+      "content": "c50fd3a6eb87c9e4",
+      "generator": "d599f8b331b41735",
+      "spec": "parity/specs/cve1/identity.jsonl"
+    },
+    "cve1/torture": {
+      "cases": 471,
+      "content": "3bf51e863655d3d2",
+      "generator": "a434820e433e27c6",
+      "spec": "parity/specs/cve1/torture.entry.json"
+    }
+  }
+}
