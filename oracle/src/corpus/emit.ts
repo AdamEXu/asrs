@@ -15,8 +15,11 @@ export function seedOption(usage: string): number {
   return seed;
 }
 
-/** Writes every case under `out` and prints the case list the xtask manifest builder reads. */
-export function emitCorpus(corpus: Corpus, out: string): void {
+/**
+ * Writes every case under `out` and prints the case list the xtask manifest builder reads. Resolves once stdout has
+ * taken the list: a pipe write is asynchronous, and exiting before it drains truncates the list past the pipe buffer.
+ */
+export function emitCorpus(corpus: Corpus, out: string): Promise<void> {
   const lines: string[] = [];
   for (const c of [...corpus.cases].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
     for (const file of c.files) {
@@ -26,7 +29,8 @@ export function emitCorpus(corpus: Corpus, out: string): void {
     }
     lines.push(JSON.stringify({ id: c.id, about: c.about, files: c.files.map((f) => f.path) }));
   }
-  process.stdout.write(lines.map((l) => l + "\n").join(""));
+  const list = lines.map((l) => l + "\n").join("");
+  return new Promise((resolve, reject) => process.stdout.write(list, (error) => (error ? reject(error) : resolve())));
 }
 
 /** Runs `fn` with console output from upstream code silenced (warnings about clamped CAN signals and the like). */

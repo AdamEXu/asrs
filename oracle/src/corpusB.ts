@@ -55,7 +55,7 @@ async function main() {
   await childMatrix(corpus);
   mergeMatrix(corpus);
   fuzzSamples(corpus);
-  emitCorpus(corpus, out);
+  await emitCorpus(corpus, out);
 }
 
 main().then(

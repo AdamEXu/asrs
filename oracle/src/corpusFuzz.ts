@@ -42,7 +42,7 @@ fs.mkdirSync(out, { recursive: true });
 const lines: string[] = [];
 for (let i = 0; i < count; i++) {
   const index = String(i).padStart(width, "0");
-  const rng = new Rng(seed, `fuzz/${index}`);
+  const rng = new Rng(seed, `fuzz/${i}`);
   const pool = byExtension.get(rng.pick(extensions))!;
   const source = rng.pick(pool);
   const donor = rng.pick(pool);
