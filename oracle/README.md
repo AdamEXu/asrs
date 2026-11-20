@@ -146,3 +146,25 @@ shipped app. `__build_date__` is pinned to `1970-01-01T00:00:00.000Z` for reprod
 Add `src/<name>.ts` (starting with `import "./shims"`), list it in `entries` in `build.mjs`,
 and run it with `cargo xtask oracle run <name>`. Harness code can import upstream sources as
 `@upstream/<path under src>`.
+
+## Synthetic corpus
+
+`cargo xtask corpus gen [<name>...] [--check]` runs the generator named by
+`parity/corpus/synthetic/<name>.spec.json` (`{"entry", "seed"}`) under the oracle runtime. Files land in
+`target/parity/corpus/synthetic/<name>/`, and the committed `parity/corpus/synthetic/<name>.manifest.json`
+lists every case with its description and each file's size and FNV-1a hash. `--check` regenerates into a
+scratch directory and fails unless every file is byte-identical. `cargo xtask corpus list` prints the cases.
+
+Corpus A (`src/corpusA.ts`, `src/corpus/`):
+
+- `wpilog/encoder/*`: files written by upstream's own `WPILOGEncoder`.
+- `wpilog/*` (everything else): files from the raw record builder in `src/corpus/wpilog.ts`, which controls
+  every width, length and header field: every type string, int64 and float bit edge cases, invalid UTF-8 and
+  BOMs, duplicate and out-of-order timestamps, redeclaration, short-lived entries, set-metadata records,
+  8-byte varints, bad headers, and truncation at every byte of three last-record shapes and of the header.
+- `payload/{struct,photon,proto,msgpack,json}/*`: a WPILOG file plus `<case>.ops.jsonl`, the `Log` calls
+  wpilogWorker's `parseField` makes for its data records, in file order, one `{"fn":"putStruct","args":[...]}`
+  per line with CVE-1 arguments and timestamps in seconds. Log-level tests replay these without a WPILOG reader.
+
+Each case draws from its own random stream (the corpus seed mixed with the case id), so adding a case leaves
+the others unchanged.
