@@ -103,10 +103,10 @@ pub struct Config3dRotation {
 /// strings outside the union (they take upstream's `default` branch).
 #[derive(Clone, Debug, PartialEq)]
 pub enum CoordinateSystem {
-    WallAlliance,   // "wall-alliance", FRC 2022
-    WallBlue,       // "wall-blue", FRC 2023-2026
-    CenterRotated,  // "center-rotated", FTC traditional
-    CenterRed,      // "center-red", Systemcore; also takes the default branch
+    WallAlliance,  // "wall-alliance", FRC 2022
+    WallBlue,      // "wall-blue", FRC 2023-2026
+    CenterRotated, // "center-rotated", FTC traditional
+    CenterRed,     // "center-red", Systemcore; also takes the default branch
     Other(JsString),
 }
 
@@ -394,9 +394,12 @@ impl ConvertPose for AnnotatedPose2d {
         field_width: f64,
     ) -> Self {
         AnnotatedPose2d {
-            pose: self
-                .pose
-                .convert_from_coordinate_system(source, alliance, field_length, field_width),
+            pose: self.pose.convert_from_coordinate_system(
+                source,
+                alliance,
+                field_length,
+                field_width,
+            ),
             annotation: self.annotation,
         }
     }
@@ -411,9 +414,7 @@ impl<T: ConvertPose> ConvertPose for Vec<T> {
         field_width: f64,
     ) -> Self {
         self.into_iter()
-            .map(|x| {
-                x.convert_from_coordinate_system(source, alliance, field_length, field_width)
-            })
+            .map(|x| x.convert_from_coordinate_system(source, alliance, field_length, field_width))
             .collect()
     }
 }
@@ -471,7 +472,12 @@ fn index_child(key: &JsString, index: f64) -> JsString {
 
 /// `indexArray(...)` mapped to grab children, or upstream's `RangeError` for a
 /// length a JS array cannot hold.
-fn indices(log: &Log, key: JsString, timestamp: f64, uuid: Option<&str>) -> Result<Vec<f64>, GeometryError> {
+fn indices(
+    log: &Log,
+    key: JsString,
+    timestamp: f64,
+    uuid: Option<&str>,
+) -> Result<Vec<f64>, GeometryError> {
     let length = number_or(log, key, timestamp, uuid);
     util::index_array(length).ok_or(GeometryError::RangeError("Invalid array length"))
 }
@@ -543,12 +549,7 @@ pub fn grab_rotation_2d(
     Ok(vec![AnnotatedPose3d {
         pose: Pose3d {
             translation: TRANSLATION_3D_ZERO,
-            rotation: rotation_2d_to_3d(number_or(
-                log,
-                child(key, "/value"),
-                timestamp,
-                uuid,
-            )),
+            rotation: rotation_2d_to_3d(number_or(log, child(key, "/value"), timestamp, uuid)),
         },
         annotation: PoseAnnotations {
             is_2d_source: true,
@@ -588,7 +589,12 @@ pub fn grab_rotation_2d_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_rotation_2d(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_rotation_2d(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -601,7 +607,12 @@ pub fn grab_rotation_3d_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_rotation_3d(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_rotation_3d(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -614,7 +625,12 @@ pub fn grab_target_corner_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_target_corner(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_target_corner(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -720,7 +736,12 @@ pub fn grab_translation_2d_array(
 
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_translation_2d(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_translation_2d(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -757,7 +778,12 @@ pub fn grab_translation_3d_array(
 
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_translation_3d(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_translation_3d(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -844,10 +870,7 @@ pub fn grab_pose_2d_array(
         while i + 24 <= raw_data.len() {
             poses.push(AnnotatedPose3d {
                 pose: pose_2d_to_3d(Pose2d {
-                    translation: [
-                        read_f64_le(&raw_data, i),
-                        read_f64_le(&raw_data, i + 8),
-                    ],
+                    translation: [read_f64_le(&raw_data, i), read_f64_le(&raw_data, i + 8)],
                     rotation: read_f64_le(&raw_data, i + 16),
                 }),
                 annotation: PoseAnnotations {
@@ -862,7 +885,12 @@ pub fn grab_pose_2d_array(
 
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_pose_2d(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_pose_2d(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -875,7 +903,12 @@ pub fn grab_choreo_sample_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_choreo_sample(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_choreo_sample(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -917,7 +950,12 @@ pub fn grab_pose_3d_array(
 
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_pose_3d(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_pose_3d(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -973,7 +1011,12 @@ pub fn grab_april_tag_array(
 ) -> Result<Vec<AnnotatedPose3d>, GeometryError> {
     let mut array = Vec::new();
     for index in indices(log, child(key, "/length"), timestamp, uuid)? {
-        array.extend(grab_april_tag(log, &index_child(key, index), timestamp, None)?);
+        array.extend(grab_april_tag(
+            log,
+            &index_child(key, index),
+            timestamp,
+            None,
+        )?);
     }
     Ok(array)
 }
@@ -1001,17 +1044,26 @@ pub fn grab_heatmap_data(
         };
         let current = state_ranges.iter().rfind(|range| range.start <= timestamp);
         Ok(match time_range {
-            HeatmapTimeRange::Enabled => current.map(|r| r.mode) != Some(crate::log::robot_state::RobotMode::Disabled),
-            HeatmapTimeRange::Auto => current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Auto),
-            HeatmapTimeRange::Teleop => current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Teleop),
+            HeatmapTimeRange::Enabled => {
+                current.map(|r| r.mode) != Some(crate::log::robot_state::RobotMode::Disabled)
+            }
+            HeatmapTimeRange::Auto => {
+                current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Auto)
+            }
+            HeatmapTimeRange::Teleop => {
+                current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Teleop)
+            }
             HeatmapTimeRange::TeleopNoEndgame => {
                 current.map(|r| r.mode) == Some(crate::log::robot_state::RobotMode::Teleop)
-                    && current.and_then(|r| r.end).is_some_and(|end| end - timestamp > 30.0)
+                    && current
+                        .and_then(|r| r.end)
+                        .is_some_and(|end| end - timestamp > 30.0)
             }
             HeatmapTimeRange::Visible => {
                 let Some(timeline) = timeline_range else {
                     return Err(GeometryError::TypeError(
-                        "Cannot read properties of undefined (reading 'getTimelineRange')".to_owned(),
+                        "Cannot read properties of undefined (reading 'getTimelineRange')"
+                            .to_owned(),
                     ));
                 };
                 timestamp >= timeline[0] && timestamp <= timeline[1]
@@ -1048,11 +1100,12 @@ pub fn grab_module_velocities(
     let mut velocities: Vec<ModuleVelocitySample> = Vec::new();
     let length = number_or(log, child(key, "/length"), timestamp, uuid);
 
-    let velocity_key = if log.get_structured_type(key) == Some(&JsString::from("SwerveModuleState[]")) {
-        "speed"
-    } else {
-        "velocity"
-    };
+    let velocity_key =
+        if log.get_structured_type(key) == Some(&JsString::from("SwerveModuleState[]")) {
+            "speed"
+        } else {
+            "velocity"
+        };
 
     let mut i = 0.0;
     while i < length {
@@ -1063,7 +1116,12 @@ pub fn grab_module_velocities(
                 timestamp,
                 uuid,
             ),
-            angle: number_or(log, child(&index_child(key, i), "/angle/value"), timestamp, uuid),
+            angle: number_or(
+                log,
+                child(&index_child(key, i), "/angle/value"),
+                timestamp,
+                uuid,
+            ),
         }));
         i += 1.0;
     }
@@ -1119,7 +1177,12 @@ pub fn grab_module_velocities(
     velocities
 }
 
-pub fn grab_robot_velocities(log: &Log, key: &JsString, timestamp: f64, uuid: Option<&str>) -> RobotVelocities {
+pub fn grab_robot_velocities(
+    log: &Log,
+    key: &JsString,
+    timestamp: f64,
+    uuid: Option<&str>,
+) -> RobotVelocities {
     RobotVelocities {
         vx: number_or(log, child(key, "/vx"), timestamp, uuid),
         vy: number_or(log, child(key, "/vy"), timestamp, uuid),

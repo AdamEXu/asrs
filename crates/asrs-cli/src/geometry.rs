@@ -19,10 +19,18 @@ use crate::shared::{Function, get_prop, strict_equal};
 
 pub const FUNCTIONS: &[(&str, Function)] = &[
     ("shared/geometry:translation2dTo3d", |a| {
-        respond(|| Ok(numbers(&geometry::translation_2d_to_3d(translation2(&arg(a, 0))?))))
+        respond(|| {
+            Ok(numbers(&geometry::translation_2d_to_3d(translation2(
+                &arg(a, 0),
+            )?)))
+        })
     }),
     ("shared/geometry:translation3dTo2d", |a| {
-        respond(|| Ok(numbers(&geometry::translation_3d_to_2d(translation3(&arg(a, 0))?))))
+        respond(|| {
+            Ok(numbers(&geometry::translation_3d_to_2d(translation3(
+                &arg(a, 0),
+            )?)))
+        })
     }),
     ("shared/geometry:rotation2dTo3d", |a| {
         respond(|| Ok(numbers(&geometry::rotation_2d_to_3d(num(&arg(a, 0))?))))
@@ -31,7 +39,11 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
         respond(|| Ok(n(geometry::rotation_3d_to_2d(rotation3(&arg(a, 0))?))))
     }),
     ("shared/geometry:rotation3dToRPY", |a| {
-        respond(|| Ok(numbers(&geometry::rotation_3d_to_rpy(rotation3(&arg(a, 0))?))))
+        respond(|| {
+            Ok(numbers(&geometry::rotation_3d_to_rpy(rotation3(&arg(
+                a, 0,
+            ))?)))
+        })
     }),
     ("shared/geometry:pose2dTo3d", |a| {
         respond(|| Ok(pose3_value(&geometry::pose_2d_to_3d(pose2_of(&arg(a, 0))?))))
@@ -235,13 +247,6 @@ fn annotated3_value(p: &AnnotatedPose3d) -> Value {
     ])
 }
 
-fn annotated2_value(p: &AnnotatedPose2d) -> Value {
-    Value::object([
-        ("pose", pose2_value(&p.pose)),
-        ("annotation", annotation_value(&p.annotation)),
-    ])
-}
-
 fn coordinate_system(v: &Value) -> CoordinateSystem {
     match v.as_str() {
         Some(s) => CoordinateSystem::parse(&JsString::from_units(s.units().to_vec())),
@@ -418,10 +423,9 @@ fn module_velocities(vs: &[ModuleVelocitySample]) -> Value {
     Value::Array(
         vs.iter()
             .map(|s| match s {
-                ModuleVelocitySample::Full(m) => Value::object([
-                    ("velocity", n(m.velocity)),
-                    ("angle", n(m.angle)),
-                ]),
+                ModuleVelocitySample::Full(m) => {
+                    Value::object([("velocity", n(m.velocity)), ("angle", n(m.angle))])
+                }
                 ModuleVelocitySample::Partial { velocity, angle } => Value::object([
                     ("velocity", velocity.map_or(Value::Null, n)),
                     ("angle", angle.map_or(Value::Null, n)),
@@ -476,25 +480,120 @@ fn grab_call(log: &Log, call: &[Value]) -> Result<Value, Response> {
             rotation_units(&arg(call, 3)),
             uuid(4)?.as_deref(),
         )),
-        "grabRotation2d" => poses!(geometry::grab_rotation_2d(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabRotation3d" => poses!(geometry::grab_rotation_3d(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabRotation2dArray" => poses!(geometry::grab_rotation_2d_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabRotation3dArray" => poses!(geometry::grab_rotation_3d_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTargetCorner" => poses!(geometry::grab_target_corner(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTargetCornerArray" => poses!(geometry::grab_target_corner_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTranslation2d" => poses!(geometry::grab_translation_2d(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTranslation3d" => poses!(geometry::grab_translation_3d(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTranslation2dArray" => poses!(geometry::grab_translation_2d_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTranslation3dArray" => poses!(geometry::grab_translation_3d_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabPose2d" => poses!(geometry::grab_pose_2d(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabPose3d" => poses!(geometry::grab_pose_3d(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabPose2dArray" => poses!(geometry::grab_pose_2d_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabPose3dArray" => poses!(geometry::grab_pose_3d_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabChoreoSample" => poses!(geometry::grab_choreo_sample(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabChoreoSampleArray" => poses!(geometry::grab_choreo_sample_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabTrajectory" => poses!(geometry::grab_trajectory(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabAprilTag" => poses!(geometry::grab_april_tag(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
-        "grabAprilTagArray" => poses!(geometry::grab_april_tag_array(log, &key()?, ts(2)?, uuid(3)?.as_deref())),
+        "grabRotation2d" => poses!(geometry::grab_rotation_2d(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabRotation3d" => poses!(geometry::grab_rotation_3d(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabRotation2dArray" => poses!(geometry::grab_rotation_2d_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabRotation3dArray" => poses!(geometry::grab_rotation_3d_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTargetCorner" => poses!(geometry::grab_target_corner(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTargetCornerArray" => poses!(geometry::grab_target_corner_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTranslation2d" => poses!(geometry::grab_translation_2d(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTranslation3d" => poses!(geometry::grab_translation_3d(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTranslation2dArray" => poses!(geometry::grab_translation_2d_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTranslation3dArray" => poses!(geometry::grab_translation_3d_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabPose2d" => poses!(geometry::grab_pose_2d(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabPose3d" => poses!(geometry::grab_pose_3d(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabPose2dArray" => poses!(geometry::grab_pose_2d_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabPose3dArray" => poses!(geometry::grab_pose_3d_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabChoreoSample" => poses!(geometry::grab_choreo_sample(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabChoreoSampleArray" => poses!(geometry::grab_choreo_sample_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabTrajectory" => poses!(geometry::grab_trajectory(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabAprilTag" => poses!(geometry::grab_april_tag(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
+        "grabAprilTagArray" => poses!(geometry::grab_april_tag_array(
+            log,
+            &key()?,
+            ts(2)?,
+            uuid(3)?.as_deref()
+        )),
         "grabHeatmapData" => poses!(geometry::grab_heatmap_data(
             log,
             &key()?,
@@ -570,7 +669,10 @@ fn geometry_run(args: &[Value]) -> Response {
             Some(call) => grab_call(&log, call),
             None => Ok(Value::object([(
                 "throw",
-                Value::Error("Error".into(), "geometryRun: a call must be an array".into()),
+                Value::Error(
+                    "Error".into(),
+                    "geometryRun: a call must be an array".into(),
+                ),
             )])),
         };
         out.push(match result {

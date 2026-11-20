@@ -1,5 +1,8 @@
 #![allow(clippy::disallowed_methods)]
 
+#[path = "../../asrs-cli/src/units.rs"]
+#[allow(dead_code)]
+mod cli_units;
 #[path = "../../asrs-cli/src/functions.rs"]
 #[allow(dead_code)]
 mod functions;
@@ -42,9 +45,6 @@ mod photon;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;
-#[path = "../../asrs-cli/src/units.rs"]
-#[allow(dead_code)]
-mod cli_units;
 
 use std::collections::HashSet;
 
@@ -238,7 +238,9 @@ fn geometry_spec() -> Spec {
     }
     // Normalized quaternions plus near-degenerate cy_sq cases for RPY.
     for _ in 0..300 {
-        let v: Vec<f64> = (0..4).map(|_| rng.below(2000) as f64 / 1000.0 - 1.0).collect();
+        let v: Vec<f64> = (0..4)
+            .map(|_| rng.below(2000) as f64 / 1000.0 - 1.0)
+            .collect();
         let norm = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]).sqrt();
         let q: Vec<Value> = if norm > 0.0 {
             v.iter().map(|c| n(c / norm)).collect()
@@ -275,7 +277,10 @@ fn geometry_spec() -> Spec {
     spec.push("oracle:geometryQuat", vec![arr(vec![])]);
     spec.push(
         "oracle:geometryQuat",
-        vec![arr(vec![obj(vec![("axis", Value::Null), ("degrees", n(90.0))])])],
+        vec![arr(vec![obj(vec![
+            ("axis", Value::Null),
+            ("degrees", n(90.0)),
+        ])])],
     );
     spec.push(
         "oracle:geometryQuat",
@@ -326,7 +331,13 @@ fn geometry_spec() -> Spec {
                 for &fw in &dims[..3] {
                     spec.push(
                         "shared/geometry:convertFromCoordinateSystem",
-                        vec![pose2(1.0, -2.0, 0.5), sys.clone(), alliance.clone(), n(fl), n(fw)],
+                        vec![
+                            pose2(1.0, -2.0, 0.5),
+                            sys.clone(),
+                            alliance.clone(),
+                            n(fl),
+                            n(fw),
+                        ],
                     );
                 }
             }
@@ -343,7 +354,13 @@ fn geometry_spec() -> Spec {
             ]),
         ),
     ]);
-    for sys in [&systems[0], &systems[1], &systems[2], &systems[3], &systems[6]] {
+    for sys in [
+        &systems[0],
+        &systems[1],
+        &systems[2],
+        &systems[3],
+        &systems[6],
+    ] {
         for alliance in [&alliances[0], &alliances[1], &alliances[2], &alliances[6]] {
             for pose in [
                 ann_pose.clone(),
@@ -361,7 +378,13 @@ fn geometry_spec() -> Spec {
         }
     }
     // Non-object poses take upstream's `in` TypeError or leaf reads.
-    for pose in [n(5.0), s("x"), Value::Null, Value::Undefined, Value::Bool(true)] {
+    for pose in [
+        n(5.0),
+        s("x"),
+        Value::Null,
+        Value::Undefined,
+        Value::Bool(true),
+    ] {
         spec.push(
             "shared/geometry:convertFromCoordinateSystem",
             vec![pose, s("wall-blue"), s("red"), n(16.0), n(8.0)],

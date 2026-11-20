@@ -6,43 +6,43 @@ use super::log_key_utils::find_key;
 use super::{Log, LogValueSetBoolean};
 
 pub const ENABLED_KEYS: &[&str] = &[
-    "/DriverStation/Enabled",              // AdvantageKit
-    "NT:/AdvantageKit/DriverStation/Enabled", // AdvantageKit
-    "DS:controlWord/enabled",              // DataLog/Phoenix, post-2027
-    "DS:enabled",                          // DataLog, pre-2027
+    "/DriverStation/Enabled",                                   // AdvantageKit
+    "NT:/AdvantageKit/DriverStation/Enabled",                   // AdvantageKit
+    "DS:controlWord/enabled",                                   // DataLog/Phoenix, post-2027
+    "DS:enabled",                                               // DataLog, pre-2027
     "DS:/Dscomm/Control/Robot/ControlData/ControlWord/enabled", // FIRST DS
-    "/DSLog/Status/DSDisabled",            // NI DS
-    "RobotEnable",                         // Phoenix
-    "NT:/DriverStation/ControlWord/enabled", // NT, post-2027
-    "NT:/FMSInfo/FMSControlData",          // NT, pre-2027
-    "RUNNING",                             // Roadrunner
+    "/DSLog/Status/DSDisabled",                                 // NI DS
+    "RobotEnable",                                              // Phoenix
+    "NT:/DriverStation/ControlWord/enabled",                    // NT, post-2027
+    "NT:/FMSInfo/FMSControlData",                               // NT, pre-2027
+    "RUNNING",                                                  // Roadrunner
 ];
 
 pub const AUTONOMOUS_KEYS: &[&str] = &[
-    "/DriverStation/RobotMode",              // AdvantageKit, post-2027
-    "NT:/AdvantageKit/DriverStation/RobotMode", // AdvantageKit, post-2027
-    "/DriverStation/Autonomous",             // AdvantageKit, pre-2027
+    "/DriverStation/RobotMode",                  // AdvantageKit, post-2027
+    "NT:/AdvantageKit/DriverStation/RobotMode",  // AdvantageKit, post-2027
+    "/DriverStation/Autonomous",                 // AdvantageKit, pre-2027
     "NT:/AdvantageKit/DriverStation/Autonomous", // AdvantageKit, pre-2027
-    "DS:controlWord/robotMode",              // DataLog/Phoenix, post-2027
-    "DS:autonomous",                         // DataLog, pre-2027
+    "DS:controlWord/robotMode",                  // DataLog/Phoenix, post-2027
+    "DS:autonomous",                             // DataLog, pre-2027
     "DS:/Dscomm/Control/Robot/ControlData/ControlWord/robotMode", // FIRST DS
-    "/DSLog/Status/DSTeleop",                // NI DS
-    "RobotMode",                             // Phoenix
-    "NT:/DriverStation/ControlWord/robotMode", // NT, post-2027
-    "NT:/FMSInfo/FMSControlData",            // NT, pre-2027
+    "/DSLog/Status/DSTeleop",                    // NI DS
+    "RobotMode",                                 // Phoenix
+    "NT:/DriverStation/ControlWord/robotMode",   // NT, post-2027
+    "NT:/FMSInfo/FMSControlData",                // NT, pre-2027
 ];
 
 pub const UTILITY_KEYS: &[&str] = &[
-    "/DriverStation/RobotMode",              // AdvantageKit, post-2027
+    "/DriverStation/RobotMode",                 // AdvantageKit, post-2027
     "NT:/AdvantageKit/DriverStation/RobotMode", // AdvantageKit, post-2027
-    "/DriverStation/Test",                   // AdvantageKit, pre-2027
-    "NT:/AdvantageKit/DriverStation/Test",   // AdvantageKit, pre-2027
-    "DS:controlWord/robotMode",              // DataLog/Phoenix, post-2027
-    "DS:test",                               // DataLog, pre-2027
+    "/DriverStation/Test",                      // AdvantageKit, pre-2027
+    "NT:/AdvantageKit/DriverStation/Test",      // AdvantageKit, pre-2027
+    "DS:controlWord/robotMode",                 // DataLog/Phoenix, post-2027
+    "DS:test",                                  // DataLog, pre-2027
     "DS:/Dscomm/Control/Robot/ControlData/ControlWord/robotMode", // FIRST DS
-    "RobotMode",                             // Phoenix
-    "NT:/DriverStation/ControlWord/robotMode", // NT, post-2027
-    "NT:/FMSInfo/FMSControlData",            // NT, pre-2027
+    "RobotMode",                                // Phoenix
+    "NT:/DriverStation/ControlWord/robotMode",  // NT, post-2027
+    "NT:/FMSInfo/FMSControlData",               // NT, pre-2027
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,7 +79,11 @@ pub fn get_enabled_data(log: &Log) -> Option<LogValueSetBoolean> {
         }
         Some(LogValueSetBoolean {
             timestamps: data.timestamps,
-            values: data.values.iter().map(|w| math::rem(*w, 2.0) == 1.0).collect(),
+            values: data
+                .values
+                .iter()
+                .map(|w| math::rem(*w, 2.0) == 1.0)
+                .collect(),
         })
     } else {
         let data = log.get_boolean(&key, f64::NEG_INFINITY, f64::INFINITY, None, None)?;
@@ -117,7 +121,10 @@ pub fn get_autonomous_data(log: &Log) -> Option<LogValueSetBoolean> {
                 .map(|w| (math::to_int32(*w) >> 1) & 1 != 0)
                 .collect(),
         })
-    } else if key.to_lower_case().ends_with(&JsString::from("robotmode"), None) {
+    } else if key
+        .to_lower_case()
+        .ends_with(&JsString::from("robotmode"), None)
+    {
         let data = log.get_string(&key, f64::NEG_INFINITY, f64::INFINITY, None, None)?;
         if data.timestamps.is_empty() {
             return None;
@@ -166,7 +173,10 @@ pub fn get_utility_data(log: &Log) -> Option<LogValueSetBoolean> {
                 .map(|w| (math::to_int32(*w) >> 2) & 1 != 0)
                 .collect(),
         })
-    } else if key.to_lower_case().ends_with(&JsString::from("robotmode"), None) {
+    } else if key
+        .to_lower_case()
+        .ends_with(&JsString::from("robotmode"), None)
+    {
         let data = log.get_string(&key, f64::NEG_INFINITY, f64::INFINITY, None, None)?;
         if data.timestamps.is_empty() {
             return None;
