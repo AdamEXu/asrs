@@ -1,0 +1,42 @@
+{"fn":"Math.sin","args":[1]}
+{"fn":"Math.pow","args":[2,0.5]}
+{"fn":"Math.round","args":[{"n":"bfe0000000000000"}]}
+{"fn":"Math.round","args":[2.5]}
+{"fn":"Math.atan2","args":[1,-1]}
+{"fn":"Math.hypot","args":[3,4]}
+{"fn":"Math.max","args":[]}
+{"fn":"Math.min","args":[{"n":"0000000000000000"},{"n":"8000000000000000"}]}
+{"fn":"Number.prototype.toString","args":[{"n":"3fd3333333333334"}]}
+{"fn":"Number.prototype.toFixed","args":[1.005,2]}
+{"fn":"Number.prototype.toPrecision","args":[123.456,4]}
+{"fn":"Number.prototype.toString","args":[255,16]}
+{"fn":"Number.prototype.toExponential","args":[123456,2]}
+{"fn":"Number.prototype.toString","args":[1e21]}
+{"fn":"parseFloat","args":["1e400"]}
+{"fn":"Number","args":[" 0x1F "]}
+{"fn":"parseInt","args":["08"]}
+{"fn":"String.prototype.localeCompare","args":["a","B"]}
+{"fn":"String.prototype.toUpperCase","args":["ß"]}
+{"fn":"JSON.stringify","args":[{"o":[["b",1],["1",2],["a",{"n":"8000000000000000"}]]}]}
+{"fn":"JSON.parse","args":["{\"__proto__\":1,\"a\":[1e400,-0]}"]}
+{"fn":"encodeURIComponent","args":["a b/é"]}
+{"fn":"oracle:textDecode","args":[{"b":"efbbbf41ff"}]}
+{"fn":"oracle:textEncode","args":["\ud800"]}
+{"fn":"BigInt","args":[{"n":"4340000000000000"}]}
+{"fn":"BigInt","args":[0.5]}
+{"fn":"oracle:sort","args":[[10,9,1,"b","a",{"u":null}]]}
+{"fn":"oracle:numberFormat","args":["en-US",{"o":[["maximumFractionDigits",6],["useGrouping",false]]},1234567.1234567]}
+{"fn":"oracle:localeSort","args":[["file10","file9","File1"],true]}
+{"fn":"Date.UTC","args":[2024,0,1]}
+{"fn":"new Date","args":[0]}
+{"fn":"String.fromCharCode","args":[55357]}
+{"fn":"shared/util:cleanFloat","args":[{"n":"3fd3333333333334"}]}
+{"fn":"shared/util:cleanFloat","args":[-1e-9]}
+{"fn":"shared/util:formatTimeWithMS","args":[12.3456]}
+{"fn":"shared/util:wrapRadians","args":[4]}
+{"fn":"shared/units:Units.convert","args":[1,"meters","inches"]}
+{"fn":"shared/units:Units.convert","args":[1,"bogus","meters"]}
+{"fn":"shared/log/LogUtil:getLogValueText","args":[{"b":"01ab"},0]}
+{"fn":"shared/log/LogUtil:getLogValueText","args":[[1.5,"x"],5]}
+{"fn":"npm:color-convert:hex.hsl","args":["ff8000"]}
+{"fn":"oracle:call","args":["() => new Promise((resolve, reject) => { const w = new Worker('../bundles/csvWorker.js', { type: 'module' }); w.onerror = (e) => reject(new Error(e.message)); w.onmessage = (e) => { if (e.data.type === 'initial') { w.terminate(); resolve(Object.keys(e.data.log.fields)); } }; w.postMessage({ type: 'start', data: [new TextEncoder().encode('Timestamp,/A\\n0,1\\n1,2\\n')] }); })"]}

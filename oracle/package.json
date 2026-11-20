@@ -1,0 +1,9 @@
+{
+  "name": "asrs-oracle",
+  "private": true,
+  "description": "Parity oracle: runs upstream AdvantageScope TypeScript inside Electron's runtime",
+  "license": "BSD-3-Clause",
+  "devDependencies": {
+    "esbuild": "0.25.0"
+  }
+}
