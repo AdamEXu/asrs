@@ -89,9 +89,6 @@ fn render_scenes(scenes: &Path, out: &Path, wanted: &[String]) -> Result<(), Str
     Ok(())
 }
 
-/// Replays one scene command list. The scene-only commands `image` (a source from straight
-/// RGBA) and `canvas` (a nested canvas) only define sources, so they run before the rest;
-/// `frame` (`canvas.width = canvas.width`) and `resize` start a new frame on the same canvas.
 fn uses_text(cmds: &[JsValue]) -> bool {
     cmds.iter().any(|cmd| {
         let items = cmd.as_array().unwrap_or_default();
@@ -106,6 +103,9 @@ fn uses_text(cmds: &[JsValue]) -> bool {
     })
 }
 
+/// Replays one scene command list. The scene-only commands `image` (a source from straight
+/// RGBA) and `canvas` (a nested canvas) only define sources, so they run before the rest;
+/// `frame` (`canvas.width = canvas.width`) and `resize` start a new frame on the same canvas.
 fn render_list(
     width: u32,
     height: u32,

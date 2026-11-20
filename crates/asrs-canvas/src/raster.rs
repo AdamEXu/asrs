@@ -523,8 +523,8 @@ impl<'a> Raster<'a> {
                     if [x, y, radius_x, radius_y, rotation, start, end]
                         .iter()
                         .all(|&v| sat32(v).is_finite())
-                        && radius_x >= 0.0
-                        && radius_y >= 0.0
+                        && sat32(radius_x) >= 0.0
+                        && sat32(radius_y) >= 0.0
                     {
                         self.fast = Fast::None;
                     }
@@ -840,6 +840,10 @@ impl<'a> Raster<'a> {
                 .unwrap_or_default()
         };
         let point = |x: f64, y: f64| Point::from_xy(x as f32, y as f32);
+        let clamped = |x: f64, y: f64| {
+            let max = f32::MAX / 1e6;
+            Point::from_xy((x as f32).clamp(-max, max), (y as f32).clamp(-max, max))
+        };
         match fill {
             Fill::Color(c) => {
                 let a = modulate(c.a * alpha);
@@ -852,28 +856,9 @@ impl<'a> Raster<'a> {
                 if x0 == x1 && y0 == y1 {
                     return None;
                 }
-                let span = (*x1 as f32 - *x0 as f32, *y1 as f32 - *y0 as f32);
-                if !(span.0.is_finite() && span.1.is_finite()) {
-                    let inverse = ctm.inverse()?;
-                    let (cx, cy) = (
-                        f64::from(self.pixmap.width()) / 2.0,
-                        f64::from(self.pixmap.height()) / 2.0,
-                    );
-                    let (ux, uy) = (
-                        inverse.a * cx + inverse.c * cy + inverse.e,
-                        inverse.b * cx + inverse.d * cy + inverse.f,
-                    );
-                    let (dx, dy) = (x1 - x0, y1 - y0);
-                    let t = ((ux - x0) * dx + (uy - y0) * dy) / (dx * dx + dy * dy);
-                    let c = sample_stops(s, t as f32);
-                    let a = modulate(c.a * alpha);
-                    return Some(Source::Solid(
-                        [c.r, c.g, c.b, a].map(|v| (v * 255.0 + 0.5) as u8),
-                    ));
-                }
                 LinearGradient::new(
-                    point(*x0, *y0),
-                    point(*x1, *y1),
+                    clamped(*x0, *y0),
+                    clamped(*x1, *y1),
                     stops(s),
                     SpreadMode::Pad,
                     ctm.to_skia(),
@@ -1415,7 +1400,6 @@ impl<'a> Raster<'a> {
         Some(out)
     }
 
-    /// The device rect of a user rect under a transform that keeps rects axis-aligned.
     /// The device rect `SkDraw::drawRect` maps a sorted LTRB rect to, when the transform keeps
     /// rects axis-aligned.
     fn device_rect(&self, r: [f32; 4]) -> Option<[f32; 4]> {
@@ -1452,7 +1436,7 @@ impl<'a> Raster<'a> {
             return true;
         }
         let (w, h) = (self.pixmap.width() as f32, self.pixmap.height() as f32);
-        !(l < w + 1.0 && rr > -1.0 && t < h + 1.0 && b > -1.0)
+        !(l.max(-1.0) < rr.min(w + 1.0) && t.max(-1.0) < b.min(h + 1.0))
     }
 
     /// The blits `SkDraw::drawRect` makes to fill a sorted LTRB user rect: `AntiFillRect` when
@@ -1603,7 +1587,7 @@ impl<'a> Raster<'a> {
         let s = &self.state;
         if !s.dash.is_empty()
             || s.line_join != LineJoin::Miter
-            || s.miter_limit < std::f64::consts::SQRT_2
+            || (s.miter_limit as f32) < std::f32::consts::SQRT_2
             || rect[0] >= rect[2]
             || rect[1] >= rect[3]
         {

@@ -1528,7 +1528,7 @@ fn add_rrect(dst: &mut SkPath, r: crate::skpath::Rect, radius: f32, cw: bool) {
         ry *= scale;
     }
     if rx <= 0.0 || ry <= 0.0 {
-        let mut i = (index + 1) / 2 % 4;
+        let mut i = index.div_ceil(2) % 4;
         dst.move_to(corners[i]);
         for _ in 0..3 {
             i = advance(i, 4);
