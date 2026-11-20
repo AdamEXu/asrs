@@ -41,6 +41,17 @@ exit \$LASTEXITCODE" ;;
     ps "New-Item -Force -ItemType Directory $DIR, C:\work\.x02sync | Out-Null"
     put "$STATE/sync.tar.gz" 'C:/work/.x02sync/x02.tar.gz'
     ps "tar.exe -xzf C:/work/.x02sync/x02.tar.gz -C $DIR; exit \$LASTEXITCODE" ;;
+  x02)
+    env_lines=""
+    while [[ "${1:-}" == *=* ]]; do env_lines+="\$env:${1%%=*} = '${1#*=}'
+"; shift; done
+    ps "\$ErrorActionPreference = 'Continue'
+Set-Location $DIR
+\$build = cargo build --release --manifest-path spikes/x02-windows/Cargo.toml 2>&1
+if (\$LASTEXITCODE) { \$build | Out-String -Stream; exit 1 }
+$env_lines
+cmd /c \"spikes\\x02-windows\\target\\release\\x02-windows.exe $* 2>&1\" | Out-String -Stream
+exit \$LASTEXITCODE" ;;
   pack)
     put "$ROOT/target/oracle/pack.tar.zst" 'C:/work/.x02sync/pack.tar.zst' ;;
   gui)

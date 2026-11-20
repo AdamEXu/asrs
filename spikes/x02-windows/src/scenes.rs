@@ -366,6 +366,6 @@ fn measure(file: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub fn dom(_dir: &Path, _out: &Path) -> Result<(), String> {
-    Err("dom: not implemented yet".to_owned())
+pub fn dom(dir: &Path, out: &Path) -> Result<(), String> {
+    crate::dom::run(dir, out)
 }

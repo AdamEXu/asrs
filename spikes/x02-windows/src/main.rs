@@ -1,4 +1,6 @@
 #[cfg(windows)]
+mod dom;
+#[cfg(windows)]
 mod dwrite;
 #[cfg(windows)]
 mod scenes;
