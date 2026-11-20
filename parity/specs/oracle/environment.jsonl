@@ -1,0 +1,9 @@
+{"fn":"oracle:call","args":["() => Intl.DateTimeFormat().resolvedOptions().timeZone"]}
+{"fn":"oracle:call","args":["() => Intl.DateTimeFormat().resolvedOptions().locale"]}
+{"fn":"oracle:call","args":["() => new Intl.Collator().resolvedOptions().locale"]}
+{"fn":"oracle:call","args":["() => new Intl.NumberFormat().resolvedOptions().locale"]}
+{"fn":"oracle:call","args":["() => new Date(0).toString()"]}
+{"fn":"oracle:call","args":["() => new Date(0).toLocaleString()"]}
+{"fn":"oracle:call","args":["() => (1234567.891).toLocaleString()"]}
+{"fn":"oracle:call","args":["() => ['b', 'a', 'B', 'A', 'ä', 'z', '10', '9'].sort((x, y) => x.localeCompare(y))"]}
+{"fn":"oracle:localeSort","args":[["item10","item9","Item2","item1"],true]}

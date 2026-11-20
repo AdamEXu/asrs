@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use asrs_parity::json::{self, Json};
 
@@ -233,7 +232,10 @@ fn build_manifest(
         ("corpus", Json::string(&spec.name)),
         ("entry", Json::string(&spec.entry)),
         ("seed", Json::string(&spec.seed)),
-        ("upstreamCommit", Json::string(&upstream_commit(paths))),
+        (
+            "upstreamCommit",
+            Json::string(&oracle::installed(paths)?.upstream_commit),
+        ),
         ("electron", Json::string(oracle::ELECTRON_VERSION)),
         ("generator", Json::string(generator)),
         ("cases", Json::Number(lines.len() as f64)),
@@ -317,18 +319,6 @@ fn list(paths: &Paths, args: &[String]) -> Result {
         }
     }
     Ok(())
-}
-
-fn upstream_commit(paths: &Paths) -> String {
-    Command::new("git")
-        .arg("-C")
-        .arg(&paths.reference)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-        .unwrap_or_default()
 }
 
 fn remove_dir(dir: &Path) -> Result {

@@ -1,3 +1,4 @@
+import "./environment";
 import { pathToFileURL } from "node:url";
 import * as path from "node:path";
 import { Worker as ThreadWorker } from "node:worker_threads";
