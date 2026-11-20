@@ -19,7 +19,8 @@ import {
 const USAGE = `usage: electron canvasMain.mjs <mode> <out dir> [options]
 
 modes:
-  canvas [<scene>...]     replay display-list scenes on the CPU and GPU canvas, measure the label corpus
+  canvas [<scene>...]     replay display-list scenes on the CPU and GPU canvas
+  measure                 TextMetrics of the label corpus under every font, align and baseline
   canvas-lut              replay the mask-gamma calibration scenes on the CPU canvas
   dom <scale>             capture the DOM text scenes at device scale 1 or 2; Electron must be
                           started with --force-device-scale-factor=<scale> and
@@ -165,7 +166,9 @@ async function main() {
     if (unknown.length > 0) fail(`unknown scenes: ${unknown.join(", ")}`);
     info(out);
     await replayScenes(win, out, scenes, ["cpu", "gpu"]);
-    if (rest.length === 0) await measure(win, out);
+  } else if (mode === "measure") {
+    info(out);
+    await measure(win, out);
   } else if (mode === "canvas-lut") {
     info(out);
     await replayScenes(win, out, calibrationScenes(), ["cpu"]);

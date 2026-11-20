@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::{Result, vectors, workspace_root};
+use crate::{Result, canvas, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 const EMSDK_VERSION: &str = "4.0.12";
@@ -32,6 +32,9 @@ commands:
   fn [args]           run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)
   run <entry> [args]  run target/oracle/dist/<entry>.mjs under the oracle runtime
+  canvas [<scene>...] Chromium canvas references (same as `cargo xtask canvas ref`)
+  canvas-lut [--check]
+                      mask-gamma LUT for this platform (same as `cargo xtask canvas lut`)
   selftest            CVE-1 encoder and decoder self test
   smoke               run oracle/smoke/fn-requests.jsonl and compare with fn-expected.jsonl
   env                 print the oracle paths as JSON
@@ -46,7 +49,7 @@ pub(crate) struct Paths {
     pub(crate) oracle_src: PathBuf,
     upstream: PathBuf,
     harness: PathBuf,
-    dist: PathBuf,
+    pub(crate) dist: PathBuf,
     stamps: PathBuf,
     cache: PathBuf,
 }
@@ -81,7 +84,7 @@ impl Paths {
         self.cache.join("emsdk")
     }
 
-    fn electron(&self) -> Result<PathBuf> {
+    pub(crate) fn electron(&self) -> Result<PathBuf> {
         let package = self.upstream.join("node_modules/electron");
         let rel = fs::read_to_string(package.join("path.txt")).map_err(|_| {
             "Electron binary is not installed; run `cargo xtask oracle setup`".to_owned()
@@ -102,6 +105,8 @@ pub fn run(args: &[String]) -> Result {
             Some((entry, entry_args)) => run_entry(&paths, entry, entry_args),
             None => Err(USAGE.to_owned()),
         },
+        Some("canvas") => canvas::reference(&paths, &canvas::reference_dir(&paths), rest),
+        Some("canvas-lut") => canvas::lut(&paths, rest.iter().any(|a| a == "--check")),
         Some("selftest") => run_entry(&paths, "selftest", &[]),
         Some("smoke") => smoke(&paths),
         Some("env") => print_env(&paths),
