@@ -360,13 +360,13 @@ impl DecodeMode {
     }
 }
 
-/// The `.dslog`/`.dsevents`/`.wpilog` files the suite decodes: corpora a and b, the public log
-/// cache and the generated fuzz corpora.
+/// The `.dslog`/`.dsevents`/`.wpilog`/`.csv` files the suite decodes: corpora a and b, the
+/// public log cache and the generated fuzz corpora.
 fn decode_cases(paths: &Paths) -> Result<Vec<PathBuf>> {
     let mut cases = Vec::new();
     let is_ported = |p: &Path| {
         p.extension()
-            .is_some_and(|e| e == "dslog" || e == "dsevents" || e == "wpilog")
+            .is_some_and(|e| e == "dslog" || e == "dsevents" || e == "wpilog" || e == "csv")
     };
     let root = crate::workspace_root();
     for dir in [

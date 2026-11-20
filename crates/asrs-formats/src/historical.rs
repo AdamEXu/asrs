@@ -9,6 +9,7 @@ use asrs_js::time::Rng;
 use asrs_log::log::Log;
 use asrs_log::realm::JsRealm;
 
+use crate::csv::CsvWorker;
 use crate::dslog::DsLogWorker;
 use crate::worker::{Abort, DecodeWorker, Request, Response, run_request};
 use crate::wpilog_worker::WpilogWorker;
@@ -79,6 +80,7 @@ pub fn create_worker(
 ) -> Result<Box<dyn DecodeWorker>, UnportedWorker> {
     match name {
         WorkerName::Wpilog => Ok(Box::new(WpilogWorker::new(JsRealm::new(random)))),
+        WorkerName::Csv => Ok(Box::new(CsvWorker)),
         WorkerName::DsLog => Ok(Box::new(DsLogWorker)),
         other => Err(UnportedWorker(other)),
     }
