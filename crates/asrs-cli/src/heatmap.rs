@@ -70,6 +70,11 @@ fn error_value(error: &CanvasError) -> Value {
                 .into(),
         ),
         CanvasError::Range(message) => Value::Error("RangeError".into(), (*message).into()),
+        CanvasError::InvalidState(message) => Value::Error(
+            "InvalidStateError".into(),
+            format!("Failed to execute 'drawImage' on 'CanvasRenderingContext2D': {message}")
+                .into(),
+        ),
     }
 }
 
@@ -150,8 +155,9 @@ pub fn json_args(update: &Json) -> Result<Value, String> {
 }
 
 /// Replays a `<name>.fixture.json` through the port: writes `<name>.data.json` plus a
-/// `<name>.<i>.png` per update whose canvas could be read, mirroring canvasMain's
-/// "heatmap" mode output for `cargo xtask canvas heatmap`.
+/// `<name>.<i>.png` per update whose canvas could be read and the shadow canvas's raw
+/// RGBA as `<name>.<i>.shadow`, mirroring canvasMain's "heatmap" mode output for
+/// `cargo xtask canvas heatmap`.
 fn run_fixture(fixture: &Path, out: &Path) -> Result<(), String> {
     let text = fs::read_to_string(fixture).map_err(|e| format!("{}: {e}", fixture.display()))?;
     let document = json::parse(&text).map_err(|e| format!("{}: {e}", fixture.display()))?;
@@ -174,9 +180,7 @@ fn run_fixture(fixture: &Path, out: &Path) -> Result<(), String> {
         let (ok, throw) = update_record(&mut heatmap, &args)
             .map_err(|e| format!("{}: update {i}: {e}", fixture.display()))?;
         let (size, mut read_error) = (heatmap.canvas_size(), Value::Null);
-        if std::env::var("ASRS_SHADOW_DUMP").is_ok()
-            && let Ok(Some(image)) = heatmap.shadow_image_data()
-        {
+        if let Ok(Some(image)) = heatmap.shadow_image_data() {
             fs::write(out.join(format!("{name}.{i}.shadow")), image.data)
                 .map_err(|e| format!("{e}"))?;
         }
@@ -217,12 +221,9 @@ fn run_fixture(fixture: &Path, out: &Path) -> Result<(), String> {
 
 /// `asrs-cli heatmap <fixtures dir> <out dir>`: replays every `<name>.fixture.json`.
 pub fn run(args: &[String]) -> Result<(), String> {
-    let [cmd, fixtures, out] = args else {
+    let [fixtures, out] = args else {
         return Err("usage: asrs-cli heatmap <fixtures dir> <out dir>".to_owned());
     };
-    if cmd != "heatmap" {
-        return Err("usage: asrs-cli heatmap <fixtures dir> <out dir>".to_owned());
-    }
     let fixtures = Path::new(fixtures);
     let out = Path::new(out);
     let mut names = Vec::new();

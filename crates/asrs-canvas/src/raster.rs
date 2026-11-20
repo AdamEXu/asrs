@@ -169,6 +169,8 @@ pub enum CanvasError {
     IndexSize(&'static str),
     /// `RangeError` with its message.
     Range(&'static str),
+    /// `drawImage`'s `InvalidStateError` with its message.
+    InvalidState(&'static str),
 }
 
 const OUT_OF_MEMORY: CanvasError = CanvasError::Range("Out of memory at ImageData creation");

@@ -18,7 +18,14 @@ class FakeContext {
   arc() {}
   fill() {}
   clearRect() {}
-  drawImage() {}
+  drawImage(image: FakeElement) {
+    if (image.width === 0 || image.height === 0) {
+      throw new DOMException(
+        "Failed to execute 'drawImage' on 'CanvasRenderingContext2D': The image argument is a canvas element with a width or height of 0.",
+        "InvalidStateError"
+      );
+    }
+  }
   getImageData(_x: number, _y: number, w: number, h: number) {
     const width = Math.trunc(w);
     const height = Math.trunc(h);

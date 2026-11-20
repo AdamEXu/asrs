@@ -135,6 +135,14 @@ export function heatmapFixtures(): HeatmapFixture[] {
       ]
     },
     {
+      name: "sub-pixel-radius",
+      updates: [
+        { translations: [[0, 0], [1, 1]], pixelDimensions: [40, 4], fieldDimensions: FIELD },
+        { translations: [[0, 0]], pixelDimensions: [40, 4], fieldDimensions: FIELD },
+        { translations: [[0, 0]], pixelDimensions: [40, 6], fieldDimensions: FIELD }
+      ]
+    },
+    {
       name: "tiny",
       updates: [
         {

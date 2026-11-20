@@ -109,7 +109,7 @@
     "tabs/console-export": {"cases":300,"content":"264169031d72d46e","generator":"c69eef6e2082faef","spec":"parity/specs/tabs/console-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-filter": {"cases":3022,"content":"d9772c459e0a5ef6","generator":"6c159751bcb0a5c5","spec":"parity/specs/tabs/console-filter.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-format": {"cases":3041,"content":"76e5265a66c5b13f","generator":"7a9127bcc1f169d7","spec":"parity/specs/tabs/console-format.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "tabs/heatmap": {"cases":32,"content":"d636867c184afd98","generator":"3af4ddee9dbf5f49","spec":"parity/specs/tabs/heatmap.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "tabs/heatmap": {"cases":35,"content":"950c6ae3f30ce34d","generator":"2403bf982d33200c","spec":"parity/specs/tabs/heatmap.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/corpus": {"cases":222,"content":"1893bd0e04348bcb","generator":"95a5f93008b3cdfa","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/public": {"cases":5,"content":"3a0c9961a122df71","generator":"8737e8f3ff4acef8","spec":"parity/specs/wpilog/public.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }

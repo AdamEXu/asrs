@@ -291,8 +291,8 @@ impl Heatmap {
         self.heatmap.as_ref().map(|h| h.renderer.canvas_size())
     }
 
-    /// Debug: the shadow canvas's pixels, straight alpha as `getImageData` returns.
-    #[doc(hidden)]
+    /// The shadow (alpha stamp) canvas's pixels, straight alpha as `getImageData` returns,
+    /// which the canvas parity gate compares byte for byte.
     pub fn shadow_image_data(&mut self) -> Result<Option<ImageData>, CanvasError> {
         match self.heatmap.as_mut() {
             None => Ok(None),
@@ -676,13 +676,13 @@ impl Renderer {
         self.canvas
             .apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
         if array_length(data.data) > 0 {
-            self.draw_alpha(&prepare_data(data));
+            self.draw_alpha(&prepare_data(data))?;
             self.colorize()?;
         }
         Ok(())
     }
 
-    fn draw_alpha(&mut self, data: &Prepared<'_>) {
+    fn draw_alpha(&mut self, data: &Prepared<'_>) -> Result<(), CanvasError> {
         self.min = data.min;
         self.max = data.max;
         let (min, max) = (data.min, data.max);
@@ -710,6 +710,11 @@ impl Renderer {
                 } else {
                     alpha
                 })));
+            if canvas_attr(radius * 2.0) == 0 {
+                return Err(CanvasError::InvalidState(
+                    "The image argument is a canvas element with a width or height of 0.",
+                ));
+            }
             self.shadow.apply(&Call::DrawImage {
                 image: key.clone(),
                 args: vec![rect_x, rect_y],
@@ -727,6 +732,7 @@ impl Renderer {
                 self.render_boundaries[3] = rect_y + 2.0 * radius;
             }
         }
+        Ok(())
     }
 
     fn colorize(&mut self) -> Result<(), CanvasError> {
@@ -847,7 +853,7 @@ fn color_palette() -> Vec<u8> {
 
 /// `h337._getPointTemplate`: the `radius*2` canvas stamped at `x - radius`.
 fn point_template(radius: f64, blur: f64) -> Option<Pixmap> {
-    let size = to_uint32(radius * 2.0);
+    let size = canvas_attr(radius * 2.0);
     let mut list = Canvas2d::new(size, size);
     if blur == 1.0 {
         list.begin_path();
