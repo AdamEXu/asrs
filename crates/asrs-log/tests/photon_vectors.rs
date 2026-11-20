@@ -27,6 +27,9 @@ mod js_time;
 #[path = "../../asrs-cli/src/log_field.rs"]
 #[allow(dead_code)]
 mod log_field;
+#[path = "../../asrs-cli/src/log_run.rs"]
+#[allow(dead_code)]
+mod log_run;
 #[path = "../../asrs-cli/src/log_struct.rs"]
 #[allow(dead_code)]
 mod log_struct;
@@ -36,6 +39,11 @@ mod photon;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;
+
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
 
 use asrs_parity::vectors::check_fn_vectors;
 use asrs_parity::{FnCase, Response};

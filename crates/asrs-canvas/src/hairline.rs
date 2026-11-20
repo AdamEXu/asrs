@@ -10,7 +10,7 @@ use tiny_skia::{LineCap, PathSegment};
 use crate::clip::{self, ClipRect};
 use crate::scan::Coverage;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct P {
     pub x: f32,
     pub y: f32,
@@ -29,8 +29,8 @@ struct Piece {
 }
 
 fn quad_lines(p0: P, p1: P, p2: P) -> Vec<P> {
-    let dx = ((p0.x + p2.x) * 0.5 - p1.x).abs().ceil() as u32;
-    let dy = ((p0.y + p2.y) * 0.5 - p1.y).abs().ceil() as u32;
+    let dx = ((p0.x + p2.x) * 0.5 - p1.x).abs().ceil() as i32 as u32;
+    let dy = ((p0.y + p2.y) * 0.5 - p1.y).abs().ceil() as i32 as u32;
     let dist = if dx > dy {
         dx + (dy >> 1)
     } else {
@@ -187,6 +187,7 @@ struct Plot {
     width: usize,
     height: usize,
     alpha: Vec<u8>,
+    pair: bool,
 }
 
 impl Plot {
@@ -239,6 +240,7 @@ fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, plot: &mut Plot) {
     } else {
         (64 - (major0 & 63), major1 & 63)
     };
+    plot.pair |= slope != 0;
     let mut f = cap(plot, horizontal, istart, fstart, scale_start) + slope;
     let full = istop - istart - 1 - i32::from(scale_stop > 0);
     for major in istart + 1..istart + 1 + full.max(0) {
@@ -305,6 +307,7 @@ pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
         width: w,
         height: h,
         alpha: vec![0; w * h],
+        pair: false,
     };
     anti_hairline(dot6(a.x), dot6(a.y), dot6(b.x), dot6(b.y), &mut plot);
     Some(Coverage {
@@ -313,6 +316,7 @@ pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
         width: w,
         height: h,
         alpha: plot.alpha,
+        pair: plot.pair,
     })
 }
 
@@ -331,6 +335,14 @@ mod tests {
             b.close();
         }
         b.finish().unwrap()
+    }
+
+    #[test]
+    fn huge_quads_subdivide_without_overflow() {
+        assert_eq!(
+            quad_lines(P::default(), P { x: 3e38, y: 3e38 }, P::default()).len(),
+            33
+        );
     }
 
     #[test]

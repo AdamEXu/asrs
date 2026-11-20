@@ -27,6 +27,9 @@ mod js_time;
 #[path = "../../asrs-cli/src/log_field.rs"]
 #[allow(dead_code)]
 mod log_field;
+#[path = "../../asrs-cli/src/log_run.rs"]
+#[allow(dead_code)]
+mod log_run;
 #[path = "../../asrs-cli/src/log_struct.rs"]
 #[allow(dead_code)]
 mod log_struct;
@@ -38,6 +41,11 @@ mod photon;
 mod shared;
 
 use std::collections::HashSet;
+
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
 
 use asrs_parity::vectors::check_fn_vectors;
 use asrs_parity::{FnCase, Request, Response, Value};
@@ -65,8 +73,21 @@ fn struct_fn() {
 }
 
 #[test]
+fn util_platform_nan() {
+    check_fn_vectors(
+        &asrs_parity::vectors::platform_vector("log/util-rem"),
+        dispatch,
+    );
+}
+
+#[test]
 fn log_field_sequences() {
     check_fn_vectors("log/field", dispatch);
+}
+
+#[test]
+fn log_sequences() {
+    check_fn_vectors("log/core", dispatch);
 }
 
 fn n(x: f64) -> Value {
@@ -578,8 +599,6 @@ fn misc(spec: &mut Spec) {
         1e16,
         -1e16,
         f64::NAN,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
     ] {
         spec.push("shared/util:wrapRadians", vec![n(r)]);
     }
@@ -663,11 +682,21 @@ fn misc(spec: &mut Spec) {
     }
 }
 
+/// Inputs whose result is the NaN that `%` makes, which V8 computes differently per platform.
+fn platform_nan(spec: &mut Spec) {
+    for r in [f64::INFINITY, f64::NEG_INFINITY] {
+        spec.push("shared/util:wrapRadians", vec![n(r)]);
+    }
+}
+
 #[test]
-#[ignore = "rewrites parity/specs/log/util.jsonl; regenerate vectors after with `cargo xtask oracle gen log/util`"]
+#[ignore = "rewrites parity/specs/log/util*; regenerate vectors after with `cargo xtask oracle gen log/util log/util-rem` and `cargo xtask host <name> gen log/util-rem` on each render host"]
 fn write_util_specs() {
     let mut spec = Spec::new();
     bounds(&mut spec);
     misc(&mut spec);
     spec.write("log/util");
+    let mut rem = Spec::new();
+    platform_nan(&mut rem);
+    rem.write("log/util-rem.requests");
 }

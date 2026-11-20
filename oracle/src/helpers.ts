@@ -1,5 +1,8 @@
 import StructDecoder from "@upstream/shared/log/StructDecoder";
 import PhotonStructDecoder from "@upstream/shared/log/PhotonStructDecoder";
+import ConsoleRenderer from "@upstream/shared/renderers/ConsoleRenderer";
+import { AnsiUp } from "ansi_up";
+import { consoleExport } from "./consoleExport";
 import { flushAnimationFrames } from "./shims";
 
 const indirectEval = eval;
@@ -59,6 +62,22 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
 
   typeof: (value: unknown) => typeof value,
 
+  // ConsoleRenderer.formatValue is private upstream; the prototype method is the real
+  // implementation, it just does not read `this`.
+  consoleFormatValue: (value: string, filter: string) =>
+    (ConsoleRenderer.prototype as { formatValue: (v: string, f: string) => string }).formatValue(value, filter),
+
+  consoleExport,
+
+  ansiUp: (text: string) => new AnsiUp().ansi_to_html(text),
+
+  // A persistent AnsiUp across calls, so Incomplete packets and rendition state carry
+  // over exactly as upstream's streaming API leaves them.
+  ansiUpAppend: (chunks: string[]) => {
+    const ansiUp = new AnsiUp();
+    return chunks.map((chunk) => ansiUp.ansi_to_html(chunk));
+  },
+
   call: (source: string, ...args: unknown[]) => {
     const fn = indirectEval(`(${source})`);
     if (typeof fn !== "function") throw new TypeError("oracle:call source must evaluate to a function");
@@ -92,6 +111,18 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   },
 
   logFieldRun: async (type: number, ops: any[][]) => (await import("./logFieldRun")).run(type, ops),
+
+  // Runs grab* calls against a Log built from logRun write ops; each call
+  // result is {ok|throw}. See geometryRun.ts for the call shapes.
+  geometryRun: async (enableTimestampSetCache: boolean, ops: any[][], calls: any[][]) =>
+    (await import("./geometryRun")).run(enableTimestampSetCache, ops, calls),
+
+  // rotationSequenceToQuaternion's THREE.Quaternion as a plain object.
+  geometryQuat: async (rotations: { axis: string; degrees: number }[]) => {
+    const { rotationSequenceToQuaternion } = await import("@upstream/shared/geometry");
+    const q = rotationSequenceToQuaternion(rotations);
+    return { x: q.x, y: q.y, z: q.z, w: q.w };
+  },
 
   flushAnimationFrames: (time: number) => flushAnimationFrames(time),
 

@@ -60,8 +60,15 @@ pub fn pixmap_from_straight_rgba(width: u32, height: u32, rgba: &[u8]) -> Option
 }
 
 /// The straight-alpha pixels of `pixmap` inside the device rect, transparent outside it.
-pub fn read_rect(pixmap: &Pixmap, x: i64, y: i64, width: u32, height: u32) -> ImageData {
-    let mut data = vec![0u8; width as usize * height as usize * 4];
+/// The pixels of `[x, x + width) x [y, y + height)` as `getImageData` returns them, or `None`
+/// when the buffer cannot be allocated.
+pub fn read_rect(pixmap: &Pixmap, x: i64, y: i64, width: u32, height: u32) -> Option<ImageData> {
+    let len = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
+    let mut data = Vec::new();
+    data.try_reserve_exact(len).ok()?;
+    data.resize(len, 0);
     let (pw, ph) = (i64::from(pixmap.width()), i64::from(pixmap.height()));
     let src = pixmap.data();
     for row in 0..i64::from(height) {
@@ -80,11 +87,11 @@ pub fn read_rect(pixmap: &Pixmap, x: i64, y: i64, width: u32, height: u32) -> Im
             data[o..o + 4].copy_from_slice(&unpremultiply(p));
         }
     }
-    ImageData {
+    Some(ImageData {
         width,
         height,
         data,
-    }
+    })
 }
 
 /// Writes straight-alpha pixels into `pixmap` at device offset `(x, y)`, replacing what was
@@ -143,7 +150,7 @@ mod tests {
     #[test]
     fn reads_outside_the_canvas_as_transparent() {
         let pixmap = pixmap_from_straight_rgba(1, 1, &[9, 9, 9, 255]).unwrap();
-        let data = read_rect(&pixmap, -1, 0, 2, 1);
+        let data = read_rect(&pixmap, -1, 0, 2, 1).unwrap();
         assert_eq!(data.data, [0, 0, 0, 0, 9, 9, 9, 255]);
     }
 }

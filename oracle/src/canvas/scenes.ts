@@ -889,6 +889,102 @@ function textStyles(dpr: number, dark: boolean): Scene {
   return scene(`textstyles-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [520, 270], dpr, dark ? DARK : LIGHT, r.cmds);
 }
 
+function offCanvas(dpr: number): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  r.set("fillStyle", "#2b66a2");
+  r.call("fillRect", -20.5, -10.25, 60, 40);
+  r.call("fillRect", 270.3, 95.6, 60, 40);
+  r.set("fillStyle", "rgba(228, 139, 50, 0.7)");
+  r.call("beginPath");
+  r.call("moveTo", -5000, 50);
+  r.call("lineTo", 100, -3000);
+  r.call("lineTo", 5000.5, 200);
+  r.call("lineTo", 120, 70.5);
+  r.call("closePath");
+  r.call("fill");
+  r.set("fillStyle", "#3fa34d");
+  r.call("beginPath");
+  r.call("moveTo", -12.3, 40);
+  r.call("lineTo", 30.7, 52.1);
+  r.call("lineTo", 25.2, 88.4);
+  r.call("lineTo", -8.6, 79.9);
+  r.call("closePath");
+  r.call("fill");
+  r.call("beginPath");
+  r.call("arc", 310, 60, 25, 0, Math.PI * 2);
+  r.call("fill");
+  r.set("strokeStyle", "#222");
+  r.set("lineWidth", 3);
+  r.set("lineCap", "round");
+  r.call("beginPath");
+  r.call("moveTo", -10000, 30);
+  r.call("lineTo", 10000, 35);
+  r.call("stroke");
+  r.set("lineWidth", 1);
+  r.set("lineCap", "butt");
+  r.call("beginPath");
+  r.call("moveTo", -400, 100.5);
+  r.call("lineTo", 700, 90);
+  r.call("stroke");
+  r.call("setLineDash", [6, 4]);
+  r.call("beginPath");
+  r.call("moveTo", -500, 60);
+  r.call("lineTo", 900, 60);
+  r.call("stroke");
+  r.set("lineWidth", 2);
+  r.call("beginPath");
+  r.call("moveTo", 150, -300);
+  r.call("lineTo", 150, 500);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", -300, -100);
+  r.call("lineTo", 600, 200);
+  r.call("stroke");
+  r.call("strokeRect", 200.5, -20.5, 140, 60);
+  r.call("setLineDash", []);
+  r.set("strokeStyle", "#af2437");
+  r.set("lineWidth", 2.5);
+  r.call("beginPath");
+  r.call("arc", 150, 20000 + 75, 20000, 0, Math.PI * 2);
+  r.call("stroke");
+  r.call("beginPath");
+  r.call("moveTo", 40, -50);
+  r.call("lineTo", 80, 170);
+  r.call("lineTo", 120, -40);
+  r.set("lineJoin", "round");
+  r.call("stroke");
+  return scene(`offcanvas-${dpr}x`, "coverage", "pixel", [300, 120], dpr, LIGHT, r.cmds);
+}
+
+function gradientText(dpr: number, dark: boolean): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  r.set("font", `16px ${SYSTEM_FONT}`);
+  r.set("textBaseline", "middle");
+  r.set("fillStyle", {
+    linearGradient: [10, 0, 290, 0],
+    stops: [
+      [0, "#2b66a2"],
+      [0.5, dark ? "#eeeeee" : "#222222"],
+      [1, "#af2437"]
+    ]
+  });
+  r.call("fillText", "Gradient text 0123 +4.37s", 10, 20);
+  r.set("font", `14px ${SYSTEM_FONT}`);
+  r.set("fillStyle", {
+    radialGradient: [150, 50, 5, 150, 50, 120],
+    stops: [
+      [0, "#e5b31b"],
+      [1, "#3fa34d"]
+    ]
+  });
+  r.call("fillText", "Radial gradient Wg", 30, 50);
+  r.set("globalAlpha", 0.6);
+  r.call("fillText", "with globalAlpha", 30, 72, 100);
+  return scene(`gradienttext-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [300, 90], dpr, dark ? DARK : LIGHT, r.cmds);
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -905,6 +1001,7 @@ export function allScenes(): Scene[] {
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));
     out.push(gradients(dpr), images(dpr), imageData(dpr), heatmap(dpr), textStyles(dpr, false), textStyles(dpr, true));
+    out.push(offCanvas(dpr), gradientText(dpr, false), gradientText(dpr, true));
   }
   return out;
 }

@@ -19,12 +19,12 @@ const TYPES: [LoggableType; 8] = [
     LoggableType::Empty,
 ];
 
-fn number(v: &Value) -> Result<f64, String> {
+pub fn number(v: &Value) -> Result<f64, String> {
     v.as_f64()
         .ok_or_else(|| format!("expected a number, got {}", v.kind()))
 }
 
-fn index(v: &Value) -> Result<i64, String> {
+pub fn index(v: &Value) -> Result<i64, String> {
     let x = number(v)?;
     if x.fract() != 0.0 || !x.is_finite() {
         return Err(format!("expected an integer, got {x}"));
@@ -32,7 +32,7 @@ fn index(v: &Value) -> Result<i64, String> {
     Ok(x as i64)
 }
 
-fn loggable_type(v: &Value) -> Result<LoggableType, String> {
+pub fn loggable_type(v: &Value) -> Result<LoggableType, String> {
     let i = index(v)?;
     usize::try_from(i)
         .ok()
@@ -40,21 +40,21 @@ fn loggable_type(v: &Value) -> Result<LoggableType, String> {
         .ok_or_else(|| format!("no LoggableType {i}"))
 }
 
-fn js_string(v: &Value) -> Result<JsString, String> {
+pub fn js_string(v: &Value) -> Result<JsString, String> {
     match v {
         Value::String(s) => Ok(JsString::from_units(s.units().to_vec())),
         other => Err(format!("expected a string, got {}", other.kind())),
     }
 }
 
-fn type_string(v: &Value) -> Result<Option<JsString>, String> {
+pub fn type_string(v: &Value) -> Result<Option<JsString>, String> {
     match v {
         Value::Null => Ok(None),
         other => js_string(other).map(Some),
     }
 }
 
-fn array<T>(v: &Value, item: impl Fn(&Value) -> Result<T, String>) -> Result<Vec<T>, String> {
+pub fn array<T>(v: &Value, item: impl Fn(&Value) -> Result<T, String>) -> Result<Vec<T>, String> {
     v.as_array()
         .ok_or_else(|| format!("expected an array, got {}", v.kind()))?
         .iter()
@@ -62,7 +62,7 @@ fn array<T>(v: &Value, item: impl Fn(&Value) -> Result<T, String>) -> Result<Vec
         .collect()
 }
 
-fn boolean(v: &Value) -> Result<bool, String> {
+pub fn boolean(v: &Value) -> Result<bool, String> {
     v.as_bool()
         .ok_or_else(|| format!("expected a boolean, got {}", v.kind()))
 }
@@ -84,11 +84,11 @@ fn put(field: &mut LogField, ty: LoggableType, timestamp: f64, v: &Value) -> Res
     Ok(())
 }
 
-fn string_value(s: &JsString) -> Value {
+pub fn string_value(s: &JsString) -> Value {
     Value::String(Utf16String::from_units(s.units().to_vec()))
 }
 
-trait ToValue {
+pub trait ToValue {
     fn to_value(&self) -> Value;
 }
 
@@ -128,11 +128,11 @@ impl<T: ToValue> ToValue for Vec<T> {
     }
 }
 
-fn numbers(xs: &[f64]) -> Value {
+pub fn numbers(xs: &[f64]) -> Value {
     Value::Array(xs.iter().map(|&x| Value::number(x)).collect())
 }
 
-fn set_value<T: ToValue>(set: &LogValueSet<T>) -> Value {
+pub fn set_value<T: ToValue>(set: &LogValueSet<T>) -> Value {
     Value::object([
         ("timestamps", numbers(&set.timestamps)),
         (
@@ -142,7 +142,7 @@ fn set_value<T: ToValue>(set: &LogValueSet<T>) -> Value {
     ])
 }
 
-fn any_set_value(set: &LogValueSetAny) -> Value {
+pub fn any_set_value(set: &LogValueSetAny) -> Value {
     match set {
         LogValueSetAny::Raw(s) => set_value(s),
         LogValueSetAny::Boolean(s) => set_value(s),
@@ -179,7 +179,7 @@ fn values_value(values: &LogValues) -> Value {
     }
 }
 
-fn optional_string(s: &Option<JsString>) -> Value {
+pub fn optional_string(s: &Option<JsString>) -> Value {
     s.as_ref().map_or(Value::Null, string_value)
 }
 

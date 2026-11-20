@@ -292,7 +292,10 @@ dependencies = [
 name = "asrs-app"
 version = "0.1.0"
 dependencies = [
+ "asrs-field3d",
  "asrs-ui",
+ "async-channel",
+ "image",
 ]
 
 [[package]]
@@ -312,9 +315,13 @@ name = "asrs-cli"
 version = "0.1.0"
 dependencies = [
  "asrs-canvas",
+ "asrs-formats",
  "asrs-js",
+ "asrs-live",
  "asrs-log",
  "asrs-parity",
+ "asrs-services",
+ "asrs-tabs",
 ]
 
 [[package]]
@@ -323,11 +330,19 @@ version = "0.1.0"
 dependencies = [
  "asrs-js",
  "asrs-parity",
+ "bytemuck",
+ "pollster 0.4.0",
+ "wgpu",
 ]
 
 [[package]]
 name = "asrs-formats"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-log",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-hub"
@@ -351,6 +366,11 @@ dependencies = [
 [[package]]
 name = "asrs-live"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-log",
+ "tokio",
+]
 
 [[package]]
 name = "asrs-log"
@@ -358,11 +378,16 @@ version = "0.1.0"
 dependencies = [
  "asrs-js",
  "asrs-parity",
+ "indexmap",
 ]
 
 [[package]]
 name = "asrs-model"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-parity"
@@ -379,12 +404,17 @@ version = "0.1.0"
 [[package]]
 name = "asrs-tabs"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "asrs-canvas",
  "asrs-parity",
  "block2 0.6.2",
  "gpui-kit",
