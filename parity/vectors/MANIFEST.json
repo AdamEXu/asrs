@@ -179,9 +179,9 @@
       "generatedOn": "macos-aarch64"
     },
     "msgpack/decode": {
-      "cases": 4131,
-      "content": "2a3cdc6dccf0f705",
-      "generator": "7a17450d2956c085",
+      "cases": 7131,
+      "content": "6ef775b5fdf738d5",
+      "generator": "4fa4f6d15fbd5c43",
       "spec": "parity/specs/msgpack/decode.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -195,9 +195,9 @@
       "generatedOn": "macos-aarch64"
     },
     "msgpack/multi": {
-      "cases": 466,
-      "content": "a5bc36c6bd096eef",
-      "generator": "03a8d9e41d1938d3",
+      "cases": 766,
+      "content": "d1cae0b634ef8bf3",
+      "generator": "0395f7035aae3381",
       "spec": "parity/specs/msgpack/multi.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"

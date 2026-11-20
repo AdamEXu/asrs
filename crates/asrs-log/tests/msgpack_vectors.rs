@@ -5,80 +5,53 @@
 mod js_json;
 
 use asrs_js::string::JsError;
-use asrs_js::value::JsValue;
-use asrs_log::msgpack;
+use asrs_js::time::Rng;
+use asrs_log::msgpack::{self, KeyCache};
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Record, Utf16String, Value};
 
-fn to_js(value: &Value) -> Result<JsValue, String> {
-    js_json::to_js(&normalize(value))
+/// Replays a record's recorded `Math.random` values and counts how many were drawn.
+struct Replay {
+    values: Vec<f64>,
+    drawn: usize,
 }
 
-fn normalize(value: &Value) -> Value {
-    match value {
-        Value::Map(_) | Value::Set(_) | Value::ArrayBuffer(_) => Value::Object(Vec::new()),
-        Value::Boxed(inner) => match inner.as_ref() {
-            Value::String(s) => Value::Object(
-                s.units()
+impl Rng for Replay {
+    fn next_f64(&mut self) -> f64 {
+        let v = self.values.get(self.drawn).copied().unwrap_or(f64::NAN);
+        self.drawn += 1;
+        v
+    }
+}
+
+impl Replay {
+    fn of(record: &Record) -> Result<Self, String> {
+        let values = match record.field("r") {
+            None => Vec::new(),
+            Some(_) => match record.value("r").map_err(|e| e.to_string())? {
+                Value::Array(items) => items
                     .iter()
-                    .enumerate()
-                    .map(|(i, u)| {
-                        (
-                            Utf16String::from(i.to_string()),
-                            Value::String(Utf16String::from_units(vec![*u])),
-                        )
+                    .map(|v| match v {
+                        Value::Number(bits) => Ok(f64::from_bits(*bits)),
+                        other => Err(format!("r holds {other:?}")),
                     })
-                    .collect(),
-            ),
-            _ => Value::Object(Vec::new()),
-        },
-        Value::DataView(b) => Value::Bytes(b.clone()),
-        Value::TypedArray(kind, items) => typed_array_bytes(kind, items)
-            .map(Value::Bytes)
-            .unwrap_or_else(|| value.clone()),
-        Value::Array(items) => Value::Array(items.iter().map(normalize).collect()),
-        Value::Object(pairs) => Value::Object(
-            pairs
-                .iter()
-                .map(|(k, v)| (k.clone(), normalize(v)))
-                .collect(),
-        ),
-        Value::Instance(name, pairs) => Value::Instance(
-            name.clone(),
-            pairs
-                .iter()
-                .map(|(k, v)| (k.clone(), normalize(v)))
-                .collect(),
-        ),
-        other => other.clone(),
-    }
-}
-
-fn typed_array_bytes(kind: &str, items: &[Value]) -> Option<Vec<u8>> {
-    let mut out = Vec::new();
-    for item in items {
-        let bits = match item {
-            Value::Number(bits) => f64::from_bits(*bits),
-            Value::BigInt(digits) => {
-                let v: i128 = digits.parse().ok()?;
-                out.extend_from_slice(&(v as i64).to_le_bytes());
-                continue;
-            }
-            _ => return None,
+                    .collect::<Result<_, _>>()?,
+                other => return Err(format!("r is not an array: {other:?}")),
+            },
         };
-        match kind {
-            "Int8Array" => out.push(bits as i8 as u8),
-            "Uint8Array" | "Uint8ClampedArray" => out.push(bits as u8),
-            "Int16Array" => out.extend_from_slice(&(bits as i16).to_le_bytes()),
-            "Uint16Array" => out.extend_from_slice(&(bits as u16).to_le_bytes()),
-            "Int32Array" => out.extend_from_slice(&(bits as i32).to_le_bytes()),
-            "Uint32Array" => out.extend_from_slice(&(bits as u32).to_le_bytes()),
-            "Float32Array" => out.extend_from_slice(&(bits as f32).to_le_bytes()),
-            "Float64Array" => out.extend_from_slice(&bits.to_le_bytes()),
-            _ => return None,
-        }
+        Ok(Replay { values, drawn: 0 })
     }
-    Some(out)
+
+    fn check(&self) -> Result<(), String> {
+        if self.drawn != self.values.len() {
+            return Err(format!(
+                "drew {} Math.random values, upstream drew {}",
+                self.drawn,
+                self.values.len()
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn thrown(e: JsError) -> Value {
@@ -104,24 +77,28 @@ fn outcome(record: &Record) -> Result<Result<Value, Value>, String> {
 
 #[test]
 fn decode_vectors() {
+    let mut keys = KeyCache::new();
     check_records("msgpack/decode", |record| {
         let bytes = hex_bytes(record, "d")?;
-        let actual = msgpack::decode(&bytes)
+        let mut rng = Replay::of(record)?;
+        let actual = msgpack::decode(&bytes, &mut keys, &mut rng)
             .map(|v| js_json::from_js(&v))
             .map_err(thrown);
         let expected = outcome(record)?;
         if actual != expected {
             return Err(format!("expected {expected:?}\ngot {actual:?}"));
         }
-        Ok(())
+        rng.check()
     });
 }
 
 #[test]
 fn multi_vectors() {
+    let mut keys = KeyCache::new();
     check_records("msgpack/multi", |record| {
         let bytes = hex_bytes(record, "m")?;
-        let (values, err) = msgpack::decode_multi(&bytes);
+        let mut rng = Replay::of(record)?;
+        let (values, err) = msgpack::decode_multi(&bytes, &mut keys, &mut rng);
         let actual = match err {
             Some(e) => Err(thrown(e)),
             None => Ok(Value::Array(values.iter().map(js_json::from_js).collect())),
@@ -130,7 +107,7 @@ fn multi_vectors() {
         if actual != expected {
             return Err(format!("expected {expected:?}\ngot {actual:?}"));
         }
-        Ok(())
+        rng.check()
     });
 }
 
@@ -138,7 +115,7 @@ fn multi_vectors() {
 fn encode_vectors() {
     check_records("msgpack/encode", |record| {
         let input = record.value("e").map_err(|e| e.to_string())?;
-        let value = to_js(&input)?;
+        let value = js_json::to_js_encodable(&input)?;
         let actual = msgpack::encode(&value).map(Value::Bytes).map_err(thrown);
         let expected = outcome(record)?;
         if actual != expected {

@@ -4,10 +4,12 @@
 //! extension -1 to `Date`, every other ext to an `ExtData` instance), and no length caps,
 //! so the `maxXxxLength` checks can never fire and are not ported.
 //!
-//! The default `keyDecoder` is a process-global `CachedKeyDecoder` keyed on the raw key
-//! bytes: a malformed key's string depends on which earlier payload cached those bytes
-//! first (and on `Math.random` evictions), so it is nondeterministic by design. The port
-//! matches `keyDecoder: null`, which is what the vectors generate against.
+//! The default `keyDecoder` is one `CachedKeyDecoder` shared by every `Decoder` in a JS
+//! realm, modelled by [`KeyCache`]. Its `utf8DecodeJs` reads continuation bytes past the
+//! key's own slice while the cache is keyed on the slice alone, so a malformed key decodes
+//! to whatever string the first payload that cached those bytes produced, and a full
+//! bucket evicts at a `Math.random` index. Callers keep one cache and the realm's `Rng`
+//! per upstream realm and decode in upstream's order.
 //!
 //! The bundled oracle mangles the `DecodeError` class name to `_DecodeError`; the thrown
 //! `name` is part of parity output, so errors use the mangled spelling.
@@ -17,10 +19,10 @@
 //! above; strings encode through `utf8EncodeJs` at <= 50 UTF-16 units (lone surrogates
 //! emitted raw) and through `TextEncoder` (lone surrogates as U+FFFD) above.
 
-use asrs_js::math::int::to_uint32;
+use asrs_js::math::int::{to_int32, to_uint32};
 use asrs_js::number;
 use asrs_js::string::{JsError, JsString, TextDecoder, text_encode};
-use asrs_js::time::time_clip;
+use asrs_js::time::{Rng, time_clip};
 use asrs_js::value::{JsObject, JsValue};
 
 const DECODE_ERROR: &str = "_DecodeError";
@@ -32,6 +34,8 @@ const TEXT_DECODER_THRESHOLD: usize = 200;
 const TEXT_ENCODER_THRESHOLD: usize = 50;
 /// `CachedKeyDecoder`'s `DEFAULT_MAX_KEY_LENGTH`.
 const MAX_KEY_LENGTH: usize = 16;
+/// `CachedKeyDecoder`'s `DEFAULT_MAX_LENGTH_PER_KEY`.
+const MAX_LENGTH_PER_KEY: usize = 16;
 
 fn decode_error(message: impl Into<String>) -> JsError {
     JsError::new(DECODE_ERROR, message)
@@ -55,9 +59,47 @@ fn pretty_byte(byte: u8) -> String {
     format!("0x{byte:02x}")
 }
 
-/// `decode(buffer)`: one value; trailing bytes are an error.
-pub fn decode(bytes: &[u8]) -> Result<JsValue, JsError> {
-    let mut decoder = RawDecoder::new(bytes);
+/// `CachedKeyDecoder`: per key byte length, up to 16 `(bytes, string)` records in
+/// lookup order.
+#[derive(Default)]
+pub struct KeyCache {
+    buckets: [Vec<(Box<[u8]>, JsString)>; MAX_KEY_LENGTH],
+}
+
+impl KeyCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn decode(
+        &mut self,
+        bytes: &[u8],
+        offset: usize,
+        byte_length: usize,
+        rng: &mut dyn Rng,
+    ) -> JsString {
+        let key = &bytes[offset..offset + byte_length];
+        let records = &mut self.buckets[byte_length - 1];
+        if let Some((_, text)) = records.iter().find(|(cached, _)| **cached == *key) {
+            return text.clone();
+        }
+        let text = utf8_decode_js(bytes, offset, byte_length);
+        let record = (Box::from(key), text.clone());
+        if records.len() >= MAX_LENGTH_PER_KEY {
+            let index = to_int32(rng.next_f64() * records.len() as f64);
+            if let Some(slot) = usize::try_from(index).ok().and_then(|i| records.get_mut(i)) {
+                *slot = record;
+            }
+        } else {
+            records.push(record);
+        }
+        text
+    }
+}
+
+/// `decoder.decode(buffer)`: one value; trailing bytes are an error.
+pub fn decode(bytes: &[u8], keys: &mut KeyCache, rng: &mut dyn Rng) -> Result<JsValue, JsError> {
+    let mut decoder = RawDecoder::new(bytes, 0, keys, rng);
     let object = decoder.do_decode_sync()?;
     if decoder.has_remaining(1) {
         return Err(JsError::range(format!(
@@ -70,13 +112,50 @@ pub fn decode(bytes: &[u8]) -> Result<JsValue, JsError> {
     Ok(object)
 }
 
-/// `decodeMulti(buffer)`: every value in the stream. The generator yields the values
-/// decoded before a mid-stream error, so they come back alongside the error.
-pub fn decode_multi(bytes: &[u8]) -> (Vec<JsValue>, Option<JsError>) {
-    let mut decoder = RawDecoder::new(bytes);
+/// The `decoder.decodeMulti(buffer)` generator. Each step takes the key cache so the
+/// caller can run other decodes between yields, as upstream's `for...of` bodies do.
+pub struct MultiDecoder<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+    done: bool,
+}
+
+impl<'a> MultiDecoder<'a> {
+    pub fn new(bytes: &'a [u8]) -> Self {
+        MultiDecoder {
+            bytes,
+            pos: 0,
+            done: false,
+        }
+    }
+
+    pub fn next(
+        &mut self,
+        keys: &mut KeyCache,
+        rng: &mut dyn Rng,
+    ) -> Option<Result<JsValue, JsError>> {
+        if self.done || self.pos >= self.bytes.len() {
+            return None;
+        }
+        let mut decoder = RawDecoder::new(self.bytes, self.pos, keys, rng);
+        let result = decoder.do_decode_sync();
+        self.pos = decoder.pos;
+        self.done = result.is_err();
+        Some(result)
+    }
+}
+
+/// Drains [`MultiDecoder`]: the values yielded before a mid-stream error come back
+/// alongside the error.
+pub fn decode_multi(
+    bytes: &[u8],
+    keys: &mut KeyCache,
+    rng: &mut dyn Rng,
+) -> (Vec<JsValue>, Option<JsError>) {
+    let mut multi = MultiDecoder::new(bytes);
     let mut values = Vec::new();
-    while decoder.has_remaining(1) {
-        match decoder.do_decode_sync() {
+    while let Some(result) = multi.next(keys, rng) {
+        match result {
             Ok(value) => values.push(value),
             Err(e) => return (values, Some(e)),
         }
@@ -102,14 +181,18 @@ struct RawDecoder<'a> {
     bytes: &'a [u8],
     pos: usize,
     stack: Vec<ArrayState>,
+    keys: &'a mut KeyCache,
+    rng: &'a mut dyn Rng,
 }
 
 impl<'a> RawDecoder<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
+    fn new(bytes: &'a [u8], pos: usize, keys: &'a mut KeyCache, rng: &'a mut dyn Rng) -> Self {
         RawDecoder {
             bytes,
-            pos: 0,
+            pos,
             stack: Vec::new(),
+            keys,
+            rng,
         }
     }
 
@@ -347,10 +430,9 @@ impl<'a> RawDecoder<'a> {
             return Err(more_data());
         }
         let offset = self.pos + header_offset;
-        // `keyDecoder.canBeCached` strings go through the same utf8DecodeJs; with the
-        // cache itself not ported, only the length threshold matters here.
         let text = if self.state_is_map_key() && byte_length > 0 && byte_length <= MAX_KEY_LENGTH {
-            utf8_decode_js(self.bytes, offset, byte_length)
+            self.keys
+                .decode(self.bytes, offset, byte_length, &mut *self.rng)
         } else {
             utf8_decode(self.bytes, offset, byte_length)
         };
@@ -533,7 +615,7 @@ fn utf8_decode_js(bytes: &[u8], input_offset: usize, byte_length: usize) -> JsSt
         } else if byte1 & 0xf0 == 0xe0 {
             let byte2 = byte_at(&mut offset) & 0x3f;
             let byte3 = byte_at(&mut offset) & 0x3f;
-            units.push((((byte1 & 0x0f) << 12) | (byte2 << 6) | byte3) as u16);
+            units.push((((byte1 & 0x1f) << 12) | (byte2 << 6) | byte3) as u16);
         } else if byte1 & 0xf8 == 0xf0 {
             let byte2 = byte_at(&mut offset) & 0x3f;
             let byte3 = byte_at(&mut offset) & 0x3f;

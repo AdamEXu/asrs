@@ -7,12 +7,16 @@ import { Rng } from "./corpus/rng";
 
 // Emits @msgpack/msgpack ground truth for the asrs_log::msgpack vectors.
 //   genMsgpack decode <seed>
-//     {"case":"<corpus id>","d":{"b":"<hex>"},"ok"|"throw":<CVE-1>}
+//     {"case":"<corpus id>","d":{"b":"<hex>"},"ok"|"throw":<CVE-1>[,"r":<CVE-1>]}
 //     Every payload of the corpus msgpack matrix plus seeded mutations (truncations, byte
-//     flips, trailing garbage) and random byte strings.
+//     flips, trailing garbage), random byte strings, and maps over a pool of malformed keys.
 //   genMsgpack multi <seed>
-//     {"m":{"b":"<hex>"},"ok":[<CVE-1>...]} | {"m":..,"throw":<CVE-1>}
-//     decodeMulti over concatenated values, NT4 wire frames and truncated streams.
+//     {"m":{"b":"<hex>"},"ok":[<CVE-1>...][,"r":<CVE-1>]} | {"m":..,"throw":<CVE-1>[,"r":..]}
+//     decodeMulti over concatenated values, NT4 wire frames, truncated streams and key-pool
+//     maps.
+//   Decode records run in file order through `new Decoder()`, so they share the library's
+//   process-global CachedKeyDecoder exactly as upstream's decoders share it within a realm.
+//   "r" lists the Math.random values a record consumed (cache evictions), in order.
 //   genMsgpack encode <count> <seed>
 //     {"e":<CVE-1 input>,"ok":{"b":"<hex>"}} | {"e":<CVE-1 input>,"throw":<CVE-1>}
 //     <count> values covering every encoder branch, then seeded random values.
@@ -40,16 +44,70 @@ function attempt(f: () => unknown): { ok: Cve1 } | { throw: Cve1 } {
   }
 }
 
-// A fresh Decoder per record: decode errors leave the container stack half-full, and the
-// upstream API the port matches is `new Decoder().decode(...)` per payload.
-// `keyDecoder: null` because the default is a process-global shared cache keyed on the raw
-// key bytes while its utf8DecodeJs reads continuation bytes past the key's own slice, so a
-// malformed key's decoded string depends on which record populated the cache first.
+let consumed: number[] = [];
+
+function scriptRandom(r: Rng) {
+  Math.random = () => {
+    const x = r.unit();
+    consumed.push(x);
+    return x;
+  };
+}
+
+function withRandom(record: Record<string, unknown>, f: () => object): object {
+  consumed = [];
+  const result = { ...record, ...f() };
+  return consumed.length > 0 ? { ...result, r: toTree(consumed) } : result;
+}
 
 function decodeRecord(bytes: Uint8Array, cse?: string): object {
   const r: Record<string, unknown> = { d: { b: bytesToHex(bytes) } };
   if (cse !== undefined) r.case = cse;
-  return { ...r, ...attempt(() => new Decoder({ keyDecoder: null }).decode(bytes)) };
+  return withRandom(r, () => attempt(() => new Decoder().decode(bytes)));
+}
+
+// More distinct keys per byte length than a CachedKeyDecoder bucket holds, most of them
+// ending in a truncated multi-byte sequence so utf8DecodeJs reads the bytes after the key.
+function keyPool(r: Rng): Uint8Array[][] {
+  const pool: Uint8Array[][] = [];
+  for (let length = 1; length <= 17; length++) {
+    const keys: Uint8Array[] = [];
+    for (let i = 0; i < 24; i++) {
+      const key = new Uint8Array(length);
+      for (let j = 0; j < length; j++) key[j] = r.bool() ? r.range(0x61, 0x7a) : r.below(256);
+      if (r.below(4) !== 0) key[length - 1] = r.pick([0xc3, 0xe2, 0xf0, 0xf4, 0xdf, 0xef]);
+      keys.push(key);
+    }
+    pool.push(keys);
+  }
+  return pool;
+}
+
+function keyPoolMap(r: Rng, pool: Uint8Array[][]): Uint8Array {
+  const pairs: Uint8Array[] = [];
+  const n = 1 + r.below(4);
+  for (let i = 0; i < n; i++) {
+    const key = r.pick(r.pick(pool));
+    pairs.push(Uint8Array.of(0xa0 | key.length), key);
+    switch (r.below(4)) {
+      case 0: pairs.push(Uint8Array.of(r.below(0x80))); break;
+      case 1: pairs.push(Uint8Array.of(0xcd, r.below(256), r.below(256))); break;
+      case 2: pairs.push(Uint8Array.of(0xa1, r.below(256))); break;
+      default: pairs.push(r.bytes(r.below(3)));
+    }
+  }
+  return concatBytes(Uint8Array.of(0x80 | n), ...pairs);
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const joined = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    joined.set(p, at);
+    at += p.length;
+  }
+  return joined;
 }
 
 function matrixPayloads(seed: number): [string, Uint8Array][] {
@@ -74,6 +132,7 @@ function matrixPayloads(seed: number): [string, Uint8Array][] {
 if (mode === "decode") {
   const seed = Number(a1);
   const corpus = new Corpus(seed);
+  scriptRandom(corpus.rng("msgpack/random"));
   const payloads = matrixPayloads(seed);
   const seen = new Set<string>();
   for (const [id, bytes] of payloads) {
@@ -105,7 +164,7 @@ if (mode === "decode") {
         break;
       }
       case 3:
-        out(decodeRecord(new Uint8Array([...source, ...r.bytes(r.below(4))])), "trailing");
+        out(decodeRecord(new Uint8Array([...source, ...r.bytes(r.below(4))]), "trailing"));
         break;
       case 4:
         out(decodeRecord(r.bytes(r.below(24)), "random"));
@@ -118,34 +177,32 @@ if (mode === "decode") {
       }
     }
   }
+  const pool = keyPool(corpus.rng("msgpack/keys"));
+  const k = corpus.rng("msgpack/keymaps");
+  for (let i = 0; i < 3000; i++) out(decodeRecord(keyPoolMap(k, pool), "keys"));
 } else if (mode === "multi") {
   const seed = Number(a1);
   const corpus = new Corpus(seed);
   const payloads = matrixPayloads(seed).map(([, b]) => b).filter((b) => b.length > 0 && b[0] !== 0xc1);
   const r = corpus.rng("msgpack/multi");
+  scriptRandom(corpus.rng("msgpack/random"));
   // `Array.from` on a number iterable stores into a PACKED_DOUBLE array and V8
   // canonicalizes NaN payloads there; iterating the generator and treeing each yielded
   // value keeps the raw f64 bits, matching `for (const x of decodeMulti(buf))`.
-  const emit = (bytes: Uint8Array) => {
-    try {
-      const trees: Cve1[] = [];
-      const it = new Decoder({ keyDecoder: null }).decodeMulti(bytes);
-      for (let r = it.next(); !r.done; r = it.next()) trees.push(toTree(r.value));
-      out({ m: { b: bytesToHex(bytes) }, ok: trees });
-    } catch (e) {
-      out({ m: { b: bytesToHex(bytes) }, throw: toTree(e) });
-    }
-  };
-  const cat = (...parts: Uint8Array[]) => {
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    const joined = new Uint8Array(total);
-    let at = 0;
-    for (const p of parts) {
-      joined.set(p, at);
-      at += p.length;
-    }
-    return joined;
-  };
+  const emit = (bytes: Uint8Array) =>
+    out(
+      withRandom({ m: { b: bytesToHex(bytes) } }, () => {
+        const trees: Cve1[] = [];
+        try {
+          const it = new Decoder().decodeMulti(bytes);
+          for (let r = it.next(); !r.done; r = it.next()) trees.push(toTree(r.value));
+          return { ok: trees };
+        } catch (e) {
+          return { throw: toTree(e) };
+        }
+      })
+    );
+  const cat = concatBytes;
   for (let i = 0; i + 1 < payloads.length; i += 2) emit(cat(payloads[i], payloads[i + 1]));
   for (let i = 0; i < 200; i++) {
     const n = 1 + r.below(6);
@@ -165,6 +222,9 @@ if (mode === "decode") {
     const stream = cat(r.pick(payloads), r.pick(payloads));
     emit(stream.subarray(0, r.below(stream.length + 1)));
   }
+  const pool = keyPool(corpus.rng("msgpack/keys"));
+  const k = corpus.rng("msgpack/keymaps");
+  for (let i = 0; i < 300; i++) emit(cat(...Array.from({ length: 1 + k.below(5) }, () => keyPoolMap(k, pool))));
   emit(new Uint8Array(0));
 } else if (mode === "encode") {
   const count = Number(a1);
@@ -338,12 +398,7 @@ if (mode === "decode") {
     }
   };
 
-  let emitted = 0;
-  for (let i = 0; i < count; i++) {
-    emitValue(randomValue(r, 0));
-    emitted++;
-  }
-  void emitted;
+  for (let i = 0; i < count; i++) emitValue(randomValue(r, 0));
 } else {
   throw new Error("usage: genMsgpack decode <seed> | multi <seed> | encode <count> <seed>");
 }
