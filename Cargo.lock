@@ -351,6 +351,11 @@ dependencies = [
 [[package]]
 name = "asrs-live"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-log",
+ "tokio",
+]
 
 [[package]]
 name = "asrs-log"
