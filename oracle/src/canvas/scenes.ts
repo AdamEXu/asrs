@@ -1124,9 +1124,8 @@ function hugeCoords(dpr: number): Scene {
   r.call("strokeRect", 170.25, 100.5, 50000, 10);
   r.call("save");
   r.call("translate", 1e39, 0);
-  r.call("translate", -3.4028234663852886e38, 0);
   r.set("fillStyle", "#3fa34d");
-  r.call("fillRect", 240, 60, 30, 20);
+  r.call("fillRect", -1e39, 60, 30, 20);
   r.call("restore");
   r.call("save");
   r.call("scale", 1e39, 1);

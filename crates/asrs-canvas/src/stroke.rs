@@ -1541,7 +1541,10 @@ fn add_rrect(dst: &mut SkPath, r: crate::skpath::Rect, radius: f32, cw: bool) {
     let mut rect_i = (index / 2 + usize::from(!cw)) % 4;
     if rx >= w / 2.0 && ry >= h / 2.0 {
         let mid = |a: f32, b: f32| ((f64::from(a) + f64::from(b)) * 0.5) as f32;
-        let (cx, cy) = (mid(bounds.left, bounds.right), mid(bounds.top, bounds.bottom));
+        let (cx, cy) = (
+            mid(bounds.left, bounds.right),
+            mid(bounds.top, bounds.bottom),
+        );
         let oval = [
             p(cx, bounds.top),
             p(bounds.right, cy),
@@ -1655,7 +1658,12 @@ mod tests {
 
     #[test]
     fn curved_cubic_outline_stays_within_the_radius() {
-        let c = [p(10.0, 100.0), p(40.0, 10.0), p(160.0, 10.0), p(190.0, 100.0)];
+        let c = [
+            p(10.0, 100.0),
+            p(40.0, 10.0),
+            p(160.0, 10.0),
+            p(190.0, 100.0),
+        ];
         let mut src = SkPath::new();
         src.move_to(c[0]);
         src.cubic_to(c[1], c[2], c[3]);

@@ -2212,7 +2212,10 @@ mod tests {
 
     fn circle_path(cx: f32, cy: f32, r: f32) -> SkPath {
         let k = r * 0.552_284_8;
-        let p = |x: f32, y: f32| P { x: cx + x, y: cy + y };
+        let p = |x: f32, y: f32| P {
+            x: cx + x,
+            y: cy + y,
+        };
         let mut path = SkPath::new();
         path.move_to(p(r, 0.0));
         path.cubic_to(p(r, k), p(k, r), p(0.0, r));
@@ -2263,7 +2266,12 @@ mod tests {
             let (line, curve) = (fill(tip, false), fill(tip, true));
             let (a, b) = (area(&line), area(&curve));
             assert!((a - b).abs() < 3.0, "{a} {b}");
-            let worst = line.iter().zip(&curve).map(|(x, y)| x.abs_diff(*y)).max().unwrap();
+            let worst = line
+                .iter()
+                .zip(&curve)
+                .map(|(x, y)| x.abs_diff(*y))
+                .max()
+                .unwrap();
             assert!(worst <= tolerance, "{worst}");
         }
     }

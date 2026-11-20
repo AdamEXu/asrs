@@ -196,7 +196,8 @@ pub fn chop_cubic_at_ts(src: &[P; 4], ts: &[f32]) -> Vec<P> {
     dst.resize(3 * ts.len() + 4, p(0.0, 0.0));
     let mut base = 0;
     let mut i = 0;
-    let cubic_at = |dst: &[P], base: usize| [dst[base], dst[base + 1], dst[base + 2], dst[base + 3]];
+    let cubic_at =
+        |dst: &[P], base: usize| [dst[base], dst[base + 1], dst[base + 2], dst[base + 3]];
     while i + 1 < ts.len() {
         let (mut t0, mut t1) = (ts[i], ts[i + 1]);
         if i != 0 {

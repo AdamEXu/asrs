@@ -638,8 +638,7 @@ pub fn anti_frame_rect(r: [f32; 4], stroke: (f32, f32), width: u32, height: u32)
     let (mut outer_l, mut outer_t) = (dot8(r[0] - rx), dot8(r[1] - ry));
     let (mut outer_r, mut outer_b) = (dot8(r[2] + rx), dot8(r[3] + ry));
     let bounds = [floor(outer_l), floor(outer_t), ceil(outer_r), ceil(outer_b)];
-    if bounds[0] >= width as i32 || bounds[1] >= height as i32 || bounds[2] <= 0 || bounds[3] <= 0
-    {
+    if bounds[0] >= width as i32 || bounds[1] >= height as i32 || bounds[2] <= 0 || bounds[3] <= 0 {
         return out;
     }
     let (rx, ry) = (stroke.0 - rx, stroke.1 - ry);

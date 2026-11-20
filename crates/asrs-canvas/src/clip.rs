@@ -461,7 +461,9 @@ fn chop_cubic_at(src: [P; 4], t: f32) -> [P; 7] {
 fn chop_cubic_at2(src: [P; 4], t0: f32, t1: f32) -> [P; 10] {
     if t1 == 1.0 {
         let d = chop_cubic_at(src, t0);
-        return [d[0], d[1], d[2], d[3], d[4], d[5], d[6], src[3], src[3], src[3]];
+        return [
+            d[0], d[1], d[2], d[3], d[4], d[5], d[6], src[3], src[3], src[3],
+        ];
     }
     let at = |t: f32| {
         let ab = unchecked_mix(src[0], src[1], t);

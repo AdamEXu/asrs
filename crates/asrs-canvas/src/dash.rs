@@ -244,7 +244,14 @@ impl Builder {
                 idx,
                 depth + 1,
             );
-            self.cubic_segs([tmp[3], tmp[4], tmp[5], tmp[6]], d, half, maxt, idx, depth + 1)
+            self.cubic_segs(
+                [tmp[3], tmp[4], tmp[5], tmp[6]],
+                d,
+                half,
+                maxt,
+                idx,
+                depth + 1,
+            )
         } else {
             self.push(length(pts[0], pts[3]), distance, idx, SegType::Cubic, maxt)
         }
@@ -922,7 +929,12 @@ mod tests {
 
     #[test]
     fn cubic_length_matches_a_dense_polyline() {
-        let c = [p(10.0, 100.0), p(40.0, 10.0), p(160.0, 10.0), p(190.0, 100.0)];
+        let c = [
+            p(10.0, 100.0),
+            p(40.0, 10.0),
+            p(160.0, 10.0),
+            p(190.0, 100.0),
+        ];
         let mut dense = 0.0f64;
         let mut prev = c[0];
         for i in 1..=10_000 {
@@ -931,7 +943,10 @@ mod tests {
             prev = q;
         }
         let measured = contours(&arch(), 1.0)[0].length;
-        assert!((f64::from(measured) / dense - 1.0).abs() < 0.002, "{measured} vs {dense}");
+        assert!(
+            (f64::from(measured) / dense - 1.0).abs() < 0.002,
+            "{measured} vs {dense}"
+        );
     }
 
     #[test]
@@ -951,9 +966,19 @@ mod tests {
         let out = dash_path(&arch(), &dash, &rec, None).unwrap();
         let moves = out.path.verbs.iter().filter(|v| **v == Verb::Move).count();
         assert_eq!(moves, (len / 20.0).ceil() as usize);
-        assert!(out.path.verbs.iter().all(|v| matches!(v, Verb::Move | Verb::Cubic)));
+        assert!(
+            out.path
+                .verbs
+                .iter()
+                .all(|v| matches!(v, Verb::Move | Verb::Cubic))
+        );
         let end = *out.path.pts.last().unwrap();
-        let c = [p(10.0, 100.0), p(40.0, 10.0), p(160.0, 10.0), p(190.0, 100.0)];
+        let c = [
+            p(10.0, 100.0),
+            p(40.0, 10.0),
+            p(160.0, 10.0),
+            p(190.0, 100.0),
+        ];
         let on_curve = (0..=1000).any(|i| length(eval_cubic_pos(&c, i as f32 / 1000.0), end) < 0.5);
         assert!(on_curve);
     }

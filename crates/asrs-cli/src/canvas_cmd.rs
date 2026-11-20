@@ -41,7 +41,9 @@ fn js_text(v: Option<&JsValue>) -> Option<String> {
 fn render_scenes(scenes: &Path, out: &Path, wanted: &[String]) -> Result<(), String> {
     let mut glyphs = platform_backend().zip(MaskGammaLut::embedded());
     if glyphs.is_none() {
-        eprintln!("no text backend or mask-gamma table on this platform: skipping scenes with text");
+        eprintln!(
+            "no text backend or mask-gamma table on this platform: skipping scenes with text"
+        );
     }
     let mut names = Vec::new();
     for entry in fs::read_dir(scenes).map_err(|e| format!("{}: {e}", scenes.display()))? {

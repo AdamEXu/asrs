@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
-    FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint,
-    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
+    FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, Pattern,
+    Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
 };
 
 use crate::aaa;
@@ -98,14 +98,33 @@ impl Default for State {
 /// What one canvas carries from frame to frame: the lines-as-paths counters of its
 /// `cc::RecordPaintCanvas`. Blink keeps that recorder while the canvas keeps its size and makes a
 /// new one when the size changes.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RasterState {
+    lines_as_paths: bool,
     draw_path_count: u32,
     draw_line_count: u32,
     size: (u32, u32),
 }
 
+impl Default for RasterState {
+    /// Chromium on macOS records with Graphite, which turns the lines-as-paths heuristic off
+    /// (`DisableLineDrawingAsPaths`) even for CPU canvases: measured against the Linux and
+    /// macOS references of the `multiframe` scenes.
+    fn default() -> RasterState {
+        RasterState::new(!cfg!(target_os = "macos"))
+    }
+}
+
 impl RasterState {
+    pub fn new(lines_as_paths: bool) -> RasterState {
+        RasterState {
+            lines_as_paths,
+            draw_path_count: 0,
+            draw_line_count: 0,
+            size: (0, 0),
+        }
+    }
+
     /// The state for a frame of `width` x `height`: kept when the size is unchanged, fresh
     /// otherwise.
     pub fn for_size(self, width: u32, height: u32) -> RasterState {
@@ -114,7 +133,7 @@ impl RasterState {
         } else {
             RasterState {
                 size: (width, height),
-                ..RasterState::default()
+                ..RasterState::new(self.lines_as_paths)
             }
         }
     }
@@ -785,7 +804,7 @@ impl<'a> Raster<'a> {
     /// `cc::RecordPaintCanvas::drawPath` bookkeeping for its lines-as-paths heuristic.
     fn count_draw_path(&mut self) {
         let l = &mut self.lines;
-        if l.draw_path_count != u32::MAX {
+        if l.lines_as_paths && l.draw_path_count != u32::MAX {
             l.draw_path_count += 1;
             if l.draw_path_count > 4 {
                 l.draw_line_count = 0;
@@ -1180,7 +1199,7 @@ impl<'a> Raster<'a> {
     /// the line is to be stroked as an ordinary path.
     fn stroke_line(&mut self, a: Pt, b: Pt) -> bool {
         let l = &mut self.lines;
-        if l.draw_line_count != u32::MAX {
+        if l.lines_as_paths && l.draw_line_count != u32::MAX {
             l.draw_line_count += 1;
             if l.draw_line_count > 4 {
                 l.draw_path_count = 0;
@@ -2077,5 +2096,42 @@ mod dash_tests {
         let p = raster.into_pixmap();
         let row: Vec<u8> = (0..40).map(|x| p.pixel(x, 50).unwrap().alpha()).collect();
         assert!(row.iter().any(|&a| a > 0), "{row:?}");
+    }
+
+    fn dashed_line_frame() -> Canvas2d {
+        let mut c = Canvas2d::new(60, 20);
+        c.set_line_width(2.0);
+        c.set_line_dash(&[3.0, 3.0]);
+        c.begin_path();
+        c.move_to(5.0, 10.6);
+        c.line_to(55.0, 10.6);
+        c.stroke();
+        c
+    }
+
+    fn after(state: RasterState, frame: &Canvas2d) -> (Pixmap, RasterState) {
+        let mut raster = Raster::new(60, 20).unwrap().with_state(state);
+        raster.run(&frame.calls);
+        let state = raster.state();
+        (raster.into_pixmap(), state)
+    }
+
+    #[test]
+    fn lines_as_paths_counters_outlive_a_frame_but_not_a_resize() {
+        let mut paths = Canvas2d::new(60, 20);
+        for i in 0..6 {
+            paths.begin_path();
+            paths.rect(f64::from(i), 0.0, 1.0, 1.0);
+            paths.fill();
+        }
+        let line = dashed_line_frame();
+        let (fresh, _) = after(RasterState::new(true), &line);
+        let (_, counted) = after(RasterState::new(true), &paths);
+        let (persisted, _) = after(counted, &line);
+        assert_ne!(fresh, persisted);
+        let (resized, _) = after(counted.for_size(61, 20), &line);
+        assert_eq!(fresh, resized);
+        let (_, off) = after(RasterState::new(false), &paths);
+        assert_eq!(after(off, &line).0, fresh);
     }
 }

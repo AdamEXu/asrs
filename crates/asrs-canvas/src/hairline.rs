@@ -252,10 +252,9 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
             PathSegment::MoveTo(p) => (Verb::Move, vec![point(p)]),
             PathSegment::LineTo(p) => (Verb::Line, vec![last, point(p)]),
             PathSegment::QuadTo(p1, p2) => (Verb::Quad, vec![last, point(p1), point(p2)]),
-            PathSegment::CubicTo(p1, p2, p3) => (
-                Verb::Cubic,
-                vec![last, point(p1), point(p2), point(p3)],
-            ),
+            PathSegment::CubicTo(p1, p2, p3) => {
+                (Verb::Cubic, vec![last, point(p1), point(p2), point(p3)])
+            }
             PathSegment::Close => (Verb::Close, Vec::new()),
         };
         if let Some(&end) = pts.last() {
