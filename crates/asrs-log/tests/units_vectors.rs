@@ -46,6 +46,11 @@ mod shared;
 use std::collections::HashSet;
 
 use asrs_log::units;
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use asrs_parity::vectors::check_fn_vectors;
 use asrs_parity::{FnCase, Request, Response, Value};
 

@@ -45,6 +45,11 @@ use std::collections::{HashMap, VecDeque};
 use asrs_js::string::JsString;
 use asrs_js::value::ToJs;
 use asrs_log::log::struct_decoder::{DecodeError, Decoded, StructDecoder};
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use asrs_parity::json::Json;
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Record, Utf16String, Value};
