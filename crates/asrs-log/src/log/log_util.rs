@@ -4,7 +4,7 @@ use asrs_js::json::quote_into;
 use asrs_js::number;
 use asrs_js::string::JsString;
 
-use super::fuse::{Fuse, FuseOptions};
+use super::fuse::Fuse;
 use super::log_value_sets::RawValue;
 use super::{Log, LogValue, LogValueSet, LogValueSetAny};
 
@@ -175,15 +175,8 @@ pub fn search_fields(log: &Log, query: &JsString) -> Vec<JsString> {
         return Vec::new();
     }
     let keys = log.get_field_keys();
-    let fuse = Fuse::new(
-        &keys,
-        FuseOptions {
-            find_all_matches: true,
-            ignore_location: true,
-            ..FuseOptions::default()
-        },
-    );
-    fuse.search(query)
+    Fuse::new(&keys)
+        .search(query)
         .into_iter()
         .take(MAX_SEARCH_RESULTS)
         .map(|result| keys[result.ref_index].clone())

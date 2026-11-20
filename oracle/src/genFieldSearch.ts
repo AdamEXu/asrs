@@ -1,4 +1,5 @@
 import "./shims";
+import Fuse from "fuse.js";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -6,6 +7,7 @@ import { WPILOGDecoder } from "@upstream/hub/dataSources/wpilog/WPILOGDecoder";
 import Log from "@upstream/shared/log/Log";
 import LoggableType from "@upstream/shared/log/LoggableType";
 import { searchFields } from "@upstream/shared/log/LogUtil";
+import { numberToBits } from "./cve1";
 import { Rng } from "./corpus/rng";
 
 // Emits ground truth for LogUtil.searchFields (Fuse.js 7.0.0), unit L10.
@@ -14,11 +16,15 @@ import { Rng } from "./corpus/rng";
 //       {"case":"keys/<set>","in":[name...],"source":{file,sha256}|null,"keys":[key...]}
 //     where "in" is the createBlankField order and "keys" is log.getFieldKeys(); then one line
 //     per query:
-//       {"case":"query/<set>/<n>","q":<query>,"r":[index into keys...]}
+//       {"case":"query/<set>/<n>","q":<query>,"r":[index into keys...],"s":[score bits...]}
+//     with the scores of the same results from a Fuse built with searchFields's options plus
+//     includeScore. Two small sets, "empty" and "blank" (only whitespace keys), come last.
 //     A public set holds the entry names of the log's start records in file order (first
 //     occurrence), read with upstream's WPILOGDecoder from the public-logs cache.
 
 const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n");
+
+const SEARCH_OPTIONS = { findAllMatches: true, ignoreLocation: true };
 
 const PROTO_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype));
 
@@ -180,7 +186,7 @@ function query(rng: Rng, keys: string[], n: number): string {
   const key = keys.length === 0 ? "drive" : rng.pick(keys);
   const fixed = [
     "", "a", "A", "/", " ", "x", "zzzz", "pose", "Pose", "drive pose", "ı", "İ", "σ", "ς", "😀",
-    "\ud83d", "\ude00", "a".repeat(32), "a".repeat(33), "a".repeat(64), "a".repeat(65), "q".repeat(200)
+    "\ud83d", "\ude00", "😀".repeat(17), "a".repeat(31) + "😀" + "b", "İ".repeat(20), "a".repeat(32), "a".repeat(33), "a".repeat(64), "a".repeat(65), "q".repeat(200)
   ];
   if (n < fixed.length) return fixed[n];
   switch (rng.below(14)) {
@@ -256,8 +262,13 @@ function emitSet(
   const rng = new Rng(seed, name);
   for (let n = 0; n < count; n++) {
     const q = query(rng, keys, n);
-    const r = searchFields(log, q).map((k) => index.get(k)!);
-    out({ case: `query/${name}/${n}`, q, r });
+    const items = searchFields(log, q);
+    const scored =
+      q.length === 0 ? [] : new Fuse(keys, { ...SEARCH_OPTIONS, includeScore: true }).search(q).slice(0, items.length);
+    if (scored.length !== items.length || scored.some((m, i) => m.item !== items[i])) {
+      throw new Error(`${name}/${n}: scored search disagrees with searchFields`);
+    }
+    out({ case: `query/${name}/${n}`, q, r: items.map((k) => index.get(k)!), s: scored.map((m) => numberToBits(m.score!)) });
   }
 }
 
@@ -282,3 +293,5 @@ for (const name of names) {
   emitSet(name, entryNames(data), { file: log.file, sha256 }, count, seed);
 }
 emitSet("synthetic", syntheticKeys(new Rng(seed, "synthetic-keys")), null, count, seed);
+emitSet("empty", [], null, Math.min(count, 40), seed);
+emitSet("blank", ["", " ", "\t", "\n", "\u00a0", "\u3000", "\ufeff", "\u2028"], null, Math.min(count, 40), seed);
