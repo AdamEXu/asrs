@@ -16,6 +16,18 @@
       "generator": "a5c3c0a24746e160",
       "spec": "parity/specs/cve1/torture.entry.json"
     },
+    "js/collation": {
+      "cases": 5002,
+      "content": "87628654f82c6a0f",
+      "generator": "8fe1cfabc4584d0a",
+      "spec": "parity/specs/js/collation.entry.json"
+    },
+    "js/collation-unsafe": {
+      "cases": 2,
+      "content": "d83814ebe2b5110b",
+      "generator": "c47f08fa9312cb72",
+      "spec": "parity/specs/js/collation-unsafe.entry.json"
+    },
     "js/math": {
       "cases": 30547,
       "content": "bc953b36ab0bd1da",
@@ -27,6 +39,12 @@
       "content": "237e0009568aa98c",
       "generator": "5fc5ccb4f490f745",
       "spec": "parity/specs/js/math-ops.jsonl"
+    },
+    "js/sort": {
+      "cases": 10000,
+      "content": "37813dd4a2a30954",
+      "generator": "bec269e4524e6b6b",
+      "spec": "parity/specs/js/sort.entry.json"
     },
     "jstring/case-data": {
       "cases": 86933,

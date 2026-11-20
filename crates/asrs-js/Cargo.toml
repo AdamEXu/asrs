@@ -7,6 +7,9 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+icu_collator = "=1.4.0"
+icu_locid = "1.4.0"
+icu_provider = { version = "1.4.0", features = ["sync"] }
 ryu-js = "1.0.3"
 
 [dev-dependencies]

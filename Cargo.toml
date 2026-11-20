@@ -26,3 +26,15 @@ disallowed_methods = "deny"
 disallowed_types = "deny"
 dbg_macro = "warn"
 todo = "warn"
+
+[profile.dev.package.icu_collator]
+opt-level = 3
+
+[profile.dev.package.icu_collections]
+opt-level = 3
+
+[profile.dev.package.icu_normalizer]
+opt-level = 3
+
+[profile.dev.package.zerovec]
+opt-level = 3
