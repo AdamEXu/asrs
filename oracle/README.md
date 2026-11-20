@@ -25,24 +25,61 @@ It finishes by running `selftest` and `smoke`.
 Downloads go to `$ASRS_CACHE` (default: `<real target dir>/../cache` when `target/` is a
 symlink, otherwise `target/cache`): `npm/`, `electron/`, `emsdk/`.
 
+Setup ends by writing `target/oracle/install.json` (upstream commit, Electron version, whether
+it was built or unpacked, and the host). `gen` and `corpus gen` refuse to run unless that
+record matches the commit and Electron version xtask pins.
+
+### Other hosts: packs
+
+emsdk setup is scripted for macOS and Linux only, and the WASM indexer and JS bundles are
+platform-neutral, so other hosts install from a pack built on the dev machine:
+
+```sh
+cargo xtask oracle pack                          # writes target/oracle/pack.tar.zst
+cargo xtask oracle setup --from-pack <file>      # on the other host
+```
+
+The pack (about 36 MB) is `target/oracle/upstream` without `node_modules`: upstream sources,
+the rolldown bundles, `wpilogIndexer.wasm`, `licenses.json` and the lockfile, plus
+`asrs-oracle-pack.json` naming the commit and Electron version, which `--from-pack` checks
+before unpacking. `--from-pack` then runs only `npm ci --ignore-scripts`, the Electron download
+for that OS, the harness `npm ci` and esbuild build, `selftest` and `smoke`. It needs no
+`reference/` checkout, no emsdk and never runs rolldown. The harness `dist` is not in the pack:
+it embeds absolute paths, so each host builds it from its own checkout of `oracle/`. On
+Windows the symlinks under upstream's `lite/` are skipped.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `cargo xtask oracle fn` | JSONL requests on stdin, CVE-1 responses on stdout (protocol below) |
+| `cargo xtask oracle fn [--zone <zone>]` | JSONL requests on stdin, CVE-1 responses on stdout (protocol below) |
 | `cargo xtask oracle fn --list` | upstream modules, npm packages and helpers callable by `fn` |
-| `cargo xtask oracle run <entry> [args]` | run `target/oracle/dist/<entry>.mjs` under the oracle runtime |
+| `cargo xtask oracle run [--zone <zone>] <entry> [args]` | run `target/oracle/dist/<entry>.mjs` under the oracle runtime |
 | `cargo xtask oracle build` | rebuild the harness bundles only, after editing `oracle/src` |
-| `cargo xtask oracle gen [<id>...] [--check]` | regenerate committed vectors (below); `--check` fails if a rerun differs |
+| `cargo xtask oracle gen [<id>...] [--check]` | regenerate committed vectors (below); `--check` fails if they are stale |
+| `cargo xtask oracle pack` | write the pack for `setup --from-pack` (above) |
 | `cargo xtask oracle selftest` | CVE-1 encoder/decoder self test |
 | `cargo xtask oracle smoke` | `smoke/fn-requests.jsonl` against `smoke/fn-expected.jsonl` |
-| `cargo xtask oracle env` | electron binary, upstream, dist and cache paths as JSON |
+| `cargo xtask oracle env` | electron binary, upstream, dist and cache paths and the environment policy as JSON |
 | `cargo xtask oracle decode <file>` | canonical `Log` dump of one log file (below) |
 | `cargo xtask oracle export <file> --options <json> [--out <file>]` | exact export bytes for one `ExportOptions` |
 | `cargo xtask oracle historical [<corpus>...] [--check] [--jobs N]` | decode dumps and the export matrix over a synthetic corpus |
 
-The runtime is not pinned to a locale or time zone. The default locale on the dev machine is
-`en-US`; set `LC_ALL`/`TZ` on the command when a vector depends on them.
+## Environment policy
+
+xtask runs every oracle process with `TZ=<zone>`, `LANG=en_US.UTF-8`, `LC_ALL=en_US.UTF-8`
+and `ASRS_ORACLE_ZONE=<zone>`, overwriting whatever the caller has set, and clears
+`LANGUAGE`, `NODE_OPTIONS`, `NODE_ICU_DATA`, `ICU_DATA` and `ICU_TIMEZONE_FILES_DIR` (Electron's
+ICU loads time zone rules from that directory, which would change offsets without changing the
+zone name the startup check sees). The zone is `UTC` unless a spec or `--zone`
+names one of `America/Los_Angeles`, `Asia/Kolkata` or `Pacific/Auckland`; no other zone is
+accepted. `src/environment.ts`, imported first by `src/shims.ts`, checks at startup that the
+variables are set that way, that the default `Intl` zone resolves to the expected one, and
+that `Intl.DateTimeFormat`, `Intl.Collator` and `Intl.NumberFormat` resolve `en-US`; otherwise
+it prints what differs and exits with status 78. Running a bundle by hand therefore needs those
+variables too. The Electron app driver adds `--lang=en-US` (`appSwitches` in the policy).
+
+The policy is written into `MANIFEST.json`, so changing it makes every vector stale.
 
 ## `fn` protocol
 
@@ -113,13 +150,35 @@ Signaling NaN bit patterns are outside the contract: V8 may quiet them.
 ## Vectors
 
 Specs live in `parity/specs`, vectors in `parity/vectors/<id>.jsonl.zst`, and
-`parity/vectors/MANIFEST.json` records the upstream commit, Electron version, case count,
-content hash and generator hash (oracle sources plus spec) of each one.
+`parity/vectors/MANIFEST.json` records the upstream commit, Electron version and environment
+policy, and for each vector its case count, content hash, generator hash (oracle sources plus
+spec files plus zone, with CRLF hashed as LF), spec, zone and the `<os>-<arch>` it was
+generated on.
 
-- `<id>.jsonl`: `fn` requests. Each vector line is the request with the oracle's `ok` or
-  `throw` key appended. An `error` response fails generation.
-- `<id>.entry.json`: `{"entry": "<name>", "args": [...]}`. The entry's stdout lines are the
-  vector, so an entry can build values JSON cannot express.
+- `<id>.jsonl`: `fn` requests, run under UTC. Each vector line is the request with the
+  oracle's `ok` or `throw` key appended. An `error` response fails generation.
+- `<id>.entry.json`: `{"entry": "<name>", "args": [...], "zones": [...]}`. The entry's stdout
+  lines are the vector, so an entry can build values JSON cannot express.
+- `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
+  a sibling file (`*.requests.jsonl` files are never specs themselves).
+
+`zones` is optional and lists policy zones. Without it a spec makes one UTC vector `<id>`;
+with it, one oracle process per zone makes vector `<id>/<zone>`, for example
+`oracle/zones/Asia/Kolkata`. Only local-time behaviour (`formatDate`, `new Date(y, m, d)`,
+`toLocaleTimeString`) needs zones; everything else stays UTC. `parity/specs/oracle/` holds
+the policy probes: `environment` (resolved zone and locales, `localeCompare`) and `zones` (the
+local-time sites under all four zones).
+
+`gen` with no ids regenerates every vector and drops manifest entries and files no spec
+produces. `gen <id>...` takes spec or vector ids and refuses to run if the manifest's commit,
+Electron version or policy differs from the current one, since that needs a full run.
+
+`gen --check` works in two stages. First, without running the oracle, it fails if the
+manifest's upstream commit, Electron version or environment policy differs from the current
+one, or if any vector's generator hash, spec, zone or content hash (against the committed
+file) is stale, or a manifest entry has no spec. So an edit to a spec or to the oracle
+sources without a regenerate fails even when it would not change the output. Only then does
+it regenerate in memory and compare content with the differ.
 
 Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
 checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a

@@ -6,6 +6,7 @@ mod corpus;
 mod historical;
 mod layout;
 mod oracle;
+mod pack;
 mod parity;
 mod public;
 mod vectors;

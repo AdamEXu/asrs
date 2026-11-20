@@ -364,7 +364,7 @@ fn build_manifest(
         ("spec", Json::string(SPEC)),
         (
             "upstreamCommit",
-            Json::string(&corpus::upstream_commit(paths)),
+            Json::string(&oracle::installed(paths)?.upstream_commit),
         ),
         ("electron", Json::string(oracle::ELECTRON_VERSION)),
         ("generator", Json::string(generator)),
