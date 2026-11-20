@@ -5,6 +5,7 @@ mod check;
 mod corpus;
 mod layout;
 mod oracle;
+mod pack;
 mod parity;
 mod vectors;
 

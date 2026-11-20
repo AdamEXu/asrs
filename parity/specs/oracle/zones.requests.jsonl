@@ -1,0 +1,20 @@
+{"fn":"oracle:call","args":["() => Intl.DateTimeFormat().resolvedOptions().timeZone"]}
+{"fn":"oracle:call","args":["() => new Date(0).toString()"]}
+{"fn":"shared/util:formatDate","args":[{"d":"4278cc3649c80000"}]}
+{"fn":"Date.prototype.toLocaleTimeString","args":[{"d":"4278cc3649c80000"}]}
+{"fn":"Date.prototype.getTimezoneOffset","args":[{"d":"4278cc3649c80000"}]}
+{"fn":"shared/util:formatDate","args":[{"d":"4278cc4e52200000"}]}
+{"fn":"Date.prototype.toLocaleTimeString","args":[{"d":"4278cc4e52200000"}]}
+{"fn":"Date.prototype.getTimezoneOffset","args":[{"d":"4278cc4e52200000"}]}
+{"fn":"shared/util:formatDate","args":[{"d":"427906abba200000"}]}
+{"fn":"Date.prototype.toLocaleTimeString","args":[{"d":"427906abba200000"}]}
+{"fn":"Date.prototype.getTimezoneOffset","args":[{"d":"427906abba200000"}]}
+{"fn":"shared/util:formatDate","args":[{"d":"427941f297818000"}]}
+{"fn":"Date.prototype.toLocaleTimeString","args":[{"d":"427941f297818000"}]}
+{"fn":"Date.prototype.getTimezoneOffset","args":[{"d":"427941f297818000"}]}
+{"fn":"new Date","args":[2027,0,9]}
+{"fn":"new Date","args":[2024,2,10,2,30]}
+{"fn":"new Date","args":[2024,10,3,1,30]}
+{"fn":"new Date","args":[2024,8,29,2,30]}
+{"fn":"new Date","args":[2024,3,7,2,30]}
+{"fn":"new Date","args":[2024,9,27,0,0]}

@@ -298,6 +298,7 @@ fn asrs_cli() -> Result<Command> {
             .join("debug")
             .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX)),
     );
+    oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
     command.arg("fn");
     Ok(command)
 }
