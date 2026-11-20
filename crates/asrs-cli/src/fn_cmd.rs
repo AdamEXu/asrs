@@ -2,16 +2,17 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use asrs_parity::{Request, Response};
 
-use crate::{assets, functions, geometry, live_base, shared, units};
+use crate::{assets, functions, geometry, live_base, shared, state, units};
 
 type Table = &'static [(&'static str, functions::Function)];
 
-const TABLES: [Table; 5] = [
+const TABLES: [Table; 6] = [
     shared::FUNCTIONS,
     units::FUNCTIONS,
     geometry::FUNCTIONS,
     live_base::FUNCTIONS,
     assets::FUNCTIONS,
+    state::FUNCTIONS,
 ];
 
 fn table_entries() -> impl Iterator<Item = &'static (&'static str, functions::Function)> {

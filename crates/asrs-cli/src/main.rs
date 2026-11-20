@@ -20,6 +20,7 @@ mod log_run;
 mod log_struct;
 mod photon;
 mod shared;
+mod state;
 mod tabs_console;
 mod units;
 mod wpilog;
