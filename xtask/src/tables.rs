@@ -159,7 +159,10 @@ impl<'a> Parser<'a> {
                             let cp = u32::from_str_radix(hex, 16)
                                 .map_err(|e| format!("bad \\u{hex}: {e}"))?;
                             self.pos += 4;
-                            out.push(char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER));
+                            match char::from_u32(cp) {
+                                Some(c) => out.push(c),
+                                None => return self.fail("lone surrogate escape"),
+                            }
                         }
                         b'x' => {
                             let hex = self
@@ -170,24 +173,16 @@ impl<'a> Parser<'a> {
                             let cp = u32::from_str_radix(hex, 16)
                                 .map_err(|e| format!("bad \\x{hex}: {e}"))?;
                             self.pos += 2;
-                            out.push(char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER));
+                            match char::from_u32(cp) {
+                                Some(c) => out.push(c),
+                                None => return self.fail("lone surrogate escape"),
+                            }
                         }
                         b'n' => out.push('\n'),
                         b'r' => out.push('\r'),
                         b't' => out.push('\t'),
-                        b'b' => out.push('\u{8}'),
-                        b'f' => out.push('\u{c}'),
-                        b'v' => out.push('\u{b}'),
-                        b'0' => out.push('\0'),
-                        other => {
-                            let s = &self.text[self.pos - 1..];
-                            let len = utf8_len(s[0]);
-                            out.push_str(
-                                std::str::from_utf8(&s[..len]).map_err(|e| e.to_string())?,
-                            );
-                            self.pos += len - 1;
-                            let _ = other;
-                        }
+                        b'"' | b'\'' | b'\\' => out.push(esc as char),
+                        _ => return self.fail("unsupported string escape"),
                     }
                 }
                 _ => {
@@ -241,7 +236,6 @@ impl<'a> Parser<'a> {
                     return Ok(Lit::Obj(entries));
                 }
                 0 => return self.fail("unterminated object"),
-                b'"' | b'\'' => {}
                 _ => {}
             }
             let key = if self.at(0) == b'"' || self.at(0) == b'\'' {
@@ -260,6 +254,15 @@ impl<'a> Parser<'a> {
             self.skip_trivia();
             if self.at(0) != b':' {
                 return self.fail(&format!("expected `:` after key {key:?}"));
+            }
+            if key.is_empty() {
+                return self.fail("expected a property name");
+            }
+            if key.bytes().all(|b| b.is_ascii_digit()) {
+                return self.fail(&format!("integer-like key {key:?} reorders in JS"));
+            }
+            if entries.iter().any(|(k, _)| *k == key) {
+                return self.fail(&format!("duplicate key {key:?}"));
             }
             self.pos += 1;
             let value = self.value()?;
@@ -361,50 +364,77 @@ fn rust_string(s: &str) -> String {
 }
 
 /// Translates a JS arithmetic expression into the identical Rust f64
-/// expression: `Math.PI` becomes `f64::consts::PI` (same bits) and integer
-/// literals gain `.0`. Evaluation order is unchanged, so the const value is
-/// bit-identical to V8's.
+/// expression. Only decimal literals, `+ - * / ( )` and `Math.PI` (same bits
+/// as `f64::consts::PI`) are accepted; anything else fails, so the const keeps
+/// V8's value and evaluation order.
 fn rust_expr(expr: &str) -> Result<String> {
+    let fail = || format!("units.ts: unsupported value expression {expr:?}");
     let mut out = String::new();
     let bytes = expr.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         let c = bytes[i];
-        if c.is_ascii_digit() || (c == b'.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit)) {
+        if c.is_ascii_digit() {
             let start = i;
-            while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
                 i += 1;
             }
-            if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
+            let mut float = false;
+            if bytes.get(i) == Some(&b'.') {
+                float = true;
                 i += 1;
-                if i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
-                    i += 1;
-                }
+                let digits = i;
                 while i < bytes.len() && bytes[i].is_ascii_digit() {
                     i += 1;
                 }
+                if i == digits {
+                    return Err(fail());
+                }
             }
-            let lit = &expr[start..i];
-            if lit.contains(['.', 'e', 'E']) {
-                out.push_str(lit);
-            } else {
-                out.push_str(lit);
+            if matches!(bytes.get(i), Some(b'e' | b'E')) {
+                float = true;
+                i += 1;
+                if matches!(bytes.get(i), Some(b'+' | b'-')) {
+                    i += 1;
+                }
+                let digits = i;
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+                if i == digits {
+                    return Err(fail());
+                }
+            }
+            if bytes
+                .get(i)
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'.')
+            {
+                return Err(fail());
+            }
+            out.push_str(&expr[start..i]);
+            if !float {
                 out.push_str(".0");
             }
-        } else if expr[i..].starts_with("Math.PI") {
+        } else if expr[i..].starts_with("Math.PI")
+            && !bytes
+                .get(i + "Math.PI".len())
+                .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'$')
+        {
             out.push_str("std::f64::consts::PI");
             i += "Math.PI".len();
-        } else {
+        } else if b"+-*/() ".contains(&c) {
+            if c == b'*' && bytes.get(i + 1) == Some(&b'*') {
+                return Err(fail());
+            }
             out.push(c as char);
             i += 1;
+        } else {
+            return Err(fail());
         }
     }
     let trimmed = out.trim().to_owned();
     if trimmed.is_empty() {
-        return Err("units.ts: empty value expression".to_owned());
-    }
-    if trimmed.contains(|c: char| !(c.is_ascii())) {
-        return Err(format!("units.ts: value expression {expr:?} is not ASCII"));
+        return Err(fail());
     }
     Ok(trimmed)
 }
@@ -413,6 +443,14 @@ fn unit_config(props: &Lit, unit: &str) -> Result<String> {
     let Lit::Obj(entries) = props else {
         return Err(format!("units.ts: unit {unit:?} is not an object"));
     };
+    if let Some((key, _)) = entries
+        .iter()
+        .find(|(k, _)| !["value", "suffix", "pluralizeSuffix", "names"].contains(&k.as_str()))
+    {
+        return Err(format!(
+            "units.ts: unit {unit:?} has unknown property {key:?}"
+        ));
+    }
     let get = |key: &str| -> Result<&Lit> {
         entries
             .iter()
@@ -503,4 +541,62 @@ fn generate(source: &str) -> Result<String> {
         struct_entries.len()
     );
     Ok(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate;
+
+    fn source(unit: &str) -> String {
+        format!(
+            "export const UNIT_GROUPS: {{ [id: string]: X }} = {{ g: {{ {unit} }} }};\n\
+             export const STRUCT_UNITS: {{}} = {{ T: {{ a: \"u\" }} }};"
+        )
+    }
+
+    fn unit(value: &str) -> String {
+        format!("u: {{ value: {value}, suffix: \"s\", pluralizeSuffix: false, names: [\"u\"] }}")
+    }
+
+    #[test]
+    fn accepts_upstream_shapes() {
+        let text = generate(&source(&unit("1 / (Math.PI * 2)"))).unwrap();
+        assert!(text.contains("value: 1.0 / (std::f64::consts::PI * 2.0)"));
+        assert!(
+            generate(&source(&unit("1e-3")))
+                .unwrap()
+                .contains("value: 1e-3,")
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_expressions() {
+        for value in [
+            "Math.sqrt(2)",
+            "1_000",
+            "0x10",
+            ".5",
+            "2 ** 3",
+            "Math.PIE",
+            "FACTOR",
+            "1.",
+        ] {
+            assert!(generate(&source(&unit(value))).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn rejects_unexpected_object_shapes() {
+        for units in [
+            format!("{}, {}", unit("1"), unit("2")),
+            format!("...OTHER, {}", unit("1")),
+            format!("0: {{}}, {}", unit("1")),
+            "u: { value: 1, suffix: \"s\", pluralizeSuffix: false, names: [\"u\"], offset: 3 }"
+                .to_owned(),
+            "u: { value: 1, suffix: `s`, pluralizeSuffix: false, names: [\"u\"] }".to_owned(),
+            "u: { value: 1, suffix: \"\\a\", pluralizeSuffix: false, names: [\"u\"] }".to_owned(),
+        ] {
+            assert!(generate(&source(&units)).is_err(), "{units}");
+        }
+    }
 }
