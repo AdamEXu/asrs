@@ -131,3 +131,8 @@ required-features = ["parity"]
 [[example]]
 name = "text_scenes"
 required-features = ["parity"]
+
+[[test]]
+name = "text_scroll"
+harness = false
+required-features = ["parity"]

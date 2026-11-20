@@ -25,7 +25,9 @@ commands:
                      port/ and gate every capture: shrink-to-fit box sizes within 0.05 px
                      (1 px for the user agent control font), box
                      and glyph-run edges within 1 px, and at most 6 % pixelmatch (YIQ 0.1)
-                     inside the text regions (DOM text rects dilated 2 px)";
+                     inside the text regions (DOM text rects dilated 2 px)
+  scroll             the 10k-row virtual list test in release: cache bounded while every row
+                     scrolls past, draw p95 within one 60 Hz frame";
 
 const SCALES: [&str; 2] = ["1", "2"];
 const SIZE_TOLERANCE: f64 = 0.05;
@@ -44,6 +46,16 @@ pub fn run(args: &[String]) -> Result {
         Some("ref") => reference(&paths),
         Some("boxes") => boxes(&paths, check),
         Some("run") => run_port(&paths),
+        Some("scroll") => cargo(&[
+            "test",
+            "--release",
+            "-p",
+            "asrs-ui",
+            "--features",
+            "parity",
+            "--test",
+            "text_scroll",
+        ]),
         _ => Err(USAGE.to_owned()),
     }
 }
