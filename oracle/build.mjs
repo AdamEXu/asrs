@@ -133,6 +133,7 @@ const entries = [
   "export",
   "historicalRun",
   "protoRenderer",
+  "genHeatmap",
   "canvasMain"
 ];
 
@@ -179,11 +180,29 @@ for (const [entry, outfile] of [
     logLevel: "warning"
   });
 }
+// The heatmap page needs the upstream sources and node_modules, like the node entries.
+await esbuild.build({
+  entryPoints: [path.join(here, "src/heatmap/page.ts")],
+  outfile: path.join(args.out, "heatmapPage.js"),
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "esnext",
+  logLevel: "warning",
+  nodePaths: [path.join(args.upstream, "node_modules")],
+  define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream) },
+  plugins: [oraclePlugin]
+});
 fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
 fs.writeFileSync(
   path.join(args.out, "canvasPage.html"),
   '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>' +
     '<body><script src="canvasPage.js"></script></body></html>\n'
+);
+fs.writeFileSync(
+  path.join(args.out, "heatmapPage.html"),
+  '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>' +
+    '<body><script src="heatmapPage.js"></script></body></html>\n'
 );
 
 fs.writeFileSync(
