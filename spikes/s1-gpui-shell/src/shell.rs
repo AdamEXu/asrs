@@ -409,7 +409,7 @@ pub fn run_auto(out: PathBuf) {
                     Ok(img) => {
                         let el = t.elapsed();
                         let side = img.get_pixel(100, 300).0;
-                        let viewer = img.get_pixel(1500, 600).0;
+                        let viewer = img.get_pixel(1500.min(img.width() - 1), 600.min(img.height() - 1)).0;
                         println!(
                             "render_to_image: {}x{} in {:?}; sidebar px(100,300)={side:?} viewer px(1500,600)={viewer:?} -> {}",
                             img.width(),
