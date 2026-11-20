@@ -7,10 +7,11 @@ use gpui_kit::{
     SharedString, Styled, Window, canvas, div, point, px, size,
 };
 use image::{Frame, RgbaImage};
-use resvg::usvg;
+use asrs_canvas::path::Affine;
 
 use crate::filter::FilterChain;
-use crate::symbols::{self, Intrinsic, Symbol};
+use crate::svg::Document;
+use crate::symbols::{self, DeviceImage, Intrinsic, Symbol};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum IconSource {
@@ -50,81 +51,132 @@ impl IconFit {
     };
 }
 
-/// Where Chromium paints an `<img>`, in logical px relative to its box: the layout position
-/// `anchor`, the layout `size` (before the transform) and the transform's `scale`. `centered`
-/// images are moved by `translate(-50%, -50%)` around the anchor.
+/// Where Chromium paints an `<img>`: the layout position `anchor` (logical px relative to its
+/// box), the content box `size` in zoomed layout px (exact LayoutUnits), the transform's
+/// `scale`, whether `translate(-50%, -50%)` centres it on the anchor, and the `zoom` it was laid
+/// out at.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placement {
     pub anchor: [f64; 2],
     pub size: [f64; 2],
     pub scale: f64,
     pub centered: bool,
+    pub zoom: f64,
+}
+
+/// A CSS length in LayoutUnits (1/64 px), truncated as `LayoutUnit(float)` truncates.
+fn lu(v: f64) -> i64 {
+    (v * 64.0) as i64
+}
+
+fn from_lu(raw: i64) -> f64 {
+    raw as f64 / 64.0
+}
+
+/// `LayoutUnit::MulDiv`.
+fn mul_div(v: i64, m: i64, d: i64) -> i64 {
+    v * m / d
+}
+
+/// `LayoutUnit::Round` of a size at a whole-pixel offset, the size `ToPixelSnappedRect` gives.
+fn snap(raw: i64) -> f64 {
+    ((raw + 32) >> 6) as f64
 }
 
 impl Placement {
-    /// The device-space image rectangle for a box at `origin`. Chromium snaps the layout
-    /// position to a whole device pixel (half up) and applies the transform after, so only the
-    /// translate and scale leave fractions: at 1x a box centre at x.5 lands on x + 1, while a
-    /// 12.5 px wide image keeps its -6.25 px shift.
-    pub fn device_rect(&self, origin: [f64; 2], dpr: f64) -> [f64; 4] {
+    /// The image as Chromium draws it for a box at `origin` (logical px). The layout position
+    /// is snapped to a whole device pixel (half up) and the transform applied after, so only
+    /// the translate and scale leave fractions: at 1x a box centre at x.5 lands on x + 1, while
+    /// a 12.5 px wide image keeps its -6.25 px shift.
+    pub fn device_image(&self, origin: [f64; 2], dpr: f64) -> DeviceImage {
         let anchor = [0, 1].map(|i| ((origin[i] + self.anchor[i]) * dpr + 0.5).floor());
-        let [w, h] = self.size.map(|v| v * self.scale * dpr);
-        if self.centered {
-            [anchor[0] - w * 0.5, anchor[1] - h * 0.5, w, h]
+        let s = self.scale;
+        let (e, f) = if self.centered {
+            (
+                anchor[0] - s * self.size[0] * 0.5,
+                anchor[1] - s * self.size[1] * 0.5,
+            )
         } else {
-            [anchor[0], anchor[1], w, h]
-        }
-    }
-
-    /// The viewport an SVG without intrinsic size is laid out in before being stretched onto
-    /// the image box: Chromium sizes it to the box rounded to whole CSS px.
-    pub fn viewport(&self, intrinsic: Intrinsic) -> Option<[f64; 2]> {
-        match intrinsic {
-            Intrinsic::Size(..) => None,
-            Intrinsic::Ratio(_) => Some(self.size.map(|v| (v + 0.5).floor())),
+            (anchor[0], anchor[1])
+        };
+        DeviceImage {
+            matrix: Affine {
+                a: s,
+                b: 0.0,
+                c: 0.0,
+                d: s,
+                e,
+                f,
+            },
+            dst: self.size.map(|v| snap(lu(v))),
+            target: self.size.map(|v| v as f32),
+            zoom: self.zoom as f32,
         }
     }
 }
 
-/// The CSS 2.1 section 10.4 resolution of `max-width` and `max-height` for a replaced element.
-fn constrain(w: f64, h: f64, max_w: f64, max_h: f64) -> (f64, f64) {
+/// The CSS 2.1 section 10.4 resolution of `max-width` and `max-height` for a replaced element
+/// with a natural size, in LayoutUnits.
+fn constrain(w: i64, h: i64, max_w: i64, max_h: i64) -> (i64, i64) {
     let (over_w, over_h) = (w > max_w, h > max_h);
     match (over_w, over_h) {
         (false, false) => (w, h),
-        (true, false) => (max_w, (max_w * h / w)),
-        (false, true) => ((max_h * w / h), max_h),
-        (true, true) if max_w / w <= max_h / h => (max_w, (max_w * h / w)),
-        (true, true) => ((max_h * w / h), max_h),
+        (true, false) => (max_w, mul_div(max_w, h, w)),
+        (false, true) => (mul_div(max_h, w, h), max_h),
+        (true, true) if (max_w as f64 / w as f64) <= (max_h as f64 / h as f64) => {
+            (max_w, mul_div(max_w, h, w))
+        }
+        (true, true) => (mul_div(max_h, w, h), max_h),
     }
 }
 
-pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64) -> Placement {
+/// The size Chromium gives an absolutely positioned image with only a natural ratio `rw:rh`:
+/// the block size follows from the stretched inline size and is clamped by `max-height`, then
+/// the inline size is derived back from it, each step truncated to a LayoutUnit (a 14 px wide
+/// box gives 13.984375 x 21.765625 for a 72:112 ratio).
+fn ratio_size(rw: i64, rh: i64, available: i64, max_w: i64, max_h: i64) -> (i64, i64) {
+    let block = mul_div(available.min(max_w).max(0), rh, rw).min(max_h);
+    let inline = mul_div(block, rw, rh).min(max_w);
+    (inline, block)
+}
+
+pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64, zoom: f64) -> Placement {
+    let bw_lu = lu(bw * zoom);
+    let ratio = |w: f64, h: f64| (lu(w), lu(h));
     match fit {
         IconFit::Natural => {
             let (w, h) = match intrinsic {
-                Intrinsic::Size(w, h) => (w, h),
-                Intrinsic::Ratio(r) => (bw, bw / r),
+                Intrinsic::Size(w, h) => (lu(w * zoom), lu(h * zoom)),
+                Intrinsic::Ratio(rw, rh) => {
+                    let (rw, rh) = ratio(rw, rh);
+                    (bw_lu, mul_div(bw_lu, rh, rw))
+                }
             };
             Placement {
                 anchor: [0.0, 0.0],
-                size: [w, h],
+                size: [from_lu(w), from_lu(h)],
                 scale: 1.0,
                 centered: false,
+                zoom,
             }
         }
         IconFit::Centered { max, scale } => {
+            let left = lu(bw * zoom * 0.5);
+            let top = lu(bh * zoom * 0.5);
+            let (max_w, max_h) = (lu(bw * zoom * max), lu(bh * zoom * max));
             let (w, h) = match intrinsic {
-                Intrinsic::Size(w, h) => (w, h),
-                // With only a ratio, an absolutely positioned image takes the width left after
-                // `left: 50%`.
-                Intrinsic::Ratio(r) => (bw * 0.5, bw * 0.5 / r),
+                Intrinsic::Size(w, h) => constrain(lu(w * zoom), lu(h * zoom), max_w, max_h),
+                Intrinsic::Ratio(rw, rh) => {
+                    let (rw, rh) = ratio(rw, rh);
+                    ratio_size(rw, rh, bw_lu - left, max_w, max_h)
+                }
             };
-            let (w, h) = constrain(w, h, bw * max, bh * max);
             Placement {
-                anchor: [bw * 0.5, bh * 0.5],
-                size: [w, h],
+                anchor: [from_lu(left) / zoom, from_lu(top) / zoom],
+                size: [from_lu(w), from_lu(h)],
                 scale,
                 centered: true,
+                zoom,
             }
         }
     }
@@ -134,13 +186,14 @@ pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64) -> Placement
 struct Key {
     source: u64,
     chain: &'static str,
-    rect: [u64; 4],
-    viewport: Option<[u64; 2]>,
+    matrix: [u64; 4],
+    size: [u64; 2],
+    zoom: u32,
 }
 
 #[derive(Default)]
 struct IconCache {
-    trees: HashMap<u64, Option<Arc<usvg::Tree>>>,
+    documents: HashMap<u64, Option<Arc<Document>>>,
     images: HashMap<Key, Option<(i32, i32, Arc<RenderImage>)>>,
 }
 
@@ -152,40 +205,43 @@ fn source_key(source: &IconSource) -> u64 {
     h.finish()
 }
 
-/// Rasterizes and caches one icon at a device-space rectangle. Only the sub-pixel part of the
-/// position is keyed, so the cache never evicts: keys are bounded by symbols x chains x the few
-/// sizes and scales the UI uses, however far icons move or scroll.
+/// Rasterizes and caches one icon. Only the sub-pixel part of the device position is keyed, so
+/// the cache never evicts: keys are bounded by symbols x chains x the few sizes and scales the
+/// UI uses, however far icons move or scroll.
 fn cached_image(
     source: &IconSource,
     chain: &'static str,
-    rect: [f64; 4],
-    viewport: Option<[f64; 2]>,
+    place: &Placement,
+    image: DeviceImage,
     cx: &mut App,
 ) -> Option<(i32, i32, Arc<RenderImage>)> {
-    let [x, y, w, h] = rect;
-    let (dx, dy) = (x.floor(), y.floor());
-    let local = [x - dx, y - dy, w, h];
+    let (dx, dy) = (image.matrix.e.floor(), image.matrix.f.floor());
+    let mut local = image;
+    local.matrix.e -= dx;
+    local.matrix.f -= dy;
     let shift =
         |(rx, ry, image): (i32, i32, Arc<RenderImage>)| (rx + dx as i32, ry + dy as i32, image);
     let source_hash = source_key(source);
+    let m = local.matrix;
     let key = Key {
         source: source_hash,
         chain,
-        rect: local.map(f64::to_bits),
-        viewport: viewport.map(|v| v.map(f64::to_bits)),
+        matrix: [m.a, m.d, m.e, m.f].map(f64::to_bits),
+        size: place.size.map(f64::to_bits),
+        zoom: local.zoom.to_bits(),
     };
     let cache = cx.default_global::<IconCache>();
     if let Some(hit) = cache.images.get(&key) {
         return hit.clone().map(shift);
     }
-    let tree = cache
-        .trees
+    let doc = cache
+        .documents
         .entry(source_hash)
         .or_insert_with(|| symbols::parse(source.bytes()).map(Arc::new))
         .clone();
-    let image = tree.and_then(|tree| {
+    let image = doc.and_then(|doc| {
         let filter = FilterChain::parse(chain).ok()?;
-        let raster = symbols::rasterize(&tree, local, viewport, &filter)?;
+        let raster = symbols::rasterize(&doc, &local, &filter)?;
         let buffer = RgbaImage::from_raw(raster.width, raster.height, raster.bgra)?;
         let image = Arc::new(RenderImage::new(vec![Frame::new(buffer)]));
         Some((raster.x, raster.y, image))
@@ -202,13 +258,9 @@ pub fn paint_icon(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let Some(intrinsic) = symbols::intrinsic(source.bytes()) else {
-        return;
-    };
     let dpr = f64::from(window.scale_factor());
-    let rect = placement.device_rect(origin, dpr);
-    let viewport = placement.viewport(intrinsic);
-    let Some((x, y, image)) = cached_image(source, chain, rect, viewport, cx) else {
+    let device = placement.device_image(origin, dpr);
+    let Some((x, y, image)) = cached_image(source, chain, placement, device, cx) else {
         return;
     };
     let device_size = image.size(0);
@@ -260,6 +312,7 @@ impl RenderOnce for Icon {
                         fit,
                         f64::from(bounds.size.width),
                         f64::from(bounds.size.height),
+                        f64::from(window.scale_factor()),
                     );
                     let origin = [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];
                     paint_icon(&source, chain, &placement, origin, window, cx);
@@ -274,39 +327,54 @@ impl RenderOnce for Icon {
 mod tests {
     use super::*;
 
+    fn rect(i: Intrinsic, fit: IconFit, b: f64, origin: [f64; 2], dpr: f64) -> [f64; 4] {
+        let d = layout(i, fit, b, b, dpr).device_image(origin, dpr);
+        let s = d.matrix.a;
+        [d.matrix.e, d.matrix.f, d.dst[0] * s, d.dst[1] * s]
+    }
+
     #[test]
     fn button_placement_matches_chromium() {
         let s24 = Intrinsic::Size(24.0, 24.0);
-        let at =
-            |i, fit, b: f64, origin: [f64; 2], dpr| layout(i, fit, b, b).device_rect(origin, dpr);
         assert_eq!(
-            at(s24, IconFit::BUTTON, 28.0, [10.0, 10.0], 1.0),
+            rect(s24, IconFit::BUTTON, 28.0, [10.0, 10.0], 1.0),
             [12.0, 12.0, 24.0, 24.0]
         );
         assert_eq!(
-            at(s24, IconFit::BUTTON, 20.0, [0.0, 0.0], 2.0),
+            rect(s24, IconFit::BUTTON, 20.0, [0.0, 0.0], 2.0),
             [0.0, 0.0, 40.0, 40.0]
         );
         assert_eq!(
-            at(s24, IconFit::BUTTON, 25.0, [10.5, 366.0], 1.0),
+            rect(s24, IconFit::BUTTON, 25.0, [10.5, 366.0], 1.0),
             [11.0, 367.0, 24.0, 24.0]
         );
         assert_eq!(
-            at(s24, IconFit::BUTTON, 25.0, [10.5, 366.0], 2.0),
+            rect(s24, IconFit::BUTTON, 25.0, [10.5, 366.0], 2.0),
             [22.0, 733.0, 48.0, 48.0]
-        );
-        let lamp = layout(Intrinsic::Ratio(72.0 / 112.0), IconFit::BUTTON, 28.0, 28.0);
-        assert_eq!(lamp.size[0], 14.0);
-        assert!((lamp.size[1] - 14.0 * 112.0 / 72.0).abs() < 1e-9);
-        assert_eq!(
-            lamp.viewport(Intrinsic::Ratio(72.0 / 112.0)),
-            Some([14.0, 22.0])
         );
         let feedback = IconFit::Centered {
             max: 1.0,
             scale: 0.9,
         };
-        let r = at(s24, feedback, 28.0, [0.0, 0.0], 1.0);
+        let r = rect(s24, feedback, 28.0, [0.0, 0.0], 1.0);
         assert!((r[2] - 21.6).abs() < 1e-9 && (r[0] - 3.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ratio_only_images_size_in_layout_units() {
+        let lamp = Intrinsic::Ratio(72.0, 112.0);
+        let at1 = layout(lamp, IconFit::BUTTON, 28.0, 28.0, 1.0);
+        assert_eq!(at1.size, [13.984375, 21.765625]);
+        let at2 = layout(lamp, IconFit::BUTTON, 28.0, 28.0, 2.0);
+        assert_eq!(at2.size, [27.984375, 43.546875]);
+        assert_eq!(at2.device_image([0.0, 0.0], 2.0).dst, [28.0, 44.0]);
+        let half = IconFit::Centered {
+            max: 0.5,
+            scale: 1.2,
+        };
+        assert_eq!(
+            layout(lamp, half, 40.0, 40.0, 1.0).size,
+            [12.84375, 20.0]
+        );
     }
 }
