@@ -13,8 +13,9 @@ use crate::hairline;
 use crate::path::{Affine, Path};
 use crate::pixels;
 use crate::scan::{self, Blend, Coverage, div255};
+use crate::text::layout::{Placed, place_text};
 use crate::text::lut::MaskGammaLut;
-use crate::text::{FontSpec, TextBackend, baseline_offset, glyph_origin};
+use crate::text::{FontSpec, TextBackend};
 
 const CONIC_TOLERANCE: f32 = 0.25;
 
@@ -81,7 +82,7 @@ impl Default for State {
             dash: Vec::new(),
             dash_offset: 0.0,
             alpha: 1.0,
-            font: FontSpec::parse("10px sans-serif"),
+            font: FontSpec::default(),
             align: "start".to_owned(),
             baseline: "alphabetic".to_owned(),
             smoothing: true,
@@ -374,7 +375,11 @@ impl<'a> Raster<'a> {
                     s.alpha = alpha;
                 }
             }
-            Property::Font(css) => s.font = FontSpec::parse(css),
+            Property::Font(css) => {
+                if let Some(font) = FontSpec::parse(css) {
+                    s.font = font;
+                }
+            }
             Property::TextAlign(align) => {
                 if ["start", "end", "left", "right", "center"].contains(&align.as_str()) {
                     s.align.clone_from(align);
@@ -883,50 +888,27 @@ impl<'a> Raster<'a> {
         if !finite(&[x, y]) || !ctm.is_invertible() {
             return;
         }
-        let axis_aligned = ctm.is_scale_translate() && ctm.a > 0.0 && ctm.d > 0.0;
         let state = &self.state;
         let Some(TextRaster { backend, lut }) = self.text.as_mut() else {
             return;
         };
-        let font = state.font;
-        let shaped = backend.shape(&font, &text.to_string_lossy());
-        let compress = match max_width {
-            Some(m) if !(m.is_finite() && m > 0.0) => return,
-            Some(m) if shaped.width > m => m / shaped.width,
-            _ => 1.0,
-        };
-        let drawn = shaped.width * compress;
-        let x = match state.align.as_str() {
-            "center" => x - drawn / 2.0,
-            "right" | "end" => x - drawn,
-            _ => x,
-        };
-        let y = y + baseline_offset(&mut **backend, &font, &state.baseline);
+        let glyphs = place_text(
+            &mut **backend,
+            &state.font,
+            &state.align,
+            &state.baseline,
+            &text.to_string_lossy(),
+            x,
+            y,
+            max_width,
+            [ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f],
+        );
         let rgb = color.to_u8();
         let a = color.a * state.alpha as f32;
         let src = [color.r, color.g, color.b, 1.0].map(|c| (c * a * 255.0 + 0.5) as u32);
         let (pw, ph) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
         let data = self.pixmap.data_mut();
-        for glyph in &shaped.glyphs {
-            let gx = x + glyph.x * compress;
-            let device_x = ctm.a * gx + ctm.c * y + ctm.e;
-            let device_y = ctm.b * gx + ctm.d * y + ctm.f;
-            let (ix, iy, mask) = if axis_aligned {
-                let (ix, iy, phase) = glyph_origin(device_x, device_y);
-                let mask =
-                    backend.raw_mask(&font, glyph.id, ctm.d, ctm.a / ctm.d * compress, phase);
-                (ix, iy, mask)
-            } else {
-                let (ix, _, phase_x) = glyph_origin(device_x, 0.0);
-                let (iy, _, phase_y) = glyph_origin(device_y, 0.0);
-                let matrix = [ctm.a * compress, ctm.b * compress, ctm.c, ctm.d];
-                let mask =
-                    backend.raw_mask_transformed(&font, glyph.id, matrix, (phase_x, phase_y));
-                (ix, iy, mask)
-            };
-            let Some(mask) = mask else {
-                continue;
-            };
+        for Placed { x: ix, y: iy, mask } in glyphs {
             for row in 0..mask.height as i32 {
                 let py = iy + mask.top + row;
                 if py < 0 || py >= ph {

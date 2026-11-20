@@ -1,4 +1,5 @@
-use super::{FontSpec, TextBackend, baseline_offset, glyph_origin};
+use super::layout::place_text;
+use super::{FontSpec, TextBackend};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TextOp {
@@ -24,7 +25,7 @@ pub fn render_coverage(
 ) -> Vec<u8> {
     let mut plane = vec![0u8; width as usize * height as usize];
     let (mut sx, mut sy) = (1.0, 1.0);
-    let mut font = FontSpec::parse("10px sans-serif");
+    let mut font = FontSpec::default();
     let mut align = "start".to_owned();
     let mut baseline = "alphabetic".to_owned();
     for op in ops {
@@ -33,7 +34,11 @@ pub fn render_coverage(
                 sx *= x;
                 sy *= y;
             }
-            TextOp::Font(css) => font = FontSpec::parse(css),
+            TextOp::Font(css) => {
+                if let Some(f) = FontSpec::parse(css) {
+                    font = f;
+                }
+            }
             TextOp::TextAlign(a) => align.clone_from(a),
             TextOp::TextBaseline(b) => baseline.clone_from(b),
             TextOp::FillText {
@@ -42,25 +47,11 @@ pub fn render_coverage(
                 y,
                 max_width,
             } => {
-                let shaped = backend.shape(&font, text);
-                let compress = match max_width {
-                    Some(m) if !m.is_finite() || *m <= 0.0 => continue,
-                    Some(m) if shaped.width > *m => m / shaped.width,
-                    _ => 1.0,
-                };
-                let drawn = shaped.width * compress;
-                let x = match align.as_str() {
-                    "center" => x - drawn / 2.0,
-                    "right" | "end" => x - drawn,
-                    _ => *x,
-                };
-                let y = y + baseline_offset(backend, &font, &baseline);
-                for glyph in &shaped.glyphs {
-                    let (ix, iy, phase) = glyph_origin((x + glyph.x * compress) * sx, y * sy);
-                    let Some(mask) = backend.raw_mask(&font, glyph.id, sx, compress, phase) else {
-                        continue;
-                    };
-                    blend(&mut plane, width, height, &mask, ix, iy);
+                let ctm = [sx, 0.0, 0.0, sy, 0.0, 0.0];
+                for glyph in place_text(
+                    backend, &font, &align, &baseline, text, *x, *y, *max_width, ctm,
+                ) {
+                    blend(&mut plane, width, height, &glyph.mask, glyph.x, glyph.y);
                 }
             }
         }
