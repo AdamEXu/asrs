@@ -101,7 +101,7 @@
     "log/joystick": {"cases":86,"content":"fe7095d3b3794267","generator":"fa18e9fbf950a92c","spec":"parity/specs/log/joystick.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/key-utils": {"cases":3443,"content":"26ecf4d09573491e","generator":"5e8559070ff4feda","spec":"parity/specs/log/key-utils.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/mechanism": {"cases":9,"content":"e73b71794c20b87a","generator":"55cecff8fe16d93e","spec":"parity/specs/log/mechanism.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "log/merge-offset": {"cases":164,"content":"3974bda7d621e474","generator":"7e92f70c33f71dc4","spec":"parity/specs/log/merge-offset.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/merge-offset": {"cases":164,"content":"3974bda7d621e474","generator":"5b0c903115184ba2","spec":"parity/specs/log/merge-offset.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/photon": {"cases":81,"content":"13c35c892c2c7d87","generator":"97a13cd05ff24766","spec":"parity/specs/log/photon.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-fuzz": {"cases":2448,"content":"be2458a704e43686","generator":"a4c51969f77b46d7","spec":"parity/specs/log/proto-fuzz.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-matrix": {"cases":776,"content":"4a7c6f536aa595f6","generator":"cb9f9b0a015d4d6d","spec":"parity/specs/log/proto-matrix.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
