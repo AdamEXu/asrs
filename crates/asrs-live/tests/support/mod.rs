@@ -577,7 +577,9 @@ pub fn dump(log: &asrs_log::log::Log) -> Value {
         ),
         (
             "timestampRange",
-            serialized.timestamp_range.map_or(Value::Null, |r| numbers(&r)),
+            serialized
+                .timestamp_range
+                .map_or(Value::Null, |r| numbers(&r)),
         ),
         (
             "timestampZero",
@@ -587,9 +589,7 @@ pub fn dump(log: &asrs_log::log::Log) -> Value {
 }
 
 fn string_value(s: &JsString) -> Value {
-    Value::String(asrs_parity::Utf16String::from_units(
-        s.units().to_vec(),
-    ))
+    Value::String(asrs_parity::Utf16String::from_units(s.units().to_vec()))
 }
 
 fn optional_string(s: &Option<JsString>) -> Value {
@@ -622,9 +622,9 @@ where
 fn serialized_field_value(s: &asrs_log::log::SerializedLogField) -> Value {
     use asrs_log::log::LogValues;
     let values = match &s.values {
-        LogValues::Raw(_) => column::<std::sync::Arc<[u8]>, _>(&s.values, |v| {
-            Value::Bytes(v.to_vec())
-        }),
+        LogValues::Raw(_) => {
+            column::<std::sync::Arc<[u8]>, _>(&s.values, |v| Value::Bytes(v.to_vec()))
+        }
         LogValues::Boolean(_) => column::<bool, _>(&s.values, |v| Value::Bool(*v)),
         LogValues::Number(_) => column::<f64, _>(&s.values, |v| Value::number(*v)),
         LogValues::String(_) => column::<JsString, _>(&s.values, string_value),

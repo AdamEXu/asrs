@@ -13,7 +13,8 @@ use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_live::nt4::{
-    NT4_PORTS_DEFAULT, NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Mode, Nt4Source, Nt4Tuner, Nt4Window,
+    NT4_PORTS_DEFAULT, NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Mode, Nt4Source, Nt4Tuner,
+    Nt4Window,
 };
 use asrs_live::{
     LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId, TunedValue,
@@ -238,13 +239,7 @@ impl SourceDriver {
             &mut env.timers,
         );
         let prefs = self.prefs.as_ref().map(Prefs::as_live);
-        source.connect(
-            &self.address,
-            status,
-            output,
-            prefs.as_ref(),
-            &mut env.cx(),
-        );
+        source.connect(&self.address, status, output, prefs.as_ref(), &mut env.cx());
         self.sources.push(source);
         Ok(())
     }
@@ -333,8 +328,6 @@ impl Driver for SourceDriver {
         self.dump(env);
     }
 }
-
-
 
 struct Publisher {
     client: Nt4Client,
@@ -526,7 +519,6 @@ impl PublisherDriver {
         }
         Ok(())
     }
-
 }
 
 fn js_values_equal(ty: LoggableType, a: &JsValue, b: &JsValue) -> bool {

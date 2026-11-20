@@ -924,8 +924,7 @@ impl Nt4Client {
         cx: &mut Nt4Context<'_>,
     ) -> Result<(), Thrown> {
         let mut multi = MultiDecoder::new(bytes);
-        while let Some(unpacked) = multi.next(&mut cx.realm.msgpack_keys, &mut *cx.realm.random)
-        {
+        while let Some(unpacked) = multi.next(&mut cx.realm.msgpack_keys, &mut *cx.realm.random) {
             let unpacked = unpacked?;
             let topic_id = js::index(&unpacked, 0)?;
             let timestamp_us = js::index(&unpacked, 1)?;

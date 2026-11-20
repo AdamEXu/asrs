@@ -54,6 +54,9 @@ fn js(text: &str) -> JsString {
     JsString::from(text)
 }
 
+/// `window.sendMainMessage(name, data)`.
+pub type SendMainMessage = Box<dyn FnMut(&str, JsValue)>;
+
 /// `window` as the NT4 classes see it.
 pub struct Nt4Window {
     /// `window.log`: the hub's log. `=== this.log` once the source's output callback runs.
@@ -64,8 +67,8 @@ pub struct Nt4Window {
     pub tabs_fields: Vec<JsString>,
     /// `window.sidebar.getActiveFields()`.
     pub sidebar_fields: Vec<JsString>,
-    /// `window.sendMainMessage(name, data)`.
-    pub send_main_message: Box<dyn FnMut(&str, JsValue)>,
+    /// `window.sendMainMessage`.
+    pub send_main_message: SendMainMessage,
 }
 
 /// `NT4Source`.
@@ -197,10 +200,7 @@ impl Nt4Source {
             (window.send_main_message)(
                 "error",
                 js::object([
-                    (
-                        "title",
-                        JsValue::string("Problem with NT4 connection"),
-                    ),
+                    ("title", JsValue::string("Problem with NT4 connection")),
                     (
                         "content",
                         JsValue::string(
@@ -219,7 +219,9 @@ impl Nt4Source {
         {
             return true;
         }
-        self.inner.base.handle_timer(id, window.preferences.as_ref())
+        self.inner
+            .base
+            .handle_timer(id, window.preferences.as_ref())
     }
 
     fn client_mut(&self) -> RefMut<'_, Nt4Client> {
@@ -233,9 +235,7 @@ impl Nt4Source {
     /// callback once if any callback marked it.
     fn periodic(&mut self, window: &Nt4Window, cx: &mut Nt4Context<'_>) -> Result<(), Thrown> {
         if let (Some(client), Some(connect_time)) = (&self.client, self.inner.connect_time)
-            && let Some(server_time) = client
-                .borrow()
-                .server_time_us(cx.clock, Some(connect_time))
+            && let Some(server_time) = client.borrow().server_time_us(cx.clock, Some(connect_time))
         {
             window
                 .log
@@ -458,11 +458,7 @@ impl Inner {
     }
 
     /// The output callback at the end of `periodic`.
-    fn maybe_output(
-        &mut self,
-        client: &Option<Rc<RefCell<Nt4Client>>>,
-        clock: &Rc<dyn Clock>,
-    ) {
+    fn maybe_output(&mut self, client: &Option<Rc<RefCell<Nt4Client>>>, clock: &Rc<dyn Clock>) {
         if !self.should_run_output_callback
             || self.base.status() == LiveDataSourceStatus::Stopped
             || !self.base.has_output_callback()
@@ -752,7 +748,8 @@ impl Nt4Handler for Inner {
 
     fn on_connect(&mut self, cx: &mut Nt4Context<'_>) -> Result<(), Thrown> {
         self.base.set_status(LiveDataSourceStatus::Active);
-        self.base.set_log(Some(Rc::new(RefCell::new(Log::new(true)))));
+        self.base
+            .set_log(Some(Rc::new(RefCell::new(Log::new(true)))));
         self.should_run_output_callback = true;
         if self.connect_time.is_none_or(|t| t == 0.0 || t.is_nan()) {
             self.connect_time = Some(Nt4Client::client_time_us(cx.clock));
@@ -837,7 +834,9 @@ impl Nt4Tuner {
         let Some(ty) = window_log.borrow().get_wpilib_type(key).cloned() else {
             return Ok(());
         };
-        self.client.borrow_mut().publish_topic(&remote_key, &ty, cx)?;
+        self.client
+            .borrow_mut()
+            .publish_topic(&remote_key, &ty, cx)?;
         let timestamp = self.client.borrow().server_time_us(cx.clock, None);
         if let Some(timestamp) = timestamp {
             match value {

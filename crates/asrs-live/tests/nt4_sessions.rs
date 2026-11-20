@@ -1,7 +1,7 @@
 //! Replays every NT4 live session against the port and compares the trace with the oracle's,
 //! line for line. `nt4-client` sessions drive `NT4_Client` directly; `nt4` and
 //! `nt4-publisher` sessions drive it the way `NT4Source`/`NT4Tuner` and `NT4Publisher` do,
-//! through the thin drivers in `nt4_drivers` over the real ports.
+//! through the drivers in `nt4_drivers` over the real ports.
 
 #![allow(clippy::disallowed_methods)]
 
