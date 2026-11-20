@@ -3,6 +3,9 @@
 #[path = "../../asrs-cli/src/functions.rs"]
 #[allow(dead_code)]
 mod functions;
+#[path = "../../asrs-cli/src/js_json.rs"]
+#[allow(dead_code)]
+mod js_json;
 #[path = "../../asrs-cli/src/js_math.rs"]
 #[allow(dead_code)]
 mod js_math;

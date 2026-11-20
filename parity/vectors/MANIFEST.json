@@ -28,6 +28,24 @@
       "generator": "5fc5ccb4f490f745",
       "spec": "parity/specs/js/math-ops.jsonl"
     },
+    "json/docs": {
+      "cases": 20000,
+      "content": "a7b43de9d1d50a6c",
+      "generator": "b04c16874b4754df",
+      "spec": "parity/specs/json/docs.entry.json"
+    },
+    "json/invalid": {
+      "cases": 10000,
+      "content": "2393f89877fc1cad",
+      "generator": "0d1d9d2f6aa51a64",
+      "spec": "parity/specs/json/invalid.entry.json"
+    },
+    "json/values": {
+      "cases": 9039,
+      "content": "e9c6fb788248c26b",
+      "generator": "48cffd50f22c33c7",
+      "spec": "parity/specs/json/values.entry.json"
+    },
     "jstring/case-data": {
       "cases": 86933,
       "content": "0a510602f8e9ea46",
