@@ -191,6 +191,8 @@ function launch(out: string) {
     app.exit(1);
   });
   app.on("browser-window-created", (_event, win) => {
+    // Upstream opens DevTools when unpackaged; docked, they shrink the hub page to half its width.
+    win.webContents.on("devtools-opened", () => win.webContents.closeDevTools());
     win.webContents.once("did-finish-load", async () => {
       const url = win.webContents.getURL();
       if (captured || !url.endsWith("/www/hub.html")) return;
@@ -206,6 +208,7 @@ function launch(out: string) {
           title: win.getTitle(),
           bounds: win.getBounds(),
           contentBounds: win.getContentBounds(),
+          scaleFactor: scale,
           capture: size,
           windows: BrowserWindow.getAllWindows().length
         });

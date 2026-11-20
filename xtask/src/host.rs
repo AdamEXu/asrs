@@ -1030,7 +1030,31 @@ fn launch(paths: &Paths, out: &Path) -> Result {
         COLOUR_SWITCHES,
         &["launch", &out.display().to_string()],
         &out.join("launch.json"),
-    )
+    )?;
+    let result = read_json_file(&out.join("launch.json"))?;
+    let number = |path: &[&str]| {
+        path.iter()
+            .try_fold(&result, |v, k| v.get(k))
+            .and_then(Json::as_f64)
+            .unwrap_or(f64::NAN)
+    };
+    let scale = number(&["scaleFactor"]);
+    let expected = (
+        number(&["contentBounds", "width"]) * scale,
+        number(&["contentBounds", "height"]) * scale,
+    );
+    let captured = (
+        number(&["capture", "width"]),
+        number(&["capture", "height"]),
+    );
+    if captured == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "launch: hub capture is {}x{}, expected the {}x{} window content",
+            captured.0, captured.1, expected.0, expected.1
+        ))
+    }
 }
 
 fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
