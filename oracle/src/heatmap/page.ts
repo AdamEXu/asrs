@@ -3,7 +3,7 @@ import { heatmapFixtures } from "./fixtures";
 import { installRecorder, runUpdates } from "./record";
 
 // canvasMain's "heatmap" mode drives this in a real BrowserWindow: the same updates
-// the genHeatmap entry records under the fake DOM, plus the output canvas pixels.
+// the genHeatmap entry records under the fake DOM, plus the output and shadow canvas pixels.
 
 const recorder = installRecorder();
 

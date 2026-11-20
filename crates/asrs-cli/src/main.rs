@@ -42,7 +42,7 @@ fn main() -> ExitCode {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
-        Some("heatmap") => heatmap::run(&args),
+        Some("heatmap") => heatmap::run(&args[1..]),
         Some("wpilog") => wpilog::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };

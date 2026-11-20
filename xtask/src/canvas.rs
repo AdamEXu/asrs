@@ -29,8 +29,8 @@ commands:
   stable                regenerate the references and the LUT twice from scratch and require
                         identical bytes, and the LUT to equal the committed one
   heatmap               run the upstream Heatmap fixtures on Chromium's CPU canvas, replay them
-                        with asrs-cli heatmap, and gate recorded fields exactly and RGBA at a
-                        max channel delta of 1
+                        with asrs-cli heatmap, and gate recorded fields and the shadow canvas
+                        exactly and the output RGBA at a max channel delta of 1
   list                  scene names
 
 Gates against the CPU canvas: pixel scenes at most 0.2 % pixelmatch (YIQ 0.1) and no blob over
@@ -612,6 +612,23 @@ fn heatmap(paths: &Paths) -> Result {
             for key in HEATMAP_FIELDS {
                 if expected_update.get(key) != actual_update.get(key) {
                     failures.push(format!("{name} update {i}: {key} differs"));
+                }
+            }
+            let reference_shadow = refs.join(format!("{name}.{i}.shadow"));
+            if reference_shadow.exists() {
+                let port_shadow = port.join(format!("{name}.{i}.shadow"));
+                match (fs::read(&reference_shadow), fs::read(&port_shadow)) {
+                    (Ok(a), Ok(b)) if a == b => {}
+                    (Ok(a), Ok(b)) => {
+                        let differing = a.iter().zip(&b).filter(|(x, y)| x != y).count();
+                        failures.push(format!(
+                            "{name} update {i}: shadow canvas differs in {differing} bytes ({} vs {} bytes)",
+                            a.len(),
+                            b.len()
+                        ));
+                    }
+                    (_, Err(e)) => failures.push(format!("{}: {e}", port_shadow.display())),
+                    (Err(e), _) => failures.push(format!("{}: {e}", reference_shadow.display())),
                 }
             }
             let reference_png = refs.join(format!("{name}.{i}.png"));
