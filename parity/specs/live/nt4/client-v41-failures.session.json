@@ -1,0 +1,30 @@
+{
+  "protocol": "nt4",
+  "seed": 9001,
+  "latencyMs": 2,
+  "endMs": 7000,
+  "client": { "source": "nt4-client" },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 1000000000,
+    "topics": [{ "name": "/v", "type": "double", "value": 1 }]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 0, "client": ["nt4", "subscribe", [""], true, true] },
+    { "t": 3, "server": ["down", "refuse"] },
+    { "t": 300, "server": ["up"] },
+    { "t": 1000, "server": ["mute", true] },
+    { "t": 2500, "client": ["nt4", "time"] },
+    { "t": 3000, "server": ["mute", false] },
+    { "t": 3100, "server": ["set", "/v", 2] },
+    { "t": 3251, "server": ["drop"] },
+    { "t": 3262, "server": ["down", "refuse"] },
+    { "t": 3300, "client": ["nt4", "time"] },
+    { "t": 3400, "server": ["set", "/v", 3] },
+    { "t": 4000, "server": ["up"] },
+    { "t": 5000, "client": ["nt4", "time"] },
+    { "t": 6000, "client": ["stop"] },
+    { "t": 6000, "client": ["nt4", "sample", "/v", 1] }
+  ]
+}

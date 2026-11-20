@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
 use asrs_js::string::JsString;
-use asrs_js::value::JsObject;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use asrs_js::time::Rng;
+use asrs_js::value::{JsObject, ToJs};
 use asrs_log::log::{
-    Log, LogFieldIterator, LogFieldTree, LogValue, LogValueSet, LogValueSetAny, LogValues,
-    LoggableType, SerializedLogField, TimestampDisplay, log_key_utils, log_util,
+    Log, LogError, LogFieldIterator, LogFieldTree, LogValue, LogValueSet, LogValueSetAny,
+    LogValues, LoggableType, QueuedStructure, SerializedLog, SerializedLogField, TimestampDisplay,
+    log_key_utils, log_util,
 };
+use asrs_log::realm::JsRealm;
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{self, arg};
@@ -78,7 +83,7 @@ fn member(v: &Value, name: &str) -> Value {
     v.get(name).cloned().unwrap_or(Value::Undefined)
 }
 
-fn serialized_field(v: &Value) -> Result<SerializedLogField, String> {
+pub(crate) fn serialized_field(v: &Value) -> Result<SerializedLogField, String> {
     let ty = loggable_type(&member(v, "type"))?;
     Ok(SerializedLogField {
         timestamps: Arc::new(array(&member(v, "timestamps"), number)?),
@@ -139,6 +144,85 @@ pub(crate) fn dump(log: &Log) -> Value {
             serialized.timestamp_zero.map_or(Value::Null, Value::number),
         ),
     ])
+}
+
+fn queue_value(items: &[QueuedStructure]) -> Value {
+    Value::Array(
+        items
+            .iter()
+            .map(|item| {
+                Value::object([
+                    ("key", string_value(&item.key)),
+                    ("timestamp", Value::number(item.timestamp)),
+                    ("value", Value::Bytes(item.value.to_vec())),
+                    ("schemaType", string_value(&item.schema_type)),
+                ])
+            })
+            .collect(),
+    )
+}
+
+/// The parts of `toSerialized()` beyond the fields: struct schema strings and schemas, proto
+/// descriptors and the three retry queues.
+pub(crate) fn decoder_state(serialized: &SerializedLog) -> [(&'static str, Value); 6] {
+    [
+        (
+            "structSchemaStrings",
+            js_json::from_js(&serialized.struct_decoder.schema_strings.to_js()),
+        ),
+        (
+            "structSchemas",
+            js_json::from_js(&serialized.struct_decoder.schemas.to_js()),
+        ),
+        (
+            "protoDescriptors",
+            js_json::from_js(&serialized.proto_decoder.to_js()),
+        ),
+        ("queuedStructs", queue_value(&serialized.queued_structs)),
+        (
+            "queuedStructArrays",
+            queue_value(&serialized.queued_struct_arrays),
+        ),
+        ("queuedProtos", queue_value(&serialized.queued_protos)),
+    ]
+}
+
+fn dump_all(log: &Log) -> Value {
+    let Value::Object(mut pairs) = dump(log) else {
+        unreachable!("dump always returns an object")
+    };
+    for (name, value) in decoder_state(&log.to_serialized()) {
+        pairs.push((name.into(), value));
+    }
+    Value::Object(pairs)
+}
+
+fn threw(results: &mut Vec<Value>, result: Result<(), LogError>) -> Result<(), String> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(LogError::Proto(e)) => {
+            results.push(Value::object([(
+                "threw",
+                Value::Error(
+                    Utf16String::from(e.js_name()),
+                    Utf16String::from_units(e.js_message().units().to_vec()),
+                ),
+            )]));
+            Ok(())
+        }
+        Err(LogError::NeverCompletes) => Err("upstream never completes".to_owned()),
+        Err(LogError::Unmodeled(what)) => Err(format!("unmodeled: {what}")),
+    }
+}
+
+fn reload(log: &Log, realm: &mut JsRealm, results: &mut Vec<Value>) -> Result<Log, String> {
+    match Log::from_serialized(log.to_serialized(), realm) {
+        Ok(log) => Ok(log),
+        Err(e) => {
+            threw(results, Err(e))?;
+            Ok(Log::new(true))
+        }
+    }
 }
 
 fn typed_get<T: LogValue + ToValue>(log: &Log, op: &[Value]) -> Result<Value, String> {
@@ -226,12 +310,63 @@ fn display(v: &Value) -> Result<Option<TimestampDisplay>, String> {
     }
 }
 
-pub(crate) fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Result<(), String> {
+pub(crate) fn apply(
+    log: &mut Log,
+    realm: &mut JsRealm,
+    op: &[Value],
+    results: &mut Vec<Value>,
+) -> Result<(), String> {
     let name = js_string(&arg(op, 0))?.to_string_lossy();
     let key = || js_string(&arg(op, 1));
     let timestamp = || number(&arg(op, 2));
     match name.as_str() {
-        "putRaw" => log.put_raw(&key()?, timestamp()?, bytes(&arg(op, 3))?),
+        "putRaw" => {
+            let result = log.put_raw(&key()?, timestamp()?, bytes(&arg(op, 3))?);
+            threw(results, result)?;
+        }
+        "putStruct" => {
+            let result = log.put_struct(
+                &key()?,
+                timestamp()?,
+                bytes(&arg(op, 3))?,
+                &js_string(&arg(op, 4))?,
+                truthy(&arg(op, 5)),
+            );
+            threw(results, result)?;
+        }
+        "putPhotonStruct" => {
+            let result = log.put_photon_struct(
+                &key()?,
+                timestamp()?,
+                bytes(&arg(op, 3))?,
+                &js_string(&arg(op, 4))?,
+            );
+            threw(results, result)?;
+        }
+        "putProto" => {
+            let result = log.put_proto(
+                realm,
+                &key()?,
+                timestamp()?,
+                bytes(&arg(op, 3))?,
+                &js_string(&arg(op, 4))?,
+            );
+            threw(results, result)?;
+        }
+        "putMsgpack" => {
+            let result = log.put_msgpack(realm, &key()?, timestamp()?, bytes(&arg(op, 3))?);
+            threw(results, result)?;
+        }
+        "getUnit" => results.push(log.get_unit(&key()?).map_or(Value::Null, Value::string)),
+        "units" => {
+            let units = log
+                .get_field_keys()
+                .iter()
+                .map(|key| log.get_unit(key).map_or(Value::Null, Value::string))
+                .collect();
+            results.push(Value::Array(units));
+        }
+        "dumpAll" => results.push(dump_all(log)),
         "putBoolean" => log.put_boolean(&key()?, timestamp()?, boolean(&arg(op, 3))?),
         "putNumber" => log.put_number(&key()?, timestamp()?, number(&arg(op, 3))?),
         "putString" => log.put_string(&key()?, timestamp()?, js_string(&arg(op, 3))?),
@@ -245,12 +380,15 @@ pub(crate) fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Re
             log.put_string_array(&key()?, timestamp()?, array(&arg(op, 3), js_string)?)
         }
         "putJSON" => log.put_json(&key()?, timestamp()?, js_string(&arg(op, 3))?),
-        "putUnknownStruct" => log.put_unknown_struct(
-            &key()?,
-            timestamp()?,
-            &js_json::to_js(&arg(op, 3))?,
-            truthy(&arg(op, 4)),
-        ),
+        "putUnknownStruct" => {
+            let result = log.put_unknown_struct(
+                &key()?,
+                timestamp()?,
+                &js_json::to_js(&arg(op, 3))?,
+                truthy(&arg(op, 4)),
+            );
+            threw(results, result)?;
+        }
         "putPose" => log.put_pose(
             &key()?,
             timestamp()?,
@@ -272,7 +410,7 @@ pub(crate) fn apply(log: &mut Log, op: &[Value], results: &mut Vec<Value>) -> Re
         "setWpilibType" => log.set_wpilib_type(&key()?, js_string(&arg(op, 2))?),
         "setMetadataString" => log.set_metadata_string(&key()?, js_string(&arg(op, 2))?),
         "setGeneratedParent" => log.set_generated_parent(&key()?),
-        "reload" => *log = Log::from_serialized(log.to_serialized()),
+        "reload" => *log = reload(log, realm, results)?,
         "get" => results.push(get(log, op)?),
         "getTimestamps" => {
             let keys = array(&arg(op, 1), js_string)?;
@@ -392,10 +530,14 @@ fn iterator_values(set: &Option<LogValueSetAny>, times: &[f64]) -> Vec<Value> {
 /// query results `run` reports.
 pub(crate) fn build_log(cache: bool, ops: &[Value]) -> Result<(Log, Vec<Value>), String> {
     let mut log = Log::new(cache);
+    let (mut realm, drawn, _) = script_realm(Vec::new());
     let mut results = Vec::new();
     for op in ops {
         let op = op.as_array().ok_or("an op must be an array")?;
-        apply(&mut log, op, &mut results)?;
+        apply(&mut log, &mut realm, op, &mut results)?;
+    }
+    if drawn.load(Ordering::Relaxed) != 0 {
+        return Err("logRun scripts draw no Math.random values".to_owned());
     }
     Ok((log, results))
 }
@@ -416,4 +558,139 @@ fn log_run(args: &[Value]) -> Response {
     }
 }
 
-pub const FUNCTIONS: &[(&str, functions::Function)] = &[("oracle:logRun", log_run)];
+/// A realm's `Math.random`: the values upstream drew, in order. Drawing past them is an error the
+/// script reports, as is leaving any undrawn.
+struct ScriptRng {
+    values: Vec<f64>,
+    drawn: Arc<AtomicUsize>,
+}
+
+impl Rng for ScriptRng {
+    fn next_f64(&mut self) -> f64 {
+        let i = self.drawn.fetch_add(1, Ordering::Relaxed);
+        self.values.get(i).copied().unwrap_or(f64::NAN)
+    }
+}
+
+pub(crate) fn script_realm(values: Vec<f64>) -> (JsRealm, Arc<AtomicUsize>, usize) {
+    let drawn = Arc::new(AtomicUsize::new(0));
+    let expected = values.len();
+    let rng = ScriptRng {
+        values,
+        drawn: Arc::clone(&drawn),
+    };
+    (JsRealm::new(Box::new(rng)), drawn, expected)
+}
+
+struct ScriptLog {
+    log: Log,
+    realm: String,
+}
+
+/// `oracle:logScript`: several logs across JS realms. `args[0]` lists each realm's
+/// `Math.random` values as `[name, [values...]]`; `args[1]` is the op list:
+///   ["new", id, realm, enableTimestampSetCache]
+///   ["transfer", from, to, toRealm]   to = Log.fromSerialized(from.toSerialized()) in toRealm
+///   ["merge", target, source, prefix]   pushes the offset; the source is dropped
+///   ["op", id, <logRun op>...]
+fn script(args: &[Value]) -> Result<Value, String> {
+    let mut realms: Vec<(String, JsRealm)> = Vec::new();
+    let mut draws = Vec::new();
+    for entry in arg(args, 0).as_array().ok_or("realms must be an array")? {
+        let name = js_string(&arg(entry.as_array().ok_or("a realm is a pair")?, 0))?;
+        let values = array(
+            &arg(entry.as_array().ok_or("a realm is a pair")?, 1),
+            number,
+        )?;
+        let (realm, drawn, expected) = script_realm(values);
+        draws.push((name.to_string_lossy(), drawn, expected));
+        realms.push((name.to_string_lossy(), realm));
+    }
+    let realm_index = |realms: &[(String, JsRealm)], name: &str| {
+        realms
+            .iter()
+            .position(|(n, _)| n == name)
+            .ok_or_else(|| format!("no realm {name:?}"))
+    };
+    let mut logs: Vec<(String, ScriptLog)> = Vec::new();
+    let log_index = |logs: &[(String, ScriptLog)], id: &str| {
+        logs.iter()
+            .position(|(n, _)| n == id)
+            .ok_or_else(|| format!("no log {id:?}"))
+    };
+    let mut results = Vec::new();
+    for op in arg(args, 1).as_array().ok_or("ops must be an array")? {
+        let op = op.as_array().ok_or("an op must be an array")?;
+        let name = js_string(&arg(op, 0))?.to_string_lossy();
+        let text = |i: usize| js_string(&arg(op, i)).map(|s| s.to_string_lossy());
+        match name.as_str() {
+            "new" => {
+                let realm = text(2)?;
+                realm_index(&realms, &realm)?;
+                let log = Log::new(boolean(&arg(op, 3))?);
+                let id = text(1)?;
+                logs.retain(|(n, _)| *n != id);
+                logs.push((id, ScriptLog { log, realm }));
+            }
+            "transfer" => {
+                let from = log_index(&logs, &text(1)?)?;
+                let serialized = logs[from].1.log.to_serialized().structured_clone();
+                let realm = text(3)?;
+                let r = realm_index(&realms, &realm)?;
+                let log = match Log::from_serialized(serialized, &mut realms[r].1) {
+                    Ok(log) => log,
+                    Err(e) => {
+                        threw(&mut results, Err(e))?;
+                        Log::new(true)
+                    }
+                };
+                let id = text(2)?;
+                logs.retain(|(n, _)| *n != id);
+                logs.push((id, ScriptLog { log, realm }));
+            }
+            "merge" => {
+                let source_index = log_index(&logs, &text(2)?)?;
+                let (_, source) = logs.remove(source_index);
+                let target = log_index(&logs, &text(1)?)?;
+                if logs[target].1.realm != source.realm {
+                    return Err("merge across realms".to_owned());
+                }
+                let r = realm_index(&realms, &source.realm)?;
+                let prefix = js_string(&arg(op, 3))?;
+                let result = logs[target]
+                    .1
+                    .log
+                    .merge_with(&source.log, &prefix, &mut realms[r].1);
+                match result {
+                    Ok(offset) => results.push(Value::number(offset)),
+                    Err(e) => threw(&mut results, Err(e))?,
+                }
+            }
+            "op" => {
+                let i = log_index(&logs, &text(1)?)?;
+                let r = realm_index(&realms, &logs[i].1.realm)?;
+                apply(&mut logs[i].1.log, &mut realms[r].1, &op[2..], &mut results)?;
+            }
+            other => return Err(format!("logScript: unknown op {other:?}")),
+        }
+    }
+    for (name, drawn, expected) in draws {
+        let drawn = drawn.load(Ordering::Relaxed);
+        if drawn != expected {
+            return Err(format!(
+                "realm {name} drew {drawn} Math.random values, upstream drew {expected}"
+            ));
+        }
+    }
+    Ok(Value::Array(results))
+}
+
+fn log_script(args: &[Value]) -> Response {
+    match script(args) {
+        Ok(v) => Response::Ok(v),
+        Err(e) => Response::Error(e),
+    }
+}
+
+pub const FUNCTIONS: &[(&str, functions::Function)] =
+    &[("oracle:logRun", log_run), ("oracle:logScript", log_script)];

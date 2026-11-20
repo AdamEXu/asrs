@@ -2,10 +2,16 @@
 //! worker's `initial` or `failed` reply), run synchronously. F09 replaces it with the decode
 //! thread, lazy field requests, child logs and progress.
 
-use asrs_log::log::Log;
+use std::sync::Arc;
 
-use crate::dslog;
-use crate::worker::{Abort, Response};
+use asrs_js::string::JsString;
+use asrs_js::time::Rng;
+use asrs_log::log::Log;
+use asrs_log::realm::JsRealm;
+
+use crate::dslog::DsLogWorker;
+use crate::worker::{Abort, DecodeWorker, Request, Response, run_request};
+use crate::wpilog_worker::WpilogWorker;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -65,9 +71,23 @@ pub fn select_worker(path: &str) -> Option<WorkerName> {
 #[derive(Debug)]
 pub struct UnportedWorker(pub WorkerName);
 
+/// `new Worker("../bundles/" + selectedWorkerName)`: a fresh worker realm with its own
+/// `Math.random` stream.
+pub fn create_worker(
+    name: WorkerName,
+    random: Box<dyn Rng + Send>,
+) -> Result<Box<dyn DecodeWorker>, UnportedWorker> {
+    match name {
+        WorkerName::Wpilog => Ok(Box::new(WpilogWorker::new(JsRealm::new(random)))),
+        WorkerName::DsLog => Ok(Box::new(DsLogWorker)),
+        other => Err(UnportedWorker(other)),
+    }
+}
+
 pub struct HistoricalDataSource {
     path: String,
     status: Status,
+    log_is_partial: bool,
 }
 
 impl HistoricalDataSource {
@@ -79,6 +99,7 @@ impl HistoricalDataSource {
         HistoricalDataSource {
             path,
             status: Status::Reading,
+            log_is_partial: false,
         }
     }
 
@@ -91,12 +112,19 @@ impl HistoricalDataSource {
         self.status
     }
 
+    pub fn log_is_partial(&self) -> bool {
+        self.log_is_partial
+    }
+
     /// `handleMainMessage` for this source's reply, then the worker's messages. A worker that
-    /// aborts posts nothing more, so the source stays in `DecodingInitial`.
+    /// aborts posts nothing more, so the source stays in `DecodingInitial`, as it does when
+    /// merging the reply into the hub's log throws.
     pub fn handle_main_message(
         &mut self,
         log: &mut Log,
-        files: &[Option<Vec<u8>>],
+        realm: &mut JsRealm,
+        files: Vec<Option<Vec<u8>>>,
+        worker_random: Box<dyn Rng + Send>,
     ) -> Result<Option<Abort>, UnportedWorker> {
         if self.status != Status::Reading {
             return Ok(None);
@@ -110,22 +138,25 @@ impl HistoricalDataSource {
             self.status = Status::Error;
             return Ok(None);
         };
-        let data: Vec<Option<&[u8]>> = files.iter().map(Option::as_deref).collect();
-        let mut replies = Vec::new();
-        let end = match worker {
-            WorkerName::DsLog => dslog::run_worker(&data, &mut |r| replies.push(r)),
-            other => return Err(UnportedWorker(other)),
-        };
+        let mut worker = create_worker(worker, worker_random)?;
+        let data = files.into_iter().map(|file| file.map(Arc::from)).collect();
+        let (replies, end) = run_request(worker.as_mut(), Request::Start(data));
         for reply in replies {
             match reply {
                 Response::Progress(_) => {}
-                Response::Initial { log: payload, .. } => {
-                    // `mergeWith(Log.fromSerialized(payload), "")` into a fresh log, until L08
-                    // ports `mergeWith`: fields are rebuilt from the source's serialization.
-                    *log = Log::from_serialized(Log::from_serialized(payload).to_serialized());
-                    self.status = Status::Idle;
+                Response::Initial {
+                    log: payload,
+                    is_partial,
+                } => {
+                    let merged = Log::from_serialized(payload.structured_clone(), realm)
+                        .and_then(|source| log.merge_with(&source, &JsString::new(), realm));
+                    if merged.is_ok() {
+                        self.log_is_partial = is_partial;
+                        self.status = Status::Idle;
+                    }
                 }
                 Response::Failed => self.status = Status::Error,
+                Response::Fields(_) => {}
             }
         }
         Ok(end.err())

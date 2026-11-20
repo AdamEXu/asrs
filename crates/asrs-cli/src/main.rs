@@ -3,6 +3,7 @@
 mod assets;
 mod canvas_cmd;
 mod decode;
+mod decode_worker;
 mod fn_cmd;
 mod functions;
 mod geometry;
@@ -19,8 +20,11 @@ mod log_field;
 mod log_keys;
 mod log_run;
 mod log_struct;
+mod merge_calculator;
 mod photon;
+mod robot_state;
 mod shared;
+mod state;
 mod tabs_console;
 mod units;
 mod wpilog;
@@ -31,7 +35,10 @@ const USAGE: &str = "usage: asrs-cli <command>
 
 commands:
   fn [--list]   JSONL fn requests on stdin, CVE-1 responses on stdout (same protocol as the oracle)
-  decode <file> decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
+  decode [--initial] <file>
+                decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
+  decode-worker <file>
+                run the file's decode worker alone and print its messages (same as oracle decodeWorker)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
   canvas render rasterize the oracle's canvas scenes with asrs-canvas
   heatmap       replay the oracle's heatmap fixtures with asrs-tabs";
@@ -41,6 +48,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
+        Some("decode-worker") => return decode_worker::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
         Some("heatmap") => heatmap::run(&args[1..]),
         Some("wpilog") => wpilog::run(&args[1..]),

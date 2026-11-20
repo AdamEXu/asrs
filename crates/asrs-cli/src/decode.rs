@@ -1,23 +1,29 @@
 //! `asrs-cli decode <log file>`: opens the file as the hub opens a historical log and prints the
 //! canonical CVE-1 dump for the "initial" and "full" phases, matching `oracle decode`
 //! (oracle/src/decode.ts, oracle/src/historical/dump.ts). Where upstream's worker never returns,
-//! nothing is printed and the exit code is `NEVER_COMPLETES`, the oracle's timeout.
+//! nothing is printed and the exit code is `NEVER_COMPLETES`, the oracle's timeout. With
+//! `--initial` only the "initial" phase is printed; a partial log (WPILOG) has no "full" phase
+//! until lazy field loading is ported (unit F09).
 
 use std::process::ExitCode;
 
 use asrs_formats::historical::HistoricalDataSource;
 use asrs_formats::worker::Abort;
 use asrs_js::string::JsString;
+use asrs_js::time::V8MathRandom;
 use asrs_log::log::{Log, SerializedLog};
+use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
 use asrs_services::historical_start;
 
 use crate::log_field::{serialized_value, string_value};
+use crate::log_run;
 
-const USAGE: &str = "usage: asrs-cli decode <log file>";
-const NEVER_COMPLETES: u8 = 3;
+const USAGE: &str = "usage: asrs-cli decode [--initial] <log file>";
+pub(crate) const NEVER_COMPLETES: u8 = 3;
+pub(crate) const UNMODELED: u8 = 4;
 
-fn dump_log(
+pub(crate) fn dump_log(
     serialized: &SerializedLog,
     phase: &str,
     status: &str,
@@ -72,40 +78,40 @@ fn dump_log(
         ])
         .encode(),
     );
-    lines.push(
-        Value::object([
-            (
-                "structSchemaStrings",
-                Value::object(Vec::<(&str, Value)>::new()),
-            ),
-            ("structSchemas", Value::object(Vec::<(&str, Value)>::new())),
-        ])
-        .encode(),
-    );
-    lines.push(Value::object([("protoDescriptors", Value::Array(Vec::new()))]).encode());
-    lines.push(
-        Value::object([
-            ("queuedStructs", Value::Array(Vec::new())),
-            ("queuedStructArrays", Value::Array(Vec::new())),
-            ("queuedProtos", Value::Array(Vec::new())),
-        ])
-        .encode(),
-    );
+    let [strings, schemas, protos, structs, arrays, proto_queue] =
+        log_run::decoder_state(serialized);
+    lines.push(Value::object([strings, schemas]).encode());
+    lines.push(Value::object([protos]).encode());
+    lines.push(Value::object([structs, arrays, proto_queue]).encode());
     lines
 }
 
 pub fn run(args: &[String]) -> ExitCode {
-    let [path] = args else {
-        eprintln!("{USAGE}");
-        return ExitCode::FAILURE;
+    let (initial_only, path) = match args {
+        [flag, path] if flag == "--initial" => (true, path),
+        [path] if !path.starts_with("--") => (false, path),
+        _ => {
+            eprintln!("{USAGE}");
+            return ExitCode::FAILURE;
+        }
     };
     let mut source = HistoricalDataSource::open_file(path);
     let mut log = Log::new(true);
+    let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
     let files = historical_start::read_files(source.path());
-    match source.handle_main_message(&mut log, &files) {
+    match source.handle_main_message(
+        &mut log,
+        &mut realm,
+        files,
+        Box::new(V8MathRandom::from_entropy()),
+    ) {
         Ok(Some(Abort::NeverReturns)) => {
             eprintln!("{path}: upstream's worker never returns");
             return ExitCode::from(NEVER_COMPLETES);
+        }
+        Ok(Some(Abort::Unmodeled(what))) => {
+            eprintln!("{path}: not modeled: {what}");
+            return ExitCode::from(UNMODELED);
         }
         Ok(_) => {}
         Err(unported) => {
@@ -116,7 +122,16 @@ pub fn run(args: &[String]) -> ExitCode {
     let serialized = log.to_serialized();
     let status = source.status().name();
     let mut out = String::new();
-    for phase in ["initial", "full"] {
+    if !initial_only && source.log_is_partial() {
+        eprintln!("{path}: the full phase of a partial log needs lazy field loading (unit F09)");
+        return ExitCode::FAILURE;
+    }
+    let phases: &[&str] = if initial_only {
+        &["initial"]
+    } else {
+        &["initial", "full"]
+    };
+    for &phase in phases {
         for line in dump_log(&serialized, phase, status, &[]) {
             out.push_str(&line);
             out.push('\n');

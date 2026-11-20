@@ -1,0 +1,44 @@
+{
+  "protocol": "ftc",
+  "seed": 42,
+  "latencyMs": 1,
+  "endMs": 3600,
+  "client": { "source": "ftc", "address": "192.168.43.1" },
+  "server": { "status": { "activeOpMode": "Tele", "activeOpModeStatus": "RUNNING" } },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1100, "client": ["tune", "/_Config/Drive/kP", 1] },
+    { "t": 1200, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "Drive": { "__type": "custom", "__value": {
+          "kP": { "__type": "double", "__value": 0.5 },
+          "kI": { "__type": "float", "__value": 0.25 },
+          "maxSpeed": { "__type": "int", "__value": 30 },
+          "ticks": { "__type": "long", "__value": 9007199254740991 },
+          "enabled": { "__type": "boolean", "__value": true },
+          "name": { "__type": "string", "__value": "tank" },
+          "mode": { "__type": "enum", "__value": "FAST", "__enumClass": "Mode", "__enumValues": ["FAST", "SLOW"] },
+          "10": { "__type": "int", "__value": 10 },
+          "empty": { "__type": "custom", "__value": null }
+        } }
+      } }
+    }] },
+    { "t": 1300, "client": ["dump"] },
+    { "t": 1400, "client": ["tune", "/_Config/Drive/kP", 0.75] },
+    { "t": 1500, "client": ["tune", "/_Config/Drive/enabled", false] },
+    { "t": 1600, "client": ["tune", "/_Config/Drive/maxSpeed", 12.5] },
+    { "t": 1700, "client": ["tune", "/_Config/Drive/mode", 1] },
+    { "t": 1800, "client": ["untune", "/_Config/Drive/kP"] },
+    { "t": 2200, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "Drive": { "__type": "custom", "__value": { "kP": { "__type": "double", "__value": 0.75 } } },
+        "Arm": { "__type": "custom", "__value": { "kG": { "__type": "double", "__value": 0.125 } } }
+      } }
+    }] },
+    { "t": 2300, "client": ["tune", "/_Config/Arm/kG", 0.2] },
+    { "t": 3000, "client": ["stop"] },
+    { "t": 3500, "client": ["dump"] }
+  ]
+}

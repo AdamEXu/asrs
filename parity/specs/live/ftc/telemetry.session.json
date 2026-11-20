@@ -1,0 +1,28 @@
+{
+  "protocol": "ftc",
+  "seed": 8000,
+  "latencyMs": 2,
+  "endMs": 4500,
+  "client": { "source": "ftc", "address": "192.168.43.1", "prefs": { "liveDiscard": 1200 } },
+  "server": {
+    "status": { "activeOpMode": "$Stop$Robot$", "activeOpModeStatus": "STOPPED", "batteryVoltage": 12.75, "available": true, "errorMessage": "" }
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1500, "server": ["send", {
+      "type": "RECEIVE_TELEMETRY",
+      "telemetry": [
+        { "timestamp": 1700000001400, "data": { "x": "12", "y": "-6", "heading": "1.5", "arm x": "3", "arm heading (deg)": "90", "speed": "2.5", "label": "hello", "2": "numeric key", "hex": "0x10", "blank": " ", "inf": "Infinity" }, "log": [], "fieldOverlay": { "ops": [] } },
+        { "timestamp": 1700000001450, "data": { "x": "13", "x ": "1", "heading (deg)": "45" } }
+      ]
+    }] },
+    { "t": 1600, "client": ["dump"] },
+    { "t": 1800, "server": ["status", { "activeOpMode": "Auto", "activeOpModeStatus": "RUNNING", "batteryVoltage": 12.5 }] },
+    { "t": 2500, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [{ "data": { "speed": "3" } }] }] },
+    { "t": 2600, "server": ["sendtext", "{not json"] },
+    { "t": 2700, "server": ["send", { "type": "RECEIVE_ROBOT_STATUS", "status": { "activeOpMode": "Auto", "activeOpModeStatus": "INIT" } }] },
+    { "t": 3000, "client": ["dump"] },
+    { "t": 3200, "server": ["status", { "activeOpMode": "$Stop$Robot$", "activeOpModeStatus": "RUNNING" }] },
+    { "t": 4300, "client": ["dump"] }
+  ]
+}

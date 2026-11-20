@@ -5,7 +5,9 @@
 pub mod channel;
 pub mod live_data_source;
 pub mod live_data_tuner;
+pub mod nt4;
 pub mod runtime;
+mod thrown;
 pub mod timers;
 
 pub use channel::{EventReceiver, EventSender, event_channel};
@@ -15,4 +17,5 @@ pub use live_data_source::{
 };
 pub use live_data_tuner::{LiveDataTuner, TunedValue};
 pub use runtime::{LiveRuntime, LiveTask};
+pub use thrown::Thrown;
 pub use timers::{ManualClock, MonotonicClock, TimerId, TimerQueue};
