@@ -99,6 +99,14 @@ pub fn all_units() -> &'static [(&'static str, &'static UnitConfig)] {
     })
 }
 
+/// `Units.ALL_UNITS[unit]` for an own unit key.
+pub fn unit_config(unit: &str) -> Option<&'static UnitConfig> {
+    all_units()
+        .iter()
+        .find(|(k, _)| *k == unit)
+        .map(|(_, config)| *config)
+}
+
 /// `Units.GROUP_BY_UNIT[unit]`.
 pub fn group_by_unit(unit: &str) -> Option<&'static str> {
     static GROUP_BY_UNIT: OnceLock<Vec<(&'static str, &'static str)>> = OnceLock::new();
@@ -164,10 +172,7 @@ pub fn valid_unit_pair(from: &str, to: &str) -> bool {
 /// `ALL_UNITS[name].value`: `undefined` for prototype names, which the
 /// arithmetic turns into NaN.
 fn unit_value(name: &str) -> f64 {
-    all_units()
-        .iter()
-        .find(|(k, _)| *k == name)
-        .map_or(f64::NAN, |(_, c)| c.value)
+    unit_config(name).map_or(f64::NAN, |c| c.value)
 }
 
 /// The temperature special cases `Units.convert` applies to an argument.

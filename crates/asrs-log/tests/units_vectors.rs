@@ -46,7 +46,8 @@ fn dispatch(case: &FnCase<'_>) -> Response {
             .map(|(_, f)| *f)
     }) {
         Some(f) => f(&case.request.args),
-        None => Response::Error(format!("no port of {}", case.name())),
+        None => cli_units::table_read(case.name(), &case.request.args)
+            .unwrap_or_else(|| Response::Error(format!("no port of {}", case.name()))),
     }
 }
 
@@ -554,6 +555,40 @@ fn field_cases(spec: &mut Spec) {
     }
 }
 
+/// Direct reads of the upstream tables through `<path>.valueOf` and
+/// `names.join`, so factor bits, suffixes and names are compared as stored.
+fn table_cases(spec: &mut Spec) {
+    let table = |path: String| format!("shared/units:Units.{path}");
+    let sep = "\u{0}";
+    for (group, group_units) in units::UNIT_GROUPS {
+        for (unit, _) in *group_units {
+            for field in ["value", "suffix", "pluralizeSuffix"] {
+                spec.push(
+                    &table(format!("UNIT_GROUPS.{group}.{unit}.{field}.valueOf")),
+                    vec![],
+                );
+            }
+            spec.push(
+                &table(format!("UNIT_GROUPS.{group}.{unit}.names.join")),
+                vec![s(sep)],
+            );
+        }
+    }
+    for (unit, _) in units::all_units() {
+        spec.push(&table(format!("ALL_UNITS.{unit}.value.valueOf")), vec![]);
+        spec.push(&table(format!("GROUP_BY_UNIT.{unit}.valueOf")), vec![]);
+    }
+    for (ty, children) in units::STRUCT_UNITS {
+        for (child, _) in *children {
+            spec.push(&table(format!("STRUCT_UNITS.{ty}.{child}.valueOf")), vec![]);
+        }
+    }
+    for (key, _) in units::unit_suffix_entries() {
+        let key = key.to_string_lossy();
+        spec.push(&table(format!("UNIT_SUFFIXES.{key}.valueOf")), vec![]);
+    }
+}
+
 #[test]
 #[ignore = "rewrites parity/specs/log/units.jsonl; regenerate vectors after with `cargo xtask oracle gen log/units`"]
 fn write_units_specs() {
@@ -562,5 +597,6 @@ fn write_units_specs() {
     preset_cases(&mut spec);
     suffix_filter_cases(&mut spec);
     field_cases(&mut spec);
+    table_cases(&mut spec);
     spec.write("log/units");
 }

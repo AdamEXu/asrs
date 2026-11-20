@@ -53,6 +53,7 @@ fn handle(line: &str) -> Response {
             .map(|(_, f)| *f)
     }) {
         Some(function) => function(&request.args),
-        None => Response::Error(format!("unknown function {:?}", request.name)),
+        None => units::table_read(&request.name, &request.args)
+            .unwrap_or_else(|| Response::Error(format!("unknown function {:?}", request.name))),
     }
 }

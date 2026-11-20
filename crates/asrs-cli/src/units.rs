@@ -154,3 +154,40 @@ fn get_unit_for_field_fn(args: &[Value]) -> Response {
         None => Response::Ok(Value::Null),
     }
 }
+
+/// `shared/units:Units.<table path>.valueOf` (and `.names.join`) reads of the
+/// upstream tables, answered from the generated tables.
+pub fn table_read(name: &str, args: &[Value]) -> Option<Response> {
+    let path = name.strip_prefix("shared/units:Units.")?;
+    let segments: Vec<&str> = path.split('.').collect();
+    let config_field = |config: &units::UnitConfig, field: &str, method: &str| match (field, method)
+    {
+        ("value", "valueOf") => Some(Value::number(config.value)),
+        ("suffix", "valueOf") => Some(Value::string(config.suffix)),
+        ("pluralizeSuffix", "valueOf") => Some(Value::Bool(config.pluralize_suffix)),
+        ("names", "join") => match arg(args, 0) {
+            Value::String(sep) => Some(Value::string(
+                &config.names.join(&String::from_utf16_lossy(sep.units())),
+            )),
+            _ => None,
+        },
+        _ => None,
+    };
+    let value = match segments.as_slice() {
+        ["UNIT_GROUPS", group, unit, field, method] => {
+            let (_, group_units) = units::UNIT_GROUPS.iter().find(|(g, _)| g == group)?;
+            let (_, config) = group_units.iter().find(|(u, _)| u == unit)?;
+            config_field(config, field, method)?
+        }
+        ["ALL_UNITS", unit, field, method] => {
+            config_field(units::unit_config(unit)?, field, method)?
+        }
+        ["GROUP_BY_UNIT", unit, "valueOf"] => Value::string(units::group_by_unit(unit)?),
+        ["STRUCT_UNITS", ty, child, "valueOf"] => Value::string(units::struct_unit(ty, child)?),
+        ["UNIT_SUFFIXES", key, "valueOf"] => {
+            Value::string(units::unit_suffix(&JsString::from(*key))?)
+        }
+        _ => return None,
+    };
+    Some(Response::Ok(value))
+}
