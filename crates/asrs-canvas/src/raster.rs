@@ -95,6 +95,31 @@ impl Default for State {
     }
 }
 
+/// What one canvas carries from frame to frame: the lines-as-paths counters of its
+/// `cc::RecordPaintCanvas`. Blink keeps that recorder while the canvas keeps its size and makes a
+/// new one when the size changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RasterState {
+    draw_path_count: u32,
+    draw_line_count: u32,
+    size: (u32, u32),
+}
+
+impl RasterState {
+    /// The state for a frame of `width` x `height`: kept when the size is unchanged, fresh
+    /// otherwise.
+    pub fn for_size(self, width: u32, height: u32) -> RasterState {
+        if self.size == (width, height) {
+            self
+        } else {
+            RasterState {
+                size: (width, height),
+                ..RasterState::default()
+            }
+        }
+    }
+}
+
 /// The text half of the raster: a platform glyph backend plus its mask-gamma table.
 pub struct TextRaster<'a> {
     pub backend: &'a mut dyn TextBackend,
@@ -109,8 +134,7 @@ pub struct Raster<'a> {
     stack: Vec<State>,
     path: Path,
     fast: Fast,
-    draw_path_count: u32,
-    draw_line_count: u32,
+    lines: RasterState,
     images: HashMap<String, Pixmap>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
@@ -305,14 +329,25 @@ impl<'a> Raster<'a> {
             stack: Vec::new(),
             path: Path::new(),
             fast: Fast::None,
-            draw_path_count: 0,
-            draw_line_count: 0,
+            lines: RasterState::default().for_size(width, height),
             images: HashMap::new(),
             registers: HashMap::new(),
             text: None,
             errors: Vec::new(),
             calls: 0,
         })
+    }
+
+    /// Continues from the state an earlier frame of the same canvas left; a state from a
+    /// canvas of another size is dropped.
+    pub fn with_state(mut self, state: RasterState) -> Raster<'a> {
+        self.lines = state.for_size(self.pixmap.width(), self.pixmap.height());
+        self
+    }
+
+    /// The state to hand to the next frame of this canvas.
+    pub fn state(&self) -> RasterState {
+        self.lines
     }
 
     pub fn with_text(mut self, text: TextRaster<'a>) -> Raster<'a> {
@@ -734,10 +769,11 @@ impl<'a> Raster<'a> {
 
     /// `cc::RecordPaintCanvas::drawPath` bookkeeping for its lines-as-paths heuristic.
     fn count_draw_path(&mut self) {
-        if self.draw_path_count != u32::MAX {
-            self.draw_path_count += 1;
-            if self.draw_path_count > 4 {
-                self.draw_line_count = 0;
+        let l = &mut self.lines;
+        if l.draw_path_count != u32::MAX {
+            l.draw_path_count += 1;
+            if l.draw_path_count > 4 {
+                l.draw_line_count = 0;
             }
         }
     }
@@ -1107,13 +1143,14 @@ impl<'a> Raster<'a> {
     /// dashed line that `SkDashPathEffect::asPoints` accepts becomes rects. Returns false when
     /// the line is to be stroked as an ordinary path.
     fn stroke_line(&mut self, a: Pt, b: Pt) -> bool {
-        if self.draw_line_count != u32::MAX {
-            self.draw_line_count += 1;
-            if self.draw_line_count > 4 {
-                self.draw_path_count = 0;
+        let l = &mut self.lines;
+        if l.draw_line_count != u32::MAX {
+            l.draw_line_count += 1;
+            if l.draw_line_count > 4 {
+                l.draw_path_count = 0;
             }
         }
-        if self.draw_path_count > 4 {
+        if l.draw_path_count > 4 {
             return false;
         }
         let Some(points) = self.dash_as_points(a, b) else {

@@ -77,6 +77,15 @@ function run(replay: Replay, ctx: Context, cmds: Cmd[]) {
         replay.sources.set(id, canvas);
         break;
       }
+      case "frame":
+        ctx.canvas.width = ctx.canvas.width;
+        break;
+      case "resize": {
+        const [width, height] = args as [number, number];
+        ctx.canvas.width = width;
+        ctx.canvas.height = height;
+        break;
+      }
       case "getImageData": {
         const [sx, sy, sw, sh, register] = args as [number, number, number, number, string];
         replay.registers.set(register, ctx.getImageData(sx, sy, sw, sh));

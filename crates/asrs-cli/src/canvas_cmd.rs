@@ -5,7 +5,7 @@ use std::path::Path;
 use asrs_canvas::text::coverage::{TextOp, render_coverage};
 use asrs_canvas::text::lut::{self, MaskGammaLut};
 use asrs_canvas::text::{TextBackend, platform_backend};
-use asrs_canvas::{Call, ImageDataSource, Pixmap, Raster, TextRaster, pixels, trace};
+use asrs_canvas::{Call, ImageDataSource, Pixmap, Raster, RasterState, TextRaster, pixels, trace};
 use asrs_js::value::JsValue;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel;
@@ -84,7 +84,8 @@ fn render_scenes(scenes: &Path, out: &Path, wanted: &[String]) -> Result<(), Str
 }
 
 /// Replays one scene command list. The scene-only commands `image` (a source from straight
-/// RGBA) and `canvas` (a nested canvas) only define sources, so they run before the rest.
+/// RGBA) and `canvas` (a nested canvas) only define sources, so they run before the rest;
+/// `frame` (`canvas.width = canvas.width`) and `resize` start a new frame on the same canvas.
 fn render_list(
     width: u32,
     height: u32,
@@ -93,6 +94,8 @@ fn render_list(
     backend: &mut dyn TextBackend,
     lut: &MaskGammaLut,
 ) -> Result<Pixmap, String> {
+    let mut frames: Vec<((u32, u32), Vec<Call>)> = Vec::new();
+    let mut frame_size = (width, height);
     let mut calls: Vec<Call> = Vec::new();
     for cmd in cmds {
         let items = cmd.as_array().ok_or("a command is not an array")?;
@@ -132,17 +135,45 @@ fn render_list(
                 let pixmap = render_list(w, h, inner, images, backend, lut)?;
                 images.insert(id.ok_or("canvas: no id")?, pixmap);
             }
+            "frame" => frames.push((frame_size, std::mem::take(&mut calls))),
+            "resize" => {
+                frames.push((frame_size, std::mem::take(&mut calls)));
+                frame_size = (
+                    js_number(items.get(1), "width")? as u32,
+                    js_number(items.get(2), "height")? as u32,
+                );
+            }
             _ => calls.push(trace::call_from_value(cmd)?),
         }
     }
-    let mut raster = Raster::new(width, height)
-        .ok_or("empty canvas")?
-        .with_text(TextRaster { backend, lut });
-    for (id, pixmap) in images.iter() {
-        raster.add_image(id, pixmap.clone());
+    frames.push((frame_size, calls));
+    let mut state = RasterState::default();
+    let mut last = None;
+    for ((w, h), calls) in frames {
+        let Some(raster) = Raster::new(w, h) else {
+            state = RasterState::default();
+            continue;
+        };
+        let mut raster = raster
+            .with_state(state)
+            .with_text(TextRaster {
+                backend: &mut *backend,
+                lut,
+            });
+        for (id, pixmap) in images.iter() {
+            raster.add_image(id, pixmap.clone());
+        }
+        raster.run(&calls);
+        state = raster.state();
+        last = Some(raster.into_pixmap());
     }
-    raster.run(&calls);
-    Ok(raster.into_pixmap())
+    if frame_size != (width, height) {
+        return Err(format!(
+            "the last frame is {}x{}, not the scene size",
+            frame_size.0, frame_size.1
+        ));
+    }
+    last.ok_or_else(|| "empty canvas".to_owned())
 }
 
 struct TextScene {

@@ -17,5 +17,5 @@ pub mod text;
 pub mod trace;
 
 pub use display::{Call, Canvas2d, Gradient, ImageData, ImageDataSource, Property, Style};
-pub use raster::{Raster, TextRaster};
+pub use raster::{Raster, RasterState, TextRaster};
 pub use tiny_skia::Pixmap;
