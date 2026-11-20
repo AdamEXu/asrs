@@ -19,7 +19,10 @@ fn dispatch(case: &FnCase<'_>) -> Response {
             None => Response::Error(format!("no port of {source:?}")),
         };
     }
-    match tabs_console::FUNCTIONS.iter().find(|(n, _)| *n == case.name()) {
+    match tabs_console::FUNCTIONS
+        .iter()
+        .find(|(n, _)| *n == case.name())
+    {
         Some((_, f)) => f(args),
         None => Response::Error(format!("no port of {}", case.name())),
     }
