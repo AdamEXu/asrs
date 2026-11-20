@@ -17,10 +17,7 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
     ("Number.prototype.toString", number_to_string),
     ("Number.prototype.toFixed", number_to_fixed),
     ("Number.prototype.toPrecision", number_to_precision),
-    (
-        "Number.prototype.toExponential",
-        number_to_exponential,
-    ),
+    ("Number.prototype.toExponential", number_to_exponential),
     ("oracle:numberFormat", number_format),
 ];
 
@@ -84,9 +81,7 @@ fn to_number(value: &Value) -> Result<f64, Response> {
         }
         Value::Number(bits) => f64::from_bits(*bits),
         Value::String(s) => number::to_number(s.units()),
-        Value::BigInt(digits) => {
-            number::to_number(&digits.encode_utf16().collect::<Vec<u16>>())
-        }
+        Value::BigInt(digits) => number::to_number(&digits.encode_utf16().collect::<Vec<u16>>()),
         Value::Symbol(_) => {
             return Err(type_error("Cannot convert a Symbol value to a number"));
         }
@@ -105,9 +100,7 @@ fn to_units(value: &Value) -> Result<Vec<u16>, Response> {
     Ok(match value {
         Value::Undefined => "undefined".encode_utf16().collect(),
         Value::Null => "null".encode_utf16().collect(),
-        Value::Bool(b) => if *b { "true" } else { "false" }
-            .encode_utf16()
-            .collect(),
+        Value::Bool(b) => if *b { "true" } else { "false" }.encode_utf16().collect(),
         Value::Number(bits) => number::to_string(f64::from_bits(*bits))
             .encode_utf16()
             .collect(),
@@ -278,15 +271,20 @@ fn number_format(args: &[Value]) -> Response {
             Some(v) => to_number(v),
         }
     };
-    let (min_integer, min_fraction, max_fraction) =
-        match (numeric("minimumIntegerDigits", 1.0), numeric("minimumFractionDigits", 0.0), numeric("maximumFractionDigits", 3.0)) {
-            (Ok(a), Ok(b), Ok(c)) => (a, b, c),
-            (Err(r), _, _) | (_, Err(r), _) | (_, _, Err(r)) => return r,
-        };
+    let (min_integer, min_fraction, max_fraction) = match (
+        numeric("minimumIntegerDigits", 1.0),
+        numeric("minimumFractionDigits", 0.0),
+        numeric("maximumFractionDigits", 3.0),
+    ) {
+        (Ok(a), Ok(b), Ok(c)) => (a, b, c),
+        (Err(r), _, _) | (_, Err(r), _) | (_, _, Err(r)) => return r,
+    };
     let grouping = match options.get("useGrouping") {
         None => true,
         Some(Value::Bool(b)) => *b,
-        Some(Value::Number(bits)) => f64::from_bits(*bits) != 0.0 && !f64::from_bits(*bits).is_nan(),
+        Some(Value::Number(bits)) => {
+            f64::from_bits(*bits) != 0.0 && !f64::from_bits(*bits).is_nan()
+        }
         Some(Value::Null) | Some(Value::Undefined) => false,
         Some(_) => true,
     };

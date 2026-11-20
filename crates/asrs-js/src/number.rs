@@ -61,10 +61,7 @@ pub fn to_fixed(value: f64, fraction_digits: f64) -> Result<String, &'static str
 }
 
 /// `Number.prototype.toExponential`. `None` is an undefined argument.
-pub fn to_exponential(
-    value: f64,
-    fraction_digits: Option<f64>,
-) -> Result<String, &'static str> {
+pub fn to_exponential(value: f64, fraction_digits: Option<f64>) -> Result<String, &'static str> {
     if let Some(f) = fraction_digits
         && !(0.0..=100.0).contains(&f)
     {
@@ -95,7 +92,12 @@ pub fn to_exponential(
             (d, p, keep)
         }
     };
-    Ok(format_exponential(&digits, point - 1, significant, negative))
+    Ok(format_exponential(
+        &digits,
+        point - 1,
+        significant,
+        negative,
+    ))
 }
 
 /// `Number.prototype.toPrecision`. `None` is an undefined argument.
@@ -198,10 +200,7 @@ pub fn intl_format(value: f64, options: IntlOptions) -> String {
     let negative = value.is_sign_negative();
     let abs = value.abs();
     if abs.is_infinite() {
-        return format!(
-            "{}∞",
-            sign_prefix(negative, false, options.sign_display)
-        );
+        return format!("{}∞", sign_prefix(negative, false, options.sign_display));
     }
     let (digits, point) = shortest_digits(abs);
     let (digits, point) = round_at(&digits, point, point + options.max_fraction as i32);
@@ -376,10 +375,7 @@ fn base_ten(u: &[u16], start: usize) -> f64 {
     if count >= 310 {
         return f64::INFINITY;
     }
-    let s: String = u[start..end]
-        .iter()
-        .map(|&c| c as u8 as char)
-        .collect();
+    let s: String = u[start..end].iter().map(|&c| c as u8 as char).collect();
     s.parse().unwrap_or(f64::NAN)
 }
 
@@ -529,7 +525,10 @@ fn scan_decimal(u: &[u16], start: usize) -> Option<(usize, String)> {
         _ => {}
     }
     let int_start = i;
-    while u.get(i).is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+    while u
+        .get(i)
+        .is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c))
+    {
         i += 1;
     }
     let int = &u[int_start..i];
@@ -537,7 +536,10 @@ fn scan_decimal(u: &[u16], start: usize) -> Option<(usize, String)> {
     if u.get(i) == Some(&(b'.' as u16)) {
         i += 1;
         let fs = i;
-        while u.get(i).is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+        while u
+            .get(i)
+            .is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c))
+        {
             i += 1;
         }
         if int.is_empty() && i == fs {
@@ -572,7 +574,10 @@ fn scan_decimal(u: &[u16], start: usize) -> Option<(usize, String)> {
             _ => "",
         };
         let ds = j;
-        while u.get(j).is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+        while u
+            .get(j)
+            .is_some_and(|&c| (b'0' as u16..=b'9' as u16).contains(&c))
+        {
             j += 1;
         }
         if j > ds {
