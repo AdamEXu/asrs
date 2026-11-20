@@ -3,18 +3,17 @@ use std::collections::HashMap;
 use asrs_js::string::JsString;
 use tiny_skia::{
     FilterQuality, GradientStop, IntSize, LineCap, LineJoin, LinearGradient, Paint, PathBuilder,
-    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode,
-    Transform,
+    Pattern, Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
 };
 
+use crate::aaa;
+use crate::blit::Spans;
 use crate::color::{self, Rgba};
 use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::hairline;
 use crate::path::{Affine, Path, Pt};
 use crate::pixels;
-use crate::aaa;
-use crate::blit::Spans;
 use crate::scan::{self, Blend, Coverage};
 use crate::skpath::SkPath;
 use crate::stroke;
@@ -493,7 +492,9 @@ impl<'a> Raster<'a> {
         if x.checked_add(w).is_none() || y.checked_add(h).is_none() {
             return Err(OUT_OF_MEMORY);
         }
-        let elements = 4u32.checked_mul(w as u32).and_then(|v| v.checked_mul(h as u32));
+        let elements = 4u32
+            .checked_mul(w as u32)
+            .and_then(|v| v.checked_mul(h as u32));
         if elements.is_none() {
             return Err(CanvasError::Range("Out of memory at ImageData creation."));
         }
@@ -883,7 +884,13 @@ impl<'a> Raster<'a> {
             return;
         };
         let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
-        aaa::fill_path(path, self.pixmap.width(), self.pixmap.height(), false, &mut spans);
+        aaa::fill_path(
+            path,
+            self.pixmap.width(),
+            self.pixmap.height(),
+            false,
+            &mut spans,
+        );
         self.paint_spans(&spans, &source);
     }
 
@@ -1290,9 +1297,7 @@ impl<'a> Raster<'a> {
     fn rect_spans(&self, rect: [f64; 4], anti_alias: bool) -> Option<Spans> {
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
         if !anti_alias {
-            return self
-                .rect_coverage(rect, false)
-                .map(|c| c.to_spans(w, h));
+            return self.rect_coverage(rect, false).map(|c| c.to_spans(w, h));
         }
         if let Some(device) = self.device_rect(rect) {
             let r = [device.left(), device.top(), device.right(), device.bottom()];
@@ -1348,7 +1353,8 @@ impl<'a> Raster<'a> {
             return;
         }
         let fill = self.state.fill.clone();
-        if let (Some(source), Some(spans)) = (self.source(&fill, 256), self.rect_spans(rect, true)) {
+        if let (Some(source), Some(spans)) = (self.source(&fill, 256), self.rect_spans(rect, true))
+        {
             self.paint_spans(&spans, &source);
         }
     }
@@ -1588,7 +1594,10 @@ impl<'a> Raster<'a> {
 
 /// Evaluates `shader` (device space) at the pixel centres of `bounds`.
 fn shade(bounds: [i32; 4], shader: Shader<'_>) -> Option<Pixmap> {
-    let (w, h) = ((bounds[2] - bounds[0]) as u32, (bounds[3] - bounds[1]) as u32);
+    let (w, h) = (
+        (bounds[2] - bounds[0]) as u32,
+        (bounds[3] - bounds[1]) as u32,
+    );
     let mut scratch = Pixmap::new(w, h)?;
     let (x, y) = (bounds[0] as f32, bounds[1] as f32);
     let rect = Rect::from_xywh(x, y, w as f32, h as f32)?;
@@ -1846,7 +1855,10 @@ mod tests {
             [
                 (0, CanvasError::IndexSize("The source width is 0.")),
                 (1, OUT_OF_MEMORY),
-                (2, CanvasError::Range("Out of memory at ImageData creation.")),
+                (
+                    2,
+                    CanvasError::Range("Out of memory at ImageData creation.")
+                ),
                 (3, OUT_OF_MEMORY),
             ]
         );

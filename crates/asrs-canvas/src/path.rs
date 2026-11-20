@@ -602,7 +602,12 @@ pub(crate) type ConicPts = ([Pt; 3], f32);
 
 /// `SkConic::BuildUnitArc` followed by the oval's scale and translate (`user` is
 /// `[sx, sy, tx, ty]`).
-pub(crate) fn build_unit_arc(start: Pt, stop: Pt, ccw: bool, user: [f32; 4]) -> Option<Vec<ConicPts>> {
+pub(crate) fn build_unit_arc(
+    start: Pt,
+    stop: Pt,
+    ccw: bool,
+    user: [f32; 4],
+) -> Option<Vec<ConicPts>> {
     let x = start.x * stop.x + start.y * stop.y;
     let mut y = start.x * stop.y - start.y * stop.x;
     let abs_y = y.abs();

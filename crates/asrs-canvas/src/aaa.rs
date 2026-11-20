@@ -212,7 +212,14 @@ impl Edge {
         Some(e)
     }
 
-    fn update_line(&mut self, mut x0: i32, mut y0: i32, mut x1: i32, mut y1: i32, slope: i32) -> bool {
+    fn update_line(
+        &mut self,
+        mut x0: i32,
+        mut y0: i32,
+        mut x1: i32,
+        mut y1: i32,
+        slope: i32,
+    ) -> bool {
         if y0 > y1 {
             std::mem::swap(&mut x0, &mut x1);
             std::mem::swap(&mut y0, &mut y1);
@@ -255,8 +262,14 @@ impl Edge {
         if (y0.wrapping_add(32) >> 6) == (y2.wrapping_add(32) >> 6) {
             return None;
         }
-        let dx = (((x1 as u32) << 1) as i32).wrapping_sub(x0).wrapping_sub(x2) >> 2;
-        let dy = (((y1 as u32) << 1) as i32).wrapping_sub(y0).wrapping_sub(y2) >> 2;
+        let dx = (((x1 as u32) << 1) as i32)
+            .wrapping_sub(x0)
+            .wrapping_sub(x2)
+            >> 2;
+        let dy = (((y1 as u32) << 1) as i32)
+            .wrapping_sub(y0)
+            .wrapping_sub(y2)
+            >> 2;
         let mut shift = diff_to_shift(dx, dy, ACCURACY);
         if shift == 0 {
             shift = 1;
@@ -319,7 +332,8 @@ impl Edge {
                         i32::MAX
                     };
                     new_snapped_y = self.q_last_y.min(round_to_fixed(newy));
-                    new_snapped_x = newx.wrapping_sub(fmul(slope, newy.wrapping_sub(new_snapped_y)));
+                    new_snapped_x =
+                        newx.wrapping_sub(fmul(slope, newy.wrapping_sub(new_snapped_y)));
                 } else {
                     new_snapped_y = self.q_last_y.min(snap_y(newy));
                     new_snapped_x = newx;
@@ -570,7 +584,12 @@ fn insertion_sort<T: Copy>(a: &mut [T], less: &impl Fn(&T, &T) -> bool) {
     }
 }
 
-fn heap_sift_down<T: Copy>(a: &mut [T], mut root: usize, bottom: usize, less: &impl Fn(&T, &T) -> bool) {
+fn heap_sift_down<T: Copy>(
+    a: &mut [T],
+    mut root: usize,
+    bottom: usize,
+    less: &impl Fn(&T, &T) -> bool,
+) {
     let x = a[root - 1];
     let mut child = root << 1;
     while child <= bottom {
@@ -588,7 +607,12 @@ fn heap_sift_down<T: Copy>(a: &mut [T], mut root: usize, bottom: usize, less: &i
     a[root - 1] = x;
 }
 
-fn heap_sift_up<T: Copy>(a: &mut [T], mut root: usize, bottom: usize, less: &impl Fn(&T, &T) -> bool) {
+fn heap_sift_up<T: Copy>(
+    a: &mut [T],
+    mut root: usize,
+    bottom: usize,
+    less: &impl Fn(&T, &T) -> bool,
+) {
     let x = a[root - 1];
     let start = root;
     let mut j = root << 1;
@@ -716,7 +740,11 @@ impl Ctx<'_> {
             && let Additive::Mask { data, .. } = &mut self.blitter
         {
             let sum = i32::from(data[i]) + i32::from(a);
-            data[i] = if safe { sum.min(255) as u8 } else { catch_overflow(sum) };
+            data[i] = if safe {
+                sum.min(255) as u8
+            } else {
+                catch_overflow(sum)
+            };
         }
     }
 
@@ -728,21 +756,20 @@ impl Ctx<'_> {
             curr_y,
             ..
         } = &mut self.blitter
+            && *curr_y >= *top
         {
-            if *curr_y >= *top {
-                for a in row.iter_mut() {
-                    *a = if *a > 247 {
-                        255
-                    } else if *a < 8 {
-                        0
-                    } else {
-                        *a
-                    };
-                }
-                self.out.anti_h(*left, *curr_y, row);
-                row.fill(0);
-                *curr_y = *top - 1;
+            for a in row.iter_mut() {
+                *a = if *a > 247 {
+                    255
+                } else if *a < 8 {
+                    0
+                } else {
+                    *a
+                };
             }
+            self.out.anti_h(*left, *curr_y, row);
+            row.fill(0);
+            *curr_y = *top - 1;
         }
     }
 
@@ -880,7 +907,7 @@ impl Ctx<'_> {
 }
 
 fn trapezoid_to_alpha(l1: i32, l2: i32) -> u8 {
-    (l1.wrapping_add(l2) / 2 >> 8) as u8
+    ((l1.wrapping_add(l2) / 2) >> 8) as u8
 }
 
 fn partial_triangle_to_alpha(a: i32, b: i32) -> u8 {
@@ -955,7 +982,15 @@ fn compute_alpha_below_line(alphas: &mut [u8], l: i32, r: i32, dy: i32, full: u8
 }
 
 #[allow(clippy::too_many_arguments)]
-fn blit_single_alpha(c: &mut Ctx<'_>, y: i32, x: i32, alpha: u8, full: u8, mask: bool, no_real: bool) {
+fn blit_single_alpha(
+    c: &mut Ctx<'_>,
+    y: i32,
+    x: i32,
+    alpha: u8,
+    full: u8,
+    mask: bool,
+    no_real: bool,
+) {
     if mask {
         if full == 0xFF && !no_real {
             c.mask_set(x, y, alpha);
@@ -970,7 +1005,16 @@ fn blit_single_alpha(c: &mut Ctx<'_>, y: i32, x: i32, alpha: u8, full: u8, mask:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn blit_two_alphas(c: &mut Ctx<'_>, y: i32, x: i32, a1: u8, a2: u8, full: u8, mask: bool, no_real: bool) {
+fn blit_two_alphas(
+    c: &mut Ctx<'_>,
+    y: i32,
+    x: i32,
+    a1: u8,
+    a2: u8,
+    full: u8,
+    mask: bool,
+    no_real: bool,
+) {
     if mask {
         c.mask_add(x, y, a1, true);
         c.mask_add(x + 1, y, a2, true);
@@ -1121,11 +1165,22 @@ fn blit_trapezoid_row(
                 let first = join_left - ONE - ul;
                 let second = ll - ul - first;
                 let a1 = partial_triangle_to_alpha(first, l_dy);
-                let a2 = (i32::from(full) - i32::from(partial_triangle_to_alpha(second, l_dy))) as u8;
+                let a2 =
+                    (i32::from(full) - i32::from(partial_triangle_to_alpha(second, l_dy))) as u8;
                 blit_two_alphas(c, y, ul >> 16, a1, a2, full, mask, no_real);
             } else {
                 blit_aaa_trapezoid_row(
-                    c, y, ul, join_left, ll, join_left, l_dy, i32::MAX, full, mask, no_real,
+                    c,
+                    y,
+                    ul,
+                    join_left,
+                    ll,
+                    join_left,
+                    l_dy,
+                    i32::MAX,
+                    full,
+                    mask,
+                    no_real,
                 );
             }
         }
@@ -1148,12 +1203,23 @@ fn blit_trapezoid_row(
             } else if len == 2 {
                 let first = join_rite + ONE - ur;
                 let second = lr - ur - first;
-                let a1 = (i32::from(full) - i32::from(partial_triangle_to_alpha(first, r_dy))) as u8;
+                let a1 =
+                    (i32::from(full) - i32::from(partial_triangle_to_alpha(first, r_dy))) as u8;
                 let a2 = partial_triangle_to_alpha(second, r_dy);
                 blit_two_alphas(c, y, join_rite >> 16, a1, a2, full, mask, no_real);
             } else {
                 blit_aaa_trapezoid_row(
-                    c, y, join_rite, ur, join_rite, lr, i32::MAX, r_dy, full, mask, no_real,
+                    c,
+                    y,
+                    join_rite,
+                    ur,
+                    join_rite,
+                    lr,
+                    i32::MAX,
+                    r_dy,
+                    full,
+                    mask,
+                    no_real,
                 );
             }
         }
@@ -1349,7 +1415,12 @@ fn walk_convex(
                             fixed_to_alpha(fmul(partial_bot, partial_left)),
                         );
                     }
-                    c.add_anti_hn(full_left, full_bot, full_rite - full_left, fixed_to_alpha(partial_bot));
+                    c.add_anti_hn(
+                        full_left,
+                        full_bot,
+                        full_rite - full_left,
+                        fixed_to_alpha(partial_bot),
+                    );
                     if partial_rite > 0 {
                         c.add_anti_hn(
                             full_rite,
@@ -1372,7 +1443,12 @@ fn walk_convex(
                         c.flush_if_y_changed(y, y + partial_top);
                     }
                     if full_bot > full_top {
-                        c.real_v(full_left - 1, full_top, full_bot - full_top, fixed_to_alpha(width));
+                        c.real_v(
+                            full_left - 1,
+                            full_top,
+                            full_bot - full_top,
+                            fixed_to_alpha(width),
+                        );
                     }
                     if partial_bot > 0 {
                         c.add_anti_hn(
@@ -1482,18 +1558,14 @@ fn update_next_next_y(y: i32, next_y: i32, nn: &mut i32) {
 
 fn check_intersection(l: &List, i: usize, next_y: i32, nn: &mut i32) {
     let p = l.e[i].prev;
-    if l.e[p].prev != NONE
-        && l.e[p].x.wrapping_add(l.e[p].dx) > l.e[i].x.wrapping_add(l.e[i].dx)
-    {
+    if l.e[p].prev != NONE && l.e[p].x.wrapping_add(l.e[p].dx) > l.e[i].x.wrapping_add(l.e[i].dx) {
         *nn = next_y + (ONE >> ACCURACY);
     }
 }
 
 fn check_intersection_fwd(l: &List, i: usize, next_y: i32, nn: &mut i32) {
     let n = l.e[i].next;
-    if l.e[n].next != NONE
-        && l.e[i].x.wrapping_add(l.e[i].dx) > l.e[n].x.wrapping_add(l.e[n].dx)
-    {
+    if l.e[n].next != NONE && l.e[i].x.wrapping_add(l.e[i].dx) > l.e[n].x.wrapping_add(l.e[n].dx) {
         *nn = next_y + (ONE >> ACCURACY);
     }
 }
@@ -1791,7 +1863,11 @@ fn try_blit_fat_anti_rect(path: &SkPath, clip: [i32; 4], out: &mut Spans) -> boo
         alphas[bw as usize - 1] = to_alpha(pr);
         alphas
     };
-    out.anti_h(b[0], b[1], &row(partial_l * partial_t, partial_t, partial_r * partial_t));
+    out.anti_h(
+        b[0],
+        b[1],
+        &row(partial_l * partial_t, partial_t, partial_r * partial_t),
+    );
     if bh > 2 {
         out.anti_rect(
             b[0],
@@ -1803,7 +1879,11 @@ fn try_blit_fat_anti_rect(path: &SkPath, clip: [i32; 4], out: &mut Spans) -> boo
         );
     }
     if bh > 1 {
-        out.anti_h(b[0], b[3] - 1, &row(partial_l * partial_b, partial_b, partial_r * partial_b));
+        out.anti_h(
+            b[0],
+            b[3] - 1,
+            &row(partial_l * partial_b, partial_b, partial_r * partial_b),
+        );
     }
     true
 }

@@ -177,11 +177,26 @@ impl Builder {
         next
     }
 
-    fn quad_segs(&mut self, pts: [P; 3], distance: f32, mint: i32, maxt: i32, idx: usize, depth: i32) -> f32 {
+    fn quad_segs(
+        &mut self,
+        pts: [P; 3],
+        distance: f32,
+        mint: i32,
+        maxt: i32,
+        idx: usize,
+        depth: i32,
+    ) -> f32 {
         if depth < 8 && (maxt - mint) >> 10 != 0 && quad_too_curvy(&pts, self.tol) {
             let tmp = chop_quad(pts, 0.5);
             let half = (mint + maxt) >> 1;
-            let d = self.quad_segs([tmp[0], tmp[1], tmp[2]], distance, mint, half, idx, depth + 1);
+            let d = self.quad_segs(
+                [tmp[0], tmp[1], tmp[2]],
+                distance,
+                mint,
+                half,
+                idx,
+                depth + 1,
+            );
             self.quad_segs([tmp[2], tmp[3], tmp[4]], d, half, maxt, idx, depth + 1)
         } else {
             self.push(length(pts[0], pts[2]), distance, idx, SegType::Quad, maxt)
@@ -205,7 +220,10 @@ impl Builder {
         if !(half_pt.x.is_finite() && half_pt.y.is_finite()) {
             return distance;
         }
-        if depth < 8 && (maxt - mint) >> 10 != 0 && conic_too_curvy(min_pt, half_pt, max_pt, self.tol) {
+        if depth < 8
+            && (maxt - mint) >> 10 != 0
+            && conic_too_curvy(min_pt, half_pt, max_pt, self.tol)
+        {
             let d = self.conic_segs(conic, distance, mint, min_pt, half, half_pt, idx, depth + 1);
             self.conic_segs(conic, d, half, half_pt, maxt, max_pt, idx, depth + 1)
         } else {
@@ -238,7 +256,13 @@ fn contours(path: &SkPath, res_scale: f32) -> Vec<Contour> {
             if closed {
                 let first = pts[0];
                 let prev = dist;
-                dist = b.push(length(pts[idx as usize], first), dist, idx as usize, SegType::Line, MAX_T);
+                dist = b.push(
+                    length(pts[idx as usize], first),
+                    dist,
+                    idx as usize,
+                    SegType::Line,
+                    MAX_T,
+                );
                 if dist > prev {
                     pts.push(first);
                 }
@@ -299,7 +323,16 @@ fn contours(path: &SkPath, res_scale: f32) -> Vec<Contour> {
                 pi += 2;
                 wi += 1;
                 let prev = dist;
-                dist = b.conic_segs(&conic, dist, 0, conic.pts[0], MAX_T, conic.pts[2], idx as usize, 0);
+                dist = b.conic_segs(
+                    &conic,
+                    dist,
+                    0,
+                    conic.pts[0],
+                    MAX_T,
+                    conic.pts[2],
+                    idx as usize,
+                    0,
+                );
                 if dist > prev {
                     pts.extend([p(conic.w, 0.0), conic.pts[1], conic.pts[2]]);
                     idx += 3;
@@ -335,7 +368,8 @@ impl Contour {
                 start_t = t_value(segs[index - 1].t_value);
             }
         }
-        let t = start_t + (t_value(seg.t_value) - start_t) * (d - start_d) / (seg.distance - start_d);
+        let t =
+            start_t + (t_value(seg.t_value) - start_t) * (d - start_d) / (seg.distance - start_d);
         (index, t)
     }
 
@@ -346,7 +380,10 @@ impl Contour {
             SegType::Quad => {
                 let c = pts[0];
                 let b = p((pts[1].x - c.x) * 2.0, (pts[1].y - c.y) * 2.0);
-                let a = p(pts[2].x - pts[1].x * 2.0 + c.x, pts[2].y - pts[1].y * 2.0 + c.y);
+                let a = p(
+                    pts[2].x - pts[1].x * 2.0 + c.x,
+                    pts[2].y - pts[1].y * 2.0 + c.y,
+                );
                 p((a.x * t + b.x) * t + c.x, (a.y * t + b.y) * t + c.y)
             }
             SegType::Conic => Conic {
@@ -372,7 +409,10 @@ impl Contour {
                 if stop_t == 1.0 {
                     dst.line_to(pts[1]);
                 } else {
-                    dst.line_to(p(interp(pts[0].x, pts[1].x, stop_t), interp(pts[0].y, pts[1].y, stop_t)));
+                    dst.line_to(p(
+                        interp(pts[0].x, pts[1].x, stop_t),
+                        interp(pts[0].y, pts[1].y, stop_t),
+                    ));
                 }
             }
             SegType::Quad => {
@@ -389,7 +429,8 @@ impl Contour {
                     if stop_t == 1.0 {
                         dst.quad_to(t0[3], t0[4]);
                     } else {
-                        let t1 = chop_quad([t0[2], t0[3], t0[4]], (stop_t - start_t) / (1.0 - start_t));
+                        let t1 =
+                            chop_quad([t0[2], t0[3], t0[4]], (stop_t - start_t) / (1.0 - start_t));
                         dst.quad_to(t1[1], t1[2]);
                     }
                 }
@@ -421,7 +462,7 @@ impl Contour {
     fn segment(&self, start_d: f32, stop_d: f32, dst: &mut SkPath, move_to: bool) {
         let start_d = start_d.max(0.0);
         let stop_d = stop_d.min(self.length);
-        if !(start_d <= stop_d) || self.segments.is_empty() {
+        if start_d.partial_cmp(&stop_d).is_none_or(|o| o.is_gt()) || self.segments.is_empty() {
             return;
         }
         let (mut si, mut start_t) = self.distance_to_segment(start_d);
@@ -541,7 +582,8 @@ pub fn dash_path(src: &SkPath, dash: &Dash, rec: &StrokeRec, cull: Option<Rect>)
     let intervals = &dash.intervals;
     let count = intervals.len();
     let len: f32 = intervals.iter().sum();
-    if count < 2 || count % 2 != 0 || intervals.iter().any(|&v| v < 0.0 || !v.is_finite()) {
+    if count < 2 || !count.is_multiple_of(2) || intervals.iter().any(|&v| v < 0.0 || !v.is_finite())
+    {
         return None;
     }
     if !(len > 0.0 && len.is_finite() && dash.phase.is_finite()) {
@@ -643,7 +685,9 @@ pub fn dash_path(src: &SkPath, dash: &Dash, rec: &StrokeRec, cull: Option<Rect>)
             if !b.is_empty() {
                 let closed = src.verbs.last() == Some(&Verb::Close);
                 if closed && initial_index % 2 == 0 {
-                    let perimeter: f32 = contours(src, rec.res_scale).first().map_or(0.0, |c| c.length);
+                    let perimeter: f32 = contours(src, rec.res_scale)
+                        .first()
+                        .map_or(0.0, |c| c.length);
                     let mut end_phase = (perimeter + phase) % len;
                     let mut index = 0;
                     while end_phase > intervals[index] {
@@ -666,7 +710,10 @@ pub fn dash_path(src: &SkPath, dash: &Dash, rec: &StrokeRec, cull: Option<Rect>)
                             next += 1;
                         }
                         let tiny = 1.0 / 4096.0;
-                        let v = p((mid.x - pts[last_i].x) * tiny, (mid.y - pts[last_i].y) * tiny);
+                        let v = p(
+                            (mid.x - pts[last_i].x) * tiny,
+                            (mid.y - pts[last_i].y) * tiny,
+                        );
                         b.move_to(p(mid.x - v.x, mid.y - v.y));
                         b.line_to(mid);
                         let v = p((mid.x - pts[next].x) * tiny, (mid.y - pts[next].y) * tiny);

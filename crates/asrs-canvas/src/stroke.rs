@@ -70,7 +70,10 @@ fn distance_sqd(a: P, b: P) -> f32 {
 fn quad_eval(src: &[P; 3], t: f32) -> P {
     let c = src[0];
     let b = p((src[1].x - c.x) * 2.0, (src[1].y - c.y) * 2.0);
-    let a = p(src[2].x - src[1].x * 2.0 + c.x, src[2].y - src[1].y * 2.0 + c.y);
+    let a = p(
+        src[2].x - src[1].x * 2.0 + c.x,
+        src[2].y - src[1].y * 2.0 + c.y,
+    );
     p((a.x * t + b.x) * t + c.x, (a.y * t + b.y) * t + c.y)
 }
 
@@ -391,7 +394,15 @@ impl Stroker {
         Some((scale(unit, self.radius), unit))
     }
 
-    fn joiner(&mut self, join: LineJoin, before_unit: P, pivot: P, after_unit: P, prev_line: bool, curr_line: bool) {
+    fn joiner(
+        &mut self,
+        join: LineJoin,
+        before_unit: P,
+        pivot: P,
+        after_unit: P,
+        prev_line: bool,
+        curr_line: bool,
+    ) {
         let radius = self.radius;
         let (outer, inner) = (&mut self.outer, &mut self.inner);
         match join {
@@ -429,9 +440,12 @@ impl Stroker {
                     x: after.x,
                     y: after.y,
                 };
-                if let Some(conics) =
-                    crate::path::build_unit_arc(start, stop, ccw, [radius, radius, pivot.x, pivot.y])
-                    && !conics.is_empty()
+                if let Some(conics) = crate::path::build_unit_arc(
+                    start,
+                    stop,
+                    ccw,
+                    [radius, radius, pivot.x, pivot.y],
+                ) && !conics.is_empty()
                 {
                     for (pts, w) in conics {
                         outer.conic_to(p(pts[1].x, pts[1].y), p(pts[2].x, pts[2].y), w);
@@ -508,8 +522,14 @@ impl Stroker {
             }
             LineCap::Square => {
                 let parallel = rotate_cw(normal);
-                let a = p(pivot.x + normal.x + parallel.x, pivot.y + normal.y + parallel.y);
-                let b = p(pivot.x - normal.x + parallel.x, pivot.y - normal.y + parallel.y);
+                let a = p(
+                    pivot.x + normal.x + parallel.x,
+                    pivot.y + normal.y + parallel.y,
+                );
+                let b = p(
+                    pivot.x - normal.x + parallel.x,
+                    pivot.y - normal.y + parallel.y,
+                );
                 if extend_last {
                     outer.set_last_pt(a);
                     outer.line_to(b);
@@ -539,7 +559,8 @@ impl Stroker {
             self.outer.move_to(self.first_outer_pt);
             self.inner.move_to(sub(self.prev_pt, normal));
         } else {
-            let (prev_unit, prev_pt, prev_line) = (self.prev_unit_normal, self.prev_pt, self.prev_is_line);
+            let (prev_unit, prev_pt, prev_line) =
+                (self.prev_unit_normal, self.prev_pt, self.prev_is_line);
             self.joiner(self.join, prev_unit, prev_pt, unit, prev_line, curr_is_line);
         }
         self.prev_is_line = curr_is_line;
@@ -557,9 +578,20 @@ impl Stroker {
     fn finish_contour(&mut self, close: bool, curr_is_line: bool) {
         if self.segment_count > 0 {
             if close {
-                let (prev_unit, prev_pt, first_unit, prev_line) =
-                    (self.prev_unit_normal, self.prev_pt, self.first_unit_normal, self.prev_is_line);
-                self.joiner(self.join, prev_unit, prev_pt, first_unit, prev_line, curr_is_line);
+                let (prev_unit, prev_pt, first_unit, prev_line) = (
+                    self.prev_unit_normal,
+                    self.prev_pt,
+                    self.first_unit_normal,
+                    self.prev_is_line,
+                );
+                self.joiner(
+                    self.join,
+                    prev_unit,
+                    prev_pt,
+                    first_unit,
+                    prev_line,
+                    curr_is_line,
+                );
                 self.outer.close();
                 if let Some(pt) = self.inner.last_pt() {
                     let inner = std::mem::take(&mut self.inner);
@@ -572,9 +604,18 @@ impl Stroker {
                 self.capper(prev_pt, prev_normal, pt, curr_is_line);
                 let inner = std::mem::take(&mut self.inner);
                 self.outer.reverse_path_to(&inner);
-                let (first_pt, first_normal, first_outer, prev_line) =
-                    (self.first_pt, self.first_normal, self.first_outer_pt, self.prev_is_line);
-                self.capper(first_pt, p(-first_normal.x, -first_normal.y), first_outer, prev_line);
+                let (first_pt, first_normal, first_outer, prev_line) = (
+                    self.first_pt,
+                    self.first_normal,
+                    self.first_outer_pt,
+                    self.prev_is_line,
+                );
+                self.capper(
+                    first_pt,
+                    p(-first_normal.x, -first_normal.y),
+                    first_outer,
+                    prev_line,
+                );
                 self.outer.close();
             }
         }
@@ -676,8 +717,9 @@ impl Stroker {
         self.stroke_type = -1.0;
         quad.init(0.0, 1.0);
         self.curve_stroke(&curve, &mut quad);
-        let (normal_bc, unit_bc) =
-            self.set_normal_unit_normal(pts[1], pts[2]).unwrap_or((normal_ab, unit_ab));
+        let (normal_bc, unit_bc) = self
+            .set_normal_unit_normal(pts[1], pts[2])
+            .unwrap_or((normal_ab, unit_ab));
         self.post_join_to(pt2, normal_bc, unit_bc);
     }
 
@@ -751,10 +793,7 @@ impl Stroker {
             return false;
         }
         let y_max = quad[0].y.max(quad[1].y).max(quad[2].y);
-        if pt.y - self.inv_res_scale > y_max {
-            return false;
-        }
-        true
+        pt.y - self.inv_res_scale <= y_max
     }
 
     fn stroke_close_enough(&self, stroke: &[P; 3], ray: [P; 2], q: &QuadConstruct) -> ResultType {
@@ -861,7 +900,10 @@ fn pt_to_line(pt: P, start: P, end: P) -> f32 {
     let denom = dot(dxy, dxy);
     let t = numer / denom;
     if (0.0..=1.0).contains(&t) {
-        let hit = p(start.x * (1.0 - t) + end.x * t, start.y * (1.0 - t) + end.y * t);
+        let hit = p(
+            start.x * (1.0 - t) + end.x * t,
+            start.y * (1.0 - t) + end.y * t,
+        );
         distance_sqd(hit, pt)
     } else {
         distance_sqd(pt, start)
@@ -983,7 +1025,8 @@ fn iter_records(path: &SkPath) -> Vec<Rec> {
                 pi += 2;
             }
             Verb::Close => {
-                let nan = last.x.is_nan() || last.y.is_nan() || move_to.x.is_nan() || move_to.y.is_nan();
+                let nan =
+                    last.x.is_nan() || last.y.is_nan() || move_to.x.is_nan() || move_to.y.is_nan();
                 if last != move_to && !nan {
                     out.push(Rec {
                         verb: Verb::Line,
@@ -1037,13 +1080,23 @@ pub struct Style {
 /// `SkStroke::strokePath`: the outline of `src` stroked with `style`, to be filled nonzero.
 pub fn stroke_path(src: &SkPath, style: &Style) -> SkPath {
     let radius = style.width * 0.5;
-    if !(radius > 0.0) {
+    if radius.is_nan() || radius <= 0.0 {
         return SkPath::new();
     }
-    if let Some((rect, true, cw)) = src.rect_contour() {
+    // Skia strokes a round-joined rect as an `addRRect` outline, which is not ported; those
+    // rects take the general stroker instead.
+    if let Some((rect, true, cw)) = src.rect_contour()
+        && style.join != LineJoin::Round
+    {
         return stroke_rect(rect, cw, style);
     }
-    let mut stroker = Stroker::new(radius, style.miter_limit, style.cap, style.join, style.res_scale);
+    let mut stroker = Stroker::new(
+        radius,
+        style.miter_limit,
+        style.cap,
+        style.join,
+        style.res_scale,
+    );
     let records = iter_records(src);
     let mut last_segment = Verb::Move;
     for (i, r) in records.iter().enumerate() {

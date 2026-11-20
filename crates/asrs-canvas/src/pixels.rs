@@ -63,7 +63,9 @@ pub fn pixmap_from_straight_rgba(width: u32, height: u32, rgba: &[u8]) -> Option
 /// The pixels of `[x, x + width) x [y, y + height)` as `getImageData` returns them, or `None`
 /// when the buffer cannot be allocated.
 pub fn read_rect(pixmap: &Pixmap, x: i64, y: i64, width: u32, height: u32) -> Option<ImageData> {
-    let len = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+    let len = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
     let mut data = Vec::new();
     data.try_reserve_exact(len).ok()?;
     data.resize(len, 0);

@@ -111,7 +111,11 @@ impl SkPath {
 
     fn inject_move(&mut self) {
         if self.needs_move {
-            let p = self.pts.get(self.last_move).copied().unwrap_or(P { x: 0.0, y: 0.0 });
+            let p = self
+                .pts
+                .get(self.last_move)
+                .copied()
+                .unwrap_or(P { x: 0.0, y: 0.0 });
             self.move_to(p);
         } else if self.verbs.is_empty() {
             self.move_to(P { x: 0.0, y: 0.0 });
