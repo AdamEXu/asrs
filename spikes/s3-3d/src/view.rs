@@ -102,6 +102,7 @@ pub struct Field3dView {
     upload_ms: Vec<f64>,
     paint_ms: Arc<Mutex<Vec<f64>>>,
     rss: Vec<f64>,
+    fg_ms: Vec<f64>,
     frames: u64,
     done: bool,
 }
@@ -125,16 +126,24 @@ impl Field3dView {
         let ts = self.thread_stats.lock().unwrap();
         let skip = |v: &[f64]| v[v.len().min(10)..].to_vec();
         println!("window run {:.1}s, scale {}", self.start.elapsed().as_secs_f64(), 2);
+        let active: f64 = self.new_intervals.iter().filter(|v| **v < 100.0).sum();
+        let gaps = self.new_intervals.iter().filter(|v| **v >= 100.0).count();
+        let over60 = self.new_intervals.iter().filter(|v| **v > 1000.0 / 60.0 + 0.5).count();
         println!(
-            "new frames presented: {} => {:.1} fps",
+            "new frames presented: {} => {:.1} fps over {:.2}s active ({} gaps >=100ms excluded); intervals over 16.67ms: {} ({:.2}%)",
             self.new_intervals.len() + 1,
-            (self.new_intervals.len() + 1) as f64 / self.start.elapsed().as_secs_f64()
+            self.new_intervals.len() as f64 / (active / 1e3),
+            active / 1e3,
+            gaps,
+            over60,
+            over60 as f64 * 100.0 / self.new_intervals.len() as f64
         );
         println!("{}", crate::summary("interval between new frames", &skip(&self.new_intervals)));
         println!("{}", crate::summary("render thread: render+readback", &skip(&ts.render_ms)));
         println!("{}", crate::summary("render thread: gpu+map wait", &skip(&ts.gpu_ms)));
         println!("{}", crate::summary("fg: RenderImage build", &skip(&self.upload_ms)));
         println!("{}", crate::summary("fg: paint_image", &skip(&self.paint_ms.lock().unwrap())));
+        println!("{}", crate::summary("fg: render() excluding paint", &skip(&self.fg_ms)));
         println!(
             "rss MB: first={:.1} last={:.1} max={:.1} n={}",
             self.rss.first().copied().unwrap_or(f64::NAN),
@@ -147,12 +156,13 @@ impl Field3dView {
 
 impl Render for Field3dView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let t_fg = Instant::now();
         let scale = window.scale_factor();
         let vp = window.viewport_size();
         let (w, h) = ((f32::from(vp.width) * scale) as u32, (f32::from(vp.height) * scale) as u32);
-        if let Some(secs) = self.auto_secs {
-            self.azimuth = self.start.elapsed().as_secs_f64() * 0.8;
-            if self.start.elapsed().as_secs_f64() > secs && !self.done {
+        if let Some(target_frames) = self.auto_secs {
+            self.azimuth = self.frames as f64 * 0.01;
+            if self.new_intervals.len() as f64 >= target_frames && !self.done {
                 self.done = true;
                 self.report();
                 cx.defer(|cx| cx.quit());
@@ -185,6 +195,7 @@ impl Render for Field3dView {
                 }
             }
         }
+        self.fg_ms.push(t_fg.elapsed().as_secs_f64() * 1e3);
         self.frames += 1;
         if self.frames % 60 == 0 {
             self.rss.push(rss_mb());
@@ -266,6 +277,7 @@ pub fn run(auto_secs: Option<f64>, samples: u32) {
                         upload_ms: Vec::new(),
                         paint_ms: Default::default(),
                         rss: Vec::new(),
+                        fg_ms: Vec::new(),
                         frames: 0,
                         done: false,
                     })
