@@ -1,6 +1,7 @@
 import "./shims";
 import { toTree } from "./cve1";
 import { Rng } from "./corpus/rng";
+import * as robotState from "@upstream/shared/log/RobotState";
 import { run } from "./robotStateRun";
 
 // Emits `oracle:robotStateRun` ground truth for asrs_log::log::robot_state:
@@ -489,12 +490,147 @@ emit(
   );
 }
 
+// Priority ladders: for each key list, the keys from rank k down are all
+// present, written lowest priority first so field order never decides, each
+// with its own reader's type and distinguishable data.
+{
+  const LISTS: [string, string[]][] = [
+    ["enabled", robotState.ENABLED_KEYS],
+    ["autonomous", robotState.AUTONOMOUS_KEYS],
+    ["utility", robotState.UTILITY_KEYS],
+    ["alliance", robotState.ALLIANCE_KEYS],
+    ["station", robotState.DRIVER_STATION_KEYS],
+    ["systemTime", robotState.SYSTEM_TIME_KEYS],
+    ["event", robotState.EVENT_KEYS],
+    ["matchType", robotState.MATCH_TYPE_KEYS],
+    ["matchNumber", robotState.MATCH_NUMBER_KEYS],
+    ["programStart", robotState.PROGRAM_START_TIME_KEYS]
+  ];
+  const STATIONS = ["Red 1", "Blue 3", "Red 2", "Blue 1", "Red 3", "Blue 2", "Red 1"];
+  const writeKey = (ops: unknown[][], list: string, key: string, rank: number) => {
+    const t = rank + 1;
+    if (key.endsWith("FMSControlData")) {
+      ops.push(["putNumber", key, t, [1, 3, 5, 7, 0][rank % 5]], ["putNumber", key, 40 + t, 0]);
+    } else if (list === "enabled" || ((list === "autonomous" || list === "utility") && !key.toLowerCase().endsWith("robotmode"))) {
+      ops.push(["putBoolean", key, t, true], ["putBoolean", key, 40 + t, false]);
+    } else if (list === "autonomous" || list === "utility") {
+      ops.push(["putString", key, t, ["autonomous", "test", "utility", "teleop"][rank % 4]], ["putString", key, 40 + t, "disabled"]);
+    } else if (key.endsWith("DriverStation/AllianceStation") || key.endsWith("StationNumber")) {
+      ops.push(["putNumber", key, 0, (rank % 6) + 1]);
+    } else if (key.endsWith("IsRedAlliance")) {
+      ops.push(["putBoolean", key, 0, rank % 2 === 0]);
+    } else if (list === "alliance" || list === "station") {
+      ops.push(["putString", key, 0, STATIONS[rank]]);
+    } else if (list === "systemTime") {
+      const ms = Date.UTC(2022 + rank, rank, 1);
+      ops.push(["putNumber", key, 0, key.endsWith("Micros") ? ms * 1e3 : ms * 1e6]);
+    } else if (list === "event") {
+      ops.push(["putString", key, 0, `Event ${rank}`]);
+    } else if (list === "matchType") {
+      ops.push(["putNumber", key, 0, (rank % 3) + 1]);
+    } else if (list === "matchNumber") {
+      ops.push(["putNumber", key, 0, rank + 10]);
+    } else if (key.endsWith("ProgramStartTime")) {
+      ops.push(["putNumber", key, t, (rank + 1) * 1e18]);
+    } else {
+      ops.push(["putRaw", key, t, new Uint8Array([rank])]);
+    }
+  };
+  const MATCH_BASE: { [list: string]: unknown[][] } = {
+    systemTime: [["putString", "DS:matchInfo/eventName", 0, "Base"], ["putNumber", "DS:matchInfo/matchType", 0, 2], ["putNumber", "DS:matchInfo/matchNumber", 0, 4]],
+    event: [["putNumber", "DS:matchInfo/matchType", 0, 2], ["putNumber", "DS:matchInfo/matchNumber", 0, 4]],
+    matchType: [["putString", "DS:matchInfo/eventName", 0, "Base"], ["putNumber", "DS:matchInfo/matchNumber", 0, 4]],
+    matchNumber: [["putString", "DS:matchInfo/eventName", 0, "Base"], ["putNumber", "DS:matchInfo/matchType", 0, 2]]
+  };
+  for (const [list, keys] of LISTS) {
+    for (let k = 0; k < keys.length; k++) {
+      const ops: unknown[][] = [];
+      const base = MATCH_BASE[list];
+      if (base !== undefined) ops.push(["putBoolean", "RUNNING", 0, true], ...base);
+      for (let rank = keys.length - 1; rank >= k; rank--) writeKey(ops, list, keys[rank], rank);
+      emit(ops, battery());
+    }
+  }
+}
+
+// findKey edges: a leading "/" is stripped once before matching, the merge
+// prefix needs no separator after its digits, ties at one rank go to the first
+// field, and FMSControlData of the wrong type or with no samples.
+{
+  for (const key of ["/RUNNING", "//DriverStation/Enabled", "/DS:enabled", "/Log3RUNNING", "Log4//RobotEnable", "/NT:/FMSInfo/FMSControlData"]) {
+    emit(
+      [
+        [key.endsWith("FMSControlData") ? "putNumber" : "putBoolean", key, 2, key.endsWith("FMSControlData") ? 3 : true],
+        ["putString", "/RobotMode", 2, "autonomous"],
+        ["putString", "/AllianceStation", 0, "Red 2"],
+        ["putNumber", "/systemTime", 0, Date.UTC(2024, 0, 1) * 1e6],
+        ["putString", "/DS:matchInfo/eventName", 0, "Slash"],
+        ["putNumber", "/DS:matchInfo/matchType", 0, 3],
+        ["putNumber", "/DS:matchInfo/matchNumber", 0, 6]
+      ],
+      battery()
+    );
+  }
+  emit(
+    [
+      ["putBoolean", "/Log1/DriverStation/Enabled", 0, true],
+      ["putBoolean", "/Log0/DriverStation/Enabled", 0, false],
+      ["putBoolean", "/Log0/DriverStation/Enabled", 7, true],
+      ["putNumber", "/Log0/DriverStation/AllianceStation", 0, 5],
+      ["putNumber", "/Log1/DriverStation/AllianceStation", 0, 2]
+    ],
+    battery()
+  );
+  emit(
+    [
+      ["putBoolean", "/DriverStation/Enabled", 0, false],
+      ["putBoolean", "/Log0/DriverStation/Enabled", 0, true]
+    ],
+    battery()
+  );
+  emit([["putBoolean", "NT:/FMSInfo/FMSControlData", 0, true]], battery());
+  emit([["createBlankField", "NT:/FMSInfo/FMSControlData", 1]], battery());
+  emit(
+    [
+      ["createBlankField", "NT:/FMSInfo/FMSControlData", 1],
+      ["putBoolean", "RUNNING", 0, true]
+    ],
+    battery()
+  );
+}
+
+// Year boundaries: 2022 is kept and 2021 resets to the clock's year; the last
+// valid Date (8.64e15 ms) keeps its year, one step past it is NaN.
+{
+  const epochs = [
+    Date.UTC(2022, 0, 1) * 1e6,
+    (Date.UTC(2022, 0, 1) - 1) * 1e6,
+    8.64e15 * 1e6,
+    8.6400000000001e15 * 1e6,
+    -8.64e15 * 1e6,
+    -0.5e6,
+    -Infinity
+  ];
+  for (const epoch of epochs) {
+    emit(
+      [
+        ["putBoolean", "/DriverStation/Enabled", 0, true],
+        ["putString", "/DriverStation/EventName", 0, "Year"],
+        ["putNumber", "/DriverStation/MatchType", 0, 1],
+        ["putNumber", "/DriverStation/MatchNumber", 0, 1],
+        ["putNumber", "/SystemStats/EpochTime", 0, epoch]
+      ],
+      [["getMatchInfo", NOW], ["getMatchInfo", NOW2], ["getMatchInfo", NaN]]
+    );
+  }
+}
+
 // getElimMatchString over every playoff type, unknown type values and match
 // numbers in and out of each bracket's range. Empty ops; the log is unused.
 {
   const calls: unknown[][] = [];
-  for (const type of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, -1, 12, 99, 1.5, NaN, Infinity]) {
-    for (const n of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 36, 37, 42, 43, 47, 48, 49, 60, -1, 1.5, NaN, Infinity, -Infinity]) {
+  for (const type of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, -0, -1, 12, 99, 1.5, NaN, Infinity]) {
+    for (const n of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 36, 37, 42, 43, 47, 48, 49, 60, -0, -1, 1.5, 2 ** 53, 1e21, NaN, Infinity, -Infinity]) {
       calls.push(["getElimMatchString", type, n]);
     }
   }
