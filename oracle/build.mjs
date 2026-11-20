@@ -122,6 +122,7 @@ const entries = [
   "genSort",
   "genRegex",
   "genMsgpack",
+  "genThree",
   "decode",
   "export",
   "historicalRun",

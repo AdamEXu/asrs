@@ -34,6 +34,14 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "field3d/three": {
+      "cases": 9460,
+      "content": "df05db1732c3129d",
+      "generator": "08e9ccd8753112be",
+      "spec": "parity/specs/field3d/three.entry.json",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "js/collation": {
       "cases": 5002,
       "content": "87628654f82c6a0f",
