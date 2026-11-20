@@ -19,6 +19,7 @@ mod log_run;
 mod log_struct;
 mod photon;
 mod shared;
+mod tabs_console;
 mod units;
 
 use std::process::ExitCode;

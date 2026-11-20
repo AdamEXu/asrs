@@ -43,6 +43,11 @@ mod photon;
 #[allow(dead_code)]
 mod shared;
 
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use asrs_parity::vectors::check_fn_vectors;
 use asrs_parity::{FnCase, Response};
 
