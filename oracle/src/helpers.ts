@@ -122,6 +122,11 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   geometryRun: async (enableTimestampSetCache: boolean, ops: any[][], calls: any[][]) =>
     (await import("./geometryRun")).run(enableTimestampSetCache, ops, calls),
 
+  // Runs RobotState calls against a Log built from logRun write ops; each call
+  // result is {ok|throw}. See robotStateRun.ts for the call shapes.
+  robotStateRun: async (enableTimestampSetCache: boolean, ops: any[][], calls: any[][]) =>
+    (await import("./robotStateRun")).run(enableTimestampSetCache, ops, calls),
+
   // rotationSequenceToQuaternion's THREE.Quaternion as a plain object.
   geometryQuat: async (rotations: { axis: string; degrees: number }[]) => {
     const { rotationSequenceToQuaternion } = await import("@upstream/shared/geometry");
