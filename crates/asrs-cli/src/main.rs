@@ -10,7 +10,10 @@ mod js_msgpack;
 mod js_regex;
 mod js_string;
 mod js_time;
+mod log_field;
+mod photon;
 mod shared;
+mod units;
 
 use std::process::ExitCode;
 

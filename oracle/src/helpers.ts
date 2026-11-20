@@ -1,3 +1,4 @@
+import PhotonStructDecoder from "@upstream/shared/log/PhotonStructDecoder";
 import { flushAnimationFrames } from "./shims";
 
 const indirectEval = eval;
@@ -39,7 +40,35 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
     }
   },
 
+  logFieldRun: async (type: number, ops: any[][]) => (await import("./logFieldRun")).run(type, ops),
+
   flushAnimationFrames: (time: number) => flushAnimationFrames(time),
+
+  // A PhotonStructDecoder session on a fresh decoder; each op result is {ok|throw} so a
+  // failed decode can't abort the session.
+  photon: (ops: [string, string, Uint8Array][]) => {
+    let decoder = new PhotonStructDecoder();
+    return ops.map((op) => {
+      try {
+        switch (op[0]) {
+          case "reload":
+            decoder = PhotonStructDecoder.fromSerialized(structuredClone(decoder.toSerialized()));
+            return { ok: structuredClone(decoder.toSerialized()) };
+          case "addSchema":
+            decoder.addSchema(op[1], op[2]);
+            return { ok: Object.keys(decoder.getSchemas()) };
+          case "decode":
+            return { ok: decoder.decode(op[1], op[2]) };
+          case "decodeImpl":
+            return { ok: decoder.decodeImpl(op[1], op[2]) };
+          default:
+            throw new Error(`oracle:photon: bad op ${op[0]}`);
+        }
+      } catch (e) {
+        return { throw: e };
+      }
+    });
+  },
 
   runtime: () => ({
     electron: process.versions.electron,

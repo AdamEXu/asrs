@@ -2,11 +2,15 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 
 use asrs_parity::{Request, Response};
 
-use crate::{functions, shared};
+use crate::{functions, shared, units};
 
 pub fn run(args: &[String]) -> Result<(), String> {
     if args.iter().any(|a| a == "--list") {
-        for (name, _) in functions::FUNCTIONS {
+        for (name, _) in functions::FUNCTIONS
+            .iter()
+            .chain(shared::FUNCTIONS)
+            .chain(units::FUNCTIONS)
+        {
             println!("{name}");
         }
         return Ok(());
@@ -44,10 +48,12 @@ fn handle(line: &str) -> Response {
     match functions::lookup(&request.name).or_else(|| {
         shared::FUNCTIONS
             .iter()
+            .chain(units::FUNCTIONS)
             .find(|(n, _)| *n == request.name)
             .map(|(_, f)| *f)
     }) {
         Some(function) => function(&request.args),
-        None => Response::Error(format!("unknown function {:?}", request.name)),
+        None => units::table_read(&request.name, &request.args)
+            .unwrap_or_else(|| Response::Error(format!("unknown function {:?}", request.name))),
     }
 }

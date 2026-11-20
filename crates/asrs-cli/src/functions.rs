@@ -1,7 +1,9 @@
 use asrs_js::number::{self, IntlOptions, SignDisplay};
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::{js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time};
+use crate::{
+    js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time, log_field, photon,
+};
 
 pub type Function = fn(&[Value]) -> Response;
 
@@ -31,6 +33,8 @@ pub fn lookup(name: &str) -> Option<Function> {
         .chain(js_json::FUNCTIONS)
         .chain(js_regex::FUNCTIONS)
         .chain(js_msgpack::FUNCTIONS)
+        .chain(log_field::FUNCTIONS)
+        .chain(photon::FUNCTIONS)
         .find(|(n, _)| *n == name)
         .map(|(_, f)| *f)
 }
@@ -99,6 +103,7 @@ pub(crate) fn to_number(value: &Value) -> Result<f64, Response> {
             return Err(type_error("Cannot convert a Symbol value to a number"));
         }
         Value::Array(_) => number::to_number(&to_units(value)?),
+        Value::Boxed(inner) => to_number(inner)?,
         _ => f64::NAN,
     })
 }
