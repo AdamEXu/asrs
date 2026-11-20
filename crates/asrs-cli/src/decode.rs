@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use asrs_formats::historical::HistoricalDataSource;
 use asrs_formats::worker::Abort;
 use asrs_js::string::JsString;
-use asrs_js::time::V8MathRandom;
+use asrs_js::time::{SystemClock, V8MathRandom};
 use asrs_log::log::{Log, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
@@ -104,6 +104,7 @@ pub fn run(args: &[String]) -> ExitCode {
         &mut realm,
         files,
         Box::new(V8MathRandom::from_entropy()),
+        Box::new(SystemClock),
     ) {
         Ok(Some(Abort::NeverReturns)) => {
             eprintln!("{path}: upstream's worker never returns");

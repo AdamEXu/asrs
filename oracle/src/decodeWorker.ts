@@ -16,7 +16,7 @@ import {
 } from "@upstream/shared/log/RobotState";
 import { encode } from "./cve1";
 import { dumpLog } from "./historical/dump";
-import { OracleWorker, terminatedWorkersExited } from "./shims";
+import { OracleWorker, resolveWorkerScript, terminatedWorkersExited } from "./shims";
 import { realSetImmediate } from "./historical/timers";
 
 const USAGE = `usage: decodeWorker <log file>
@@ -28,7 +28,11 @@ drives it, and prints every message it posts (CVE-1 lines, see oracle/README.md)
   followed by its messages. The keys are the initial log's fields in order, the keys
   HistoricalDataSource always requests, "/" + the first field, a missing key and the first
   field again. If the worker's thread dies (its
-  realm runs out of memory), the run exits with status 3 after the lines so far.`;
+  realm runs out of memory), the run exits with status 3 after the lines so far.
+The worker's Date is frozen at WORKER_NOW (asrs-cli uses the same instant), so progress that
+upstream throttles on wall-clock time (RLOGDecoder) is the same under any machine load.`;
+
+const WORKER_NOW = 1_767_225_600_000;
 
 const MISSING_KEY = "/asrs-oracle/missing";
 
@@ -127,7 +131,18 @@ const files = file.endsWith(".dslog")
   ? [readOrNull(file), readOrNull(file.slice(0, -5) + "dsevents")]
   : [readOrNull(file)];
 
-const worker = new OracleWorker("../bundles/" + workerName, { type: "module" });
+function withFrozenDate(script: string): string {
+  const source =
+    `const RealDate = Date;` +
+    `globalThis.Date = class Date extends RealDate {` +
+    `constructor(...args) { if (args.length === 0) super(${WORKER_NOW}); else super(...args); }` +
+    `static now() { return ${WORKER_NOW}; }` +
+    `};` +
+    `await import(${JSON.stringify(resolveWorkerScript(script))});`;
+  return "data:text/javascript," + encodeURIComponent(source);
+}
+
+const worker = new OracleWorker(withFrozenDate("../bundles/" + workerName), { type: "module" });
 let initial: any = null;
 worker.onmessage = (event) => {
   if (event.data.type === "initial") initial = event.data;

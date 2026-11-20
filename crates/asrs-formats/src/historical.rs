@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use asrs_js::string::JsString;
-use asrs_js::time::Rng;
+use asrs_js::time::{Clock, Rng};
 use asrs_log::log::Log;
 use asrs_log::realm::JsRealm;
 
@@ -73,14 +73,15 @@ pub fn select_worker(path: &str) -> Option<WorkerName> {
 pub struct UnportedWorker(pub WorkerName);
 
 /// `new Worker("../bundles/" + selectedWorkerName)`: a fresh worker realm with its own
-/// `Math.random` stream.
+/// `Math.random` stream and `Date`.
 pub fn create_worker(
     name: WorkerName,
     random: Box<dyn Rng + Send>,
+    clock: Box<dyn Clock + Send>,
 ) -> Result<Box<dyn DecodeWorker>, UnportedWorker> {
     match name {
         WorkerName::Wpilog => Ok(Box::new(WpilogWorker::new(JsRealm::new(random)))),
-        WorkerName::Rlog => Ok(Box::new(RlogWorker::new(JsRealm::new(random)))),
+        WorkerName::Rlog => Ok(Box::new(RlogWorker::new(JsRealm::new(random), clock))),
         WorkerName::DsLog => Ok(Box::new(DsLogWorker)),
         other => Err(UnportedWorker(other)),
     }
@@ -127,6 +128,7 @@ impl HistoricalDataSource {
         realm: &mut JsRealm,
         files: Vec<Option<Vec<u8>>>,
         worker_random: Box<dyn Rng + Send>,
+        worker_clock: Box<dyn Clock + Send>,
     ) -> Result<Option<Abort>, UnportedWorker> {
         if self.status != Status::Reading {
             return Ok(None);
@@ -140,7 +142,7 @@ impl HistoricalDataSource {
             self.status = Status::Error;
             return Ok(None);
         };
-        let mut worker = create_worker(worker, worker_random)?;
+        let mut worker = create_worker(worker, worker_random, worker_clock)?;
         let data = files.into_iter().map(|file| file.map(Arc::from)).collect();
         let (replies, end) = run_request(worker.as_mut(), Request::Start(data));
         for reply in replies {

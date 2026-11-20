@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use asrs_js::string::{JsString, TextDecoder};
-use asrs_js::time::{Clock, SystemClock};
+use asrs_js::time::Clock;
 use asrs_log::log::log_key_utils::{PHOTON_PREFIX, PROTO_PREFIX, STRUCT_PREFIX};
 use asrs_log::log::{Log, LogError, LoggableType};
 use asrs_log::realm::JsRealm;
@@ -275,8 +275,13 @@ impl RlogDecoder {
 
     /// `keyIDs[keyID]` is `undefined` for an undeclared id; upstream then operates on a field
     /// literally named "undefined". The first such write throws inside `createBlankField`
-    /// (`endsWith` on the non-string key) after registering it; once it exists, writes land.
-    fn effective_key(log: &Log, key: Option<&JsString>) -> Result<JsString, Fail> {
+    /// (`endsWith` on the non-string key) after registering an empty field of the write's
+    /// type, which a live source's log keeps; once it exists, writes land.
+    fn effective_key(
+        log: &mut Log,
+        key: Option<&JsString>,
+        ty: LoggableType,
+    ) -> Result<JsString, Fail> {
         match key {
             Some(key) => Ok(key.clone()),
             None => {
@@ -284,6 +289,7 @@ impl RlogDecoder {
                 if log.get_field(&undefined).is_some() {
                     Ok(undefined)
                 } else {
+                    log.create_blank_field(&undefined, ty);
                     Err(Fail::Js)
                 }
             }
@@ -313,7 +319,7 @@ impl RlogDecoder {
                 if value.len() != 1 {
                     return Err(Fail::Js);
                 }
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::Boolean)?;
                 log.put_boolean(&key, timestamp, value[0] != 0);
             }
             Some("int" | "int64") => {
@@ -321,7 +327,7 @@ impl RlogDecoder {
                     return Err(Fail::Js);
                 }
                 let number = i64_at(data, *offset)? as f64;
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::Number)?;
                 log.put_number(&key, timestamp, number);
             }
             Some("float") => {
@@ -329,7 +335,7 @@ impl RlogDecoder {
                     return Err(Fail::Js);
                 }
                 let number = f64::from(f32_at(data, *offset)?);
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::Number)?;
                 log.put_number(&key, timestamp, number);
             }
             Some("double") => {
@@ -337,7 +343,7 @@ impl RlogDecoder {
                     return Err(Fail::Js);
                 }
                 let number = f64_at(data, *offset)?;
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::Number)?;
                 log.put_number(&key, timestamp, number);
             }
             Some("string") => {
@@ -345,12 +351,12 @@ impl RlogDecoder {
                     .text_decoder
                     .decode(value)
                     .expect("nonfatal UTF-8 never errors");
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::String)?;
                 log.put_string(&key, timestamp, string);
             }
             Some("boolean[]") => {
                 let array: Vec<bool> = value.iter().map(|x| *x != 0).collect();
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::BooleanArray)?;
                 log.put_boolean_array(&key, timestamp, array);
             }
             Some("int[]" | "int64[]") => {
@@ -363,7 +369,7 @@ impl RlogDecoder {
                     array.push(i64_at(data, *offset + position)? as f64);
                     position += 8;
                 }
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::NumberArray)?;
                 log.put_number_array(&key, timestamp, array);
             }
             Some("float[]") => {
@@ -376,7 +382,7 @@ impl RlogDecoder {
                     array.push(f64::from(f32_at(data, *offset + position)?));
                     position += 4;
                 }
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::NumberArray)?;
                 log.put_number_array(&key, timestamp, array);
             }
             Some("double[]") => {
@@ -389,7 +395,7 @@ impl RlogDecoder {
                     array.push(f64_at(data, *offset + position)?);
                     position += 8;
                 }
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::NumberArray)?;
                 log.put_number_array(&key, timestamp, array);
             }
             Some("string[]") => {
@@ -412,7 +418,7 @@ impl RlogDecoder {
                     );
                     position = position.saturating_add(4).saturating_add(string_size);
                 }
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::StringArray)?;
                 log.put_string_array(&key, timestamp, array);
             }
             Some("json") => {
@@ -420,11 +426,11 @@ impl RlogDecoder {
                     .text_decoder
                     .decode(value)
                     .expect("nonfatal UTF-8 never errors");
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::String)?;
                 log.put_json(&key, timestamp, string);
             }
             Some("msgpack") => {
-                let key = Self::effective_key(log, key)?;
+                let key = Self::effective_key(log, key, LoggableType::Raw)?;
                 caught(log.put_msgpack(realm, &key, timestamp, Arc::<[u8]>::from(value)))?;
             }
             _ => {
@@ -436,7 +442,7 @@ impl RlogDecoder {
                     } else {
                         schema
                     };
-                    let key = Self::effective_key(log, key)?;
+                    let key = Self::effective_key(log, key, LoggableType::Raw)?;
                     caught(log.put_struct(
                         &key,
                         timestamp,
@@ -446,7 +452,7 @@ impl RlogDecoder {
                     ))?;
                 } else if type_.starts_with(&js(PHOTON_PREFIX), None) {
                     let schema = schema_type(&type_, PHOTON_PREFIX);
-                    let key = Self::effective_key(log, key)?;
+                    let key = Self::effective_key(log, key, LoggableType::Raw)?;
                     caught(log.put_photon_struct(
                         &key,
                         timestamp,
@@ -455,7 +461,7 @@ impl RlogDecoder {
                     ))?;
                 } else if type_.starts_with(&js(PROTO_PREFIX), None) {
                     let schema = schema_type(&type_, PROTO_PREFIX);
-                    let key = Self::effective_key(log, key)?;
+                    let key = Self::effective_key(log, key, LoggableType::Raw)?;
                     caught(log.put_proto(
                         realm,
                         &key,
@@ -464,7 +470,7 @@ impl RlogDecoder {
                         &schema,
                     ))?;
                 } else {
-                    let key = Self::effective_key(log, key)?;
+                    let key = Self::effective_key(log, key, LoggableType::Raw)?;
                     caught(log.put_raw(&key, timestamp, Arc::<[u8]>::from(value)))?;
                     if let Some(parser) = custom_schemas::get(&type_) {
                         // The parser runs inside its own try/catch; the generated parent is
@@ -502,58 +508,52 @@ impl RlogDecoder {
         match u8_at(data, shift(offset, 1)) {
             Some(0) => {
                 // null writes the default value for the field's current type; a key that has
-                // no type yet (or an undeclared id) writes nothing.
+                // no field yet (or an undeclared id without an "undefined" field) writes
+                // nothing.
                 let lookup = key.unwrap_or_else(|| js("undefined"));
                 match log.get_type(&lookup) {
                     Some(LoggableType::Raw) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        caught(log.put_raw(&key, timestamp, Vec::<u8>::new()))?;
+                        caught(log.put_raw(&lookup, timestamp, Vec::<u8>::new()))?;
                     }
                     Some(LoggableType::Boolean) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        log.put_boolean(&key, timestamp, false);
+                        log.put_boolean(&lookup, timestamp, false);
                     }
                     Some(LoggableType::Number) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        log.put_number(&key, timestamp, 0.0);
+                        log.put_number(&lookup, timestamp, 0.0);
                     }
                     Some(LoggableType::String) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        log.put_string(&key, timestamp, JsString::new());
+                        log.put_string(&lookup, timestamp, JsString::new());
                     }
                     Some(LoggableType::BooleanArray) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        log.put_boolean_array(&key, timestamp, Vec::new());
+                        log.put_boolean_array(&lookup, timestamp, Vec::new());
                     }
                     Some(LoggableType::NumberArray) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        log.put_number_array(&key, timestamp, Vec::new());
+                        log.put_number_array(&lookup, timestamp, Vec::new());
                     }
                     Some(LoggableType::StringArray) => {
-                        let key = Self::effective_key(log, Some(&lookup))?;
-                        log.put_string_array(&key, timestamp, Vec::new());
+                        log.put_string_array(&lookup, timestamp, Vec::new());
                     }
                     _ => {}
                 }
             }
             Some(1) => {
                 let value = u8_at(data, shift(offset, 1)) != Some(0);
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::Boolean)?;
                 log.put_boolean(&key, timestamp, value);
             }
             Some(9) => {
                 let byte = u8_at(data, shift(offset, 1)).unwrap_or(0);
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::Raw)?;
                 caught(log.put_raw(&key, timestamp, vec![byte]))?;
             }
             Some(3) => {
                 let number = f64::from(i32_at(data, shift(offset, 4))?);
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::Number)?;
                 log.put_number(&key, timestamp, number);
             }
             Some(5) => {
                 let number = f64_at(data, shift(offset, 8))?;
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::Number)?;
                 log.put_number(&key, timestamp, number);
             }
             Some(7) => {
@@ -563,7 +563,7 @@ impl RlogDecoder {
                     .decode(subarray(data, *offset, *offset + string_length))
                     .expect("nonfatal UTF-8 never errors");
                 *offset += string_length;
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::String)?;
                 log.put_string(&key, timestamp, string);
             }
             Some(2) => {
@@ -572,7 +572,7 @@ impl RlogDecoder {
                 for _ in 0..length {
                     array.push(u8_at(data, shift(offset, 1)) != Some(0));
                 }
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::BooleanArray)?;
                 log.put_boolean_array(&key, timestamp, array);
             }
             Some(10) => {
@@ -581,7 +581,7 @@ impl RlogDecoder {
                 for _ in 0..length {
                     array.push(u8_at(data, shift(offset, 1)).unwrap_or(0));
                 }
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::Raw)?;
                 caught(log.put_raw(&key, timestamp, array))?;
             }
             Some(4) => {
@@ -590,7 +590,7 @@ impl RlogDecoder {
                 for _ in 0..length {
                     array.push(f64::from(i32_at(data, shift(offset, 4))?));
                 }
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::NumberArray)?;
                 log.put_number_array(&key, timestamp, array);
             }
             Some(6) => {
@@ -599,7 +599,7 @@ impl RlogDecoder {
                 for _ in 0..length {
                     array.push(f64_at(data, shift(offset, 8))?);
                 }
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::NumberArray)?;
                 log.put_number_array(&key, timestamp, array);
             }
             Some(8) => {
@@ -614,7 +614,7 @@ impl RlogDecoder {
                     );
                     *offset += string_length;
                 }
-                let key = Self::effective_key(log, key.as_ref())?;
+                let key = Self::effective_key(log, key.as_ref(), LoggableType::StringArray)?;
                 log.put_string_array(&key, timestamp, array);
             }
             _ => {}
@@ -624,14 +624,15 @@ impl RlogDecoder {
 }
 
 /// `rlogWorker`: `new RLOGDecoder(true)` over the whole file; `isPartial: false`. Any other
-/// request type is ignored.
+/// request type is ignored. `clock` is the realm's `new Date()`, which throttles progress.
 pub struct RlogWorker {
     realm: JsRealm,
+    clock: Box<dyn Clock + Send>,
 }
 
 impl RlogWorker {
-    pub fn new(realm: JsRealm) -> Self {
-        RlogWorker { realm }
+    pub fn new(realm: JsRealm, clock: Box<dyn Clock + Send>) -> Self {
+        RlogWorker { realm, clock }
     }
 }
 
@@ -652,7 +653,7 @@ impl DecodeWorker for RlogWorker {
             &mut self.realm,
             &mut log,
             &data,
-            &SystemClock,
+            self.clock.as_ref(),
             Some(&mut progress),
         )?;
         if success {
@@ -670,6 +671,8 @@ impl DecodeWorker for RlogWorker {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use asrs_js::time::{SetClock, V8MathRandom};
 
     use super::*;
@@ -828,6 +831,61 @@ mod tests {
     }
 
     #[test]
+    fn an_undeclared_r1_write_leaves_an_empty_undefined_field() {
+        let mut r1 = builder(1);
+        timestamp(&mut r1, 0.0);
+        r1.push(2);
+        r1.extend(77i16.to_be_bytes());
+        r1.extend([1, 1]);
+        let mut realm = realm();
+        let mut log = Log::new(false);
+        let ok = RlogDecoder::new(false)
+            .decode(&mut realm, &mut log, &r1, &SetClock(0.0), None)
+            .unwrap();
+        assert!(!ok);
+        let field = log.get_field(&js("undefined")).expect("registered before the throw");
+        assert_eq!(field.get_type(), LoggableType::Boolean);
+        assert_eq!(log.get_timestamps(&[js("undefined")], None).len(), 0);
+    }
+
+    /// Ticks one millisecond per `new Date()`.
+    struct Ticking(Cell<f64>);
+
+    impl Clock for Ticking {
+        fn now(&self) -> f64 {
+            let now = self.0.get() + 1.0;
+            self.0.set(now);
+            now
+        }
+    }
+
+    #[test]
+    fn progress_is_throttled_to_every_seventeenth_millisecond() {
+        let mut file = builder(2);
+        timestamp(&mut file, 0.0);
+        key(&mut file, 1, "/A", Some("boolean"));
+        for _ in 0..40 {
+            value(&mut file, 1, &[1]);
+        }
+        let mut realm = realm();
+        let mut log = Log::new(false);
+        let mut posted = Vec::new();
+        let ok = RlogDecoder::new(true)
+            .decode(
+                &mut realm,
+                &mut log,
+                &file,
+                &Ticking(Cell::new(0.0)),
+                Some(&mut |value| posted.push(value)),
+            )
+            .unwrap();
+        assert!(ok);
+        let length = file.len() as f64;
+        let after_entry = |n: f64| (2.0 + 8.0 + 16.0 + 6.0 * n) / length;
+        assert_eq!(posted, [after_entry(16.0), after_entry(33.0)]);
+    }
+
+    #[test]
     fn live_chunks_carry_a_marker_byte_and_skip_corruption_checks() {
         let mut first = builder(2);
         timestamp(&mut first, 0.5);
@@ -864,7 +922,7 @@ mod tests {
         timestamp(&mut file, 0.0);
         key(&mut file, 1, "/A", Some("double"));
         value(&mut file, 1, &1f64.to_be_bytes());
-        let mut worker = RlogWorker::new(realm());
+        let mut worker = RlogWorker::new(realm(), Box::new(SetClock(1e12)));
         let (responses, end) =
             run_request(&mut worker, Request::Start(vec![Some(Arc::from(file))]));
         assert_eq!(end, Ok(()));
@@ -881,12 +939,12 @@ mod tests {
             })
         ));
 
-        let mut worker = RlogWorker::new(realm());
+        let mut worker = RlogWorker::new(realm(), Box::new(SetClock(1e12)));
         let (responses, end) = run_request(&mut worker, Request::Start(vec![None]));
         assert!(responses.is_empty());
         assert_eq!(end, Err(Abort::Threw));
 
-        let mut worker = RlogWorker::new(realm());
+        let mut worker = RlogWorker::new(realm(), Box::new(SetClock(1e12)));
         let (responses, end) = run_request(
             &mut worker,
             Request::Start(vec![Some(Arc::from(vec![9, 0]))]),
