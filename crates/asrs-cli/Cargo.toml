@@ -12,10 +12,12 @@ path = "src/main.rs"
 
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
+asrs-formats = { path = "../asrs-formats" }
 asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-parity = { path = "../asrs-parity" }
+asrs-services = { path = "../asrs-services" }
 
 [lints]
 workspace = true
