@@ -80,7 +80,7 @@ fn join_elements(items: &[MapValue], out: &mut Vec<u16>) {
             MapValue::Undefined => {}
             MapValue::Bool(b) => out.extend(if *b { "true" } else { "false" }.encode_utf16()),
             MapValue::Number(x) => out.extend(number::to_string(*x).encode_utf16()),
-            MapValue::BigInt(v) => out.extend(v.to_string().encode_utf16()),
+            MapValue::BigInt(v) => out.extend(format!("{v}").encode_utf16()),
             MapValue::Text(s) => out.extend_from_slice(s.units()),
             MapValue::Map(_) => out.extend("[object Map]".encode_utf16()),
             MapValue::Array(inner) => join_elements(inner, out),
@@ -123,6 +123,12 @@ pub struct RrLogDecoder {
 
 const WORK_BUDGET: u64 = 2_000_000_000;
 const PRODUCED_BUDGET: u64 = 8_000_000;
+
+impl Default for RrLogDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RrLogDecoder {
     pub fn new() -> Self {
@@ -200,7 +206,7 @@ impl RrLogDecoder {
         Ok(usize::try_from(at)
             .ok()
             .and_then(|i| data.get(i))
-            .map_or(true, |&b| b != 0))
+            .is_none_or(|&b| b != 0))
     }
 
     fn read_string(&self, data: &[u8], offset: &mut i64) -> Result<JsString, Step> {
@@ -213,7 +219,12 @@ impl RrLogDecoder {
         Ok(string)
     }
 
-    fn read_schema(&self, data: &[u8], offset: &mut i64, depth: u32) -> Result<MessageSchema, Step> {
+    fn read_schema(
+        &self,
+        data: &[u8],
+        offset: &mut i64,
+        depth: u32,
+    ) -> Result<MessageSchema, Step> {
         if depth >= MAX_DEPTH {
             return Err(Step::Fail);
         }
@@ -248,9 +259,11 @@ impl RrLogDecoder {
                 }
                 Ok(MessageSchema::Enum(constants))
             }
-            7 => Ok(MessageSchema::Array(Box::new(
-                self.read_schema(data, offset, depth + 1)?,
-            ))),
+            7 => Ok(MessageSchema::Array(Box::new(self.read_schema(
+                data,
+                offset,
+                depth + 1,
+            )?))),
             _ => Err(Step::Fail),
         }
     }
@@ -266,7 +279,13 @@ impl RrLogDecoder {
         }
     }
 
-    fn read_msg(&self, schema: &MessageSchema, data: &[u8], offset: &mut i64, depth: u32) -> Result<MapValue, Step> {
+    fn read_msg(
+        &self,
+        schema: &MessageSchema,
+        data: &[u8],
+        offset: &mut i64,
+        depth: u32,
+    ) -> Result<MapValue, Step> {
         if depth >= MAX_DEPTH {
             return Err(Step::Fail);
         }
@@ -274,10 +293,7 @@ impl RrLogDecoder {
             MessageSchema::Struct(fields) => {
                 let mut entries = Vec::with_capacity(fields.len());
                 for (name, field) in fields {
-                    entries.push((
-                        name.clone(),
-                        self.read_msg(field, data, offset, depth + 1)?,
-                    ));
+                    entries.push((name.clone(), self.read_msg(field, data, offset, depth + 1)?));
                     self.tick_produced()?;
                 }
                 MapValue::Map(entries)
@@ -398,7 +414,10 @@ impl RrLogDecoder {
                 self.key_schemas.push(schema);
                 // Revision 0 wrote four padding bytes per array schema in the definition.
                 if self.log_revision == Some(0) {
-                    shift_offset(offset, 4 * Self::array_schema_count(&self.key_schemas[key_id]));
+                    shift_offset(
+                        offset,
+                        4 * Self::array_schema_count(&self.key_schemas[key_id]),
+                    );
                 }
             }
             1 => {
@@ -430,14 +449,13 @@ impl RrLogDecoder {
                     } else if ascii_eq(&key, "OPMODE_POST_STOP") {
                         log.put_boolean(&JsString::from("RUNNING"), self.last_timestamp, false);
                     }
-                } else if let MapValue::Map(entries) = &msg {
-                    if let Some(MapValue::BigInt(rr_timestamp)) = entries
+                } else if let MapValue::Map(entries) = &msg
+                    && let Some(MapValue::BigInt(rr_timestamp)) = entries
                         .iter()
                         .find(|(name, _)| ascii_eq(name, "timestamp"))
                         .map(|(_, value)| value)
-                    {
-                        self.last_timestamp = self.rr_timestamp_to_seconds(*rr_timestamp);
-                    }
+                {
+                    self.last_timestamp = self.rr_timestamp_to_seconds(*rr_timestamp);
                 }
 
                 let timestamp = self.last_timestamp;
@@ -497,9 +515,12 @@ pub fn run_worker(
         return Err(Abort::Threw);
     };
     let mut log = Log::new(false);
-    match RrLogDecoder::new()
-        .decode(&mut log, data, &mut |value| post(Response::Progress(value)), clock)?
-    {
+    match RrLogDecoder::new().decode(
+        &mut log,
+        data,
+        &mut |value| post(Response::Progress(value)),
+        clock,
+    )? {
         true => {
             post(Response::Progress(1.0));
             post(Response::Initial {
@@ -592,10 +613,7 @@ mod tests {
     fn count_arrays(schema: &[u8]) -> usize {
         // Counts array type ids (7) anywhere in the schema bytes; test schemas keep
         // strings free of the type-id bytes.
-        schema
-            .chunks(4)
-            .filter(|c| *c == [0, 0, 0, 7])
-            .count()
+        schema.chunks(4).filter(|c| *c == [0, 0, 0, 7]).count()
     }
 
     const INT: &[u8] = &[0, 0, 0, 1];
@@ -885,7 +903,11 @@ mod tests {
         assert!((numbers(&log, "P/translation/x")[0] - 0.0254).abs() < 1e-9);
         assert!((numbers(&log, "P/translation/y")[0] - 0.0508).abs() < 1e-9);
         assert_eq!(
-            field(&log, "P").structured_type.as_ref().unwrap().to_string_lossy(),
+            field(&log, "P")
+                .structured_type
+                .as_ref()
+                .unwrap()
+                .to_string_lossy(),
             "Pose2d"
         );
     }
@@ -936,7 +958,10 @@ mod tests {
         );
         assert_eq!(end, Ok(()));
         assert!(matches!(responses.last(), Some(Response::Initial { .. })));
-        assert_eq!(run_worker(&[], &mut |_| {}, &SetClock(1e12)), Err(Abort::Threw));
+        assert_eq!(
+            run_worker(&[], &mut |_| {}, &SetClock(1e12)),
+            Err(Abort::Threw)
+        );
         assert_eq!(
             run_worker(&[None], &mut |_| {}, &SetClock(1e12)),
             Err(Abort::Threw)
