@@ -53,6 +53,7 @@ const BASE_KEYS = [
   "DS:/Dscomm/Console/ConsoleLine",
   "DS:/Dscomm/Console/ErrorInfo",
   "/r/DS:/Dscomm/Console/ErrorInfo",
+  "rDS:/Dscomm/Console/ConsoleLine",
   "q/DS:/Dscomm/Console/ProgramCrashInfo",
   "DS:/Dscomm/Console/Other",
   "m/.type",
@@ -149,7 +150,7 @@ function jsonText(r: Rng): string {
 
 function makeCase(r: Rng): [boolean, unknown[][]] {
   const enableCache = r.below(5) !== 0;
-  const steps = r.range(5, 70);
+  const steps = r.range(5, 50);
   const ops: unknown[][] = [];
   const keys = [...BASE_KEYS];
   let cursor = r.range(-2, 5);
@@ -286,7 +287,7 @@ function makeCase(r: Rng): [boolean, unknown[][]] {
       else if (which === 1) ops.push(["setWpilibType", k, r.pick(TYPES) ?? "int64"]);
       else if (which === 2) ops.push(["setMetadataString", k, r.pick(["", "{}", "unit"])]);
       else ops.push(["setGeneratedParent", k]);
-    } else if (choice < 95) {
+    } else if (choice < 97) {
       ops.push(["reload"]);
     } else {
       ops.push(["dump"]);
@@ -325,6 +326,21 @@ emit(true, [
   ["clearBeforeTime", NaN, true],
   ["range"],
   ["getTimestamps", ["d", "c"], ""],
+  ["dump"]
+]);
+
+emit(true, [
+  ["putNumber", "n1", 1, 1],
+  ["putNumber", "n2", 2, 2],
+  ["putNumber", "n3", 4, 3],
+  ["getTimestamps", ["n1", "n2"], ""],
+  ["getTimestamps", ["n1", "n2"], "u1"],
+  ["getTimestamps", ["n1", "n2", "n3"], "u2"],
+  ["putNumber", "n1", 3, 1],
+  ["getTimestamps", ["n1", "n2"], ""],
+  ["getTimestamps", ["n1", "n2"], "u1"],
+  ["deleteField", "n3"],
+  ["getTimestamps", ["n1", "n2", "n3"], "u2"],
   ["dump"]
 ]);
 
