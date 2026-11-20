@@ -19,7 +19,7 @@ import { dumpLog } from "./historical/dump";
 import { OracleWorker, terminatedWorkersExited } from "./shims";
 import { realSetImmediate } from "./historical/timers";
 
-const USAGE = `usage: decodeWorker <log file>
+const USAGE = `usage: decodeWorker [--skip-types <type,...>] <log file>
 
 Runs the real worker bundle for the file's extension on its own, the way HistoricalDataSource
 drives it, and prints every message it posts (CVE-1 lines, see oracle/README.md):
@@ -27,7 +27,9 @@ drives it, and prints every message it posts (CVE-1 lines, see oracle/README.md)
   if the initial log is partial, one {"request": "parseField", "key"} per requested key, each
   followed by its messages. The keys are the initial log's fields in order, the keys
   HistoricalDataSource always requests, "/" + the first field, a missing key and the first
-  field again.`;
+  field again. --skip-types leaves out requests for fields of those WPILib types and prints
+  {"request": "parseField", "key", "skipped": true} instead. If the worker's thread dies (its
+  realm runs out of memory), the run exits with status 3 after the lines so far.`;
 
 const MISSING_KEY = "/asrs-oracle/missing";
 
@@ -99,11 +101,16 @@ function messageLines(message: any): string[] {
   }
 }
 
+const THREAD_DIED = 3;
+
 async function idle(worker: OracleWorker): Promise<void> {
   while (worker.busy) await new Promise((resolve) => realSetImmediate(resolve));
+  if ((worker as any).exited) process.exit(THREAD_DIED);
 }
 
-let file = process.argv[2];
+const skipIndex = process.argv[2] === "--skip-types" ? 3 : -1;
+const skipTypes = skipIndex > 0 ? (process.argv[skipIndex] ?? "").split(",").filter((t) => t.length > 0) : [];
+let file = process.argv[skipIndex > 0 ? 4 : 2];
 if (file === undefined || file.startsWith("-")) {
   console.error(USAGE);
   process.exit(2);
@@ -129,7 +136,9 @@ worker.onmessage = (event) => {
   if (event.data.type === "initial") initial = event.data;
   write(messageLines(event.data));
 };
-worker.onerror = () => write([encode({ type: "threw" })]);
+worker.onerror = (event) => {
+  if (typeof event.error === "string") write([encode({ type: "threw" })]);
+};
 
 write([encode({ request: "start" })]);
 worker.postMessage(
@@ -144,7 +153,16 @@ if (initial !== null && initial.isPartial) {
   if (keys.length > 0) requests.push("/" + keys[0]);
   requests.push(MISSING_KEY);
   if (keys.length > 0) requests.push(keys[0]);
+  const fields = initial.log.fields;
+  const skipped = (key: string) =>
+    [key, key.startsWith("/") ? key.slice(1) : null].some(
+      (k) => k !== null && Object.hasOwn(fields, k) && skipTypes.includes(fields[k].wpilibType)
+    );
   for (const key of requests) {
+    if (skipped(key)) {
+      write([encode({ request: "parseField", key, skipped: true })]);
+      continue;
+    }
     write([encode({ request: "parseField", key })]);
     worker.postMessage({ type: "parseField", key });
     await idle(worker);

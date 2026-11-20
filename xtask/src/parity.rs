@@ -31,7 +31,9 @@ suites:
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
-        output up to that point must be a prefix of the oracle's.
+        output up to that point must be a prefix of the oracle's. Requests for fields
+        whose custom schema type the port cannot decode yet are skipped on both sides.
+        --plant flips a bit in the first asrs-cli dump, so the run fails on purpose.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
         anything else byte by byte
@@ -236,6 +238,21 @@ fn decode_suite(args: &[String]) -> Result {
         .unwrap_or_else(|| crate::workspace_root().join("target"))
         .join("debug")
         .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
+    let unported = String::from_utf8(
+        Command::new(&target)
+            .args(["decode-worker", "--unported-types"])
+            .output()
+            .map_err(|e| format!("asrs-cli decode-worker --unported-types: {e}"))?
+            .stdout,
+    )
+    .map_err(|e| format!("asrs-cli decode-worker --unported-types: {e}"))?
+    .trim()
+    .to_owned();
+    let skip_flags: Vec<String> = if unported.is_empty() {
+        Vec::new()
+    } else {
+        vec!["--skip-types".to_owned(), unported.clone()]
+    };
     let mut cases = Vec::new();
     for file in &files {
         let partial = file.extension().is_some_and(|e| e == "wpilog");
@@ -260,19 +277,14 @@ fn decode_suite(args: &[String]) -> Result {
                         return;
                     }
                     let (path, mode) = &cases[i];
+                    let flags = mode.flags(&skip_flags);
                     let mut oracle_command = oracle::oracle_command(&paths, mode.oracle_entry())
                         .expect("oracle decode command");
-                    oracle_command.args(mode.flags()).arg(path);
+                    oracle_command.args(&flags).arg(path);
                     let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, timeout));
                     let mut rust_command = Command::new(&target);
-                    rust_command
-                        .arg(mode.cli_command())
-                        .args(mode.flags())
-                        .arg(path);
-                    let mut rust = DecodeVerdict::port(run_decode(&mut rust_command, timeout));
-                    if plant && i == 0 {
-                        rust.plant();
-                    }
+                    rust_command.arg(mode.cli_command()).args(&flags).arg(path);
+                    let rust = DecodeVerdict::port(run_decode(&mut rust_command, timeout));
                     *results[i].lock().expect("decode result poisoned") = Some((oracle, rust));
                 }
             });
@@ -280,9 +292,11 @@ fn decode_suite(args: &[String]) -> Result {
     });
     let mut failures = Vec::new();
     let mut never = 0;
+    let mut skipped = 0;
     let mut unmodeled = Vec::new();
+    let mut planted = !plant;
     for (i, (path, mode)) in cases.iter().enumerate() {
-        let (oracle, rust) = results[i]
+        let (oracle, mut rust) = results[i]
             .lock()
             .expect("decode result poisoned")
             .take()
@@ -290,6 +304,15 @@ fn decode_suite(args: &[String]) -> Result {
         let name = format!("{} ({})", path.display(), mode.cli_command());
         if let DecodeVerdict::NeverCompletes(_) = oracle {
             never += 1;
+        }
+        if let DecodeVerdict::Dump(out) | DecodeVerdict::NeverCompletes(out) = &oracle {
+            skipped += out
+                .windows(SKIPPED_MARK.len())
+                .filter(|w| *w == SKIPPED_MARK)
+                .count();
+        }
+        if !planted {
+            planted = rust.plant();
         }
         match (oracle, rust) {
             (DecodeVerdict::Dump(want), DecodeVerdict::Dump(got))
@@ -325,6 +348,11 @@ fn decode_suite(args: &[String]) -> Result {
         cases.len(),
         unmodeled.len()
     );
+    if skipped > 0 {
+        eprintln!(
+            "  {skipped} field requests skipped for unported custom schema types ({unported})"
+        );
+    }
     for name in &unmodeled {
         eprintln!("  not modeled: {name}");
     }
@@ -332,9 +360,7 @@ fn decode_suite(args: &[String]) -> Result {
 }
 
 enum DecodeMode {
-    /// `decode`; a partial log stops after the "initial" phase.
     Decode { partial: bool },
-    /// `decodeWorker` / `decode-worker`.
     Worker,
 }
 
@@ -353,10 +379,11 @@ impl DecodeMode {
         }
     }
 
-    fn flags(&self) -> &'static [&'static str] {
+    fn flags(&self, skip_flags: &[String]) -> Vec<String> {
         match self {
-            DecodeMode::Decode { partial: true } => &["--initial"],
-            _ => &[],
+            DecodeMode::Decode { partial: true } => vec!["--initial".to_owned()],
+            DecodeMode::Decode { partial: false } => Vec::new(),
+            DecodeMode::Worker => skip_flags.to_vec(),
         }
     }
 }
@@ -398,6 +425,7 @@ fn collect_paths(dir: &Path, keep: &dyn Fn(&Path) -> bool, out: &mut Vec<PathBuf
 
 const NEVER_COMPLETES: i32 = 3;
 const UNMODELED: i32 = 4;
+const SKIPPED_MARK: &[u8] = b"[\"skipped\",true]";
 
 enum DecodeRun {
     Exited(Option<i32>, Vec<u8>),
@@ -414,10 +442,12 @@ enum DecodeVerdict {
 }
 
 impl DecodeVerdict {
-    /// The oracle never completes when its worker loops, so a timeout is that verdict there.
+    /// The oracle never completes when its worker loops, so a timeout is that verdict there, and
+    /// so is `decodeWorker`'s exit code 3 for a worker thread that died.
     fn oracle(run: DecodeRun) -> Self {
         match run {
             DecodeRun::Exited(Some(0), out) => DecodeVerdict::Dump(out),
+            DecodeRun::Exited(Some(NEVER_COMPLETES), out) => DecodeVerdict::NeverCompletes(out),
             DecodeRun::Exited(code, _) => DecodeVerdict::Broken(format!("exited with {code:?}")),
             DecodeRun::TimedOut(out) => DecodeVerdict::NeverCompletes(out),
         }
@@ -435,13 +465,16 @@ impl DecodeVerdict {
     }
 
     /// Flips one bit of the last byte before the final newline, to show a mismatch report.
-    fn plant(&mut self) {
+    /// Returns whether there was output to plant into.
+    fn plant(&mut self) -> bool {
         if let DecodeVerdict::Dump(out) | DecodeVerdict::NeverCompletes(out) = self
             && out.len() >= 2
         {
             let at = out.len() - 2;
             out[at] ^= 1;
+            return true;
         }
+        false
     }
 
     fn describe(&self) -> String {

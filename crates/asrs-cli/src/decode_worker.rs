@@ -1,12 +1,14 @@
 //! `asrs-cli decode-worker <log file>`: drives the file's decode worker on its own and prints
 //! every message it posts, matching `oracle decodeWorker` (oracle/src/decodeWorker.ts). Where
 //! upstream's worker never returns, the output stops there and the exit code is
-//! `NEVER_COMPLETES`.
+//! `NEVER_COMPLETES`. `--skip-types` leaves out requests for fields of those WPILib types, as
+//! the oracle does; `--unported-types` prints the custom schema types the port cannot decode.
 
 use std::io::Write as _;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use asrs_formats::custom_schemas;
 use asrs_formats::historical::{HistoricalDataSource, create_worker, select_worker};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, Response};
 use asrs_js::string::JsString;
@@ -21,7 +23,8 @@ use asrs_services::historical_start;
 use crate::decode::{NEVER_COMPLETES, UNMODELED, dump_log};
 use crate::log_field::{serialized_value, string_value};
 
-const USAGE: &str = "usage: asrs-cli decode-worker <log file>";
+const USAGE: &str = "usage: asrs-cli decode-worker [--skip-types <type,...>] <log file>
+       asrs-cli decode-worker --unported-types";
 const MISSING_KEY: &str = "/asrs-oracle/missing";
 
 fn message_lines(response: Response) -> Vec<String> {
@@ -83,18 +86,23 @@ impl Output {
     }
 }
 
+type InitialFields = Vec<(JsString, Option<JsString>)>;
+
 /// One request: its messages, then a `threw` line for a throw. `Err` is how the run ends early.
 fn request(
     out: &mut Output,
     worker: &mut dyn DecodeWorker,
     request: Request,
-    initial: &mut Option<(bool, Vec<JsString>)>,
+    initial: &mut Option<(bool, InitialFields)>,
 ) -> Result<(), ExitCode> {
     let end = worker.handle(request, &mut |response| {
         if let Response::Initial { log, is_partial } = &response {
             *initial = Some((
                 *is_partial,
-                log.fields.iter().map(|(k, _)| k.clone()).collect(),
+                log.fields
+                    .iter()
+                    .map(|(key, field)| (key.clone(), field.wpilib_type.clone()))
+                    .collect(),
             ));
         }
         out.write(&message_lines(response));
@@ -118,9 +126,27 @@ fn header(fields: impl IntoIterator<Item = (&'static str, Value)>) -> String {
 }
 
 pub fn run(args: &[String]) -> ExitCode {
-    let [path] = args else {
-        eprintln!("{USAGE}");
-        return ExitCode::FAILURE;
+    let (skip_types, path): (Vec<JsString>, &String) = match args {
+        [flag] if flag == "--unported-types" => {
+            println!(
+                "{}",
+                custom_schemas::unported().collect::<Vec<_>>().join(",")
+            );
+            return ExitCode::SUCCESS;
+        }
+        [flag, types, path] if flag == "--skip-types" => (
+            types
+                .split(',')
+                .filter(|t| !t.is_empty())
+                .map(JsString::from)
+                .collect(),
+            path,
+        ),
+        [path] if !path.starts_with('-') => (Vec::new(), path),
+        _ => {
+            eprintln!("{USAGE}");
+            return ExitCode::FAILURE;
+        }
     };
     let source = HistoricalDataSource::open_file(path);
     let Some(name) = select_worker(source.path()) else {
@@ -150,8 +176,16 @@ pub fn run(args: &[String]) -> ExitCode {
     ) {
         return code;
     }
-    let Some((true, keys)) = initial.take() else {
+    let Some((true, fields)) = initial.take() else {
         return ExitCode::SUCCESS;
+    };
+    let keys: Vec<JsString> = fields.iter().map(|(key, _)| key.clone()).collect();
+    let skipped = |key: &JsString| {
+        let unslashed = key.slice(1.0, None);
+        fields.iter().any(|(field, wpilib_type)| {
+            (field == key || (key.starts_with(&JsString::from("/"), None) && *field == unslashed))
+                && wpilib_type.as_ref().is_some_and(|t| skip_types.contains(t))
+        })
     };
     let mut requests = keys.clone();
     for group in [
@@ -176,6 +210,14 @@ pub fn run(args: &[String]) -> ExitCode {
     requests.push(JsString::from(MISSING_KEY));
     requests.extend(keys.first().cloned());
     for key in requests {
+        if skipped(&key) {
+            out.write(&[header([
+                ("request", Value::string("parseField")),
+                ("key", string_value(&key)),
+                ("skipped", Value::Bool(true)),
+            ])]);
+            continue;
+        }
         out.write(&[header([
             ("request", Value::string("parseField")),
             ("key", string_value(&key)),

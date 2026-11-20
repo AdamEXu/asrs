@@ -15,7 +15,7 @@ use asrs_log::log::robot_state::{
 use asrs_log::log::{Log, LogError, LoggableType};
 use asrs_log::realm::JsRealm;
 
-use crate::custom_schemas;
+use crate::custom_schemas::{self, SchemaError};
 use crate::worker::{Abort, DecodeWorker, FieldResponse, Request, Response};
 use crate::wpilog::{self, CONTROL_ENTRY, WpilogDecoder, WpilogRecord};
 
@@ -122,7 +122,6 @@ impl WpilogWorker {
         Ok(())
     }
 
-    /// `wpilogIndexer.run` with the worker's two callbacks.
     fn index(&mut self, post: &mut dyn FnMut(Response)) -> Result<(), Failed> {
         let data = Arc::clone(&self.data);
         let index = wpilog::index(&data).map_err(|_| Failed)?;
@@ -290,17 +289,17 @@ impl WpilogWorker {
                         &schema,
                     ));
                 }
-                match log.put_raw(key, timestamp, raw.clone()) {
-                    Err(LogError::Proto(_)) => return Ok(()),
-                    other => caught(other)?,
-                }
+                caught(log.put_raw(key, timestamp, raw.clone()))?;
                 if custom_schemas::has(type_) {
                     let Some(parser) = custom_schemas::get(type_) else {
                         return Err(Abort::Unmodeled(
                             "custom schema parsers are not ported yet (unit F08)",
                         ));
                     };
-                    let _ = parser(log, key, timestamp, &raw);
+                    match parser(log, key, timestamp, &raw) {
+                        Ok(()) | Err(SchemaError::Threw) => {}
+                        Err(SchemaError::Log(error)) => caught(Err(error))?,
+                    }
                     log.set_generated_parent(key);
                 }
             }
@@ -308,7 +307,6 @@ impl WpilogWorker {
         Ok(())
     }
 
-    /// `parseField(key, skipMessage)`.
     fn parse_field(
         &mut self,
         mut key: JsString,
@@ -323,7 +321,7 @@ impl WpilogWorker {
                 return Ok(());
             }
         }
-        if let Some(positions) = self.data_record_positions.get(&key).cloned() {
+        if let Some(positions) = self.data_record_positions.remove(&key) {
             let type_ = self.entry_types[&key].clone();
             let data = Arc::clone(&self.data);
             let decoder = WpilogDecoder::new(&data);
@@ -332,7 +330,6 @@ impl WpilogWorker {
                     self.put_record(&key, &type_, &record)?;
                 }
             }
-            self.data_record_positions.remove(&key);
         }
 
         if let Some(clear_time) = self.clear_time {

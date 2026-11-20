@@ -2,6 +2,7 @@
 //! `HistoricalDataSource_WorkerResponse`) and the thread each worker runs on.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::JoinHandle;
 
@@ -40,7 +41,8 @@ pub enum Abort {
     /// Upstream loops forever or its realm dies. The port detects it and stops instead; the
     /// worker never handles another request.
     NeverReturns,
-    /// Upstream continues in a way the port does not model yet; see the text.
+    /// Upstream continues in a way the port does not model yet; see the text. The worker's state
+    /// is then neither upstream's nor modeled, so it never handles another request.
     Unmodeled(&'static str),
 }
 
@@ -57,12 +59,13 @@ pub enum WorkerMessage {
     Done(Result<(), Abort>),
 }
 
-/// A worker on its own OS thread, named `decode-<id>`. Requests are handled in order; after a
-/// `NeverReturns` the thread drops every later request without answering, as the stuck upstream
-/// worker would.
+/// A worker on its own OS thread, named `decode-<id>`. Requests are handled in order. After a
+/// `NeverReturns` or `Unmodeled` abort the thread drops every later request without answering,
+/// as the stuck upstream worker would.
 pub struct WorkerThread {
     requests: Option<Sender<Request>>,
-    pub messages: Receiver<WorkerMessage>,
+    messages: Receiver<WorkerMessage>,
+    terminated: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -70,24 +73,31 @@ impl WorkerThread {
     pub fn spawn(id: &str, mut worker: Box<dyn DecodeWorker>) -> std::io::Result<Self> {
         let (request_tx, request_rx) = channel::<Request>();
         let (message_tx, message_rx) = channel();
+        let terminated = Arc::new(AtomicBool::new(false));
+        let stop = Arc::clone(&terminated);
         let thread = std::thread::Builder::new()
             .name(format!("decode-{id}"))
             .spawn(move || {
                 let mut stuck = false;
                 for request in request_rx {
-                    if stuck {
+                    if stuck || stop.load(Ordering::Acquire) {
                         continue;
                     }
                     let end = worker.handle(request, &mut |response| {
-                        let _ = message_tx.send(WorkerMessage::Response(response));
+                        if !stop.load(Ordering::Acquire) {
+                            let _ = message_tx.send(WorkerMessage::Response(response));
+                        }
                     });
-                    stuck = end == Err(Abort::NeverReturns);
-                    let _ = message_tx.send(WorkerMessage::Done(end));
+                    stuck = matches!(end, Err(Abort::NeverReturns | Abort::Unmodeled(_)));
+                    if !stop.load(Ordering::Acquire) {
+                        let _ = message_tx.send(WorkerMessage::Done(end));
+                    }
                 }
             })?;
         Ok(WorkerThread {
             requests: Some(request_tx),
             messages: message_rx,
+            terminated,
             thread: Some(thread),
         })
     }
@@ -98,9 +108,25 @@ impl WorkerThread {
         }
     }
 
-    /// `terminate()`: no further requests are handled. A request already running finishes on
-    /// its own and its messages are dropped with the receiver.
+    /// The next message, or `None` once the worker is terminated or its thread has ended.
+    pub fn recv(&self) -> Option<WorkerMessage> {
+        if self.terminated.load(Ordering::Acquire) {
+            return None;
+        }
+        self.messages.recv().ok()
+    }
+
+    pub fn try_recv(&self) -> Option<WorkerMessage> {
+        if self.terminated.load(Ordering::Acquire) {
+            return None;
+        }
+        self.messages.try_recv().ok()
+    }
+
+    /// `terminate()`: nothing more is delivered and no further request is handled. A request
+    /// already running finishes on the detached thread with its messages discarded.
     pub fn terminate(&mut self) {
+        self.terminated.store(true, Ordering::Release);
         self.requests = None;
         self.thread.take();
     }
@@ -112,7 +138,6 @@ impl Drop for WorkerThread {
     }
 }
 
-/// Runs one request synchronously on the calling thread and collects its responses.
 pub fn run_request(
     worker: &mut dyn DecodeWorker,
     request: Request,
@@ -149,13 +174,13 @@ mod tests {
 
     #[test]
     fn a_thread_answers_in_order_and_goes_silent_after_never_returns() {
-        let worker = WorkerThread::spawn("test", Box::new(Echo)).unwrap();
+        let mut worker = WorkerThread::spawn("test", Box::new(Echo)).unwrap();
         worker.post(Request::ParseField(JsString::from("a")));
         worker.post(Request::Start(vec![]));
         worker.post(Request::ParseField(JsString::from("b")));
         let mut seen = Vec::new();
         for _ in 0..4 {
-            seen.push(match worker.messages.recv().unwrap() {
+            seen.push(match worker.recv().unwrap() {
                 WorkerMessage::Response(Response::Progress(_)) => "progress",
                 WorkerMessage::Response(Response::Failed) => "failed",
                 WorkerMessage::Response(_) => "other",
@@ -170,5 +195,7 @@ mod tests {
                 .recv_timeout(std::time::Duration::from_millis(100))
                 .is_err()
         );
+        worker.terminate();
+        assert!(worker.recv().is_none());
     }
 }

@@ -102,7 +102,7 @@ pub fn run(args: &[String]) -> ExitCode {
     match source.handle_main_message(
         &mut log,
         &mut realm,
-        &files,
+        files,
         Box::new(V8MathRandom::from_entropy()),
     ) {
         Ok(Some(Abort::NeverReturns)) => {

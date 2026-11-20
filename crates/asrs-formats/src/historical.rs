@@ -112,7 +112,6 @@ impl HistoricalDataSource {
         self.status
     }
 
-    /// `logIsPartial`: the worker's initial log leaves fields to `parseField`.
     pub fn log_is_partial(&self) -> bool {
         self.log_is_partial
     }
@@ -124,7 +123,7 @@ impl HistoricalDataSource {
         &mut self,
         log: &mut Log,
         realm: &mut JsRealm,
-        files: &[Option<Vec<u8>>],
+        files: Vec<Option<Vec<u8>>>,
         worker_random: Box<dyn Rng + Send>,
     ) -> Result<Option<Abort>, UnportedWorker> {
         if self.status != Status::Reading {
@@ -140,10 +139,7 @@ impl HistoricalDataSource {
             return Ok(None);
         };
         let mut worker = create_worker(worker, worker_random)?;
-        let data = files
-            .iter()
-            .map(|file| file.as_deref().map(Arc::from))
-            .collect();
+        let data = files.into_iter().map(|file| file.map(Arc::from)).collect();
         let (replies, end) = run_request(worker.as_mut(), Request::Start(data));
         for reply in replies {
             match reply {
