@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+default-members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100.0"
+license = "BSD-3-Clause"
+publish = false
+
+[workspace.dependencies]
+asrs-ui = { path = "crates/asrs-ui" }
+
+gpui-kit = { version = "=0.10.0", default-features = false, features = ["component"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+disallowed_methods = "deny"
+disallowed_types = "deny"
+dbg_macro = "warn"
+todo = "warn"
