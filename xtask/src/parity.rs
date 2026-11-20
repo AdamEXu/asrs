@@ -24,7 +24,7 @@ suites:
   decode [<log file>...] [--timeout SECS] [--plant]
         decode log files with both sides and compare the canonical dumps (`decode`) and
         the decode worker's messages, initial log and per-field responses
-        (`decodeWorker`): every .dslog/.dsevents/.wpilog file under the corpus a and b
+        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.csv file under the corpus a and b
         trees, the public log cache and the fuzz corpora, or just the files listed. A
         WPILOG's `decode` dump is compared on its initial phase only until lazy loading
         is ported (F09). An oracle that does not finish in time and an asrs-cli that
