@@ -20,6 +20,11 @@ anyhow = { version = "=1.0.104", optional = true }
 gpui-kit.workspace = true
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
+image = { version = "=0.25.10", default-features = false }
+resvg = { version = "=0.46.0", default-features = false }
+
+[dev-dependencies]
+asrs-parity = { path = "../asrs-parity" }
 
 [[test]]
 name = "headless_capture"
@@ -28,3 +33,12 @@ required-features = ["parity"]
 
 [lints]
 workspace = true
+
+[[example]]
+name = "ui_scenes"
+required-features = ["parity"]
+
+[[test]]
+name = "icon_capture"
+harness = false
+required-features = ["parity"]

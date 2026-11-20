@@ -74,7 +74,7 @@ fn electron(paths: &Paths, args: &[String]) -> Result {
     electron_with(paths, &[], args)
 }
 
-fn electron_with(paths: &Paths, flags: &[String], args: &[String]) -> Result {
+pub(crate) fn electron_with(paths: &Paths, flags: &[String], args: &[String]) -> Result {
     let main = paths.dist.join("canvasMain.mjs");
     if !main.exists() {
         return Err(format!(
@@ -250,14 +250,14 @@ fn measure(paths: &Paths, check: bool) -> Result {
     Ok(())
 }
 
-fn write(path: &Path, bytes: &[u8]) -> Result {
+pub(crate) fn write(path: &Path, bytes: &[u8]) -> Result {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn read_json(path: &Path) -> Result<Json> {
+pub(crate) fn read_json(path: &Path) -> Result<Json> {
     let text = String::from_utf8(oracle::read(path)?).map_err(|e| e.to_string())?;
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }

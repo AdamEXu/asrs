@@ -1,0 +1,11 @@
+{
+  "electron": "39.2.7",
+  "chrome": "142.0.7444.235",
+  "platform": "darwin",
+  "arch": "arm64",
+  "osRelease": "27.3.0",
+  "generator": "6a133c2275bf7131",
+  "file": "tints-macos.jsonl.zst",
+  "cases": 1524,
+  "content": "99e9f15fd0be8e9f"
+}
