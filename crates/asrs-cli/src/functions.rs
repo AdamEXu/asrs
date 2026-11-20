@@ -1,7 +1,7 @@
 use asrs_js::number::{self, IntlOptions, SignDisplay};
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::{js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time};
+use crate::{js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time, log_field};
 
 pub type Function = fn(&[Value]) -> Response;
 
@@ -31,6 +31,7 @@ pub fn lookup(name: &str) -> Option<Function> {
         .chain(js_json::FUNCTIONS)
         .chain(js_regex::FUNCTIONS)
         .chain(js_msgpack::FUNCTIONS)
+        .chain(log_field::FUNCTIONS)
         .find(|(n, _)| *n == name)
         .map(|(_, f)| *f)
 }

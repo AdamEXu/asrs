@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from "electron";
+import { app, BrowserWindow, nativeTheme, screen } from "electron";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { encode } from "./cve1";
 import { domScenes } from "./canvas/dom";
 import { encodePng } from "./canvas/png";
+import { uiHtml, uiScenes } from "./canvas/ui";
 import {
   allScenes,
   calibrationScenes,
@@ -25,13 +26,15 @@ modes:
   dom <scale>             capture the DOM text scenes at device scale 1 or 2; Electron must be
                           started with --force-device-scale-factor=<scale> and
                           --force-color-profile=srgb before the script path
+  ui <scale>              capture the UI theme scenes (upstream global.css, symbols, filter chains)
+                          at device scale 1 or 2, with the same Electron flags as dom
   list                    print the scene names`;
 
 const args = process.argv.slice(process.argv.findIndex((a) => /canvasMain\.mjs$/.test(a)) + 1);
 const [mode, outArg, ...rest] = args;
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-if (mode === "dom" && rest[0] !== "1" && rest[0] !== "2") fail(USAGE);
+if ((mode === "dom" || mode === "ui") && rest[0] !== "1" && rest[0] !== "2") fail(USAGE);
 
 function fail(message: string): never {
   console.error(message);
@@ -136,6 +139,71 @@ async function dom(out: string, scale: string) {
   }
 }
 
+async function captureRgba(win: BrowserWindow, scale: number) {
+  const image = await win.webContents.capturePage();
+  const size = image.getSize(scale);
+  const bitmap = image.toBitmap({ scaleFactor: scale });
+  const rgba = Buffer.alloc(bitmap.length);
+  for (let i = 0; i < bitmap.length; i += 4) {
+    rgba[i] = bitmap[i + 2];
+    rgba[i + 1] = bitmap[i + 1];
+    rgba[i + 2] = bitmap[i];
+    rgba[i + 3] = bitmap[i + 3];
+  }
+  const at = (x: number, y: number) => {
+    const i = (Math.floor(y * scale) * size.width + Math.floor(x * scale)) * 4;
+    return [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]];
+  };
+  return { size, rgba, at };
+}
+
+async function ui(out: string, scaleArg: string) {
+  const scale = Number(scaleArg);
+  const upstream = path.join(here, "..", "upstream");
+  for (const scene of uiScenes(upstream)) {
+    writeJson(path.join(out, "scenes", `${scene.name}.json`), scene);
+    nativeTheme.themeSource = scene.dark ? "dark" : "light";
+    const html = path.join(out, "html", `${scene.name}.html`);
+    fs.mkdirSync(path.dirname(html), { recursive: true });
+    fs.writeFileSync(html, uiHtml(scene, upstream));
+    const win = await page(scene.width, scene.height);
+    await win.loadFile(html);
+    const state = await win.webContents.executeJavaScript(
+      "Promise.all(Array.from(document.images).map((i) => i.decode())).then(() => document.fonts.ready)" +
+        ".then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))" +
+        ".then(() => ({ dpr: window.devicePixelRatio, dark: matchMedia('(prefers-color-scheme: dark)').matches, " +
+        "broken: Array.from(document.images).filter((i) => i.naturalWidth === 0).map((i) => i.src) }))"
+    );
+    if (state.dpr !== scale) throw new Error(`devicePixelRatio is ${state.dpr}, expected ${scale}`);
+    if (state.dark !== scene.dark) throw new Error(`${scene.name}: prefers-color-scheme did not follow nativeTheme`);
+    if (state.broken.length > 0) throw new Error(`images failed to load: ${state.broken.join(", ")}`);
+    if (scene.pointer !== null) {
+      const { x, y, down } = scene.pointer;
+      win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+      if (down) win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+      const pseudo = down ? ":active" : ":hover";
+      const matched = await win.webContents.executeJavaScript(
+        `new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))).then(() => document.querySelector("button${pseudo}") !== null)`
+      );
+      if (!matched) throw new Error(`${scene.name}: no button matches ${pseudo} after the synthetic pointer event`);
+    }
+    const shot = await captureRgba(win, scale);
+    for (const p of scene.patches) {
+      const got = "#" + shot.at(p.x + 10, p.y + 10).slice(0, 3).map((c) => c.toString(16).padStart(2, "0")).join("");
+      if (got !== p.color) throw new Error(`colour patch ${p.color} captured as ${got}; start Electron with --force-color-profile=srgb`);
+    }
+    const probes = scene.probes.map((p) => ({ chain: p.chain, input: p.input, opacity: p.opacity, rgba: shot.at(p.x + p.size / 2, p.y + p.size / 2) }));
+    const buttons = (scene.pointer === null ? [] : scene.buttons).map((b) => shot.at(b.x + b.size / 2, b.y + 1));
+    const base = path.join(out, "ref", `${scene.name}@${scale}x`);
+    fs.mkdirSync(path.dirname(base), { recursive: true });
+    fs.writeFileSync(`${base}.png`, encodePng(shot.size.width, shot.size.height, shot.rgba));
+    writeJson(`${base}.json`, { scene: scene.name, scale, width: shot.size.width, height: shot.size.height, probes, buttons });
+    if (scene.pointer?.down) win.webContents.sendInputEvent({ type: "mouseUp", x: scene.pointer.x, y: scene.pointer.y, button: "left", clickCount: 1 });
+    win.destroy();
+    console.error(`  ${scene.name}@${scale}x`);
+  }
+}
+
 function info(out: string) {
   writeJson(path.join(out, "info.json"), {
     electron: process.versions.electron,
@@ -156,6 +224,11 @@ async function main() {
   const out = path.resolve(outArg);
   if (mode === "dom") {
     await dom(out, rest[0]);
+    return;
+  }
+  if (mode === "ui") {
+    info(out);
+    await ui(out, rest[0]);
     return;
   }
   const win = await page(400, 300);
