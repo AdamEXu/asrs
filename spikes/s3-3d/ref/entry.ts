@@ -58,8 +58,24 @@ const command: Field3dRendererCommand = {
 };
 
 let frames = 0;
+w.s3Grab = null;
+w.s3GrabRequested = false;
 function loop() {
   impl.render(command);
+  if (w.s3GrabRequested) {
+    w.s3GrabRequested = false;
+    (impl as any).shouldRender = true;
+    impl.render(command);
+    const gl = (impl as any).renderer.getContext() as WebGL2RenderingContext;
+    const width = gl.drawingBufferWidth;
+    const height = gl.drawingBufferHeight;
+    const px = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const flipped = new Uint8Array(px.length);
+    const row = width * 4;
+    for (let y = 0; y < height; y++) flipped.set(px.subarray((height - 1 - y) * row, (height - y) * row), y * row);
+    w.s3Grab = { width, height, data: flipped };
+  }
   frames++;
   const loading = (impl as any).robotLoadingCount > 0;
   w.s3Ready = !loading && frames > 30;
