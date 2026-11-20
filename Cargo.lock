@@ -364,6 +364,10 @@ dependencies = [
 [[package]]
 name = "asrs-model"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-parity"
