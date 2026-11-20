@@ -292,7 +292,10 @@ dependencies = [
 name = "asrs-app"
 version = "0.1.0"
 dependencies = [
+ "asrs-field3d",
  "asrs-ui",
+ "async-channel",
+ "image",
 ]
 
 [[package]]
@@ -325,6 +328,9 @@ version = "0.1.0"
 dependencies = [
  "asrs-js",
  "asrs-parity",
+ "bytemuck",
+ "pollster 0.4.0",
+ "wgpu",
 ]
 
 [[package]]
