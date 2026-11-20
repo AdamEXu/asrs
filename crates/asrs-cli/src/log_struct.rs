@@ -16,55 +16,76 @@ fn struct_fn(args: &[Value]) -> Response {
     let Value::Array(ops) = functions::arg(args, 0) else {
         return Response::Error("oracle:struct: ops must be an array".to_owned());
     };
-    let mut decoder = StructDecoder::new();
+    let mut decoders = vec![StructDecoder::new()];
+    let mut results = Vec::with_capacity(ops.len());
+    for op in ops {
+        results.push(run_op(&mut decoders, &op));
+    }
+    // Upstream hands back `decoder.toSerialized()` by reference: results are
+    // only serialized once the whole op list has run, so each of them shows
+    // that decoder instance's final state.
     Response::Ok(Value::Array(
-        ops.iter().map(|op| run_op(&mut decoder, op)).collect(),
+        results
+            .into_iter()
+            .map(|result| match result {
+                Ok(OpOut::Live(i)) => outcome(Ok(decoders[i].to_serialized())),
+                Ok(OpOut::Now(value)) => outcome(Ok(value)),
+                Err(e) => outcome(Err(e)),
+            })
+            .collect(),
     ))
 }
 
-fn run_op(decoder: &mut StructDecoder, op: &Value) -> Value {
+enum OpOut {
+    /// The `toSerialized()` reference of the decoder at the given index.
+    Live(usize),
+    Now(JsValue),
+}
+
+fn run_op(decoders: &mut Vec<StructDecoder>, op: &Value) -> Result<OpOut, JsError> {
     let Value::Array(parts) = op else {
-        return outcome(Err(JsError::new(
-            "Error",
-            "oracle:struct: op is not an array",
-        )));
+        return Err(JsError::new("Error", "oracle:struct: op is not an array"));
     };
     let kind = match functions::arg(parts, 0) {
         Value::String(s) => s.to_string_lossy(),
         _ => String::new(),
     };
+    let live = decoders.len() - 1;
+    let decoder = decoders.last_mut().expect("nonempty");
     match kind.as_str() {
-        "addSchema" => outcome(match (name_arg(parts, 1), bytes_arg(parts, 2)) {
+        "addSchema" => match (name_arg(parts, 1), bytes_arg(parts, 2)) {
             (Ok(name), Ok(bytes)) => decoder
                 .add_schema(&name, &bytes)
-                .map(|()| decoder.to_serialized()),
+                .map(|()| OpOut::Live(live)),
             (Err(e), _) | (_, Err(e)) => Err(e),
-        }),
-        "decode" => outcome(match (name_arg(parts, 1), bytes_arg(parts, 2)) {
-            (Ok(name), Ok(bytes)) => decoder.decode(&name, &bytes).map(decoded_to_js),
+        },
+        "decode" => match (name_arg(parts, 1), bytes_arg(parts, 2)) {
+            (Ok(name), Ok(bytes)) => decoder
+                .decode(&name, &bytes)
+                .map(|d| OpOut::Now(decoded_to_js(d))),
             (Err(e), _) | (_, Err(e)) => Err(e),
-        }),
-        "decodeArray" => outcome(match (name_arg(parts, 1), bytes_arg(parts, 2)) {
+        },
+        "decodeArray" => match (name_arg(parts, 1), bytes_arg(parts, 2)) {
             (Ok(name), Ok(bytes)) => decoder
                 .decode_array(&name, &bytes, length_arg(parts, 3))
-                .map(decoded_to_js),
+                .map(|d| OpOut::Now(decoded_to_js(d))),
             (Err(e), _) | (_, Err(e)) => Err(e),
-        }),
-        "toSerialized" => outcome(Ok(decoder.to_serialized())),
+        },
+        "toSerialized" => Ok(OpOut::Live(live)),
         "fromSerialized" => match js_json::to_js(&functions::arg(parts, 1)) {
             Ok(value) => match StructDecoder::from_serialized(&value) {
                 Ok(restored) => {
-                    *decoder = restored;
-                    outcome(Ok(decoder.to_serialized()))
+                    decoders.push(restored);
+                    Ok(OpOut::Live(live + 1))
                 }
-                Err(e) => outcome(Err(e)),
+                Err(e) => Err(e),
             },
-            Err(message) => outcome(Err(JsError::type_error(message))),
+            Err(message) => Err(JsError::type_error(message)),
         },
-        _ => outcome(Err(JsError::new(
+        _ => Err(JsError::new(
             "Error",
             format!("oracle:struct: unknown op {kind}"),
-        ))),
+        )),
     }
 }
 

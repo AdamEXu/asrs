@@ -178,6 +178,14 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "log/struct": {
+      "cases": 5,
+      "content": "3225f9f8a28e11ad",
+      "generator": "d3109e437fec41a4",
+      "spec": "parity/specs/log/struct.jsonl",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "log/struct-fuzz": {
       "cases": 2346,
       "content": "170dafac7bfe174b",

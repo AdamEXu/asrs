@@ -53,6 +53,11 @@ fn util_utc() {
     check_fn_vectors("log/util", dispatch);
 }
 
+#[test]
+fn struct_fn() {
+    check_fn_vectors("log/struct", dispatch);
+}
+
 fn n(x: f64) -> Value {
     Value::number(x)
 }
