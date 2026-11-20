@@ -317,6 +317,10 @@ dependencies = [
 [[package]]
 name = "asrs-field3d"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-formats"
