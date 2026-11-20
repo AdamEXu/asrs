@@ -21,14 +21,12 @@ const EPSILON: f64 = 1e-5;
 const DEG2RAD: f64 = math::PI / 180.0;
 const TOUCH_DOLLY_FACTOR: f64 = 1.0 / 8.0;
 
-/// `MouseEvent.buttons` bits.
 pub mod mouse_button {
     pub const LEFT: u32 = 1;
     pub const RIGHT: u32 = 2;
     pub const MIDDLE: u32 = 4;
 }
 
-/// `CameraControls.ACTION` values for the default mouse bindings.
 pub mod action {
     pub const NONE: u32 = 0;
     pub const ROTATE: u32 = 1;
@@ -364,7 +362,6 @@ impl CameraControls {
         &mut self.camera
     }
 
-    /// Events dispatched since the last call, in dispatch order.
     pub fn take_events(&mut self) -> Vec<ControlsEvent> {
         std::mem::take(&mut self.events)
     }
@@ -586,7 +583,6 @@ impl CameraControls {
         );
     }
 
-    /// `getTarget(out, receiveEndValue)`.
     pub fn get_target(&self, receive_end_value: bool) -> Vector3 {
         if receive_end_value {
             self.target_end
@@ -595,7 +591,6 @@ impl CameraControls {
         }
     }
 
-    /// `getPosition(out, receiveEndValue)`.
     pub fn get_position(&self, receive_end_value: bool) -> Vector3 {
         let (spherical, target) = if receive_end_value {
             (self.spherical_end, self.target_end)
@@ -608,7 +603,6 @@ impl CameraControls {
             + target
     }
 
-    /// `getSpherical(out, receiveEndValue)`.
     pub fn get_spherical(&self, receive_end_value: bool) -> Spherical {
         if receive_end_value {
             self.spherical_end
@@ -932,7 +926,6 @@ impl CameraControls {
         self.end_dragging();
     }
 
-    /// `wheel` on the element.
     pub fn wheel(&mut self, event: WheelInput) {
         if !self.enabled {
             return;
@@ -947,7 +940,6 @@ impl CameraControls {
         self.events.push(ControlsEvent::Control);
     }
 
-    /// Force-cancels a drag (`cancel()`).
     pub fn cancel(&mut self) {
         if self.state == action::NONE {
             return;
@@ -1027,7 +1019,6 @@ impl CameraControls {
         }
     }
 
-    /// Internal state for parity dumps.
     pub fn debug_state(&self) -> ControlsDebugState {
         ControlsDebugState {
             spherical: self.spherical,
