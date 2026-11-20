@@ -1,9 +1,21 @@
 //! Thin stand-ins for `NT4Source` (with `NT4Tuner`) and `NT4Publisher`: they call the client
 //! exactly where and when upstream's classes do, which is all that reaches the wire, but keep no
-//! real `Log`. The source models each `Log` by the fields announcements create, which is all its
-//! subscription logic and the tuner read; values are only type-checked, as the data callback
-//! does to decide whether to run the output callback. The publisher needs values, so it uses the
-//! real `Log`.
+//! real `Log` on the source side. The source models each `Log` by the fields announcements
+//! create, which is all its subscription logic and the tuner read; values are only type-checked,
+//! as the data callback does to decide whether to run the output callback. The publisher needs
+//! values, so it uses the real `Log`.
+//!
+//! What the real N02 source must add over this driver: the `Log` writes of every callback
+//! (typed puts including struct, photon, proto and msgpack, which decode with the client's
+//! `cx.keys` and `cx.rng` between `decodeMulti` yields, plus custom schemas and generated
+//! parents), so `dump` lines match too; an exception from a put returned from
+//! `on_new_topic_data`, which ends the frame; `clearBeforeTime` of the connect time in
+//! `periodic`; `getURCLKeys` and the tuner's checks against the real `window.log`; non-string
+//! topic names and types from malformed announcements; the tuner's `window.log` puts and
+//! `hasTunableFields`. N03 must add robot mode (`getRobotAddress`); this driver runs sim only.
+//! Both keep upstream's leaks: a stopped source's idle loop keeps running and still draws
+//! subscription ids from `Math.random` when the subscribe mode changes, and `stop()` reports
+//! `Stopped` on every call.
 
 use std::cell::RefCell;
 use std::rc::Rc;
