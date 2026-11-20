@@ -200,17 +200,29 @@ impl SelectionImpl {
         r.insert("width", JsValue::Number(rect.width));
         r.insert("height", JsValue::Number(rect.height));
         data.insert("rect", JsValue::Object(r));
-        self.outbox
-            .push(NamedMessage::new(HubToMain::AskPlaybackOptions, JsValue::Object(data)));
+        self.outbox.push(NamedMessage::new(
+            HubToMain::AskPlaybackOptions,
+            JsValue::Object(data),
+        ));
     }
 
     /// The window `keydown` listener. Returns whether `preventDefault` was called.
-    pub fn key_down(&mut self, code: &str, meta_key: bool, ctrl_key: bool, target: KeyTarget) -> bool {
+    pub fn key_down(
+        &mut self,
+        code: &str,
+        meta_key: bool,
+        ctrl_key: bool,
+        target: KeyTarget,
+    ) -> bool {
         match target {
             KeyTarget::Input | KeyTarget::TextArea | KeyTarget::ContentEditable => return false,
             KeyTarget::Other => {}
         }
-        let command = if self.context.uses_command() { meta_key } else { ctrl_key };
+        let command = if self.context.uses_command() {
+            meta_key
+        } else {
+            ctrl_key
+        };
         match code {
             "Space" => {
                 self.toggle_playback();
@@ -225,7 +237,10 @@ impl SelectionImpl {
             }
             "ArrowLeft" | "ArrowRight" => {
                 // Unlocked video uses arrow keys to navigate by frame
-                if self.context.unlocked_video_selected || self.mode != SelectionMode::Static || command {
+                if self.context.unlocked_video_selected
+                    || self.mode != SelectionMode::Static
+                    || command
+                {
                     return false;
                 }
                 self.step_cycle(code == "ArrowRight");
@@ -238,7 +253,8 @@ impl SelectionImpl {
     fn set_mode(&mut self, new_mode: SelectionMode) {
         self.mode = new_mode;
         self.show_lock_buttons = if self.live_connected { "1" } else { "0" }.to_owned();
-        self.play_hidden = self.mode == SelectionMode::Playback || self.mode == SelectionMode::Locked;
+        self.play_hidden =
+            self.mode == SelectionMode::Playback || self.mode == SelectionMode::Locked;
         self.pause_hidden = self.mode == SelectionMode::Idle || self.mode == SelectionMode::Static;
         self.lock_hidden = !self.live_connected || self.mode == SelectionMode::Locked;
         self.unlock_hidden = !self.live_connected || self.mode != SelectionMode::Locked;
@@ -263,7 +279,9 @@ impl Selection for SelectionImpl {
         let log = log.borrow();
         match self.mode {
             SelectionMode::Idle => None,
-            SelectionMode::Static => Some(math::max2(self.static_time, log.get_timestamp_range()[0])),
+            SelectionMode::Static => {
+                Some(math::max2(self.static_time, log.get_timestamp_range()[0]))
+            }
             SelectionMode::Playback => {
                 let mut time = (self.now() - self.playback_start_real) * self.playback_speed
                     + self.playback_start_log;
@@ -387,10 +405,11 @@ impl Selection for SelectionImpl {
     fn step_cycle(&mut self, is_forward: bool) {
         let log = self.log.clone();
         let log = log.borrow();
-        let akit_key = log
-            .get_field_keys()
-            .into_iter()
-            .find(|key| AKIT_TIMESTAMP_KEYS.iter().any(|k| *key == JsString::from(*k)));
+        let akit_key = log.get_field_keys().into_iter().find(|key| {
+            AKIT_TIMESTAMP_KEYS
+                .iter()
+                .any(|k| *key == JsString::from(*k))
+        });
         match akit_key {
             Some(key) => {
                 let data = log.get_number(&key, f64::NEG_INFINITY, f64::INFINITY, None, None);
@@ -399,7 +418,12 @@ impl Selection for SelectionImpl {
                     if let Some(next) = data.timestamps.iter().find(|&&v| v > self.static_time) {
                         self.static_time = *next;
                     }
-                } else if let Some(prev) = data.timestamps.iter().rev().find(|&&v| v < self.static_time) {
+                } else if let Some(prev) = data
+                    .timestamps
+                    .iter()
+                    .rev()
+                    .find(|&&v| v < self.static_time)
+                {
                     self.static_time = *prev;
                 }
             }
@@ -536,8 +560,8 @@ impl Selection for SelectionImpl {
             let hovered_time = self
                 .hovered_time
                 .unwrap_or((self.timeline_range[0] + self.timeline_range[1]) / 2.0);
-            let hovered_percent =
-                (hovered_time - self.timeline_range[0]) / (self.timeline_range[1] - self.timeline_range[0]);
+            let hovered_percent = (hovered_time - self.timeline_range[0])
+                / (self.timeline_range[1] - self.timeline_range[0]);
             self.timeline_range[0] = hovered_time - new_zoom * hovered_percent;
             self.timeline_range[1] = hovered_time + new_zoom * (1.0 - hovered_percent);
         } else if self.timeline_max_zoom {
@@ -545,11 +569,12 @@ impl Selection for SelectionImpl {
         }
 
         // Enforce max range
-        if self.timeline_range[1] - self.timeline_range[0] > available_range[1] - available_range[0] {
+        if self.timeline_range[1] - self.timeline_range[0] > available_range[1] - available_range[0]
+        {
             self.timeline_range = available_range;
         }
-        self.timeline_max_zoom =
-            self.timeline_range[1] - self.timeline_range[0] == available_range[1] - available_range[0];
+        self.timeline_max_zoom = self.timeline_range[1] - self.timeline_range[0]
+            == available_range[1] - available_range[0];
 
         // Enforce left limit
         if self.timeline_range[0] < available_range[0] {

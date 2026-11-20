@@ -126,9 +126,7 @@ fn run_log_step(log: &RefCell<Log>, calls: &[Value]) -> Result<(), String> {
             ),
             "clearBeforeTime" => log.clear_before_time(number(&args[0])?, truthy(&args[1])),
             "deleteField" => log.delete_field(&key(0)?),
-            "updateRangeWithTimestamp" => {
-                log.update_range_with_timestamp(number(&args[0])?)
-            }
+            "updateRangeWithTimestamp" => log.update_range_with_timestamp(number(&args[0])?),
             other => return Err(err(format!("unsupported log method {other}"))),
         }
     }
@@ -170,13 +168,16 @@ fn selection_value(sel: &mut SelectionImpl) -> Value {
             "buttons",
             Value::object([
                 ("play", Value::Bool(sel.button_hidden(ControlButton::Play))),
-                ("pause", Value::Bool(sel.button_hidden(ControlButton::Pause))),
-                ("lock", Value::Bool(sel.button_hidden(ControlButton::Lock))),
-                ("unlock", Value::Bool(sel.button_hidden(ControlButton::Unlock))),
                 (
-                    "showLockButtons",
-                    Value::string(sel.show_lock_buttons()),
+                    "pause",
+                    Value::Bool(sel.button_hidden(ControlButton::Pause)),
                 ),
+                ("lock", Value::Bool(sel.button_hidden(ControlButton::Lock))),
+                (
+                    "unlock",
+                    Value::Bool(sel.button_hidden(ControlButton::Unlock)),
+                ),
+                ("showLockButtons", Value::string(sel.show_lock_buttons())),
             ]),
         ),
     ])
@@ -300,9 +301,9 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     let mut touch_bar_due = start + touch_bar_period;
     let mut last_frame = start;
     let mut advance = |ms: f64,
-                      sel: &mut SelectionImpl,
-                      emitted: &mut Vec<Emit>,
-                      show_pending: &mut bool| {
+                       sel: &mut SelectionImpl,
+                       emitted: &mut Vec<Emit>,
+                       show_pending: &mut bool| {
         let end = clock_cell.get() + ms;
         loop {
             let frame_at = last_frame + frame_period;
@@ -320,10 +321,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 if *show_pending {
                     *show_pending = false;
                     emitted.push(Emit {
-                        values: vec![
-                            ("main", Value::string("show")),
-                            ("data", Value::Undefined),
-                        ],
+                        values: vec![("main", Value::string("show")), ("data", Value::Undefined)],
                     });
                 }
             } else {
@@ -396,9 +394,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 "setPlaybackLooping" => sel.set_playback_looping(truthy(&arg(0)?)),
                 "setGrabZoomRange" => sel.set_grab_zoom_range(opt_pair(&arg(0)?)?),
                 "finishGrabZoom" => sel.finish_grab_zoom(),
-                "setTimelineRange" => {
-                    sel.set_timeline_range(pair(&arg(0)?)?, truthy(&arg(1)?))
-                }
+                "setTimelineRange" => sel.set_timeline_range(pair(&arg(0)?)?, truthy(&arg(1)?)),
                 "applyTimelineScroll" => sel.apply_timeline_scroll(
                     number(&arg(0)?)?,
                     number(&arg(1)?)?,
@@ -441,11 +437,12 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 }
                 "set-playback-options" => {
                     sel.set_playback_speed(
-                        data.get("speed").map(|v| number(v)).transpose()?.unwrap_or(f64::NAN),
+                        data.get("speed")
+                            .map(|v| number(v))
+                            .transpose()?
+                            .unwrap_or(f64::NAN),
                     );
-                    sel.set_playback_looping(
-                        data.get("looping").map(truthy).unwrap_or(false),
-                    );
+                    sel.set_playback_looping(data.get("looping").map(truthy).unwrap_or(false));
                 }
                 _ => {}
             }
@@ -536,12 +533,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                     "selection" => emitted.push(Emit {
                         values: vec![("selection", selection_value(&mut sel))],
                     }),
-                    other => {
-                        return Err(format!(
-                            "{}: unsupported capture kind {other}",
-                            where_()
-                        ))
-                    }
+                    other => return Err(format!("{}: unsupported capture kind {other}", where_())),
                 }
             }
         } else {
@@ -587,7 +579,11 @@ fn specs() -> Vec<(PathBuf, String)> {
         .filter_map(|e| e.ok())
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
-        .filter(|p| p.file_name().and_then(|s| s.to_str()).is_some_and(|n| n.ends_with(".entry.json")))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|n| n.ends_with(".entry.json"))
+        })
         .map(|p| {
             let name = p
                 .file_name()
