@@ -185,6 +185,6 @@ app.whenReady().then(async () => {
     console.error(e);
     process.exitCode = 1;
   }
-  app.quit();
+  app.exit(process.exitCode ?? 0);
 });
 app.on("window-all-closed", () => {});
