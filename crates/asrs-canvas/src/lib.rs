@@ -1,13 +1,18 @@
 #![allow(clippy::disallowed_methods)]
 
+pub mod aaa;
+pub mod blit;
 pub mod clip;
 pub mod color;
+pub mod dash;
 pub mod display;
 pub mod hairline;
 pub mod path;
 pub mod pixels;
 pub mod raster;
 pub mod scan;
+pub mod skpath;
+pub mod stroke;
 pub mod text;
 pub mod trace;
 
