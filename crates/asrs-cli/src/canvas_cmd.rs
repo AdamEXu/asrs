@@ -97,7 +97,7 @@ fn uses_text(cmds: &[JsValue]) -> bool {
             Some("canvas") => items
                 .get(4)
                 .and_then(JsValue::as_array)
-                .is_some_and(|inner| uses_text(inner)),
+                .is_some_and(uses_text),
             _ => false,
         }
     })
