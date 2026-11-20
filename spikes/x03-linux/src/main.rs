@@ -19,7 +19,11 @@ const USAGE: &str = "x03-linux <command>
   render <scenes dir> <out dir> [<scene>...]
                                         rasterize scenes with the FreeType backend (X03_LUT=<bin>)
   measure <measure.jsonl>               compare widths with Chromium's measureText
-env: X03_HINT=none|slight|normal X03_AUTOHINT=0|1 X03_SUBPIXEL=0|1 X03_ROUNDSIZE=0|1";
+  dump <reference dir> <scene> <out.png>
+                                        raw text coverage of one scene, before the table
+env: X03_HINT=none|slight|normal X03_AUTOHINT=0|1 X03_SUBPIXEL=0|1 X03_ROUNDSIZE=0|1
+     X03_SKPATH=1|2|3 (fill the hinted outline: Skia analytic AA, tiny-skia, exact area)
+     X03_LCDAVG=1 (LCD render averaged to gray)";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
