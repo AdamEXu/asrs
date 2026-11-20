@@ -843,7 +843,9 @@ mod tests {
             .decode(&mut realm, &mut log, &r1, &SetClock(0.0), None)
             .unwrap();
         assert!(!ok);
-        let field = log.get_field(&js("undefined")).expect("registered before the throw");
+        let field = log
+            .get_field(&js("undefined"))
+            .expect("registered before the throw");
         assert_eq!(field.get_type(), LoggableType::Boolean);
         assert_eq!(log.get_timestamps(&[js("undefined")], None).len(), 0);
     }
