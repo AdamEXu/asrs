@@ -289,7 +289,16 @@ $principal = New-ScheduledTaskPrincipal -UserId dev -LogonType Interactive -RunL
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 4) -AllowStartIfOnBatteries
 Register-ScheduledTask -TaskName asrs-gui -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName asrs-gui
-while (-not (Test-Path {GUI_DIR}/exit.txt)) {{ Start-Sleep -Milliseconds 500 }}
+$idle = 0
+while (-not (Test-Path {GUI_DIR}/exit.txt)) {{
+    Start-Sleep -Milliseconds 500
+    if ((Get-ScheduledTask -TaskName asrs-gui).State -eq 'Ready') {{ $idle++ }} else {{ $idle = 0 }}
+    if ($idle -ge 20 -and -not (Test-Path {GUI_DIR}/exit.txt)) {{
+        Get-Content -ErrorAction SilentlyContinue {GUI_DIR}/last.log
+        [Console]::Error.WriteLine('the desktop task stopped without an exit code (is dev logged in to the desktop?)')
+        exit 1
+    }}
+}}
 Start-Sleep -Milliseconds 200
 Get-Content {GUI_DIR}/last.log
 exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
