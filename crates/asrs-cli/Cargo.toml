@@ -14,10 +14,11 @@ path = "src/main.rs"
 asrs-canvas = { path = "../asrs-canvas" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-js = { path = "../asrs-js" }
-asrs-tabs = { path = "../asrs-tabs" }
+asrs-live = { path = "../asrs-live" }
 asrs-log = { path = "../asrs-log" }
 asrs-parity = { path = "../asrs-parity" }
 asrs-services = { path = "../asrs-services" }
+asrs-tabs = { path = "../asrs-tabs" }
 
 [lints]
 workspace = true

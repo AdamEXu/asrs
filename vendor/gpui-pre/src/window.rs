@@ -77,7 +77,7 @@ use self::a11y::A11y;
 use self::a11y::ROOT_NODE_ID;
 use crate::util::{
     atomic_incr_if_not_zero, ceil_to_device_pixel, floor_to_device_pixel, round_half_toward_zero,
-    round_half_toward_zero_f64, round_stroke_to_device_pixel, round_to_device_pixel,
+    round_half_up_f64, round_stroke_to_device_pixel, round_to_device_pixel,
 };
 pub use prompts::*;
 
@@ -3414,7 +3414,7 @@ impl Window {
     #[inline]
     pub fn pixel_snap_f64(&self, value: f64) -> f64 {
         let scale_factor = f64::from(self.scale_factor());
-        round_half_toward_zero_f64(value * scale_factor) / scale_factor
+        round_half_up_f64(value * scale_factor) / scale_factor
     }
 
     /// Snaps a bounds' origin and size to the nearest device pixel.

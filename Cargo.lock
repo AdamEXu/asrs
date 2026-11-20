@@ -292,7 +292,10 @@ dependencies = [
 name = "asrs-app"
 version = "0.1.0"
 dependencies = [
+ "asrs-field3d",
  "asrs-ui",
+ "async-channel",
+ "image",
 ]
 
 [[package]]
@@ -314,6 +317,7 @@ dependencies = [
  "asrs-canvas",
  "asrs-formats",
  "asrs-js",
+ "asrs-live",
  "asrs-log",
  "asrs-parity",
  "asrs-services",
@@ -326,6 +330,9 @@ version = "0.1.0"
 dependencies = [
  "asrs-js",
  "asrs-parity",
+ "bytemuck",
+ "pollster 0.4.0",
+ "wgpu",
 ]
 
 [[package]]
@@ -334,6 +341,7 @@ version = "0.1.0"
 dependencies = [
  "asrs-js",
  "asrs-log",
+ "asrs-parity",
 ]
 
 [[package]]
@@ -358,6 +366,11 @@ dependencies = [
 [[package]]
 name = "asrs-live"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-log",
+ "tokio",
+]
 
 [[package]]
 name = "asrs-log"
@@ -371,6 +384,10 @@ dependencies = [
 [[package]]
 name = "asrs-model"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-parity"
@@ -397,6 +414,7 @@ name = "asrs-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "asrs-canvas",
  "asrs-parity",
  "block2 0.6.2",
  "gpui-kit",

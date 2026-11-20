@@ -1,0 +1,57 @@
+{
+  "size": [1100, 650],
+  "antialias": false,
+  "fov": 65,
+  "camera": { "position": [1.2, 1.9, -3.3], "target": [-0.2, 0.3, 0.1] },
+  "nodes": [
+    { "type": "hemisphere", "color": 16777215, "groundColor": 4473924, "intensity": 2 },
+    { "type": "group", "name": "wpilib", "rotation": [-1.5707963267948966, 0, 3.141592653589793] },
+    { "type": "point", "parent": "wpilib", "color": 16777215, "intensity": 0.5, "position": [0, 0, 10] },
+    {
+      "type": "mesh",
+      "parent": "wpilib",
+      "geometry": { "type": "plane", "args": [5, 4, 1, 1] },
+      "material": { "color": 8947848, "side": "double" }
+    },
+    { "type": "group", "name": "mirror", "parent": "wpilib", "position": [0.6, 0.4, 0], "scale": [-1, 1, 1] },
+    {
+      "type": "mesh",
+      "parent": "mirror",
+      "position": [0.5, 0.2, 0.4],
+      "rotation": [0.3, 0.2, 0.6],
+      "geometry": { "type": "cone", "args": [0.35, 0.8, 10, 1, false, 0, 6.283185307179586] },
+      "material": { "color": 10904419 }
+    },
+    {
+      "type": "mesh",
+      "parent": "mirror",
+      "position": [-0.6, -0.9, 0.4],
+      "rotation": [0, 0.7, 0],
+      "geometry": { "type": "cylinder", "args": [0.3, 0.3, 0.8, 16, 1, true, 0.5, 4.5] },
+      "material": { "color": 6519206, "side": "double" }
+    },
+    { "type": "group", "name": "spin", "parent": "wpilib", "position": [-1.2, 0.8, 0.5], "rotation": [0.5, -0.4, 1.1] },
+    {
+      "type": "mesh",
+      "parent": "spin",
+      "scale": [1.5, 0.6, 1],
+      "geometry": { "type": "box", "args": [0.6, 0.6, 0.6, 2, 2, 2] },
+      "material": { "color": 13421772, "specular": 6710886, "shininess": 100 }
+    },
+    {
+      "type": "mesh",
+      "parent": "spin",
+      "position": [0, 0, 0.6],
+      "scale": [0.5, 0.5, -0.5],
+      "geometry": { "type": "sphere", "args": [0.4, 18, 9, 0, 6.283185307179586, 0, 3.141592653589793] },
+      "material": { "color": 16737792, "side": "back" }
+    },
+    {
+      "type": "mesh",
+      "parent": "wpilib",
+      "position": [-0.3, -1.0, 0.3],
+      "geometry": { "type": "sphere", "args": [0.3, 16, 8, 0, 3.141592653589793, 0, 3.141592653589793] },
+      "material": { "color": 16777096, "side": "double", "transparent": true, "opacity": 0.7 }
+    }
+  ]
+}

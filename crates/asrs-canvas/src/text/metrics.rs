@@ -159,13 +159,14 @@ impl TextBackend for FixedAdvance {
     fn shape(&mut self, font: &FontSpec, text: &str) -> Shaped {
         let mut glyphs = Vec::new();
         let mut x = 0.0f32;
-        for unit in text.encode_utf16() {
+        for (i, unit) in text.encode_utf16().enumerate() {
             glyphs.push(ShapedGlyph {
                 glyph: Glyph {
                     face: font.size.to_bits(),
                     id: u32::from(unit),
                 },
                 x,
+                cluster: i as u32,
             });
             x += Self::advance(unit) * font.size;
         }
@@ -176,6 +177,7 @@ impl TextBackend for FixedAdvance {
         FontMetrics {
             ascent: (font.size * 0.8 + 0.5).floor(),
             descent: (font.size * 0.2 + 0.5).floor(),
+            line_gap: 0.0,
             typo: None,
         }
     }
