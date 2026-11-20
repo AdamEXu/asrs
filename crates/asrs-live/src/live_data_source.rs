@@ -218,3 +218,39 @@ pub trait LiveDataSource {
         self.base_mut().handle_timer(id, cx.preferences)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use asrs_js::time::SetRng;
+
+    use super::*;
+    use crate::timers::ManualClock;
+
+    fn base() -> LiveDataSourceBase {
+        LiveDataSourceBase::new(&mut SetRng::new(vec![0.0; 32]))
+    }
+
+    #[test]
+    fn output_without_a_callback_does_nothing() {
+        let mut source = base();
+        assert!(!source.output(Rc::new(|| 0.0)));
+        assert!(!source.has_output_callback());
+    }
+
+    #[test]
+    fn foreign_timers_are_left_to_the_subclass() {
+        let mut timers = TimerQueue::new(Rc::new(ManualClock::new(0.0)));
+        let mut source = base();
+        let foreign = timers.set_timeout(0.0);
+        source.connect(
+            "127.0.0.1",
+            Box::new(|_| {}),
+            Box::new(|_, _| {}),
+            true,
+            &mut timers,
+        );
+        assert!(!source.handle_timer(foreign, None));
+        assert_eq!(source.uuid(), "a".repeat(32));
+        assert_eq!(source.status(), LiveDataSourceStatus::Connecting);
+    }
+}
