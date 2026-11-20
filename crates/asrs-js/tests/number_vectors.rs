@@ -3,15 +3,24 @@
 #[path = "../../asrs-cli/src/functions.rs"]
 #[allow(dead_code)]
 mod functions;
+#[path = "../../asrs-cli/src/js_color.rs"]
+#[allow(dead_code)]
+mod js_color;
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
 #[path = "../../asrs-cli/src/js_math.rs"]
 #[allow(dead_code)]
 mod js_math;
+#[path = "../../asrs-cli/src/js_regex.rs"]
+#[allow(dead_code)]
+mod js_regex;
 #[path = "../../asrs-cli/src/js_string.rs"]
 #[allow(dead_code)]
 mod js_string;
+#[path = "../../asrs-cli/src/js_time.rs"]
+#[allow(dead_code)]
+mod js_time;
 
 use asrs_parity::{FnCase, Response, fn_vectors};
 

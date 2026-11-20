@@ -85,7 +85,7 @@ impl BigUint {
         out.extend_from_slice(top.to_string().as_bytes());
         while let Some(chunk) = chunks.pop() {
             let s = chunk.to_string();
-            out.resize(out.len() + (9 - s.len()), b'0');
+            out.extend(std::iter::repeat_n(b'0', 9 - s.len()));
             out.extend_from_slice(s.as_bytes());
         }
         out
