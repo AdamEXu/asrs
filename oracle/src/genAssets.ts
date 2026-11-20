@@ -113,8 +113,6 @@ function genDirs(dirs: string[]) {
   }
 }
 
-// --- malformed fixtures ---
-
 let seed = 0;
 function next(): number {
   seed ^= seed << 13;

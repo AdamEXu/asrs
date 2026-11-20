@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 use asrs_js::number;
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue, array_index};
-use asrs_log::units;
 use asrs_log::util::check_array_type;
+use asrs_log::{geometry, units};
 
 fn inches(x: f64) -> f64 {
     units::convert(x, "inches", "meters").expect("inches and meters are units")
@@ -42,8 +42,7 @@ pub fn alliance_station_width() -> f64 {
     inches(69.0)
 }
 
-/// `DEFAULT_DRIVER_STATIONS_FRC`. Upstream shares this array by reference into every
-/// parsed FRC field config; it is never mutated.
+/// `DEFAULT_DRIVER_STATIONS_FRC`.
 pub fn default_driver_stations_frc() -> &'static [[f64; 2]] {
     static DS: OnceLock<Vec<[f64; 2]>> = OnceLock::new();
     DS.get_or_init(|| {
@@ -70,6 +69,17 @@ pub enum CoordinateSystem {
     WallBlue,
     CenterRotated,
     CenterRed,
+}
+
+impl From<CoordinateSystem> for geometry::CoordinateSystem {
+    fn from(system: CoordinateSystem) -> Self {
+        match system {
+            CoordinateSystem::WallAlliance => Self::WallAlliance,
+            CoordinateSystem::WallBlue => Self::WallBlue,
+            CoordinateSystem::CenterRotated => Self::CenterRotated,
+            CoordinateSystem::CenterRed => Self::CenterRed,
+        }
+    }
 }
 
 impl CoordinateSystem {
@@ -249,6 +259,21 @@ pub struct Config3dRotation {
     pub axis: RotationAxis,
     pub degrees: f64,
     pub raw: JsValue,
+}
+
+impl From<&Config3dRotation> for geometry::Config3dRotation {
+    fn from(rotation: &Config3dRotation) -> Self {
+        geometry::Config3dRotation {
+            axis: JsString::from(rotation.axis.as_str()),
+            degrees: rotation.degrees,
+        }
+    }
+}
+
+/// `rotationSequenceToQuaternion` over parsed config rotations.
+pub fn rotation_sequence_to_quaternion(rotations: &[Config3dRotation]) -> geometry::Quaternion {
+    let rotations: Vec<geometry::Config3dRotation> = rotations.iter().map(Into::into).collect();
+    geometry::rotation_sequence_to_quaternion(&rotations)
 }
 
 /// `Config3d_Rotation["axis"]`.
@@ -839,16 +864,7 @@ pub fn parse_robot(config_raw: &JsValue) -> ParseResult<Config3dRobot> {
     if config_raw.is_null() || config_raw.type_of() != "object" {
         return Ok(Parsed::Invalid);
     }
-    let mut config = Config3dRobot {
-        name: JsString::new(),
-        path: JsString::new(),
-        is_ftc: false,
-        disable_simplification: false,
-        rotations: Vec::new(),
-        position: [0.0, 0.0, 0.0],
-        cameras: Vec::new(),
-        components: Vec::new(),
-    };
+    let mut config = Config3dRobot::default();
     if let Some(JsValue::String(s)) = prop(config_raw, "name")? {
         config.name = s.clone();
     }
@@ -887,10 +903,7 @@ pub fn parse_robot(config_raw: &JsValue) -> ParseResult<Config3dRobot> {
     }
     if let Some(JsValue::Array(items)) = prop(config_raw, "components")? {
         for raw in items {
-            config.components.push(Config3dRobotComponent {
-                zeroed_rotations: Vec::new(),
-                zeroed_position: [0.0, 0.0, 0.0],
-            });
+            config.components.push(Config3dRobotComponent::default());
             let component = config.components.last_mut().expect("just pushed");
             if let Some(rotations) = rotations_prop(raw, "zeroedRotations")? {
                 component.zeroed_rotations = rotations;
@@ -911,11 +924,7 @@ pub fn parse_joystick(config_raw: &JsValue) -> ParseResult<ConfigJoystick> {
     if config_raw.is_null() || config_raw.type_of() != "object" {
         return Ok(Parsed::Invalid);
     }
-    let mut config = ConfigJoystick {
-        name: JsString::new(),
-        path: JsString::new(),
-        components: Vec::new(),
-    };
+    let mut config = ConfigJoystick::default();
     if let Some(JsValue::String(s)) = prop(config_raw, "name")? {
         config.name = s.clone();
     }

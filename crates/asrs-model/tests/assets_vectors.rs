@@ -173,3 +173,30 @@ fn check_builtin(record: &Record) -> Result<(), String> {
         ))
     }
 }
+
+#[test]
+fn rotations_feed_geometry() {
+    let raw = json::parse_units(
+        &r#"{"name":"r","rotations":[{"degrees":-90,"axis":"x","note":1},{"axis":"y","degrees":180}]}"#
+            .encode_utf16()
+            .collect::<Vec<u16>>(),
+    )
+    .expect("valid JSON");
+    let Ok(Parsed::Config(robot)) = assets::parse_robot(&raw) else {
+        panic!("robot config parses");
+    };
+    let direct = asrs_log::geometry::rotation_sequence_to_quaternion(&[
+        asrs_log::geometry::Config3dRotation {
+            axis: "x".into(),
+            degrees: -90.0,
+        },
+        asrs_log::geometry::Config3dRotation {
+            axis: "y".into(),
+            degrees: 180.0,
+        },
+    ]);
+    assert_eq!(
+        assets::rotation_sequence_to_quaternion(&robot.rotations),
+        direct
+    );
+}
