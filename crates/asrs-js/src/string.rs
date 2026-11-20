@@ -6,6 +6,7 @@ pub mod case_table;
 pub mod encoding;
 pub mod uri;
 
+pub use crate::math::int::{to_uint16, to_uint32};
 pub use crate::number::to_integer_or_infinity;
 use crate::number::to_string as number_to_string;
 
@@ -311,13 +312,13 @@ impl JsString {
         if target <= self.0.len() {
             return Ok(self.clone());
         }
-        if target > MAX_STRING_LENGTH {
-            return Err(JsError::range("Invalid string length"));
-        }
         let space = JsString::from_units(vec![0x20]);
         let filler = fill.unwrap_or(&space);
         if filler.0.is_empty() {
             return Ok(self.clone());
+        }
+        if target > MAX_STRING_LENGTH {
+            return Err(JsError::range("Invalid string length"));
         }
         let needed = target - self.0.len();
         let mut padding = Vec::with_capacity(needed);
@@ -361,6 +362,87 @@ impl JsString {
             out.extend_from_slice(&self.0);
         }
         Ok(JsString::from_units(out))
+    }
+
+    /// `String.prototype.replace(search, replacement)` with a string pattern: only the
+    /// first occurrence. `$$`, `$&`, `` $` `` and `$'` in `replacement` are expanded.
+    pub fn replace(&self, search: &JsString, replacement: &JsString) -> Result<JsString, JsError> {
+        let position = usize::try_from(self.index_of(search, None)).ok();
+        self.replace_at(search, replacement, position.into_iter())
+    }
+
+    /// `String.prototype.replaceAll(search, replacement)` with a string pattern. An
+    /// empty `search` matches before every code unit and at the end.
+    pub fn replace_all(
+        &self,
+        search: &JsString,
+        replacement: &JsString,
+    ) -> Result<JsString, JsError> {
+        let advance = search.0.len().max(1);
+        let mut positions = Vec::new();
+        let mut from = 0;
+        while from <= self.0.len() {
+            let Ok(p) = usize::try_from(self.index_of(search, Some(from as f64))) else {
+                break;
+            };
+            positions.push(p);
+            from = p + advance;
+        }
+        self.replace_at(search, replacement, positions.into_iter())
+    }
+
+    fn replace_at(
+        &self,
+        search: &JsString,
+        replacement: &JsString,
+        positions: impl Iterator<Item = usize>,
+    ) -> Result<JsString, JsError> {
+        let mut out = Vec::with_capacity(self.0.len());
+        let mut end_of_last = 0;
+        for p in positions {
+            out.extend_from_slice(&self.0[end_of_last..p]);
+            self.push_substitution(search.0.len(), p, &replacement.0, &mut out);
+            end_of_last = p + search.0.len();
+            if out.len() > MAX_STRING_LENGTH {
+                return Err(JsError::range("Invalid string length"));
+            }
+        }
+        out.extend_from_slice(&self.0[end_of_last..]);
+        if out.len() > MAX_STRING_LENGTH {
+            return Err(JsError::range("Invalid string length"));
+        }
+        Ok(JsString::from_units(out))
+    }
+
+    /// GetSubstitution for a string pattern: there are no captures, so `$1` and `$<`
+    /// stay literal.
+    fn push_substitution(
+        &self,
+        match_len: usize,
+        position: usize,
+        template: &[u16],
+        out: &mut Vec<u16>,
+    ) {
+        let mut i = 0;
+        while i < template.len() {
+            let unit = template[i];
+            i += 1;
+            if unit != u16::from(b'$') {
+                out.push(unit);
+                continue;
+            }
+            match template.get(i).and_then(|&n| u8::try_from(n).ok()) {
+                Some(b'$') => out.push(unit),
+                Some(b'&') => out.extend_from_slice(&self.0[position..position + match_len]),
+                Some(b'`') => out.extend_from_slice(&self.0[..position]),
+                Some(b'\'') => out.extend_from_slice(&self.0[position + match_len..]),
+                _ => {
+                    out.push(unit);
+                    continue;
+                }
+            }
+            i += 1;
+        }
     }
 
     /// `String.prototype.trim` on the JS whitespace set.
@@ -517,21 +599,6 @@ fn combine_surrogates(high: u16, low: u16) -> u32 {
 /// ECMAScript `ToLength`: `ToIntegerOrInfinity` clamped to `[0, 2^53 - 1]`.
 pub fn to_length(x: f64) -> f64 {
     to_integer_or_infinity(x).clamp(0.0, 9007199254740991.0)
-}
-
-/// ECMAScript `ToUint32`.
-pub fn to_uint32(x: f64) -> u32 {
-    if !x.is_finite() || x == 0.0 {
-        return 0;
-    }
-    let m = x.trunc() % 4294967296.0;
-    let m = if m < 0.0 { m + 4294967296.0 } else { m };
-    m as u32
-}
-
-/// ECMAScript `ToUint16`.
-pub fn to_uint16(x: f64) -> u16 {
-    (to_uint32(x) & 0xffff) as u16
 }
 
 fn is_js_whitespace(u: u16) -> bool {
