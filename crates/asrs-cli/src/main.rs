@@ -1,8 +1,10 @@
 #![allow(clippy::disallowed_methods)]
 
 mod canvas_cmd;
+mod decode;
 mod fn_cmd;
 mod functions;
+mod geometry;
 mod js_color;
 mod js_json;
 mod js_math;
@@ -23,6 +25,7 @@ const USAGE: &str = "usage: asrs-cli <command>
 
 commands:
   fn [--list]   JSONL fn requests on stdin, CVE-1 responses on stdout (same protocol as the oracle)
+  decode <file> decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
   canvas render rasterize the oracle's canvas scenes with asrs-canvas";
 
@@ -30,6 +33,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("fn") => fn_cmd::run(&args[1..]),
+        Some("decode") => return decode::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
