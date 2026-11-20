@@ -3,6 +3,7 @@
 mod fn_cmd;
 mod functions;
 mod js_math;
+mod js_string;
 
 use std::process::ExitCode;
 

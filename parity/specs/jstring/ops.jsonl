@@ -1,0 +1,363 @@
+{"fn":"String.prototype.charCodeAt","args":[null]}
+{"fn":"String.prototype.charCodeAt","args":[{"u": null}]}
+{"fn":"String.prototype.toLowerCase","args":[null]}
+{"fn":"String.prototype.toLowerCase","args":[{"u": null}]}
+{"fn":"String.prototype.repeat","args":[null]}
+{"fn":"String.prototype.repeat","args":[{"u": null}]}
+{"fn":"String.prototype.slice","args":[null]}
+{"fn":"String.prototype.slice","args":[{"u": null}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"u": null}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"u": null}]}
+{"fn":"String.prototype.charCodeAt","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"u": null}]}
+{"fn":"String.prototype.charCodeAt","args":["a\ud800b\udc00",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"u": null}]}
+{"fn":"String.prototype.charCodeAt","args":["",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"u": null}]}
+{"fn":"String.prototype.charAt","args":["hello world",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"u": null}]}
+{"fn":"String.prototype.charAt","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"u": null}]}
+{"fn":"String.prototype.charAt","args":["a\ud800b\udc00",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.charAt","args":["",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.charAt","args":["",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.charAt","args":["",{"u": null}]}
+{"fn":"String.prototype.charAt","args":["",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.charCodeAt","args":["hello world","2"]}
+{"fn":"String.prototype.charCodeAt","args":["hello world","abc"]}
+{"fn":"String.prototype.at","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.at","args":["\ud801\udc00\ud801\udc37x",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.at","args":["\ud801\udc00\ud801\udc37x",{"n": "c010000000000000"}]}
+{"fn":"String.prototype.at","args":["\ud801\udc00\ud801\udc37x",{"n": "4014000000000000"}]}
+{"fn":"String.prototype.at","args":["\ud801\udc00\ud801\udc37x",{"n": "c059000000000000"}]}
+{"fn":"String.prototype.at","args":["hello world",{"u": null}]}
+{"fn":"String.prototype.codePointAt","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.codePointAt","args":["\ud801\udc00\ud801\udc37x",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.codePointAt","args":["\ud801\udc00\ud801\udc37x",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.codePointAt","args":["\ud801\udc00\ud801\udc37x",{"n": "4008000000000000"}]}
+{"fn":"String.prototype.codePointAt","args":["\ud801\udc00\ud801\udc37x",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.codePointAt","args":["a\ud800b\udc00",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.codePointAt","args":["hello world",{"n": "4059000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "3ff0000000000000"},{"n": "4010000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "c010000000000000"},{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "c010000000000000"},{"u": null}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "c059000000000000"},{"n": "4059000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "4000000000000000"},{"n": "4000000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "4008000000000000"},{"n": "4008000000000000"}]}
+{"fn":"String.prototype.slice","args":["\ud801\udc00\ud801\udc37x",{"n": "3ff0000000000000"},{"n": "4010000000000000"}]}
+{"fn":"String.prototype.slice","args":["\ud801\udc00\ud801\udc37x",{"n": "c010000000000000"},{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.slice","args":["\ud801\udc00\ud801\udc37x",{"n": "c010000000000000"},{"u": null}]}
+{"fn":"String.prototype.slice","args":["\ud801\udc00\ud801\udc37x",{"n": "c059000000000000"},{"n": "4059000000000000"}]}
+{"fn":"String.prototype.slice","args":["\ud801\udc00\ud801\udc37x",{"n": "4000000000000000"},{"n": "4000000000000000"}]}
+{"fn":"String.prototype.slice","args":["\ud801\udc00\ud801\udc37x",{"n": "4008000000000000"},{"n": "4008000000000000"}]}
+{"fn":"String.prototype.slice","args":["a\ud800b\udc00",{"n": "3ff0000000000000"},{"n": "4010000000000000"}]}
+{"fn":"String.prototype.slice","args":["a\ud800b\udc00",{"n": "c010000000000000"},{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.slice","args":["a\ud800b\udc00",{"n": "c010000000000000"},{"u": null}]}
+{"fn":"String.prototype.slice","args":["a\ud800b\udc00",{"n": "c059000000000000"},{"n": "4059000000000000"}]}
+{"fn":"String.prototype.slice","args":["a\ud800b\udc00",{"n": "4000000000000000"},{"n": "4000000000000000"}]}
+{"fn":"String.prototype.slice","args":["a\ud800b\udc00",{"n": "4008000000000000"},{"n": "4008000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world"]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "7ff8000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world",{"n": "8000000000000000"}]}
+{"fn":"String.prototype.slice","args":["hello world","2","5"]}
+{"fn":"String.prototype.substring","args":["\ud801\udc00\ud801\udc37x",{"n": "4008000000000000"},{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.substring","args":["\ud801\udc00\ud801\udc37x",{"n": "bff0000000000000"},{"n": "4000000000000000"}]}
+{"fn":"String.prototype.substring","args":["\ud801\udc00\ud801\udc37x",{"u": null},{"u": null}]}
+{"fn":"String.prototype.substring","args":["\ud801\udc00\ud801\udc37x",{"n": "0000000000000000"},{"n": "7ff8000000000000"}]}
+{"fn":"String.prototype.substring","args":["\ud801\udc00\ud801\udc37x",{"n": "c014000000000000"},{"n": "c000000000000000"}]}
+{"fn":"String.prototype.substring","args":["hello world",{"n": "0000000000000000"},{"n": "4010000000000000"}]}
+{"fn":"String.prototype.indexOf","args":["hello world","o"]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","o"]}
+{"fn":"String.prototype.includes","args":["hello world","o"]}
+{"fn":"String.prototype.startsWith","args":["hello world","o"]}
+{"fn":"String.prototype.endsWith","args":["hello world","o"]}
+{"fn":"String.prototype.indexOf","args":["hello world","o",{"n": "4014000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","o",{"n": "4014000000000000"}]}
+{"fn":"String.prototype.includes","args":["hello world","o",{"n": "4014000000000000"}]}
+{"fn":"String.prototype.startsWith","args":["hello world","o",{"n": "4014000000000000"}]}
+{"fn":"String.prototype.endsWith","args":["hello world","o",{"n": "4014000000000000"}]}
+{"fn":"String.prototype.indexOf","args":["hello world",""]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world",""]}
+{"fn":"String.prototype.includes","args":["hello world",""]}
+{"fn":"String.prototype.startsWith","args":["hello world",""]}
+{"fn":"String.prototype.endsWith","args":["hello world",""]}
+{"fn":"String.prototype.indexOf","args":["hello world","",{"n": "4049000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","",{"n": "4049000000000000"}]}
+{"fn":"String.prototype.includes","args":["hello world","",{"n": "4049000000000000"}]}
+{"fn":"String.prototype.startsWith","args":["hello world","",{"n": "4049000000000000"}]}
+{"fn":"String.prototype.endsWith","args":["hello world","",{"n": "4049000000000000"}]}
+{"fn":"String.prototype.indexOf","args":["hello world","zz"]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","zz"]}
+{"fn":"String.prototype.includes","args":["hello world","zz"]}
+{"fn":"String.prototype.startsWith","args":["hello world","zz"]}
+{"fn":"String.prototype.endsWith","args":["hello world","zz"]}
+{"fn":"String.prototype.indexOf","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37"]}
+{"fn":"String.prototype.lastIndexOf","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37"]}
+{"fn":"String.prototype.includes","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37"]}
+{"fn":"String.prototype.startsWith","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37"]}
+{"fn":"String.prototype.endsWith","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37"]}
+{"fn":"String.prototype.indexOf","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.includes","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.startsWith","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.endsWith","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "3ff0000000000000"}]}
+{"fn":"String.prototype.indexOf","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.includes","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.startsWith","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.endsWith","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.indexOf","args":["a\ud800b\udc00","\ud800"]}
+{"fn":"String.prototype.lastIndexOf","args":["a\ud800b\udc00","\ud800"]}
+{"fn":"String.prototype.includes","args":["a\ud800b\udc00","\ud800"]}
+{"fn":"String.prototype.startsWith","args":["a\ud800b\udc00","\ud800"]}
+{"fn":"String.prototype.endsWith","args":["a\ud800b\udc00","\ud800"]}
+{"fn":"String.prototype.indexOf","args":["hello world","O"]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","O"]}
+{"fn":"String.prototype.includes","args":["hello world","O"]}
+{"fn":"String.prototype.startsWith","args":["hello world","O"]}
+{"fn":"String.prototype.endsWith","args":["hello world","O"]}
+{"fn":"String.prototype.indexOf","args":["hello world","o",{"n": "c014000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","o",{"n": "c014000000000000"}]}
+{"fn":"String.prototype.includes","args":["hello world","o",{"n": "c014000000000000"}]}
+{"fn":"String.prototype.startsWith","args":["hello world","o",{"n": "c014000000000000"}]}
+{"fn":"String.prototype.endsWith","args":["hello world","o",{"n": "c014000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","o",{"n": "7ff8000000000000"}]}
+{"fn":"String.prototype.lastIndexOf","args":["hello world","o",{"u": null}]}
+{"fn":"String.prototype.includes","args":["hello world","o",{"n": "c059000000000000"}]}
+{"fn":"String.prototype.endsWith","args":["hello world","d",{"n": "4008000000000000"}]}
+{"fn":"String.prototype.startsWith","args":["hello world","h",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.split","args":["hello world",","]}
+{"fn":"String.prototype.split","args":["hello world",""]}
+{"fn":"String.prototype.split","args":["a,b,,c",","]}
+{"fn":"String.prototype.split","args":["a,b,,c",",",{"n": "4000000000000000"}]}
+{"fn":"String.prototype.split","args":["hello world",",",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.split","args":["aaa","aa"]}
+{"fn":"String.prototype.split","args":["\ud801\udc00\ud801\udc37x","\ud801\udc37"]}
+{"fn":"String.prototype.split","args":["a\ud800b\udc00","\ud800"]}
+{"fn":"String.prototype.split","args":["hello world",{"u": null}]}
+{"fn":"String.prototype.split","args":["",","]}
+{"fn":"String.prototype.split","args":["",""]}
+{"fn":"String.prototype.split","args":["a,b,c",",",{"n": "41f0000000000000"}]}
+{"fn":"String.prototype.split","args":["a,b,c",",",{"u": null}]}
+{"fn":"String.prototype.padStart","args":["hello world",{"n": "4034000000000000"},"*"]}
+{"fn":"String.prototype.padEnd","args":["hello world",{"n": "4034000000000000"},"*"]}
+{"fn":"String.prototype.padStart","args":["hello world",{"n": "4008000000000000"},null]}
+{"fn":"String.prototype.padEnd","args":["hello world",{"n": "4008000000000000"},null]}
+{"fn":"String.prototype.padStart","args":["x",{"n": "4014000000000000"},"ab"]}
+{"fn":"String.prototype.padEnd","args":["x",{"n": "4014000000000000"},"ab"]}
+{"fn":"String.prototype.padStart","args":["x",{"n": "4018000000000000"},"\ud801\udc00"]}
+{"fn":"String.prototype.padEnd","args":["x",{"n": "4018000000000000"},"\ud801\udc00"]}
+{"fn":"String.prototype.padStart","args":["x",{"n": "4010000000000000"},""]}
+{"fn":"String.prototype.padEnd","args":["x",{"n": "4010000000000000"},""]}
+{"fn":"String.prototype.padStart","args":["hello world",{"n": "4026000000000000"},"*"]}
+{"fn":"String.prototype.padEnd","args":["hello world",{"n": "4026000000000000"},"*"]}
+{"fn":"String.prototype.padStart","args":["x",{"n": "41bfffffe9000000"},"ab"]}
+{"fn":"String.prototype.padEnd","args":["x",{"n": "41bfffffe9000000"},"ab"]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "0000000000000000"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "4008000000000000"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "4007333333333333"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "bff0000000000000"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "7ff0000000000000"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "bff8000000000000"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "fff0000000000000"}]}
+{"fn":"String.prototype.repeat","args":["ab",{"n": "41afffffea000000"}]}
+{"fn":"String.prototype.repeat","args":["",{"n": "426d1a94a1ffe000"}]}
+{"fn":"String.prototype.trim","args":["  hi  "]}
+{"fn":"String.prototype.trimStart","args":["  hi  "]}
+{"fn":"String.prototype.trimEnd","args":["  hi  "]}
+{"fn":"String.prototype.trim","args":[" hi "]}
+{"fn":"String.prototype.trimStart","args":[" hi "]}
+{"fn":"String.prototype.trimEnd","args":[" hi "]}
+{"fn":"String.prototype.trim","args":["﻿﻿hi﻿"]}
+{"fn":"String.prototype.trimStart","args":["﻿﻿hi﻿"]}
+{"fn":"String.prototype.trimEnd","args":["﻿﻿hi﻿"]}
+{"fn":"String.prototype.trim","args":["\tx\n"]}
+{"fn":"String.prototype.trimStart","args":["\tx\n"]}
+{"fn":"String.prototype.trimEnd","args":["\tx\n"]}
+{"fn":"String.prototype.trim","args":[""]}
+{"fn":"String.prototype.trimStart","args":[""]}
+{"fn":"String.prototype.trimEnd","args":[""]}
+{"fn":"String.prototype.trim","args":["   "]}
+{"fn":"String.prototype.trimStart","args":["   "]}
+{"fn":"String.prototype.trimEnd","args":["   "]}
+{"fn":"String.prototype.toLowerCase","args":["AbCßẞﬃǄǆ İ \ud801\udc00\ud801\udc28 \ud835\udc00\ud835\udc1a ᏸᎹᏺﬀ"]}
+{"fn":"String.prototype.toUpperCase","args":["AbCßẞﬃǄǆ İ \ud801\udc00\ud801\udc28 \ud835\udc00\ud835\udc1a ᏸᎹᏺﬀ"]}
+{"fn":"String.prototype.toLowerCase","args":["ΟΣ ΣΟΣ ΟΣΑ Σ' 'Σ Σ Σ"]}
+{"fn":"String.prototype.toUpperCase","args":["ΟΣ ΣΟΣ ΟΣΑ Σ' 'Σ Σ Σ"]}
+{"fn":"String.prototype.toLowerCase","args":["aé́ x"]}
+{"fn":"String.prototype.toUpperCase","args":["aé́ x"]}
+{"fn":"String.prototype.toLowerCase","args":["Σ"]}
+{"fn":"String.prototype.toUpperCase","args":["Σ"]}
+{"fn":"String.prototype.toLowerCase","args":["ΣΣ"]}
+{"fn":"String.prototype.toUpperCase","args":["ΣΣ"]}
+{"fn":"String.prototype.toLowerCase","args":["Σ'"]}
+{"fn":"String.prototype.toUpperCase","args":["Σ'"]}
+{"fn":"String.prototype.toLowerCase","args":["'Σ"]}
+{"fn":"String.prototype.toUpperCase","args":["'Σ"]}
+{"fn":"String.prototype.toLowerCase","args":["AΣ A"]}
+{"fn":"String.prototype.toUpperCase","args":["AΣ A"]}
+{"fn":"String.prototype.toLowerCase","args":["Σ 1"]}
+{"fn":"String.prototype.toUpperCase","args":["Σ 1"]}
+{"fn":"String.prototype.toLowerCase","args":["ﬁle"]}
+{"fn":"String.prototype.toUpperCase","args":["ﬁle"]}
+{"fn":"String.prototype.toLowerCase","args":["İSTANBUL i̇"]}
+{"fn":"String.prototype.toUpperCase","args":["İSTANBUL i̇"]}
+{"fn":"String.prototype.toLowerCase","args":["ǄUNGLA"]}
+{"fn":"String.prototype.toUpperCase","args":["ǄUNGLA"]}
+{"fn":"String.prototype.toLowerCase","args":["ՕՒ ՈՒ"]}
+{"fn":"String.prototype.toUpperCase","args":["ՕՒ ՈՒ"]}
+{"fn":"String.prototype.toLowerCase","args":["ᏸᎹᏺᏼ"]}
+{"fn":"String.prototype.toUpperCase","args":["ᏸᎹᏺᏼ"]}
+{"fn":"String.prototype.toLowerCase","args":["\ud801\udc00\ud801\udc28\ud801\udc22"]}
+{"fn":"String.prototype.toUpperCase","args":["\ud801\udc00\ud801\udc28\ud801\udc22"]}
+{"fn":"String.prototype.toLowerCase","args":["\ud835\udc00\ud835\udc1a\ud835\udea8\ud835\udec2\ud835\udf90"]}
+{"fn":"String.prototype.toUpperCase","args":["\ud835\udc00\ud835\udc1a\ud835\udea8\ud835\udec2\ud835\udf90"]}
+{"fn":"String.prototype.toLowerCase","args":["a\ud800b"]}
+{"fn":"String.prototype.toUpperCase","args":["a\ud800b"]}
+{"fn":"String.prototype.toLowerCase","args":["ﬀﬁﬂﬆ"]}
+{"fn":"String.prototype.toUpperCase","args":["ﬀﬁﬂﬆ"]}
+{"fn":"String.prototype.toLowerCase","args":["ǅǅ"]}
+{"fn":"String.prototype.toUpperCase","args":["ǅǅ"]}
+{"fn":"String.prototype.toLowerCase","args":["ŉ Ŋ"]}
+{"fn":"String.prototype.toUpperCase","args":["ŉ Ŋ"]}
+{"fn":"String.prototype.toLowerCase","args":["ǰ ΐ ΰ"]}
+{"fn":"String.prototype.toUpperCase","args":["ǰ ΐ ΰ"]}
+{"fn":"String.prototype.toLowerCase","args":["ΒΆΘΟΣ ΣΟΥΛΟΣ"]}
+{"fn":"String.prototype.toUpperCase","args":["ΒΆΘΟΣ ΣΟΥΛΟΣ"]}
+{"fn":"String.fromCharCode","args":[{"n": "4050400000000000"},{"n": "4050800000000000"},{"n": "4050c00000000000"}]}
+{"fn":"String.fromCharCode","args":[]}
+{"fn":"String.fromCharCode","args":[{"n": "40f003f000000000"},{"n": "bff0000000000000"},{"n": "7ff8000000000000"},{"n": "40f0437000000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "4050400000000000"},{"n": "40f0437000000000"}]}
+{"fn":"String.fromCodePoint","args":[]}
+{"fn":"String.fromCodePoint","args":[{"n": "4130ffff00000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "40eb000000000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "bff0000000000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "7ff8000000000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "3ff8000000000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "4131000000000000"}]}
+{"fn":"String.fromCodePoint","args":[{"n": "7ff0000000000000"}]}
+{"fn":"encodeURIComponent","args":["a b&c=?"]}
+{"fn":"encodeURIComponent","args":["héllo→"]}
+{"fn":"encodeURIComponent","args":["\ud801\udc00"]}
+{"fn":"encodeURIComponent","args":["~!*'()-_."]}
+{"fn":"encodeURIComponent","args":[";,/?:@&=+$#"]}
+{"fn":"encodeURIComponent","args":["\ud800"]}
+{"fn":"encodeURIComponent","args":["x\ud800"]}
+{"fn":"encodeURIComponent","args":["\udc00"]}
+{"fn":"encodeURIComponent","args":["%"]}
+{"fn":"encodeURIComponent","args":["Á"]}
+{"fn":"encodeURIComponent","args":["Ȁ"]}
+{"fn":"encodeURIComponent","args":["￿"]}
+{"fn":"encodeURIComponent","args":["x\ud801\udc00y"]}
+{"fn":"decodeURIComponent","args":["%20"]}
+{"fn":"decodeURIComponent","args":["%E2%86%92"]}
+{"fn":"decodeURIComponent","args":["a%20b"]}
+{"fn":"decodeURIComponent","args":["a+b"]}
+{"fn":"decodeURIComponent","args":["%"]}
+{"fn":"decodeURIComponent","args":["%2"]}
+{"fn":"decodeURIComponent","args":["%GG"]}
+{"fn":"decodeURIComponent","args":["%C0%80"]}
+{"fn":"decodeURIComponent","args":["%ED%A0%80"]}
+{"fn":"decodeURIComponent","args":["%ED%BF%BF"]}
+{"fn":"decodeURIComponent","args":["%F4%90%80%80"]}
+{"fn":"decodeURIComponent","args":["%F0%90%80%80"]}
+{"fn":"decodeURIComponent","args":["%E2%82"]}
+{"fn":"decodeURIComponent","args":["%C2"]}
+{"fn":"decodeURIComponent","args":["x\ud800y"]}
+{"fn":"decodeURIComponent","args":["%41%42"]}
+{"fn":"decodeURIComponent","args":["%e2%86%92"]}
+{"fn":"decodeURIComponent","args":["\ud83d\udca9"]}
+{"fn":"decodeURIComponent","args":["%F0%9F%92%A9"]}
+{"fn":"decodeURIComponent","args":["%25"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"}]}
+{"fn":"oracle:textDecode","args":[{"b": "efbbbf6869"}]}
+{"fn":"oracle:textDecode","args":[{"b": "efbbbf6869"},{"u": null},{"o": [["ignoreBOM", true]]}]}
+{"fn":"oracle:textDecode","args":[{"b": "f0288c28"}]}
+{"fn":"oracle:textDecode","args":[{"b": "f0288c28"},{"u": null},{"o": [["fatal", true]]}]}
+{"fn":"oracle:textDecode","args":[{"b": "f0908d"}]}
+{"fn":"oracle:textDecode","args":[{"b": "e08080"}]}
+{"fn":"oracle:textDecode","args":[{"b": "eda080"}]}
+{"fn":"oracle:textDecode","args":[{"b": "c0af"}]}
+{"fn":"oracle:textDecode","args":[{"b": "80"}]}
+{"fn":"oracle:textDecode","args":[{"b": "fffe"}]}
+{"fn":"oracle:textDecode","args":[{"b": "f4908080"}]}
+{"fn":"oracle:textDecode","args":[{"b": "41f09f92a942"}]}
+{"fn":"oracle:textDecode","args":[{"b": "c3a9"}]}
+{"fn":"oracle:textDecode","args":[{"b": ""}]}
+{"fn":"oracle:textDecode","args":[{"b": "fffe68006900"},"utf-16le"]}
+{"fn":"oracle:textDecode","args":[{"b": "feff00680069"},"utf-16be"]}
+{"fn":"oracle:textDecode","args":[{"b": "680069"},"utf-16le"]}
+{"fn":"oracle:textDecode","args":[{"b": "680069"},"utf-16le",{"o": [["fatal", true]]}]}
+{"fn":"oracle:textDecode","args":[{"b": "00d800dc"},"utf-16le"]}
+{"fn":"oracle:textDecode","args":[{"b": "00d841"},"utf-16le"]}
+{"fn":"oracle:textDecode","args":[{"b": "00dc4100"},"utf-16le"]}
+{"fn":"oracle:textDecode","args":[{"b": "68006900"},"utf-16"]}
+{"fn":"oracle:textDecode","args":[{"b": "68006900"},"unicode"]}
+{"fn":"oracle:textDecode","args":[{"b": "68006900"},"ucs-2"]}
+{"fn":"oracle:textDecode","args":[{"b": "68006900"}," UTF-16LE "]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},"UTF-8"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},"utf8"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},"bogus"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},"x-user-defined"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},"replacement"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},"hz-gb-2312"]}
+{"fn":"oracle:textDecode","args":[{"b": "6869"},{"u": null}]}
+{"fn":"oracle:textDecode","args":[{"b": "efbbbf"}]}
+{"fn":"oracle:textDecode","args":[{"b": "e282"},"utf-8",{"o": [["fatal", false]]}]}
+{"fn":"oracle:textDecode","args":[]}
+{"fn":"oracle:textEncode","args":["hello"]}
+{"fn":"oracle:textEncode","args":["héllo→"]}
+{"fn":"oracle:textEncode","args":["\ud801\udc00"]}
+{"fn":"oracle:textEncode","args":["a\ud800b"]}
+{"fn":"oracle:textEncode","args":["\udc00"]}
+{"fn":"oracle:textEncode","args":[""]}
+{"fn":"oracle:textEncode","args":["\ud83d\udca9"]}
+{"fn":"shared/util:htmlEncode","args":["a<b>&c"]}
+{"fn":"shared/util:htmlEncode","args":["héllo→"]}
+{"fn":"shared/util:htmlEncode","args":[" "]}
+{"fn":"shared/util:htmlEncode","args":[""]}
+{"fn":"shared/util:htmlEncode","args":[""]}
+{"fn":"shared/util:htmlEncode","args":["\ud801\udc00x"]}
+{"fn":"shared/util:htmlEncode","args":["a\ud800b"]}
+{"fn":"shared/util:htmlEncode","args":["plain"]}
+{"fn":"shared/util:htmlEncode","args":["&amp;"]}
+{"fn":"shared/util:htmlEncode","args":[" x "]}

@@ -7,61 +7,79 @@
     "cve1/identity": {
       "cases": 7,
       "content": "c50fd3a6eb87c9e4",
-      "generator": "0f6e679da0a44072",
+      "generator": "69dd4503063ee873",
       "spec": "parity/specs/cve1/identity.jsonl"
     },
     "cve1/torture": {
       "cases": 471,
       "content": "3bf51e863655d3d2",
-      "generator": "03c32aa3f71b8809",
+      "generator": "a5c3c0a24746e160",
       "spec": "parity/specs/cve1/torture.entry.json"
     },
     "js/math": {
       "cases": 30547,
       "content": "bc953b36ab0bd1da",
-      "generator": "845f22f0d4165544",
+      "generator": "9664cc03f11f810f",
       "spec": "parity/specs/js/math.jsonl"
     },
     "js/math-ops": {
       "cases": 5311,
       "content": "237e0009568aa98c",
-      "generator": "c2acf6130eebd08e",
+      "generator": "5fc5ccb4f490f745",
       "spec": "parity/specs/js/math-ops.jsonl"
+    },
+    "jstring/case-data": {
+      "cases": 86933,
+      "content": "0a510602f8e9ea46",
+      "generator": "5fd6842fd2c8283d",
+      "spec": "parity/specs/jstring/case-data.entry.json"
+    },
+    "jstring/ops": {
+      "cases": 363,
+      "content": "ad9803f70340a4a8",
+      "generator": "66d16e147ba09115",
+      "spec": "parity/specs/jstring/ops.jsonl"
+    },
+    "jstring/utf8": {
+      "cases": 12844,
+      "content": "8e595ceab22ed01c",
+      "generator": "65bc9e746e46630e",
+      "spec": "parity/specs/jstring/utf8.entry.json"
     },
     "number/numberformat": {
       "cases": 182,
       "content": "44a96cd7bef54d21",
-      "generator": "414e7585d2ad87c3",
+      "generator": "5efc23b17493a750",
       "spec": "parity/specs/number/numberformat.jsonl"
     },
     "number/parse": {
       "cases": 569,
       "content": "495136adba4d37f3",
-      "generator": "6040f048ab227c2d",
+      "generator": "3d2c21a1b34a73fe",
       "spec": "parity/specs/number/parse.jsonl"
     },
     "number/toexponential": {
       "cases": 865,
       "content": "403ebd0ffa92248e",
-      "generator": "bd8fb4ac9524b40d",
+      "generator": "681767dd4916bbca",
       "spec": "parity/specs/number/toexponential.jsonl"
     },
     "number/tofixed": {
       "cases": 1033,
       "content": "fa7343e79bca3fb7",
-      "generator": "f03de1d8105a9fb2",
+      "generator": "0071cc3862d07485",
       "spec": "parity/specs/number/tofixed.jsonl"
     },
     "number/toprecision": {
       "cases": 1104,
       "content": "f658c6cab73cb999",
-      "generator": "ae73c80bee92ed6f",
+      "generator": "4d63a574abc253ec",
       "spec": "parity/specs/number/toprecision.jsonl"
     },
     "number/tostring": {
       "cases": 970,
       "content": "059629bdb39b45e3",
-      "generator": "cce4ecd8626a5f57",
+      "generator": "34d44fa8b1369684",
       "spec": "parity/specs/number/tostring.jsonl"
     }
   }
