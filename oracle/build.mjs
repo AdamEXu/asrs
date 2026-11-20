@@ -121,6 +121,7 @@ const entries = [
   "genCollationUnsafe",
   "genSort",
   "genRegex",
+  "genMsgpack",
   "decode",
   "export",
   "historicalRun",

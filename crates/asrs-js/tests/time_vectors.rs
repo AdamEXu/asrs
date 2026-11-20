@@ -18,6 +18,10 @@ mod js_regex;
 #[path = "../../asrs-cli/src/js_string.rs"]
 #[allow(dead_code)]
 mod js_string;
+mod js_msgpack {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
 #[path = "../../asrs-cli/src/js_time.rs"]
 mod js_time;
 

@@ -311,6 +311,7 @@ version = "0.1.0"
 dependencies = [
  "asrs-canvas",
  "asrs-js",
+ "asrs-log",
  "asrs-parity",
 ]
 
@@ -348,6 +349,10 @@ version = "0.1.0"
 [[package]]
 name = "asrs-log"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-model"
