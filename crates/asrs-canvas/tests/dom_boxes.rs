@@ -7,6 +7,7 @@ use asrs_parity::json::Json;
 use asrs_parity::vectors::{self, Record};
 
 const SIZE_TOLERANCE: f64 = 0.05;
+const UA_SIZE_TOLERANCE: f64 = 1.0;
 const RUN_TOLERANCE: f64 = 1.0 / 64.0;
 
 fn string(r: &Record, k: &str) -> String {
@@ -70,10 +71,18 @@ fn dom_text_boxes_match_chromium() {
             ("width", layout.width_px(), 2),
             ("height", layout.height_px(), 3),
         ] {
-            if number(r, k).is_none() && exact {
+            if number(r, k).is_none() {
                 let err = (ours - dom_rect[i]).abs();
-                max_size = max_size.max(err);
-                if err > SIZE_TOLERANCE {
+                if exact {
+                    max_size = max_size.max(err);
+                }
+                if err
+                    > if exact {
+                        SIZE_TOLERANCE
+                    } else {
+                        UA_SIZE_TOLERANCE
+                    }
+                {
                     failures.push(format!("{id}: {k} {ours} vs DOM {}", dom_rect[i]));
                 }
             }
