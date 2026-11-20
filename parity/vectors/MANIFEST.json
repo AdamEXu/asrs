@@ -101,7 +101,7 @@
     "js/math-rem/linux-aarch64": {
       "cases": 980,
       "content": "5001d446f16a7017",
-      "generator": "c1db88100b5f83e9",
+      "generator": "ef593283f425c972",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "linux-aarch64"
@@ -117,7 +117,7 @@
     "js/math-rem/windows-aarch64": {
       "cases": 980,
       "content": "e02ff52693333343",
-      "generator": "c1db88100b5f83e9",
+      "generator": "ef593283f425c972",
       "spec": "parity/specs/js/math-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "windows-aarch64"
@@ -293,7 +293,7 @@
     "log/util-rem/linux-aarch64": {
       "cases": 2,
       "content": "64415ee47e101ad0",
-      "generator": "bc04a3933ce44a67",
+      "generator": "92ed0f3432ac4308",
       "spec": "parity/specs/log/util-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "linux-aarch64"
@@ -309,7 +309,7 @@
     "log/util-rem/windows-aarch64": {
       "cases": 2,
       "content": "779ce0d41fd802be",
-      "generator": "bc04a3933ce44a67",
+      "generator": "92ed0f3432ac4308",
       "spec": "parity/specs/log/util-rem.fn.json",
       "zone": "UTC",
       "generatedOn": "windows-aarch64"
