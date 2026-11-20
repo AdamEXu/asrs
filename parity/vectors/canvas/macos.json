@@ -13,5 +13,64 @@
     "file": "measure-macos.jsonl.zst",
     "cases": 5724,
     "content": "0ed1a841d0d2f61a"
+  },
+  "host": {
+    "os": "macos",
+    "arch": "aarch64",
+    "osRelease": "27.3.0",
+    "osVersion": "Darwin Kernel Version 27.3.0: Fri Oct 30 02:15:09 PDT 2026; root:xnu-13432.60.57~99/RELEASE_ARM64_T6000",
+    "cpus": 8,
+    "memoryBytes": 17179869184,
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "darkTheme": false,
+    "displays": [
+      {
+        "size": {
+          "width": 1512,
+          "height": 982
+        },
+        "scaleFactor": 2,
+        "colorSpace": "{primaries:BT709, transfer:SRGB, matrix:RGB, range:FULL}",
+        "colorDepth": 30,
+        "depthPerComponent": 10
+      }
+    ],
+    "chromiumRasterizer": {
+      "glRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Version 27.3 (Build 26C5035r))",
+      "glVendor": "Google Inc. (Apple)",
+      "glImplementation": "(gl=egl-angle,angle=metal)",
+      "featureStatus": {
+        "2d_canvas": "enabled",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "enabled",
+        "multiple_raster_threads": "enabled_on",
+        "opengl": "enabled_on",
+        "rasterization": "enabled",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "enabled_on",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "enabled",
+        "video_encode": "enabled",
+        "webgl": "enabled",
+        "webgl2": "enabled",
+        "webgpu": "enabled",
+        "webnn": "disabled_off"
+      }
+    },
+    "nativeRasterizers": {
+      "gpu": "Apple M1 Pro"
+    },
+    "displayProfile": null,
+    "fonts": {
+      "/System/Library/Fonts/SFNS.ttf": "44890958f3e0b997028121ed7c7a789f3f5cce227c7a93ce8f86ec0db26da571",
+      "/System/Library/Fonts/SFNSItalic.ttf": "8f6a91c3340283d7653eda26bdc8ef9a3e7b31b5af20175348e9372d6836ffa0",
+      "/System/Library/Fonts/SFNSMono.ttf": "fc99d1608690ab5f2e1f78af9fbd4ef9ffef61f3eef36ceeea3ac3c844e652d4",
+      "/System/Library/Fonts/Helvetica.ttc": "658718d77497145281cb0ec45ff2fe7c6e18062b2a38f837d0d792d9be3a9ba3",
+      "/System/Library/Fonts/Courier.ttc": "76cdad2ba4e8774223ed6184f530570261f9f7fb9beb5c68368e09234c0273ec",
+      "/System/Library/Fonts/Menlo.ttc": "f2d400484a6aace67980730ec0a9ef24ce9e535a2604f118e6fdc2510021b85f",
+      "/System/Library/Fonts/Times.ttc": "79d8f1b02824796dda7234574826455c6cc62e898b2728c834859baad3332727",
+      "/System/Library/Fonts/Apple Color Emoji.ttc": "12bc8221a908c5bcf05f0fce940d3c3f6e9d09d8d806ffe31a969b4ac9be8f9e"
+    }
   }
 }

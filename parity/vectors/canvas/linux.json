@@ -1,0 +1,64 @@
+{
+  "host": {
+    "os": "linux",
+    "arch": "aarch64",
+    "osRelease": "7.0.0-38-generic",
+    "osVersion": "#38~24.04.4-Ubuntu SMP PREEMPT_DYNAMIC Mon Sep 14 17:12:37 UTC 2",
+    "cpus": 6,
+    "memoryBytes": 8298901504,
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "darkTheme": false,
+    "displays": [
+      {
+        "size": {
+          "width": 1920,
+          "height": 1200
+        },
+        "scaleFactor": 1,
+        "colorSpace": "{primaries:BT709, transfer:SRGB, matrix:RGB, range:FULL}",
+        "colorDepth": 24,
+        "depthPerComponent": 8
+      }
+    ],
+    "chromiumRasterizer": {
+      "glRenderer": null,
+      "glVendor": null,
+      "glImplementation": "(gl=none,angle=none)",
+      "featureStatus": {
+        "2d_canvas": "disabled_software",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "disabled_software",
+        "multiple_raster_threads": "enabled_on",
+        "opengl": "disabled_off",
+        "rasterization": "disabled_software",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "disabled_software",
+        "video_encode": "disabled_software",
+        "vulkan": "disabled_off",
+        "webgl": "disabled_off",
+        "webgl2": "disabled_off",
+        "webgpu": "disabled_off",
+        "webnn": "disabled_off"
+      }
+    },
+    "nativeRasterizers": {
+      "openGl": "llvmpipe (LLVM 20.1.2, 128 bits)",
+      "vulkan": "llvmpipe (LLVM 20.1.2, 128 bits)",
+      "xServer": "The X.Org Foundation"
+    },
+    "displayProfile": "none (sRGB)",
+    "fonts": {
+      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf": "ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf": "5c1247acef7f2b8522a31742c76d6adcb5569bacc0be7ceaa4dc39dd252ce895",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf": "8f2c103bfa3fd5de71f1b92b18f21906b5a26871fb7e19a9a4c9af539c3cc7ab",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf": "c805f9436dbc268644c1d9584f01a601a653e028e08fd74b9b949f6cf8304d88",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf": "3a3c502eeff669a231549e80df9f7c49de109bafe303170409e905d0b31a38fe",
+      "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf": "395fa5ab8d40c8eba390ced528744ea75a7f69aabf3e68b6f925ca0e39a27370",
+      "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf": "626655e94dd82f3f42549daf995c921b0915fa8ab1f4b839559e8892ea41d240",
+      "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477"
+    }
+  }
+}

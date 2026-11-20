@@ -262,6 +262,23 @@ pub(crate) fn read_json(path: &Path) -> Result<Json> {
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+pub(crate) fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
+    let path = vectors_dir(paths).join(format!("{platform}.json"));
+    let mut fields: Vec<(String, Json)> = match read_json(&path) {
+        Ok(Json::Object(pairs)) => pairs
+            .into_iter()
+            .map(|(k, v)| (k.to_string_lossy(), v))
+            .collect(),
+        _ => Vec::new(),
+    };
+    match fields.iter_mut().find(|(name, _)| name == key) {
+        Some(slot) => slot.1 = value,
+        None => fields.push((key.to_owned(), value)),
+    }
+    let json = Json::object(fields.iter().map(|(k, v)| (k.as_str(), v.clone())));
+    write(&path, format!("{}\n", json.to_pretty()).as_bytes())
+}
+
 fn update_manifest(paths: &Paths, info: &Path, key: &str, entry: Json) -> Result {
     let path = vectors_dir(paths).join(format!("{}.json", platform()));
     let mut fields: Vec<(String, Json)> = match read_json(&path) {
