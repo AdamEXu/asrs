@@ -21,10 +21,12 @@ use asrs_hub::sidebar::{
 };
 use asrs_js::number;
 use asrs_js::string::JsString;
+use asrs_js::time::Clock;
 use asrs_js::value::{JsValue, ToJs};
 use asrs_log::log::{Log, LoggableType, RawValue};
 use asrs_model::hub_state::SidebarState;
-use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
+use asrs_model::selection::Selection;
+use asrs_model::selection_impl::SelectionImpl;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
@@ -81,186 +83,12 @@ fn json_to_cve(j: &Json) -> Value {
     Value::from_json_lenient(j)
 }
 
-/// Stand-in for `window.selection` until D03's `SelectionImpl` is on main; replace it with
-/// that type rather than extending it. Covers only the methods the sidebar specs call.
-struct ScriptedSelection {
-    mode: SelectionMode,
-    hovered_time: Option<f64>,
-    static_time: f64,
-    live_connected: bool,
-    live_time: Option<TimeSupplier>,
-    playback_start_log: f64,
-    playback_start_real: f64,
-    playback_speed: f64,
-    playback_looping: bool,
-    now: Rc<Cell<f64>>,
-    range: Rc<Cell<[f64; 2]>>,
-}
+struct ScriptedClock(Rc<Cell<f64>>);
 
-impl ScriptedSelection {
-    fn range(&self) -> [f64; 2] {
-        self.range.get()
+impl Clock for ScriptedClock {
+    fn now(&self) -> f64 {
+        self.0.get()
     }
-    fn set_mode(&mut self, mode: SelectionMode) {
-        self.mode = mode;
-    }
-}
-
-impl Selection for ScriptedSelection {
-    fn get_mode(&self) -> SelectionMode {
-        self.mode
-    }
-    fn get_hovered_time(&self) -> Option<f64> {
-        self.hovered_time
-    }
-    fn set_hovered_time(&mut self, value: Option<f64>) {
-        self.hovered_time = value;
-    }
-    fn get_selected_time(&self) -> Option<f64> {
-        match self.mode {
-            SelectionMode::Idle => None,
-            SelectionMode::Static => Some(self.static_time.max(self.range()[0])),
-            SelectionMode::Playback => {
-                let mut time = (self.now.get() - self.playback_start_real) / 1000.0
-                    * self.playback_speed
-                    + self.playback_start_log;
-                let mut max_time = self.range()[1];
-                if let Some(live) = &self.live_time {
-                    max_time = max_time.max(live());
-                }
-                if time > max_time {
-                    Some(max_time.max(self.range()[0]))
-                } else {
-                    time = time.max(self.range()[0]);
-                    Some(time)
-                }
-            }
-            SelectionMode::Locked => Some(self.live_time.as_ref().map_or(0.0, |f| f())),
-        }
-    }
-    fn set_selected_time(&mut self, time: f64) {
-        match self.mode {
-            SelectionMode::Idle => {
-                self.set_mode(SelectionMode::Static);
-                self.static_time = time;
-            }
-            SelectionMode::Static => self.static_time = time,
-            SelectionMode::Playback => {
-                self.playback_start_log = time;
-                self.playback_start_real = self.now.get();
-            }
-            SelectionMode::Locked => {}
-        }
-    }
-    fn go_idle(&mut self) {
-        if self.mode == SelectionMode::Static {
-            self.set_mode(SelectionMode::Idle);
-        }
-    }
-    fn play(&mut self) {
-        match self.mode {
-            SelectionMode::Idle => {
-                self.set_mode(SelectionMode::Playback);
-                self.playback_start_log = self.range()[0];
-                self.playback_start_real = self.now.get();
-            }
-            SelectionMode::Static => {
-                let mut max_time = self.range()[1];
-                if let Some(live) = &self.live_time {
-                    max_time = max_time.max(live());
-                }
-                if self.static_time < max_time {
-                    self.set_mode(SelectionMode::Playback);
-                    self.playback_start_log = self.static_time.max(self.range()[0]);
-                    self.playback_start_real = self.now.get();
-                }
-            }
-            _ => {}
-        }
-    }
-    fn pause(&mut self) {
-        if matches!(self.mode, SelectionMode::Playback | SelectionMode::Locked) {
-            let selected = self.get_selected_time();
-            self.set_mode(SelectionMode::Static);
-            self.static_time = selected.unwrap_or(0.0);
-        }
-    }
-    fn toggle_playback(&mut self) {
-        if matches!(self.mode, SelectionMode::Playback | SelectionMode::Locked) {
-            self.pause();
-        } else {
-            self.play();
-        }
-    }
-    fn lock(&mut self) {
-        if self.live_connected {
-            self.set_mode(SelectionMode::Locked);
-        }
-    }
-    fn unlock(&mut self) {
-        if self.mode == SelectionMode::Locked {
-            let selected = self.get_selected_time();
-            self.set_mode(SelectionMode::Static);
-            self.static_time = selected.unwrap_or(0.0);
-        }
-    }
-    fn toggle_lock(&mut self) {
-        if self.mode == SelectionMode::Locked {
-            self.unlock();
-        } else {
-            self.lock();
-        }
-    }
-    fn step_cycle(&mut self, is_forward: bool) {
-        self.static_time += if is_forward { 0.02 } else { -0.02 };
-    }
-    fn set_live_connected(&mut self, time_supplier: TimeSupplier) {
-        let new_connection = !self.live_connected;
-        self.live_connected = true;
-        self.live_time = Some(time_supplier);
-        if new_connection {
-            self.set_mode(SelectionMode::Locked);
-        }
-    }
-    fn set_live_disconnected(&mut self) {
-        self.unlock();
-        self.live_connected = false;
-        self.live_time = None;
-    }
-    fn get_current_live_time(&self) -> Option<f64> {
-        self.live_time.as_ref().map(|f| f())
-    }
-    fn get_render_time(&self) -> Option<f64> {
-        let selected = self.get_selected_time();
-        match self.mode {
-            SelectionMode::Playback | SelectionMode::Locked => selected,
-            _ => self.hovered_time.or(selected),
-        }
-    }
-    fn set_playback_speed(&mut self, speed: f64) {
-        if self.mode == SelectionMode::Playback {
-            let selected = self.get_selected_time();
-            self.playback_start_log = selected.unwrap_or(0.0);
-            self.playback_start_real = self.now.get();
-        }
-        self.playback_speed = speed;
-    }
-    fn set_playback_looping(&mut self, looping: bool) {
-        self.playback_looping = looping;
-    }
-    fn set_grab_zoom_range(&mut self, _range: Option<[f64; 2]>) {}
-    fn get_grab_zoom_range(&self) -> Option<[f64; 2]> {
-        None
-    }
-    fn finish_grab_zoom(&mut self) {}
-    fn get_timeline_range(&self) -> [f64; 2] {
-        self.range()
-    }
-    fn get_timeline_is_max_zoom(&self) -> bool {
-        true
-    }
-    fn set_timeline_range(&mut self, _range: [f64; 2], _lock_max_zoom: bool) {}
-    fn apply_timeline_scroll(&mut self, _dx: f64, _dy: f64, _width_pixels: f64) {}
 }
 
 struct StubTuner {
@@ -1089,8 +917,8 @@ fn exception_emit(where_: &str, outcome: EventOutcome) -> Option<Emit> {
 macro_rules! senv {
     ($ctx:expr) => {
         SidebarEnv {
-            log: &mut *$ctx.log.borrow_mut(),
-            selection: &*$ctx.selection.borrow(),
+            log: $ctx.log,
+            selection: &mut *$ctx.selection.borrow_mut(),
             tuner: $ctx.tuner.borrow().as_ref().map(|t| t as &dyn Tuner),
             dark_theme: $ctx.dark_theme,
             inner_height: $ctx.inner_height,
@@ -1103,10 +931,9 @@ macro_rules! senv {
 
 struct Ctx<'a> {
     log: &'a Rc<RefCell<Log>>,
-    selection: &'a RefCell<ScriptedSelection>,
+    selection: &'a RefCell<SelectionImpl>,
     tuner: &'a RefCell<Option<StubTuner>>,
     loading_fields: &'a HashSet<JsString>,
-    range: &'a Rc<Cell<[f64; 2]>>,
     dark_theme: bool,
     inner_height: f64,
 }
@@ -1137,14 +964,7 @@ impl Runner<'_> {
         rects
     }
 
-    fn sync_range(&self) {
-        self.ctx
-            .range
-            .set(self.ctx.log.borrow().get_timestamp_range());
-    }
-
     fn drain(&mut self) {
-        self.sync_range();
         for update in self.drag.take_updates() {
             self.emitted.push(Emit {
                 values: vec![
@@ -1465,20 +1285,10 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
 
     let log = Rc::new(RefCell::new(Log::new(true)));
     let now_cell = Rc::new(Cell::new(start));
-    let range_cell = Rc::new(Cell::new(log.borrow().get_timestamp_range()));
-    let selection = RefCell::new(ScriptedSelection {
-        mode: SelectionMode::Idle,
-        hovered_time: None,
-        static_time: 0.0,
-        live_connected: false,
-        live_time: None,
-        playback_start_log: 0.0,
-        playback_start_real: 0.0,
-        playback_speed: 1.0,
-        playback_looping: false,
-        now: now_cell.clone(),
-        range: range_cell.clone(),
-    });
+    let selection = RefCell::new(SelectionImpl::new(
+        log.clone(),
+        Rc::new(ScriptedClock(now_cell.clone())),
+    ));
     let tuner: RefCell<Option<StubTuner>> = RefCell::new(None);
     let tuner_events: Rc<RefCell<Vec<Emit>>> = Rc::new(RefCell::new(Vec::new()));
     let live_cell: Rc<RefCell<Option<f64>>> = Rc::new(RefCell::new(None));
@@ -1492,7 +1302,6 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             selection: &selection,
             tuner: &tuner,
             loading_fields: &loading_fields,
-            range: &range_cell,
             dark_theme,
             inner_height,
         },
@@ -1579,7 +1388,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 "setPlaybackLooping" => sel.set_playback_looping(truthy(&arg(0)?)),
                 "setLiveConnected" => {
                     let cell = live_cell.clone();
-                    sel.set_live_connected(Box::new(move || cell.borrow().unwrap_or(f64::NAN)));
+                    sel.set_live_connected(Rc::new(move || cell.borrow().unwrap_or(f64::NAN)));
                 }
                 "setLiveDisconnected" => sel.set_live_disconnected(),
                 other => return Err(format!("{}: unknown selection method {other}", where_())),

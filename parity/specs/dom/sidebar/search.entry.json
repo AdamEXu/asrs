@@ -2,7 +2,7 @@
   "entry": "dom",
   "inputs": [
     "../logs/robot.json",
-    "../logs/akit.json"
+    "../logs/sidebar-akit.json"
   ],
   "fixture": {
     "seed": 7,
@@ -22,7 +22,7 @@
         "log": "../logs/robot.json"
       },
       {
-        "log": "../logs/akit.json"
+        "log": "../logs/sidebar-akit.json"
       },
       {
         "frames": 1

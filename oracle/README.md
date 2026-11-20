@@ -356,6 +356,29 @@ The dump is CVE-1 JSONL, written for `initial` and then for `full`:
 {"queuedStructs", "queuedStructArrays", "queuedProtos"}
 ```
 
+`decode --initial` stops after the `initial` phase.
+
+`decodeWorker <file>` (`src/decodeWorker.ts`) runs the worker bundle for the file's extension
+alone, with the files main would send, and prints every message it posts, one request at a time
+(the next request is posted once the worker has finished the previous one):
+
+```text
+{"request": "start"}                                         then the messages start posts
+{"request": "parseField", "key"}                             then the messages parseField posts
+{"type": "progress", "value"}
+{"type": "initial", "isPartial"}                             then the dump lines above for message.log
+{"type": "failed"}
+{"type": "fields", "count"}                                  then one line per field response:
+{"key", "generatedParent", "type", "timestamps", "values", "structuredType", "wpilibType",
+ "metadataString", "stripingReference", "typeWarning"}
+{"type": "threw"}                                            the handler threw (the worker's error event)
+```
+
+When the initial log is partial, the requests after `start` are every key of the initial log in
+order, then every key `HistoricalDataSource` always requests (the robot-state key lists in
+`updateFieldRequest`'s order), `"/"` plus the first key, `/asrs-oracle/missing`, and the first key
+again. Lines are written synchronously, so a worker that never answers leaves the lines before it.
+
 `export` decodes like `decode` (through `full`), then runs the real `exportWorker` bundle through
 upstream's `WorkerManager` on `log.toSerialized()`, as `prepare-export` does, and writes what main's
 `write-export` would: a string as UTF-8 (lone surrogates become U+FFFD), bytes as they are. Exit
@@ -476,7 +499,7 @@ exist yet is a harness change, not a session.
 | `epochMs` | `Date.now()` at session time 0 (default 1700000000000) |
 | `latencyMs` | one-way network delay, an integer of at least 1 (default 1) |
 | `endMs` | the session stops after this time; a final `dump` is recorded then |
-| `client.source` | `nt4` (needs `mode`: `default`, `akit`, `systemcore`, `ds`), `nt4-publisher` (`mode`: `sim` or `robot`), `rlog`, `phoenix`, `ftc` |
+| `client.source` | `nt4` (needs `mode`: `default`, `akit`, `systemcore`, `ds`), `nt4-publisher` (`mode`: `sim` or `robot`), `nt4-client` (upstream's `NT4_Client` on its own; optional `ports` and `appName`), `rlog`, `phoenix`, `ftc` |
 | `client.address` | what `connect` passes to the source (default `127.0.0.1`); the publisher derives its own |
 | `client.prefs` | merged over upstream's `DEFAULT_PREFS` into `window.preferences`; `null` makes it `null` |
 | `client.tabs`, `client.sidebar` | what `window.tabs.getActiveFields()` and `window.sidebar.getActiveFields()` return |
@@ -496,6 +519,7 @@ Client ops, applied the way `hub.ts` does:
 | `["select", selected, hovered]` | `window.selection.getSelectedTime()` and `getHoveredTime()` (numbers or `null`) |
 | `["tune", key, value]`, `["untune", key]` | `getTuner().publish` and `unpublish` |
 | `["dump"]` | records the canonical dump of `window.log` |
+| `["nt4", method, ...args]` | `nt4-client` only (`connect` builds the client once, then calls `connect()`; `stop` calls `disconnect()`). Methods: `subscribe`, `subscribeTopicsOnly`, `unsubscribe` (an argument `k` that indexes the subscription ids returned so far means that id; anything else is passed as is), `clearAllSubscriptions`, `publish`, `unpublish`, `setProperties`, `setPersistent`, `setRetained`, `sample` (`addSample`), `sampleAt` (`addTimestampedSample`), `connect`, `disconnect`, and `time` (records `nt4` `["time", client µs, server µs, latency µs]`). Args in CVE-1 (bare numbers allowed) |
 
 Server ops shared by every mock: `["up"]`; `["down", "refuse" \| "hang"]` (new connections and
 requests are refused or never answered, open ones stay); `["mute", bool]` (pushes on open
@@ -505,7 +529,7 @@ its own behaviour in detail):
 
 | Protocol | Config | Steps |
 |---|---|---|
-| `nt4` (`src/live/nt4Server.ts`) | `version` (`4.1` or `4.0`), `ports` ([5810]), `offsetUs` (server time is `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}]) | `announce`, `unannounce`, `properties`, `set`, `batch`, `setraw`, `text`, `binary` |
+| `nt4` (`src/live/nt4Server.ts`) | `version` (`4.1` or `4.0`), `ports` ([5810]), `offsetUs` (server time is `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}]) | `announce`, `unannounce`, `properties`, `set`, `batch`, `setraw`, `text`, `textraw` (a string sent verbatim), `binary` (hex, or a list of hex pieces and `[hex, count]` repeats), `httpStatus` (the alive check's status from then on) |
 | `rlog` (`RLOGServer`) | `port` (5800) | `["send", hex]` (one length-prefixed frame), `["sendraw", hex]` |
 | `phoenix` (`PhoenixServer`) | `devices` ([{device, signals, values}]), `busUtil`, `startUs`, `points`, `stepUs` | `["devices", [...]]`, `["error", action, code]` |
 | `ftc` (`FTCServer`) | `status` | `["status", {...}]`, `["send", json]`, `["sendtext", text]` |
@@ -549,7 +573,7 @@ where an event has none, in the order things happen.
 |---|---|
 | client | `ws-open` ([url, [protocols]]), `ws-send` (string or bytes), `ws-close`, `http-get` (url), `http-abort`, `tcp-open` ([host, port]), `tcp-send` (bytes), `tcp-close` |
 | server | `ws-accept` (protocol, `""` for none), `ws-reject`, `ws-push` (string or bytes), `ws-drop`, `http-reply` ([status, body]), `http-refuse`, `tcp-accept`, `tcp-refuse`, `tcp-push` (bytes), `tcp-drop` |
-| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string) |
+| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string), `nt4` (an `nt4-client` callback: `["announce" \| "unannounce" \| "properties", uid, name, type, properties]`, `["data", uid, name, timestamp, value]`, `["connect"]`, `["disconnect"]`) |
 
 Log indexes number the distinct `Log` objects in the order the harness first sees them; 0 is
 the hub's initial log. TCP chunk boundaries are recorded as written, but only the byte stream
@@ -563,7 +587,9 @@ event)`, `next_time()`, `process(t)` returning server events), `ClientEvent::lin
 `ServerEvent::line` write trace lines, and `replay` checks a recorded trace's server events
 against the Rust mock line for line. A port's live test feeds its client's traffic to
 `ServerHost`, delivers the returned events `latencyMs` later under the loop rules above, and
-compares its own trace with the vector.
+compares its own trace with the vector. `crates/asrs-live/tests/support` is that client side for
+the N units: the loop, browser `WebSocket` and `fetch` over `ServerHost`, and a `Driver` trait a
+port implements to run a session (`tests/nt4_sessions.rs` uses it for every NT4 session).
 
 ## DOM harness
 
@@ -706,7 +732,7 @@ Captures (a string or `{"kind": ..., ...}`):
 | `commands` | `{"command": {index, type, title, uuid}, "value": <command>}` for every tab whose renderer was called since the last `commands` capture, with the command it was last given (snapshotted when `render` was called) |
 | `canvas` | `{"canvas": "<class>#<n>", "frame", "width", "height", "calls": [...]}` for every 2D canvas drawn since the last `canvas` capture; `selector` limits it to matching canvases |
 | `dom` | `{"dom": selector, "nodes": [...]}`: for the first match (`"all": true` for every match), each element in document order as `[depth, tag, class, hidden, text, extra]`, where `text` joins the element's own non-blank text nodes and `extra` holds the `attributes` asked for (default `title`) plus `value` of form controls and `checked` of checkboxes and radios |
-| `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom}}` |
+| `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom, buttons}}` where `buttons` records each control button's `hidden` flag and the inline `--show-lock-buttons` value |
 | `eval` | `{"eval": expr, "value": <result>}` or `"throw"` |
 | `measure` | `{"measure": {font, align, baseline, text}, "metrics": {...}}` per string of `texts`, from the recording canvas (`null` when the font is invalid) |
 

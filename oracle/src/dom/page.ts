@@ -85,6 +85,7 @@ function domNodes(root: Element, attributes: string[]): unknown[] {
 
 function selectionState(): object {
   const s = w.selection;
+  const button = (cls: string) => (document.getElementsByClassName(cls)[0] as HTMLElement)?.hidden ?? null;
   return {
     mode: s.getMode(),
     hoveredTime: s.getHoveredTime(),
@@ -93,7 +94,14 @@ function selectionState(): object {
     currentLiveTime: s.getCurrentLiveTime(),
     grabZoomRange: s.getGrabZoomRange(),
     timelineRange: s.getTimelineRange(),
-    timelineIsMaxZoom: s.getTimelineIsMaxZoom()
+    timelineIsMaxZoom: s.getTimelineIsMaxZoom(),
+    buttons: {
+      play: button("play"),
+      pause: button("pause"),
+      lock: button("lock"),
+      unlock: button("unlock"),
+      showLockButtons: document.documentElement.style.getPropertyValue("--show-lock-buttons")
+    }
   };
 }
 

@@ -8,7 +8,7 @@ use asrs_js::value::{JsObject, ToJs};
 use asrs_log::log::{
     Log, LogError, LogFieldIterator, LogFieldTree, LogValue, LogValueSet, LogValueSetAny,
     LogValues, LoggableType, QueuedStructure, SerializedLog, SerializedLogField, TimestampDisplay,
-    log_key_utils, log_util, merge_offset_fallback,
+    log_key_utils, log_util,
 };
 use asrs_log::realm::JsRealm;
 use asrs_parity::{Response, Utf16String, Value};
@@ -83,7 +83,7 @@ fn member(v: &Value, name: &str) -> Value {
     v.get(name).cloned().unwrap_or(Value::Undefined)
 }
 
-fn serialized_field(v: &Value) -> Result<SerializedLogField, String> {
+pub(crate) fn serialized_field(v: &Value) -> Result<SerializedLogField, String> {
     let ty = loggable_type(&member(v, "type"))?;
     Ok(SerializedLogField {
         timestamps: Arc::new(array(&member(v, "timestamps"), number)?),
@@ -572,7 +572,7 @@ impl Rng for ScriptRng {
     }
 }
 
-fn script_realm(values: Vec<f64>) -> (JsRealm, Arc<AtomicUsize>, usize) {
+pub(crate) fn script_realm(values: Vec<f64>) -> (JsRealm, Arc<AtomicUsize>, usize) {
     let drawn = Arc::new(AtomicUsize::new(0));
     let expected = values.len();
     let rng = ScriptRng {
@@ -657,21 +657,10 @@ fn script(args: &[Value]) -> Result<Value, String> {
                 }
                 let r = realm_index(&realms, &source.realm)?;
                 let prefix = js_string(&arg(op, 3))?;
-                let mut unported = None;
-                let result = logs[target].1.log.merge_with(
-                    &source.log,
-                    &prefix,
-                    &mut realms[r].1,
-                    |target, source| {
-                        merge_offset_fallback(target, source).unwrap_or_else(|| {
-                            unported = Some("getMergeOffset alignment needs L14".to_owned());
-                            0.0
-                        })
-                    },
-                );
-                if let Some(e) = unported {
-                    return Err(e);
-                }
+                let result = logs[target]
+                    .1
+                    .log
+                    .merge_with(&source.log, &prefix, &mut realms[r].1);
                 match result {
                     Ok(offset) => results.push(Value::number(offset)),
                     Err(e) => threw(&mut results, Err(e))?,

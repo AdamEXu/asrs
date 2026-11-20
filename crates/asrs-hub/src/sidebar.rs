@@ -3,6 +3,7 @@
 //! offsets, handle widths) takes the rects and coordinates a DOM would produce, so the model is
 //! byte-identical to upstream while staying renderable by any view.
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
@@ -107,8 +108,8 @@ pub trait Tuner {
 
 /// The `window.*` services upstream `Sidebar` reads.
 pub struct SidebarEnv<'a> {
-    pub log: &'a mut Log,
-    pub selection: &'a dyn Selection,
+    pub log: &'a RefCell<Log>,
+    pub selection: &'a mut dyn Selection,
     pub tuner: Option<&'a dyn Tuner>,
     pub dark_theme: bool,
     pub inner_height: f64,
@@ -622,7 +623,7 @@ impl Sidebar {
         self.search_results = if self.search_value.is_empty() {
             Vec::new()
         } else {
-            search_fields(env.log, &self.search_value)
+            search_fields(&env.log.borrow(), &self.search_value)
         };
         self.search_results.retain(|field| {
             !HIDDEN_KEYS.iter().any(|hidden| {
@@ -1113,7 +1114,9 @@ impl Sidebar {
         if let Some(tuner) = env.tuner {
             tuner.publish(&full_key, &JsValue::Bool(value));
         }
-        env.log.put_boolean(&full_key, live_time, value);
+        env.log
+            .borrow_mut()
+            .put_boolean(&full_key, live_time, value);
     }
 
     /// Number tuning input focus/blur/value/keydown (the DOM element's own state).
@@ -1166,7 +1169,7 @@ impl Sidebar {
                     if let Some(tuner) = env.tuner {
                         tuner.publish(&full_key, &JsValue::Number(value));
                     }
-                    env.log.put_number(&full_key, live_time, value);
+                    env.log.borrow_mut().put_number(&full_key, live_time, value);
                 }
             } else if state.last_has_value {
                 self.tuning_value_cache.remove_key(&full_key);
@@ -1188,7 +1191,7 @@ impl Sidebar {
     }
 
     fn update_title(&mut self, env: &SidebarEnv<'_>) {
-        let mut range = env.log.get_timestamp_range();
+        let mut range = env.log.borrow().get_timestamp_range();
         if let Some(live_time) = env.selection.get_current_live_time() {
             range[1] = live_time;
         }
@@ -1255,7 +1258,8 @@ impl Sidebar {
         };
         let remeasure = match &mut self.nodes[id].value {
             ValueState::Bool(state) => {
-                let value = time.and_then(|t| get_value_at::<bool>(env.log, &full_key, t, None));
+                let value =
+                    time.and_then(|t| get_value_at::<bool>(&env.log.borrow(), &full_key, t, None));
                 if !state.first_update && value == state.last_value {
                     return;
                 }
@@ -1280,7 +1284,8 @@ impl Sidebar {
                 changed
             }
             ValueState::Number(state) => {
-                let value = time.and_then(|t| get_value_at::<f64>(env.log, &full_key, t, None));
+                let value =
+                    time.and_then(|t| get_value_at::<f64>(&env.log.borrow(), &full_key, t, None));
                 if !state.first_update && value == state.last_value {
                     return;
                 }
@@ -1305,8 +1310,8 @@ impl Sidebar {
                 changed
             }
             ValueState::Text(state) => {
-                let value =
-                    time.and_then(|t| get_value_at::<JsString>(env.log, &full_key, t, None));
+                let value = time
+                    .and_then(|t| get_value_at::<JsString>(&env.log.borrow(), &full_key, t, None));
                 if !state.first_update
                     && value == state.last_value
                     && self.sidebar_width == state.last_sidebar_width
@@ -1398,9 +1403,10 @@ impl Sidebar {
             let node = &self.nodes[id];
             if let Some(full_key) = node.full_key.clone() {
                 let mut is_active = false;
-                let r#type = env.log.get_type(&full_key);
-                let structured_type = env.log.get_structured_type(&full_key);
-                let wpilib_type = env.log.get_wpilib_type(&full_key);
+                let log = env.log.borrow();
+                let r#type = log.get_type(&full_key);
+                let structured_type = log.get_structured_type(&full_key);
+                let wpilib_type = log.get_wpilib_type(&full_key);
                 if expanded
                     && (r#type == Some(LoggableType::BooleanArray)
                         || r#type == Some(LoggableType::NumberArray)
@@ -1439,7 +1445,7 @@ impl Sidebar {
 
     /// `refresh`.
     pub fn refresh(&mut self, env: &mut SidebarEnv<'_>, force: bool) -> Attempt<()> {
-        let field_keys = env.log.get_field_keys();
+        let field_keys = env.log.borrow().get_field_keys();
         let fields_changed = force || !arrays_equal(&field_keys, &self.last_field_keys);
         self.last_field_keys = field_keys;
         if !fields_changed {
@@ -1465,14 +1471,14 @@ impl Sidebar {
             }
             return Ok(());
         }
-        self.field_count = env.log.get_field_count();
+        self.field_count = env.log.borrow().get_field_count();
         self.generation += 1;
         for node in &mut self.nodes {
             node.detached = true;
         }
         self.roots.clear();
         self.active_fields.clear();
-        let mut tree = env.log.get_field_tree(true, &JsString::new());
+        let mut tree = env.log.borrow().get_field_tree(true, &JsString::new());
         let root_keys: Vec<JsString> = tree
             .keys()
             .filter(|key| !starts_with(key, "."))
@@ -1523,7 +1529,7 @@ impl Sidebar {
         let Some(full_key) = self.nodes[id].full_key.clone() else {
             return;
         };
-        let hidden = !env.log.get_type_warning(&full_key);
+        let hidden = !env.log.borrow().get_type_warning(&full_key);
         let node = &mut self.nodes[id];
         if hidden != node.warning_last_hidden {
             node.warning_last_hidden = hidden;
@@ -1535,7 +1541,7 @@ impl Sidebar {
         let Some(full_key) = self.nodes[id].full_key.clone() else {
             return;
         };
-        let metadata = env.log.get_metadata_string(&full_key);
+        let metadata = env.log.borrow().get_metadata_string(&full_key);
         if Some(&metadata) == self.nodes[id].metadata_last.as_ref() {
             return;
         }
@@ -1631,7 +1637,7 @@ impl Sidebar {
             || (field
                 .full_key
                 .as_ref()
-                .is_some_and(|key| env.log.is_generated_parent(key)));
+                .is_some_and(|key| env.log.borrow().is_generated_parent(key)));
         let id = self.nodes.len();
         let node_id = self.next_node_id;
         self.next_node_id += 1;
@@ -1680,7 +1686,7 @@ impl Sidebar {
         if let Some(full_key) = field.full_key.clone() {
             if !full_key.is_empty() {
                 self.update_type_warning(env, id);
-                if let Some(structured_type) = env.log.get_structured_type(&full_key) {
+                if let Some(structured_type) = env.log.borrow().get_structured_type(&full_key) {
                     let mut label = js(" \u{2013} ");
                     label.push_str(structured_type);
                     self.nodes[id].type_label = Some(label);
@@ -1688,7 +1694,7 @@ impl Sidebar {
             }
             self.search_callbacks.push(SearchCallback::Highlight(id));
             self.highlight_for_search(id, now, env.can_scroll_into_view)?;
-            match env.log.get_type(&full_key) {
+            match env.log.borrow().get_type(&full_key) {
                 Some(LoggableType::Boolean) => {
                     let mut state = BoolState {
                         first_update: true,

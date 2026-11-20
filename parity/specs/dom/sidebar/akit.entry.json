@@ -1,7 +1,7 @@
 {
   "entry": "dom",
   "inputs": [
-    "../logs/akit.json"
+    "../logs/sidebar-akit.json"
   ],
   "fixture": {
     "seed": 7,
@@ -18,7 +18,7 @@
     ],
     "steps": [
       {
-        "log": "../logs/akit.json"
+        "log": "../logs/sidebar-akit.json"
       },
       {
         "frames": 1

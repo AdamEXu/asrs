@@ -4,6 +4,7 @@ import { DEFAULT_PREFS } from "@upstream/shared/Preferences";
 import Log from "@upstream/shared/log/Log";
 import FTCDashboardSource from "@upstream/hub/dataSources/ftcdashboard/FTCDashboardSource";
 import { LiveDataSource } from "@upstream/hub/dataSources/LiveDataSource";
+import { NT4_Client, NT4_PORTS_DEFAULT, NT4_Topic } from "@upstream/hub/dataSources/nt4/NT4";
 import { NT4Publisher } from "@upstream/hub/dataSources/nt4/NT4Publisher";
 import NT4Source, { NT4Mode } from "@upstream/hub/dataSources/nt4/NT4Source";
 import PhoenixDiagnosticsSource from "@upstream/hub/dataSources/PhoenixDiagnosticsSource";
@@ -40,6 +41,7 @@ const SERVERS: { [protocol: string]: new (out: Outbox, ctx: ServerContext, confi
 const SOURCES: { [source: string]: string } = {
   nt4: "nt4",
   "nt4-publisher": "nt4",
+  "nt4-client": "nt4",
   rlog: "rlog",
   phoenix: "phoenix",
   ftc: "ftc"
@@ -112,6 +114,8 @@ async function main() {
   let hovered: number | null = null;
   let liveSource: LiveDataSource | null = null;
   let publisher: NT4Publisher | null = null;
+  let nt4Client: NT4_Client | null = null;
+  const nt4Uids: number[] = [];
 
   const saved = {
     preferences: g.preferences,
@@ -163,7 +167,25 @@ async function main() {
       }
     };
 
+    const nt4Event = (...v: unknown[]) => trace.add("nt4", undefined, v);
+    const nt4Topic = (topic: NT4_Topic) => [topic.uid, topic.name, topic.type, topic.properties];
+
     const connect = () => {
+      if (client.source === "nt4-client") {
+        nt4Client ??= new NT4_Client(
+          address,
+          client.ports ?? NT4_PORTS_DEFAULT,
+          client.appName ?? "AdvantageScope",
+          (topic) => nt4Event("announce", ...nt4Topic(topic)),
+          (topic) => nt4Event("unannounce", ...nt4Topic(topic)),
+          (topic) => nt4Event("properties", ...nt4Topic(topic)),
+          (topic, timestamp, value) => nt4Event("data", topic.uid, topic.name, timestamp, value),
+          () => nt4Event("connect"),
+          () => nt4Event("disconnect")
+        );
+        nt4Client.connect();
+        return;
+      }
       if (client.source === "nt4-publisher") {
         publisher?.stop();
         publisher = new NT4Publisher(client.mode === "sim", (status) => trace.add("status", undefined, status));
@@ -202,6 +224,59 @@ async function main() {
       return t;
     };
 
+    const nt4Op = (args: any[]) => {
+      const c = nt4Client;
+      if (c === null) throw "no nt4 client";
+      const v = args.slice(1).map(fromTree);
+      const uid = (k: number) => (Number.isInteger(k) && k >= 0 && k < nt4Uids.length ? nt4Uids[k] : k);
+      switch (args[0]) {
+        case "subscribe":
+          nt4Uids.push((c.subscribe as any)(...v));
+          break;
+        case "subscribeTopicsOnly":
+          nt4Uids.push(c.subscribeTopicsOnly(v[0], v[1]));
+          break;
+        case "unsubscribe":
+          c.unsubscribe(uid(v[0]));
+          break;
+        case "clearAllSubscriptions":
+          c.clearAllSubscriptions();
+          break;
+        case "publish":
+          c.publishTopic(v[0], v[1]);
+          break;
+        case "unpublish":
+          c.unpublishTopic(v[0]);
+          break;
+        case "setProperties":
+          c.setProperties(v[0], v[1]);
+          break;
+        case "setPersistent":
+          c.setPersistent(v[0], v[1]);
+          break;
+        case "setRetained":
+          c.setRetained(v[0], v[1]);
+          break;
+        case "sample":
+          c.addSample(v[0], v[1]);
+          break;
+        case "sampleAt":
+          c.addTimestampedSample(v[0], v[1], v[2]);
+          break;
+        case "time":
+          nt4Event("time", c.getClientTime_us(), c.getServerTime_us(), c.getNetworkLatency_us());
+          break;
+        case "connect":
+          c.connect();
+          break;
+        case "disconnect":
+          c.disconnect();
+          break;
+        default:
+          fail(`unknown nt4 op ${JSON.stringify(args[0])}`);
+      }
+    };
+
     const runOp = (op: any[]) => {
       switch (op[0]) {
         case "connect":
@@ -210,6 +285,10 @@ async function main() {
         case "stop":
           liveSource?.stop();
           publisher?.stop();
+          nt4Client?.disconnect();
+          break;
+        case "nt4":
+          nt4Op(op.slice(1));
           break;
         case "prefs":
           g.preferences = op[1] === null ? null : Object.assign(g.preferences ?? { ...DEFAULT_PREFS }, op[1]);
@@ -240,7 +319,7 @@ async function main() {
     };
 
     for (const { op } of clientOps) {
-      if (!["connect", "stop", "prefs", "fields", "log", "select", "tune", "untune", "dump"].includes(op[0])) {
+      if (!["connect", "stop", "prefs", "fields", "log", "select", "tune", "untune", "dump", "nt4"].includes(op[0])) {
         fail(`unknown client op ${JSON.stringify(op[0])}`);
       }
       if (op[0] === "log" && typeof (Log.prototype as any)[op[1]] !== "function") fail(`Log has no method ${op[1]}`);

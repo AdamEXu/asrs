@@ -7,6 +7,7 @@ pub mod color;
 pub mod dash;
 pub mod display;
 pub mod geometry;
+pub mod gradient;
 pub mod hairline;
 pub mod msaa;
 pub mod path;
