@@ -125,6 +125,16 @@ export function heatmapFixtures(): HeatmapFixture[] {
       ]
     },
     {
+      name: "dense-fractional",
+      updates: [
+        {
+          translations: denseTranslations(),
+          pixelDimensions: [817.5, 403.5],
+          fieldDimensions: FIELD
+        }
+      ]
+    },
+    {
       name: "tiny",
       updates: [
         {
