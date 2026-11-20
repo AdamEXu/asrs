@@ -63,6 +63,7 @@ struct SpotU {
 struct FrameU {
     projection: [f32; 16],
     counts: [u32; 4],
+    clip_factors: [f32; 4],
     hemi: [HemiU; MAX_HEMI],
     point: [PointU; MAX_POINT],
     spot: [SpotU; MAX_SPOT],
@@ -495,6 +496,7 @@ impl Renderer {
         let lights = &frame.lights;
         let mut frame_u = FrameU::zeroed();
         frame_u.projection = frame.projection;
+        frame_u.clip_factors = [-1.0, 1.0, 0.0, 0.0];
         frame_u.counts = [
             lights.hemisphere.len().min(MAX_HEMI) as u32,
             lights.point.len().min(MAX_POINT) as u32,

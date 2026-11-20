@@ -292,7 +292,10 @@ dependencies = [
 name = "asrs-app"
 version = "0.1.0"
 dependencies = [
+ "asrs-field3d",
  "asrs-ui",
+ "async-channel",
+ "image",
 ]
 
 [[package]]

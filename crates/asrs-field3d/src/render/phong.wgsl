@@ -31,6 +31,8 @@ struct Frame {
     projection: mat4x4<f32>,
     // hemisphere, point, spot
     counts: vec4<u32>,
+    // ANGLE's runtime clip-space factors: y flip (-1) and depth sign (+1)
+    clip_factors: vec4<f32>,
     hemisphere: array<HemisphereLight, MAX_HEMI>,
     point: array<PointLight, MAX_POINT>,
     spot: array<SpotLight, MAX_SPOT>,
@@ -95,12 +97,14 @@ fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> 
     out.normal = fast_normalize(transformed_normal);
     let mv_position = draw.model_view * mv_input;
     out.clip = frame.projection * mv_position;
-    // ANGLE's Metal translation of gl_Position: GL's [-w, w] depth range mapped to [0, w], and
-    // y negated because WebGL renders bottom-up. Drawing upside down puts the multisample
-    // pattern and the fill rule's tie-breaks on the same image pixels as upstream's; the
-    // readback reverses the rows again.
+    // ANGLE's Metal epilogue for gl_Position, with its factors read from a uniform as ANGLE
+    // does so the compiler cannot fold them into the matrix product: depth sign, GL's [-w, w]
+    // depth mapped to [0, w], and y flipped because WebGL renders bottom-up. Drawing upside
+    // down puts the multisample pattern and the fill rule's tie-breaks on the same image
+    // pixels as upstream's; the readback reverses the rows again.
+    out.clip.z = out.clip.z * frame.clip_factors.y;
     out.clip.z = (out.clip.z + out.clip.w) * 0.5;
-    out.clip.y = -out.clip.y;
+    out.clip.y = out.clip.y * frame.clip_factors.x;
     out.view_position = -mv_position.xyz;
     return out;
 }
@@ -178,6 +182,9 @@ fn srgb_transfer_oetf(value: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(mix(pow(value.rgb, vec3<f32>(0.41666)) * 1.055 - vec3<f32>(0.055), value.rgb * 12.92, low), value.a);
 }
 
+// ANGLE's fragment shaders always write [[sample_mask]] under MSAA. Writing it changes how the
+// GPU shades pixels split between two triangles of one draw (without it, internal edges of
+// meshes with non-linear vertex colours differ by up to 37 levels), so it is not removable.
 struct FragmentOut {
     @location(0) color: vec4<f32>,
     @builtin(sample_mask) sample_mask: u32,
