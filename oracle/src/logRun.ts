@@ -17,7 +17,11 @@ import { LogFieldIterator, getLogValueText, getOrDefault, getURCLKeys } from "@u
 //   ["updateRangeWithTimestamp", timestamp]
 //   ["setStructuredType", key, type | null], ["setWpilibType", key, type],
 //   ["setMetadataString", key, metadata], ["setGeneratedParent", key]
-//   ["reload"]   log = Log.fromSerialized(log.toSerialized())
+//   ["putStruct", key, timestamp, bytes, schemaType, isArray]
+//   ["putPhotonStruct" | "putProto", key, timestamp, bytes, schemaType]
+//   ["putMsgpack", key, timestamp, bytes]
+//   ["reload"]   log = Log.fromSerialized(log.toSerialized()); a new Log if that throws
+// A write or reload that throws pushes {threw: error}.
 // Queries, whose results are returned in order:
 //   ["get", method, key, start, end, uuid, startOffset]
 //   ["getTimestamps", keys, uuid | null]
@@ -34,6 +38,9 @@ import { LogFieldIterator, getLogValueText, getOrDefault, getURCLKeys } from "@u
 //     getAtTime per element of times
 //   ["valueText", key]   getLogValueText on the field's last sample, or null
 //   ["dump"]   toSerialized() with the field order spelled out
+//   ["dumpAll"]   dump plus struct schemas, proto descriptors and the retry queues
+//   ["getUnit", key]
+//   ["units"]   getUnit of every key in getFieldKeys() order
 
 const PUTS = new Set([
   "putRaw",
@@ -43,7 +50,11 @@ const PUTS = new Set([
   "putBooleanArray",
   "putNumberArray",
   "putStringArray",
-  "putJSON"
+  "putJSON",
+  "putStruct",
+  "putPhotonStruct",
+  "putProto",
+  "putMsgpack"
 ]);
 
 function fieldState(field: LogField): unknown {
@@ -71,22 +82,49 @@ export function dump(log: Log): unknown {
   };
 }
 
+export function dumpAll(log: Log): unknown {
+  const s = log.toSerialized();
+  return {
+    ...(dump(log) as object),
+    structSchemaStrings: s.structDecoder.schemaStrings,
+    structSchemas: s.structDecoder.schemas,
+    protoDescriptors: s.protoDecoder,
+    queuedStructs: s.queuedStructs,
+    queuedStructArrays: s.queuedStructArrays,
+    queuedProtos: s.queuedProtos
+  };
+}
+
 export function run(enableTimestampSetCache: boolean, ops: any[][]): unknown[] {
   return runWithLog(enableTimestampSetCache, ops).results;
 }
 
 export function runWithLog(enableTimestampSetCache: boolean, ops: any[][]): { log: Log; results: unknown[] } {
-  let log = new Log(enableTimestampSetCache);
+  const state = { log: new Log(enableTimestampSetCache) };
   const results: unknown[] = [];
-  for (const op of ops) {
+  for (const op of ops) applyOp(state, op, results);
+  return { log: state.log, results };
+}
+
+function attempt(results: unknown[], f: () => void) {
+  try {
+    f();
+  } catch (e) {
+    results.push({ threw: e });
+  }
+}
+
+export function applyOp(state: { log: Log }, op: any[], results: unknown[]): void {
+  const log = state.log;
+  {
     const [name, ...args] = op;
     if (PUTS.has(name)) {
-      (log as any)[name](args[0], args[1], args[2]);
-      continue;
+      attempt(results, () => (log as any)[name](...args));
+      return;
     }
     switch (name) {
       case "putUnknownStruct":
-        log.putUnknownStruct(args[0], args[1], args[2], args[3]);
+        attempt(results, () => log.putUnknownStruct(args[0], args[1], args[2], args[3]));
         break;
       case "putPose":
         log.putPose(args[0], args[1], { translation: args[2], rotation: args[3] });
@@ -122,7 +160,21 @@ export function runWithLog(enableTimestampSetCache: boolean, ops: any[][]): { lo
         log.setGeneratedParent(args[0]);
         break;
       case "reload":
-        log = Log.fromSerialized(log.toSerialized());
+        try {
+          state.log = Log.fromSerialized(log.toSerialized());
+        } catch (e) {
+          results.push({ threw: e });
+          state.log = new Log();
+        }
+        break;
+      case "getUnit":
+        results.push(log.getUnit(args[0]));
+        break;
+      case "units":
+        results.push(log.getFieldKeys().map((key) => log.getUnit(key)));
+        break;
+      case "dumpAll":
+        results.push(dumpAll(log));
         break;
       case "get":
         results.push((log as any)[args[0]](args[1], args[2], args[3], args[4], args[5]));
@@ -202,5 +254,4 @@ export function runWithLog(enableTimestampSetCache: boolean, ops: any[][]): { lo
         throw new Error(`logRun: unknown op ${JSON.stringify(name)}`);
     }
   }
-  return { log, results };
 }

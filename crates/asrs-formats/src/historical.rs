@@ -2,7 +2,9 @@
 //! worker's `initial` or `failed` reply), run synchronously. F09 replaces it with the decode
 //! thread, lazy field requests, child logs and progress.
 
+use asrs_js::string::JsString;
 use asrs_log::log::Log;
+use asrs_log::realm::JsRealm;
 
 use crate::dslog;
 use crate::worker::{Abort, Response};
@@ -92,10 +94,12 @@ impl HistoricalDataSource {
     }
 
     /// `handleMainMessage` for this source's reply, then the worker's messages. A worker that
-    /// aborts posts nothing more, so the source stays in `DecodingInitial`.
+    /// aborts posts nothing more, so the source stays in `DecodingInitial`, as it does when
+    /// merging the reply into the hub's log throws.
     pub fn handle_main_message(
         &mut self,
         log: &mut Log,
+        realm: &mut JsRealm,
         files: &[Option<Vec<u8>>],
     ) -> Result<Option<Abort>, UnportedWorker> {
         if self.status != Status::Reading {
@@ -120,10 +124,14 @@ impl HistoricalDataSource {
             match reply {
                 Response::Progress(_) => {}
                 Response::Initial { log: payload, .. } => {
-                    // `mergeWith(Log.fromSerialized(payload), "")` into a fresh log, until L08
-                    // ports `mergeWith`: fields are rebuilt from the source's serialization.
-                    *log = Log::from_serialized(Log::from_serialized(payload).to_serialized());
-                    self.status = Status::Idle;
+                    // Each decode merges into a fresh hub log, so the merge offset is never
+                    // computed; F09 passes L14's getMergeOffset here.
+                    let merged = Log::from_serialized(payload.structured_clone(), realm).and_then(
+                        |source| log.merge_with(&source, &JsString::new(), realm, |_, _| 0.0),
+                    );
+                    if merged.is_ok() {
+                        self.status = Status::Idle;
+                    }
                 }
                 Response::Failed => self.status = Status::Error,
             }
