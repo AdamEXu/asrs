@@ -38,7 +38,6 @@ pub struct MetadataRecordData {
     pub metadata: JsString,
 }
 
-/// A record in the data log. May represent either a control record or a data record.
 pub struct WpilogRecord<'a> {
     entry: u32,
     timestamp: f64,
@@ -220,7 +219,6 @@ fn u32_at(data: &[u8], position: usize) -> Result<u32, WpilogError> {
     }
 }
 
-/// WPILOG decoder.
 pub struct WpilogDecoder<'a> {
     data: &'a [u8],
 }
@@ -230,7 +228,6 @@ impl<'a> WpilogDecoder<'a> {
         Self { data }
     }
 
-    /// True if the data log is valid (e.g. has a valid header).
     pub fn is_valid(&self) -> bool {
         self.data.len() >= 12
             && utf8_decode(&self.data[..6]).as_string().as_deref() == Some("WPILOG")
@@ -321,8 +318,8 @@ impl<'a> WpilogDecoder<'a> {
     }
 }
 
-/// The C indexer's WASM trap: a read at a negative offset (a negative extra-header size) or past
-/// the buffer. Upstream's `run` rejects with a `RuntimeError`, which `start` catches and answers
+/// The C indexer's WASM trap: a read at a negative offset, from a negative extra-header size.
+/// Upstream's `run` rejects with a `RuntimeError`, which `start` catches and answers
 /// with `failed`. Offsets in `[-bufferIn, 0)` read the module's own heap and do not trap
 /// upstream; the port reports those as traps too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -337,9 +334,6 @@ pub struct WpilogIndex {
     pub records: Vec<(u32, u32)>,
 }
 
-/// The read at `offset` is in bounds when `0 <= offset < size`; a negative
-/// offset is the wasm case that traps (the oracle cannot produce readable heap
-/// bytes there deterministically).
 fn byte_at(data: &[u8], offset: i32) -> Result<u8, IndexError> {
     if offset < 0 || offset as usize >= data.len() {
         Err(IndexError)
@@ -459,7 +453,6 @@ mod tests {
         v
     }
 
-    /// One record: entry u8, size u8, timestamp u8 bitfield 0x00.
     fn record(entry: u8, timestamp: u8, payload: &[u8]) -> Vec<u8> {
         let mut v = vec![0x00, entry, payload.len() as u8, timestamp];
         v.extend_from_slice(payload);
@@ -562,7 +555,6 @@ mod tests {
         data.extend_from_slice(&record(1, 0, &[1]));
         data.extend_from_slice(&record(1, 0, &(-5i64).to_le_bytes()));
         data.extend_from_slice(&record(1, 0, &1.5f64.to_le_bytes()));
-        // 1 string in an 8-byte payload: count passes (len-4)/4 but it overflows.
         let mut bad = 1u32.to_le_bytes().to_vec();
         bad.extend_from_slice(&7u32.to_le_bytes());
         data.extend_from_slice(&record(1, 0, &bad));
@@ -583,7 +575,6 @@ mod tests {
 
     #[test]
     fn string_array_bounds() {
-        // size <= (len-4)/4 but a string runs past the end
         let mut payload = 1u32.to_le_bytes().to_vec();
         payload.extend_from_slice(&100u32.to_le_bytes());
         let mut data = header(b"");
@@ -594,7 +585,6 @@ mod tests {
             r.string_array(),
             Err(WpilogError::Message("Invalid string size"))
         );
-        // shorter than 4 bytes: DataView throws a RangeError
         let mut data = header(b"");
         data.extend_from_slice(&record(1, 0, &[1, 2]));
         let decoder = WpilogDecoder::new(&data);
@@ -625,8 +615,8 @@ mod tests {
     #[test]
     fn index_timestamps() {
         let mut data = header(b"");
-        data.extend_from_slice(&record(1, 150, &[0])); // t=150us -> 0.00015s
-        data.extend_from_slice(&record(0, 255, &[])); // control: ignored for range
+        data.extend_from_slice(&record(1, 150, &[0]));
+        data.extend_from_slice(&record(0, 255, &[]));
         data.extend_from_slice(&record(2, 40, &[0]));
         let index = index(&data).unwrap();
         assert_eq!(index.records.len(), 3);
@@ -637,7 +627,7 @@ mod tests {
     #[test]
     fn index_no_data_records() {
         let mut data = header(b"");
-        data.extend_from_slice(&record(0, 255, &[])); // control only
+        data.extend_from_slice(&record(0, 255, &[]));
         let index = index(&data).unwrap();
         assert_eq!(index.records.len(), 1);
         assert_eq!(index.min_timestamp, 0.0);
@@ -646,8 +636,6 @@ mod tests {
 
     #[test]
     fn index_sign_and_eight_byte_timestamps() {
-        // timestampLength = 8: bitfield 0x70; the high bit of byte 8 is a sign
-        // bit, so the timestamp is read as a signed int64.
         let mut data = header(b"");
         let mut r = vec![0x70u8, 1, 1];
         r.extend_from_slice(&(-1i64).to_le_bytes());
@@ -675,10 +663,9 @@ mod tests {
     #[test]
     fn index_extra_header_edges() {
         let mut data = header(b"");
-        data[8..12].copy_from_slice(&(-1i32).to_le_bytes()); // extra = 0xFFFFFFFF
-        // offset = 11 lands inside the file but before the first record.
+        data[8..12].copy_from_slice(&(-1i32).to_le_bytes());
         assert_eq!(index(&data).unwrap().records.len(), 0);
-        data[8..12].copy_from_slice(&0x8000_0000u32.to_le_bytes()); // extra = -2^31
+        data[8..12].copy_from_slice(&0x8000_0000u32.to_le_bytes());
         assert!(index(&data).is_err());
     }
 }
