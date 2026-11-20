@@ -4,7 +4,7 @@
   "seed": "0x6328a5c0",
   "upstreamCommit": "8fc5b89fc93be5dba5a66005ea6111fa16594aa8",
   "electron": "39.2.7",
-  "generator": "6cc1d3ff9a08212e",
+  "generator": "63dc9ffbff077fcc",
   "cases": 222,
   "files": 260,
   "bytes": 566891,
