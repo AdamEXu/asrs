@@ -5,6 +5,7 @@ import { concat, hex, utf8 } from "./corpus/bytes";
 import { Corpus } from "./corpus/corpus";
 import { structMatrix } from "./corpus/struct";
 import { Rng } from "./corpus/rng";
+import { ownView } from "./helpers";
 
 // Emits upstream StructDecoder ground truth for the asrs_log::struct_decoder vectors.
 //   genStruct replay <seed>
@@ -23,8 +24,9 @@ import { Rng } from "./corpus/rng";
 //     payloads. Extra op kinds:
 //       {"case":id,"a":{"n":type,"b":hex,"l":<len tree>},"ok"|"throw"}   decodeArray with an
 //         explicit length ("l" absent means undefined)
+//       {"case":id,"a":{...},"never":true}   decodeArray that never returns upstream
 //       {"case":id,"r":<serialized>,"ok":<toSerialized()>}            the decoder is replaced
-//         with StructDecoder.fromSerialized(r); later records in the case reuse it
+//         with StructDecoder.fromSerialized(structuredClone(r)); later records reuse it
 
 const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n");
 const decoder8 = new TextDecoder();
@@ -73,7 +75,7 @@ class Session {
   }
 
   restore(serialized: unknown) {
-    this.decoder = StructDecoder.fromSerialized(serialized);
+    this.decoder = StructDecoder.fromSerialized(structuredClone(serialized));
     this.rec({ r: toTree(serialized) }, { ok: toTree(this.decoder.toSerialized()) });
   }
 
@@ -104,7 +106,7 @@ class Session {
       const decoded = isArray
         ? this.decoder.decodeArray(item.name, item.value)
         : this.decoder.decode(item.name, item.value);
-      this.rec(input, { ok: toTree(decoded) });
+      this.rec(input, { ok: toTree(ownView(decoded)) });
       return true;
     } catch (e) {
       this.rec(input, { throw: toTree(e) });
@@ -113,19 +115,25 @@ class Session {
   }
 
   decodeArrayExplicit(item: Item, len: number | undefined) {
-    // Upstream would loop forever here: value.length / 0 is +Infinity and every
-    // empty-schema decode succeeds.
-    if (len === undefined && item.value.length > 0) {
-      const schema = this.decoder.toSerialized().schemas[item.name];
-      if (typeof schema === "object" && schema !== null && schema.length === 0 && 1 / schema.length > 0) return;
-    }
     const d: Record<string, unknown> = { n: item.name, b: bytesToHex(item.value), a: true, q: false };
     if (len !== undefined) d.l = toTree(len);
     try {
-      this.rec({ a: d }, { ok: toTree(this.decoder.decodeArray(item.name, item.value, len)) });
+      if (len === undefined && item.value.length > 0 && this.zeroLength(item.name)) {
+        // value.length / 0 is +Infinity and every item decodes the same empty
+        // slice: upstream loops until the realm dies of OOM unless that throws.
+        this.decoder.decodeArray(item.name, item.value, 1);
+        this.rec({ a: d }, { never: true });
+        return;
+      }
+      this.rec({ a: d }, { ok: toTree(ownView(this.decoder.decodeArray(item.name, item.value, len))) });
     } catch (e) {
       this.rec({ a: d }, { throw: toTree(e) });
     }
+  }
+
+  private zeroLength(name: string): boolean {
+    const schemas = this.decoder.toSerialized().schemas;
+    return Object.hasOwn(schemas, name) && schemas[name].length === 0;
   }
 
   /** putRaw's schema-key handling plus the decodes a putStruct performs. */
@@ -363,14 +371,35 @@ function fuzz(seed: number) {
   for (const name of ["ProtoNames", "EnumWeird", "BfPack", "ArrLens", "Deep", "Wrap"]) {
     session.decode({ name, value: rng.bytes(sizer(name) + 2) }, false, false);
   }
-  // Crafted serialized states, including a bitRange that overflows decodeValue's buffer
-  // and enum maps with unusual own keys.
-  const crafted = JSON.parse(JSON.stringify(serialized));
-  crafted.schemas["ProtoLeaf"].valueSchemas[0].bitRange = [0, 4096];
-  crafted.schemas["EnumOnChar"].valueSchemas[0].enum = { "5": "five", "true": "T", "toString": "TS" };
-  session.restore(crafted);
-  session.decode({ name: "ProtoLeaf", value: rng.bytes(600) }, false, false);
-  session.decode({ name: "EnumOnChar", value: hex("35 34 36 37") }, false, false);
+  // A merge-style restore (Log.mergeWith spreads two decoders' maps): a schema
+  // string whose compiled schema did not come along is compiled by the next addSchema.
+  session.restore({
+    schemaStrings: { ...serialized.schemaStrings, Late: "Leaf l;uint8 n:3" },
+    schemas: serialized.schemas
+  });
+  session.decode({ name: "Late", value: rng.bytes(9) }, false, false);
+  session.addSchema("AfterMerge", utf8("Late x[2]"));
+  session.decode({ name: "AfterMerge", value: rng.bytes(18) }, false, false);
+
+  // Exact int64/uint64 rounding and float32 NaN payload widening.
+  const numbers = new Session("fuzz/numbers");
+  numbers.addSchema("I64", utf8("int64 i;uint64 u"));
+  numbers.addSchema("F32", utf8("float f;float32 g"));
+  numbers.addSchema("BfI64", utf8("int64 a:53;int64 b:11;uint64 c:63;bool d:1"));
+  for (const [i, u] of [
+    ["0100000000002000", "0100000000002000"],
+    ["0300000000002000", "0300000000002000"],
+    ["ffffffffffffff7f", "ffffffffffffffff"],
+    ["0000000000000080", "0004000000000080"],
+    ["0104000000000080", "0104000000000080"],
+    ["ffffffffffffdfff", "01feffffffffffff"]
+  ]) {
+    numbers.decode({ name: "I64", value: hex(i + u) }, false, false);
+    numbers.decode({ name: "BfI64", value: hex(i + u) }, false, false);
+  }
+  for (const f of ["0100807f0100c07f", "ffffffffffffff7f", "00008000000080ff", "010000000000807f"]) {
+    numbers.decode({ name: "F32", value: hex(f) }, false, false);
+  }
 
   // Seeded random schemas mixing every feature.
   for (let set = 0; set < 8; set++) {

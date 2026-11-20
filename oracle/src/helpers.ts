@@ -3,6 +3,17 @@ import { flushAnimationFrames } from "./shims";
 
 const indirectEval = eval;
 
+// A `__proto__` field assigns the decoded object's prototype (to an array, for an
+// array field). Log.putUnknownStruct only reads own properties, so the records
+// keep just those.
+export const ownView = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(ownView);
+  if (typeof value !== "object" || value === null) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) out[key] = ownView(item);
+  return out;
+};
+
 export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   identity: (value: unknown) => value,
 
@@ -12,7 +23,8 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   //   ["decodeArray", name, bytes, length?]   -> {data, schemaTypes}
   //   ["toSerialized"]                        -> serialized state
   //   ["fromSerialized", serialized]          -> serialized state after restore
-  // Each element comes back as {ok: ...} or {throw: ...}.
+  // Each element comes back as {ok: ...} or {throw: ...}, serialized states
+  // structured-cloned when taken, as Log's postMessage hand-offs do.
   struct: (ops: unknown[][]) => {
     let decoder = new StructDecoder();
     return ops.map((item) => {
@@ -21,18 +33,20 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
         switch (kind) {
           case "addSchema":
             decoder.addSchema(args[0] as string, args[1] as Uint8Array);
-            return { ok: decoder.toSerialized() };
+            return { ok: structuredClone(decoder.toSerialized()) };
           case "decode":
-            return {
-              ok: decoder.decode(args[0] as string, args[1] as Uint8Array, args[2] as number | undefined)
-            };
+            return { ok: ownView(decoder.decode(args[0] as string, args[1] as Uint8Array)) };
           case "decodeArray":
-            return { ok: decoder.decodeArray(args[0] as string, args[1] as Uint8Array, args[2] as number | undefined) };
+            return {
+              ok: ownView(
+                decoder.decodeArray(args[0] as string, args[1] as Uint8Array, args[2] as number | undefined)
+              )
+            };
           case "toSerialized":
-            return { ok: decoder.toSerialized() };
+            return { ok: structuredClone(decoder.toSerialized()) };
           case "fromSerialized":
             decoder = StructDecoder.fromSerialized(args[0]);
-            return { ok: decoder.toSerialized() };
+            return { ok: structuredClone(decoder.toSerialized()) };
           default:
             throw new Error(`oracle:struct: unknown op ${String(kind)}`);
         }

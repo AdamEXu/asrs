@@ -1,26 +1,30 @@
 //! `shared/log/StructDecoder.ts`: the WPILib struct schema compiler and bit-level
-//! decoder. `schemaStrings` and `schemas` are plain JS objects upstream, so the
-//! maps here keep every stored value verbatim (a `fromSerialized` restore
-//! round-trips `null`, strings and other non-schema values byte-exactly) while
-//! reads go through JS semantics: `in` sees `Object.prototype` members,
-//! `obj["__proto__"] = v` is swallowed, and property reads coerce via
-//! `ToNumber`/`ToPropertyKey`.
+//! decoder.
+//!
+//! Upstream keeps `schemaStrings` and `schemas` in plain objects, so lookups use the
+//! `in` operator and see `Object.prototype` members. Schema names come from log
+//! data, which makes that reachable: a field typed `toString` compiles against the
+//! method's arity, and decoding such a name throws.
 
 use asrs_js::math;
 use asrs_js::number::{self, to_integer_or_infinity};
-use asrs_js::string::{JsError, JsString, TextDecoder};
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::string::{JsString, TextDecoder};
+use asrs_js::value::{JsObject, JsValue, ToJs};
 
-/// `VALID_TYPE_STRINGS` (`Object.values(ValueType)`).
 const VALID_TYPE_STRINGS: &[&str] = &[
     "bool", "char", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
     "float", "float32", "double", "float64",
 ];
 
-/// `BITFIELD_VALID_TYPES`.
 const BITFIELD_VALID_TYPES: &[&str] = &[
     "bool", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64",
 ];
+
+/// The most elements one JS array holds in the oracle's Electron (measured with
+/// `push` of small integers, doubles, booleans and one-character strings): the
+/// push past it throws `RangeError: Invalid array length`. Upstream takes minutes
+/// to get there, so no oracle vector covers it.
+const MAX_ARRAY_LENGTH: f64 = 134_217_728.0;
 
 /// `VALUE_TYPE_MAX_BITS`.
 fn type_max_bits(ty: &JsString) -> f64 {
@@ -76,69 +80,12 @@ fn js_string(s: &str) -> JsString {
     JsString::from_units(s.encode_utf16().collect())
 }
 
-/// `ToNumber` for the values that can appear in a serialized decoder.
-fn to_number(v: &JsValue) -> f64 {
-    match v {
-        JsValue::Undefined => f64::NAN,
-        JsValue::Null => 0.0,
-        JsValue::Bool(b) => f64::from(*b),
-        JsValue::Number(x) => *x,
-        JsValue::String(s) => number::to_number(s.units()),
-        JsValue::Array(items) => number::to_number(&join_units(items)),
-        JsValue::Bytes(bytes) => {
-            if bytes.is_empty() {
-                0.0
-            } else if bytes.len() == 1 {
-                f64::from(bytes[0])
-            } else {
-                f64::NAN
-            }
-        }
-        _ => f64::NAN,
-    }
-}
-
-/// `ToString`/`ToPropertyKey` for stored field values.
-fn to_property_key(v: &JsValue) -> JsString {
-    match v {
-        JsValue::String(s) => s.clone(),
-        JsValue::Number(x) => JsString::from(number::to_string(*x)),
-        JsValue::Bool(b) => js_string(if *b { "true" } else { "false" }),
-        JsValue::Null => js_string("null"),
-        JsValue::Array(items) => JsString::from_units(join_units(items)),
-        JsValue::Bytes(bytes) => JsString::from(
-            bytes
-                .iter()
-                .map(|b| number::to_string(f64::from(*b)))
-                .collect::<Vec<_>>()
-                .join(","),
-        ),
-        JsValue::Object(_) | JsValue::ExtData(..) => js_string("[object Object]"),
-        _ => js_string("undefined"),
-    }
-}
-
-/// `Array.prototype.join`/`ToString` for arrays: nullish elements are empty.
-fn join_units(items: &[JsValue]) -> Vec<u16> {
-    let mut out: Vec<u16> = Vec::new();
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            out.push(u16::from(b','));
-        }
-        if matches!(item, JsValue::Null | JsValue::Undefined) {
-            continue;
-        }
-        out.extend_from_slice(to_property_key(item).units());
-    }
-    out
-}
-
-/// The member `schemas[name]` resolves to for a name the map does not own, when
-/// the name is an `Object.prototype` member: `__proto__` is the prototype object
-/// itself, everything else is a method (with its `Function.length` arity).
+/// What `obj[name]` resolves to on a plain `{}` that has no own `name`.
 #[derive(Clone, Copy)]
 enum Inherited {
+    /// `__proto__`: `Object.prototype` itself.
     Prototype,
+    /// A method, with its `Function.length`.
     Function(f64),
 }
 
@@ -165,53 +112,13 @@ fn object_proto_member(name: &JsString) -> Option<Inherited> {
         .map(|(_, arity)| Inherited::Function(*arity))
 }
 
-/// `key in obj` for a plain `{}`: own properties and the inherited members.
-fn js_in(obj: &JsObject, key: &JsString) -> bool {
+fn js_in<V>(obj: &JsObject<V>, key: &JsString) -> bool {
     obj.get_key(key).is_some() || object_proto_member(key).is_some()
 }
 
-/// `Cannot use 'in' operator to search for 'key' in rhs` for primitive rhs.
-fn in_type_error(key: &JsString, rhs: &JsValue) -> JsError {
-    JsError::type_error(format!(
-        "Cannot use 'in' operator to search for '{}' in {}",
-        key.to_string_lossy(),
-        to_property_key(rhs).to_string_lossy()
-    ))
-}
-
-fn read_error(kind: &str, prop: &str) -> JsError {
-    JsError::type_error(format!(
-        "Cannot read properties of {kind} (reading '{prop}')"
-    ))
-}
-
-/// The verbatim `schemaStrings`/`schemas` maps: a plain object when the stored
-/// value is one, anything else as-is.
-#[derive(Clone, Debug)]
-enum MapData {
-    Own(JsObject),
-    Other(JsValue),
-}
-
-impl MapData {
-    fn to_js(&self) -> JsValue {
-        match self {
-            MapData::Own(map) => JsValue::Object(map.clone()),
-            MapData::Other(v) => v.clone(),
-        }
-    }
-
-    /// `name in map`, erroring when the map is a primitive.
-    fn contains(&self, name: &JsString) -> Result<bool, JsError> {
-        match self {
-            MapData::Own(map) => Ok(js_in(map, name)),
-            MapData::Other(v) => Err(in_type_error(name, v)),
-        }
-    }
-}
-
-/// `obj[key] = value` where `key` is `"__proto__"`: the prototype setter runs
-/// instead, and no own property ever appears.
+/// `obj[key] = value` on a plain object. Assigning to `__proto__` runs the
+/// prototype setter, which never creates an own property, and `Object.entries`
+/// (all `Log.putUnknownStruct` reads) only sees own properties.
 fn set_property<V>(object: &mut JsObject<V>, key: &JsString, value: V) {
     if is_proto(key) {
         return;
@@ -219,203 +126,154 @@ fn set_property<V>(object: &mut JsObject<V>, key: &JsString, value: V) {
     object.insert(key.clone(), value);
 }
 
-/// `ToNumber(v.length)` for a stored schema entry.
-fn length_of(v: &JsValue) -> f64 {
-    match v {
-        JsValue::Object(map) => map.get("length").map_or(f64::NAN, to_number),
-        JsValue::String(s) => s.len() as f64,
-        JsValue::Array(items) => items.len() as f64,
-        JsValue::Bytes(bytes) => bytes.len() as f64,
-        _ => f64::NAN,
+/// A compiled schema, as upstream stores it in `schemas[name]`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Schema {
+    /// Total bit length; fractional, negative or NaN for odd array lengths.
+    pub length: f64,
+    pub value_schemas: Vec<ValueSchema>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValueSchema {
+    pub name: JsString,
+    pub ty: JsString,
+    /// Numeric value (as a property key) to enum name.
+    pub enum_data: Option<JsObject<JsString>>,
+    pub bitfield_width: Option<f64>,
+    pub array_length: Option<f64>,
+    pub bit_range: [f64; 2],
+}
+
+/// `toSerialized()` / `fromSerialized()` data. `Log.mergeWith` merges two of these
+/// with object spread: [`JsObject::extend`] keeps an existing key's position and
+/// takes the later value, as spread does.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SerializedStructDecoder {
+    pub schema_strings: JsObject<JsString>,
+    pub schemas: JsObject<Schema>,
+}
+
+impl ToJs for ValueSchema {
+    fn to_js(&self) -> JsValue {
+        asrs_js::js_object! {
+            "name" => self.name,
+            "type" => self.ty,
+            "enum" => self.enum_data.as_ref().map_or(JsValue::Null, ToJs::to_js),
+            "bitfieldWidth" => self.bitfield_width.map_or(JsValue::Null, JsValue::Number),
+            "arrayLength" => self.array_length.map_or(JsValue::Null, JsValue::Number),
+            "bitRange" => self.bit_range,
+        }
     }
 }
 
-/// `v[i]` for a `valueSchemas` stand-in.
-fn index_get(v: &JsValue, i: f64) -> JsValue {
-    match v {
-        JsValue::Array(items) => items.get(i as usize).cloned().unwrap_or_default(),
-        JsValue::Object(map) => map.get(&number::to_string(i)).cloned().unwrap_or_default(),
-        JsValue::String(s) => match s.char_code_at(i) {
-            Some(unit) => JsValue::String(JsString::from_units(vec![unit])),
-            None => JsValue::Undefined,
-        },
-        JsValue::Bytes(bytes) => bytes
-            .get(i as usize)
-            .map_or(JsValue::Undefined, |b| JsValue::Number(f64::from(*b))),
-        _ => JsValue::Undefined,
+impl ToJs for Schema {
+    fn to_js(&self) -> JsValue {
+        asrs_js::js_object! {
+            "length" => self.length,
+            "valueSchemas" => self.value_schemas,
+        }
     }
 }
 
-/// The raw `valueSchemas` of a stored schema.
-#[derive(Clone, Debug)]
-enum SchemaList {
-    Items(Vec<ValueSchema>),
-    /// `undefined` or `null`: `.length` on it throws.
-    Missing(&'static str),
-    /// A primitive or non-array object: `.length` and `[i]` reads still apply.
-    Other(JsValue),
+impl ToJs for SerializedStructDecoder {
+    fn to_js(&self) -> JsValue {
+        asrs_js::js_object! {
+            "schemaStrings" => self.schema_strings,
+            "schemas" => self.schemas,
+        }
+    }
 }
 
-/// A `valueSchemas` element: fields parsed through JS coercions, or any
-/// non-object kept verbatim.
-#[derive(Clone, Debug)]
-enum ValueSchema {
-    Fields {
-        name: JsString,
-        ty: JsString,
-        enum_value: JsValue,
-        array_length: Option<f64>,
-        bit_range: BitRange,
-    },
-    Other(JsValue),
-}
-
-/// `valueSchema.bitRange`: elements `ToNumber`-coerced, or `undefined`/`null`
-/// (whose `[0]` read throws).
-#[derive(Clone, Debug)]
-enum BitRange {
-    Pair([f64; 2]),
-    Missing(&'static str),
-}
-
-/// The typed view of a stored schema object.
-#[derive(Clone, Debug)]
-struct Schema {
-    value_schemas: SchemaList,
+/// Why `decode`/`decodeArray` did not return a value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecodeError {
+    /// `Error: Schema not defined`.
+    SchemaNotDefined,
+    /// The name resolved to an `Object.prototype` member, whose `valueSchemas` is
+    /// `undefined`: `TypeError: Cannot read properties of undefined (reading 'length')`.
+    NotASchema,
+    /// Float drift in a field's bit range sliced more bytes than the type holds, and
+    /// `paddedValue.set` threw `RangeError: offset is out of bounds`.
+    OffsetOutOfBounds,
+    /// A primitive array field has more items than a JS array can hold, so its
+    /// `push` threw `RangeError: Invalid array length`. Items past the end of the
+    /// data are cheap (small integers, booleans, one-character strings), so the
+    /// heap holds out until then; the port does not model heap exhaustion.
+    InvalidArrayLength,
+    /// Upstream never returns. `decodeArray` runs on past [`MAX_ARRAY_LENGTH`]
+    /// items (a zero-length schema decoded as an array, where `value.length / 0`
+    /// is `Infinity`, or an infinite or huge nested array length), and each item
+    /// is an object plus a `schemaTypes` entry, at least 36 bytes, so the 4 GiB V8
+    /// heap is exhausted before the array limit is reached. That out-of-memory
+    /// error is fatal to the realm and no `try`/`catch` sees it: `Log.putStruct`
+    /// neither stores nor queues anything, and the worker or hub renderer running
+    /// it crashes after minutes of allocating (measured: about 4 minutes and
+    /// 3.9 GB for the zero-length case).
+    NeverCompletes,
 }
 
 /// `decode`/`decodeArray`'s return: the decoded object (or array for
 /// `decodeArray`) plus the schema-type map `Log.putStruct` turns into `Empty`
 /// fields. Both iterate in JS property order.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Decoded {
     pub data: JsValue,
     pub schema_types: JsObject<JsString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct StructDecoder {
-    schema_strings: MapData,
-    schemas: MapData,
+    schema_strings: JsObject<JsString>,
+    schemas: JsObject<Schema>,
 }
 
-impl Default for StructDecoder {
-    fn default() -> Self {
-        Self::new()
-    }
+enum SchemaRef<'a> {
+    Own(&'a Schema),
+    Inherited(Inherited),
 }
 
 impl StructDecoder {
     pub fn new() -> Self {
-        Self {
-            schema_strings: MapData::Own(JsObject::new()),
-            schemas: MapData::Own(JsObject::new()),
+        Self::default()
+    }
+
+    /// `schemas[name]` if `name in schemas`.
+    fn schema_ref(&self, name: &JsString) -> Option<SchemaRef<'_>> {
+        match self.schemas.get_key(name) {
+            Some(schema) => Some(SchemaRef::Own(schema)),
+            None => object_proto_member(name).map(SchemaRef::Inherited),
         }
     }
 
-    /// `decoder.schemaStrings`, for `mergeWith`. `None` when a restore stored a
-    /// non-object, matching the verbatim `undefined`.
-    pub fn schema_strings(&self) -> Option<&JsObject> {
-        match &self.schema_strings {
-            MapData::Own(map) => Some(map),
-            MapData::Other(_) => None,
+    pub fn add_schema(&mut self, name: &JsString, schema: &[u8]) {
+        if js_in(&self.schema_strings, name) {
+            return;
         }
-    }
-
-    /// `this.schemaStrings[name]`, including string indexing on a stored
-    /// string map; `undefined` elsewhere.
-    fn schema_string(&self, name: &JsString) -> JsValue {
-        match &self.schema_strings {
-            MapData::Own(map) => map.get_key(name).cloned().unwrap_or_default(),
-            MapData::Other(v) => index_get(
-                v,
-                asrs_js::value::array_index(name.units()).map_or(f64::NAN, f64::from),
-            ),
-        }
-    }
-
-    /// `Object.keys(this.schemaStrings)`.
-    fn schema_string_keys(&self) -> Result<Vec<JsString>, JsError> {
-        match &self.schema_strings {
-            MapData::Own(map) => Ok(map.keys().cloned().collect()),
-            MapData::Other(JsValue::Null) | MapData::Other(JsValue::Undefined) => Err(
-                JsError::type_error("Cannot convert undefined or null to object"),
-            ),
-            MapData::Other(JsValue::String(s)) => Ok((0..s.len())
-                .map(|i| JsString::from(number::to_string(i as f64)))
-                .collect()),
-            MapData::Other(_) => Ok(Vec::new()),
-        }
-    }
-
-    /// `schemas[name]` with `in`-operator reachability.
-    fn schema_ref(&self, name: &JsString) -> Result<Option<SchemaRef<'_>>, JsError> {
-        match &self.schemas {
-            MapData::Own(map) => {
-                if let Some(schema) = map.get_key(name) {
-                    return Ok(Some(SchemaRef::Own(schema)));
-                }
-                Ok(object_proto_member(name).map(SchemaRef::Inherited))
-            }
-            MapData::Other(v) => Err(in_type_error(name, v)),
-        }
-    }
-
-    /// `schemas[name].length` for `compileSchema`.
-    fn schema_bit_length(&self, name: &JsString) -> Result<Option<f64>, JsError> {
-        Ok(match self.schema_ref(name)? {
-            None => None,
-            Some(SchemaRef::Own(schema)) => Some(length_of(schema)),
-            Some(SchemaRef::Inherited(Inherited::Function(arity))) => Some(arity),
-            Some(SchemaRef::Inherited(Inherited::Prototype)) => Some(f64::NAN),
-        })
-    }
-
-    fn schema_in(&self, name: &JsString) -> Result<bool, JsError> {
-        self.schemas.contains(name)
-    }
-
-    pub fn add_schema(&mut self, name: &JsString, schema: &[u8]) -> Result<(), JsError> {
-        let text = JsValue::String(
-            text_decoder()
-                .decode(schema)
-                .unwrap_or_else(|_| JsString::new()),
-        );
-        match &self.schema_strings {
-            MapData::Own(map) => {
-                if js_in(map, name) {
-                    return Ok(());
-                }
-            }
-            MapData::Other(v) => return Err(in_type_error(name, v)),
-        }
-        if let MapData::Own(map) = &mut self.schema_strings {
-            map.insert(name.clone(), text);
-        }
+        let text = text_decoder()
+            .decode(schema)
+            .unwrap_or_else(|_| JsString::new());
+        self.schema_strings.insert(name.clone(), text);
         loop {
-            let keys = self.schema_string_keys()?;
+            let pending: Vec<(JsString, JsString)> = self
+                .schema_strings
+                .iter()
+                .filter(|(key, _)| !js_in(&self.schemas, key))
+                .map(|(key, text)| (key.clone(), text.clone()))
+                .collect();
             let mut progress = false;
-            for schema_name in keys {
-                if !self.schema_in(&schema_name)? {
-                    progress |= self.compile_schema(&schema_name)?;
+            for (key, text) in pending {
+                if !js_in(&self.schemas, &key) {
+                    progress |= self.compile_schema(&key, &text);
                 }
             }
             if !progress {
-                return Ok(());
+                return;
             }
         }
     }
 
-    /// `compileSchema(name, this.schemaStrings[name])`.
-    fn compile_schema(&mut self, name: &JsString) -> Result<bool, JsError> {
-        let schema = self.schema_string(name);
-        let JsValue::String(schema) = schema else {
-            return Err(match schema {
-                JsValue::Null => read_error("null", "trim"),
-                JsValue::Undefined => read_error("undefined", "trim"),
-                _ => JsError::type_error("schema.trim is not a function"),
-            });
-        };
+    fn compile_schema(&mut self, name: &JsString, schema: &JsString) -> bool {
         let semis = js_string(";");
         let space = js_string(" ");
         let value_schema_strs: Vec<JsString> = schema
@@ -424,16 +282,13 @@ impl StructDecoder {
             .into_iter()
             .filter(|s| !s.is_empty())
             .collect();
-        let mut value_schemas: Vec<JsValue> = Vec::new();
-        let mut metas: Vec<(JsString, Option<f64>, Option<f64>)> = Vec::new();
+        let mut value_schemas: Vec<ValueSchema> = Vec::new();
         for mut schema_str in value_schema_strs {
-            let mut enum_data: Option<JsObject> = None;
+            let mut enum_data = None;
             if schema_str.starts_with(&js_string("enum"), None) {
                 let mut map = JsObject::new();
-                let brace = js_string("{");
-                let close = js_string("}");
-                let enum_str_start = schema_str.index_of(&brace, None) as f64 + 1.0;
-                let enum_str_end = schema_str.index_of(&close, None) as f64;
+                let enum_str_start = schema_str.index_of(&js_string("{"), None) as f64 + 1.0;
+                let enum_str_end = schema_str.index_of(&js_string("}"), None) as f64;
                 let enum_str = JsString::from_units(
                     schema_str
                         .substring(enum_str_start, Some(enum_str_end))
@@ -452,7 +307,7 @@ impl StructDecoder {
                     if pair.len() == 2 {
                         let key = number::to_number(pair[1].units());
                         if !key.is_nan() {
-                            map.insert(number::to_string(key), JsValue::String(pair[0].clone()));
+                            map.insert(number::to_string(key), pair[0].clone());
                         }
                     }
                 }
@@ -465,8 +320,8 @@ impl StructDecoder {
                 .into_iter()
                 .filter(|s| !s.is_empty());
             let ty = tokens.next().unwrap_or_else(|| js_string("undefined"));
-            if !is_valid_type(&ty) && !self.schema_in(&ty)? {
-                return Ok(false);
+            if !is_valid_type(&ty) && !js_in(&self.schemas, &ty) {
+                return false;
             }
             let name_str = tokens.fold(JsString::new(), |mut acc, t| {
                 acc.push_str(&t);
@@ -496,60 +351,37 @@ impl StructDecoder {
                 field_name = name_str;
             }
 
-            value_schemas.push(JsValue::Object(JsObject::from_iter([
-                (js_string("name"), JsValue::String(field_name.clone())),
-                (js_string("type"), JsValue::String(ty.clone())),
-                (
-                    js_string("enum"),
-                    enum_data.map_or(JsValue::Null, JsValue::Object),
-                ),
-                (
-                    js_string("bitfieldWidth"),
-                    bitfield_width.map_or(JsValue::Null, JsValue::Number),
-                ),
-                (
-                    js_string("arrayLength"),
-                    array_length.map_or(JsValue::Null, JsValue::Number),
-                ),
-                (
-                    js_string("bitRange"),
-                    JsValue::Array(vec![JsValue::Number(0.0), JsValue::Number(0.0)]),
-                ),
-            ])));
-            metas.push((ty, bitfield_width, array_length));
+            value_schemas.push(ValueSchema {
+                name: field_name,
+                ty,
+                enum_data,
+                bitfield_width,
+                array_length,
+                bit_range: [0.0, 0.0],
+            });
         }
 
-        // Upstream mutates `valueSchemas[i].bitRange` in place; the loop below
-        // tracks the same positions and writes them back into the objects.
         let mut bit_position = 0.0_f64;
         let mut bitfield: Option<(f64, f64)> = None;
-        let mut bit_ranges: Vec<[f64; 2]> = Vec::with_capacity(value_schemas.len());
-        for (ty, bitfield_width, array_length) in &metas {
-            let array_length = *array_length;
+        for value_schema in &mut value_schemas {
+            let ty = &value_schema.ty;
             if !is_valid_type(ty) {
                 if let Some((position, length)) = bitfield.take() {
                     bit_position += length - position;
                 }
-                let mut length = self.schema_bit_length(ty)?.unwrap_or(f64::NAN);
-                if let Some(array_length) = array_length {
+                let mut length = match self.schema_ref(ty) {
+                    Some(SchemaRef::Own(schema)) => schema.length,
+                    Some(SchemaRef::Inherited(Inherited::Function(arity))) => arity,
+                    Some(SchemaRef::Inherited(Inherited::Prototype)) | None => f64::NAN,
+                };
+                if let Some(array_length) = value_schema.array_length {
                     length *= array_length;
                 }
-                bit_ranges.push([bit_position, bit_position + length]);
+                value_schema.bit_range = [bit_position, bit_position + length];
                 bit_position += length;
-            } else if bitfield_width.is_none() {
-                if let Some((position, length)) = bitfield.take() {
-                    bit_position += length - position;
-                }
-                let mut bit_length = type_max_bits(ty);
-                if let Some(array_length) = array_length {
-                    bit_length *= array_length;
-                }
-                bit_ranges.push([bit_position, bit_position + bit_length]);
-                bit_position += bit_length;
-            } else {
+            } else if let Some(width) = value_schema.bitfield_width {
                 let type_length = type_max_bits(ty);
-                let value_bit_length =
-                    math::min(&[bitfield_width.unwrap_or(f64::NAN), type_length]);
+                let value_bit_length = math::min(&[width, type_length]);
                 let needs_new = match bitfield {
                     None => true,
                     Some((position, length)) => {
@@ -564,125 +396,85 @@ impl StructDecoder {
                     bitfield = Some((0.0, type_length));
                 }
                 let (position, _) = bitfield.as_mut().expect("bitfield just opened");
-                bit_ranges.push([bit_position, bit_position + value_bit_length]);
+                value_schema.bit_range = [bit_position, bit_position + value_bit_length];
                 *position += value_bit_length;
                 bit_position += value_bit_length;
+            } else {
+                if let Some((position, length)) = bitfield.take() {
+                    bit_position += length - position;
+                }
+                let mut bit_length = type_max_bits(ty);
+                if let Some(array_length) = value_schema.array_length {
+                    bit_length *= array_length;
+                }
+                value_schema.bit_range = [bit_position, bit_position + bit_length];
+                bit_position += bit_length;
             }
         }
         if let Some((position, length)) = bitfield {
             bit_position += length - position;
         }
 
-        for (value_schema, range) in value_schemas.iter_mut().zip(bit_ranges) {
-            if let JsValue::Object(map) = value_schema {
-                map.insert(
-                    js_string("bitRange"),
-                    JsValue::Array(vec![JsValue::Number(range[0]), JsValue::Number(range[1])]),
-                );
-            }
-        }
-        self.insert_schema(
+        set_property(
+            &mut self.schemas,
             name,
-            JsValue::Object(JsObject::from_iter([
-                (js_string("length"), JsValue::Number(bit_position)),
-                (js_string("valueSchemas"), JsValue::Array(value_schemas)),
-            ])),
+            Schema {
+                length: bit_position,
+                value_schemas,
+            },
         );
-        Ok(true)
+        true
     }
 
-    fn insert_schema(&mut self, name: &JsString, schema: JsValue) {
-        if let MapData::Own(map) = &mut self.schemas {
-            map.insert(name.clone(), schema);
-        }
-    }
-
-    /// `decode(name, value)`: the `bitLength` parameter is dead upstream
-    /// (assigned and never read), so it is not part of this signature.
-    pub fn decode(&self, name: &JsString, value: &[u8]) -> Result<Decoded, JsError> {
-        let schema = match self.schema_ref(name)? {
+    /// `decode(name, value)`. The `bitLength` parameter is dead upstream (assigned
+    /// and never read), so it is not part of this signature.
+    pub fn decode(&self, name: &JsString, value: &[u8]) -> Result<Decoded, DecodeError> {
+        let schema = match self.schema_ref(name) {
             Some(SchemaRef::Own(schema)) => schema,
-            Some(SchemaRef::Inherited(_)) => {
-                // `schema.valueSchemas` is `undefined` on functions and on
-                // `Object.prototype`; reading `.length` then throws.
-                return Err(read_error("undefined", "length"));
-            }
-            None => return Err(JsError::new("Error", "Schema not defined")),
+            Some(SchemaRef::Inherited(_)) => return Err(DecodeError::NotASchema),
+            None => return Err(DecodeError::SchemaNotDefined),
         };
         let mut output_data = JsObject::new();
         let mut output_schema_types = JsObject::<JsString>::new();
-        let schema_view = match schema {
-            JsValue::Null => return Err(read_error("null", "valueSchemas")),
-            JsValue::Undefined => return Err(read_error("undefined", "valueSchemas")),
-            other => schema_view(other),
-        };
-        let mut emit = |value_schema: &ValueSchema| -> Result<(), JsError> {
-            let ValueSchema::Fields {
-                name,
-                ty,
-                enum_value,
-                array_length,
-                bit_range,
-                ..
-            } = value_schema
-            else {
-                let ValueSchema::Other(v) = value_schema else {
-                    unreachable!()
-                };
-                return Err(match v {
-                    JsValue::Null => read_error("null", "bitRange"),
-                    JsValue::Undefined => read_error("undefined", "bitRange"),
-                    _ => read_error("undefined", "0"),
-                });
-            };
-            let range = match bit_range {
-                BitRange::Pair(range) => *range,
-                BitRange::Missing(kind) => return Err(read_error(kind, "0")),
-            };
+        for value_schema in &schema.value_schemas {
+            let ty = &value_schema.ty;
+            let name = &value_schema.name;
+            let range = value_schema.bit_range;
             let (value_array, value_bit_length) = slice_bits(value, range);
             if is_valid_type(ty) {
-                if array_length.is_none() {
+                let enum_data = value_schema.enum_data.as_ref();
+                let Some(array_length) = value_schema.array_length else {
                     set_property(
                         &mut output_data,
                         name,
-                        decode_value(&value_array, ty, enum_value)?,
+                        decode_value(&value_array, ty, enum_data)?,
                     );
-                } else {
-                    let mut items = Vec::new();
-                    let item_length = (range[1] - range[0]) / array_length.unwrap_or(f64::NAN);
-                    let mut position = 0.0_f64;
-                    while position < value_bit_length {
-                        let (item, _) =
-                            slice_bits(&value_array, [position, position + item_length]);
-                        items.push(decode_value(&item, ty, enum_value)?);
-                        position += item_length;
-                    }
-                    let decoded = if is_char(ty) {
-                        // `value.join("")`: each item was TextDecoder-decoded
-                        // on its own one-byte slice already.
-                        let mut joined = JsString::new();
-                        for item in items {
-                            if let JsValue::String(s) = item {
-                                joined.push_str(&s);
-                            }
+                    continue;
+                };
+                let item_length = (range[1] - range[0]) / array_length;
+                let items =
+                    decode_items(&value_array, value_bit_length, item_length, ty, enum_data)?;
+                let decoded = if is_char(ty) {
+                    let mut joined = JsString::new();
+                    for item in items {
+                        if let JsValue::String(s) = item {
+                            joined.push_str(&s);
                         }
-                        JsValue::String(joined)
-                    } else {
-                        JsValue::Array(items)
-                    };
-                    set_property(&mut output_data, name, decoded);
-                }
+                    }
+                    JsValue::String(joined)
+                } else {
+                    JsValue::Array(items)
+                };
+                set_property(&mut output_data, name, decoded);
             } else {
-                let is_array = array_length.is_some();
                 let mut schema_type = ty.clone();
-                if is_array {
+                if value_schema.array_length.is_some() {
                     schema_type.push_str(&js_string("[]"));
                 }
                 set_property(&mut output_schema_types, name, schema_type);
-                let child = if is_array {
-                    self.decode_array(ty, &value_array, *array_length)?
-                } else {
-                    self.decode(ty, &value_array)?
+                let child = match value_schema.array_length {
+                    Some(length) => self.decode_array(ty, &value_array, Some(length))?,
+                    None => self.decode(ty, &value_array)?,
                 };
                 set_property(&mut output_data, name, child.data);
                 for (field, field_type) in child.schema_types.iter() {
@@ -690,22 +482,6 @@ impl StructDecoder {
                     key.push_str(&js_string("/"));
                     key.push_str(field);
                     set_property(&mut output_schema_types, &key, field_type.clone());
-                }
-            }
-            Ok(())
-        };
-        match &schema_view.value_schemas {
-            SchemaList::Items(items) => {
-                for value_schema in items {
-                    emit(value_schema)?;
-                }
-            }
-            SchemaList::Missing(kind) => return Err(read_error(kind, "length")),
-            SchemaList::Other(raw) => {
-                let mut i = 0.0_f64;
-                while i < length_of(raw) {
-                    emit(&value_schema_view(&index_get(raw, i)))?;
-                    i += 1.0;
                 }
             }
         }
@@ -721,22 +497,27 @@ impl StructDecoder {
         name: &JsString,
         value: &[u8],
         array_length: Option<f64>,
-    ) -> Result<Decoded, JsError> {
-        let schema_length = match self.schema_ref(name)? {
-            Some(SchemaRef::Own(schema)) => match schema {
-                JsValue::Null => return Err(read_error("null", "length")),
-                JsValue::Undefined => return Err(read_error("undefined", "length")),
-                other => length_of(other) / 8.0,
-            },
+    ) -> Result<Decoded, DecodeError> {
+        let schema_length = match self.schema_ref(name) {
+            Some(SchemaRef::Own(schema)) => schema.length / 8.0,
             Some(SchemaRef::Inherited(Inherited::Function(arity))) => arity / 8.0,
             Some(SchemaRef::Inherited(Inherited::Prototype)) => f64::NAN,
-            None => return Err(JsError::new("Error", "Schema not defined")),
+            None => return Err(DecodeError::SchemaNotDefined),
         };
         let length = array_length.unwrap_or(value.len() as f64 / schema_length);
         let mut output_data = Vec::new();
         let mut output_schema_types = JsObject::<JsString>::new();
         let mut i = 0.0_f64;
         while i < length {
+            if length > MAX_ARRAY_LENGTH {
+                if i >= MAX_ARRAY_LENGTH {
+                    return Err(DecodeError::NeverCompletes);
+                }
+                if rest_is_empty(i, schema_length, value.len()) {
+                    self.decode(name, &[])?;
+                    return Err(DecodeError::NeverCompletes);
+                }
+            }
             let slice = js_slice(value, i * schema_length, (i + 1.0) * schema_length);
             let decoded = self.decode(name, &slice)?;
             output_data.push(decoded.data);
@@ -759,123 +540,113 @@ impl StructDecoder {
         })
     }
 
-    /// `toSerialized()`: the stored objects verbatim.
-    pub fn to_serialized(&self) -> JsValue {
-        JsValue::Object(JsObject::from_iter([
-            (js_string("schemaStrings"), self.schema_strings.to_js()),
-            (js_string("schemas"), self.schemas.to_js()),
-        ]))
-    }
-
-    /// `StructDecoder.fromSerialized(serializedData)`: stores the objects
-    /// verbatim; `null`/`undefined` `serializedData` throws.
-    pub fn from_serialized(data: &JsValue) -> Result<Self, JsError> {
-        let field = |key: &'static str| -> Result<MapData, JsError> {
-            let value = match data {
-                JsValue::Object(map) => map.get(key).cloned().unwrap_or_default(),
-                JsValue::Null => return Err(read_error("null", key)),
-                JsValue::Undefined => return Err(read_error("undefined", key)),
-                _ => JsValue::Undefined,
-            };
-            Ok(match value {
-                JsValue::Object(map) => MapData::Own(map),
-                other => MapData::Other(other),
-            })
-        };
-        Ok(StructDecoder {
-            schema_strings: field("schemaStrings")?,
-            schemas: field("schemas")?,
-        })
-    }
-}
-
-enum SchemaRef<'a> {
-    Own(&'a JsValue),
-    Inherited(Inherited),
-}
-
-/// Parses a stored `valueSchemas` element through JS property reads.
-fn value_schema_view(item: &JsValue) -> ValueSchema {
-    let Some(fields) = item.as_object() else {
-        return ValueSchema::Other(item.clone());
-    };
-    let get = |key: &str| fields.get(key).cloned().unwrap_or_default();
-    // `!== null` upstream: `undefined` and every non-number stay present as `NaN`.
-    let nullish = |key: &str| match fields.get(key) {
-        Some(JsValue::Null) => None,
-        Some(v) => Some(to_number(v)),
-        None => Some(f64::NAN),
-    };
-    let bit_range = match get("bitRange") {
-        JsValue::Null => BitRange::Missing("null"),
-        JsValue::Undefined => BitRange::Missing("undefined"),
-        raw => BitRange::Pair([
-            to_number(&index_get(&raw, 0.0)),
-            to_number(&index_get(&raw, 1.0)),
-        ]),
-    };
-    ValueSchema::Fields {
-        name: to_property_key(&get("name")),
-        ty: to_property_key(&get("type")),
-        enum_value: get("enum"),
-        array_length: nullish("arrayLength"),
-        bit_range,
-    }
-}
-
-/// Parses a stored schema object through JS property reads.
-fn schema_view(entry: &JsValue) -> Schema {
-    let object = entry.as_object();
-    let value_schemas = match object.and_then(|o| o.get("valueSchemas")) {
-        Some(JsValue::Array(items)) => {
-            SchemaList::Items(items.iter().map(value_schema_view).collect())
+    /// `toSerialized()`. Upstream returns its live maps, but every caller either
+    /// copies them (`mergeWith`'s spread) or posts them to another realm, so a
+    /// snapshot is equivalent.
+    pub fn to_serialized(&self) -> SerializedStructDecoder {
+        SerializedStructDecoder {
+            schema_strings: self.schema_strings.clone(),
+            schemas: self.schemas.clone(),
         }
-        Some(JsValue::Null) => SchemaList::Missing("null"),
-        None => SchemaList::Missing("undefined"),
-        Some(other) => SchemaList::Other(other.clone()),
-    };
-    Schema { value_schemas }
+    }
+
+    pub fn from_serialized(data: SerializedStructDecoder) -> Self {
+        Self {
+            schema_strings: data.schema_strings,
+            schemas: data.schemas,
+        }
+    }
 }
 
-/// `output in enumData ? enumData[output] : output` for a decoded primitive.
-fn enum_lookup(enum_value: &JsValue, output: &JsValue) -> Result<JsValue, JsError> {
-    let key: Vec<u16> = match output {
+/// `for (position = 0; position < valueBitLength; position += itemLength)` over
+/// a primitive array field. Once the item slices run past the data they are
+/// empty and decode identically, so those items are counted, not sliced.
+fn decode_items(
+    value: &[u8],
+    bit_length: f64,
+    item_length: f64,
+    ty: &JsString,
+    enum_data: Option<&JsObject<JsString>>,
+) -> Result<Vec<JsValue>, DecodeError> {
+    let data_bits = (value.len() * 8) as f64;
+    let mut items = Vec::new();
+    let mut position = 0.0_f64;
+    while position < bit_length {
+        if position >= data_bits || item_length <= 0.0 {
+            let filler = decode_value(&[], ty, enum_data)?;
+            if (bit_length - position) / item_length >= 2.0 * MAX_ARRAY_LENGTH {
+                return Err(DecodeError::InvalidArrayLength);
+            }
+            let mut count = items.len() as f64;
+            while position < bit_length {
+                if count >= MAX_ARRAY_LENGTH || position + item_length == position {
+                    return Err(DecodeError::InvalidArrayLength);
+                }
+                count += 1.0;
+                position += item_length;
+            }
+            items.resize(count as usize, filler);
+            break;
+        }
+        let (item, _) = slice_bits(value, [position, position + item_length]);
+        let decoded = decode_value(&item, ty, enum_data)?;
+        if items.len() as f64 >= MAX_ARRAY_LENGTH {
+            return Err(DecodeError::InvalidArrayLength);
+        }
+        items.push(decoded);
+        position += item_length;
+    }
+    Ok(items)
+}
+
+/// Whether `value.slice(j * schemaLength, (j + 1) * schemaLength)` is empty for
+/// every `j >= i`, so that every remaining `decodeArray` item decodes the same way.
+fn rest_is_empty(i: f64, schema_length: f64, len: usize) -> bool {
+    let len = len as f64;
+    if schema_length.is_nan() || schema_length == 0.0 || schema_length == f64::NEG_INFINITY {
+        true
+    } else if schema_length > 0.0 {
+        i * schema_length >= len
+    } else {
+        len + (i + 1.0) * schema_length <= 0.0
+    }
+}
+
+/// `output in enumData ? enumData[output] : output`. Decoded outputs are booleans,
+/// numbers and strings of at most one character, none of which name an
+/// `Object.prototype` member, so only own keys can match.
+fn enum_lookup(enum_data: Option<&JsObject<JsString>>, output: JsValue) -> JsValue {
+    let Some(map) = enum_data else {
+        return output;
+    };
+    let key: Vec<u16> = match &output {
         JsValue::Bool(b) => if *b { "true" } else { "false" }.encode_utf16().collect(),
         JsValue::Number(x) => number::to_string(*x).encode_utf16().collect(),
         JsValue::String(s) => s.units().to_vec(),
-        _ => return Ok(output.clone()),
+        _ => return output,
     };
-    let lookup = match enum_value {
-        JsValue::Null => return Ok(output.clone()),
-        JsValue::Object(map) => map.get_units(&key).cloned(),
-        JsValue::Array(items) => asrs_js::value::array_index(&key)
-            .and_then(|i| items.get(i as usize))
-            .cloned(),
-        JsValue::Bytes(bytes) => asrs_js::value::array_index(&key)
-            .and_then(|i| bytes.get(i as usize))
-            .map(|b| JsValue::Number(f64::from(*b))),
-        // `output in` an object never matches the decoded primitives.
-        JsValue::Date(_) | JsValue::ExtData(..) => None,
-        // `output in enumData` throws for every other primitive enum value.
-        other => {
-            return Err(JsError::type_error(format!(
-                "Cannot use 'in' operator to search for '{}' in {}",
-                String::from_utf16_lossy(&key),
-                to_property_key(other).to_string_lossy()
-            )));
-        }
-    };
-    Ok(lookup.unwrap_or_else(|| output.clone()))
+    match map.get_units(&key) {
+        Some(name) => JsValue::String(name.clone()),
+        None => output,
+    }
 }
 
-fn decode_value(value: &[u8], ty: &JsString, enum_value: &JsValue) -> Result<JsValue, JsError> {
+fn decode_value(
+    value: &[u8],
+    ty: &JsString,
+    enum_data: Option<&JsObject<JsString>>,
+) -> Result<JsValue, DecodeError> {
     let width = (type_max_bits(ty) / 8.0) as usize;
     if value.len() > width {
-        // `paddedValue.set(value)` upstream.
-        return Err(JsError::range("offset is out of bounds"));
+        return Err(DecodeError::OffsetOutOfBounds);
     }
     let mut padded = [0u8; 8];
     padded[..value.len()].copy_from_slice(value);
+    let bytes = |n: usize| -> [u8; 8] {
+        let mut out = [0u8; 8];
+        out[..n].copy_from_slice(&padded[..n]);
+        out
+    };
     let output = if is_bool(ty) {
         JsValue::Bool(padded[0] > 0)
     } else if is_char(ty) {
@@ -887,35 +658,31 @@ fn decode_value(value: &[u8], ty: &JsString, enum_value: &JsValue) -> Result<JsV
     } else if js_eq(ty, "int8") {
         JsValue::Number(f64::from(padded[0] as i8))
     } else if js_eq(ty, "int16") {
-        JsValue::Number(f64::from(i16::from_le_bytes(
-            padded[..2].try_into().unwrap(),
-        )))
+        JsValue::Number(f64::from(i16::from_le_bytes([padded[0], padded[1]])))
     } else if js_eq(ty, "int32") {
         JsValue::Number(f64::from(i32::from_le_bytes(
-            padded[..4].try_into().unwrap(),
+            padded[..4].try_into().expect("4 bytes"),
         )))
     } else if js_eq(ty, "int64") {
-        JsValue::Number(i64::from_le_bytes(padded[..8].try_into().unwrap()) as f64)
+        JsValue::Number(i64::from_le_bytes(bytes(8)) as f64)
     } else if js_eq(ty, "uint8") {
         JsValue::Number(f64::from(padded[0]))
     } else if js_eq(ty, "uint16") {
-        JsValue::Number(f64::from(u16::from_le_bytes(
-            padded[..2].try_into().unwrap(),
-        )))
+        JsValue::Number(f64::from(u16::from_le_bytes([padded[0], padded[1]])))
     } else if js_eq(ty, "uint32") {
         JsValue::Number(f64::from(u32::from_le_bytes(
-            padded[..4].try_into().unwrap(),
+            padded[..4].try_into().expect("4 bytes"),
         )))
     } else if js_eq(ty, "uint64") {
-        JsValue::Number(u64::from_le_bytes(padded[..8].try_into().unwrap()) as f64)
+        JsValue::Number(u64::from_le_bytes(bytes(8)) as f64)
     } else if js_eq(ty, "float") || js_eq(ty, "float32") {
         JsValue::Number(f64::from(f32::from_le_bytes(
-            padded[..4].try_into().unwrap(),
+            padded[..4].try_into().expect("4 bytes"),
         )))
     } else {
-        JsValue::Number(f64::from_le_bytes(padded[..8].try_into().unwrap()))
+        JsValue::Number(f64::from_le_bytes(bytes(8)))
     };
-    enum_lookup(enum_value, &output)
+    Ok(enum_lookup(enum_data, output))
 }
 
 /// `Array.prototype.slice` / `TypedArray.prototype.slice` index math:
@@ -935,10 +702,11 @@ fn slice_bounds(start: f64, end: f64, len: usize) -> (usize, usize) {
 }
 
 fn js_slice(input: &[u8], start: f64, end: f64) -> Vec<u8> {
-    let (s, e) = slice_bounds(start, end, input.len());
-    input[s..s + e].to_vec()
+    let (s, count) = slice_bounds(start, end, input.len());
+    input[s..s + count].to_vec()
 }
 
+/// `sliceBits`: LSB-first within each byte.
 fn slice_bits(input: &[u8], range: [f64; 2]) -> (Vec<u8>, f64) {
     if range[0] % 8.0 == 0.0 && range[1] % 8.0 == 0.0 {
         (
@@ -948,17 +716,96 @@ fn slice_bits(input: &[u8], range: [f64; 2]) -> (Vec<u8>, f64) {
     } else {
         let (s, count) = slice_bounds(range[0], range[1], input.len() * 8);
         let mut out = vec![0u8; count.div_ceil(8)];
-        for (i, out_byte) in out.iter_mut().enumerate() {
-            for bit in 0..8 {
-                let index = i * 8 + bit;
-                if index < count {
-                    let src = s + index;
-                    if input[src / 8] >> (src % 8) & 1 != 0 {
-                        *out_byte |= 1 << bit;
-                    }
-                }
+        for index in 0..count {
+            let src = s + index;
+            if input[src / 8] >> (src % 8) & 1 != 0 {
+                out[index / 8] |= 1 << (index % 8);
             }
         }
         (out, range[1] - range[0])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn s(text: &str) -> JsString {
+        js_string(text)
+    }
+
+    fn decoder(schemas: &[(&str, &str)]) -> StructDecoder {
+        let mut d = StructDecoder::new();
+        for (name, text) in schemas {
+            d.add_schema(&s(name), text.as_bytes());
+        }
+        d
+    }
+
+    #[test]
+    fn zero_length_schema_array_never_completes() {
+        let d = decoder(&[
+            ("Empty", ""),
+            ("ZeroArr", "int8 a[0]"),
+            ("Proto", "toString x"),
+        ]);
+        for name in ["Empty", "ZeroArr"] {
+            assert_eq!(
+                d.decode_array(&s(name), &[1], None),
+                Err(DecodeError::NeverCompletes)
+            );
+            assert!(d.decode_array(&s(name), &[], None).is_ok());
+        }
+        assert_eq!(
+            d.decode_array(&s("Proto"), &[1], None),
+            Err(DecodeError::NotASchema)
+        );
+    }
+
+    #[test]
+    fn unbounded_nested_arrays_never_complete() {
+        let d = decoder(&[
+            ("Leaf", "double v"),
+            ("InfNested", "Leaf a[Infinity]"),
+            ("HugeNested", "Leaf a[1e12]"),
+            ("ProtoNested", "toString a[1e12]"),
+        ]);
+        for name in ["InfNested", "HugeNested"] {
+            assert_eq!(
+                d.decode(&s(name), &[0; 16]),
+                Err(DecodeError::NeverCompletes),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            d.decode(&s("ProtoNested"), &[0; 16]),
+            Err(DecodeError::NotASchema)
+        );
+    }
+
+    #[test]
+    fn oversized_primitive_arrays_throw_invalid_array_length() {
+        let d = decoder(&[
+            ("Huge", "int8 a[1e300]"),
+            ("JustOver", "bool a[134217729]"),
+            ("Inf", "int8 a[Infinity]"),
+            ("Big", "uint8 a[100000]"),
+        ]);
+        for name in ["Huge", "JustOver"] {
+            assert_eq!(
+                d.decode(&s(name), &[1, 2, 3]),
+                Err(DecodeError::InvalidArrayLength),
+                "{name}"
+            );
+        }
+        assert!(d.decode(&s("Inf"), &[0; 16]).is_ok());
+        let big = d.decode(&s("Big"), &[7, 8]).expect("finite array decodes");
+        let items = big
+            .data
+            .get("a")
+            .and_then(JsValue::as_array)
+            .expect("array");
+        assert_eq!(items.len(), 100_000);
+        assert_eq!(items[..3], [7.0, 8.0, 0.0].map(JsValue::Number));
     }
 }

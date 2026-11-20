@@ -180,16 +180,16 @@
     },
     "log/struct": {
       "cases": 5,
-      "content": "3225f9f8a28e11ad",
-      "generator": "d3109e437fec41a4",
+      "content": "5b842ffa1a277c13",
+      "generator": "5104d9b7bff9a895",
       "spec": "parity/specs/log/struct.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
     "log/struct-fuzz": {
-      "cases": 2346,
-      "content": "170dafac7bfe174b",
-      "generator": "bff5f41d86eef950",
+      "cases": 2369,
+      "content": "31b82a923741b434",
+      "generator": "81ba3d8c0d93985d",
       "spec": "parity/specs/log/struct-fuzz.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
@@ -197,7 +197,7 @@
     "log/struct-replay": {
       "cases": 363,
       "content": "b247e6a9d54a9c8f",
-      "generator": "8a16fb5938bdcb46",
+      "generator": "040f38ba5dc78ebf",
       "spec": "parity/specs/log/struct-replay.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"

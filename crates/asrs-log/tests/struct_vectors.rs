@@ -1,14 +1,41 @@
 #![allow(clippy::disallowed_methods)]
 
+#[path = "../../asrs-cli/src/functions.rs"]
+#[allow(dead_code)]
+mod functions;
+#[path = "../../asrs-cli/src/js_color.rs"]
+#[allow(dead_code)]
+mod js_color;
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
+#[path = "../../asrs-cli/src/js_math.rs"]
+#[allow(dead_code)]
+mod js_math;
+#[path = "../../asrs-cli/src/js_msgpack.rs"]
+#[allow(dead_code)]
+mod js_msgpack;
+#[path = "../../asrs-cli/src/js_regex.rs"]
+#[allow(dead_code)]
+mod js_regex;
+#[path = "../../asrs-cli/src/js_string.rs"]
+#[allow(dead_code)]
+mod js_string;
+#[path = "../../asrs-cli/src/js_time.rs"]
+#[allow(dead_code)]
+mod js_time;
+#[path = "../../asrs-cli/src/log_struct.rs"]
+#[allow(dead_code)]
+mod log_struct;
+#[path = "../../asrs-cli/src/shared.rs"]
+#[allow(dead_code)]
+mod shared;
 
 use std::collections::{HashMap, VecDeque};
 
 use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, JsValue};
-use asrs_log::log::struct_decoder::{Decoded, StructDecoder};
+use asrs_js::value::ToJs;
+use asrs_log::log::struct_decoder::{DecodeError, Decoded, StructDecoder};
 use asrs_parity::json::Json;
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Record, Utf16String, Value};
@@ -78,14 +105,15 @@ fn field_of<'a>(json: &'a Json, key: &str) -> Result<&'a Json, String> {
 }
 
 fn decoded_value(decoded: &Decoded) -> Value {
-    let mut schema_types = JsObject::new();
-    for (key, ty) in decoded.schema_types.iter() {
-        schema_types.insert(key.clone(), JsValue::String(ty.clone()));
-    }
-    js_json::from_js(&JsValue::Object(JsObject::from_iter([
-        (JsString::from("data"), decoded.data.clone()),
-        (JsString::from("schemaTypes"), JsValue::Object(schema_types)),
-    ])))
+    js_json::from_js(&log_struct::decoded_to_js(decoded))
+}
+
+fn thrown(error: DecodeError) -> Value {
+    let (name, message) = log_struct::js_error(error);
+    Value::object([(
+        "throw",
+        Value::Error(Utf16String::from(name), Utf16String::from(message)),
+    )])
 }
 
 fn compare(record: &Record, actual: Value) -> Result<(), String> {
@@ -108,13 +136,11 @@ fn replay(record: &Record, state: &mut State) -> Result<(), String> {
     if let Some(s) = record.field("s") {
         let name = js_string(field_of(s, "n")?)?;
         let bytes = hex_bytes(field_of(s, "b")?)?;
-        let actual = match state.decoder.add_schema(&name, &bytes) {
-            Ok(()) => Value::object([("ok", js_json::from_js(&state.decoder.to_serialized()))]),
-            Err(e) => Value::object([(
-                "throw",
-                Value::Error(Utf16String::from(e.name), Utf16String::from(e.message)),
-            )]),
-        };
+        state.decoder.add_schema(&name, &bytes);
+        let actual = Value::object([(
+            "ok",
+            js_json::from_js(&state.decoder.to_serialized().to_js()),
+        )]);
         compare(record, actual)?;
         state.drain();
         return Ok(());
@@ -122,16 +148,11 @@ fn replay(record: &Record, state: &mut State) -> Result<(), String> {
     if let Some(r) = record.field("r") {
         let input = Value::from_json(r).map_err(|e| e.to_string())?;
         let js = js_json::to_js(&input)?;
-        let actual = match StructDecoder::from_serialized(&js) {
-            Ok(decoder) => {
-                state.decoder = decoder;
-                Value::object([("ok", js_json::from_js(&state.decoder.to_serialized()))])
-            }
-            Err(e) => Value::object([(
-                "throw",
-                Value::Error(Utf16String::from(e.name), Utf16String::from(e.message)),
-            )]),
-        };
+        state.decoder = StructDecoder::from_serialized(log_struct::parse_serialized(&js)?);
+        let actual = Value::object([(
+            "ok",
+            js_json::from_js(&state.decoder.to_serialized().to_js()),
+        )]);
         return compare(record, actual);
     }
     if record.field("k").is_some() {
@@ -180,15 +201,13 @@ fn replay(record: &Record, state: &mut State) -> Result<(), String> {
     };
     match result {
         Ok(decoded) => compare(record, Value::object([("ok", decoded_value(&decoded))])),
+        Err(DecodeError::NeverCompletes) => match record.field("never") {
+            Some(_) => Ok(()),
+            None => Err("port never completes; upstream did".to_owned()),
+        },
         Err(e) => {
             state.queue((name, bytes, is_array));
-            compare(
-                record,
-                Value::object([(
-                    "throw",
-                    Value::Error(Utf16String::from(e.name), Utf16String::from(e.message)),
-                )]),
-            )
+            compare(record, thrown(e))
         }
     }
 }
