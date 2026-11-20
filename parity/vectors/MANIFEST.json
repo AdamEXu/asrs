@@ -171,9 +171,9 @@
       "generatedOn": "macos-aarch64"
     },
     "log/util": {
-      "cases": 7138,
-      "content": "861036ad0cea6c83",
-      "generator": "f3bdb9d2fcd1e0df",
+      "cases": 7141,
+      "content": "8a06f51360d0a8d4",
+      "generator": "719229744102b7f1",
       "spec": "parity/specs/log/util.jsonl",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"

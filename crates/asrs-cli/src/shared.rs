@@ -412,6 +412,9 @@ fn js_add(a: &Value, b: &Value) -> Result<Value, Response> {
 fn arrays_equal_fn(args: &[Value]) -> Response {
     let a = arg(args, 0);
     let b = arg(args, 1);
+    if let (Some(x), Some(y)) = (number_items(&a), number_items(&b)) {
+        return Response::Ok(Value::Bool(util::arrays_equal(&x, &y)));
+    }
     let (la, lb) = match (length_prop(&a), length_prop(&b)) {
         (Ok(x), Ok(y)) => (x, y),
         (Err(r), _) | (_, Err(r)) => return r,
@@ -474,8 +477,8 @@ fn bound_fn(args: &[Value], kind: Bound) -> Response {
         let t = target.as_f64().unwrap_or_default();
         let s = start.as_f64().unwrap_or(0.0);
         let result = match kind {
-            Bound::Lower => util::lower_bound(&ts, t, s),
-            Bound::Upper => util::upper_bound(&ts, t, s),
+            Bound::Lower => util::lower_bound_js(&ts, t, s),
+            Bound::Upper => util::upper_bound_js(&ts, t, s),
         };
         return ok_number(result);
     }
@@ -539,6 +542,19 @@ fn generic_bound(
     }
 }
 
+fn number_items(v: &Value) -> Option<Vec<f64>> {
+    match v {
+        Value::Array(items) => items
+            .iter()
+            .map(|v| match v {
+                Value::Number(bits) => Some(f64::from_bits(*bits)),
+                _ => None,
+            })
+            .collect(),
+        _ => None,
+    }
+}
+
 fn sets_equal_fn(args: &[Value]) -> Response {
     let a = arg(args, 0);
     let b = arg(args, 1);
@@ -584,6 +600,13 @@ fn js_typeof(v: &Value) -> &'static str {
 }
 
 fn check_array_type_fn(args: &[Value]) -> Response {
+    if let (Value::Array(items), Value::String(type_name)) = (&arg(args, 0), &arg(args, 1))
+        && !items.iter().any(|v| matches!(v, Value::Hole))
+        && let Ok(value) = crate::js_json::to_js(&arg(args, 0))
+    {
+        let type_name = type_name.to_string_lossy();
+        return Response::Ok(Value::Bool(util::check_array_type(&value, &type_name)));
+    }
     let items = match &arg(args, 0) {
         Value::Array(items) => items.clone(),
         _ => return Response::Ok(Value::Bool(false)),
@@ -600,6 +623,14 @@ fn check_array_type_fn(args: &[Value]) -> Response {
 }
 
 fn index_array_fn(args: &[Value]) -> Response {
+    if let Value::Number(bits) = arg(args, 0) {
+        return match util::index_array(f64::from_bits(bits)) {
+            Some(items) => {
+                Response::Ok(Value::Array(items.into_iter().map(Value::number).collect()))
+            }
+            None => range_error("Invalid array length"),
+        };
+    }
     let length = match to_number(&arg(args, 0)) {
         Ok(x) => x,
         Err(r) => return r,
@@ -634,6 +665,13 @@ fn char_is_capital_fn(args: &[Value]) -> Response {
 }
 
 fn shift_color_fn(args: &[Value]) -> Response {
+    if let (Value::String(color), Value::Number(shift)) = (arg(args, 0), arg(args, 1)) {
+        let color = JsString::from_units(color.units().to_vec());
+        return Response::Ok(Value::string(&util::shift_color(
+            &color,
+            f64::from_bits(shift),
+        )));
+    }
     let sliced = match &arg(args, 0) {
         Value::String(s) => JsString::from_units(s.units().to_vec()).slice(1.0, None),
         Value::Boxed(inner) => match inner.as_ref() {
@@ -693,6 +731,13 @@ fn shift_color_fn(args: &[Value]) -> Response {
 }
 
 fn zfill_fn(args: &[Value]) -> Response {
+    if let (Value::String(number), Value::Number(length)) = (arg(args, 0), arg(args, 1)) {
+        let number = JsString::from_units(number.units().to_vec());
+        let padded = util::zfill(&number, f64::from_bits(length));
+        return Response::Ok(Value::String(Utf16String::from_units(
+            padded.units().to_vec(),
+        )));
+    }
     let mut number = arg(args, 0);
     let length = arg(args, 1);
     loop {
@@ -815,6 +860,18 @@ fn to_index(x: f64) -> Result<f64, Response> {
 }
 
 fn concat_buffers_fn(args: &[Value]) -> Response {
+    if let Value::Array(items) = &arg(args, 0) {
+        let buffers: Option<Vec<&[u8]>> = items
+            .iter()
+            .map(|v| match v {
+                Value::Bytes(b) => Some(b.as_slice()),
+                _ => None,
+            })
+            .collect();
+        if let Some(buffers) = buffers {
+            return Response::Ok(Value::Bytes(util::concat_buffers(&buffers)));
+        }
+    }
     let items: Vec<Value> = match &arg(args, 0) {
         Value::Array(items) | Value::TypedArray(_, items) => items.clone(),
         Value::Bytes(bytes) => bytes.iter().map(|&b| Value::number(f64::from(b))).collect(),

@@ -26,10 +26,20 @@ pub fn arrays_equal<T: PartialEq>(a: &[T], b: &[T]) -> bool {
     a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x == y)
 }
 
-/// `lowerBound`: first index `i >= startIndex` with `array[i] >= target`, or
-/// `array.length`. `startIndex` is an f64 because upstream never coerces it:
-/// negative, fractional and NaN hints all reach the binary search.
-pub fn lower_bound(array: &[f64], target: f64, start_index: f64) -> f64 {
+/// `lowerBound` for the index hints every upstream call site passes.
+pub fn lower_bound(array: &[f64], target: f64, start_index: usize) -> usize {
+    lower_bound_js(array, target, start_index as f64) as usize
+}
+
+/// `upperBound` for the index hints every upstream call site passes.
+pub fn upper_bound(array: &[f64], target: f64, start_index: usize) -> usize {
+    upper_bound_js(array, target, start_index as f64) as usize
+}
+
+/// `lowerBound` with `startIndex` as any JS number, uncoerced: negative,
+/// fractional and NaN hints all reach the binary search. A `-Infinity` hint
+/// loops forever whenever `array[0] >= target`, as upstream does.
+pub fn lower_bound_js(array: &[f64], target: f64, start_index: f64) -> f64 {
     let length = array.len() as f64;
     let ge = |i: f64| element(array, i).is_some_and(|v| v >= target);
     if length == 0.0 || start_index >= length || !ge(length - 1.0) {
@@ -56,9 +66,8 @@ pub fn lower_bound(array: &[f64], target: f64, start_index: f64) -> f64 {
     low
 }
 
-/// `upperBound`: first index `i >= startIndex` with `array[i] > target`, or
-/// `array.length`.
-pub fn upper_bound(array: &[f64], target: f64, start_index: f64) -> f64 {
+/// `upperBound` with `startIndex` as any JS number; see `lower_bound_js`.
+pub fn upper_bound_js(array: &[f64], target: f64, start_index: f64) -> f64 {
     let length = array.len() as f64;
     let gt = |i: f64| element(array, i).is_some_and(|v| v > target);
     if length == 0.0 || start_index >= length || !gt(length - 1.0) {
@@ -108,10 +117,15 @@ pub fn html_encode(text: &JsString) -> JsString {
     string::html_encode(text)
 }
 
-/// `indexArray`: `Array.from({ length }, (_, i) => i)`.
-pub fn index_array(length: f64) -> Vec<f64> {
-    let n = string::to_length(length) as usize;
-    (0..n).map(|i| i as f64).collect()
+/// `indexArray`: `Array.from({ length }, (_, i) => i)`. `None` is upstream's
+/// `RangeError: Invalid array length` for a length past 2^32 - 1, which
+/// geometry readers can hit through a log's `/length` field.
+pub fn index_array(length: f64) -> Option<Vec<f64>> {
+    let n = string::to_length(length);
+    if n > 4_294_967_295.0 {
+        return None;
+    }
+    Some((0..n as usize).map(|i| i as f64).collect())
 }
 
 /// `charIsCapital`: `input.charAt(index)` against its own uppercase. The
@@ -149,7 +163,9 @@ pub fn shift_color(color: &JsString, shift: f64) -> String {
     format!("rgb({})", parts.join(","))
 }
 
-/// `zfill`: prepend `"0"` while `number.length < length`.
+/// `zfill`: prepend `"0"` while `number.length < length`. Upstream throws
+/// `RangeError: Invalid string length` past V8's 2^29 - 24 limit; every call
+/// site passes a constant length (2, 3 or 8), so that path is not ported.
 pub fn zfill(number: &JsString, length: f64) -> JsString {
     let mut out = number.clone();
     while (out.len() as f64) < length {

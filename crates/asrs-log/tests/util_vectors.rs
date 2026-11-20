@@ -316,6 +316,9 @@ fn misc(spec: &mut Spec) {
         Value::Undefined,
         Value::Bool(true),
         n(100.0),
+        n(4294967296.0),
+        n(1e300),
+        n(f64::INFINITY),
     ] {
         spec.push("shared/util:indexArray", vec![length]);
     }
