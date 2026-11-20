@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
-    FilterQuality, GradientStop, LineCap, LineJoin, LinearGradient, Paint, Pattern,
-    Pixmap, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
+    FilterQuality, GradientStop, LineCap, LineJoin, Paint, Pattern, Pixmap, Point, RadialGradient,
+    Rect, Shader, SpreadMode, Transform,
 };
 
 use crate::aaa;
@@ -11,6 +11,7 @@ use crate::blit::Spans;
 use crate::color::{self, Rgba};
 use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
+use crate::gradient;
 use crate::hairline;
 use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
@@ -842,7 +843,7 @@ impl<'a> Raster<'a> {
         let point = |x: f64, y: f64| Point::from_xy(x as f32, y as f32);
         let clamped = |x: f64, y: f64| {
             let max = f32::MAX / 1e6;
-            Point::from_xy((x as f32).clamp(-max, max), (y as f32).clamp(-max, max))
+            ((x as f32).clamp(-max, max), (y as f32).clamp(-max, max))
         };
         match fill {
             Fill::Color(c) => {
@@ -856,25 +857,21 @@ impl<'a> Raster<'a> {
                 if x0 == x1 && y0 == y1 {
                     return None;
                 }
-                if coverage_scale >= 256
-                    && alpha >= 1.0
-                    && s.iter().all(|c| c.1.a >= 1.0)
-                    && let Some(p) = self.dithered_linear([*x0, *y0, *x1, *y1], s)
-                {
-                    return Some(Source::Device(p));
-                }
-                LinearGradient::new(
+                let geometry = gradient::Geometry::linear(
+                    ctm.to_skia(),
                     clamped(*x0, *y0),
                     clamped(*x1, *y1),
-                    stops(s),
-                    SpreadMode::Pad,
-                    ctm.to_skia(),
-                )
-                .map(Source::Shader)
+                )?;
+                self.gradient_pixmap(&geometry, s, alpha * modulate(1.0))
             }
             &Fill::Radial([x0, y0, r0, x1, y1, r1], ref s) => {
                 if r0 < 0.0 || r1 < 0.0 || (x0 == x1 && y0 == y1 && r0 == r1) {
                     return None;
+                }
+                let g = [x0, y0, r0, x1, y1, r1].map(|v| v as f32);
+                if gradient::shares_center(g) {
+                    let geometry = gradient::Geometry::radial(ctm.to_skia(), g)?;
+                    return self.gradient_pixmap(&geometry, s, alpha * modulate(1.0));
                 }
                 if r0 == 0.0 {
                     return RadialGradient::new(
@@ -887,75 +884,42 @@ impl<'a> Raster<'a> {
                     )
                     .map(Source::Shader);
                 }
-                if x0 == x1 && y0 == y1 && r1 > r0 {
-                    let k = r0 / r1;
-                    let mut remapped: Vec<(f32, Rgba)> = vec![(0.0, s[0].1)];
-                    remapped.extend(
-                        s.iter()
-                            .map(|&(o, c)| ((k + f64::from(o) * (1.0 - k)) as f32, c)),
-                    );
-                    return RadialGradient::new(
-                        point(x0, y0),
-                        point(x1, y1),
-                        r1 as f32,
-                        stops(&remapped),
-                        SpreadMode::Pad,
-                        ctm.to_skia(),
-                    )
-                    .map(Source::Shader);
-                }
-                self.conical_pixmap([x0, y0, r0, x1, y1, r1], s, modulate(1.0))
+                self.conical_pixmap([x0, y0, r0, x1, y1, r1], s, alpha * modulate(1.0))
                     .map(Source::Device)
             }
         }
     }
 
-    /// Chromium's CPU canvas ordered-dithers opaque gradient fills: each channel packs as
-    /// `floor(v * 255 + (BAYER[x & 7][y & 7] + 0.5) / 64)` over device coordinates.
-    fn dithered_linear(&self, g: [f64; 4], stops: &[(f32, Rgba)]) -> Option<Pixmap> {
-        const BAYER: [[u8; 8]; 8] = [
-            [0, 32, 8, 40, 2, 34, 10, 42],
-            [48, 16, 56, 24, 50, 18, 58, 26],
-            [12, 44, 4, 36, 14, 46, 6, 38],
-            [60, 28, 52, 20, 62, 30, 54, 22],
-            [3, 35, 11, 43, 1, 33, 9, 41],
-            [51, 19, 59, 27, 49, 17, 57, 25],
-            [15, 47, 7, 39, 13, 45, 5, 37],
-            [63, 31, 55, 23, 61, 29, 53, 21],
-        ];
-        let inverse = self.state.transform.inverse()?;
-        let [x0, y0, x1, y1] = g;
-        let (dx, dy) = (x1 - x0, y1 - y0);
-        let len2 = dx * dx + dy * dy;
-        let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        let mut out = Pixmap::new(w, h)?;
-        let data = out.data_mut();
-        for py in 0..h {
-            for px in 0..w {
-                let (cx, cy) = (f64::from(px) + 0.5, f64::from(py) + 0.5);
-                let ux = inverse.a * cx + inverse.c * cy + inverse.e;
-                let uy = inverse.b * cx + inverse.d * cy + inverse.f;
-                let t = ((ux - x0) * dx + (uy - y0) * dy) / len2;
-                let c = sample_stops(stops, t as f32);
-                let d = (f64::from(BAYER[(px & 7) as usize][(py & 7) as usize]) + 0.5) / 64.0;
-                let i = ((py * w + px) * 4) as usize;
-                data[i] = (f64::from(c.r) * 255.0 + d) as u8;
-                data[i + 1] = (f64::from(c.g) * 255.0 + d) as u8;
-                data[i + 2] = (f64::from(c.b) * 255.0 + d) as u8;
-                data[i + 3] = 255;
-            }
-        }
-        Some(out)
+    fn gradient_pixmap(
+        &self,
+        geometry: &gradient::Geometry,
+        stops: &[(f32, Rgba)],
+        paint_alpha: f32,
+    ) -> Option<Source> {
+        let colors = gradient::Colors::new(stops);
+        gradient::shade(
+            geometry,
+            &colors,
+            paint_alpha,
+            self.pixmap.width(),
+            self.pixmap.height(),
+        )
+        .map(Source::Device)
     }
 
     /// The canvas-spec two-point conical gradient evaluated at every device pixel centre, for
     /// the start-radius cases tiny-skia's focal gradient cannot express.
-    fn conical_pixmap(&self, g: [f64; 6], stops: &[(f32, Rgba)], scale: f32) -> Option<Pixmap> {
+    fn conical_pixmap(
+        &self,
+        g: [f64; 6],
+        stops: &[(f32, Rgba)],
+        paint_alpha: f32,
+    ) -> Option<Pixmap> {
         let inverse = self.state.transform.inverse()?;
         let [x0, y0, r0, x1, y1, r1] = g;
         let (cdx, cdy, dr) = (x1 - x0, y1 - y0, r1 - r0);
         let a = cdx * cdx + cdy * cdy - dr * dr;
-        let alpha = self.state.alpha as f32 * scale;
+        let colors = gradient::Colors::new(stops);
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
         let mut out = Pixmap::new(w, h)?;
         let data = out.data_mut();
@@ -987,14 +951,13 @@ impl<'a> Raster<'a> {
                         continue;
                     }
                 };
-                let c = sample_stops(stops, t as f32).with_alpha_scaled(alpha);
                 let i = ((py * w + px) * 4) as usize;
-                data[i..i + 4].copy_from_slice(&pixels::premultiply([
-                    (c.r * 255.0 + 0.5) as u8,
-                    (c.g * 255.0 + 0.5) as u8,
-                    (c.b * 255.0 + 0.5) as u8,
-                    (c.a * 255.0 + 0.5) as u8,
-                ]));
+                data[i..i + 4].copy_from_slice(&gradient::shade_pixel(
+                    colors.at(t as f32),
+                    paint_alpha,
+                    px,
+                    py,
+                ));
             }
         }
         Some(out)
@@ -1812,9 +1775,10 @@ impl<'a> Raster<'a> {
     /// its sample coordinate `s = p + 0.5 - d` lies in `(0, image]`. Both filter taps clamp to
     /// the image border, the interpolation weight is the top 4 bits of the 16.16 fixed-point
     /// fraction, and the premultiplied channels combine as one `sum(tap * wx * wy) >> 8` sum.
-    /// With an opaque paint alpha source-over blends as `s + (d * (255 - s_a) + 127) / 255`.
-    /// Below that, the paint alpha expands the source to `v * (a8 + 1)` in u16 units and the
-    /// destination scales by `256 - v_a * (a8 + 1) / 255`, summed before the `>> 8` pack.
+    /// Source-over blends as `s + (d * (255 - s_a) + 127) / 255`. A paint alpha below 255
+    /// takes one of two legacy paths: at an integer offset Skia draws a sprite and blends with
+    /// `SkBlendARGB32` (`(v * (a8 + 1) + d * (256 - v_a * (a8 + 1) / 255)) >> 8`), at a fractional
+    /// one the image shader scales the filtered pixel to `v * (a8 + 1) >> 8` before source-over.
     fn blit_decal_image(&mut self, image: &Pixmap, src: [f64; 4], e: f64, f: f64) {
         let (il, it, ir, ib) = (src[0], src[1], src[0] + src[2], src[1] + src[3]);
         let (e, f) = (e as f32 as f64, f as f32 as f64);
@@ -1837,6 +1801,7 @@ impl<'a> Raster<'a> {
         if alpha8 == 0 {
             return;
         }
+        let sprite = e.fract() == 0.0 && f.fract() == 0.0;
         let (il, it, ir, ib) = (il as i64, it as i64, ir as i64, ib as i64);
         let iw = i64::from(image.width());
         let data = image.data();
@@ -1859,7 +1824,10 @@ impl<'a> Raster<'a> {
                     *p = ((row(j0) * (16 - wy) + row(j1) * wy) >> 8).clamp(0, 255) as u8;
                 }
                 let k = ((y * pw + x) * 4) as usize;
-                if alpha8 == 255 {
+                if alpha8 < 255 && !sprite {
+                    pixel = pixel.map(|v| ((u32::from(v) * (alpha8 as u32 + 1)) >> 8) as u8);
+                }
+                if alpha8 == 255 || !sprite {
                     let inv = 255 - u32::from(pixel[3]);
                     for (d, s) in dst[k..k + 4].iter_mut().zip(pixel) {
                         *d = (u32::from(s) + (u32::from(*d) * inv + 127) / 255).min(255) as u8;
@@ -1939,31 +1907,6 @@ fn skia_uniform_stops(stops: &[(f32, Rgba)]) -> bool {
         prev = curr;
         uniform
     })
-}
-
-fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
-    let t = t.clamp(0.0, 1.0);
-    let first = stops[0];
-    if t <= first.0 {
-        return first.1;
-    }
-    for pair in stops.windows(2) {
-        let ((o0, c0), (o1, c1)) = (pair[0], pair[1]);
-        if t <= o1 {
-            if o1 == o0 {
-                return c1;
-            }
-            let k = (t - o0) / (o1 - o0);
-            let lerp = |a: f32, b: f32| a + (b - a) * k;
-            return Rgba {
-                r: lerp(c0.r, c1.r),
-                g: lerp(c0.g, c1.g),
-                b: lerp(c0.b, c1.b),
-                a: lerp(c0.a, c1.a),
-            };
-        }
-    }
-    stops[stops.len() - 1].1
 }
 
 #[cfg(test)]
