@@ -136,3 +136,8 @@ required-features = ["parity"]
 name = "text_scroll"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "text_box"
+harness = false
+required-features = ["parity"]

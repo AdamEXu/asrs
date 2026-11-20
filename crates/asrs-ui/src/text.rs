@@ -5,7 +5,9 @@
 //! Each window keeps its own cache, evicted least recently used first past a byte or entry
 //! budget, and evicted images leave that window's sprite atlas on its next text paint.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_canvas::text::dom::{self, Layout, Lu};
@@ -198,9 +200,41 @@ pub fn layout(
     scale: f32,
     available: Option<f32>,
 ) -> Layout {
+    layout_lu(
+        cx,
+        style,
+        text,
+        scale,
+        available.map(|w| dom::lu_round(w * scale)),
+    )
+}
+
+fn layout_lu(
+    cx: &mut App,
+    style: &TextStyle,
+    text: &str,
+    scale: f32,
+    available: Option<Lu>,
+) -> Layout {
     let system = cx.default_global::<TextSystem>();
-    let available = available.map(|w| dom::lu_round(w * scale));
     dom::layout(system.backend.as_mut(), style, text, available, scale)
+}
+
+fn snap(lu: Lu, scale: f32) -> Pixels {
+    px(((f64::from(lu) / 64.0 + 0.5).floor() / f64::from(scale)) as f32)
+}
+
+/// The exact width behind `width` if it is one the measure function returned, else `width`.
+fn exact_width(measured: &RefCell<Vec<(Pixels, Lu)>>, width: Pixels, scale: f32) -> Lu {
+    measured
+        .borrow()
+        .iter()
+        .rev()
+        .find(|(snapped, _)| *snapped == width)
+        .map_or_else(
+            || dom::lu_round(f32::from(width) * scale),
+            |&(_, exact)| exact,
+        )
 }
 
 /// The border-box size Chromium gives a shrink-to-fit block holding `text`, in CSS px.
@@ -223,6 +257,9 @@ pub struct Text {
     subpixel: (f32, f32),
     probe: Option<SharedString>,
     gpui: StyleRefinement,
+    /// Each width the measure function returned, snapped as GPUI will snap the box, with the
+    /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
+    measured: Rc<RefCell<Vec<(Pixels, Lu)>>>,
 }
 
 impl Text {
@@ -234,6 +271,7 @@ impl Text {
             subpixel: (0.0, 0.0),
             probe: None,
             gpui: StyleRefinement::default(),
+            measured: Rc::default(),
         }
     }
 
@@ -253,10 +291,6 @@ impl Text {
     pub fn probe(mut self, id: impl Into<SharedString>) -> Self {
         self.probe = Some(id.into());
         self
-    }
-
-    fn sized(&self) -> bool {
-        self.gpui.size.width.is_some() || self.style.white_space == WhiteSpace::Normal
     }
 }
 
@@ -303,16 +337,27 @@ impl Element for Text {
         let text = self.text.clone();
         let text_style = self.style;
         let wraps = text_style.white_space == WhiteSpace::Normal;
+        let measured = self.measured.clone();
+        measured.borrow_mut().clear();
         let id = window.request_measured_layout(style, move |known, available, window, cx| {
-            let width = known.width.or(match available.width {
-                AvailableSpace::Definite(w) if wraps => Some(w),
-                _ => None,
-            });
             let scale = window.scale_factor();
-            let l = layout(cx, &text_style, &text, scale, width.map(f32::from));
-            let snap =
-                |v: f64| px(((v * f64::from(scale) + 0.5).floor() / f64::from(scale)) as f32);
-            size(snap(l.width_px()), snap(l.height_px()))
+            let wrap_at = match (known.width, available.width) {
+                (Some(w), _) => Some(exact_width(&measured, w, scale)),
+                (None, AvailableSpace::Definite(w)) if wraps => {
+                    Some(exact_width(&measured, w, scale))
+                }
+                (None, AvailableSpace::MinContent) if wraps => Some(0),
+                _ => None,
+            };
+            let l = layout_lu(cx, &text_style, &text, scale, wrap_at);
+            let width = match (known.width, wrap_at) {
+                (Some(_), Some(at)) => at,
+                (None, Some(at)) if l.lines.len() > 1 => at.max(l.width),
+                _ => l.width,
+            };
+            let snapped = snap(width, scale);
+            measured.borrow_mut().push((snapped, width));
+            size(snapped, snap(l.height, scale))
         });
         (id, ())
     }
@@ -327,8 +372,8 @@ impl Element for Text {
         cx: &mut App,
     ) -> Prepaint {
         let scale = window.scale_factor();
-        let available = self.sized().then(|| f32::from(bounds.size.width));
-        let layout = layout(cx, &self.style, &self.text, scale, available);
+        let available = exact_width(&self.measured, bounds.size.width, scale);
+        let layout = layout_lu(cx, &self.style, &self.text, scale, Some(available));
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
             dom::lu_round((f32::from(bounds.origin.y) + self.subpixel.1) * scale),
