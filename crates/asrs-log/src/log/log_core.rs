@@ -36,18 +36,37 @@ struct TimestampSetCache {
     source_counts: Vec<usize>,
 }
 
+#[derive(Debug, Default)]
+struct TimestampSetCaches(Mutex<HashMap<String, TimestampSetCache>>);
+
+impl TimestampSetCaches {
+    fn lock(&self) -> MutexGuard<'_, HashMap<String, TimestampSetCache>> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn get_mut(&mut self) -> &mut HashMap<String, TimestampSetCache> {
+        self.0.get_mut().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl Clone for TimestampSetCaches {
+    fn clone(&self) -> Self {
+        TimestampSetCaches(Mutex::new(self.lock().clone()))
+    }
+}
+
 /// A collection of log fields.
 ///
 /// The hub's `Log` lives on the foreground thread. `clone` is the snapshot handed to export and
 /// other worker threads: it costs O(fields) because every column is shared copy-on-write.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Log {
     pub(super) fields: JsObject<LogField>,
     pub(super) generated_parents: IndexSet<JsString>,
     pub(super) timestamp_range: Option<[f64; 2]>,
     pub(super) timestamp_zero: Option<f64>,
     enable_timestamp_set_cache: bool,
-    timestamp_set_cache: Mutex<HashMap<String, TimestampSetCache>>,
+    timestamp_set_cache: TimestampSetCaches,
     pub(super) changed_fields: IndexSet<JsString>,
 }
 
@@ -66,25 +85,8 @@ impl Default for Log {
     }
 }
 
-impl Clone for Log {
-    fn clone(&self) -> Self {
-        Log {
-            fields: self.fields.clone(),
-            generated_parents: self.generated_parents.clone(),
-            timestamp_range: self.timestamp_range,
-            timestamp_zero: self.timestamp_zero,
-            enable_timestamp_set_cache: self.enable_timestamp_set_cache,
-            timestamp_set_cache: Mutex::new(self.caches().clone()),
-            changed_fields: self.changed_fields.clone(),
-        }
-    }
-}
-
 fn child_key(key: &JsString, child: &str) -> JsString {
-    let mut out = key.clone();
-    out.push_unit(u16::from(b'/'));
-    out.push_str(&JsString::from(child));
-    out
+    child_key_js(key, &JsString::from(child))
 }
 
 fn child_key_js(key: &JsString, child: &JsString) -> JsString {
@@ -94,9 +96,13 @@ fn child_key_js(key: &JsString, child: &JsString) -> JsString {
     out
 }
 
-fn ends_with(key: &[u16], suffix: &str) -> bool {
-    let suffix: Vec<u16> = suffix.encode_utf16().collect();
-    key.ends_with(&suffix)
+fn ends_with_ascii(units: &[u16], suffix: &str) -> bool {
+    units.len() >= suffix.len()
+        && suffix
+            .bytes()
+            .rev()
+            .zip(units.iter().rev())
+            .all(|(a, &b)| u16::from(a) == b)
 }
 
 /// `[...new Set(timestamps.flat())].sort((a, b) => a - b)`. `Set` treats `-0` as `+0` and keeps
@@ -129,28 +135,21 @@ impl Log {
             timestamp_range: None,
             timestamp_zero: None,
             enable_timestamp_set_cache,
-            timestamp_set_cache: Mutex::default(),
+            timestamp_set_cache: TimestampSetCaches::default(),
             changed_fields: IndexSet::new(),
         }
-    }
-
-    fn caches(&self) -> MutexGuard<'_, HashMap<String, TimestampSetCache>> {
-        self.timestamp_set_cache
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
-
-    fn caches_mut(&mut self) -> &mut HashMap<String, TimestampSetCache> {
-        self.timestamp_set_cache
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
     }
 
     fn has_field(&self, key: &JsString) -> bool {
         self.fields.get_key(key).is_some()
     }
 
-    /// Registers the field if it does not exist yet.
+    fn field_mut_existing(&mut self, key: &JsString) -> &mut LogField {
+        self.fields
+            .get_units_mut(key.units())
+            .expect("the field was created before this write")
+    }
+
     pub fn create_blank_field(&mut self, key: &JsString, ty: LoggableType) {
         if self.has_field(key) {
             return;
@@ -164,16 +163,20 @@ impl Log {
     fn check_ds_console_field(&mut self, key: &JsString) {
         let units = key.units();
         let is_console = CONSOLE_SUFFIXES.iter().any(|suffix| {
-            let path: Vec<u16> = format!("{CONSOLE_PATH}{suffix}").encode_utf16().collect();
-            let nested: Vec<u16> = format!("/{CONSOLE_PATH}{suffix}").encode_utf16().collect();
-            units == path.as_slice() || units.ends_with(&nested)
+            let path_length = CONSOLE_PATH.len() + suffix.len();
+            let Some(head) = units.len().checked_sub(path_length) else {
+                return false;
+            };
+            ends_with_ascii(units, suffix)
+                && ends_with_ascii(&units[..units.len() - suffix.len()], CONSOLE_PATH)
+                && (head == 0 || units[head - 1] == u16::from(b'/'))
         });
         if !is_console {
             return;
         }
         let suffix_length = CONSOLE_SUFFIXES
             .iter()
-            .find(|suffix| ends_with(units, suffix))
+            .find(|suffix| ends_with_ascii(units, suffix))
             .map_or(0, |suffix| suffix.len());
         let console_key = JsString::from_units(units[..units.len() - (suffix_length + 1)].to_vec());
         if !self.has_field(&console_key) {
@@ -182,7 +185,6 @@ impl Log {
         }
     }
 
-    /// Removes all data for a field.
     pub fn delete_field(&mut self, key: &JsString) {
         if self.fields.remove_key(key).is_none() {
             return;
@@ -191,11 +193,7 @@ impl Log {
         self.changed_fields.shift_remove(key);
 
         let fields = &self.fields;
-        let caches = self
-            .timestamp_set_cache
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner);
-        for cache in caches.values_mut() {
+        for cache in self.timestamp_set_cache.get_mut().values_mut() {
             if cache.keys.contains(key) {
                 cache.keys.retain(|x| x != key);
                 let columns = cache.keys.iter().map(|k| {
@@ -213,7 +211,6 @@ impl Log {
         }
     }
 
-    /// Clears all data before the provided timestamp.
     pub fn clear_before_time(&mut self, timestamp: f64, update_zero: bool) {
         match &mut self.timestamp_range {
             None => self.timestamp_range = Some([timestamp, timestamp]),
@@ -229,7 +226,7 @@ impl Log {
         if update_zero && self.timestamp_zero.is_none_or(|zero| zero < timestamp) {
             self.timestamp_zero = Some(timestamp);
         }
-        for cache in self.caches_mut().values_mut() {
+        for cache in self.timestamp_set_cache.get_mut().values_mut() {
             let timestamps = &mut cache.timestamps;
             let drop = timestamps
                 .windows(2)
@@ -247,7 +244,6 @@ impl Log {
         }
     }
 
-    /// Adjusts the timestamp range and zero for a known timestamp.
     pub fn update_range_with_timestamp(&mut self, timestamp: f64) {
         match &mut self.timestamp_range {
             None => self.timestamp_range = Some([timestamp, timestamp]),
@@ -271,7 +267,7 @@ impl Log {
         if !self.enable_timestamp_set_cache {
             return;
         }
-        for cache in self.caches_mut().values_mut() {
+        for cache in self.timestamp_set_cache.get_mut().values_mut() {
             if cache.keys.contains(key) {
                 let timestamps = &mut cache.timestamps;
                 let insert_index = lower_bound(timestamps, timestamp, 0);
@@ -426,7 +422,7 @@ impl Log {
                 .map(|field| field.get_timestamps().to_vec())
                 .unwrap_or_default(),
             _ => {
-                let mut caches = self.caches();
+                let mut caches = self.timestamp_set_cache.lock();
                 let mut save_cache = false;
                 if let Some(uuid) = uuid
                     && self.enable_timestamp_set_cache
@@ -454,6 +450,7 @@ impl Log {
                         .get_key(key)
                         .map_or(&[][..], |field| field.get_timestamps())
                 }));
+                // Upstream saves only for a truthy uuid, so "" keeps the blank entry it just made.
                 if save_cache
                     && let Some(uuid) = uuid.filter(|uuid| !uuid.is_empty())
                     && let Some(cache) = caches.get_mut(uuid)
@@ -522,14 +519,13 @@ impl Log {
         root
     }
 
-    /// `getRange`. Upstream does not forward `startOffset` here, so it is ignored.
+    /// `getRange`. Upstream accepts a `startOffset` here but never forwards it.
     pub fn get_range(
         &self,
         key: &JsString,
         start: f64,
         end: f64,
         uuid: Option<&str>,
-        _start_offset: Option<i64>,
     ) -> Option<LogValueSetAny> {
         Some(self.fields.get_key(key)?.get_range(start, end, uuid, None))
     }
@@ -635,9 +631,7 @@ impl Log {
     /// when the field really holds `T`.
     fn put_value<T: LogValue>(&mut self, key: &JsString, timestamp: f64, value: T) {
         self.create_blank_field(key, T::TYPE);
-        if let Some(field) = self.fields.get_units_mut(key.units()) {
-            field.put(timestamp, value);
-        }
+        self.field_mut_existing(key).put(timestamp, value);
         self.changed_fields.insert(key.clone());
         if self.get_type(key) == Some(T::TYPE) {
             self.process_timestamp(key, timestamp);
@@ -662,7 +656,7 @@ impl Log {
     pub fn put_string(&mut self, key: &JsString, timestamp: f64, value: JsString) {
         self.put_value(key, timestamp, value.clone());
         let units = key.units();
-        if ends_with(units, TYPE_KEY_SUFFIX) {
+        if ends_with_ascii(units, TYPE_KEY_SUFFIX) {
             let parent_key =
                 JsString::from_units(units[..units.len() - TYPE_KEY_SUFFIX.len()].to_vec());
             self.create_blank_field(&parent_key, LoggableType::Empty);
@@ -672,16 +666,13 @@ impl Log {
         }
     }
 
-    /// The array writers: the array itself, then generated `length` and per-item children.
     fn put_array<T: LogValue>(&mut self, key: &JsString, timestamp: f64, value: Vec<T>)
     where
         Vec<T>: LogValue,
     {
         let ty = <Vec<T> as LogValue>::TYPE;
         self.create_blank_field(key, ty);
-        if let Some(field) = self.fields.get_units_mut(key.units()) {
-            field.put(timestamp, value.clone());
-        }
+        self.field_mut_existing(key).put(timestamp, value.clone());
         self.changed_fields.insert(key.clone());
         if self.get_type(key) != Some(ty) {
             return;
@@ -692,9 +683,8 @@ impl Log {
         let length_key = child_key(key, "length");
         self.create_blank_field(&length_key, LoggableType::Number);
         self.process_timestamp(&length_key, timestamp);
-        if let Some(field) = self.fields.get_units_mut(length_key.units()) {
-            field.put_number(timestamp, value.len() as f64);
-        }
+        self.field_mut_existing(&length_key)
+            .put_number(timestamp, value.len() as f64);
         self.changed_fields.insert(length_key);
 
         for (i, item) in value.into_iter().enumerate() {
@@ -703,9 +693,7 @@ impl Log {
                 self.process_timestamp(&item_key, timestamp);
             }
             self.create_blank_field(&item_key, T::TYPE);
-            if let Some(field) = self.fields.get_units_mut(item_key.units()) {
-                field.put(timestamp, item);
-            }
+            self.field_mut_existing(&item_key).put(timestamp, item);
             self.changed_fields.insert(item_key);
         }
     }
@@ -805,9 +793,8 @@ impl Log {
             let length_key = child_key(key, "length");
             self.create_blank_field(&length_key, LoggableType::Number);
             self.process_timestamp(&length_key, timestamp);
-            if let Some(field) = self.fields.get_units_mut(length_key.units()) {
-                field.put_number(timestamp, items.len() as f64);
-            }
+            self.field_mut_existing(&length_key)
+                .put_number(timestamp, items.len() as f64);
             for (i, item) in items.iter().enumerate() {
                 self.put_unknown_struct(&child_key(key, &format!("{i}")), timestamp, item, true);
             }
@@ -914,7 +901,6 @@ impl Log {
     }
 }
 
-/// Walks `root` along `tables`, creating `{fullKey: null, children: {}}` nodes on the way.
 fn tree_node<'a>(
     root: &'a mut JsObject<LogFieldTree>,
     tables: &[JsString],

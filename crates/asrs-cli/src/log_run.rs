@@ -146,17 +146,12 @@ fn get(log: &Log, op: &[Value]) -> Result<Value, String> {
         "getRange" => {
             let key = js_string(&arg(op, 2))?;
             let uuid = optional_uuid(&arg(op, 5))?;
-            let offset = match arg(op, 6) {
-                Value::Undefined => None,
-                other => Some(index(&other)?),
-            };
             Ok(log
                 .get_range(
                     &key,
                     number(&arg(op, 3))?,
                     number(&arg(op, 4))?,
                     uuid.as_deref(),
-                    offset,
                 )
                 .map_or(Value::Undefined, |set| any_set_value(&set)))
         }
@@ -212,7 +207,7 @@ fn display(v: &Value) -> Result<Option<TimestampDisplay>, String> {
         None => Ok(None),
         Some("start-zero") => Ok(Some(TimestampDisplay::StartZero)),
         Some("original") => Ok(Some(TimestampDisplay::Original)),
-        Some(other) => Err(format!("logRun: unknown timestamps preference {other:?}")),
+        Some(_) => Ok(None),
     }
 }
 

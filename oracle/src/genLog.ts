@@ -69,11 +69,13 @@ const BASE_KEYS = [
   "a//b",
   "é/ü",
   "\ud800",
+  "\ud83d\ude00/a",
+  "a/\ud83d\ude00",
   "/a/.schema/struct:Foo",
   ".schema/photonstruct:Bar"
 ];
 const CHILDREN = ["0", "1", "2", "10", "length", "x", "y", "value", ".type", "", "a"];
-const NAMES = ["a", "b", "0", "1", "2", "10", "01", "x/y", "", "é", "length", ".type"];
+const NAMES = ["a", "b", "0", "1", "2", "10", "01", "x/y", "", "é", "\ud83d\ude00", "length", ".type"];
 const NUMBERS = [0, -0, 1, 2, 1.5, -1, 3, NaN, Infinity, -Infinity, 1e21, 5e-324];
 const STRINGS = ["", "a", "b", "\ud800", "é", "Mechanism2d", "Console", "{}", "[1,2]"];
 const TYPES = [null, "log:wpilog", "struct:Pose2d", "raw", "Log:x", "Console"];
@@ -176,7 +178,7 @@ function makeCase(r: Rng): [boolean, unknown[][]] {
   const bound = (): number => {
     switch (r.below(5)) {
       case 0:
-        return r.pick([-Infinity, Infinity, -0, 0]);
+        return r.pick([-Infinity, Infinity, -0, 0, NaN]);
       case 1:
         return cursor + r.pick([-0.5, 0.5, 0]);
       default:
@@ -255,11 +257,14 @@ function makeCase(r: Rng): [boolean, unknown[][]] {
       const listed = keyLists.flat();
       ops.push(["deleteField", listed.length > 0 && r.bool() ? r.pick(listed) : key()]);
     } else if (choice < 90) {
-      const type = r.below(7);
+      const type = r.below(8);
       const n = r.below(4);
       let t = r.range(-2, 4);
       const timestamps = Array.from({ length: n }, () => (t += r.range(1, 3)));
-      const values = Array.from({ length: n }, () => (type < 4 ? scalar(r, type) : array(r, type - 3)));
+      if (n > 0 && r.below(4) === 0) timestamps[0] = r.pick([-0, 0, NaN]);
+      const values = Array.from({ length: n }, () =>
+        type === 7 ? undefined : type < 4 ? scalar(r, type) : array(r, type - 3)
+      );
       ops.push([
         "setField",
         key(),
@@ -302,6 +307,26 @@ for (let i = 0; i < count; i++) {
   const [enableCache, ops] = makeCase(new Rng(seed, `log/${i}`));
   emit(enableCache, ops);
 }
+
+emit(true, [
+  ["putNumber", "a", 0, 1],
+  ["putNumber", "b", -0, 2],
+  ["putNumber", "c", NaN, 3],
+  ["putNumber", "c", NaN, 4],
+  ["putNumber", "d", 1, 5],
+  ["getTimestamps", ["a", "b", "c", "d"], null],
+  ["getTimestamps", ["b", "a"], "u1"],
+  ["putNumber", "a", -0, 1],
+  ["putNumber", "b", 2, 2],
+  ["getTimestamps", ["b", "a"], "u1"],
+  ["getTimestamps", ["b", "a"], "u1"],
+  ["deleteField", "a"],
+  ["getTimestamps", ["b", "a"], "u1"],
+  ["clearBeforeTime", NaN, true],
+  ["range"],
+  ["getTimestamps", ["d", "c"], ""],
+  ["dump"]
+]);
 
 const SUPPORTED = new Set(["putRaw", "putJSON"]);
 const corpus = new Corpus(corpusSeed);
