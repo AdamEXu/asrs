@@ -21,6 +21,32 @@ pub fn remove_merge_prefix(key: &JsString) -> JsString {
     }
 }
 
+/// `findKey`: the field key whose unmerged form sits earliest in `search`, also trying the
+/// key without a leading `/`. Ties keep the earliest field key (strict `<`).
+pub fn find_key(log: &super::Log, search: &[&str]) -> Option<JsString> {
+    let search: Vec<JsString> = search.iter().map(|s| JsString::from(*s)).collect();
+    let mut best_key = None;
+    let mut best_index = usize::MAX;
+    for key in log.get_field_keys() {
+        let unmerged = remove_merge_prefix(&key);
+        let index = search.iter().position(|s| *s == unmerged).or_else(|| {
+            if unmerged.units().first() == Some(&(b'/' as u16)) {
+                let without = JsString::from_units(unmerged.units()[1..].to_vec());
+                search.iter().position(|s| *s == without)
+            } else {
+                None
+            }
+        });
+        if let Some(index) = index
+            && index < best_index
+        {
+            best_index = index;
+            best_key = Some(key);
+        }
+    }
+    best_key
+}
+
 /// `splitLogKey`: splits on `/` and `:`, and also on `_` when the unmerged key is a Phoenix 6
 /// signal.
 pub fn split_log_key(key: &JsString) -> Vec<JsString> {
