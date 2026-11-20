@@ -1,17 +1,34 @@
 import "./shims";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import CustomSchemas from "@upstream/hub/dataSources/schema/CustomSchemas";
 import { WPILOGDecoder, WPILOGDecoderRecord } from "@upstream/hub/dataSources/wpilog/WPILOGDecoder";
 import { CONTROL_ENTRY } from "@upstream/hub/dataSources/wpilog/WPILOGShared";
 import Log from "@upstream/shared/log/Log";
+import LogField from "@upstream/shared/log/LogField";
 import LoggableType from "@upstream/shared/log/LoggableType";
-import { getStructuredTypeFromRaw, isChildLog, isSchema } from "@upstream/shared/log/LogKeyUtils";
+import { sparkFramesSpec as spec2025 } from "@upstream/hub/dataSources/schema/spark/spark-frames-2025";
+import { sparkFramesSpec as spec2026 } from "@upstream/hub/dataSources/schema/spark/spark-frames-2026";
+import { getStructuredTypeFromRaw } from "@upstream/shared/log/LogKeyUtils";
 import { Cve1, bitsToNumber, encode, fromTree, numberToBits, toTree } from "./cve1";
 import { HistoricalSession } from "./historical/session";
 import { dump } from "./logRun";
 import { UPSTREAM_DIR } from "./shims";
+import { ByteSource, Bytes, concat, hex, toBytes, utf8 } from "./corpus/bytes";
+import {
+  SPARK_FLEX,
+  SPARK_MAX,
+  legacyFirmware,
+  legacyModel,
+  periodicEntry,
+  periodicId,
+  persistentEntry,
+  persistentId,
+  statusFrame
+} from "./corpus/urcl";
+import { WpilogBuilder } from "./corpus/wpilog";
 
 // Emits replay vectors for the URCL custom schemas (URCLSchema.ts, URCLSchemaLegacy.ts).
 //
@@ -25,12 +42,12 @@ import { UPSTREAM_DIR } from "./shims";
 //     ["meta",name,metadata], ["del",name]. Each record is {"t":<ts bits>,"v":<cve1>}
 //     where `v` is what the worker's type switch decodes (raw bytes for the custom
 //     schema branch), {"t":...,"throw":<cve1>} when the getter threw, or {"null":true}
-//     when getRecordAtPosition returned null. `requests` is the field order
-//     HistoricalDataSource.loadAllFields asks the worker for: schema, URCL aliases and
-//     persistent fields first.
+//     when getRecordAtPosition returned null. `requests` lists the parseField keys the real
+//     HistoricalDataSource posted to its worker, in order.
 //
-//     Corpus cases are cross-checked against a real HistoricalSession: the replay in
-//     this harness uses upstream's CustomSchemas and must produce the same dump.
+//     Every case, corpus or generated here, is a WPILOG file opened in a real
+//     HistoricalSession, whose hub Log is the dump. The replay of the extracted ops,
+//     records and requests must produce the same dump, or generation fails.
 
 interface IndexerModule {
   _malloc(size: number): number;
@@ -206,17 +223,6 @@ async function extract(data: Uint8Array): Promise<Extracted> {
   return { failed: false, ops, types: entryTypes, records };
 }
 
-/** The order `HistoricalDataSource.updateFieldRequest(loadEverything)` requests fields in. */
-function requestOrder(log: Log): string[] {
-  const fields = log.getFieldKeys();
-  const first = (field: string) =>
-    isSchema(field) ||
-    field.includes("URCL/Raw/Aliases") ||
-    field.includes("URCL/Raw/Persistent") ||
-    isChildLog(log.getWpilibType(field), log.getStructuredType(field));
-  return [...fields.filter(first), ...fields.filter((f) => !first(f))];
-}
-
 function applyOps(log: Log, ops: unknown[][]): void {
   for (const op of ops) {
     switch (op[0]) {
@@ -306,61 +312,36 @@ function parseRecords(log: Log, key: string, type: string, records: object[]): v
   }
 }
 
-interface Replayed {
-  log: Log;
-  requests: string[];
-  dump: unknown;
-}
 
-/** Replays the worker's index + parseField sequence and returns the dump the hub observes. */
-function replay(ops: unknown[][], types: { [key: string]: string }, records: { [key: string]: object[] }): Replayed {
-  const log = new Log(false);
-  applyOps(log, ops);
-  // The worker drains changed fields and posts "initial" before any parseField
-  // call; the hub keeps that serialized range/zero. Generated parents only reach
-  // the hub through "fields" responses, applied in changed-field order.
-  log.getChangedFields();
-  const initial = log.toSerialized();
-  const initialRange = initial.timestampRange === null ? null : [...initial.timestampRange];
-  const initialZero = initial.timestampZero;
-  const requests = requestOrder(log);
-  const parents = new Set(initial.generatedParents);
-  for (const key of requests) {
+/**
+ * Replays the worker's index and parseField sequence on a worker-side Log and moves its
+ * "initial" and "fields" responses through structuredClone into a hub-side Log, as
+ * HistoricalDataSource does, and returns the hub's dump.
+ */
+function replay(
+  ops: unknown[][],
+  types: { [key: string]: string },
+  records: { [key: string]: object[] },
+  requests: string[]
+): unknown {
+  const worker = new Log(false);
+  applyOps(worker, ops);
+  worker.getChangedFields();
+  const hub = new Log();
+  hub.mergeWith(Log.fromSerialized(structuredClone(worker.toSerialized())), "");
+  for (let key of requests) {
+    if (!(key in types) && key.startsWith("/")) key = key.slice(1);
     const type = types[key];
-    if (type === undefined) continue; // the worker warns and skips unknown keys
-    if (!(key in records)) continue;
-    parseRecords(log, key, type, records[key]);
-    let hasRoot = false;
-    log.getChangedFields().forEach((childKey) => {
-      if (childKey === key) hasRoot = true;
-      if (log.isGeneratedParent(childKey)) parents.add(childKey);
+    if (type === undefined) continue;
+    if (key in records) parseRecords(worker, key, type, records[key]);
+    const fields = worker.getChangedFields();
+    if (!fields.has(key) && worker.getField(key) !== null) fields.add(key);
+    fields.forEach((field) => {
+      hub.setField(field, LogField.fromSerialized(structuredClone(worker.getField(field)!.toSerialized())));
+      if (worker.isGeneratedParent(field)) hub.setGeneratedParent(field);
     });
-    if (!hasRoot && log.getField(key) !== null && log.isGeneratedParent(key)) parents.add(key);
   }
-  // Field values cross the worker's postMessage boundary; structured clone
-  // canonicalizes NaN payloads to 0x7ff8000000000000.
-  const d = dump(log) as {
-    fields: unknown[];
-    generatedParents: string[];
-    timestampRange: number[] | null;
-    timestampZero: number | null;
-  };
-  d.generatedParents = [...parents];
-  d.timestampRange = initialRange;
-  d.timestampZero = initialZero;
-  return { log, requests, dump: canonicalize(d) };
-}
-
-function canonicalize(value: unknown): unknown {
-  if (typeof value === "number") return Number.isNaN(value) ? NaN : value;
-  if (value instanceof Uint8Array) return value;
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value !== null && typeof value === "object") {
-    const out: { [key: string]: unknown } = {};
-    for (const [k, v] of Object.entries(value)) out[k] = canonicalize(v);
-    return out;
-  }
-  return value;
+  return dump(hub);
 }
 
 const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n");
@@ -379,13 +360,22 @@ async function corpusCase(root: string, rel: string): Promise<void> {
   const data = new Uint8Array(fs.readFileSync(path.join(root, rel)));
   const id = rel.slice(0, -".wpilog".length);
   const extracted = await extract(data);
-  const replayed = replay(extracted.ops, extracted.types, extracted.records);
   const session = await HistoricalSession.open(path.resolve(root, rel));
   try {
+    const requests: string[] = [];
+    const worker = (session as any).source.worker;
+    if (worker !== null) {
+      const post = worker.postMessage.bind(worker);
+      worker.postMessage = (message: any, transfer?: any) => {
+        if (message.type === "parseField") requests.push(message.key);
+        post(message, transfer);
+      };
+    }
     if (!extracted.failed) await session.loadEverything();
     const sessionDump = dump(session.log);
-    if (encode(toTree(replayed.dump)) !== encode(toTree(sessionDump))) {
-      const a = replayed.dump as { keys: string[]; fields: unknown[] };
+    const replayed = replay(extracted.ops, extracted.types, extracted.records, requests);
+    if (encode(toTree(replayed)) !== encode(toTree(sessionDump))) {
+      const a = replayed as { keys: string[]; fields: unknown[] };
       const b = sessionDump as { keys: string[]; fields: unknown[] };
       for (const key of new Set([...a.keys, ...b.keys])) {
         const fa = a.fields[a.keys.indexOf(key)];
@@ -401,10 +391,11 @@ async function corpusCase(root: string, rel: string): Promise<void> {
       const ka = JSON.stringify(a.keys);
       const kb = JSON.stringify(b.keys);
       if (ka !== kb) console.error(`${id} keys:\n  replay  ${ka}\n  session ${kb}`);
+      console.error(`${id} requests: ${JSON.stringify(requests)}`);
       throw new Error(`${id}: harness replay differs from the real worker`);
     }
     if (!extracted.failed) {
-      out({ t: "case", id, ops: extracted.ops, requests: replayed.requests, types: extracted.types, records: extracted.records });
+      out({ t: "case", id, ops: extracted.ops, requests, types: extracted.types, records: extracted.records });
       out({ t: "dump", log: toTree(sessionDump) });
     } else {
       out({ t: "case", id, failed: true, ops: [], requests: [], types: {}, records: {} });
@@ -415,225 +406,322 @@ async function corpusCase(root: string, rel: string): Promise<void> {
   }
 }
 
-interface GeneratedCase {
-  id: string;
-  entries: [name: string, type: string, metadata: string][];
-  range: [number, number];
-  records: { [key: string]: [us: number, bytes: Uint8Array][] };
-}
+const SECOND = 1_000_000;
+const FIRMWARE_API = 0x98;
+const MODEL_API = 0x300 | 155;
+const LEGACY_CLASS = 6;
+const PERIODIC_CLASS = spec2026.periodicFrames.STATUS_0.apiClass;
+const STATUS_2025 = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (spec2025.periodicFrames as any)[`STATUS_${i}`]);
+const STATUS_2026 = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (spec2026.periodicFrames as any)[`STATUS_${i}`]);
+const R1 = "URCL";
+const R2 = "URCLr2_periodic";
+const R3 = "URCLr3_periodic";
 
-function generatedCase(c: GeneratedCase): void {
-  const ops: unknown[][] = [
-    ["range", numberToBits(c.range[0] / 1e6), numberToBits(c.range[1] / 1e6)],
-    ...c.entries.map(([name, type, metadata]) => [
-      "field",
-      name,
-      BLANK_TYPE[type] ?? LoggableType.Raw,
-      type,
-      metadata,
-      getStructuredTypeFromRaw(type)
-    ])
-  ];
-  const records: { [key: string]: object[] } = {};
-  for (const [key, recs] of Object.entries(c.records)) {
-    records[key] = recs.map(([us, bytes]) => ({ t: numberToBits(us), v: toTree(bytes) }));
+class GenLog {
+  private b = new WpilogBuilder({ extra: "genUrcl" });
+  private ids = new Map<string, number>();
+
+  entry(name: string, type: string, metadata = ""): this {
+    const id = this.ids.size + 1;
+    this.b.start(0, id, name, type, metadata);
+    this.ids.set(name, id);
+    return this;
   }
-  const types: { [key: string]: string } = {};
-  for (const [name, type] of c.entries) types[name] = type;
-  const replayed = replay(ops, types, records);
-  out({ t: "case", id: c.id, generated: true, ops, requests: replayed.requests, types, records });
-  out({ t: "dump", log: toTree(replayed.dump) });
+
+  put(name: string, us: number, data: ByteSource): this {
+    this.b.record(this.ids.get(name)!, us, toBytes(data));
+    return this;
+  }
+
+  bytes(): Uint8Array {
+    return this.b.bytes();
+  }
 }
 
-const SECOND_US = 1_000_000;
-const le = (bytes: number[]): Uint8Array => Uint8Array.from(bytes);
-const u16le = (v: number) => [v & 0xff, (v >> 8) & 0xff];
-const u32le = (v: number) => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+const r3Root = (root: string, aliases = true) => {
+  const log = new GenLog().entry(root + "Raw/Periodic", R3);
+  if (aliases) log.entry(root + "Raw/Aliases", "URCLr3_aliases");
+  return log.entry(root + "Raw/Persistent", "URCLr3_persistent");
+};
+const r2Root = (root: string) =>
+  new GenLog()
+    .entry(root + "Raw/Periodic", R2)
+    .entry(root + "Raw/Aliases", "URCLr2_aliases")
+    .entry(root + "Raw/Persistent", "URCLr2_persistent");
+const firmware3 = (dev: number, major: number) => persistentEntry(persistentId(FIRMWARE_API, dev), [major, 1, 0, 2, 0, 3]);
+const firmware2 = (dev: number, major: number, minor = 0, build = 1) =>
+  persistentEntry(persistentId(FIRMWARE_API, dev), legacyFirmware(major, minor, build));
+const model2 = (dev: number, model: number, status = 0) => persistentEntry(persistentId(MODEL_API, dev), legacyModel(model, status));
+const status = (ms: number, index: number, dev: number, data: ByteSource) =>
+  periodicEntry(ms, periodicId(PERIODIC_CLASS, index, dev), data);
+const legacy = (ms: number, index: number, dev: number, data: ByteSource) => periodicEntry(ms, periodicId(LEGACY_CLASS, index, dev), data);
+const r1Value = (persistent: Uint8Array[], periodic: Uint8Array[], counts?: [number, number]) =>
+  concat(new Bytes().le(counts?.[0] ?? persistent.length, 4).le(counts?.[1] ?? periodic.length, 4).finish(), ...persistent, ...periodic);
+const json = (text: string) => utf8(text);
+const f32Bits = (bits: number) => new Bytes().le(bits, 4).finish();
 
-function persistentRecord(api: number, device: number, payload: number[]): Uint8Array {
-  const data = new Uint8Array(8);
-  data.set(u16le(((api << 6) | device) & 0xffff), 0);
-  data.set(payload.slice(0, 6), 2);
-  return data;
+/** Deterministic byte patterns: all clear, all set, NaN-bearing, then an LCG stream. */
+function pattern(n: number, seed: number): Uint8Array {
+  if (n % 4 === 0) return new Uint8Array(8);
+  if (n % 4 === 1) return new Uint8Array(8).fill(0xff);
+  if (n % 4 === 2) return hex("01 00 c0 7f 00 00 80 ff");
+  const out = new Uint8Array(8);
+  let x = (seed * 2654435761 + n * 40503) >>> 0;
+  for (let i = 0; i < 8; i++) {
+    x = (Math.imul(x, 1664525) + 1013904223) >>> 0;
+    out[i] = x >>> 24;
+  }
+  return out;
 }
 
-function periodicRecord(us: number, apiClass: number, index: number, device: number, payload: number[]): Uint8Array {
-  const data = new Uint8Array(14);
-  data.set(u32le(us), 0);
-  data.set(u16le(((apiClass << 10) | (index << 6) | device) & 0xffff), 4);
-  data.set(payload.slice(0, 8), 6);
-  return data;
-}
+function generated(): [string, Uint8Array][] {
+  const cases: [string, Uint8Array][] = [];
+  const add = (id: string, log: GenLog) => cases.push([id, log.bytes()]);
 
-function generated(): GeneratedCase[] {
-  const cases: GeneratedCase[] = [];
-  const r3 = "URCLr3_periodic";
-  const r2 = "URCLr2_periodic";
-  const PERIODIC_CLASS = 47;
-  const FIRMWARE_API = 0x98;
-  const MODEL_API = 0x300 | 155;
-  const FIRMWARE_API_R3 = (6 << 4) | 0;
-  const firmwareR3 = (dev: number, major: number) => persistentRecord(FIRMWARE_API_R3, dev, [major, 0, 0, 0, 0, 0]);
-  const firmwareR2 = (dev: number, major: number, minor: number, build: number) =>
-    persistentRecord(FIRMWARE_API, dev, [major, minor, (build >> 8) & 0xff, build & 0xff, 0, 0]);
-  const model = (dev: number, value: number, status = 0) =>
-    persistentRecord(MODEL_API, dev, [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >> 24) & 0xff, 0, status]);
-  const cat = (...parts: Uint8Array[]) => Uint8Array.from(parts.flatMap((p) => [...p]));
-
-  cases.push({
-    id: "edge/r3/no-persistent",
-    entries: [
-      ["URCL/Raw/Periodic", r3, ""],
-      ["URCL/Raw/Aliases", "URCLr3_aliases", ""]
-    ],
-    range: [SECOND_US, 2 * SECOND_US],
-    records: {
-      "URCL/Raw/Periodic": [[SECOND_US, cat(periodicRecord(10, PERIODIC_CLASS, 0, 1, [1, 2, 3, 4, 5, 6, 7, 8]))]],
-      "URCL/Raw/Aliases": [[SECOND_US, le([0x7b, 0x7d])]]
-    }
-  });
-  cases.push({
-    id: "edge/r3/no-aliases",
-    entries: [
-      ["URCL/Raw/Periodic", r3, ""],
-      ["URCL/Raw/Persistent", "URCLr3_persistent", ""]
-    ],
-    range: [0, SECOND_US],
-    records: {
-      "URCL/Raw/Persistent": [[0, firmwareR3(3, 26)]],
-      "URCL/Raw/Periodic": [[SECOND_US, cat(periodicRecord(10, PERIODIC_CLASS, 0, 3, [9, 9, 9, 9, 9, 9, 9, 9]))]]
-    }
-  });
-  cases.push({
-    id: "edge/r3/alias-values",
-    entries: [
-      ["URCL/Raw/Periodic", r3, ""],
-      ["URCL/Raw/Aliases", "URCLr3_aliases", ""],
-      ["URCL/Raw/Persistent", "URCLr3_persistent", ""]
-    ],
-    range: [0, SECOND_US],
-    records: {
-      "URCL/Raw/Aliases": [[0, le([...new TextEncoder().encode('{"2":5,"3":[1,null],"4":null,"5":true,"name":"x"}')])]],
-      "URCL/Raw/Persistent": [[0, cat(firmwareR3(2, 26), firmwareR3(3, 26), firmwareR3(4, 26), firmwareR3(5, 26), firmwareR3(9, 26))]],
-      "URCL/Raw/Periodic": [
-        [
-          SECOND_US,
-          cat(
-            periodicRecord(10, PERIODIC_CLASS, 0, 2, [1, 0, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(11, PERIODIC_CLASS, 0, 3, [2, 0, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(12, PERIODIC_CLASS, 0, 4, [3, 0, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(13, PERIODIC_CLASS, 0, 5, [4, 0, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(14, PERIODIC_CLASS, 0, 9, [5, 0, 0, 0, 0, 0, 0, 0])
-          )
-        ]
-      ]
-    }
-  });
-  cases.push({
-    id: "edge/r3/aliases-null",
-    entries: [
-      ["URCL/Raw/Periodic", r3, ""],
-      ["URCL/Raw/Aliases", "URCLr3_aliases", ""],
-      ["URCL/Raw/Persistent", "URCLr3_persistent", ""]
-    ],
-    range: [0, SECOND_US],
-    records: {
-      "URCL/Raw/Aliases": [[0, le([...new TextEncoder().encode("null")])]],
-      "URCL/Raw/Persistent": [[0, firmwareR3(1, 26)]],
-      "URCL/Raw/Periodic": [[SECOND_US, cat(periodicRecord(10, PERIODIC_CLASS, 0, 1, [0, 0, 0, 0, 0, 0, 0, 0]))]]
-    }
-  });
-  cases.push({
-    id: "edge/r3/short-periodic",
-    entries: [
-      ["URCL/Raw/Periodic", r3, ""],
-      ["URCL/Raw/Persistent", "URCLr3_persistent", ""]
-    ],
-    range: [0, SECOND_US],
-    records: {
-      "URCL/Raw/Persistent": [[0, firmwareR3(1, 26)]],
-      "URCL/Raw/Periodic": [
-        [
-          SECOND_US,
-          cat(
-            periodicRecord(10, PERIODIC_CLASS, 0, 1, [1, 2, 3, 4, 5, 6, 7, 8]),
-            periodicRecord(20, PERIODIC_CLASS, 0, 1, [8, 7, 6, 5, 4, 3, 2, 1]).slice(0, 9),
-            periodicRecord(30, PERIODIC_CLASS, 0, 1, [0, 0, 0, 0, 0, 0, 0, 0]).slice(0, 3)
-          )
-        ]
-      ]
-    }
-  });
-  cases.push({
-    id: "edge/r3/non-periodic-key",
-    entries: [["URCL/Raw", r3, ""]],
-    range: [0, SECOND_US],
-    records: {
-      "URCL/Raw": [[SECOND_US, cat(periodicRecord(10, PERIODIC_CLASS, 0, 1, [1, 2, 3, 4, 5, 6, 7, 8]))]]
-    }
-  });
-  cases.push({
-    id: "edge/r2/missing-and-unknown-models",
-    entries: [
-      ["URCL/Raw/Periodic", r2, ""],
-      ["URCL/Raw/Aliases", "URCLr2_aliases", ""],
-      ["URCL/Raw/Persistent", "URCLr2_persistent", ""]
-    ],
-    range: [0, SECOND_US],
-    records: {
-      "URCL/Raw/Aliases": [[0, le([...new TextEncoder().encode('{"1":"Turret"}')])]],
-      "URCL/Raw/Persistent": [
-        [
-          0,
-          cat(
-            firmwareR2(1, 25, 0, 1),
-            firmwareR2(2, 25, 0, 1),
-            model(2, 0x2159, 1),
-            model(3, 0x2158),
-            firmwareR2(4, 24, 1, 0xabcd),
-            model(4, 0x9999)
-          )
-        ]
-      ],
-      "URCL/Raw/Periodic": [
-        [
-          SECOND_US,
-          cat(
-            periodicRecord(10, 6, 0, 1, [0, 64, 255, 255, 255, 255, 3, 0]),
-            periodicRecord(11, 6, 1, 1, [0, 0, 128, 63, 30, 2, 1, 0]),
-            periodicRecord(12, 6, 0, 2, [0, 64, 1, 0, 0, 0, 0, 0]),
-            periodicRecord(13, 6, 0, 3, [0, 64, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(14, 6, 0, 4, [0, 64, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(15, 6, 0, 40, [0, 64, 0, 0, 0, 0, 0, 0]),
-            periodicRecord(16, 6, 9, 1, [1, 2, 3, 4, 5, 6, 7, 8]),
-            periodicRecord(17, 5, 0, 1, [1, 2, 3, 4, 5, 6, 7, 8])
-          )
-        ]
-      ]
-    }
-  });
   {
-    const persistent = cat(firmwareR2(1, 25, 0, 1), model(1, 0x2158));
-    const frame = periodicRecord(10, 6, 0, 1, [0, 64, 255, 255, 255, 255, 3, 0]);
-    cases.push({
-      id: "edge/r1/periodic-overrun",
-      entries: [["/URCL", "URCL", ""]],
-      range: [SECOND_US, 2 * SECOND_US],
-      records: {
-        "/URCL": [
-          [SECOND_US, Uint8Array.from([...u32le(1), ...u32le(1), ...persistent, ...frame])],
-          [2 * SECOND_US, Uint8Array.from([...u32le(1), ...u32le(100), ...persistent, ...frame])]
-        ]
-      }
+    const log = r3Root("URCL/");
+    const devs = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 63];
+    log.put("URCL/Raw/Aliases", 0, json('{"2":5,"3":[1,null,[2,"x"],{}],"4":null,"5":true,"6":{"a":1},"7":"","8":"Arm/Sub","9":-0,"10":1e21,"11":[],"63":"Last"}'));
+    log.put("URCL/Raw/Persistent", 0, concat(...devs.map((d) => firmware3(d, 26))));
+    log.put("URCL/Raw/Periodic", SECOND, concat(...devs.map((d, i) => status(i, i % 8, d, statusFrame(STATUS_2026[i % 8], pattern(i, 1))))));
+    add("r3/alias-values", log);
+  }
+  for (const [id, aliases] of [
+    ["r3/alias-tostring-throws", '{"3":{"toString":1}}'],
+    ["r3/alias-nested-tostring-throws", '{"3":[1,{"toString":"x"}]}'],
+    ["r3/alias-valueof-object", '{"3":{"valueOf":1}}']
+  ]) {
+    const log = r3Root("URCL/");
+    log.put("URCL/Raw/Aliases", 0, json(aliases));
+    log.put("URCL/Raw/Persistent", 0, concat(firmware3(2, 26), firmware3(3, 26), firmware3(4, 25)));
+    log.put("URCL/Raw/Periodic", SECOND, concat(status(1, 0, 2, pattern(3, 2)), status(2, 0, 3, pattern(3, 3)), status(3, 0, 4, pattern(3, 4))));
+    add(id, log);
+  }
+  {
+    const log = r3Root("URCL/");
+    log.put("URCL/Raw/Persistent", 0, concat(firmware3(0, 26), firmware3(1, 26), firmware3(2, 26), firmware3(10, 26)));
+    const frames = concat(status(1, 0, 0, pattern(3, 5)), status(2, 0, 1, pattern(3, 6)), status(3, 0, 2, pattern(3, 7)), status(4, 0, 10, pattern(3, 8)));
+    const aliasSets: ByteSource[] = [
+      '["Zero","One"]',
+      '"ab"',
+      "5",
+      "null",
+      "[]",
+      concat(hex("ef bb bf"), '{"1":"Bom"}'),
+      concat('{"1":"', hex("ff fe c3"), '"}'),
+      '{"1":"A","01":"B","-1":"C","64":"D","1.5":"E","2":"Dup","10":"Dup"}',
+      '{"__proto__":"P","constructor":"C","2":"Two"}',
+      '{"1":"First","1":"Second"}',
+      "  {}  ",
+      "{}x"
+    ];
+    aliasSets.forEach((aliases, i) => {
+      log.put("URCL/Raw/Aliases", (i + 1) * SECOND, aliases);
+      log.put("URCL/Raw/Periodic", (i + 1) * SECOND, frames);
     });
-    cases.push({
-      id: "edge/r1/short-header",
-      entries: [["/URCL", "URCL", ""]],
-      range: [SECOND_US, SECOND_US],
-      records: {
-        "/URCL": [[SECOND_US, le([1, 2, 3])]]
+    log.put("URCL/Raw/Periodic", (aliasSets.length + 1) * SECOND - 1, frames);
+    add("r3/alias-shapes", log);
+  }
+  {
+    const log = new GenLog()
+      .entry("URCL/Raw/Periodic", R3)
+      .entry("URCL/Raw/Aliases", "string")
+      .entry("URCL/Raw/Persistent", "URCLr3_persistent");
+    log.put("URCL/Raw/Aliases", 0, '{"1":"Ignored"}');
+    log.put("URCL/Raw/Persistent", 0, firmware3(1, 26));
+    log.put("URCL/Raw/Periodic", SECOND, status(1, 0, 1, pattern(3, 9)));
+    add("r3/aliases-wrong-type", log);
+  }
+  {
+    const log = r3Root("URCL/");
+    const devs = [0, 1, 2, 3, 4, 5, 6, 7];
+    const majors = [0, 23, 24, 25, 26, 27, 128, 255];
+    log.put("URCL/Raw/Persistent", 0, concat(...devs.map((d, i) => firmware3(d, majors[i]))));
+    for (let cycle = 0; cycle < 4; cycle++) {
+      const chunks: Uint8Array[] = [];
+      for (const dev of devs) {
+        const specs = majors[dev] >= 26 ? STATUS_2026 : STATUS_2025;
+        for (let index = 0; index < 16; index++) {
+          const seed = pattern(cycle + index, dev * 16 + index);
+          chunks.push(status(cycle * 100 + index, index, dev, index < 8 ? statusFrame(specs[index], seed) : seed));
+        }
+        chunks.push(periodicEntry(cycle * 100 + 50, periodicId(LEGACY_CLASS, 0, dev), pattern(cycle, dev)));
+        chunks.push(periodicEntry(cycle * 100 + 51, periodicId(PERIODIC_CLASS + 1, 0, dev), pattern(cycle, dev)));
       }
-    });
+      log.put("URCL/Raw/Periodic", SECOND + cycle * 20000, concat(...chunks));
+    }
+    add("r3/firmware-years-all-frames", log);
+  }
+  for (const [year, specs, major] of [
+    ["2025", STATUS_2025, 25],
+    ["2026", STATUS_2026, 26]
+  ] as const) {
+    const log = r3Root("URCL/", false);
+    log.put("URCL/Raw/Persistent", 0, firmware3(5, major));
+    for (let index = 0; index < 8; index++) {
+      const frames: Uint8Array[] = [];
+      for (let n = 0; n < 24; n++) frames.push(status(index * 100 + n, index, 5, statusFrame(specs[index], pattern(n, index * 31 + n))));
+      for (let n = 0; n < 4; n++) frames.push(status(index * 100 + 50 + n, index, 5, pattern(n, index)));
+      log.put("URCL/Raw/Periodic", SECOND + index * 1000, concat(...frames));
+    }
+    add(`r3/signals-${year}`, log);
+  }
+  {
+    const log = r3Root("URCL/", false);
+    log.put("URCL/Raw/Persistent", 0, concat(firmware3(1, 25), firmware3(1, 26), firmware3(2, 26), firmware3(2, 24)));
+    log.put("URCL/Raw/Periodic", SECOND, concat(status(1, 0, 1, pattern(3, 10)), status(2, 0, 2, pattern(3, 11))));
+    log.put("URCL/Raw/Persistent", 2 * SECOND, concat(firmware3(1, 26), hex("98 26")));
+    log.put("URCL/Raw/Periodic", 2 * SECOND, status(3, 0, 1, pattern(3, 12)));
+    log.put("URCL/Raw/Persistent", 3 * SECOND, concat(firmware3(1, 26), hex("98 26 1a")));
+    log.put("URCL/Raw/Periodic", 3 * SECOND, status(4, 0, 1, pattern(3, 13)));
+    log.put("URCL/Raw/Persistent", 4 * SECOND, concat(firmware3(1, 26), hex("98")));
+    log.put("URCL/Raw/Periodic", 4 * SECOND, status(5, 0, 1, pattern(3, 14)));
+    log.put("URCL/Raw/Persistent", 5 * SECOND, new Uint8Array());
+    log.put("URCL/Raw/Periodic", 5 * SECOND, status(6, 0, 1, pattern(3, 15)));
+    add("r3/persistent-variants", log);
+  }
+  {
+    const log = r3Root("URCL/", false);
+    log.put("URCL/Raw/Persistent", 0, firmware3(1, 26));
+    const full = status(7, 1, 1, statusFrame(STATUS_2026[1], pattern(3, 16)));
+    for (let length = 0; length <= 14; length++) log.put("URCL/Raw/Periodic", SECOND + length * 1000, concat(full, full.slice(0, length)));
+    add("r3/truncated-frames", log);
+  }
+  {
+    const log = new GenLog()
+      .entry("Raw/Periodic", R3)
+      .entry("Raw/Persistent", "URCLr3_persistent")
+      .entry("A/URCL/Raw/Periodic", R3)
+      .entry("A/URCL/Raw/Persistent", "URCLr3_persistent")
+      .entry("A/URCL/Raw/Aliases", "URCLr3_aliases")
+      .entry("B/URCL/Raw/Periodic", R3)
+      .entry("B/URCL/Raw/Persistent", "URCLr3_persistent")
+      .entry("FooRaw/Periodic", R3)
+      .entry("FooRaw/Persistent", "URCLr3_persistent")
+      .entry("C/URCL/Raw/Periodic/", R3)
+      .entry("C/URCL/Raw/Persistent", "URCLr3_persistent");
+    for (const root of ["", "A/URCL/", "B/URCL/", "Foo", "C/URCL/"]) {
+      log.put(root + "Raw/Persistent", 0, concat(firmware3(1, 26), firmware3(2, root === "B/URCL/" ? 25 : 26)));
+      log.put(root === "C/URCL/" ? "C/URCL/Raw/Periodic/" : root + "Raw/Periodic", SECOND, concat(status(1, 0, 1, pattern(3, 17)), status(2, 1, 2, pattern(3, 18))));
+    }
+    log.put("A/URCL/Raw/Aliases", 0, '{"1":"Shared","2":"Shared"}');
+    add("r3/roots", log);
+  }
+  {
+    const log = new GenLog()
+      .entry("URCL/Spark-1/AppliedOutput", "string")
+      .entry("URCL/Spark-1", "double")
+      .entry("URCL/Spark-1/Firmware", "boolean")
+      .entry("URCL/Spark-1/PeriodicFrame/0", "int64")
+      .entry("URCL/Spark-1/Fault/Other", "raw", '{"description":"existing"}')
+      .entry("URCL/Raw/Persistent", "URCLr3_persistent")
+      .entry("URCL/Raw/Periodic", R3);
+    log.put("URCL/Spark-1/AppliedOutput", 0, "text");
+    log.put("URCL/Spark-1", 0, new Bytes().f64(1.5).finish());
+    log.put("URCL/Spark-1/Firmware", 0, [1]);
+    log.put("URCL/Spark-1/PeriodicFrame/0", 0, new Bytes().le(7, 8).finish());
+    log.put("URCL/Raw/Persistent", 0, firmware3(1, 26));
+    log.put("URCL/Raw/Periodic", SECOND, concat(status(1, 0, 1, pattern(1, 19)), status(2, 1, 1, pattern(3, 20))));
+    add("r3/key-collisions", log);
+  }
+
+  {
+    const log = r2Root("URCL/");
+    const devs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 63];
+    log.put("URCL/Raw/Aliases", 0, '{"5":"Five","6":null,"7":{"toString":1}}');
+    log.put(
+      "URCL/Raw/Persistent",
+      0,
+      concat(
+        model2(0, SPARK_MAX),
+        firmware2(0, 25, 1, 0x0203),
+        firmware2(1, 23, 0, 7),
+        model2(1, SPARK_FLEX),
+        firmware2(2, 24, 0, 0xffff),
+        model2(2, SPARK_FLEX),
+        firmware2(3, 24),
+        model2(3, SPARK_MAX),
+        firmware2(4, 25),
+        model2(4, SPARK_FLEX, 1),
+        firmware2(5, 25),
+        model2(5, 0x9999),
+        firmware2(6, 25),
+        model2(6, SPARK_FLEX, 0xff),
+        firmware2(8, 25),
+        model2(9, SPARK_MAX),
+        firmware2(63, 22, 255, 0x8000),
+        model2(63, SPARK_FLEX)
+      )
+    );
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const chunks: Uint8Array[] = [];
+      for (const dev of devs) {
+        for (let index = 0; index < 10; index++) chunks.push(legacy(cycle * 100 + index, index, dev, pattern(cycle + index, dev * 10 + index)));
+        chunks.push(periodicEntry(cycle * 100 + 60, periodicId(LEGACY_CLASS - 1, 0, dev), pattern(cycle, dev)));
+      }
+      log.put("URCL/Raw/Periodic", SECOND + cycle * 20000, concat(...chunks));
+    }
+    add("r2/models", log);
+  }
+  {
+    const log = r2Root("URCL/");
+    log.put("URCL/Raw/Persistent", 0, concat(firmware2(1, 24), model2(1, SPARK_FLEX), firmware2(2, 23), model2(2, SPARK_MAX)));
+    const frames: Uint8Array[] = [];
+    let ms = 0;
+    const both = (index: number, data: ByteSource) => {
+      frames.push(legacy(ms++, index, 1, data));
+      frames.push(legacy(ms++, index, 2, data));
+    };
+    both(0, [0x01, 0x80, 0xff, 0xff, 0x00, 0x00, 0x33, 0]);
+    both(1, concat(new Bytes().f32(1500).finish(), [0, 0x80, 0x0c, 0]));
+    both(0, [0xff, 0x7f, 0x00, 0x00, 0xff, 0xff, 0x00, 0]);
+    both(1, concat(f32Bits(0x7fa00001), [40, 0x00, 0xf8, 0]));
+    for (const position of [-2.75, -0.5, 0, 0.25, 3.5, -1e9, NaN, Infinity, -Infinity]) {
+      both(2, concat(new Bytes().f32(position).finish(), [0x00, 0x80, 0x12, 0x34]));
+    }
+    both(2, concat(f32Bits(0xffc00007), f32Bits(0x7f800001)));
+    for (const raw of [0, 0x3ff, 0x200, 0x155]) {
+      both(3, concat([raw & 0xff, (raw >> 8) & 0x03 | 0xfc, 0xff, 0x7f], new Bytes().f32(-0).finish()));
+      both(3, concat([raw & 0xff, (raw >> 8) & 0x03, 0x00, 0x80], new Bytes().f32(12.5).finish()));
+    }
+    both(4, concat(new Bytes().f32(-100).finish(), new Bytes().f32(7.25).finish()));
+    both(5, concat(new Bytes().f32(0.5).finish(), [0xff, 0xff, 0, 0]));
+    both(6, concat(new Bytes().f32(60).finish(), [0x34, 0x12, 0, 0]));
+    both(7, f32Bits(0x7f800000));
+    log.put("URCL/Raw/Periodic", SECOND, concat(...frames));
+    add("r2/frame-values", log);
+  }
+  {
+    const log = r2Root("URCL/");
+    log.put("URCL/Raw/Persistent", 0, concat(firmware2(1, 25), model2(1, SPARK_FLEX)));
+    for (let index = 0; index < 8; index++) {
+      const full = legacy(index, index, 1, pattern(3, 21 + index));
+      for (const length of [6, 7, 8, 9, 10, 11, 12, 13]) log.put("URCL/Raw/Periodic", SECOND + index * 1000 + length, full.slice(0, length));
+    }
+    log.put("URCL/Raw/Persistent", 2 * SECOND, concat(firmware2(1, 25), model2(1, SPARK_FLEX), hex("98 26 19")));
+    log.put("URCL/Raw/Periodic", 2 * SECOND, legacy(1, 0, 1, pattern(3, 30)));
+    log.put("URCL/Raw/Persistent", 3 * SECOND, concat(firmware2(1, 25), model2(1, SPARK_FLEX).slice(0, 7)));
+    log.put("URCL/Raw/Periodic", 3 * SECOND, legacy(1, 0, 1, pattern(3, 31)));
+    add("r2/truncated", log);
+  }
+
+  {
+    const log = new GenLog().entry("/URCL", R1).entry("URCL", R1).entry("a/b", R1, '{"source":"URCL"}');
+    const persistent = [firmware2(1, 25, 2, 3), model2(1, SPARK_FLEX), model2(2, SPARK_MAX), firmware2(2, 23), firmware2(3, 25), model2(4, SPARK_MAX), model2(63, 0x1111, 0), firmware2(63, 25)];
+    const periodic = [0, 2, 3, 4, 63].flatMap((dev) => [0, 1, 2, 3, 4, 5, 6, 7, 9].map((index) => legacy(dev * 10 + index, index, dev, pattern(index + dev, dev))));
+    log.put("/URCL", SECOND, r1Value(persistent, periodic));
+    log.put("/URCL", 2 * SECOND, r1Value([], []));
+    log.put("/URCL", 3 * SECOND, r1Value(persistent, []));
+    log.put("/URCL", 4 * SECOND, r1Value([], periodic));
+    log.put("/URCL", 5 * SECOND, r1Value(persistent, periodic, [persistent.length, 3]));
+    log.put("/URCL", 6 * SECOND, concat(r1Value(persistent, periodic), [1, 2, 3]));
+    log.put("/URCL", 7 * SECOND, r1Value(persistent, periodic, [0xffffffff, 0]));
+    log.put("/URCL", 8 * SECOND, r1Value(persistent, periodic, [persistent.length, 0xffffffff]));
+    log.put("/URCL", 9 * SECOND, r1Value([firmware2(1, 25).slice(0, 3)], [], [1, 0]));
+    log.put("/URCL", 10 * SECOND, concat(r1Value([], [], [0, 0]).slice(0, 7)));
+    log.put("URCL", SECOND, r1Value(persistent, periodic.slice(0, 9)));
+    log.put("a/b", SECOND, r1Value([firmware2(1, 24), model2(1, SPARK_FLEX)], [legacy(5, 2, 1, pattern(3, 32))]));
+    add("r1/field-sets", log);
   }
   return cases;
 }
@@ -651,6 +739,14 @@ for (const rel of listFiles(path.join(dir, "urcl"), "urcl")) {
 for (const rel of listFiles(path.join(dir, "fuzz/urcl"), "fuzz/urcl")) {
   await corpusCase(dir, rel);
 }
-for (const c of generated()) {
-  generatedCase(c);
+const generatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "genUrcl-"));
+try {
+  for (const [id, bytes] of generated()) {
+    const rel = path.join("generated", id + ".wpilog");
+    fs.mkdirSync(path.dirname(path.join(generatedDir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(generatedDir, rel), bytes);
+    await corpusCase(generatedDir, rel);
+  }
+} finally {
+  fs.rmSync(generatedDir, { recursive: true, force: true });
 }

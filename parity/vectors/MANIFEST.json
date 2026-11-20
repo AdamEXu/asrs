@@ -123,7 +123,7 @@
     "tabs/console-export": {"cases":300,"content":"264169031d72d46e","generator":"12fd5833630e29e6","spec":"parity/specs/tabs/console-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-filter": {"cases":3022,"content":"d9772c459e0a5ef6","generator":"c8c373b75d9477bc","spec":"parity/specs/tabs/console-filter.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-format": {"cases":3041,"content":"76e5265a66c5b13f","generator":"5026c07e5bb3c666","spec":"parity/specs/tabs/console-format.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "urcl/urcl": {"cases":47,"content":"8742fe8f48dbd1fb","generator":"6e6e0c62a83f1cc3","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "urcl/urcl": {"cases":63,"content":"0234af7989d75049","generator":"b52dd2dd691f58e1","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/corpus": {"cases":222,"content":"1893bd0e04348bcb","generator":"e8e59a41a5d7abae","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/public": {"cases":5,"content":"3a0c9961a122df71","generator":"ebd4a01880efc2e4","spec":"parity/specs/wpilog/public.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }

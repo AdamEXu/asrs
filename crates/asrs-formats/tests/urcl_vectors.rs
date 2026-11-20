@@ -169,7 +169,12 @@ fn replay(case: &Json) -> Result<Value, String> {
     let types = case.get("types").ok_or("case has no types")?;
     let records = case.get("records").ok_or("case has no records")?;
     for key_json in requests {
-        let key = js(key_json)?;
+        let mut key = js(key_json)?;
+        if types.get(&key.to_string_lossy()).is_none()
+            && key.starts_with(&JsString::from("/"), None)
+        {
+            key = key.slice(1.0, None);
+        }
         let Some(type_) = types.get(&key.to_string_lossy()) else {
             continue;
         };
