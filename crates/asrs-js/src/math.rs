@@ -71,9 +71,42 @@ pub fn pow(x: f64, y: f64) -> f64 {
     x.powf(y)
 }
 
-/// The `%` operator on numbers (C `fmod`, which is exact).
+/// The `%` operator on numbers: the first NaN operand, else the exact `fmod` result, with
+/// V8's NaN for the invalid cases (`x` infinite or `y` zero).
+///
+/// That NaN depends on the platform. V8 returns the canonical `0x7ff8...` from its Smi path
+/// (both operands Smis) and otherwise whatever the C library's `fmod` returns. On Windows
+/// (measured on arm64) the UCRT returns `0xfff8...`, so `1.5 % 0` and `1 % -0` are negative
+/// NaNs there while `1 % 0` is not. With pointer compression a Smi is an integer in
+/// `[-2^30, 2^30)` other than `-0`. V8 also keeps integral values that came out of float
+/// arithmetic as heap numbers (`(1 + 0.5 - 0.5) % 0` is `0xfff8...` on Windows); a plain `f64`
+/// cannot tell those apart, so this assumes every such operand is a Smi.
 pub fn rem(x: f64, y: f64) -> f64 {
-    x % y
+    if x.is_nan() {
+        return quiet(x);
+    }
+    if y.is_nan() {
+        return quiet(y);
+    }
+    if x.is_infinite() || y == 0.0 {
+        return if cfg!(windows) && !(is_smi(x) && is_smi(y)) {
+            f64::from_bits(0xfff8_0000_0000_0000)
+        } else {
+            NAN
+        };
+    }
+    if y.is_infinite() || x == 0.0 {
+        return x;
+    }
+    let r = x % y;
+    if r == 0.0 { 0.0f64.copysign(x) } else { r }
+}
+
+#[allow(clippy::float_cmp)]
+fn is_smi(x: f64) -> bool {
+    x.trunc() == x
+        && (-1_073_741_824.0..1_073_741_824.0).contains(&x)
+        && !(x == 0.0 && x.is_sign_negative())
 }
 
 pub fn abs(x: f64) -> f64 {

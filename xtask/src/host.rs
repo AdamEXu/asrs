@@ -45,6 +45,9 @@ commands on a host (cargo xtask host <name> ...):
   run <command>...        run a command in the checkout over SSH
   gui <command>...        run a command in the checkout inside the desktop session and wait
   fetch [<dir>]           copy target/parity[/<dir>] from the host into target/parity/<name>/
+  gen <id>...             sync, run `oracle gen <id>...` there for the host's platform vectors
+                          (specs with `platforms`), and copy those vectors and their manifest
+                          entries back into parity/vectors
   theme light|dark        switch the desktop theme
   screenshot <file>       PNG of the host display
   manifest                store the fetched host description (target/parity/<name>/host/host.json)
@@ -130,6 +133,7 @@ fn run_remote(paths: &Paths, host: &Host, command: &str, rest: &[String]) -> Res
         ("screenshot", [file]) => host.screenshot(Path::new(file)),
         ("check", []) => host.check(paths),
         ("manifest", []) => host.record_manifest(paths),
+        ("gen", [_, ..]) => host.gen_vectors(paths, rest),
         _ => Err(USAGE.to_owned()),
     }
 }
@@ -600,6 +604,35 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
                 Ok(())
             }
         }
+    }
+
+    fn gen_vectors(&self, paths: &Paths, ids: &[String]) -> Result {
+        self.sync(paths)?;
+        self.run(&format!("cargo xtask oracle gen {}", ids.join(" ")))?;
+        let remote_dir = match self.os {
+            Os::Windows => format!("{}/parity/vectors", self.checkout()),
+            Os::Linux => format!("{}/parity/vectors", host_dir()),
+        };
+        let state = paths.root.join("target/hosts").join(self.name);
+        fs::create_dir_all(&state).map_err(|e| format!("{}: {e}", state.display()))?;
+        let manifest = state.join("MANIFEST.json");
+        self.scp(
+            &format!(":{remote_dir}/MANIFEST.json"),
+            &manifest.display().to_string(),
+        )?;
+        let text =
+            fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
+        let remote = json::parse(&text).map_err(|e| format!("{}: {e}", manifest.display()))?;
+        let os = match self.os {
+            Os::Windows => "windows",
+            Os::Linux => "linux",
+        };
+        crate::vectors::import_platform_vectors(paths, &remote, ids, os, |id, dest| {
+            self.scp(
+                &format!(":{remote_dir}/{id}.jsonl.zst"),
+                &dest.display().to_string(),
+            )
+        })
     }
 
     fn record_manifest(&self, paths: &Paths) -> Result {

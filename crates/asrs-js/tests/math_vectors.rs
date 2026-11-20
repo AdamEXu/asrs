@@ -30,6 +30,11 @@ fn dispatch(case: &FnCase<'_>) -> Response {
 
 fn_vectors!(math_functions, "js/math", dispatch);
 fn_vectors!(math_operators, "js/math-ops", dispatch);
+fn_vectors!(
+    math_remainder,
+    &asrs_parity::vectors::platform_vector("js/math-rem"),
+    dispatch
+);
 
 fn words(hi: u32) -> f64 {
     f64::from_bits(u64::from(hi) << 32)
@@ -524,9 +529,32 @@ fn math_spec() -> Spec {
     spec
 }
 
-fn ops_spec() -> Spec {
+fn rem_boundaries(rem: &mut Spec) {
+    let smi_edges = [
+        1073741823.0,
+        1073741824.0,
+        -1073741824.0,
+        -1073741825.0,
+        2147483647.0,
+        -2147483648.0,
+        -0.0,
+        0.0,
+        -7.0,
+        7.0,
+        1.5,
+    ];
+    for &a in &smi_edges {
+        for b in [0.0, -0.0, 1.0, -1.0, 4.0, 0.25, f64::INFINITY] {
+            rem.call("(a, b) => a % b", vec![n(a), n(b)]);
+        }
+    }
+}
+
+/// `js/math-ops` and the platform-dependent `%` requests of `js/math-rem`.
+fn ops_specs() -> (Spec, Spec) {
     let mut rng = Rng::new(0x6a03);
     let mut spec = Spec::new();
+    let mut rem = Spec::new();
     spec.call(
         "() => [Math.E, Math.LN10, Math.LN2, Math.LOG10E, Math.LOG2E, Math.PI, Math.SQRT1_2, Math.SQRT2]",
         vec![],
@@ -611,13 +639,13 @@ fn ops_spec() -> Spec {
     let pairs = pair_values();
     for &a in &pairs {
         for &b in &pairs {
-            spec.call("(a, b) => a % b", vec![n(a), n(b)]);
+            rem.call("(a, b) => a % b", vec![n(a), n(b)]);
             spec.call("(a, b) => a ** b", vec![n(a), n(b)]);
         }
     }
     for _ in 0..300 {
         let v = random_doubles(&mut rng, 2, 60, -60);
-        spec.call("(a, b) => a % b", vec![n(v[0]), n(v[1])]);
+        rem.call("(a, b) => a % b", vec![n(v[0]), n(v[1])]);
         spec.call("(a, b) => a ** b", vec![n(v[0].abs()), n(v[1] / 1e15)]);
     }
     let bigs = [
@@ -655,12 +683,15 @@ fn ops_spec() -> Spec {
             }
         }
     }
-    spec
+    rem_boundaries(&mut rem);
+    (spec, rem)
 }
 
 #[test]
-#[ignore = "rewrites parity/specs/js/math*.jsonl; regenerate vectors after with `cargo xtask oracle gen js/math js/math-ops`"]
+#[ignore = "rewrites parity/specs/js/math*; regenerate vectors after with `cargo xtask oracle gen js/math js/math-ops js/math-rem` and `cargo xtask host windows gen js/math-rem/windows-aarch64` (likewise linux)"]
 fn write_math_specs() {
     math_spec().write("js/math");
-    ops_spec().write("js/math-ops");
+    let (ops, rem) = ops_specs();
+    ops.write("js/math-ops");
+    rem.write("js/math-rem.requests");
 }
