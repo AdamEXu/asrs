@@ -123,7 +123,7 @@ pub fn get_log_value_text_at(set: &LogValueSetAny, index: usize) -> Option<Strin
 
 /// `getOrDefault` without the default: the value of `key` in effect at `timestamp`, or `None`
 /// when the field is missing, has another type, or has no sample at or before it.
-pub fn get_value<T: LogValue>(
+pub fn get_value_at<T: LogValue>(
     log: &Log,
     key: &JsString,
     timestamp: f64,
@@ -147,7 +147,7 @@ pub fn get_or_default<T: LogValue>(
     default: T,
     uuid: Option<&str>,
 ) -> T {
-    get_value(log, key, timestamp, uuid).unwrap_or(default)
+    get_value_at(log, key, timestamp, uuid).unwrap_or(default)
 }
 
 /// `logValuesEqual`.

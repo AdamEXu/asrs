@@ -72,6 +72,10 @@ export function dump(log: Log): unknown {
 }
 
 export function run(enableTimestampSetCache: boolean, ops: any[][]): unknown[] {
+  return runWithLog(enableTimestampSetCache, ops).results;
+}
+
+export function runWithLog(enableTimestampSetCache: boolean, ops: any[][]): { log: Log; results: unknown[] } {
   let log = new Log(enableTimestampSetCache);
   const results: unknown[] = [];
   for (const op of ops) {
@@ -198,5 +202,5 @@ export function run(enableTimestampSetCache: boolean, ops: any[][]): unknown[] {
         throw new Error(`logRun: unknown op ${JSON.stringify(name)}`);
     }
   }
-  return results;
+  return { log, results };
 }
