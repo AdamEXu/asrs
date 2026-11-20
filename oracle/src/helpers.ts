@@ -45,10 +45,13 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   // A PhotonStructDecoder session on a fresh decoder; each op result is {ok|throw} so a
   // failed decode can't abort the session.
   photon: (ops: [string, string, Uint8Array][]) => {
-    const decoder = new PhotonStructDecoder();
+    let decoder = new PhotonStructDecoder();
     return ops.map((op) => {
       try {
         switch (op[0]) {
+          case "reload":
+            decoder = PhotonStructDecoder.fromSerialized(structuredClone(decoder.toSerialized()));
+            return { ok: structuredClone(decoder.toSerialized()) };
           case "addSchema":
             decoder.addSchema(op[1], op[2]);
             return { ok: Object.keys(decoder.getSchemas()) };

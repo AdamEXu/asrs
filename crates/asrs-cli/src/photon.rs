@@ -1,8 +1,9 @@
 //! `oracle:photon`: replays a `PhotonStructDecoder` op list through the `asrs-log` port.
-//! Ops are `["addSchema", name, bytes]` or `["decode"|"decodeImpl", name, bytes]`; each
+//! Ops are `["addSchema", name, bytes]`, `["decode"|"decodeImpl", name, bytes]` or
+//! `["reload", ..]` (`from_serialized(to_serialized())`); each
 //! result is wrapped `{"ok": v}` or `{"throw": e}` so a throw can't abort the session.
 
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::photon_struct_decoder::PhotonStructDecoder;
 use asrs_parity::{Response, Utf16String, Value};
@@ -36,6 +37,10 @@ fn run_op(decoder: &mut PhotonStructDecoder, op: &Value) -> Result<Value, Value>
     };
     let arg = |i: usize| parts.get(i).cloned().unwrap_or(Value::Undefined);
     match kind.as_str() {
+        "reload" => {
+            *decoder = PhotonStructDecoder::from_serialized(&decoder.to_serialized());
+            Ok(js_json::from_js(&decoder.to_serialized()))
+        }
         "addSchema" => {
             let name = name_arg(&arg(1))?;
             let bytes = bytes_arg(&arg(2))?;
@@ -48,28 +53,31 @@ fn run_op(decoder: &mut PhotonStructDecoder, op: &Value) -> Result<Value, Value>
                     .collect(),
             ))
         }
-        "decode" | "decodeImpl" => {
+        "decode" => {
             let name = name_arg(&arg(1))?;
             let bytes = bytes_arg(&arg(2))?;
-            match decoder.decode_impl(&name, &bytes) {
-                Ok(r) => {
-                    let mut result = vec![
-                        ("data", js_json::from_js(&r.data)),
-                        ("schemaTypes", schema_types(&r.schema_types)),
-                    ];
-                    if kind == "decodeImpl" {
-                        result.push(("bytesConsumed", Value::number(r.bytes_consumed as f64)));
-                    }
-                    Ok(Value::object(result))
-                }
-                Err(e) => Err(Value::Error(
-                    Utf16String::from(e.name),
-                    Utf16String::from(e.message),
-                )),
-            }
+            let r = decoder.decode(&name, &bytes).map_err(thrown)?;
+            Ok(Value::object([
+                ("data", js_json::from_js(&r.data)),
+                ("schemaTypes", schema_types(&r.schema_types)),
+            ]))
+        }
+        "decodeImpl" => {
+            let name = name_arg(&arg(1))?;
+            let bytes = bytes_arg(&arg(2))?;
+            let r = decoder.decode_impl(&name, &bytes).map_err(thrown)?;
+            Ok(Value::object([
+                ("data", js_json::from_js(&r.data)),
+                ("schemaTypes", schema_types(&r.schema_types)),
+                ("bytesConsumed", Value::number(r.bytes_consumed as f64)),
+            ]))
         }
         _ => Err(bad_op(&format!("bad op {kind:?}"))),
     }
+}
+
+fn thrown(e: JsError) -> Value {
+    Value::Error(Utf16String::from(e.name), Utf16String::from(e.message))
 }
 
 fn name_arg(value: &Value) -> Result<JsString, Value> {

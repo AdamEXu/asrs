@@ -1,16 +1,17 @@
 import "./shims";
-import PhotonStructDecoder from "@upstream/shared/log/PhotonStructDecoder";
 import { utf8 } from "./corpus/bytes";
 import { Corpus } from "./corpus/corpus";
 import { photonMatrix } from "./corpus/photon";
 import { Rng } from "./corpus/rng";
 import { encode, fromTree } from "./cve1";
+import { HELPERS } from "./helpers";
 
 // Emits PhotonStructDecoder ground truth for the asrs_log photon vectors.
 //   genPhoton <seed>
 //     {"fn":"oracle:photon","args":[[<op>...]],"ok":[<result>...]}
 //     One record per session; each op is ["addSchema", name, bytes],
-//     ["decode", name, bytes] or ["decodeImpl", name, bytes], and each result is
+//     ["decode", name, bytes], ["decodeImpl", name, bytes] or ["reload", "", empty]
+//     (fromSerialized(structuredClone(toSerialized()))), and each result is
 //     {"ok": value} or {"throw": error}. Records cover the corpus photon matrix
 //     (schema puts and decodes in file order), schema-compile edges and seeded
 //     schema/payload fuzz with per-byte truncations for short-buffer errors.
@@ -21,29 +22,8 @@ if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error(US
 
 type Op = [kind: string, name: string, bytes: Uint8Array];
 
-function run(ops: Op[]): unknown[] {
-  const decoder = new PhotonStructDecoder();
-  return ops.map((op) => {
-    try {
-      switch (op[0]) {
-        case "addSchema":
-          decoder.addSchema(op[1], op[2]);
-          return { ok: Object.keys(decoder.getSchemas()) };
-        case "decode":
-          return { ok: decoder.decode(op[1], op[2]) };
-        case "decodeImpl":
-          return { ok: decoder.decodeImpl(op[1], op[2]) };
-        default:
-          throw new Error(`oracle:photon: bad op ${op[0]}`);
-      }
-    } catch (e) {
-      return { throw: e };
-    }
-  });
-}
-
 function emit(ops: Op[]): void {
-  process.stdout.write(`{"fn":"oracle:photon","args":[${encode(ops)}],"ok":${encode(run(ops))}}\n`);
+  process.stdout.write(`{"fn":"oracle:photon","args":[${encode(ops)}],"ok":${encode(HELPERS.photon(ops))}}\n`);
 }
 
 // The corpus photon matrix, as decoder ops in the order Log.ts would see them.
@@ -78,6 +58,7 @@ const zeros = (n: number) => new Uint8Array(n);
 const seq = (n: number) => Uint8Array.from({ length: n }, (_, i) => i & 0xff);
 const add = (name: string, text: string): Op => ["addSchema", name, utf8(text)];
 const dec = (name: string, bytes: Uint8Array): Op => ["decode", name, bytes];
+const reload = (): Op => ["reload", "", zeros(0)];
 
 // Compile-time edges: every declaration shape compileSchema sees.
 for (const [name, text] of [
@@ -289,6 +270,7 @@ for (let iter = 0; iter < 6; iter++) {
       utf8(fields.map((f) => `${f.optional ? "optional " : ""}${f.type} ${f.name}${f.vla ? "[?]" : ""};`).join(""))
     ]);
   }
+  ops.push(reload());
   for (const name of local) {
     const payload = Uint8Array.from(payloadFor(byName.get(name)!, byName, rng, 0));
     ops.push(dec(name, payload));
@@ -298,3 +280,121 @@ for (let iter = 0; iter < 6; iter++) {
   }
   emit(ops);
 }
+
+// Every primitive as a scalar, an optional and a VLA, with each truncation of a valid payload.
+for (const p of PRIMS) {
+  const name = `M_${p}`;
+  const size = PRIM_SIZE[p];
+  const full = Uint8Array.from([...rng.bytes(size), 0x01, ...rng.bytes(size), 0x02, ...rng.bytes(2 * size)]);
+  const absent = Uint8Array.from([...rng.bytes(size), 0x00, 0xff, ...rng.bytes(size)]);
+  emit([
+    add(name, `${p} s;optional ${p} o;${p} v[?];`),
+    ...Array.from({ length: full.length + 1 }, (_, i) => dec(name, full.slice(0, i))),
+    dec(name, absent),
+    ["decodeImpl", name, Uint8Array.from([...full, 0x5a])]
+  ]);
+}
+
+// Exactness edges: NaN payloads, signed zero, subnormals and int64 to Number rounding,
+// each as a scalar and inside a VLA (array element storage).
+{
+  const le = (hex: string) => Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)).reverse());
+  const groups: [string, string[]][] = [
+    ["float", ["7f800001", "7fc00001", "ffc00000", "7fbfffff", "ff800001", "00000001", "80000000", "7f7fffff", "ff800000"]],
+    [
+      "double",
+      [
+        "7ff0000000000001",
+        "7ff8000000000001",
+        "fff8000000000000",
+        "fff7fffffff7ffff",
+        "7ff4000000000000",
+        "fffffffffffffffe",
+        "0000000000000001",
+        "8000000000000000"
+      ]
+    ],
+    [
+      "int64",
+      [
+        "0020000000000001",
+        "0020000000000003",
+        "0020000000000002",
+        "7fffffffffffffff",
+        "8000000000000000",
+        "ffdfffffffffffff",
+        "ffdffffffffffffd",
+        "7ffffffffffffdff",
+        "7ffffffffffffe00",
+        "fffffffffffffffe"
+      ]
+    ],
+    [
+      "uint64",
+      [
+        "0020000000000001",
+        "0020000000000003",
+        "ffffffffffffffff",
+        "fffffffffffff7ff",
+        "fffffffffffffbff",
+        "fffffffffffffc00",
+        "8000000000000400",
+        "8000000000000c00",
+        "001fffffffffffff"
+      ]
+    ]
+  ];
+  for (const [type, values] of groups) {
+    for (const alias of type === "float" ? ["float", "float32"] : type === "double" ? ["double", "float64"] : [type]) {
+      const name = `X_${alias}`;
+      const ops: Op[] = [add(name, `${alias} s;${alias} v[?];`)];
+      for (const v of values) ops.push(dec(name, Uint8Array.from([...le(v), 0x02, ...le(v), ...le(values[0])])));
+      ops.push(dec(name, Uint8Array.from([...le(values[0]), values.length, ...values.flatMap((v) => [...le(v)])])));
+      emit(ops);
+    }
+  }
+}
+
+// Log.ts also hands every struct: schema to the photon decoder, so WPILib struct syntax
+// (bitfields, enums, fixed arrays, nested structs) reaches compileSchema.
+emit([
+  add("Pose2d", "Translation2d translation;Rotation2d rotation"),
+  add("Translation2d", "double x;double y"),
+  dec("Pose2d", seq(24)),
+  add("Rotation2d", "double value"),
+  dec("Pose2d", seq(24)),
+  add("Bits", "int8 a:4;uint16 b:3;bool c : 1"),
+  dec("Bits", seq(8)),
+  add("Enum", "enum {a=1, b=2} int8 e;double d"),
+  add("EnumTight", "enum{a=1,b=2}int8 e"),
+  add("FixedStruct", "double arr[4];char name[8]"),
+  add("Trailing", "double x; double y; "),
+  dec("Trailing", seq(16)),
+  add("Ref", "Pose2d p;Bits b[?]"),
+  dec("Ref", Uint8Array.from([...seq(24), 0x02, 0x10, 0x20, 0x30, 0x40])),
+  reload(),
+  dec("Ref", Uint8Array.from([...seq(24), 0x01, 0x10, 0x20]))
+]);
+
+// Serialization round trips: pending (uncompiled) schema strings survive and compile later,
+// a no-type-token field keeps its undefined type, and reloading an empty decoder.
+emit([reload(), add("A", "int8 a;"), dec("A", seq(2))]);
+emit([
+  add("Wait", "Later l;optional int16 o;int8 v[?];"),
+  add("Never", "int8 a[3];"),
+  reload(),
+  add("Later", "float32 f;char c;"),
+  dec("Wait", Uint8Array.from([...seq(5), 0x01, 0x10, 0x20, 0x03, 0x01, 0x02, 0x03])),
+  reload(),
+  dec("Later", seq(6))
+]);
+emit([
+  add("undefined", "int8 a;"),
+  add("HasUndef", " ;optional  ;float f;"),
+  reload(),
+  dec("HasUndef", seq(16)),
+  add("2", "int8 z;"),
+  add("1", "2 t;HasUndef h;"),
+  reload(),
+  dec("1", seq(16))
+]);

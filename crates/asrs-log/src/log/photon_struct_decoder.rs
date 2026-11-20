@@ -291,6 +291,17 @@ impl PhotonStructDecoder {
     }
 
     pub fn decode_impl(&self, name: &JsString, value: &[u8]) -> Result<DecodeResult, JsError> {
+        self.decode_at(name, value, 0)
+    }
+
+    /// `base` is where `value` starts in the backing buffer, which upstream's nested
+    /// `DataView` constructor errors report.
+    fn decode_at(
+        &self,
+        name: &JsString,
+        value: &[u8],
+        base: usize,
+    ) -> Result<DecodeResult, JsError> {
         if !has_key(&self.schemas, name) {
             return Err(JsError::new("Error", "Schema not defined"));
         }
@@ -308,14 +319,14 @@ impl PhotonStructDecoder {
             let mut is_present = true;
             let mut vla_length: Option<i8> = None;
             if vs.is_optional {
-                is_present = decode_value(value, offset, Primitive::Bool)?
+                is_present = decode_value(value, base, offset, Primitive::Bool)?
                     .as_bool()
                     .expect("bool decodes to Bool");
                 offset += 1;
                 assign(&mut data, vs.name.clone(), JsValue::Null);
             }
             if vs.is_vla {
-                let length = decode_value(value, offset, Primitive::Int8)?
+                let length = decode_value(value, base, offset, Primitive::Int8)?
                     .as_f64()
                     .expect("int8 decodes to Number");
                 vla_length = Some(length as i8);
@@ -334,7 +345,7 @@ impl PhotonStructDecoder {
                         );
                         let mut inner = Vec::new();
                         for _ in 0..length {
-                            inner.push(decode_value(value, offset, *p)?);
+                            inner.push(decode_value(value, base, offset, *p)?);
                             offset += p.bytes();
                         }
                         assign(&mut data, vs.name.clone(), JsValue::Array(inner));
@@ -343,7 +354,7 @@ impl PhotonStructDecoder {
                         assign(&mut data, length_key, JsValue::Number(f64::from(length)));
                     } else {
                         assign(&mut schema_types, vs.name.clone(), vs.ty.schema_type());
-                        let item = decode_value(value, offset, *p)?;
+                        let item = decode_value(value, base, offset, *p)?;
                         offset += p.bytes();
                         assign(&mut data, vs.name.clone(), item);
                     }
@@ -358,7 +369,11 @@ impl PhotonStructDecoder {
                         );
                         let mut inner = Vec::new();
                         for i in 0..length {
-                            let child = self.decode_impl(&child_name, tail(value, offset)?)?;
+                            let child = self.decode_at(
+                                &child_name,
+                                tail(value, base, offset)?,
+                                base + offset,
+                            )?;
                             offset += child.bytes_consumed;
                             inner.push(child.data);
                             for (field, ty) in child.schema_types.iter() {
@@ -378,7 +393,8 @@ impl PhotonStructDecoder {
                         assign(&mut data, length_key, JsValue::Number(f64::from(length)));
                     } else {
                         assign(&mut schema_types, vs.name.clone(), vs.ty.schema_type());
-                        let child = self.decode_impl(&child_name, tail(value, offset)?)?;
+                        let child =
+                            self.decode_at(&child_name, tail(value, base, offset)?, base + offset)?;
                         offset += child.bytes_consumed;
                         assign(&mut data, vs.name.clone(), child.data);
                         for (field, ty) in child.schema_types.iter() {
@@ -488,12 +504,22 @@ fn assign(data: &mut JsObject<JsValue>, key: JsString, value: JsValue) {
 }
 
 /// The remaining view a nested `DataView(buffer, offset, length - offset)` sees.
-fn tail(view: &[u8], offset: usize) -> Result<&[u8], JsError> {
-    view.get(offset..).ok_or_else(out_of_bounds)
+fn tail(view: &[u8], base: usize, offset: usize) -> Result<&[u8], JsError> {
+    view.get(offset..).ok_or_else(|| {
+        JsError::range(format!(
+            "Start offset {} is outside the bounds of the buffer",
+            base + offset
+        ))
+    })
 }
 
 /// One `dataView.get*` read at `offset`; `char` takes the rest of the view.
-fn decode_value(view: &[u8], offset: usize, ty: Primitive) -> Result<JsValue, JsError> {
+fn decode_value(
+    view: &[u8],
+    base: usize,
+    offset: usize,
+    ty: Primitive,
+) -> Result<JsValue, JsError> {
     let at = |width: usize| -> Result<&[u8], JsError> {
         view.get(offset..offset + width).ok_or_else(out_of_bounds)
     };
@@ -501,7 +527,7 @@ fn decode_value(view: &[u8], offset: usize, ty: Primitive) -> Result<JsValue, Js
         Primitive::Bool => JsValue::Bool(at(1)?[0] > 0),
         Primitive::Char => JsValue::String(
             text_decoder()
-                .decode(tail(view, offset)?)
+                .decode(tail(view, base, offset)?)
                 .unwrap_or_else(|_| JsString::new()),
         ),
         Primitive::Int8 => JsValue::Number(f64::from(at(1)?[0] as i8)),
