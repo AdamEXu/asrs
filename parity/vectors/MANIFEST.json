@@ -69,6 +69,7 @@
     "log/geometry": {"cases":179,"content":"efe04e0bfa72c886","generator":"132342a124e4ddbe","spec":"parity/specs/log/geometry.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/geometry-math": {"cases":45746,"content":"ed8412b2876a5543","generator":"ed2bb98d6f32111f","spec":"parity/specs/log/geometry-math.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/key-utils": {"cases":3443,"content":"26ecf4d09573491e","generator":"72bec965231b3964","spec":"parity/specs/log/key-utils.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/merge-offset": {"cases":164,"content":"3974bda7d621e474","generator":"c42064ba9b67694f","spec":"parity/specs/log/merge-offset.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/photon": {"cases":81,"content":"13c35c892c2c7d87","generator":"de9891cf129303ed","spec":"parity/specs/log/photon.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-fuzz": {"cases":2448,"content":"be2458a704e43686","generator":"a4c51969f77b46d7","spec":"parity/specs/log/proto-fuzz.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-matrix": {"cases":776,"content":"4a7c6f536aa595f6","generator":"cb9f9b0a015d4d6d","spec":"parity/specs/log/proto-matrix.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
