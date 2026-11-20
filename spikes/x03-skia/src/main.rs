@@ -68,10 +68,12 @@ fn render(scene: &Value, out: &Path) {
     let mut font = font_for(&mgr, "10px sans-serif");
     let mut align = "start".to_owned();
     let mut baseline = "alphabetic".to_owned();
+    let mut scale = 1.0f32;
     for cmd in scene["cmds"].as_array().unwrap() {
         let c = cmd.as_array().unwrap();
         match c[0].as_str().unwrap() {
             "scale" => {
+                scale *= c[2].as_f64().unwrap() as f32;
                 canvas.scale((c[1].as_f64().unwrap() as f32, c[2].as_f64().unwrap() as f32));
             }
             "=" => match c[1].as_str().unwrap() {
@@ -113,7 +115,27 @@ fn render(scene: &Value, out: &Path) {
                     "middle" => (ascent - descent) / 2.0,
                     _ => 0.0,
                 };
-                canvas.draw_str(text, (x, y), &font, &paint);
+                if std::env::var("X03_PATHS").is_ok() {
+                    let glyphs = font.str_to_glyphs_vec(text);
+                    let mut pos = vec![skia_safe::Point::default(); glyphs.len()];
+                    font.get_pos(&glyphs, &mut pos, None);
+                    let device = font.with_size(font.size() * scale).unwrap();
+                    canvas.save();
+                    canvas.reset_matrix();
+                    for (g, p) in glyphs.iter().zip(&pos) {
+                        let dx = (x + p.x) * scale;
+                        let dy = y * scale;
+                        let q = (dx * 4.0 + 0.5).floor();
+                        let ox = q / 4.0;
+                        let oy = (dy + 0.5).floor();
+                        if let Some(path) = device.get_path(*g) {
+                            canvas.draw_path(&path.with_offset((ox, oy)), &paint);
+                        }
+                    }
+                    canvas.restore();
+                } else {
+                    canvas.draw_str(text, (x, y), &font, &paint);
+                }
             }
             _ => {}
         }

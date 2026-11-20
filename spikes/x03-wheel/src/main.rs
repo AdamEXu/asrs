@@ -2,7 +2,7 @@ use std::io::Write;
 use std::time::Duration;
 
 use gpui_kit::{
-    App, AppContext, Bounds, Context, InteractiveElement, IntoElement, ParentElement, Render,
+    App, AppContext, Bounds, Context, InteractiveElement, IntoElement, Render,
     ScrollDelta, ScrollEvent, Styled, TitlebarOptions, Window, WindowBounds, WindowOptions, div,
     point, px, rgb, size,
 };

@@ -5876,24 +5876,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
-name = "x03-wheel"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "gpui-kit",
- "gpui-pre",
- "gpui-pre-platform",
- "image",
- "objc2 0.6.5",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-foundation 0.3.2",
- "raw-window-handle",
- "smallvec",
-]
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8326,6 +8308,24 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "x03-wheel"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "gpui-kit",
+ "gpui-pre",
+ "gpui-pre-platform",
+ "image",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
+ "smallvec",
+]
 
 [[package]]
 name = "x11"

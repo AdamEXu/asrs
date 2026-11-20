@@ -16,7 +16,7 @@ sleep 2
 "$@" >> /tmp/x03-wheel.log 2>&1 &
 pid=$!
 for _ in $(seq 120); do
-  win=$(xdotool search --name "^$title\$" 2>/dev/null | head -1)
+  win=$( (xdotool search --name "^$title\$"; xdotool search --onlyvisible --pid $pid) 2>/dev/null | head -1)
   [ -n "$win" ] && break
   sleep 0.5
 done
@@ -24,6 +24,9 @@ sleep 2
 eval "$(xdotool getwindowgeometry --shell "$win")"
 xdotool windowactivate --sync "$win" 2>/dev/null
 xdotool mousemove $((X + WIDTH / 2)) $((Y + HEIGHT / 2))
+sleep 0.3
+xdotool mousemove_relative 3 3; sleep 0.2; xdotool mousemove_relative -- -3 -3
+echo "window $win at $X,$Y ${WIDTH}x$HEIGHT" >> /tmp/x03-wheel.log
 sleep 0.5
 step() {
   echo "--- $1" >> /tmp/x03-wheel.log
