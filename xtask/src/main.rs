@@ -3,6 +3,7 @@
 mod assets;
 mod check;
 mod layout;
+mod oracle;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -14,7 +15,8 @@ const USAGE: &str = "usage: cargo xtask <command>
 commands:
   check     layout rules, rustfmt, clippy, tests
   layout    crate dependency and lint opt-out rules only
-  assets    copy upstream assets into assets/";
+  assets    copy upstream assets into assets/
+  oracle    parity oracle: setup, fn, smoke (see `cargo xtask oracle`)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -22,6 +24,7 @@ fn main() -> ExitCode {
         Some("check") => check::run(),
         Some("layout") => layout::run(),
         Some("assets") => assets::run(),
+        Some("oracle") => oracle::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {
