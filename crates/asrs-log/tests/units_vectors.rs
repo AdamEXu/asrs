@@ -33,6 +33,9 @@ mod log_field;
 #[path = "../../asrs-cli/src/log_run.rs"]
 #[allow(dead_code)]
 mod log_run;
+#[path = "../../asrs-cli/src/photon.rs"]
+#[allow(dead_code)]
+mod photon;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;

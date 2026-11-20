@@ -12,6 +12,7 @@ mod js_string;
 mod js_time;
 mod log_field;
 mod log_run;
+mod photon;
 mod shared;
 mod units;
 
