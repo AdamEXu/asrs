@@ -3,7 +3,7 @@ use asrs_parity::{Response, Utf16String, Value};
 
 use crate::{
     js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time, log_field, log_run,
-    photon,
+    log_struct, photon,
 };
 
 pub type Function = fn(&[Value]) -> Response;
@@ -34,6 +34,7 @@ pub fn lookup(name: &str) -> Option<Function> {
         .chain(js_json::FUNCTIONS)
         .chain(js_regex::FUNCTIONS)
         .chain(js_msgpack::FUNCTIONS)
+        .chain(log_struct::FUNCTIONS)
         .chain(log_field::FUNCTIONS)
         .chain(log_run::FUNCTIONS)
         .chain(photon::FUNCTIONS)

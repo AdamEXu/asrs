@@ -30,6 +30,9 @@ mod log_field;
 #[path = "../../asrs-cli/src/log_run.rs"]
 #[allow(dead_code)]
 mod log_run;
+#[path = "../../asrs-cli/src/log_struct.rs"]
+#[allow(dead_code)]
+mod log_struct;
 #[path = "../../asrs-cli/src/photon.rs"]
 #[allow(dead_code)]
 mod photon;
