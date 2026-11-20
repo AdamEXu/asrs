@@ -8,5 +8,8 @@ publish.workspace = true
 
 [dependencies]
 
+[dev-dependencies]
+asrs-parity = { path = "../asrs-parity" }
+
 [lints]
 workspace = true
