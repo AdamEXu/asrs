@@ -33,7 +33,6 @@ pub fn lookup(name: &str) -> Option<Function> {
         .chain(js_color::FUNCTIONS)
         .chain(js_json::FUNCTIONS)
         .chain(log_keys::FUNCTIONS)
-        .chain(js_regex::FUNCTIONS)
         .chain(js_msgpack::FUNCTIONS)
         .chain(log_struct::FUNCTIONS)
         .chain(log_field::FUNCTIONS)

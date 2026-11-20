@@ -90,6 +90,11 @@ fn log_util_sequences() {
     check_fn_vectors("log/util-run", dispatch);
 }
 
+#[test]
+fn regex_sites() {
+    check_fn_vectors("regex/sites", dispatch);
+}
+
 fn n(x: f64) -> Value {
     Value::number(x)
 }
