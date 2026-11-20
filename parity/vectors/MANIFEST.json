@@ -27,6 +27,42 @@
       "content": "237e0009568aa98c",
       "generator": "c2acf6130eebd08e",
       "spec": "parity/specs/js/math-ops.jsonl"
+    },
+    "number/numberformat": {
+      "cases": 182,
+      "content": "44a96cd7bef54d21",
+      "generator": "414e7585d2ad87c3",
+      "spec": "parity/specs/number/numberformat.jsonl"
+    },
+    "number/parse": {
+      "cases": 569,
+      "content": "495136adba4d37f3",
+      "generator": "6040f048ab227c2d",
+      "spec": "parity/specs/number/parse.jsonl"
+    },
+    "number/toexponential": {
+      "cases": 865,
+      "content": "403ebd0ffa92248e",
+      "generator": "bd8fb4ac9524b40d",
+      "spec": "parity/specs/number/toexponential.jsonl"
+    },
+    "number/tofixed": {
+      "cases": 1033,
+      "content": "fa7343e79bca3fb7",
+      "generator": "f03de1d8105a9fb2",
+      "spec": "parity/specs/number/tofixed.jsonl"
+    },
+    "number/toprecision": {
+      "cases": 1104,
+      "content": "f658c6cab73cb999",
+      "generator": "ae73c80bee92ed6f",
+      "spec": "parity/specs/number/toprecision.jsonl"
+    },
+    "number/tostring": {
+      "cases": 970,
+      "content": "059629bdb39b45e3",
+      "generator": "cce4ecd8626a5f57",
+      "spec": "parity/specs/number/tostring.jsonl"
     }
   }
 }
