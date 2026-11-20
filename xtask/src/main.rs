@@ -3,6 +3,7 @@
 mod assets;
 mod check;
 mod corpus;
+mod gpui;
 mod layout;
 mod oracle;
 mod parity;
@@ -16,11 +17,12 @@ type Result<T = ()> = std::result::Result<T, String>;
 const USAGE: &str = "usage: cargo xtask <command>
 
 commands:
-  check     layout rules, rustfmt, clippy, tests
+  check     layout rules, gpui vendor and features, rustfmt, clippy, tests
   layout    crate dependency and lint opt-out rules only
   assets    copy upstream assets into assets/
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    synthetic test corpora: gen, list (see `cargo xtask corpus`)
+  gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)";
 
 fn main() -> ExitCode {
@@ -31,6 +33,7 @@ fn main() -> ExitCode {
         Some("assets") => assets::run(),
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
+        Some("gpui") => gpui::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
