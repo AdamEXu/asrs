@@ -438,7 +438,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 "set-playback-options" => {
                     sel.set_playback_speed(
                         data.get("speed")
-                            .map(|v| number(v))
+                            .map(number)
                             .transpose()?
                             .unwrap_or(f64::NAN),
                     );
