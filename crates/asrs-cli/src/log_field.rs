@@ -34,10 +34,15 @@ pub fn index(v: &Value) -> Result<i64, String> {
 
 pub fn loggable_type(v: &Value) -> Result<LoggableType, String> {
     let i = index(v)?;
-    usize::try_from(i)
+    loggable_type_opt(v).ok_or_else(|| format!("no LoggableType {i}"))
+}
+
+/// `Some` when the value is a valid `LoggableType` index; `None` for any other JS value.
+pub fn loggable_type_opt(v: &Value) -> Option<LoggableType> {
+    index(v)
         .ok()
+        .and_then(|i| usize::try_from(i).ok())
         .and_then(|i| TYPES.get(i).copied())
-        .ok_or_else(|| format!("no LoggableType {i}"))
 }
 
 pub fn js_string(v: &Value) -> Result<JsString, String> {

@@ -1,0 +1,43 @@
+{
+  "name": "XRP",
+  "sourceUrl": "https://cad.onshape.com/documents/c913e8123c02ee33921a5971/w/7d14522ced56234cd785a73a/e/9d00469367efc1f33d913be0",
+  "rotations": [
+    {
+      "axis": "z",
+      "degrees": 90
+    },
+    {
+      "axis": "y",
+      "degrees": 90
+    }
+  ],
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "cameras": [],
+  "components": [
+    {
+      "zeroedRotations": [],
+      "zeroedPosition": [
+        -0.07,
+        -0.03,
+        0
+      ]
+    },
+    {
+      "zeroedRotations": [
+        {
+          "axis": "z",
+          "degrees": 180
+        }
+      ],
+      "zeroedPosition": [
+        -0.07,
+        0.03,
+        0
+      ]
+    }
+  ]
+}

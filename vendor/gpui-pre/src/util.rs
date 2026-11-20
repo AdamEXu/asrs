@@ -131,14 +131,21 @@ pub(crate) fn round_half_toward_zero(value: f32) -> f32 {
     (value.abs() - 0.5).ceil().copysign(value)
 }
 
+/// Rounds to the nearest integer with 0.5 ties toward positive infinity, as Chromium snaps
+/// layout positions to device pixels.
 #[inline]
-pub(crate) fn round_half_toward_zero_f64(value: f64) -> f64 {
-    (value.abs() - 0.5).ceil().copysign(value)
+pub(crate) fn round_half_up(value: f32) -> f32 {
+    (value + 0.5).floor()
+}
+
+#[inline]
+pub(crate) fn round_half_up_f64(value: f64) -> f64 {
+    (value + 0.5).floor()
 }
 
 #[inline]
 pub(crate) fn round_to_device_pixel(logical: f32, scale_factor: f32) -> f32 {
-    round_half_toward_zero(logical * scale_factor)
+    round_half_up(logical * scale_factor)
 }
 
 #[inline]
@@ -146,7 +153,7 @@ pub(crate) fn round_stroke_to_device_pixel(logical: f32, scale_factor: f32) -> f
     if logical == 0.0 {
         0.0
     } else {
-        round_to_device_pixel(logical.max(0.0), scale_factor).max(1.0)
+        round_half_toward_zero(logical.max(0.0) * scale_factor).max(1.0)
     }
 }
 
@@ -190,14 +197,15 @@ mod tests {
 
     #[test]
     fn test_device_pixel_helpers() {
-        // Snap uses half-toward-zero: 1.0 * 1.5 = 1.5 ties toward 1.0.
-        assert_eq!(round_to_device_pixel(1.0, 1.5), 1.0);
+        // Snap uses half-up: 1.0 * 1.5 = 1.5 ties toward 2.0.
+        assert_eq!(round_to_device_pixel(1.0, 1.5), 2.0);
+        assert_eq!(round_to_device_pixel(-0.25, 2.0), 0.0);
         // Below the tie rounds down, above rounds up.
         assert_eq!(round_to_device_pixel(0.3, 2.0), 1.0);
         assert_eq!(round_to_device_pixel(1.4, 1.0), 1.0);
         assert_eq!(round_to_device_pixel(1.6, 1.0), 2.0);
 
-        // Stroke uses snap, but clamps non-zero input up to at least 1dp.
+        // Stroke rounds half toward zero, but clamps non-zero input up to at least 1dp.
         assert_eq!(round_stroke_to_device_pixel(0.0, 1.0), 0.0);
         assert_eq!(round_stroke_to_device_pixel(0.4, 1.0), 1.0);
         assert_eq!(round_stroke_to_device_pixel(0.5, 1.0), 1.0);
@@ -217,12 +225,14 @@ mod tests {
     }
 
     #[test]
-    fn test_round_half_toward_zero_f64() {
-        assert_eq!(round_half_toward_zero_f64(0.5), 0.0);
-        assert_eq!(round_half_toward_zero_f64(-0.5), 0.0);
-        assert_eq!(round_half_toward_zero_f64(1.5), 1.0);
-        assert_eq!(round_half_toward_zero_f64(-1.5), -1.0);
-        assert_eq!(round_half_toward_zero_f64(2.5001), 3.0);
+    fn test_round_half_up() {
+        assert_eq!(round_half_up(0.5), 1.0);
+        assert_eq!(round_half_up(2.5), 3.0);
+        assert_eq!(round_half_up(-0.5), 0.0);
+        assert_eq!(round_half_up(-1.5), -1.0);
+        assert_eq!(round_half_up(1.4999), 1.0);
+        assert_eq!(round_half_up_f64(920.5), 921.0);
+        assert_eq!(round_half_up_f64(-2.5), -2.0);
     }
 
     #[gpui::test]

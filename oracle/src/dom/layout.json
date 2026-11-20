@@ -1,0 +1,14 @@
+[
+  { "selector": "html, body", "rect": [0, 0, 1100, 650] },
+  { "selector": "div.side-bar", "rect": [0, 0, 300, 650] },
+  { "selector": "input.side-bar-search", "rect": [16, 43, 268, 29] },
+  { "selector": "div.viewer", "rect": [300, 0, 800, 650] },
+  { "selector": "div.tab-bar, div.tab-bar-scroll", "rect": [310, 0, 636, 50] },
+  { "selector": "div.timeline", "rect": [310, 50, 780, 32] },
+  { "selector": "div.timeline *", "parent": true },
+  { "selector": "div.renderer-content", "rect": [300, 92, 800, 358] },
+  { "selector": "div.renderer-content *", "parent": true },
+  { "selector": "div.controls-content", "rect": [300, 450, 800, 200] },
+  { "selector": "div.source-list .type-name, div.field-value", "text": 12 },
+  { "selector": "div.controls-content *", "parent": true }
+]

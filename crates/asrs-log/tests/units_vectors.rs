@@ -30,6 +30,9 @@ mod js_time;
 #[path = "../../asrs-cli/src/log_field.rs"]
 #[allow(dead_code)]
 mod log_field;
+#[path = "../../asrs-cli/src/log_keys.rs"]
+#[allow(dead_code)]
+mod log_keys;
 #[path = "../../asrs-cli/src/log_run.rs"]
 #[allow(dead_code)]
 mod log_run;
@@ -46,6 +49,11 @@ mod shared;
 use std::collections::HashSet;
 
 use asrs_log::units;
+mod tabs_console {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+    pub const CALLS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use asrs_parity::vectors::check_fn_vectors;
 use asrs_parity::{FnCase, Request, Response, Value};
 

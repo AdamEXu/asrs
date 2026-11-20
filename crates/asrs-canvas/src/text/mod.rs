@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod coverage;
+pub mod dom;
 pub mod font;
 pub mod layout;
 pub mod lut;
@@ -33,6 +34,8 @@ pub struct Glyph {
 pub struct ShapedGlyph {
     pub glyph: Glyph,
     pub x: f32,
+    /// UTF-16 offset of the first code unit of the character this glyph draws.
+    pub cluster: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -47,6 +50,8 @@ pub struct FontMetrics {
     /// Rounded ascent and descent in CSS px, after Blink's per-platform adjustments.
     pub ascent: f32,
     pub descent: f32,
+    /// Rounded line gap in CSS px, the leading `line-height: normal` adds.
+    pub line_gap: f32,
     /// OS/2 `sTypoAscender` and the negated `sTypoDescender` in font units, if the face has them.
     pub typo: Option<(f32, f32)>,
 }
@@ -91,6 +96,11 @@ pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
     return Some(Box::new(cache::Cached::new(mac::CoreText::new())));
     #[cfg(not(target_os = "macos"))]
     return None;
+}
+
+/// Skia's `sk_relax`: a strike's device matrix entry rounded to 1/1024.
+pub(crate) fn relax(v: f32) -> f32 {
+    (v * 1024.0 + 0.5).floor() / 1024.0
 }
 
 /// Blink's `LayoutUnit::FromFloatRound`.
@@ -140,6 +150,7 @@ mod tests {
         let sf = FontMetrics {
             ascent: 12.0,
             descent: 3.0,
+            line_gap: 0.0,
             typo: Some((1950.0, 494.0)),
         };
         assert_eq!(normalized_typo(&sf, 12.0), (9.578125, 2.421875));

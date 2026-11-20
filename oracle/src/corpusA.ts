@@ -1,13 +1,7 @@
 import "./shims";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Corpus } from "./corpus/corpus";
-import { jsonMatrix } from "./corpus/json";
-import { msgpackMatrix } from "./corpus/msgpack";
-import { photonMatrix } from "./corpus/photon";
-import { protoMatrix } from "./corpus/proto";
-import { structMatrix } from "./corpus/struct";
-import { wpilogMatrix } from "./corpus/wpilogMatrix";
+import { buildCorpusA } from "./corpus/matrices";
 
 const USAGE = "usage: corpusA --seed <u32> --out <dir>";
 
@@ -22,13 +16,7 @@ const seed = Number(option("--seed"));
 if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error(`${USAGE}: bad seed`);
 const out = path.resolve(option("--out"));
 
-const corpus = new Corpus(seed);
-wpilogMatrix(corpus);
-structMatrix(corpus);
-photonMatrix(corpus);
-protoMatrix(corpus);
-msgpackMatrix(corpus);
-jsonMatrix(corpus);
+const corpus = buildCorpusA(seed);
 
 const lines: string[] = [];
 for (const c of [...corpus.cases].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use core_foundation::attributed_string::CFMutableAttributedString;
-use core_foundation::base::{CFRange, TCFType};
+use core_foundation::base::{CFRange, CFType, TCFType};
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::number::CFNumber;
 use core_foundation::string::CFString;
@@ -15,13 +15,16 @@ use core_graphics::geometry::{CGAffineTransform, CGPoint, CGRect, CGSize};
 use core_text::font::{CTFont, new_from_descriptor, new_from_name, new_ui_font_for_language};
 use core_text::font_descriptor::{
     kCTFontBoldTrait, kCTFontItalicTrait, kCTFontOrientationHorizontal, kCTFontVariationAttribute,
+    new_from_attributes,
 };
 use core_text::line::CTLine;
 use core_text::run::CTRun;
 use core_text::string_attributes::kCTFontAttributeName;
 
 use super::font::FontKey;
-use super::{Bounds, Family, FontMetrics, FontSpec, Glyph, Mask, Shaped, ShapedGlyph, TextBackend};
+use super::{
+    Bounds, Family, FontMetrics, FontSpec, Glyph, Mask, Shaped, ShapedGlyph, TextBackend, relax,
+};
 
 const K_CT_FONT_UI_FONT_SYSTEM: u32 = 2;
 const K_CG_IMAGE_ALPHA_ONLY: u32 = 7;
@@ -34,6 +37,7 @@ pub(crate) struct CoreText {
     faces: Vec<Face>,
     primary: HashMap<FontKey, u32>,
     fallback: HashMap<(FontKey, String), u32>,
+    device: HashMap<(u32, u32), CTFont>,
 }
 
 fn variation(base: &CTFont, weight: f32, size: f64) -> CTFont {
@@ -67,6 +71,48 @@ unsafe extern "C" {
     ) -> *const std::ffi::c_void;
     fn CGPathGetBoundingBox(path: *const std::ffi::c_void) -> CGRect;
     fn CGPathRelease(path: *const std::ffi::c_void);
+    fn CTFontCreateCopyWithAttributes(
+        font: core_text::font::CTFontRef,
+        size: f64,
+        matrix: *const CGAffineTransform,
+        attributes: core_text::font_descriptor::CTFontDescriptorRef,
+    ) -> core_text::font::CTFontRef;
+    fn CTFontCopyAttribute(
+        font: core_text::font::CTFontRef,
+        attribute: core_foundation::string::CFStringRef,
+    ) -> core_foundation::base::CFTypeRef;
+}
+
+/// Skia's `SkCTFontCreateExactCopy`: `font` at `size`, keeping the optical size of `font` and
+/// with tracking off.
+fn exact_copy(font: &CTFont, size: f64) -> CTFont {
+    let opsz_key = CFString::from_static_string("NSCTFontOpticalSizeAttribute");
+    // SAFETY: `font` is a live CTFont and the attribute, if any, is returned under the create rule.
+    let opsz = unsafe {
+        let value = CTFontCopyAttribute(font.as_concrete_TypeRef(), opsz_key.as_concrete_TypeRef());
+        (!value.is_null()).then(|| CFType::wrap_under_create_rule(value))
+    }
+    .and_then(|v| v.downcast::<CFNumber>())
+    .and_then(|n| n.to_f64())
+    .filter(|&v| v > 0.0)
+    .unwrap_or_else(|| font.pt_size());
+    let attributes = CFDictionary::from_CFType_pairs(&[
+        (opsz_key, CFNumber::from(opsz).as_CFType()),
+        (
+            CFString::from_static_string("NSCTFontUnscaledTrackingAttribute"),
+            CFNumber::from(0i32).as_CFType(),
+        ),
+    ]);
+    let descriptor = new_from_attributes(&attributes);
+    // SAFETY: both arguments are live CoreText objects; the copy is returned under the create rule.
+    unsafe {
+        CTFont::wrap_under_create_rule(CTFontCreateCopyWithAttributes(
+            font.as_concrete_TypeRef(),
+            size,
+            std::ptr::null(),
+            descriptor.as_concrete_TypeRef(),
+        ))
+    }
 }
 
 fn path_bounds(font: &CTFont, glyph: CGGlyph) -> Option<CGRect> {
@@ -159,7 +205,7 @@ fn round(v: f32) -> f32 {
 }
 
 fn bitmap_context(width: usize, height: usize) -> CGContext {
-    let cx = CGContext::create_bitmap_context(
+    let mut cx = CGContext::create_bitmap_context(
         None,
         width,
         height,
@@ -168,6 +214,7 @@ fn bitmap_context(width: usize, height: usize) -> CGContext {
         &CGColorSpace::create_device_gray(),
         K_CG_IMAGE_ALPHA_ONLY,
     );
+    cx.data().fill(0);
     cx.set_text_drawing_mode(CGTextDrawingMode::CGTextFill);
     cx.set_allows_antialiasing(true);
     cx.set_should_antialias(true);
@@ -201,7 +248,16 @@ impl CoreText {
             faces: Vec::new(),
             primary: HashMap::new(),
             fallback: HashMap::new(),
+            device: HashMap::new(),
         }
+    }
+
+    /// The face at the device text size, as `SkScalerContext_Mac` sizes its CTFont.
+    fn device_font(&mut self, face: u32, font: &CTFont, size: f32) -> CTFont {
+        self.device
+            .entry((face, size.to_bits()))
+            .or_insert_with(|| exact_copy(font, f64::from(size)))
+            .clone()
     }
 
     fn primary(&mut self, spec: &FontSpec) -> u32 {
@@ -273,6 +329,7 @@ impl CoreText {
         primary: u32,
         word: &str,
         origin: f32,
+        start: u32,
         out: &mut Vec<ShapedGlyph>,
     ) -> f32 {
         let font = self.faces[primary as usize].font.clone();
@@ -287,6 +344,7 @@ impl CoreText {
             let run_font = run_font(&run).unwrap_or_else(|| font.clone());
             let ids = run.glyphs();
             let positions = run.positions();
+            let indices = run.string_indices();
             let Some(first) = positions.first() else {
                 continue;
             };
@@ -312,6 +370,7 @@ impl CoreText {
                         id: u32::from(id),
                     },
                     x: origin + pen,
+                    cluster: start + indices.get(i).map_or(0, |&k| k as u32),
                 });
                 let next = positions.get(i + 1).map_or(run_end, |q| q.x);
                 let raw = advances[i].width;
@@ -360,8 +419,10 @@ impl TextBackend for CoreText {
         let primary = self.primary(spec);
         let mut glyphs = Vec::new();
         let mut width = 0.0f32;
+        let mut start = 0;
         for word in words(text) {
-            width += self.shape_word(spec, primary, word, width, &mut glyphs);
+            width += self.shape_word(spec, primary, word, width, start, &mut glyphs);
+            start += word.encode_utf16().count() as u32;
         }
         Shaped { glyphs, width }
     }
@@ -371,6 +432,7 @@ impl TextBackend for CoreText {
             return FontMetrics {
                 ascent: 0.0,
                 descent: 0.0,
+                line_gap: 0.0,
                 typo: None,
             };
         }
@@ -393,6 +455,7 @@ impl TextBackend for CoreText {
         FontMetrics {
             ascent,
             descent,
+            line_gap: round(font.leading() as f32),
             typo,
         }
     }
@@ -409,6 +472,9 @@ impl TextBackend for CoreText {
 
     fn raw_mask(&mut self, glyph: Glyph, scale: f64, x_scale: f64, phase: u8) -> Option<Arc<Mask>> {
         let (font, id, [l, b, r, t]) = self.glyph_rect(glyph)?;
+        let size = font.pt_size() as f32;
+        let text_size = size * relax(scale as f32);
+        let residual = f64::from(size * relax((scale * x_scale) as f32) / text_size);
         let sx = scale * x_scale;
         let shift = f64::from(phase) / 4.0;
         let x0 = (l * sx + shift).floor() as i32 - 2;
@@ -416,11 +482,11 @@ impl TextBackend for CoreText {
         let y0 = (b * scale).floor() as i32 - 2;
         let y1 = (t * scale).ceil() as i32 + 2;
         let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
-        let mut cx = bitmap_context(w, h);
-        cx.data().fill(0);
-        cx.translate(-f64::from(x0), -f64::from(y0));
-        cx.scale(sx, scale);
-        font.draw_glyphs(&[id], &[CGPoint::new(shift / sx, 0.0)], cx.clone());
+        let device = self.device_font(glyph.face, &font, text_size);
+        let cx = bitmap_context(w, h);
+        cx.set_text_matrix(&CGAffineTransform::new(residual, 0.0, 0.0, 1.0, 0.0, 0.0));
+        let origin = CGPoint::new((shift - f64::from(x0)) * (1.0 / residual), -f64::from(y0));
+        device.draw_glyphs(&[id], &[origin], cx.clone());
         Some(read_mask(cx, x0, y1, w, h))
     }
 
@@ -431,6 +497,7 @@ impl TextBackend for CoreText {
         (phase_x, phase_y): (u8, u8),
     ) -> Option<Arc<Mask>> {
         let (font, id, [l, bottom, r, top]) = self.glyph_rect(glyph)?;
+        let [a, b, c, d] = [a, b, c, d].map(|v| f64::from(relax(v as f32)));
         // Font space is y-up and so is the bitmap context, while the canvas matrix is y-down.
         let m = CGAffineTransform::new(a, -b, -c, d, 0.0, 0.0);
         let (sx, sy) = (f64::from(phase_x) / 4.0, -f64::from(phase_y) / 4.0);
@@ -444,8 +511,7 @@ impl TextBackend for CoreText {
         let y0 = min(|p| p.1).floor() as i32 - 2;
         let y1 = max(|p| p.1).ceil() as i32 + 2;
         let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
-        let mut cx = bitmap_context(w, h);
-        cx.data().fill(0);
+        let cx = bitmap_context(w, h);
         cx.translate(sx - f64::from(x0), sy - f64::from(y0));
         cx.concat_ctm(m);
         font.draw_glyphs(&[id], &[CGPoint::new(0.0, 0.0)], cx.clone());
