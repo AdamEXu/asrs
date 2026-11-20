@@ -213,7 +213,7 @@ mod probe {
                 say(&report, format!("SPI_GETWHEELSCROLLLINES={lines} SPI_GETWHEELSCROLLCHARS={chars}"));
                 let _ = any.update(cx, |_, window, _| window.activate_window());
                 sleep(cx, 500).await;
-                let (cxp, cyp) = (x + 700, y + 400);
+                let (cxp, cyp) = (x + 950, y + 150);
                 let deltas = wheel_deltas.clone();
                 std::thread::spawn(move || win::send_wheel(cxp, cyp, &deltas));
                 sleep(cx, 400 * wheel_deltas.len() as u64 + 1500).await;
