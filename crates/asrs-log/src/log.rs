@@ -4,6 +4,7 @@ pub mod log_key_utils;
 pub mod log_value_sets;
 pub mod loggable_type;
 pub mod photon_struct_decoder;
+pub mod proto_decoder;
 pub mod struct_decoder;
 
 pub use log_field::{LogField, SerializedLogField};

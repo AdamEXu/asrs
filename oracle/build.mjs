@@ -126,6 +126,7 @@ const entries = [
   "genLogField",
   "genThree",
   "genPhoton",
+  "genProto",
   "decode",
   "export",
   "historicalRun",
