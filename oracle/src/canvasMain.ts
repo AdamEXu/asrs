@@ -3,10 +3,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { encode } from "./cve1";
+import { encode, toTree } from "./cve1";
 import { domScenes } from "./canvas/dom";
 import { encodePng } from "./canvas/png";
 import { uiHtml, uiScenes } from "./canvas/ui";
+import { heatmapFixtures } from "./heatmap/fixtures";
 import {
   allScenes,
   calibrationScenes,
@@ -23,6 +24,8 @@ modes:
   canvas [<scene>...]     replay display-list scenes on the CPU and GPU canvas
   measure                 TextMetrics of the label corpus under every font, align and baseline
   canvas-lut              replay the mask-gamma calibration scenes on the CPU canvas
+  heatmap                 run the upstream Heatmap.update fixtures on a real page and record
+                          the setData arguments, store contents and CPU-canvas pixels
   dom <scale>             capture the DOM text scenes at device scale 1 or 2; Electron must be
                           started with --force-device-scale-factor=<scale> and
                           --force-color-profile=srgb before the script path
@@ -215,6 +218,66 @@ function info(out: string) {
   });
 }
 
+interface PageError {
+  name: string;
+  message: string;
+}
+
+interface HeatmapResult {
+  created: boolean;
+  setData: unknown;
+  store: unknown;
+  error: PageError | null;
+  canvas: [number, number] | null;
+  readError: PageError | null;
+  rgba: string | null;
+  shadow: string | null;
+}
+
+function errorTree(error: PageError | null): unknown {
+  if (error === null) return null;
+  return toTree(Object.assign(new Error(error.message), { name: error.name }));
+}
+
+async function heatmap(win: BrowserWindow, out: string) {
+  const dir = path.join(out, "heatmap");
+  for (const [index, fixture] of heatmapFixtures().entries()) {
+    if (fixture.nodeOnly) continue;
+    const results: HeatmapResult[] = await win.webContents.executeJavaScript(`heatmapRun(${index})`);
+    writeJson(path.join(dir, `${fixture.name}.fixture.json`), {
+      name: fixture.name,
+      updates: fixture.updates.map((u) => ({
+        translations: toTree(u.translations),
+        pixelDimensions: toTree(u.pixelDimensions),
+        fieldDimensions: toTree(u.fieldDimensions)
+      }))
+    });
+    writeJson(path.join(dir, `${fixture.name}.expected.json`), {
+      name: fixture.name,
+      updates: results.map((r) => ({
+        created: r.created,
+        setData: toTree(r.setData),
+        store: toTree(r.store),
+        throw: errorTree(r.error),
+        canvas: r.canvas,
+        readError: errorTree(r.readError)
+      }))
+    });
+    for (const [i, r] of results.entries()) {
+      if (r.rgba !== null && r.canvas !== null) {
+        fs.writeFileSync(
+          path.join(dir, `${fixture.name}.${i}.png`),
+          encodePng(r.canvas[0], r.canvas[1], Buffer.from(r.rgba, "base64"))
+        );
+      }
+      if (r.shadow !== null && r.canvas !== null) {
+        fs.writeFileSync(path.join(dir, `${fixture.name}.${i}.shadow`), Buffer.from(r.shadow, "base64"));
+      }
+    }
+    console.error(`  ${fixture.name}`);
+  }
+}
+
 async function main() {
   if (mode === "list") {
     for (const s of [...allScenes(), ...calibrationScenes()]) console.log(s.name);
@@ -232,6 +295,13 @@ async function main() {
     return;
   }
   const win = await page(400, 300);
+  if (mode === "heatmap") {
+    info(out);
+    await win.loadFile(path.join(here, "heatmapPage.html"));
+    await heatmap(win, out);
+    win.destroy();
+    return;
+  }
   await win.loadFile(path.join(here, "canvasPage.html"));
   if (mode === "canvas") {
     const scenes = allScenes().filter((s) => rest.length === 0 || rest.includes(s.name));

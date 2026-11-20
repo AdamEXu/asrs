@@ -199,6 +199,21 @@ for (const [entry, outfile] of [
     ).metafile
   );
 }
+// The heatmap page needs the upstream sources and node_modules, like the node entries.
+recordInputs(
+  (
+    await esbuild.build({
+      ...common,
+      entryPoints: [path.join(here, "src/heatmap/page.ts")],
+      outfile: path.join(args.out, "heatmapPage.js"),
+      format: "iife",
+      platform: "browser",
+      nodePaths: [path.join(args.upstream, "node_modules")],
+      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream) },
+      plugins: [oraclePlugin]
+    })
+  ).metafile
+);
 // The DOM harness evaluates the real hub inside a jsdom window, so it is a browser bundle of
 // upstream sources with the WebGL-only 3D renderer replaced by a stub.
 const field3dStub = {
@@ -227,12 +242,17 @@ fs.writeFileSync(
   '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>' +
     '<body><script src="canvasPage.js"></script></body></html>\n'
 );
+fs.writeFileSync(
+  path.join(args.out, "heatmapPage.html"),
+  '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>' +
+    '<body><script src="heatmapPage.js"></script></body></html>\n'
+);
 
 // Bundles an entry starts at runtime (by spawning or loading them in a window) count as its
 // inputs, so `oracle gen` invalidates its vectors when they change.
 const runtimeLoads = {
   protoRenderer: ["rendererMain", "rendererPage", "src/renderer/renderer.html"],
-  canvasMain: ["canvasPage"],
+  canvasMain: ["canvasPage", "heatmapPage"],
   dom: ["domPage"]
 };
 const inputs = {};
