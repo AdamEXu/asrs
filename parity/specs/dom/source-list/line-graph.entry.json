@@ -1,0 +1,1088 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/source-list.json"
+  ],
+  "fixture": {
+    "sourceLists": true,
+    "layout": [
+      {
+        "selector": "div.line-graph-left",
+        "rect": [
+          300,
+          450,
+          266,
+          200
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list",
+        "rect": [
+          300,
+          490,
+          266,
+          160
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"0\"]",
+        "rect": [
+          300,
+          490,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"1\"]",
+        "rect": [
+          300,
+          520,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"2\"]",
+        "rect": [
+          300,
+          550,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"3\"]",
+        "rect": [
+          300,
+          580,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"4\"]",
+        "rect": [
+          300,
+          610,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"5\"]",
+        "rect": [
+          300,
+          640,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"6\"]",
+        "rect": [
+          300,
+          670,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"7\"]",
+        "rect": [
+          300,
+          700,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"8\"]",
+        "rect": [
+          300,
+          730,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"9\"]",
+        "rect": [
+          300,
+          760,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"10\"]",
+        "rect": [
+          300,
+          790,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-left > div.list > div.item[data-i=\"11\"]",
+        "rect": [
+          300,
+          820,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right",
+        "rect": [
+          566,
+          450,
+          266,
+          200
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list",
+        "rect": [
+          566,
+          490,
+          266,
+          160
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"0\"]",
+        "rect": [
+          566,
+          490,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"1\"]",
+        "rect": [
+          566,
+          520,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"2\"]",
+        "rect": [
+          566,
+          550,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"3\"]",
+        "rect": [
+          566,
+          580,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"4\"]",
+        "rect": [
+          566,
+          610,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"5\"]",
+        "rect": [
+          566,
+          640,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"6\"]",
+        "rect": [
+          566,
+          670,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"7\"]",
+        "rect": [
+          566,
+          700,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"8\"]",
+        "rect": [
+          566,
+          730,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"9\"]",
+        "rect": [
+          566,
+          760,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"10\"]",
+        "rect": [
+          566,
+          790,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-right > div.list > div.item[data-i=\"11\"]",
+        "rect": [
+          566,
+          820,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete",
+        "rect": [
+          832,
+          450,
+          266,
+          200
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list",
+        "rect": [
+          832,
+          490,
+          266,
+          160
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"0\"]",
+        "rect": [
+          832,
+          490,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"1\"]",
+        "rect": [
+          832,
+          520,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"2\"]",
+        "rect": [
+          832,
+          550,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"3\"]",
+        "rect": [
+          832,
+          580,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"4\"]",
+        "rect": [
+          832,
+          610,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"5\"]",
+        "rect": [
+          832,
+          640,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"6\"]",
+        "rect": [
+          832,
+          670,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"7\"]",
+        "rect": [
+          832,
+          700,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"8\"]",
+        "rect": [
+          832,
+          730,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"9\"]",
+        "rect": [
+          832,
+          760,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"10\"]",
+        "rect": [
+          832,
+          790,
+          266,
+          30
+        ]
+      },
+      {
+        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"11\"]",
+        "rect": [
+          832,
+          820,
+          266,
+          30
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/source-list.json"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.leftSourceList.addField('/Drive/LeftVelocity')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.leftSourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.rightSourceList.addField('/Arm/Angle')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.leftSourceList.addField('/Flag')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.leftSourceList.addField('/Missing')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Flag')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Mode')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/RawData')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Bools')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Nums')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Strs')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Alerts')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Drive/LeftVelocity')"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.discreteSourceList.addField('/Odometry/Pose2d')"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "added"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "eval": "window.startDrag(10, 10, 0, 0, {fields: [\"/Swerve/Speeds\"], children: [\"/Swerve/Speeds/vx\", \"/Swerve/Speeds/vy\", \"/Swerve/Speeds/omega\"]})"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 400,
+            "clientY": 520
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 400,
+            "clientY": 560
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "eval": "window.startDrag(10, 10, 0, 0, {fields: [\"/Swerve/Speeds\"], children: [\"/Swerve/Speeds/vx\"]})"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 900,
+            "clientY": 500
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 100,
+            "clientY": 100
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "eval": "window.startDrag(10, 10, 0, 0, {fields: [\"/Swerve/Speeds\"], children: [\"/Swerve/Speeds/vx\"]})"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 900,
+            "clientY": 500
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "field-drag"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list > div.item[data-i=\"0\"]",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 495
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 501
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 560
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 330,
+            "clientY": 571
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "reorder-down"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list > div.item[data-i=\"3\"]",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 585
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 591
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 500
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 491
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "reorder-up"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list > div.item[data-i=\"1\"]",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 525
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 320,
+            "clientY": 531
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 600,
+            "clientY": 500
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 650,
+            "clientY": 560
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "cross-list"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"2\"]",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 840,
+            "clientY": 555
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 840,
+            "clientY": 561
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 840,
+            "clientY": 700
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"2\"]",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 840,
+            "clientY": 555
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 840,
+            "clientY": 561
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 500,
+            "clientY": 520
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "rejected-drags"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-left > div.list > div.item[data-i=\"0\"] > button.type",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "(sl => sl.constructor.typePromptCallbacks[sl.UUID]?.({\"type\": \"points\", \"logKey\": \"/Drive/RightVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#80588e\"}}))(window.tabs.tabList[1].controller.leftSourceList)"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"1\"]",
+          "type": "contextmenu",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 850,
+            "clientY": 530
+          }
+        }
+      },
+      {
+        "eval": "(sl => sl.constructor.typePromptCallbacks[sl.UUID]?.({\"type\": \"graph\", \"logKey\": \"/Mode\", \"logType\": \"String\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}))(window.tabs.tabList[1].controller.discreteSourceList)"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"0\"] > button.hide",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"3\"] > div.type-name",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"3\"] > div.key-container > span",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"4\"] > div.key-container",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 500
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"4\"] > div.key-container",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"5\"] > button.remove",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "interactions"
+      },
+      {
+        "eval": "window.__oracleTheme = 'dark'"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "dark"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(0.5)"
+      },
+      {
+        "log": [
+          [
+            "deleteField",
+            "/Mode"
+          ],
+          [
+            "putNumber",
+            "/Mode",
+            3.5,
+            1
+          ],
+          [
+            "deleteField",
+            "/Nums"
+          ]
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "availability"
+      },
+      {
+        "log": [
+          [
+            "putNumberArray",
+            "/Nums",
+            4.0,
+            [
+              1,
+              2
+            ]
+          ]
+        ]
+      },
+      {
+        "eval": "window.selection.setHoveredTime(4.5)"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "restored-field"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.rightSourceList.clear()"
+      },
+      {
+        "eval": "window.tabs.tabList[1].controller.leftSourceList.setState([{\"type\": \"smooth\", \"logKey\": \"/Late\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"size\": \"bold\", \"color\": \"#c0b487\"}}, {\"type\": \"stepped\", \"logKey\": \"/Nope\", \"logType\": \"String\", \"visible\": false, \"options\": {\"color\": \"#2b66a2\", \"size\": \"normal\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "set-state"
+      }
+    ]
+  }
+}

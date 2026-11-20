@@ -22,6 +22,7 @@ export interface Fixture {
   images?: { [src: string]: [number, number] };
   layout?: LayoutRule[];
   ignoreMain?: string[];
+  sourceLists?: boolean;
   steps?: unknown[];
 }
 
@@ -195,7 +196,7 @@ define(w, "outerWidth", () => view.width ?? 1100);
 define(w, "outerHeight", () => view.height ?? 650);
 define(w, "devicePixelRatio", () => view.devicePixelRatio ?? 1);
 w.matchMedia = (query: string) => ({
-  matches: query.replace(/\s+/g, "").includes("prefers-color-scheme:" + theme),
+  matches: query.replace(/\s+/g, "").includes("prefers-color-scheme:" + (w.__oracleTheme ?? theme)),
   media: query,
   onchange: null,
   addListener() {},

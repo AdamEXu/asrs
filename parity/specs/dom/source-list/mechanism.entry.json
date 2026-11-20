@@ -1,0 +1,221 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/source-list.json"
+  ],
+  "fixture": {
+    "sourceLists": true,
+    "layout": [
+      {
+        "selector": "div.mechanism-sources",
+        "rect": [
+          310,
+          460,
+          400,
+          180
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list",
+        "rect": [
+          310,
+          490,
+          400,
+          150
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"0\"]",
+        "rect": [
+          310,
+          490,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"1\"]",
+        "rect": [
+          310,
+          520,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"2\"]",
+        "rect": [
+          310,
+          550,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"3\"]",
+        "rect": [
+          310,
+          580,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"4\"]",
+        "rect": [
+          310,
+          610,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"5\"]",
+        "rect": [
+          310,
+          640,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"6\"]",
+        "rect": [
+          310,
+          670,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"7\"]",
+        "rect": [
+          310,
+          700,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"8\"]",
+        "rect": [
+          310,
+          730,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"9\"]",
+        "rect": [
+          310,
+          760,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"10\"]",
+        "rect": [
+          310,
+          790,
+          400,
+          30
+        ]
+      },
+      {
+        "selector": "div.mechanism-sources > div.list > div.item[data-i=\"11\"]",
+        "rect": [
+          310,
+          820,
+          400,
+          30
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/source-list.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "eval": "window.selection.setSelectedTime(1)"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField('/Mech')"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField('/Alerts')"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField('/Mech1')"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "added"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2)"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "eval": "window.startDrag(10, 10, 0, 0, {fields: [\"/Mech\", \"/Mode\"], children: []})"
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 400,
+            "clientY": 600
+          }
+        }
+      },
+      {
+        "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "dragged"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.stop()"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ],
+        "label": "stopped"
+      }
+    ]
+  }
+}

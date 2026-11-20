@@ -1,0 +1,19 @@
+{
+  "title": "Sources",
+  "autoAdvance": false,
+  "allowChildrenFromDrag": false,
+  "types": [
+    {
+      "key": "mechanism",
+      "display": "Mechanism",
+      "symbol": "settings",
+      "showInTypeName": false,
+      "color": "#888888",
+      "sourceTypes": [
+        "Mechanism2d"
+      ],
+      "showDocs": true,
+      "options": []
+    }
+  ]
+}

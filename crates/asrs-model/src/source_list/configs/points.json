@@ -1,0 +1,582 @@
+{
+  "title": "Sources",
+  "autoAdvance": false,
+  "allowChildrenFromDrag": false,
+  "typeMemoryId": "points",
+  "types": [
+    {
+      "key": "plus",
+      "display": "Plus",
+      "symbol": "add",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "Translation2d",
+        "Translation2d[]",
+        "TargetCorner:16f6ac0dedc8eaccb951f4895d9e18b6[]"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "size",
+          "display": "Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "medium",
+              "display": "Medium"
+            },
+            {
+              "key": "large",
+              "display": "Large"
+            },
+            {
+              "key": "small",
+              "display": "Small"
+            }
+          ]
+        },
+        {
+          "key": "groupSize",
+          "display": "Group Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "0",
+              "display": "0"
+            },
+            {
+              "key": "1",
+              "display": "1"
+            },
+            {
+              "key": "2",
+              "display": "2"
+            },
+            {
+              "key": "3",
+              "display": "3"
+            },
+            {
+              "key": "4",
+              "display": "4"
+            },
+            {
+              "key": "5",
+              "display": "5"
+            },
+            {
+              "key": "6",
+              "display": "6"
+            },
+            {
+              "key": "7",
+              "display": "7"
+            },
+            {
+              "key": "8",
+              "display": "8"
+            },
+            {
+              "key": "9",
+              "display": "9"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    },
+    {
+      "key": "cross",
+      "display": "Cross",
+      "symbol": "close",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "Translation2d",
+        "Translation2d[]",
+        "TargetCorner:16f6ac0dedc8eaccb951f4895d9e18b6[]"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "size",
+          "display": "Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "medium",
+              "display": "Medium"
+            },
+            {
+              "key": "large",
+              "display": "Large"
+            },
+            {
+              "key": "small",
+              "display": "Small"
+            }
+          ]
+        },
+        {
+          "key": "groupSize",
+          "display": "Group Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "0",
+              "display": "0"
+            },
+            {
+              "key": "1",
+              "display": "1"
+            },
+            {
+              "key": "2",
+              "display": "2"
+            },
+            {
+              "key": "3",
+              "display": "3"
+            },
+            {
+              "key": "4",
+              "display": "4"
+            },
+            {
+              "key": "5",
+              "display": "5"
+            },
+            {
+              "key": "6",
+              "display": "6"
+            },
+            {
+              "key": "7",
+              "display": "7"
+            },
+            {
+              "key": "8",
+              "display": "8"
+            },
+            {
+              "key": "9",
+              "display": "9"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    },
+    {
+      "key": "circle",
+      "display": "Circle",
+      "symbol": "circle",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "Translation2d",
+        "Translation2d[]",
+        "TargetCorner:16f6ac0dedc8eaccb951f4895d9e18b6[]"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "size",
+          "display": "Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "medium",
+              "display": "Medium"
+            },
+            {
+              "key": "large",
+              "display": "Large"
+            },
+            {
+              "key": "small",
+              "display": "Small"
+            }
+          ]
+        },
+        {
+          "key": "groupSize",
+          "display": "Group Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "0",
+              "display": "0"
+            },
+            {
+              "key": "1",
+              "display": "1"
+            },
+            {
+              "key": "2",
+              "display": "2"
+            },
+            {
+              "key": "3",
+              "display": "3"
+            },
+            {
+              "key": "4",
+              "display": "4"
+            },
+            {
+              "key": "5",
+              "display": "5"
+            },
+            {
+              "key": "6",
+              "display": "6"
+            },
+            {
+              "key": "7",
+              "display": "7"
+            },
+            {
+              "key": "8",
+              "display": "8"
+            },
+            {
+              "key": "9",
+              "display": "9"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    },
+    {
+      "key": "plusSplit",
+      "display": "Plus/Split",
+      "symbol": "add",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "NumberArray"
+      ],
+      "parentKey": "split",
+      "showDocs": true,
+      "options": [
+        {
+          "key": "component",
+          "display": "Component",
+          "showInTypeName": true,
+          "values": [
+            {
+              "key": "x",
+              "display": "X"
+            },
+            {
+              "key": "y",
+              "display": "Y"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "display": "Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "medium",
+              "display": "Medium"
+            },
+            {
+              "key": "large",
+              "display": "Large"
+            },
+            {
+              "key": "small",
+              "display": "Small"
+            }
+          ]
+        },
+        {
+          "key": "groupSize",
+          "display": "Group Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "0",
+              "display": "0"
+            },
+            {
+              "key": "1",
+              "display": "1"
+            },
+            {
+              "key": "2",
+              "display": "2"
+            },
+            {
+              "key": "3",
+              "display": "3"
+            },
+            {
+              "key": "4",
+              "display": "4"
+            },
+            {
+              "key": "5",
+              "display": "5"
+            },
+            {
+              "key": "6",
+              "display": "6"
+            },
+            {
+              "key": "7",
+              "display": "7"
+            },
+            {
+              "key": "8",
+              "display": "8"
+            },
+            {
+              "key": "9",
+              "display": "9"
+            }
+          ]
+        }
+      ],
+      "initialSelectionOption": "component",
+      "previewType": null
+    },
+    {
+      "key": "crossSplit",
+      "display": "Cross/Split",
+      "symbol": "close",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "NumberArray"
+      ],
+      "parentKey": "split",
+      "showDocs": true,
+      "options": [
+        {
+          "key": "component",
+          "display": "Component",
+          "showInTypeName": true,
+          "values": [
+            {
+              "key": "x",
+              "display": "X"
+            },
+            {
+              "key": "y",
+              "display": "Y"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "display": "Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "medium",
+              "display": "Medium"
+            },
+            {
+              "key": "large",
+              "display": "Large"
+            },
+            {
+              "key": "small",
+              "display": "Small"
+            }
+          ]
+        },
+        {
+          "key": "groupSize",
+          "display": "Group Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "0",
+              "display": "0"
+            },
+            {
+              "key": "1",
+              "display": "1"
+            },
+            {
+              "key": "2",
+              "display": "2"
+            },
+            {
+              "key": "3",
+              "display": "3"
+            },
+            {
+              "key": "4",
+              "display": "4"
+            },
+            {
+              "key": "5",
+              "display": "5"
+            },
+            {
+              "key": "6",
+              "display": "6"
+            },
+            {
+              "key": "7",
+              "display": "7"
+            },
+            {
+              "key": "8",
+              "display": "8"
+            },
+            {
+              "key": "9",
+              "display": "9"
+            }
+          ]
+        }
+      ],
+      "initialSelectionOption": "component",
+      "previewType": null
+    },
+    {
+      "key": "circleSplit",
+      "display": "Circle/Split",
+      "symbol": "circle",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "NumberArray"
+      ],
+      "parentKey": "split",
+      "showDocs": true,
+      "options": [
+        {
+          "key": "component",
+          "display": "Component",
+          "showInTypeName": true,
+          "values": [
+            {
+              "key": "x",
+              "display": "X"
+            },
+            {
+              "key": "y",
+              "display": "Y"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "display": "Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "medium",
+              "display": "Medium"
+            },
+            {
+              "key": "large",
+              "display": "Large"
+            },
+            {
+              "key": "small",
+              "display": "Small"
+            }
+          ]
+        },
+        {
+          "key": "groupSize",
+          "display": "Group Size",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "0",
+              "display": "0"
+            },
+            {
+              "key": "1",
+              "display": "1"
+            },
+            {
+              "key": "2",
+              "display": "2"
+            },
+            {
+              "key": "3",
+              "display": "3"
+            },
+            {
+              "key": "4",
+              "display": "4"
+            },
+            {
+              "key": "5",
+              "display": "5"
+            },
+            {
+              "key": "6",
+              "display": "6"
+            },
+            {
+              "key": "7",
+              "display": "7"
+            },
+            {
+              "key": "8",
+              "display": "8"
+            },
+            {
+              "key": "9",
+              "display": "9"
+            }
+          ]
+        }
+      ],
+      "initialSelectionOption": "component",
+      "previewType": null
+    },
+    {
+      "key": "component",
+      "display": "Component",
+      "symbol": "numbers",
+      "showInTypeName": false,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "NumberArray"
+      ],
+      "childOf": "split",
+      "showDocs": true,
+      "options": [
+        {
+          "key": "component",
+          "display": "Component",
+          "showInTypeName": true,
+          "values": [
+            {
+              "key": "x",
+              "display": "X"
+            },
+            {
+              "key": "y",
+              "display": "Y"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    }
+  ]
+}

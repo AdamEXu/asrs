@@ -1,0 +1,208 @@
+{
+  "title": "Measurements",
+  "autoAdvance": "color",
+  "allowChildrenFromDrag": true,
+  "typeMemoryId": "statistics",
+  "types": [
+    {
+      "key": "independent",
+      "display": "Independent",
+      "symbol": "menu",
+      "showInTypeName": true,
+      "color": "color",
+      "sourceTypes": [
+        "Number"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "color",
+          "display": "Color",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "#2b66a2",
+              "display": "Blue"
+            },
+            {
+              "key": "#e5b31b",
+              "display": "Gold"
+            },
+            {
+              "key": "#af2437",
+              "display": "Red"
+            },
+            {
+              "key": "#80588e",
+              "display": "Purple"
+            },
+            {
+              "key": "#e48b32",
+              "display": "Orange"
+            },
+            {
+              "key": "#c0b487",
+              "display": "Tan"
+            },
+            {
+              "key": "#858584",
+              "display": "Gray"
+            },
+            {
+              "key": "#3b875a",
+              "display": "Green"
+            },
+            {
+              "key": "#d993aa",
+              "display": "Pink"
+            },
+            {
+              "key": "#5f4528",
+              "display": "Brown"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    },
+    {
+      "key": "reference",
+      "display": "Reference",
+      "symbol": "anchor",
+      "showInTypeName": true,
+      "color": "#000000",
+      "darkColor": "#ffffff",
+      "sourceTypes": [
+        "Number"
+      ],
+      "parentKey": "reference",
+      "showDocs": true,
+      "options": [],
+      "previewType": null
+    },
+    {
+      "key": "relativeError",
+      "display": "Relative Error",
+      "symbol": "verticalaligncenter",
+      "showInTypeName": true,
+      "color": "color",
+      "sourceTypes": [
+        "Number"
+      ],
+      "childOf": "reference",
+      "showDocs": true,
+      "options": [
+        {
+          "key": "color",
+          "display": "Color",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "#2b66a2",
+              "display": "Blue"
+            },
+            {
+              "key": "#e5b31b",
+              "display": "Gold"
+            },
+            {
+              "key": "#af2437",
+              "display": "Red"
+            },
+            {
+              "key": "#80588e",
+              "display": "Purple"
+            },
+            {
+              "key": "#e48b32",
+              "display": "Orange"
+            },
+            {
+              "key": "#c0b487",
+              "display": "Tan"
+            },
+            {
+              "key": "#858584",
+              "display": "Gray"
+            },
+            {
+              "key": "#3b875a",
+              "display": "Green"
+            },
+            {
+              "key": "#d993aa",
+              "display": "Pink"
+            },
+            {
+              "key": "#5f4528",
+              "display": "Brown"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    },
+    {
+      "key": "absoluteError",
+      "display": "Absolute Error",
+      "symbol": "verticalalignbottom",
+      "showInTypeName": true,
+      "color": "color",
+      "sourceTypes": [
+        "Number"
+      ],
+      "childOf": "reference",
+      "showDocs": true,
+      "options": [
+        {
+          "key": "color",
+          "display": "Color",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "#2b66a2",
+              "display": "Blue"
+            },
+            {
+              "key": "#e5b31b",
+              "display": "Gold"
+            },
+            {
+              "key": "#af2437",
+              "display": "Red"
+            },
+            {
+              "key": "#80588e",
+              "display": "Purple"
+            },
+            {
+              "key": "#e48b32",
+              "display": "Orange"
+            },
+            {
+              "key": "#c0b487",
+              "display": "Tan"
+            },
+            {
+              "key": "#858584",
+              "display": "Gray"
+            },
+            {
+              "key": "#3b875a",
+              "display": "Green"
+            },
+            {
+              "key": "#d993aa",
+              "display": "Pink"
+            },
+            {
+              "key": "#5f4528",
+              "display": "Brown"
+            }
+          ]
+        }
+      ],
+      "previewType": null
+    }
+  ]
+}

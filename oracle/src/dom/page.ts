@@ -4,6 +4,7 @@ import { DEFAULT_PREFS, mergePreferences } from "@upstream/shared/Preferences";
 import { LITE_VERSION } from "@upstream/shared/buildConstants";
 import { fromTree, toTree } from "../cve1";
 import { measureFixed, parseFontSize } from "./recordingCanvas";
+import * as sourceLists from "./sourceLists";
 
 const w = window as any;
 const write = (record: object) => w.__oracleWrite(JSON.stringify(record));
@@ -145,6 +146,9 @@ function capture(spec: any) {
         write({ eval: spec.expr, throw: toTree(error instanceof Error ? `${error.name}: ${error.message}` : error) });
       }
       return;
+    case "sourceLists":
+      sourceLists.capture();
+      return;
     case "measure": {
       const size = parseFontSize(spec.font);
       for (const text of spec.texts as string[]) {
@@ -161,6 +165,7 @@ function capture(spec: any) {
 async function step(s: any, index: number) {
   if ("main" in s) await sendMain(s.main, "cve1" in s ? fromTree(s.cve1) : s.data);
   else if ("log" in s) {
+    if (fixture.sourceLists) sourceLists.recordLog(s.log);
     for (const [method, ...args] of s.log as [string, ...unknown[]][]) {
       w.log[method](...args.map((a) => fromTree(a)));
     }
@@ -195,6 +200,7 @@ async function step(s: any, index: number) {
 
 w.__oracleRun = async () => {
   setExceptionHandler(exception);
+  if (fixture.sourceLists) sourceLists.install();
   for (const listener of windowMessageListeners) listener({ data: "port", ports: [port] });
   const prefs = JSON.parse(JSON.stringify(DEFAULT_PREFS));
   if (fixture.preferences !== undefined) mergePreferences(prefs, fixture.preferences);
