@@ -1,0 +1,52 @@
+{
+  "protocol": "nt4",
+  "seed": 254,
+  "epochMs": 1731000000000,
+  "latencyMs": 1,
+  "endMs": 11000,
+  "client": {
+    "source": "nt4",
+    "mode": "akit",
+    "address": "10.63.28.2",
+    "prefs": { "liveSubscribeMode": "low-bandwidth" },
+    "tabs": ["/Drive/LeftPosition", "/Arm"],
+    "sidebar": ["/Tuning/kP"]
+  },
+  "server": {
+    "version": "4.0",
+    "offsetUs": -5000000,
+    "topics": [
+      { "name": "/AdvantageKit/Timestamp", "type": "int", "value": 20000 },
+      { "name": "/AdvantageKit/Drive/LeftPosition", "type": "double", "value": 0.5 },
+      { "name": "/AdvantageKit/Drive/RightPosition", "type": "double", "value": 0.75 },
+      { "name": "/AdvantageKit/Arm/Angle", "type": "double", "properties": { "unit": "rad" }, "value": 1.25 },
+      { "name": "/AdvantageKit/Arm/Pair", "type": "struct:Pair", "value": "000000000000f03f00000000000004c0" },
+      { "name": "/AdvantageKit/DriverStation/Enabled", "type": "boolean", "value": false },
+      { "name": "/AdvantageKit/.schema/struct:Pair", "type": "structschema", "value": "646f75626c6520613b646f75626c652062" },
+      { "name": "/Tuning/kP", "type": "double", "value": 0.1 },
+      { "name": "/SmartDashboard/other", "type": "double", "value": 9 }
+    ]
+  },
+  "steps": [
+    { "t": 0, "server": ["down", "hang"] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 700, "server": ["down", "refuse"] },
+    { "t": 1200, "server": ["up"] },
+    { "t": 1800, "server": ["set", "/AdvantageKit/Drive/LeftPosition", 0.625] },
+    { "t": 1800, "server": ["set", "/AdvantageKit/Drive/RightPosition", 0.875] },
+    { "t": 1900, "server": ["batch", [["/AdvantageKit/Arm/Angle", 1.5], ["/AdvantageKit/DriverStation/Enabled", true], ["/AdvantageKit/Timestamp", 40000]]] },
+    { "t": 2000, "client": ["dump"] },
+    { "t": 2100, "client": ["fields", ["/Drive"], []] },
+    { "t": 2400, "server": ["set", "/AdvantageKit/Drive/RightPosition", 1] },
+    { "t": 2500, "client": ["tune", "/Tuning/kP", 0.2] },
+    { "t": 2600, "client": ["tune", "/Drive/LeftPosition", 3] },
+    { "t": 2700, "client": ["prefs", { "liveSubscribeMode": "logging" }] },
+    { "t": 2900, "server": ["set", "/AdvantageKit/Arm/Angle", 1.75] },
+    { "t": 3000, "client": ["prefs", { "liveSubscribeMode": "low-bandwidth" }] },
+    { "t": 3200, "client": ["dump"] },
+    { "t": 3500, "server": ["mute", true] },
+    { "t": 8002, "server": ["mute", false] },
+    { "t": 10000, "server": ["set", "/AdvantageKit/Drive/LeftPosition", 2] },
+    { "t": 10500, "client": ["dump"] }
+  ]
+}

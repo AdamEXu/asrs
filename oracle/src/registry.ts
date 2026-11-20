@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { NPM_MODULES } from "oracle:npm-modules";
 import { UPSTREAM_MODULES } from "oracle:upstream-modules";
 import { HELPERS } from "./helpers";
@@ -18,7 +19,12 @@ function walk(root: any, segments: string[], name: string): { parent: any; value
 }
 
 async function loadRoot(target: string, name: string): Promise<{ root: any; path: string }> {
-  if (target.startsWith("oracle:")) return { root: HELPERS, path: target.slice("oracle:".length) };
+  if (target.startsWith("oracle:")) {
+    const path = target.slice("oracle:".length);
+    const helper = path.split(".")[0];
+    if (Object.hasOwn(HELPERS, helper)) return { root: HELPERS, path };
+    return { root: await loadLazyHelper(helper, name), path };
+  }
   if (target.startsWith("npm:")) {
     const rest = target.slice("npm:".length);
     const colon = rest.indexOf(":");
@@ -35,6 +41,28 @@ async function loadRoot(target: string, name: string): Promise<{ root: any; path
     return { root: await load(), path: target.slice(colon + 1) };
   }
   return { root: globalThis, path: target };
+}
+
+// Separate bundles (build.mjs) loaded through a computed URL, so esbuild leaves them out of every
+// bundle that imports this registry and adding one does not change their generator hashes.
+const LAZY_HELPERS_DIR = new URL("./lazyHelpers/", import.meta.url);
+
+function lazyHelperNames(): string[] {
+  try {
+    return fs
+      .readdirSync(LAZY_HELPERS_DIR)
+      .filter((file) => file.endsWith(".mjs"))
+      .map((file) => file.slice(0, -".mjs".length))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+async function loadLazyHelper(helper: string, name: string): Promise<any> {
+  if (!lazyHelperNames().includes(helper)) throw new Error(`fn ${name}: no helper ${helper}`);
+  const module = await import(new URL(`${helper}.mjs`, LAZY_HELPERS_DIR).href);
+  return { [helper]: module.run };
 }
 
 const cache = new Map<string, Callable>();
@@ -72,6 +100,6 @@ export function listModules(): { upstream: string[]; npm: string[]; helpers: str
   return {
     upstream: Object.keys(UPSTREAM_MODULES),
     npm: Object.keys(NPM_MODULES),
-    helpers: Object.keys(HELPERS)
+    helpers: [...Object.keys(HELPERS), ...lazyHelperNames()]
   };
 }
