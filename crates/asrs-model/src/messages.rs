@@ -104,10 +104,6 @@ message_names!(MainToHub {
     SetAssets = "set-assets",
     SetActiveSatellites = "set-active-satellites",
     CallSelectionSetter = "call-selection-setter",
-    Play = "play",
-    Pause = "pause",
-    Lock = "lock",
-    Unlock = "unlock",
     ZoomEnabled = "zoom-enabled",
     ShowUpdateButton = "show-update-button",
     ShowFeedbackButton = "show-feedback-button",
@@ -181,3 +177,22 @@ message_names!(MainToDownload {
     SetProgress = "set-progress",
     SetList = "set-list",
 });
+
+message_names!(
+    /// The `Selection` methods a `call-selection-setter` message may name.
+    SelectionSetter {
+        SetHoveredTime = "setHoveredTime",
+        SetSelectedTime = "setSelectedTime",
+        GoIdle = "goIdle",
+        Play = "play",
+        Pause = "pause",
+        TogglePlayback = "togglePlayback",
+        Lock = "lock",
+        Unlock = "unlock",
+        ToggleLock = "toggleLock",
+        StepCycle = "stepCycle",
+        SetGrabZoomRange = "setGrabZoomRange",
+        FinishGrabZoom = "finishGrabZoom",
+        ApplyTimelineScroll = "applyTimelineScroll",
+    }
+);

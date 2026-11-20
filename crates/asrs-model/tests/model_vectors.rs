@@ -9,9 +9,7 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_model::build_constants::{self, Distribution};
 use asrs_model::json_file;
-use asrs_model::preferences::{
-    LiveMode, Preferences, SystemcoreStaticAddress, merge_preferences,
-};
+use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, merge_preferences};
 use asrs_model::selection::SelectionMode;
 use asrs_model::tab_type::TabType;
 use asrs_parity::vectors::check_records;
@@ -25,12 +23,17 @@ fn bytes_field(record: &Record, key: &str) -> Result<Option<Vec<u8>>, String> {
     match record.value(key).map_err(|e| e.to_string())? {
         Value::Null => Ok(None),
         Value::Bytes(bytes) => Ok(Some(bytes)),
-        other => Err(format!("{key}: expected bytes or null, got {}", other.kind())),
+        other => Err(format!(
+            "{key}: expected bytes or null, got {}",
+            other.kind()
+        )),
     }
 }
 
 fn startup(record: &Record) -> Result<Vec<u8>, JsError> {
-    let platform = record.string("platform").expect("startup records name a platform");
+    let platform = record
+        .string("platform")
+        .expect("startup records name a platform");
     let file = match bytes_field(record, "file").expect("file") {
         Some(bytes) => Some(json_file::parse(&bytes)?),
         None => None,
@@ -85,8 +88,7 @@ fn prefs_flows_match_upstream() {
 #[test]
 fn typed_merge_matches_raw_merge() {
     check_records("model/prefs", |record| {
-        if record.string("flow").as_deref() != Some("update") || record.string("throw").is_some()
-        {
+        if record.string("flow").as_deref() != Some("update") || record.string("throw").is_some() {
             return Ok(());
         }
         let data = json::parse_str(&record.string("data").unwrap()).unwrap();
@@ -130,9 +132,9 @@ fn schema_value(name: &str) -> Option<JsValue> {
         "getRobotAddress" => {
             let prefs = Preferences {
                 robot_address: JsString::from("10.63.28.2"),
-                systemcore_static_address: SystemcoreStaticAddress::from_js_str(
-                    &JsString::from(words[1]),
-                )?,
+                systemcore_static_address: SystemcoreStaticAddress::from_js_str(&JsString::from(
+                    words[1],
+                ))?,
                 ..Preferences::default()
             };
             prefs.robot_address_for(words[2]).to_js()
