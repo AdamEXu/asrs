@@ -15,7 +15,7 @@ use crate::path::{Affine, Path, Pt};
 use crate::pixels;
 use crate::aaa;
 use crate::blit::Spans;
-use crate::scan::{self, Blend, Coverage, div255};
+use crate::scan::{self, Blend, Coverage};
 use crate::skpath::SkPath;
 use crate::stroke;
 use crate::text::lut::MaskGammaLut;
@@ -113,7 +113,20 @@ pub struct Raster<'a> {
     images: HashMap<String, Pixmap>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
+    errors: Vec<(usize, CanvasError)>,
+    calls: usize,
 }
+
+/// An exception Blink throws from a canvas call instead of drawing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CanvasError {
+    /// `IndexSizeError` with its message.
+    IndexSize(&'static str),
+    /// `RangeError` with its message.
+    Range(&'static str),
+}
+
+const OUT_OF_MEMORY: CanvasError = CanvasError::Range("Out of memory at ImageData creation");
 
 enum Source {
     Solid([u8; 4]),
@@ -256,9 +269,7 @@ fn validate_rect(x: f64, y: f64, w: f64, h: f64) -> Option<[f64; 4]> {
     Some([x, y, w, h])
 }
 
-fn to_int32(v: f64) -> i64 {
-    if v.is_finite() { v.trunc() as i64 } else { 0 }
-}
+use asrs_js::number::to_int32;
 
 impl<'a> Raster<'a> {
     pub fn new(width: u32, height: u32) -> Option<Raster<'a>> {
@@ -273,6 +284,8 @@ impl<'a> Raster<'a> {
             images: HashMap::new(),
             registers: HashMap::new(),
             text: None,
+            errors: Vec::new(),
+            calls: 0,
         })
     }
 
@@ -298,6 +311,11 @@ impl<'a> Raster<'a> {
         self.pixmap
     }
 
+    /// Every exception a call threw, with the index of the call among those applied.
+    pub fn errors(&self) -> &[(usize, CanvasError)] {
+        &self.errors
+    }
+
     pub fn run(&mut self, calls: &[Call]) {
         for call in calls {
             self.apply(call);
@@ -305,6 +323,13 @@ impl<'a> Raster<'a> {
     }
 
     pub fn apply(&mut self, call: &Call) {
+        self.calls += 1;
+        if let Err(e) = self.apply_call(call) {
+            self.errors.push((self.calls - 1, e));
+        }
+    }
+
+    fn apply_call(&mut self, call: &Call) -> Result<(), CanvasError> {
         match call {
             Call::Set(p) => self.set(p),
             Call::Save => self.stack.push(self.state.clone()),
@@ -423,20 +448,7 @@ impl<'a> Raster<'a> {
                 sh,
                 ref register,
             } => {
-                let (mut x, mut y, mut w, mut h) =
-                    (to_int32(sx), to_int32(sy), to_int32(sw), to_int32(sh));
-                if w == 0 || h == 0 {
-                    return;
-                }
-                if w < 0 {
-                    x += w;
-                    w = -w;
-                }
-                if h < 0 {
-                    y += h;
-                    h = -h;
-                }
-                let data = pixels::read_rect(&self.pixmap, x, y, w as u32, h as u32);
+                let data = self.get_image_data(sx, sy, sw, sh)?;
                 self.registers.insert(register.clone(), data);
             }
             Call::PutImageData { data, dx, dy } => {
@@ -445,10 +457,48 @@ impl<'a> Raster<'a> {
                     ImageDataSource::Inline(image) => Some(image.clone()),
                 };
                 if let Some(image) = image {
-                    pixels::write_rect(&mut self.pixmap, &image, to_int32(*dx), to_int32(*dy));
+                    pixels::write_rect(
+                        &mut self.pixmap,
+                        &image,
+                        i64::from(to_int32(*dx)),
+                        i64::from(to_int32(*dy)),
+                    );
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Blink's `getImageDataInternal`: the arguments are WebIDL `long`s, and sizes whose
+    /// arithmetic overflows `int` or whose buffer cannot exist throw instead of allocating.
+    fn get_image_data(&self, sx: f64, sy: f64, sw: f64, sh: f64) -> Result<ImageData, CanvasError> {
+        let (mut x, mut y, mut w, mut h) = (to_int32(sx), to_int32(sy), to_int32(sw), to_int32(sh));
+        if w.checked_mul(h).is_none() {
+            return Err(OUT_OF_MEMORY);
+        }
+        if w == 0 {
+            return Err(CanvasError::IndexSize("The source width is 0."));
+        }
+        if h == 0 {
+            return Err(CanvasError::IndexSize("The source height is 0."));
+        }
+        if w < 0 {
+            x = x.checked_add(w).ok_or(OUT_OF_MEMORY)?;
+            w = i32::try_from(w.unsigned_abs()).unwrap_or(i32::MAX);
+        }
+        if h < 0 {
+            y = y.checked_add(h).ok_or(OUT_OF_MEMORY)?;
+            h = i32::try_from(h.unsigned_abs()).unwrap_or(i32::MAX);
+        }
+        if x.checked_add(w).is_none() || y.checked_add(h).is_none() {
+            return Err(OUT_OF_MEMORY);
+        }
+        let elements = 4u32.checked_mul(w as u32).and_then(|v| v.checked_mul(h as u32));
+        if elements.is_none() {
+            return Err(CanvasError::Range("Out of memory at ImageData creation."));
+        }
+        pixels::read_rect(&self.pixmap, i64::from(x), i64::from(y), w as u32, h as u32)
+            .ok_or(CanvasError::Range("Array buffer allocation failed"))
     }
 
     fn set(&mut self, property: &Property) {
@@ -1383,8 +1433,13 @@ impl<'a> Raster<'a> {
     }
 
     fn fill_text(&mut self, text: &JsString, x: f64, y: f64, max_width: Option<f64>) {
-        let Fill::Color(color) = self.state.fill else {
+        let fill = self.state.fill.clone();
+        let Some(source) = self.source(&fill, 256) else {
             return;
+        };
+        let luminance = match &fill {
+            Fill::Color(color) => color.to_u8(),
+            Fill::Linear(_, stops) | Fill::Radial(_, stops) => gradient_luminance(stops),
         };
         let ctm = self.state.transform;
         if !finite(&[x, y]) || !ctm.is_invertible() {
@@ -1409,11 +1464,7 @@ impl<'a> Raster<'a> {
             _ => x,
         };
         let y = y + baseline_offset(&mut **backend, &font, &state.baseline);
-        let rgb = color.to_u8();
-        let a = color.a * state.alpha as f32;
-        let src = [color.r, color.g, color.b, 1.0].map(|c| (c * a * 255.0 + 0.5) as u32);
-        let (pw, ph) = (self.pixmap.width() as i32, self.pixmap.height() as i32);
-        let data = self.pixmap.data_mut();
+        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
         for glyph in &shaped.glyphs {
             let gx = x + glyph.x * compress;
             let device_x = ctm.a * gx + ctm.c * y + ctm.e;
@@ -1435,29 +1486,15 @@ impl<'a> Raster<'a> {
                 continue;
             };
             for row in 0..mask.height as i32 {
-                let py = iy + mask.top + row;
-                if py < 0 || py >= ph {
-                    continue;
-                }
-                for col in 0..mask.width as i32 {
-                    let px = ix + mask.left + col;
-                    if px < 0 || px >= pw {
-                        continue;
-                    }
-                    let raw = mask.data[(row * mask.width as i32 + col) as usize];
-                    let m = u32::from(lut.apply(rgb, raw));
-                    if m == 0 {
-                        continue;
-                    }
-                    let s = src.map(|c| div255(c * m));
-                    let i = ((py * pw + px) * 4) as usize;
-                    for (k, &sc) in s.iter().enumerate() {
-                        let d = u32::from(data[i + k]);
-                        data[i + k] = (sc + div255(d * (255 - s[3]))).min(255) as u8;
-                    }
-                }
+                let start = (row * mask.width as i32) as usize;
+                let coverage: Vec<u8> = mask.data[start..start + mask.width as usize]
+                    .iter()
+                    .map(|&raw| lut.apply(luminance, raw))
+                    .collect();
+                spans.anti_h(ix + mask.left, iy + mask.top + row, &coverage);
             }
         }
+        self.paint_spans(&spans, &source);
     }
 
     fn draw_image(&mut self, id: &str, args: &[f64]) {
@@ -1562,6 +1599,23 @@ fn shade(bounds: [i32; 4], shader: Shader<'_>) -> Option<Pixmap> {
     };
     scratch.fill_rect(rect, &paint, Transform::from_translate(-x, -y), None);
     Some(scratch)
+}
+
+/// `SkGradientBaseShader::onAsLuminanceColor`, which text masks are gamma-corrected for: the
+/// plain average of the stop colours, including the stops Skia pads at 0 and 1.
+fn gradient_luminance(stops: &[(f32, Rgba)]) -> [u8; 3] {
+    let mut colors: Vec<Rgba> = stops.iter().map(|s| s.1).collect();
+    if let (Some(first), Some(last)) = (stops.first(), stops.last()) {
+        if first.0 != 0.0 {
+            colors.insert(0, first.1);
+        }
+        if last.0 != 1.0 {
+            colors.push(last.1);
+        }
+    }
+    let scale = 1.0 / colors.len().max(1) as f32;
+    let sum = |f: fn(&Rgba) -> f32| colors.iter().map(f).fold(0.0f32, |a, b| a + b) * scale;
+    [sum(|c| c.r), sum(|c| c.g), sum(|c| c.b)].map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8)
 }
 
 fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
@@ -1775,6 +1829,28 @@ mod tests {
         let pixmap = render(&c);
         assert_eq!(pixmap.pixel(3, 3).unwrap().alpha(), 255);
         assert_eq!(pixmap.pixel(6, 6).unwrap().alpha(), 0);
+    }
+
+    #[test]
+    fn get_image_data_throws_instead_of_allocating() {
+        let mut c = Canvas2d::new(4, 4);
+        c.get_image_data(0.0, 0.0, 0.0, 2.0, "$zero");
+        c.get_image_data(0.0, 0.0, 1e5, 1e5, "$int");
+        c.get_image_data(0.0, 0.0, 40000.0, 40000.0, "$bytes");
+        c.get_image_data(2_147_483_000.0, 0.0, 1000.0, 1.0, "$sum");
+        c.get_image_data(0.0, 0.0, 4_294_967_298.0, 1.0, "$wrapped");
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.run(&c.calls);
+        assert_eq!(
+            raster.errors(),
+            [
+                (0, CanvasError::IndexSize("The source width is 0.")),
+                (1, OUT_OF_MEMORY),
+                (2, CanvasError::Range("Out of memory at ImageData creation.")),
+                (3, OUT_OF_MEMORY),
+            ]
+        );
+        assert_eq!(raster.register("$wrapped").unwrap().width, 2);
     }
 
     #[test]
