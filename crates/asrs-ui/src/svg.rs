@@ -405,6 +405,9 @@ fn walk(node: Node<'_, '_>, parent: &Style, ctm: Affine, css: &Css<'_>, out: &mu
     if matches!(name, "defs" | "style" | "title" | "desc" | "metadata") {
         return;
     }
+    if node.attribute("display") == Some("none") {
+        return;
+    }
     let style = computed(node, parent, css);
     let transform = ctm.then(&transform_of(node));
     if name == "g" {
@@ -618,6 +621,7 @@ fn path_data(d: &str) -> SkPath {
                 let p = at(abs, x, y);
                 arc_to(
                     &mut path,
+                    current,
                     [rx as f32, ry as f32],
                     x_axis_rotation as f32,
                     large_arc,
@@ -653,8 +657,15 @@ fn rotation(degrees: f32) -> [f32; 2] {
 }
 
 /// `SkPathBuilder::arcTo(rad, angle, arcLarge, arcSweep, endPt)`, the SVG arc as conics.
-fn arc_to(path: &mut SkPath, rad: [f32; 2], angle: f32, large: bool, sweep: bool, end: P) {
-    let start = path.last_pt().unwrap_or(P { x: 0.0, y: 0.0 });
+fn arc_to(
+    path: &mut SkPath,
+    start: P,
+    rad: [f32; 2],
+    angle: f32,
+    large: bool,
+    sweep: bool,
+    end: P,
+) {
     if path.is_empty() {
         path.move_to(start);
     }
@@ -719,15 +730,10 @@ fn arc_to(path: &mut SkPath, rad: [f32; 2], angle: f32, large: bool, sweep: bool
         return;
     }
     let [c, s] = rotation(angle);
-    let map = |p: P| {
-        let q = P {
-            x: p.x * rx,
-            y: p.y * ry,
-        };
-        P {
-            x: c * q.x - s * q.y,
-            y: s * q.x + c * q.y,
-        }
+    let [m00, m01, m10, m11] = [c * rx, -s * ry, s * rx, c * ry];
+    let map = |p: P| P {
+        x: m00 * p.x + m01 * p.y,
+        y: m10 * p.x + m11 * p.y,
     };
     let segments = (theta_arc / (2.0 * std::f32::consts::PI / 3.0))
         .abs()
@@ -1024,6 +1030,17 @@ fn stroke_raster(geometry: &Geometry, m: &Affine, style: &Style, pixmap: &Pixmap
     let (w, h) = (pixmap.width(), pixmap.height());
     let width = style.stroke_width;
     let [sx, ky, kx, sy] = [m.a, m.b, m.c, m.d].map(|v| v as f32);
+    if let Geometry::Rect(r) = geometry
+        && rect_stays_rect(m)
+        && style.join == LineJoin::Miter
+        && style.miter >= std::f32::consts::SQRT_2
+    {
+        let size = (
+            (sx * width + kx * width).abs(),
+            (ky * width + sy * width).abs(),
+        );
+        return (scan::anti_frame_rect(device_rect(m, *r), size, w, h), 256);
+    }
     let len0 = fast_len(sx * width, ky * width);
     let len1 = fast_len(kx * width, sy * width);
     if len0 <= 1.0 && len1 <= 1.0 {
@@ -1044,17 +1061,6 @@ fn stroke_raster(geometry: &Geometry, m: &Affine, style: &Style, pixmap: &Pixmap
             }
         }
         return (spans, scale);
-    }
-    if let Geometry::Rect(r) = geometry
-        && rect_stays_rect(m)
-        && style.join == LineJoin::Miter
-        && style.miter >= std::f32::consts::SQRT_2
-    {
-        let size = (
-            (sx * width + kx * width).abs(),
-            (ky * width + sy * width).abs(),
-        );
-        return (scan::anti_frame_rect(device_rect(m, *r), size, w, h), 256);
     }
     (
         area_coverage(&stroke_outline(geometry, m, style), false, pixmap),

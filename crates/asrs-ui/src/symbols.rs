@@ -57,7 +57,7 @@ pub fn intrinsic(svg: &[u8]) -> Option<Intrinsic> {
     };
     let px = |v: &str| v.strip_suffix("px").unwrap_or(v).trim().parse::<f64>().ok();
     match (attr("width").and_then(px), attr("height").and_then(px)) {
-        (Some(w), Some(h)) => Some(Intrinsic::Size(w, h)),
+        (Some(w), Some(h)) if w.is_finite() && h.is_finite() => Some(Intrinsic::Size(w, h)),
         _ => {
             let mut view_box = attr("viewBox")?
                 .split([' ', ','])
@@ -69,7 +69,8 @@ pub fn intrinsic(svg: &[u8]) -> Option<Intrinsic> {
                 view_box.next()??,
                 view_box.next()??,
             );
-            Some(Intrinsic::Ratio(w, h))
+            let representable = |v: f64| v.is_finite() && v * 64.0 >= 1.0;
+            (representable(w) && representable(h)).then_some(Intrinsic::Ratio(w, h))
         }
     }
 }

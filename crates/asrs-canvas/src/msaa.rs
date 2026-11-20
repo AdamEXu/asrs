@@ -139,7 +139,8 @@ fn contours(path: &SkPath) -> Vec<Vec<P>> {
 }
 
 fn snap(v: f32) -> i64 {
-    (v * GRID).round() as i64
+    const LIMIT: f32 = (1u32 << 30) as f32;
+    (v * GRID).round().clamp(-LIMIT, LIMIT) as i64
 }
 
 /// The coverage (0 to 4 samples) of every pixel of a `width` x `height` target.
@@ -177,7 +178,8 @@ pub fn sample_counts(path: &SkPath, width: u32, height: u32, even_odd: bool) -> 
                 let x = col * 256 + sx;
                 let mut winding = 0i32;
                 for &[xa, ya, xb, yb] in &active {
-                    let cross = (xb - xa) * (y - ya) - (yb - ya) * (x - xa);
+                    let cross = i128::from(xb - xa) * i128::from(y - ya)
+                        - i128::from(yb - ya) * i128::from(x - xa);
                     if yb > ya {
                         if cross > 0 {
                             winding += 1;

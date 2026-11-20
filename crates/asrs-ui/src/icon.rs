@@ -75,7 +75,7 @@ fn from_lu(raw: i64) -> f64 {
 
 /// `LayoutUnit::MulDiv`.
 fn mul_div(v: i64, m: i64, d: i64) -> i64 {
-    v * m / d
+    if d == 0 { 0 } else { v * m / d }
 }
 
 /// `LayoutUnit::Round` of a size at a whole-pixel offset, the size `ToPixelSnappedRect` gives.
