@@ -8,6 +8,7 @@ mod js_math;
 mod js_regex;
 mod js_string;
 mod js_time;
+mod shared;
 
 use std::process::ExitCode;
 
