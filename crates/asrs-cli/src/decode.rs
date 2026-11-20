@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use asrs_formats::historical::HistoricalDataSource;
 use asrs_formats::worker::Abort;
 use asrs_js::string::JsString;
-use asrs_js::time::V8MathRandom;
+use asrs_js::time::{SetClock, V8MathRandom};
 use asrs_log::log::{Log, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
@@ -22,6 +22,10 @@ use crate::log_run;
 const USAGE: &str = "usage: asrs-cli decode [--initial] <log file>";
 pub(crate) const NEVER_COMPLETES: u8 = 3;
 pub(crate) const UNMODELED: u8 = 4;
+
+/// The `new Date().getTime()` a decode worker sees, pinned so workers that throttle progress
+/// by wall clock (Road Runner, RLOG) emit a fixed sequence; the oracle pins the same value.
+pub(crate) const WORKER_FROZEN_MS: f64 = 1_000_000_000_000.0;
 
 pub(crate) fn dump_log(
     serialized: &SerializedLog,
@@ -104,6 +108,7 @@ pub fn run(args: &[String]) -> ExitCode {
         &mut realm,
         files,
         Box::new(V8MathRandom::from_entropy()),
+        Box::new(SetClock(WORKER_FROZEN_MS)),
     ) {
         Ok(Some(Abort::NeverReturns)) => {
             eprintln!("{path}: upstream's worker never returns");

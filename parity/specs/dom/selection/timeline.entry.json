@@ -1,0 +1,248 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "layout": [
+      {
+        "selector": "button.tab-control.play",
+        "rect": [
+          946,
+          6,
+          38,
+          38
+        ]
+      },
+      {
+        "selector": "button.tab-control.pause",
+        "rect": [
+          946,
+          6,
+          38,
+          38
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          3
+        ]
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -200,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-hover-anchor"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -200,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-deeper"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          200,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-out"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          null
+        ]
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          0,
+          -100,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoom-center-anchor"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          100,
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "pan-right"
+      },
+      {
+        "selection": [
+          "applyTimelineScroll",
+          -2000,
+          0,
+          780
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "pan-left-clamped"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0,
+            10
+          ],
+          true
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "re-max-zoom"
+      },
+      {
+        "selection": [
+          "setGrabZoomRange",
+          [
+            5,
+            1
+          ]
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "grab-reversed"
+      },
+      {
+        "selection": [
+          "finishGrabZoom"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "grab-applied"
+      },
+      {
+        "selection": [
+          "setGrabZoomRange",
+          [
+            2,
+            2.0005
+          ]
+        ]
+      },
+      {
+        "selection": [
+          "finishGrabZoom"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "grab-min-zoom"
+      },
+      {
+        "selection": [
+          "setGrabZoomRange",
+          null
+        ]
+      },
+      {
+        "selection": [
+          "finishGrabZoom"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "grab-cancelled"
+      },
+      {
+        "event": {
+          "target": "button.tab-control.play",
+          "kind": "MouseEvent",
+          "type": "contextmenu"
+        }
+      },
+      {
+        "event": {
+          "target": "button.tab-control.play",
+          "kind": "MouseEvent",
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "button-click-play"
+      },
+      {
+        "event": {
+          "target": "button.tab-control.pause",
+          "kind": "MouseEvent",
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "button-click-pause"
+      }
+    ]
+  }
+}

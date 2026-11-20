@@ -1,0 +1,145 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/selection.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/selection.json"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "two-frames"
+      },
+      {
+        "advance": 2000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "after-2s"
+      },
+      {
+        "selection": [
+          "setPlaybackSpeed",
+          2
+        ]
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "speed-2"
+      },
+      {
+        "main": "set-playback-options",
+        "data": {
+          "speed": 0.5,
+          "looping": true
+        }
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "options-applied"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            1,
+            3
+          ],
+          false
+        ]
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          2.9
+        ]
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "loop-boundary"
+      },
+      {
+        "selection": [
+          "setPlaybackLooping",
+          false
+        ]
+      },
+      {
+        "advance": 6000
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "past-end"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "play-at-end"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          4
+        ]
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 1500
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "replay-past-end"
+      }
+    ]
+  }
+}
