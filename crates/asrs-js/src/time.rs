@@ -293,10 +293,9 @@ impl NamedZone {
             let end = rule_epoch(y, 11, nth_weekday(y, 11, 0, 1), 7_200_000, -25_200_000);
             epoch_ms >= start as f64 && epoch_ms < end as f64
         } else {
-            // Sep lastSun at 02:00 standard (+12:00), Apr Sun>=1 at 03:00
-            // standard, standard-time triggers.
+            // Sep lastSun and Apr Sun>=1, both at 02:00 standard (+12:00).
             let start = rule_epoch(y, 9, last_weekday(y, 9, 0), 7_200_000, 43_200_000);
-            let end = rule_epoch(y, 4, nth_weekday(y, 4, 0, 1), 10_800_000, 43_200_000);
+            let end = rule_epoch(y, 4, nth_weekday(y, 4, 0, 1), 7_200_000, 43_200_000);
             epoch_ms >= start as f64 || epoch_ms < end as f64
         }
     }

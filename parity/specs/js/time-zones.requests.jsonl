@@ -143,3 +143,4 @@
 {"fn":"Date.prototype.getTimezoneOffset","args":["abc"]}
 {"fn":"Date.prototype.getTimezoneOffset","args":[null]}
 {"fn":"Date.prototype.getTimezoneOffset","args":[{"o":[]}]}
+{"fn":"Date.prototype.toString","args":[{"d":"c215c1f434000000"}]}

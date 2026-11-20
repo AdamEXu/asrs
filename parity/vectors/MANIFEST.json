@@ -67,33 +67,33 @@
       "generatedOn": "macos-aarch64"
     },
     "js/time-zones/America/Los_Angeles": {
-      "cases": 145,
-      "content": "04f3c8507f238843",
-      "generator": "5a2b7ea70dda8dcf",
+      "cases": 146,
+      "content": "2580ce5d5f3e42a2",
+      "generator": "baa0785453551256",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "America/Los_Angeles",
       "generatedOn": "macos-aarch64"
     },
     "js/time-zones/Asia/Kolkata": {
-      "cases": 145,
-      "content": "5e34d97e9d855eed",
-      "generator": "3da4257bcf3fd5dc",
+      "cases": 146,
+      "content": "e0f4993d7a66247e",
+      "generator": "69864ba86cea9eab",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "Asia/Kolkata",
       "generatedOn": "macos-aarch64"
     },
     "js/time-zones/Pacific/Auckland": {
-      "cases": 145,
-      "content": "7a66b92123526b8e",
-      "generator": "15fbca751f9b3c99",
+      "cases": 146,
+      "content": "f114b45007c2414e",
+      "generator": "dc8c59784774f516",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "Pacific/Auckland",
       "generatedOn": "macos-aarch64"
     },
     "js/time-zones/UTC": {
-      "cases": 145,
-      "content": "5f50849de887b6cb",
-      "generator": "8887a82bf6a896c6",
+      "cases": 146,
+      "content": "eab17d3ef494eb09",
+      "generator": "2efb3a5ee8bb03af",
       "spec": "parity/specs/js/time-zones.fn.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
