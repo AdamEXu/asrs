@@ -79,9 +79,12 @@ const oraclePlugin = {
       loader: "js",
       resolveDir: srcDir
     }));
-    build.onResolve({ filter: /^@upstream\// }, (resolveArgs) => ({
-      path: path.join(srcDir, resolveArgs.path.slice("@upstream/".length))
-    }));
+    build.onResolve({ filter: /^@upstream\// }, (resolveArgs) => {
+      const base = path.join(srcDir, resolveArgs.path.slice("@upstream/".length));
+      const found = ["", ".ts", "/index.ts"].map((ext) => base + ext).find((p) => fs.statSync(p, { throwIfNoEntry: false })?.isFile());
+      if (found === undefined) return { errors: [{ text: `cannot resolve ${resolveArgs.path}` }] };
+      return { path: found };
+    });
   }
 };
 
