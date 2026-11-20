@@ -75,13 +75,32 @@ w.Date = OracleDate;
 Object.defineProperty(w.performance, "now", { value: () => clock.now - clock.start, configurable: true });
 
 let randomState = (fixture.seed ?? 1) >>> 0;
-Math.random = () => {
+function nextU32(): number {
   randomState = (randomState + 0x6d2b79f5) >>> 0;
   let t = randomState;
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  return (t ^ (t >>> 14)) >>> 0;
+}
+Math.random = () => nextU32() / 4294967296;
+const randomBytes = <T extends ArrayBufferView>(array: T): T => {
+  const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = nextU32() & 0xff;
+  return array;
 };
+Object.defineProperty(w, "crypto", {
+  configurable: true,
+  value: {
+    getRandomValues: randomBytes,
+    randomUUID() {
+      const b = randomBytes(new Uint8Array(16));
+      b[6] = (b[6] & 0x0f) | 0x40;
+      b[8] = (b[8] & 0x3f) | 0x80;
+      const hex = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+  }
+});
 
 interface Timer {
   id: number;

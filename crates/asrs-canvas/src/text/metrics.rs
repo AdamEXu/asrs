@@ -170,21 +170,31 @@ fn table() -> &'static AdvanceTable {
             json.get(key)
                 .unwrap_or_else(|| panic!("fixedAdvance.json has no {key}"))
         };
-        let list = |key: &str| field(key).as_array().unwrap_or_default();
+        let list = |key: &str| {
+            field(key)
+                .as_array()
+                .unwrap_or_else(|| panic!("fixedAdvance.json {key} is not a list"))
+        };
+        let unit = |v: &JsValue| {
+            let n = number(v);
+            assert!(
+                n.fract() == 0.0 && (0.0..=65535.0).contains(&n),
+                "fixedAdvance.json code unit {n} is not a u16"
+            );
+            n as u16
+        };
         AdvanceTable {
             ranges: list("advances")
                 .iter()
                 .map(|range| {
-                    let range = range.as_array().unwrap_or_default();
-                    (
-                        number(&range[0]) as u16,
-                        number(&range[1]) as u16,
-                        number(&range[2]) as f32,
-                    )
+                    let range = range
+                        .as_array()
+                        .expect("fixedAdvance.json ranges are lists");
+                    (unit(&range[0]), unit(&range[1]), number(&range[2]) as f32)
                 })
                 .collect(),
             default: number(field("defaultAdvance")) as f32,
-            blank: list("blank").iter().map(|u| number(u) as u16).collect(),
+            blank: list("blank").iter().map(unit).collect(),
             ascent: number(field("ascent")) as f32,
             descent: number(field("descent")) as f32,
             ink_top: number(field("inkTop")) as f32,

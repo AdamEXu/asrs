@@ -276,8 +276,8 @@ export class RecordingContext {
         get(_target, name) {
           if (typeof name !== "string") return undefined;
           if (name === "canvas") return self.canvas;
-          if (name in self.props) return self.props[name];
-          if (name in DEFAULTS) return DEFAULTS[name];
+          if (name === "then") return undefined;
+          if (Object.hasOwn(self.props, name)) return self.props[name];
           return (...args: unknown[]) => self.method(name, args);
         },
         set(_target, name, value) {

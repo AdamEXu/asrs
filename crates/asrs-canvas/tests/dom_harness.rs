@@ -29,6 +29,11 @@ record_vectors!(
                 )),
             };
         };
+        if expected == Value::Null {
+            return Err(format!(
+                "{font:?}: the oracle ignores the font, the port does not"
+            ));
+        }
         let m = measure_text(
             &mut FixedAdvance,
             &spec,

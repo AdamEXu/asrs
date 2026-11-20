@@ -444,14 +444,17 @@ cargo xtask oracle gen dom/tabs/line-graph            # regenerate one committed
   time order by those steps: a timer due at or before the next frame runs first, frames come
   every `framePeriod` ms (default 16). Microtasks settle after each callback and each step.
 - `Math.random` is mulberry32 seeded with `seed` (default 1), returning `u32 / 2^32`, so tab
-  UUIDs and everything else drawn from it repeat exactly.
+  UUIDs and everything else drawn from it repeat exactly. `crypto.getRandomValues` and
+  `crypto.randomUUID` draw from the same stream (one byte per draw).
 - Layout: nothing reads CSS. `getBoundingClientRect`, `client*`, `offset*` and `scroll*` sizes
   come from layout rules, fixture rules first, then `src/dom/layout.json` (a 1100x650 window
   with the hub's main regions). The first rule whose selector matches an element decides:
   `"rect": [x, y, w, h]`, `"parent": true` (the parent's rect), or `"text": <px>` (width from
   the shared advance table at that size, height `round(1.25 * px)`, at the parent's origin).
-  Unmatched, hidden (`hidden` attribute or `display: none` on it or an ancestor) and detached
-  elements are `0x0`. `innerWidth`, `innerHeight` and `devicePixelRatio` come from `window`.
+  Unmatched, hidden (`hidden` attribute or inline `display: none` on it or an ancestor; CSS
+  classes are not consulted) and detached elements are `0x0`. `innerWidth`, `innerHeight` and
+  `devicePixelRatio` come from `window`; the default rules assume 1100x650, so a fixture with
+  another window size overrides the region rules too.
 - `matchMedia` answers `prefers-color-scheme` from `window.theme`; everything else is false.
 - `innerText` (jsdom has none) sets text nodes with `<br>` for line breaks and reads them back.
 - Images never load. An `<img>` whose `src` is a key of `images` reports that `[w, h]` as its
@@ -463,8 +466,9 @@ cargo xtask oracle gen dom/tabs/line-graph            # regenerate one committed
 
 Each call and assignment is recorded in the form `asrs_canvas::trace` decodes
 (`asrs_canvas::trace::call_from_value`): `[method, ...args]` and `["=", property, value]`.
-Gradients assigned to a style are recorded as `{"linearGradient" | "radialGradient": [...],
-"stops": [[offset, colour], ...]}` with the stops present at assignment, images as `"@<src>"`,
+Gradients assigned to a style are recorded as `{"linearGradient" | "radialGradient" |
+"conicGradient": [...], "stops": [[offset, colour], ...]}` with the stops present at assignment
+(the port's trace has no conic gradients yet), patterns as `{"pattern": "@<src>", "repetition"}`, images as `"@<src>"`,
 canvases as `"@canvas:<id>"`, `getImageData` as `[..., "r<n>"]` naming a register that a later
 `putImageData` refers to. Trailing `undefined` arguments are dropped, as WebIDL does for
 optional arguments. Queries (`measureText`, `isPointInPath`, `getLineDash`, ...) and factories
@@ -473,7 +477,8 @@ optional arguments. Queries (`measureText`, `isPointInPath`, `getLineDash`, ...)
 the port cannot express yet shows up in its trace. Property reads return the last assigned
 value, not Chromium's normalized one.
 
-Setting the canvas `width` or `height` resets the context and starts a new frame, so a trace is
+Setting the canvas `width` or `height`, or calling `reset()`, resets the context and starts a
+new frame, so a trace is
 the display list since the last reset, and `frame` counts resets.
 
 `measureText` uses the advance table in `src/canvas/fixedAdvance.json`, which
@@ -483,7 +488,7 @@ first become spaces), the first `[first, last, em]` range or `defaultAdvance`; c
 `round(ascent * size)` and `round(descent * size)`. All arithmetic is f32, step for step with
 `asrs_canvas::text::measure_text`, and the font size follows `FontSpec::parse` (an invalid
 `font` is ignored). Vector `dom/canvas/fixed-advance` pins the two sides together
-(`crates/asrs-canvas/tests/fixed_advance.rs`).
+(`crates/asrs-canvas/tests/dom_harness.rs`).
 
 ### Fixtures
 
@@ -559,7 +564,8 @@ Captures (a string or `{"kind": ..., ...}`):
 
 Also written as they happen: `{"main": name, "data": ...}` for every hub-to-main message not
 ignored, and `{"exception": where, "error": "<name>: <message>"}` when upstream code throws in
-a timer, frame, event, message handler or `eval` (the run goes on, as a page would). Every value
+a timer, frame, event listener (reported by jsdom, `where` is `event`), message handler or
+`eval`, or a promise rejection goes unhandled (the run goes on, as a page would). Every value
 is CVE-1 inside a plain JSON object, so Rust reads it with `asrs_parity::record_vectors!` and
 `Record::value`.
 

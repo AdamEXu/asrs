@@ -117,10 +117,9 @@ function capture(spec: any) {
       return;
     case "canvas":
       for (const ctx of contexts) {
-        if (!ctx.drawnSinceCapture) continue;
-        ctx.drawnSinceCapture = false;
         const canvas = ctx.canvas;
-        if (spec.selector !== undefined && !canvas.matches(spec.selector)) continue;
+        if (!ctx.drawnSinceCapture || (spec.selector !== undefined && !canvas.matches(spec.selector))) continue;
+        ctx.drawnSinceCapture = false;
         write({
           canvas: canvasId(canvas),
           frame: toTree(ctx.frames),

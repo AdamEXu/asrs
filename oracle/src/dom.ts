@@ -43,7 +43,13 @@ const virtualConsole = new VirtualConsole();
 for (const level of ["log", "info", "warn", "error", "debug"]) {
   virtualConsole.on(level, (...args: unknown[]) => log(`page ${level}: ${args.map(String).join(" ")}`));
 }
-virtualConsole.on("jsdomError", (error: Error) => log(`jsdom: ${error.message}`));
+const lines: string[] = [];
+virtualConsole.on("jsdomError", (error: Error & { type?: string; cause?: unknown }) => {
+  log(`jsdom: ${error.message}`);
+  if (error.type === "not-implemented") return;
+  const cause = (error.cause ?? error) as Error;
+  lines.push(JSON.stringify({ exception: "event", error: `${cause?.name}: ${cause?.message}` }));
+});
 
 const hubHtml = path.join(UPSTREAM_DIR, "www", "hub.html");
 const dom = new JSDOM(fs.readFileSync(hubHtml, "utf8"), {
@@ -52,7 +58,6 @@ const dom = new JSDOM(fs.readFileSync(hubHtml, "utf8"), {
   virtualConsole
 });
 const page = dom.window;
-const lines: string[] = [];
 page.__oracleFixture = page.JSON.parse(JSON.stringify(fixture));
 page.__oracleYield = () => new Promise((resolve) => setImmediate(resolve));
 page.__oracleWrite = (line: string) => lines.push(line);
