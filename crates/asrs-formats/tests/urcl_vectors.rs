@@ -159,7 +159,7 @@ fn replay(case: &Json) -> Result<Value, String> {
     let initial = Log::from_serialized(worker.to_serialized().structured_clone(), &mut realm)
         .map_err(|e| format!("fromSerialized: {e:?}"))?;
     let mut hub = Log::new(true);
-    hub.merge_with(&initial, &JsString::new(), &mut realm, |_, _| 0.0)
+    hub.merge_with(&initial, &JsString::new(), &mut realm)
         .map_err(|e| format!("mergeWith: {e:?}"))?;
 
     let requests = case
