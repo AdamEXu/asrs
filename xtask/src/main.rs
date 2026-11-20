@@ -12,6 +12,7 @@ mod oracle;
 mod pack;
 mod parity;
 mod public;
+mod tables;
 mod ui;
 mod vectors;
 
@@ -32,7 +33,8 @@ commands:
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
   canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
-  ui        UI theme scenes: icon tints, buttons, gates against Electron (see `cargo xtask ui`)";
+  ui        UI theme scenes: icon tints, buttons, gates against Electron (see `cargo xtask ui`)
+  tables    table generators from upstream TypeScript (see `cargo xtask tables`)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +49,7 @@ fn main() -> ExitCode {
         Some("canvas") => canvas::run(&args[1..]),
         Some("ui") => ui::run(&args[1..]),
         Some("host") => host::run(&args[1..]),
+        Some("tables") => tables::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {
