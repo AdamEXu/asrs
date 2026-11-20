@@ -698,10 +698,10 @@ impl SourceDriver {
         let source = self
             .sources
             .last_mut()
-            .ok_or_else(|| Thrown("no tuner".to_owned()))?;
+            .ok_or_else(|| Thrown::new("no tuner"))?;
         if source.client.is_none() || source.state.log.is_none() {
-            return Err(Thrown(
-                "Cannot create NT4 tuner before starting connection".to_owned(),
+            return Err(Thrown::new(
+                "Cannot create NT4 tuner before starting connection",
             ));
         }
         Ok(source)

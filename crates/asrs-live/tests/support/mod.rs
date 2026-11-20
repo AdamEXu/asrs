@@ -404,7 +404,12 @@ pub fn run(
         while let Some(step) = steps.get(next_step).filter(|s| s.t <= now) {
             next_step += 1;
             if let Err(e) = driver.op(&step.op, &mut env) {
-                env.app("throw", Some(&Value::string(&e.0)));
+                env.app(
+                    "throw",
+                    Some(&Value::String(asrs_parity::Utf16String::from_units(
+                        e.0.units().to_vec(),
+                    ))),
+                );
             }
         }
         loop {
@@ -429,7 +434,7 @@ pub fn run(
 }
 
 pub fn js_arg(json: &Json) -> Result<asrs_js::value::JsValue, Thrown> {
-    js_json::to_js(&Value::from_json_lenient(json)).map_err(Thrown)
+    js_json::to_js(&Value::from_json_lenient(json)).map_err(Thrown::new)
 }
 
 pub fn js_value(value: &asrs_js::value::JsValue) -> Value {

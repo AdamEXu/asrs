@@ -89,27 +89,25 @@ impl Nt4Topic {
     }
 
     /// `getTypeIdx()`. `in` also sees `Object.prototype`, so a type named after one of its
-    /// properties indexes a function (or the prototype itself, for `__proto__`).
-    fn type_idx(&self) -> JsValue {
+    /// methods indexes a function, which the encoder rejects, and `__proto__` indexes the
+    /// prototype itself, which encodes as an empty map.
+    fn type_idx(&self) -> Result<JsValue, Thrown> {
         let Some(ty) = self.ty.as_str() else {
-            return JsValue::Number(5.0);
+            return Ok(JsValue::Number(5.0));
         };
         let ty = ty.to_string_lossy();
         if let Some((_, idx)) = TYPESTR_IDX_LOOKUP.iter().find(|(name, _)| *name == ty) {
-            JsValue::Number(*idx)
+            Ok(JsValue::Number(*idx))
         } else if ty == "__proto__" {
-            JsValue::Object(JsObject::new())
+            Ok(JsValue::Object(JsObject::new()))
         } else if OBJECT_PROTOTYPE_METHODS.contains(&ty.as_str()) {
-            JsValue::Undefined
+            Err(Thrown::error(
+                "Error",
+                "Unrecognized object: [object Function]",
+            ))
         } else {
-            JsValue::Number(5.0)
+            Ok(JsValue::Number(5.0))
         }
-    }
-
-    fn is_function_type_idx(&self) -> bool {
-        self.ty
-            .as_str()
-            .is_some_and(|ty| OBJECT_PROTOTYPE_METHODS.contains(&ty.to_string_lossy().as_str()))
     }
 }
 
@@ -528,7 +526,7 @@ impl Nt4Client {
             .iter()
             .position(|s| s.uid == subscription_id || (s.uid.is_nan() && subscription_id.is_nan()))
         else {
-            return Err(Thrown(format!(
+            return Err(Thrown::new(format!(
                 "Unknown subscription ID \"{}\"",
                 number::to_string(subscription_id)
             )));
@@ -674,8 +672,8 @@ impl Nt4Client {
         self.add_timestamped_sample(topic, timestamp, value, cx)
     }
 
-    /// `addTimestampedSample(topic, timestamp, value)`. Integral numbers, the timestamp
-    /// included, go out as the smallest msgpack int; others as float64.
+    /// `addTimestampedSample(topic, timestamp, value)`. Safe integers, the timestamp included,
+    /// go out as the smallest msgpack int; other numbers as float64.
     pub fn add_timestamped_sample(
         &mut self,
         topic: &JsString,
@@ -686,16 +684,10 @@ impl Nt4Client {
         let Some(topic_obj) = self.published_topic(topic) else {
             return Err(not_found(topic));
         };
-        if topic_obj.is_function_type_idx() {
-            return Err(Thrown::error(
-                "Error",
-                "Unrecognized object: [object Function]",
-            ));
-        }
         let tx_data = msgpack::encode(&JsValue::Array(vec![
             topic_obj.uid.clone(),
             JsValue::Number(timestamp),
-            topic_obj.type_idx(),
+            topic_obj.type_idx()?,
             value,
         ]))?;
         self.ws_send_binary(tx_data, false, cx)
@@ -975,7 +967,9 @@ impl Nt4Client {
         handler: &mut dyn Nt4Handler,
         cx: &mut Nt4Context<'_>,
     ) -> Result<(), Thrown> {
-        if self.is_rtt_socket(id) != Some(false) {
+        let rtt = self.is_rtt_socket(id);
+        self.sockets.retain(|(s, _)| *s != id);
+        if rtt != Some(false) {
             return Ok(());
         }
         self.ws_on_close(id, handler, cx)
@@ -1134,7 +1128,10 @@ fn publish_obj(topic: &Nt4Topic) -> JsValue {
 }
 
 fn not_found(topic: &JsString) -> Thrown {
-    Thrown(format!("Topic \"{}\" not found", topic.to_string_lossy()))
+    let mut text = JsString::from("Topic \"");
+    text.push_str(topic);
+    text.push_str(&JsString::from("\" not found"));
+    Thrown(text)
 }
 
 /// `parseInt(url.split(":")[2].split("/")[0])`; `None` where upstream throws a TypeError.

@@ -169,7 +169,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
             && !seen.data.is_empty()
             && client.server_time_us(&clock, None).is_some())
     {
-        for event in net.poll() {
+        while let Some(event) = net.next_event() {
             let mut cx = Nt4Context {
                 timers: &mut timers,
                 net: &mut net,

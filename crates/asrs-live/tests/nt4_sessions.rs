@@ -124,7 +124,7 @@ struct ClientDriver {
 fn str_arg(v: &JsValue) -> Result<JsString, Thrown> {
     v.as_str()
         .cloned()
-        .ok_or_else(|| Thrown("expected a string".to_owned()))
+        .ok_or_else(|| Thrown::new("expected a string"))
 }
 
 fn bool_arg(v: Option<&JsValue>, default: bool) -> bool {
@@ -154,7 +154,7 @@ fn strings(v: &JsValue) -> Vec<JsString> {
 impl ClientDriver {
     fn nt4_op(&mut self, args: &[Json], env: &mut Env) -> Result<(), Thrown> {
         let Some(client) = self.client.as_mut() else {
-            return Err(Thrown("no nt4 client".to_owned()));
+            return Err(Thrown::new("no nt4 client"));
         };
         let name = args[0].as_str().expect("op name").to_string_lossy();
         let v: Vec<JsValue> = args[1..].iter().map(js_arg).collect::<Result<_, _>>()?;

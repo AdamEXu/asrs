@@ -113,22 +113,46 @@ pub fn get_key(value: &JsValue, key: &JsString) -> Result<JsValue, Thrown> {
     }
 }
 
+// JS arrays go sparse; growing a dense Vec past this many holes would exhaust memory on a
+// hostile index such as 4294967294, so such writes are dropped instead.
+const MAX_HOLES: usize = 1 << 20;
+
+fn grow(items: &mut Vec<JsValue>, len: usize) {
+    if len > items.len() && len - items.len() <= MAX_HOLES {
+        items.resize(len, JsValue::Undefined);
+    }
+}
+
 /// Strict-mode `target[key] = value`. Named properties on arrays are invisible to everything
-/// upstream does with them (`JSON.stringify`), so they are not kept.
+/// upstream does with them (`JSON.stringify`, `Object.keys` aside from indices), so they are not
+/// kept; nor is an assignment to an object's inherited `__proto__` accessor.
 pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(), Thrown> {
     let name = key.to_string_lossy();
     match target {
         JsValue::Object(o) => {
-            o.insert(key.clone(), value);
+            if name != "__proto__" || o.contains_key("__proto__") {
+                o.insert(key.clone(), value);
+            }
             Ok(())
         }
         JsValue::Array(items) => {
             if let Some(i) = array_index(key.units()) {
                 let i = i as usize;
-                if i >= items.len() {
-                    items.resize(i + 1, JsValue::Undefined);
+                grow(items, i + 1);
+                if let Some(slot) = items.get_mut(i) {
+                    *slot = value;
                 }
-                items[i] = value;
+            } else if name == "length" {
+                let n = value_to_number(&value)?;
+                if !(0.0..=4294967295.0).contains(&n) || n.fract() != 0.0 {
+                    return Err(Thrown::error("RangeError", "Invalid array length"));
+                }
+                let n = n as usize;
+                if n < items.len() {
+                    items.truncate(n);
+                } else {
+                    grow(items, n);
+                }
             }
             Ok(())
         }
@@ -136,6 +160,15 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
             "Cannot set properties of {} (setting '{name}')",
             describe(target)
         ))),
+        JsValue::String(s)
+            if name == "length"
+                || array_index(key.units()).is_some_and(|i| (i as usize) < s.len()) =>
+        {
+            Err(Thrown::type_error(format!(
+                "Cannot assign to read only property '{name}' of string '{}'",
+                s.to_string_lossy()
+            )))
+        }
         JsValue::Bool(_) | JsValue::Number(_) | JsValue::String(_) | JsValue::BigInt(_) => {
             Err(Thrown::type_error(format!(
                 "Cannot create property '{name}' on {} '{}'",
@@ -149,12 +182,21 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
 
 /// Strict-mode `delete target[key]`.
 pub fn delete_key(target: &mut JsValue, key: &JsString) -> Result<(), Thrown> {
+    let name = key.to_string_lossy();
+    let undeletable = |kind: &str| {
+        Err(Thrown::type_error(format!(
+            "Cannot delete property '{name}' of [object {kind}]"
+        )))
+    };
     match target {
         JsValue::Object(o) => {
             o.remove_key(key);
             Ok(())
         }
         JsValue::Array(items) => {
+            if name == "length" {
+                return undeletable("Array");
+            }
             if let Some(i) = array_index(key.units())
                 && let Some(slot) = items.get_mut(i as usize)
             {
@@ -165,20 +207,21 @@ pub fn delete_key(target: &mut JsValue, key: &JsString) -> Result<(), Thrown> {
         JsValue::Undefined | JsValue::Null => Err(Thrown::type_error(
             "Cannot convert undefined or null to object",
         )),
-        JsValue::String(s) => match array_index(key.units()) {
-            Some(i) if (i as usize) < s.len() => Err(Thrown::type_error(format!(
-                "Cannot delete property '{}' of [object String]",
-                key.to_string_lossy()
-            ))),
-            _ => Ok(()),
-        },
-        JsValue::Bytes(bytes) => match array_index(key.units()) {
-            Some(i) if (i as usize) < bytes.len() => Err(Thrown::type_error(format!(
-                "Cannot delete property '{}' of [object Uint8Array]",
-                key.to_string_lossy()
-            ))),
-            _ => Ok(()),
-        },
+        JsValue::String(s) => {
+            if name == "length" || array_index(key.units()).is_some_and(|i| (i as usize) < s.len())
+            {
+                undeletable("String")
+            } else {
+                Ok(())
+            }
+        }
+        JsValue::Bytes(bytes) => {
+            if array_index(key.units()).is_some_and(|i| (i as usize) < bytes.len()) {
+                undeletable("Uint8Array")
+            } else {
+                Ok(())
+            }
+        }
         _ => Ok(()),
     }
 }
