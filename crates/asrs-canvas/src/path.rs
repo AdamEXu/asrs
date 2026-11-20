@@ -711,28 +711,32 @@ impl Conic {
         pow2
     }
 
-    /// `SkConic::chop` (the non-legacy form Chromium builds): the halves at t = 1/2.
+    /// `SkConic::chop` as Chromium builds it (`SK_SUPPORT_LEGACY_CONIC_CHOP`): the halves at
+    /// t = 1/2.
     fn chop(&self) -> [Conic; 2] {
         let scale = 1.0 / (1.0 + self.w);
         let new_w = (0.5 + self.w * 0.5).sqrt();
         let [p0, p1, p2] = self.pts;
-        let ws = self.w * scale;
-        let t0 = pt(p0.x * scale, p0.y * scale);
-        let t1 = pt(p1.x * ws, p1.y * ws);
-        let t2 = pt(p2.x * scale, p2.y * scale);
-        let q1 = pt(t0.x + t1.x, t0.y + t1.y);
-        let q3 = pt(t1.x + t2.x, t1.y + t2.y);
-        let q2 = pt(
-            0.5 * t0.x + t1.x + 0.5 * t2.x,
-            0.5 * t0.y + t1.y + 0.5 * t2.y,
+        let wp1 = pt(self.w * p1.x, self.w * p1.y);
+        let mut m = pt(
+            (p0.x + (wp1.x + wp1.x) + p2.x) * scale * 0.5,
+            (p0.y + (wp1.y + wp1.y) + p2.y) * scale * 0.5,
         );
+        if !(m.x.is_finite() && m.y.is_finite()) {
+            let w = f64::from(self.w);
+            let scale_half = 1.0 / (1.0 + w) * 0.5;
+            let mid = |a: f32, b: f32, c: f32| {
+                ((f64::from(a) + w * 2.0 * f64::from(b) + f64::from(c)) * scale_half) as f32
+            };
+            m = pt(mid(p0.x, p1.x, p2.x), mid(p0.y, p1.y, p2.y));
+        }
         [
             Conic {
-                pts: [p0, q1, q2],
+                pts: [p0, pt((p0.x + wp1.x) * scale, (p0.y + wp1.y) * scale), m],
                 w: new_w,
             },
             Conic {
-                pts: [q2, q3, p2],
+                pts: [m, pt((wp1.x + p2.x) * scale, (wp1.y + p2.y) * scale), p2],
                 w: new_w,
             },
         ]
