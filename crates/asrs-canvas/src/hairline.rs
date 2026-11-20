@@ -7,6 +7,7 @@ use std::f32::consts::PI;
 
 use tiny_skia::{LineCap, PathSegment};
 
+use crate::clip::{self, ClipRect};
 use crate::scan::Coverage;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -275,6 +276,20 @@ fn cap(plot: &mut Plot, horizontal: bool, major: i32, f: i32, mod64: i32) -> i32
 
 /// The coverage Skia's antihair blitter gives one segment, clipped to the canvas.
 pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
+    let fixed = ClipRect {
+        left: -32767.0,
+        top: -32767.0,
+        right: 32767.0,
+        bottom: 32767.0,
+    };
+    let canvas = ClipRect {
+        left: -1.0,
+        top: -1.0,
+        right: width as f32 + 1.0,
+        bottom: height as f32 + 1.0,
+    };
+    let [a, b] = clip::intersect_line([a, b], fixed)?;
+    let [a, b] = clip::intersect_line([a, b], canvas)?;
     let dot6 = |v: f32| (v * 64.0) as i32;
     let x0 = (a.x.min(b.x).floor() as i32 - 1).max(0);
     let y0 = (a.y.min(b.y).floor() as i32 - 1).max(0);

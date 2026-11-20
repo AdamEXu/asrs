@@ -1171,20 +1171,65 @@ mod tests {
 
     #[test]
     fn no_hairline_stroker_in_the_source() {
-        let sources = [
-            include_str!("raster.rs"),
-            include_str!("path.rs"),
-            include_str!("display.rs"),
-            include_str!("lib.rs"),
-        ];
+        fn sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    sources(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        sources(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        assert!(files.len() > 10, "{files:?}");
         let banned = [concat!(".stroke", "_path("), concat!("stroke", "_hairline")];
-        for source in sources {
+        for file in files {
+            let source = std::fs::read_to_string(&file).unwrap();
             for b in banned {
                 assert!(
                     !source.contains(b),
-                    "tiny-skia's hairline stroker is banned: {b}"
+                    "{}: tiny-skia's hairline stroker is banned: {b}",
+                    file.display()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn geometry_far_off_the_canvas_is_clipped_before_fixed_point() {
+        for far in [1e4, 1e5, 1e7, 1e9] {
+            let mut c = Canvas2d::new(20, 20);
+            c.begin_path();
+            c.rect(-far, 0.0, 2.0 * far, 10.0);
+            c.fill();
+            c.set_line_width(2.0);
+            c.begin_path();
+            c.move_to(-far, 12.0);
+            c.line_to(far, 12.0);
+            c.stroke();
+            c.set_line_width(1.0);
+            c.begin_path();
+            c.move_to(-far, 16.5);
+            c.line_to(far, 16.5);
+            c.stroke();
+            c.begin_path();
+            c.arc(10.0, 2e4 + 18.0, 2e4, 0.0, 6.0);
+            c.fill();
+            let pixmap = render(&c);
+            let column: Vec<u8> = (0..20)
+                .map(|y| pixmap.pixel(10, y).unwrap().alpha())
+                .collect();
+            let mut want = [0; 20];
+            want[..10].fill(255);
+            want[11..13].fill(255);
+            want[16] = 255;
+            want[18..].fill(255);
+            assert_eq!(column, want, "{far}");
         }
     }
 

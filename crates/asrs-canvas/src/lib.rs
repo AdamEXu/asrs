@@ -1,5 +1,6 @@
 #![allow(clippy::disallowed_methods)]
 
+pub mod clip;
 pub mod color;
 pub mod display;
 pub mod hairline;

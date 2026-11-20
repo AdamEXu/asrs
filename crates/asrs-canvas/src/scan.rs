@@ -5,6 +5,9 @@
 
 use tiny_skia::{PathSegment, Pixmap};
 
+use crate::clip::{self, ClipRect, Piece};
+use crate::hairline::P;
+
 const FLATTEN_TOLERANCE: f32 = 0.02;
 
 /// 8-bit coverage over the integer rect `[x, x + width) x [y, y + height)` of the canvas.
@@ -14,12 +17,6 @@ pub struct Coverage {
     pub width: usize,
     pub height: usize,
     pub alpha: Vec<u8>,
-}
-
-#[derive(Clone, Copy)]
-struct P {
-    x: f32,
-    y: f32,
 }
 
 struct Accumulator {
@@ -156,6 +153,7 @@ impl Edge {
 struct Edges {
     edges: Vec<Edge>,
     snap: bool,
+    clip: Option<ClipRect>,
 }
 
 /// `SkAnalyticEdge::setLine` quantizes x to 1/256 pixel and snaps y to the nearest quarter
@@ -169,6 +167,25 @@ fn snap(p: P) -> (f64, f64) {
 
 impl Edges {
     fn line(&mut self, a: P, b: P) {
+        let Some(clip) = self.clip else {
+            self.push_line(a, b);
+            return;
+        };
+        let mut pieces = Vec::new();
+        clip::clip_line([a, b], clip, &mut pieces);
+        self.push_pieces(pieces);
+    }
+
+    fn push_pieces(&mut self, pieces: Vec<Piece>) {
+        for piece in pieces {
+            match piece {
+                Piece::Line([a, b]) => self.push_line(a, b),
+                Piece::Quad([p0, p1, p2]) => self.monotonic_quad(p0, p1, p2),
+            }
+        }
+    }
+
+    fn push_line(&mut self, a: P, b: P) {
         let exact = |p: P| (f64::from(p.x), f64::from(p.y));
         let (a, b) = if self.snap {
             (snap(a), snap(b))
@@ -189,6 +206,12 @@ impl Edges {
     }
 
     fn quad(&mut self, p0: P, p1: P, p2: P) {
+        if let Some(clip) = self.clip {
+            let mut pieces = Vec::new();
+            clip::clip_quad([p0, p1, p2], clip, &mut pieces);
+            self.push_pieces(pieces);
+            return;
+        }
         if self.snap {
             let denom = p0.y - 2.0 * p1.y + p2.y;
             let t = if denom != 0.0 {
@@ -357,9 +380,19 @@ fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<
         return None;
     }
     let (w, h) = ((right - left) as usize, (bottom - top) as usize);
+    let contained = b.left().floor() >= 0.0
+        && b.top().floor() >= 0.0
+        && b.right().ceil() <= width as f32
+        && b.bottom().ceil() <= height as f32;
     let mut edges = Edges {
         edges: Vec::new(),
         snap,
+        clip: (snap && !contained).then_some(ClipRect {
+            left: 0.0,
+            top: 0.0,
+            right: width as f32,
+            bottom: height as f32,
+        }),
     };
     let point = |p: tiny_skia::Point| P { x: p.x, y: p.y };
     let (mut start, mut last) = (P { x: 0.0, y: 0.0 }, P { x: 0.0, y: 0.0 });
