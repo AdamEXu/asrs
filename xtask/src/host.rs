@@ -425,8 +425,16 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
         let state = paths.root.join("target/hosts").join(self.name);
         fs::create_dir_all(&state).map_err(|e| format!("{}: {e}", state.display()))?;
         let files = checkout_files(&paths.root)?;
+        let listing = state.join("synced.txt");
+        let previous = read_sync_listing(&listing);
+        let stamps = file_stamps(&paths.root, &files)?;
+        let changed: BTreeSet<&String> = stamps
+            .iter()
+            .filter(|(f, stamp)| previous.get(f) != Some(stamp))
+            .map(|(f, _)| f)
+            .collect();
         let tarball = state.join("sync.tar.gz");
-        write_tarball(&paths.root, &files, &tarball)?;
+        write_tarball(&paths.root, &files, &changed, &tarball)?;
         let size = fs::metadata(&tarball).map(|m| m.len()).unwrap_or_default();
         eprintln!(
             "sync {} files ({:.1} MB) -> {}:{}",
@@ -435,13 +443,7 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
             self.name,
             self.checkout()
         );
-        let listing = state.join("synced.txt");
-        let previous: BTreeSet<String> = fs::read_to_string(&listing)
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_owned)
-            .collect();
-        let removed: Vec<&String> = previous.iter().filter(|f| !files.contains(*f)).collect();
+        let removed: Vec<&String> = previous.keys().filter(|f| !files.contains(*f)).collect();
 
         match self.os {
             Os::Linux => {
@@ -489,12 +491,10 @@ exit [int](Get-Content {GUI_DIR}/exit.txt).Trim()"#
                 removed.len()
             );
         }
-        let mut text = files
+        let text: String = stamps
             .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .join("\n");
-        text.push('\n');
+            .map(|(f, stamp)| format!("{stamp} {f}\n"))
+            .collect();
         fs::write(&listing, text).map_err(|e| format!("{}: {e}", listing.display()))?;
         self.sync_pack(paths, &state)
     }
@@ -765,13 +765,65 @@ fn checkout_files(root: &Path) -> Result<BTreeSet<String>> {
         .collect())
 }
 
-fn write_tarball(root: &Path, files: &BTreeSet<String>, out: &Path) -> Result {
+fn read_sync_listing(listing: &Path) -> std::collections::BTreeMap<String, String> {
+    fs::read_to_string(listing)
+        .unwrap_or_default()
+        .lines()
+        .map(|line| match line.splitn(3, ' ').collect::<Vec<_>>()[..] {
+            [mtime, size, path] => (path.to_owned(), format!("{mtime} {size}")),
+            _ => (line.to_owned(), String::new()),
+        })
+        .collect()
+}
+
+fn file_stamps(root: &Path, files: &BTreeSet<String>) -> Result<Vec<(String, String)>> {
+    files
+        .iter()
+        .map(|f| {
+            let meta = fs::metadata(root.join(f)).map_err(|e| format!("{f}: {e}"))?;
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .unwrap_or_default();
+            Ok((
+                f.clone(),
+                format!(
+                    "{}.{:09} {}",
+                    mtime.as_secs(),
+                    mtime.subsec_nanos(),
+                    meta.len()
+                ),
+            ))
+        })
+        .collect()
+}
+
+// Unchanged files keep their mtime so the host's cargo does not rebuild them; changed files get
+// the sync time, because their own mtime can predate the host's last build of the old content.
+fn write_tarball(
+    root: &Path,
+    files: &BTreeSet<String>,
+    changed: &BTreeSet<&String>,
+    out: &Path,
+) -> Result {
     let file = File::create(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let encoder = flate2::write::GzEncoder::new(BufWriter::new(file), flate2::Compression::fast());
     let mut builder = tar::Builder::new(encoder);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
     for f in files {
+        let source = File::open(root.join(f)).map_err(|e| format!("{f}: {e}"))?;
+        let meta = source.metadata().map_err(|e| format!("{f}: {e}"))?;
+        let mut header = tar::Header::new_gnu();
+        header.set_metadata(&meta);
+        if changed.contains(f) {
+            header.set_mtime(now);
+        }
         builder
-            .append_path_with_name(root.join(f), f)
+            .append_data(&mut header, f, source)
             .map_err(|e| format!("{f}: {e}"))?;
     }
     builder
@@ -1275,5 +1327,50 @@ mod tests {
     #[test]
     fn powershell_commands_are_utf16le() {
         assert_eq!(powershell_encode("ls"), "bABzAA==");
+    }
+
+    #[test]
+    fn sync_gives_only_changed_files_a_new_mtime() {
+        let root = std::env::temp_dir().join(format!("asrs-host-sync-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let files: BTreeSet<String> = ["kept.rs", "edited.rs"].map(str::to_owned).into();
+        let old = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+        for f in &files {
+            fs::write(root.join(f), f).unwrap();
+            File::options()
+                .write(true)
+                .open(root.join(f))
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+        }
+        let stamps = file_stamps(&root, &files).unwrap();
+        let listing = root.join("synced.txt");
+        let text: String = stamps.iter().map(|(f, s)| format!("{s} {f}\n")).collect();
+        fs::write(&listing, text).unwrap();
+        assert_eq!(
+            read_sync_listing(&listing),
+            stamps.iter().cloned().collect()
+        );
+
+        let edited = "edited.rs".to_owned();
+        let tarball = root.join("sync.tar.gz");
+        write_tarball(&root, &files, &[&edited].into(), &tarball).unwrap();
+        let mut archive =
+            tar::Archive::new(flate2::read::GzDecoder::new(File::open(&tarball).unwrap()));
+        let mut seen = 0;
+        for entry in archive.entries().unwrap() {
+            let entry = entry.unwrap();
+            seen += 1;
+            let path = entry.path().unwrap().display().to_string();
+            let mtime = entry.header().mtime().unwrap();
+            if path == "kept.rs" {
+                assert_eq!(mtime, 1_000_000_000);
+            } else {
+                assert!(mtime > 1_700_000_000, "{path}: {mtime}");
+            }
+        }
+        assert_eq!(seen, 2);
+        fs::remove_dir_all(&root).unwrap();
     }
 }
