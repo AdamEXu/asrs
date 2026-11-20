@@ -49,8 +49,8 @@ pub struct TextDecoder {
     ignore_bom: bool,
 }
 
-/// Labels that resolve to a WHATWG encoding V8 does not implement; the error
-/// message names the encoding, not the label.
+/// Labels that resolve to a WHATWG encoding Node does not implement; the error
+/// message names the encoding. Any other unknown label is quoted as given.
 const UNIMPLEMENTED_ENCODINGS: &[(&str, &str)] = &[
     ("replacement", "replacement"),
     ("hz-gb-2312", "replacement"),
@@ -86,7 +86,7 @@ impl TextDecoder {
                     .iter()
                     .find(|(l, _)| *l == other)
                     .map(|(_, n)| (*n).to_owned())
-                    .unwrap_or(normalized.clone());
+                    .unwrap_or(label.clone());
                 return Err(DecodeError::UnsupportedEncoding(name));
             }
         };
