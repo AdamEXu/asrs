@@ -1,0 +1,45 @@
+{
+  "protocol": "nt4",
+  "seed": 4040,
+  "epochMs": 1731000000123,
+  "latencyMs": 3,
+  "endMs": 16000,
+  "client": { "source": "nt4-client", "address": "10.0.0.2", "ports": [5809, 5810], "appName": "Probe" },
+  "server": {
+    "version": "4.0",
+    "ports": [5810],
+    "offsetUs": -77,
+    "topics": [
+      { "name": "/x", "type": "float", "value": 0.1 },
+      { "name": "/y", "type": "int[]", "value": [1, -2, 300] }
+    ]
+  },
+  "steps": [
+    { "t": 0, "server": ["httpStatus", 503] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 0, "client": ["nt4", "time"] },
+    { "t": 0, "client": ["nt4", "subscribe", [""], true] },
+    { "t": 0, "client": ["nt4", "publish", "/client/v", "boolean"] },
+    { "t": 400, "server": ["httpStatus", 200] },
+    { "t": 400, "server": ["down", "hang"] },
+    { "t": 1100, "server": ["up"] },
+    { "t": 1500, "client": ["nt4", "time"] },
+    { "t": 1600, "client": ["nt4", "sample", "/client/v", true] },
+    { "t": 2000, "server": ["set", "/x", 0.5] },
+    { "t": 2100, "server": ["mute", true] },
+    { "t": 7100, "client": ["nt4", "time"] },
+    { "t": 7200, "server": ["mute", false] },
+    { "t": 7400, "server": ["set", "/x", 0.75] },
+    { "t": 8000, "server": ["drop"] },
+    { "t": 8000, "server": ["down", "refuse"] },
+    { "t": 8600, "server": ["up"] },
+    { "t": 9000, "client": ["nt4", "sample", "/client/v", false] },
+    { "t": 9500, "server": ["down", "refuse"] },
+    { "t": 9500, "server": ["drop"] },
+    { "t": 9520, "server": ["up"] },
+    { "t": 12000, "client": ["nt4", "time"] },
+    { "t": 12000, "client": ["nt4", "setRetained", "/client/v", true] },
+    { "t": 15000, "client": ["stop"] },
+    { "t": 15500, "client": ["nt4", "time"] }
+  ]
+}
