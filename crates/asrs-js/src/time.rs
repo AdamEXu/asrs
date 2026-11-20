@@ -217,13 +217,19 @@ const CYCLE_MS: i64 = CYCLE_DAYS * 86_400_000;
 pub struct NamedZone(jiff::tz::TimeZone);
 
 impl NamedZone {
+    /// Looks `name` up in jiff's bundled tzdb, never the host's: Electron
+    /// reads its own ICU copy, so results must not drift with the OS.
     pub fn get(name: &str) -> Result<Self, jiff::Error> {
-        jiff::tz::TimeZone::get(name).map(Self)
+        jiff::tz::TimeZoneDatabase::bundled().get(name).map(Self)
     }
 
     /// The host's zone, what `TZ`-less `Date` getters mean in the app.
     pub fn system() -> Self {
-        Self(jiff::tz::TimeZone::system())
+        let system = jiff::tz::TimeZone::system();
+        system
+            .iana_name()
+            .and_then(|name| Self::get(name).ok())
+            .unwrap_or(Self(system))
     }
 
     pub fn iana_name(&self) -> Option<&str> {

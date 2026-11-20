@@ -8,7 +8,9 @@ publish.workspace = true
 
 [dependencies]
 ryu-js = "1.0.3"
-jiff = "=1.0.1"
+jiff = { version = "=1.0.1", features = ["tzdb-bundle-always"] }
+# Fixes the bundled tzdata release (2026f); Electron 39 ships 2025b.
+jiff-tzdb = "=1.0.0"
 getrandom = "=0.3.4"
 
 [dev-dependencies]
