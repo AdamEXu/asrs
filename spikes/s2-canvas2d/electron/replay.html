@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      function replay(scene, cpu) {
+        const canvas = document.createElement("canvas");
+        canvas.width = scene.width * scene.dpr;
+        canvas.height = scene.height * scene.dpr;
+        document.body.appendChild(canvas);
+        const ctx = canvas.getContext("2d", cpu ? { willReadFrequently: true } : undefined);
+        for (const cmd of scene.cmds) {
+          if (cmd[0] === "=") {
+            ctx[cmd[1]] = cmd[2];
+          } else {
+            ctx[cmd[0]](...cmd.slice(1));
+          }
+        }
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        canvas.remove();
+        let binary = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < data.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, data.subarray(i, i + chunk));
+        }
+        return { width: canvas.width, height: canvas.height, rgba: btoa(binary) };
+      }
+
+      function measure(fonts, strings) {
+        const ctx = document.createElement("canvas").getContext("2d");
+        const out = [];
+        for (const font of fonts) {
+          ctx.font = font;
+          for (const text of strings) {
+            ctx.textBaseline = "alphabetic";
+            ctx.textAlign = "left";
+            const m = ctx.measureText(text);
+            out.push({
+              font,
+              text,
+              resolvedFont: ctx.font,
+              width: m.width,
+              actualBoundingBoxLeft: m.actualBoundingBoxLeft,
+              actualBoundingBoxRight: m.actualBoundingBoxRight,
+              actualBoundingBoxAscent: m.actualBoundingBoxAscent,
+              actualBoundingBoxDescent: m.actualBoundingBoxDescent,
+              fontBoundingBoxAscent: m.fontBoundingBoxAscent,
+              fontBoundingBoxDescent: m.fontBoundingBoxDescent,
+              emHeightAscent: m.emHeightAscent,
+              emHeightDescent: m.emHeightDescent
+            });
+          }
+        }
+        return out;
+      }
+    </script>
+  </body>
+</html>
