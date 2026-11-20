@@ -2,10 +2,12 @@
 //! concatenated logs) and roadRunnerWorker, which decodes a whole file into a Log.
 
 use std::cell::Cell;
+use std::collections::HashMap;
 
 use asrs_js::number;
 use asrs_js::string::{JsString, TextDecoder};
 use asrs_js::time::Clock;
+use asrs_log::log::struct_decoder::MAX_ARRAY_LENGTH;
 use asrs_log::log::{Log, MapValue};
 use asrs_log::units;
 
@@ -36,9 +38,43 @@ enum MessageSchema {
     Array(Box<MessageSchema>),
 }
 
-/// Upstream can nest schemas and messages arbitrarily deep before V8's own stack limit
-/// throws; past this depth a real throw is modeled as one instead of overflowing ours.
-const MAX_DEPTH: u32 = 2048;
+/// Upstream recurses until V8's stack overflows, a RangeError that fails the load. Where that
+/// happens depends on the realm's stack size (the oracle's Node worker still succeeds at depth
+/// 12000), so nesting this deep is not modeled. The bound also keeps the port's own recursion
+/// inside a default 2 MiB thread stack in debug builds.
+const MAX_DEPTH: u32 = 512;
+
+/// Brent's cycle detection over a loop whose next state is a function of its offset: a repeated
+/// offset means every later pass repeats the same `period` iterations.
+struct CycleDetector {
+    tortoise: Option<i64>,
+    power: u64,
+    steps: u64,
+}
+
+impl CycleDetector {
+    fn new() -> Self {
+        CycleDetector {
+            tortoise: None,
+            power: 1,
+            steps: 0,
+        }
+    }
+
+    /// Feeds the next offset; returns the cycle's period once `offset` repeats.
+    fn period(&mut self, offset: i64) -> Option<u64> {
+        self.steps += 1;
+        if self.tortoise == Some(offset) {
+            return Some(self.steps);
+        }
+        if self.tortoise.is_none() || self.steps == self.power {
+            self.tortoise = Some(offset);
+            self.power *= 2;
+            self.steps = 0;
+        }
+        None
+    }
+}
 
 /// `Uint8Array.prototype.subarray(begin, end)`: negative indexes count from the end and both
 /// ends clamp to the length; an empty range stays empty.
@@ -105,9 +141,10 @@ fn units_operand(value: &MapValue) -> Result<f64, Step> {
     })
 }
 
-/// `RRLOGDecoder`. The `Cell`s count work and materialized values: loops bounded only by a
-/// corrupt i32 count can run past any finishable time or upstream's heap, both of which end
-/// as "never completes" for the oracle's purposes.
+/// `RRLOGDecoder`. `produced` counts the values one channel definition or message materializes:
+/// a corrupt i32 count can ask for more than either side's heap holds, and past
+/// `PRODUCED_LIMIT` the port does not model whether upstream finishes, fails or runs out of
+/// memory.
 pub struct RrLogDecoder {
     magic: Option<JsString>,
     log_revision: Option<i32>,
@@ -117,12 +154,10 @@ pub struct RrLogDecoder {
     key_ids: Vec<JsString>,
     key_schemas: Vec<MessageSchema>,
     text_decoder: TextDecoder,
-    work: Cell<u64>,
     produced: Cell<u64>,
 }
 
-const WORK_BUDGET: u64 = 2_000_000_000;
-const PRODUCED_BUDGET: u64 = 8_000_000;
+const PRODUCED_LIMIT: u64 = 8_000_000;
 
 impl Default for RrLogDecoder {
     fn default() -> Self {
@@ -142,25 +177,17 @@ impl RrLogDecoder {
             key_schemas: Vec::new(),
             text_decoder: TextDecoder::new(Some(&JsString::from("UTF-8")), false, false)
                 .expect("UTF-8 is always supported"),
-            work: Cell::new(0),
             produced: Cell::new(0),
         }
-    }
-
-    fn tick_work(&self) -> Result<(), Step> {
-        let work = self.work.get() + 1;
-        self.work.set(work);
-        if work > WORK_BUDGET {
-            return Err(Step::Abort(Abort::NeverReturns));
-        }
-        Ok(())
     }
 
     fn tick_produced(&self) -> Result<(), Step> {
         let produced = self.produced.get() + 1;
         self.produced.set(produced);
-        if produced > PRODUCED_BUDGET {
-            return Err(Step::Abort(Abort::NeverReturns));
+        if produced > PRODUCED_LIMIT {
+            return Err(Step::Abort(Abort::Unmodeled(
+                "a channel definition or message with more values than the port materializes",
+            )));
         }
         Ok(())
     }
@@ -171,7 +198,6 @@ impl RrLogDecoder {
         offset: &mut i64,
         read: T,
     ) -> Result<R, Step> {
-        self.tick_work()?;
         let at = usize::try_from(shift_offset(offset, N as i64)).map_err(|_| Step::Bounds)?;
         let end = at.checked_add(N).ok_or(Step::Bounds)?;
         let bytes: [u8; N] = data
@@ -201,7 +227,6 @@ impl RrLogDecoder {
     /// `dataArray[shiftOffset(1)] !== 0`: an out-of-bounds index is `undefined`, which is
     /// `!== 0`, so a truncated boolean reads true rather than throwing.
     fn get_bool(&self, data: &[u8], offset: &mut i64) -> Result<bool, Step> {
-        self.tick_work()?;
         let at = shift_offset(offset, 1);
         Ok(usize::try_from(at)
             .ok()
@@ -226,19 +251,36 @@ impl RrLogDecoder {
         depth: u32,
     ) -> Result<MessageSchema, Step> {
         if depth >= MAX_DEPTH {
-            return Err(Step::Fail);
+            return Err(Step::Abort(Abort::Unmodeled(
+                "a schema nested past MAX_DEPTH",
+            )));
         }
         match self.get_i32(data, offset)? {
             0 => {
-                let num_fields = self.get_i32(data, offset)?;
+                let num_fields = i64::from(self.get_i32(data, offset)?);
                 let mut fields: Vec<(JsString, MessageSchema)> = Vec::new();
-                for _ in 0..num_fields {
+                let mut positions: HashMap<JsString, usize> = HashMap::new();
+                // A negative name length can bring every field back to an offset already
+                // read; a full cycle sets the same names to the same schemas again, so whole
+                // cycles are skipped rather than run up to 2^31 times.
+                let mut cycle = CycleDetector::new();
+                let mut i = 0;
+                while i < num_fields {
+                    if let Some(period) = cycle.period(*offset) {
+                        let period = period as i64;
+                        i += (num_fields - i) / period * period;
+                        if i >= num_fields {
+                            break;
+                        }
+                    }
+                    i += 1;
                     let name = self.read_string(data, offset)?;
                     let schema = self.read_schema(data, offset, depth + 1)?;
-                    match fields.iter_mut().find(|(n, _)| *n == name) {
-                        Some(entry) => entry.1 = schema,
+                    match positions.get(&name) {
+                        Some(&position) => fields[position].1 = schema,
                         None => {
                             self.tick_produced()?;
+                            positions.insert(name.clone(), fields.len());
                             fields.push((name, schema));
                         }
                     }
@@ -287,7 +329,9 @@ impl RrLogDecoder {
         depth: u32,
     ) -> Result<MapValue, Step> {
         if depth >= MAX_DEPTH {
-            return Err(Step::Fail);
+            return Err(Step::Abort(Abort::Unmodeled(
+                "a schema nested past MAX_DEPTH",
+            )));
         }
         Ok(match schema {
             MessageSchema::Struct(fields) => {
@@ -314,7 +358,26 @@ impl RrLogDecoder {
                 let size = self.get_i32(data, offset)?;
                 let mut items = Vec::new();
                 for _ in 0..size {
-                    items.push(self.read_msg(inner, data, offset, depth + 1)?);
+                    let start = *offset;
+                    let item = self.read_msg(inner, data, offset, depth + 1)?;
+                    if f64::from(size) > MAX_ARRAY_LENGTH {
+                        // Every later element repeats this one when it read nothing (an empty
+                        // string of length -4) or read a boolean past the end. Then upstream
+                        // pushes copies until `push` throws "Invalid array length", a
+                        // RangeError that fails the load; copies of an object run its heap out
+                        // first.
+                        let past_end_boolean =
+                            matches!(**inner, MessageSchema::Boolean) && start >= data.len() as i64;
+                        if *offset == start || past_end_boolean {
+                            return Err(match item {
+                                MapValue::Map(_) | MapValue::Array(_) => {
+                                    Step::Abort(Abort::NeverReturns)
+                                }
+                                _ => Step::Fail,
+                            });
+                        }
+                    }
+                    items.push(item);
                     self.tick_produced()?;
                 }
                 MapValue::Array(items)
@@ -362,7 +425,16 @@ impl RrLogDecoder {
             }
         }
 
+        // Within one concatenated log, the step from an offset depends only on that offset (a
+        // channel table only grows, and the ids a step looks up resolve the same way each
+        // pass), so a repeated offset means upstream loops forever. A restart clears the table,
+        // so offsets after one start a new sequence, and restarts are tracked on their own.
+        let mut steps = CycleDetector::new();
+        let mut restarts = CycleDetector::new();
         loop {
+            if steps.period(offset).is_some() {
+                return Err(Abort::NeverReturns);
+            }
             // A "RR" at a message boundary starts a concatenated log: the revision is reread
             // (a RangeError fails the load) and channels reset, but the first timestamp does
             // not.
@@ -373,6 +445,10 @@ impl RrLogDecoder {
                     .expect("nonfatal UTF-8 never errors"),
                 "RR",
             ) {
+                if restarts.period(offset).is_some() {
+                    return Err(Abort::NeverReturns);
+                }
+                steps = CycleDetector::new();
                 shift_offset(&mut offset, 2);
                 match self.get_i16(data, &mut offset) {
                     Err(_) => return Ok(false),
@@ -387,6 +463,7 @@ impl RrLogDecoder {
                 self.key_schemas.clear();
             }
 
+            self.produced.set(0);
             match self.read_step(log, data, &mut offset) {
                 Err(Step::Bounds) => break,
                 Err(Step::Fail) => return Ok(false),
@@ -886,6 +963,92 @@ mod tests {
         b.raw(b"AB");
         let (_, end, _) = decode(&b.bytes());
         assert_eq!(end, Ok(true));
+    }
+
+    #[test]
+    fn a_repeated_offset_never_returns() {
+        // The string's length -12 leads back to the message's type, every pass.
+        let mut b = Builder::new(1);
+        b.channel("S", STRING);
+        b.message(0, &(-12i32).to_be_bytes());
+        assert_eq!(decode(&b.bytes()).1, Err(Abort::NeverReturns));
+    }
+
+    #[test]
+    fn a_repeated_restart_never_returns() {
+        // A no-op type 2, then "RR" at 8; the channel name's length -16 leaves the LONG schema
+        // id at 4 and ends the definition back at 8.
+        let mut data = b"RR\x00\x01".to_vec();
+        data.extend_from_slice(&2i32.to_be_bytes());
+        data.extend_from_slice(b"RR\x00\x01");
+        data.extend_from_slice(&0i32.to_be_bytes());
+        data.extend_from_slice(&(-16i32).to_be_bytes());
+        assert_eq!(decode(&data).1, Err(Abort::NeverReturns));
+    }
+
+    #[test]
+    fn repeating_struct_schema_fields_are_skipped() {
+        // After the first field ("" as INT), each name length -8 rereads that INT id, so all
+        // 2^31 - 1 fields set "" again.
+        let mut schema = vec![0, 0, 0, 0];
+        schema.extend_from_slice(&i32::MAX.to_be_bytes());
+        schema.extend_from_slice(&0i32.to_be_bytes());
+        schema.extend_from_slice(INT);
+        schema.extend_from_slice(&(-8i32).to_be_bytes());
+        let mut b = Builder::new(1);
+        b.channel("S", &schema);
+        b.message(0, &42i32.to_be_bytes());
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        assert_eq!(numbers(&log, "S/"), [42.0]);
+    }
+
+    #[test]
+    fn repeating_elements_past_the_array_length_limit() {
+        let mut b = Builder::new(1);
+        b.channel("S", &array_schema(STRING));
+        let mut payload = i32::MAX.to_be_bytes().to_vec();
+        payload.extend_from_slice(&(-4i32).to_be_bytes());
+        b.message(0, &payload);
+        assert_eq!(decode(&b.bytes()).1, Ok(false));
+
+        let mut b = Builder::new(1);
+        b.channel("B", &array_schema(BOOLEAN));
+        b.message(0, &i32::MAX.to_be_bytes());
+        assert_eq!(decode(&b.bytes()).1, Ok(false));
+
+        let mut b = Builder::new(1);
+        b.channel("E", &array_schema(&struct_schema(&[])));
+        b.message(0, &i32::MAX.to_be_bytes());
+        assert_eq!(decode(&b.bytes()).1, Err(Abort::NeverReturns));
+    }
+
+    #[test]
+    fn nesting_just_inside_max_depth_decodes() {
+        let depth = MAX_DEPTH as usize - 1;
+        let mut schema = [0, 0, 0, 7].repeat(depth);
+        schema.extend_from_slice(INT);
+        let mut payload = 1i32.to_be_bytes().repeat(depth);
+        payload.extend_from_slice(&5i32.to_be_bytes());
+        let mut b = Builder::new(1);
+        b.channel("D", &schema);
+        b.message(0, &payload);
+        let (_, end, log) = decode(&b.bytes());
+        assert_eq!(end, Ok(true));
+        let leaf = format!("D{}", "/0".repeat(depth - 1));
+        let LogValues::NumberArray(v) = &field(&log, &leaf).values else {
+            panic!()
+        };
+        assert_eq!(v.as_slice(), [vec![5.0]]);
+    }
+
+    #[test]
+    fn nesting_past_max_depth_is_unmodeled() {
+        let mut schema = [0, 0, 0, 7].repeat(MAX_DEPTH as usize);
+        schema.extend_from_slice(INT);
+        let mut b = Builder::new(1);
+        b.channel("D", &schema);
+        assert!(matches!(decode(&b.bytes()).1, Err(Abort::Unmodeled(_))));
     }
 
     #[test]
