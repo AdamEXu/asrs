@@ -7,13 +7,13 @@
     "cve1/identity": {
       "cases": 7,
       "content": "c50fd3a6eb87c9e4",
-      "generator": "d599f8b331b41735",
+      "generator": "0f6e679da0a44072",
       "spec": "parity/specs/cve1/identity.jsonl"
     },
     "cve1/torture": {
       "cases": 471,
       "content": "3bf51e863655d3d2",
-      "generator": "a434820e433e27c6",
+      "generator": "03c32aa3f71b8809",
       "spec": "parity/specs/cve1/torture.entry.json"
     }
   }

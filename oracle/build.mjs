@@ -59,6 +59,18 @@ const esbuild = createRequire(path.join(args.harness, "package.json"))("esbuild"
 
 const upstreamModules = listUpstreamModules(srcDir);
 
+const upstreamPackage = JSON.parse(fs.readFileSync(path.join(args.upstream, "package.json"), "utf8"));
+// Mirrors the replacePlugin values in upstream's rolldown.config.mjs for the FRC6328 build. The
+// build date is pinned instead of the wall clock so harness output stays reproducible.
+const buildReplacements = {
+  __distribution__: "FRC6328",
+  __version__: upstreamPackage.version,
+  __build_date__: "1970-01-01T00:00:00.000Z",
+  __copyright__: upstreamPackage.build.copyright
+};
+const realSrcDir = fs.realpathSync(srcDir);
+const buildReplacementPattern = new RegExp(`\\b(${Object.keys(buildReplacements).join("|")})\\b(?!\\.)(?!\\s*=[^=])`, "g");
+
 const virtualModules = {
   "oracle:upstream-modules":
     "export const UPSTREAM_MODULES = {\n" +
@@ -79,6 +91,13 @@ const oraclePlugin = {
       loader: "js",
       resolveDir: srcDir
     }));
+    build.onLoad({ filter: /\.ts$/ }, (loadArgs) => {
+      if (![srcDir, realSrcDir].some((dir) => loadArgs.path.startsWith(dir + path.sep))) return undefined;
+      const source = fs.readFileSync(loadArgs.path, "utf8");
+      buildReplacementPattern.lastIndex = 0;
+      if (!buildReplacementPattern.test(source)) return undefined;
+      return { contents: source.replace(buildReplacementPattern, (token) => buildReplacements[token]), loader: "ts" };
+    });
     build.onResolve({ filter: /^@upstream\// }, (resolveArgs) => {
       const base = path.join(srcDir, resolveArgs.path.slice("@upstream/".length));
       const found = ["", ".ts", "/index.ts"].map((ext) => base + ext).find((p) => fs.statSync(p, { throwIfNoEntry: false })?.isFile());

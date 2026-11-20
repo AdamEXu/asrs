@@ -5,6 +5,8 @@ Runs upstream AdvantageScope TypeScript, unmodified, inside Electron 39.2.7's ow
 compared against what this produces.
 
 Nothing here touches `reference/`. Setup copies it to `target/oracle/upstream` and builds there.
+Setup refuses to run unless `reference/AdvantageScope` is a clean checkout of the pinned commit
+`8fc5b89`.
 
 ## Setup
 
@@ -132,6 +134,12 @@ Imported first by every entry point: `window` and `self` alias `globalThis`;
 `worker_threads` thread with a web-worker style `self`, `onmessage` and `postMessage`. Relative
 worker URLs resolve against `target/oracle/upstream/www`, so upstream's
 `new Worker("../bundles/csvWorker.js")` loads the bundle rolldown built.
+
+## Build constants
+
+`build.mjs` applies the same `__distribution__`, `__version__` and `__copyright__` replacements
+as upstream's `rolldown.config.mjs` (FRC6328 distribution), so `buildConstants.ts` matches the
+shipped app. `__build_date__` is pinned to `1970-01-01T00:00:00.000Z` for reproducible output.
 
 ## Adding an entry point
 

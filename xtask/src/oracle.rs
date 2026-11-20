@@ -8,6 +8,8 @@ use crate::{Result, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 const EMSDK_VERSION: &str = "4.0.12";
+const UPSTREAM_COMMIT: &str = "8fc5b89fc93be5dba5a66005ea6111fa16594aa8";
+const UPSTREAM_REPO: &str = "https://github.com/Mechanical-Advantage/AdvantageScope.git";
 const EMSDK_REPO: &str = "https://github.com/emscripten-core/emsdk.git";
 
 const USAGE: &str = "usage: cargo xtask oracle <command>
@@ -108,12 +110,7 @@ pub fn run(args: &[String]) -> Result {
 }
 
 fn setup(paths: &Paths, force: bool) -> Result {
-    if !paths.reference.is_dir() {
-        return Err(format!(
-            "upstream checkout not found at {}",
-            paths.reference.display()
-        ));
-    }
+    check_reference(paths)?;
     fs::create_dir_all(&paths.stamps).map_err(|e| e.to_string())?;
     fs::create_dir_all(&paths.cache).map_err(|e| e.to_string())?;
 
@@ -224,6 +221,51 @@ fn setup(paths: &Paths, force: bool) -> Result {
     smoke(paths)?;
     eprintln!("oracle setup complete");
     print_env(paths)
+}
+
+fn check_reference(paths: &Paths) -> Result {
+    let reference = &paths.reference;
+    let clone_hint = format!(
+        "  git clone {UPSTREAM_REPO} {dir}\n  git -C {dir} checkout {UPSTREAM_COMMIT}",
+        dir = reference.display()
+    );
+    if !reference.is_dir() {
+        return Err(format!(
+            "upstream checkout not found at {}; create it with\n{clone_hint}",
+            reference.display()
+        ));
+    }
+    let git = |args: &[&str]| -> Result<String> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(reference)
+            .args(args)
+            .output()
+            .map_err(|e| format!("running git: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "{} is not a git checkout of upstream; create it with\n{clone_hint}",
+                reference.display()
+            ));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    };
+    let head = git(&["rev-parse", "HEAD"])?;
+    if head != UPSTREAM_COMMIT {
+        return Err(format!(
+            "{} is at {head}, but the oracle is pinned to {UPSTREAM_COMMIT}; run\n  git -C {} checkout {UPSTREAM_COMMIT}",
+            reference.display(),
+            reference.display()
+        ));
+    }
+    let dirty = git(&["status", "--porcelain", "--untracked-files=no"])?;
+    if !dirty.is_empty() {
+        return Err(format!(
+            "{} has local modifications; the oracle must run upstream unmodified:\n{dirty}",
+            reference.display()
+        ));
+    }
+    Ok(())
 }
 
 fn step(name: &str) {
