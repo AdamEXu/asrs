@@ -200,6 +200,15 @@ impl Color {
         }
     }
 
+    /// `getRGB(target, SRGBColorSpace)`.
+    pub fn get_srgb(self) -> [f64; 3] {
+        [
+            linear_to_srgb(self.r),
+            linear_to_srgb(self.g),
+            linear_to_srgb(self.b),
+        ]
+    }
+
     pub fn get_hex(self) -> f64 {
         let channel = |c: f64| math::round(clamp(linear_to_srgb(c) * 255.0, 0.0, 255.0));
         channel(self.r) * 65536.0 + channel(self.g) * 256.0 + channel(self.b)

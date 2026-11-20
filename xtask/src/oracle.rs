@@ -36,13 +36,16 @@ commands:
   pack [--out <file>] write the built upstream copy (without node_modules) to
                       target/oracle/pack.tar.zst for `setup --from-pack` on another host
   build               rebuild only the harness bundles (step 7)
-  gen [<id>...] [--check]
+  gen [<id>...] [--check | --stale]
                       regenerate committed vectors from parity/specs into parity/vectors and
-                      update parity/vectors/MANIFEST.json. --check first fails, without running
-                      the oracle, if the manifest's upstream commit, Electron version or
-                      environment policy, or any vector's generator hash, zone or content hash,
-                      differs from the current one; then it regenerates in memory and fails if
-                      any committed vector differs
+                      update parity/vectors/MANIFEST.json. A vector's generator hash covers
+                      the harness files its entry bundles (target/oracle/dist/inputs.json),
+                      build.mjs, package-lock.json, its spec files and zone. --stale
+                      regenerates only vectors whose manifest entry is stale. --check first
+                      fails, without running the oracle, if the manifest's upstream commit,
+                      Electron version or environment policy, or any vector's generator hash,
+                      zone or content hash, differs from the current one; then it regenerates
+                      in memory and fails if any committed vector differs
   fn [--zone <zone>] [args]
                       run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)
@@ -778,16 +781,12 @@ pub(crate) fn hash_text(bytes: &[u8]) -> String {
     )
 }
 
-pub(crate) fn hash_text_tree(base: &Path, roots: &[&str]) -> Result<String> {
-    let mut files = Vec::new();
-    for root in roots {
-        collect_files(base, &base.join(root), &mut files)?;
-    }
-    files.sort();
+/// Hashes each file under `base` in order, by its relative path and its [`hash_text`] bytes.
+pub(crate) fn hash_text_files(base: &Path, files: &[String]) -> Result<String> {
     let mut hash = 0xcbf2_9ce4_8422_2325;
     for rel in files {
         hash = fnv1a(hash, rel.as_bytes());
-        hash = fnv1a(hash, &normalize_newlines(&read(&base.join(&rel))?));
+        hash = fnv1a(hash, &normalize_newlines(&read(&base.join(rel))?));
     }
     Ok(format!("{hash:016x}"))
 }
