@@ -14,6 +14,7 @@ mod pack;
 mod parity;
 mod public;
 mod tables;
+mod text;
 mod ui;
 mod vectors;
 
@@ -36,6 +37,7 @@ commands:
   canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
   ui        UI theme scenes: icon tints, buttons, gates against Electron (see `cargo xtask ui`)
   field3d   3D reference scenes against the wgpu renderer, gate 4 (see `cargo xtask field3d`)
+  text      DOM text scenes for the Text element, gates against Electron (see `cargo xtask text`)
   tables    table generators from upstream TypeScript (see `cargo xtask tables`)";
 
 fn main() -> ExitCode {
@@ -51,6 +53,7 @@ fn main() -> ExitCode {
         Some("canvas") => canvas::run(&args[1..]),
         Some("ui") => ui::run(&args[1..]),
         Some("field3d") => field3d::run(&args[1..]),
+        Some("text") => text::run(&args[1..]),
         Some("host") => host::run(&args[1..]),
         Some("tables") => tables::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
