@@ -460,8 +460,8 @@
     },
     "tabs/console-export": {
       "cases": 300,
-      "content": "e8c8043933e101f7",
-      "generator": "26a7354970b31467",
+      "content": "264169031d72d46e",
+      "generator": "6c28cf0b1da888ea",
       "spec": "parity/specs/tabs/console-export.entry.json",
       "zone": "UTC",
       "generatedOn": "macos-aarch64"

@@ -2,6 +2,7 @@ import StructDecoder from "@upstream/shared/log/StructDecoder";
 import PhotonStructDecoder from "@upstream/shared/log/PhotonStructDecoder";
 import ConsoleRenderer from "@upstream/shared/renderers/ConsoleRenderer";
 import { AnsiUp } from "ansi_up";
+import { consoleExport } from "./consoleExport";
 import { flushAnimationFrames } from "./shims";
 
 const indirectEval = eval;
@@ -66,8 +67,7 @@ export const HELPERS: { [name: string]: (...args: any[]) => unknown } = {
   consoleFormatValue: (value: string, filter: string) =>
     (ConsoleRenderer.prototype as { formatValue: (v: string, f: string) => string }).formatValue(value, filter),
 
-  // Console export: this.lines.map((l) => l.value).join("\n").
-  consoleExport: (lines: string[]) => lines.join("\n"),
+  consoleExport,
 
   ansiUp: (text: string) => new AnsiUp().ansi_to_html(text),
 

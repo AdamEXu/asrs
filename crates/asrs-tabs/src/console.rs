@@ -93,6 +93,35 @@ pub fn line_visible(value: &JsString, filter_input: &JsString) -> bool {
     }
 }
 
+/// What the console export button asks the main process to do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConsoleExport {
+    Error {
+        title: &'static str,
+        content: &'static str,
+    },
+    /// The bytes main writes to the chosen file: every unfiltered line joined with `\n`,
+    /// as UTF-8 with lone surrogates replaced.
+    Save(Vec<u8>),
+}
+
+pub fn export(values: &[JsString]) -> ConsoleExport {
+    if values.is_empty() {
+        return ConsoleExport::Error {
+            title: "Cannot export console log",
+            content: "Please add a field with console data, then try again.",
+        };
+    }
+    let mut text = JsString::new();
+    for (i, value) in values.iter().enumerate() {
+        if i > 0 {
+            text.push_str(&js("\n"));
+        }
+        text.push_str(value);
+    }
+    ConsoleExport::Save(text.to_string_lossy().into_bytes())
+}
+
 /// One node of the DOM a console value cell holds after `innerHTML = formatValue(...)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsoleNode {

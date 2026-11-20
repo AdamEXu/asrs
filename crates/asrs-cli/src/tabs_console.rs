@@ -42,17 +42,27 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
         let Some(lines) = a.first().and_then(Value::as_array) else {
             return Response::Error("argument 0 must be an array".to_owned());
         };
-        let mut out = JsString::new();
+        let mut values = Vec::with_capacity(lines.len());
         for (i, item) in lines.iter().enumerate() {
             let Some(s) = item.as_str() else {
                 return Response::Error(format!("argument 0[{i}] must be a string"));
             };
-            if i > 0 {
-                out.push_str(&JsString::from("\n"));
-            }
-            out.push_str(&JsString::from_units(s.units().to_vec()));
+            values.push(JsString::from_units(s.units().to_vec()));
         }
-        Response::Ok(string(out))
+        let (message, data) = match console::export(&values) {
+            console::ConsoleExport::Error { title, content } => (
+                "error",
+                Value::Object(vec![
+                    ("title".into(), Value::String(title.into())),
+                    ("content".into(), Value::String(content.into())),
+                ]),
+            ),
+            console::ConsoleExport::Save(bytes) => ("export-console", Value::Bytes(bytes)),
+        };
+        Response::Ok(Value::Object(vec![
+            ("message".into(), Value::String(message.into())),
+            ("data".into(), data),
+        ]))
     }),
 ];
 
