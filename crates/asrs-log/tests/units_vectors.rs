@@ -27,6 +27,9 @@ mod js_string;
 #[path = "../../asrs-cli/src/js_time.rs"]
 #[allow(dead_code)]
 mod js_time;
+#[path = "../../asrs-cli/src/log_field.rs"]
+#[allow(dead_code)]
+mod log_field;
 #[path = "../../asrs-cli/src/shared.rs"]
 #[allow(dead_code)]
 mod shared;
