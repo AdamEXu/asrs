@@ -7,6 +7,10 @@ import { installRecorder, runUpdates } from "./record";
 
 const recorder = installRecorder();
 
+// A tall container would otherwise give the page a classic scrollbar on Linux and Windows,
+// shrinking the 400 px containing block an auto-width container resolves against.
+document.documentElement.style.overflow = "hidden";
+
 function base64(bytes: Uint8ClampedArray): string {
   let bin = "";
   for (let i = 0; i < bytes.length; i += 8192) {

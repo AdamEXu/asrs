@@ -50,8 +50,8 @@ fn canvas_attr(v: f64) -> u32 {
 /// `container.style.width = v + "px"` on a block box in the oracle's document: the
 /// declaration sticks only for finite non-negative lengths (Blink drops "NaNpx",
 /// "Infinitypx" and negatives, keeping the previous value), and an auto width resolves
-/// to the containing block. The containing block is 400 px in `heatmapPage.html` and the
-/// empty container's auto height is 0.
+/// to the containing block: the 400 px, never-scrolling page of `oracle/src/heatmap/page.ts`.
+/// The empty container's auto height is 0.
 struct Container {
     style_width: Option<f64>,
     style_height: Option<f64>,
