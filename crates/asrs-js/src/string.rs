@@ -6,6 +6,7 @@ pub mod case_table;
 pub mod encoding;
 pub mod uri;
 
+pub use crate::math::int::{to_uint16, to_uint32};
 pub use crate::number::to_integer_or_infinity;
 use crate::number::to_string as number_to_string;
 
@@ -510,21 +511,6 @@ fn combine_surrogates(high: u16, low: u16) -> u32 {
 /// ECMAScript `ToLength`: `ToIntegerOrInfinity` clamped to `[0, 2^53 - 1]`.
 pub fn to_length(x: f64) -> f64 {
     to_integer_or_infinity(x).clamp(0.0, 9007199254740991.0)
-}
-
-/// ECMAScript `ToUint32`.
-pub fn to_uint32(x: f64) -> u32 {
-    if !x.is_finite() || x == 0.0 {
-        return 0;
-    }
-    let m = x.trunc() % 4294967296.0;
-    let m = if m < 0.0 { m + 4294967296.0 } else { m };
-    m as u32
-}
-
-/// ECMAScript `ToUint16`.
-pub fn to_uint16(x: f64) -> u16 {
-    (to_uint32(x) & 0xffff) as u16
 }
 
 fn is_js_whitespace(u: u16) -> bool {
