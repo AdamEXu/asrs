@@ -81,9 +81,14 @@ impl BigNum {
         let body = body.strip_suffix('.').unwrap_or(body);
         let (mantissa, exp_add) = match body.find(['e', 'E']) {
             Some(i) => {
-                let exp: i64 = body[i + 1..]
-                    .parse()
-                    .expect("isNumeric guarantees a signed digit exponent");
+                let exp_str = &body[i + 1..];
+                let (esign, edigits) = match exp_str.strip_prefix('-') {
+                    Some(rest) => (-1i64, rest),
+                    None => (1, exp_str.strip_prefix('+').unwrap_or(exp_str)),
+                };
+                let exp = edigits.bytes().fold(0i64, |a, b| {
+                    a.saturating_mul(10).saturating_add((b - b'0') as i64)
+                }) * esign;
                 (&body[..i], exp)
             }
             None => (body, 0),
@@ -181,16 +186,15 @@ impl BigNum {
         if exp < MIN_EXP {
             return BigNum::zero(neg);
         }
-        BigNum::Finite(Finite {
-            neg,
-            digits,
-            exp,
-        })
+        BigNum::Finite(Finite { neg, digits, exp })
     }
 
     /// `x.times(y)`: exact product.
     pub fn times(&self, y: &BigNum) -> BigNum {
-        let (x_inf, y_inf) = (matches!(self, BigNum::Infinity { .. }), matches!(y, BigNum::Infinity { .. }));
+        let (x_inf, y_inf) = (
+            matches!(self, BigNum::Infinity { .. }),
+            matches!(y, BigNum::Infinity { .. }),
+        );
         if matches!(self, BigNum::Nan)
             || matches!(y, BigNum::Nan)
             || (self.is_zero() && y_inf)
@@ -404,7 +408,10 @@ impl BigNum {
             return Some(if i { -1 } else { 1 });
         }
         let neg = i;
-        let (x_inf, y_inf) = (matches!(self, BigNum::Infinity { .. }), matches!(y, BigNum::Infinity { .. }));
+        let (x_inf, y_inf) = (
+            matches!(self, BigNum::Infinity { .. }),
+            matches!(y, BigNum::Infinity { .. }),
+        );
         if x_inf || y_inf {
             return Some(if x_inf && y_inf {
                 0
@@ -420,7 +427,11 @@ impl BigNum {
         }
         for k in 0..xf.digits.len().min(yf.digits.len()) {
             if xf.digits[k] != yf.digits[k] {
-                return Some(if (xf.digits[k] > yf.digits[k]) ^ neg { 1 } else { -1 });
+                return Some(if (xf.digits[k] > yf.digits[k]) ^ neg {
+                    1
+                } else {
+                    -1
+                });
             }
         }
         Some(if xf.digits.len() == yf.digits.len() {
@@ -478,7 +489,8 @@ impl BigNum {
                     // value = digits * 10^t; Number() parses the exact decimal either way.
                     s.push('e');
                     let t = f.exp - f.digits.len() as i64 + 1;
-                    s.push_str(&t.to_string());
+                    use std::fmt::Write as _;
+                    let _ = write!(s, "{t}");
                 }
                 let units: Vec<u16> = s.bytes().map(|b| b as u16).collect();
                 asrs_js::number::to_number(&units)
@@ -557,7 +569,8 @@ fn is_numeric(s: &str) -> bool {
     };
     let int_digits = int.bytes().all(|b| b.is_ascii_digit());
     let frac_digits = frac.bytes().all(|b| b.is_ascii_digit());
-    (!int.is_empty() && int_digits && frac_digits) || (int.is_empty() && !frac.is_empty() && frac_digits)
+    (!int.is_empty() && int_digits && frac_digits)
+        || (int.is_empty() && !frac.is_empty() && frac_digits)
 }
 
 fn mul_digits(a: &[u8], b: &[u8]) -> Vec<u8> {
@@ -581,8 +594,16 @@ fn add_digits(a: &[u8], b: &[u8]) -> Vec<u8> {
     let n = a.len().max(b.len());
     let mut out = vec![0u8; n + 1];
     for k in 0..n {
-        let da = if k < n - a.len() { 0 } else { a[k - (n - a.len())] };
-        let db = if k < n - b.len() { 0 } else { b[k - (n - b.len())] };
+        let da = if k < n - a.len() {
+            0
+        } else {
+            a[k - (n - a.len())]
+        };
+        let db = if k < n - b.len() {
+            0
+        } else {
+            b[k - (n - b.len())]
+        };
         out[k + 1] = da + db;
     }
     for k in (1..=n).rev() {
@@ -600,7 +621,11 @@ fn sub_digits(a: &[u8], b: &[u8]) -> Vec<u8> {
     let n = a.len();
     let mut out = a.to_vec();
     for k in (0..n).rev() {
-        let db = if k < n - b.len() { 0 } else { b[k - (n - b.len())] };
+        let db = if k < n - b.len() {
+            0
+        } else {
+            b[k - (n - b.len())]
+        };
         if out[k] < db {
             let mut i = k;
             while out[i - 1] == 0 {
@@ -619,9 +644,7 @@ fn sub_digits(a: &[u8], b: &[u8]) -> Vec<u8> {
 
 /// Compare two digit integers of possibly different lengths.
 fn cmp_digits(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
-    a.len()
-        .cmp(&b.len())
-        .then_with(|| a.iter().cmp(b.iter()))
+    a.len().cmp(&b.len()).then_with(|| a.iter().cmp(b.iter()))
 }
 
 fn shift(digits: &[u8], zeros: usize) -> Vec<u8> {
@@ -658,7 +681,10 @@ fn round_finite(f: &Finite, sd: i64, rm: u8, r_extra: bool) -> (BigNum, bool) {
     }
     let sd = sd as usize;
     let rd = f.digits.get(sd).copied().unwrap_or(0);
-    let r = r_extra || f.digits[(sd + 1).min(f.digits.len())..].iter().any(|d| *d != 0);
+    let r = r_extra
+        || f.digits[(sd + 1).min(f.digits.len())..]
+            .iter()
+            .any(|d| *d != 0);
     let prev = if sd > 0 { f.digits[sd - 1] } else { 0 };
     let mut kept: Vec<u8> = f.digits[..sd.min(f.digits.len())].to_vec();
     let mut exp = f.exp;
@@ -706,7 +732,12 @@ fn round_up(rd: u8, r: bool, rm: u8, neg: bool, prev: u8) -> bool {
                 && (rm == ROUND_HALF_UP
                     || r
                     || (rm == ROUND_HALF_EVEN && prev % 2 == 1)
-                    || rm == if neg { ROUND_HALF_FLOOR } else { ROUND_HALF_CEIL }))
+                    || rm
+                        == if neg {
+                            ROUND_HALF_FLOOR
+                        } else {
+                            ROUND_HALF_CEIL
+                        }))
     }
 }
 
@@ -727,7 +758,10 @@ mod tests {
         assert_eq!(fixed(&bn("0.5")), "0.5");
         assert_eq!(fixed(&bn("-0")), "0");
         assert_eq!(fixed(&bn("18446744073709551615")), "18446744073709551615");
-        assert_eq!(fixed(&bn("0.00003082369457075716")), "0.00003082369457075716");
+        assert_eq!(
+            fixed(&bn("0.00003082369457075716")),
+            "0.00003082369457075716"
+        );
         assert_eq!(fixed(&bn("1e3")), "1000");
         assert_eq!(bn("5e-324").to_number().to_bits(), 5e-324f64.to_bits());
         assert_eq!(fixed(&bn("garbage")), "NaN");
@@ -748,7 +782,10 @@ mod tests {
         assert_eq!(fixed(&bn("1.5").minus(&bn("2"))), "-0.5");
         assert_eq!(fixed(&bn("0").plus(&bn("0"))), "0");
         assert_eq!(fixed(&bn("1").minus(&bn("1"))), "0");
-        assert_eq!(fixed(&bn("1e-20").plus(&bn("1e20"))), "100000000000000000000.00000000000000000001");
+        assert_eq!(
+            fixed(&bn("1e-20").plus(&bn("1e20"))),
+            "100000000000000000000.00000000000000000001"
+        );
     }
 
     #[test]
@@ -770,16 +807,25 @@ mod tests {
         assert_eq!(fixed(&bn("0.5").integer_value(ROUND_HALF_UP)), "1");
         assert_eq!(fixed(&bn("0.4").integer_value(ROUND_HALF_UP)), "0");
         assert_eq!(fixed(&bn("-0.4").integer_value(ROUND_DOWN)), "0");
-        assert_eq!(fixed(&bn("32442.9").integer_value(ROUND_HALF_DOWN)), "32443");
+        assert_eq!(
+            fixed(&bn("32442.9").integer_value(ROUND_HALF_DOWN)),
+            "32443"
+        );
     }
 
     #[test]
     fn to_number() {
         assert_eq!(bn("0.5").to_number(), 0.5);
         assert_eq!(bn("-0").to_number().to_bits(), (-0.0f64).to_bits());
-        assert_eq!(bn("18446744073709551615").to_number().to_bits(), 1.8446744073709552e19f64.to_bits());
+        assert_eq!(
+            bn("18446744073709551615").to_number().to_bits(),
+            1.8446744073709552e19f64.to_bits()
+        );
         assert!(BigNum::Nan.to_number().is_nan());
-        assert_eq!(BigNum::Infinity { neg: true }.to_number(), f64::NEG_INFINITY);
+        assert_eq!(
+            BigNum::Infinity { neg: true }.to_number(),
+            f64::NEG_INFINITY
+        );
         assert_eq!(bn("5e-324").to_number().to_bits(), 5e-324f64.to_bits());
     }
 
@@ -789,6 +835,9 @@ mod tests {
         assert_eq!(fixed(&bn("1.5").div(&bn("1"))), "1.5");
         assert_eq!(fixed(&bn("0").div(&bn("0"))), "NaN");
         assert_eq!(fixed(&bn("1").div(&bn("0"))), "Infinity");
-        assert_eq!(fixed(&bn("32442").div(&bn("0.00003082369457075716"))), "1052501994.05940608469304528568");
+        assert_eq!(
+            fixed(&bn("32442").div(&bn("0.00003082369457075716"))),
+            "1052501994.05940608469304528568"
+        );
     }
 }

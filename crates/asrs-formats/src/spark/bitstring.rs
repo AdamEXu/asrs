@@ -44,14 +44,14 @@ pub fn bit_string_to_buffer(bit_string: BitString) -> Result<Vec<u8>, SparkError
             bit_string.bits()
         )));
     }
-    if bit_string.bits() % 8 != 0 {
+    if !bit_string.bits().is_multiple_of(8) {
         return Err(SparkError(format!(
             "bitStringToBuffer() called with {}-bit BitString (only BitStrings with a length divisible by 8 are currently supported)",
             bit_string.bits()
         )));
     }
     let rounded = bit_string.value as f64;
-    if !(rounded >= 0.0 && rounded < 18446744073709551616.0) {
+    if !(0.0..18446744073709551616.0).contains(&rounded) {
         return Err(SparkError(format!(
             "bitStringToBuffer() value {rounded} is out of range for a 64-bit unsigned integer"
         )));
@@ -76,7 +76,11 @@ pub fn uint_to_bit_string(value: i128, length_bits: u32) -> Result<BitString, Sp
             "uintToBitString() was called with a value ({value}) too large for the specified number of bits ({length_bits})"
         )));
     }
-    let field = if neg { mag } else { mag - (1u128 << length_bits) };
+    let field = if neg {
+        mag
+    } else {
+        mag - (1u128 << length_bits)
+    };
     Ok(BitString {
         value: field as u64,
         bits: length_bits,

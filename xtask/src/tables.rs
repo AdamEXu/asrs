@@ -570,13 +570,7 @@ const SPARK_USED: &[(&str, &[&str], &[&str])] = &[
     (
         "2025",
         &[
-            "STATUS_0",
-            "STATUS_1",
-            "STATUS_2",
-            "STATUS_3",
-            "STATUS_4",
-            "STATUS_5",
-            "STATUS_6",
+            "STATUS_0", "STATUS_1", "STATUS_2", "STATUS_3", "STATUS_4", "STATUS_5", "STATUS_6",
             "STATUS_7",
         ],
         &[],
@@ -584,13 +578,7 @@ const SPARK_USED: &[(&str, &[&str], &[&str])] = &[
     (
         "2026",
         &[
-            "STATUS_0",
-            "STATUS_1",
-            "STATUS_2",
-            "STATUS_3",
-            "STATUS_4",
-            "STATUS_5",
-            "STATUS_6",
+            "STATUS_0", "STATUS_1", "STATUS_2", "STATUS_3", "STATUS_4", "STATUS_5", "STATUS_6",
             "STATUS_7",
         ],
         &["GET_FIRMWARE_VERSION"],
@@ -598,9 +586,8 @@ const SPARK_USED: &[(&str, &[&str], &[&str])] = &[
 ];
 
 fn spark(root: &Path, check: bool) -> Result {
-    let mut text = format!(
-        "// {SPARK_GENERATED}\n\nuse super::{{Frame, FrameKind, Signal, SignalType}};\n"
-    );
+    let mut text =
+        format!("// {SPARK_GENERATED}\n\nuse super::{{Frame, FrameKind, Signal, SignalType}};\n");
     let mut frames = 0;
     let mut signals = 0;
     for (year, periodic, non_periodic) in SPARK_USED {
@@ -618,21 +605,16 @@ fn spark(root: &Path, check: bool) -> Result {
             signals += signal_count;
             text.push_str(&frame);
         }
-        let status_list: Vec<String> = periodic
-            .iter()
-            .map(|f| format!("&{f}_{year}"))
-            .collect();
+        let status_list: Vec<String> = periodic.iter().map(|f| format!("&{f}_{year}")).collect();
         text.push_str(&format!(
             "\n/// `sparkFramesSpec{year}.periodicFrames` in spec order (the subset URCLSchema uses).\npub static STATUS_{year}: &[&Frame] = &[{}];\n",
             status_list.join(", ")
         ));
-
     }
     let text = rustfmt(&text)?;
     let out = root.join("crates/asrs-formats/src/spark/tables.rs");
     if check {
-        let committed =
-            fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+        let committed = fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
         return if committed == text {
             eprintln!("{}: up to date", out.display());
             Ok(())
@@ -646,7 +628,10 @@ fn spark(root: &Path, check: bool) -> Result {
     fs::create_dir_all(out.parent().expect("tables.rs has a parent"))
         .map_err(|e| format!("{}: {e}", out.display()))?;
     fs::write(&out, &text).map_err(|e| format!("{}: {e}", out.display()))?;
-    eprintln!("{}: written ({frames} frames, {signals} signals)", out.display());
+    eprintln!(
+        "{}: written ({frames} frames, {signals} signals)",
+        out.display()
+    );
     Ok(())
 }
 
@@ -698,14 +683,16 @@ fn spark_spec<'a>(spec: &'a Lit, year: &str) -> Result<SparkSpec<'a>> {
             ));
         }
     }
-    for key in ["deviceType", "deviceTypeNumber", "manufacturer", "manufacturerNumber"] {
+    for key in [
+        "deviceType",
+        "deviceTypeNumber",
+        "manufacturer",
+        "manufacturerNumber",
+    ] {
         spark_need(device, key, &ctx())?;
     }
     let periodic = spark_obj(spark_need(entries, "periodicFrames", &ctx())?, &ctx())?;
-    let non_periodic = spark_obj(
-        spark_need(entries, "nonPeriodicFrames", &ctx())?,
-        &ctx(),
-    )?;
+    let non_periodic = spark_obj(spark_need(entries, "nonPeriodicFrames", &ctx())?, &ctx())?;
     for (name, frame) in periodic {
         spark_frame_shape(frame, true, &format!("{}: periodic frame {name}", ctx()))?;
     }
@@ -856,8 +843,16 @@ fn spark_frame_shape(frame: &Lit, periodic: bool, ctx: &str) -> Result {
         return Err(format!("{ctx}: lengthBytes {length_bytes} exceeds 8"));
     }
     spark_bool(spark_get(entries, "broadcast").expect("checked"), ctx)?;
-    spark_str(spark_get(entries, "versionImplemented").expect("checked"), ctx)?;
-    for key in ["description", "versionDeprecated", "versionRemoved", "frameRangeName"] {
+    spark_str(
+        spark_get(entries, "versionImplemented").expect("checked"),
+        ctx,
+    )?;
+    for key in [
+        "description",
+        "versionDeprecated",
+        "versionRemoved",
+        "frameRangeName",
+    ] {
         if let Some(v) = spark_get(entries, key) {
             spark_str(v, &format!("{ctx}: {key}"))?;
         }
@@ -934,7 +929,10 @@ fn spark_signal_shape(signal: &Lit, ctx: &str) -> Result {
         ));
     }
     spark_bool(spark_get(entries, "isBigEndian").expect("checked"), ctx)?;
-    spark_decimal(spark_get(entries, "decodeScaleFactor").expect("checked"), ctx)?;
+    spark_decimal(
+        spark_get(entries, "decodeScaleFactor").expect("checked"),
+        ctx,
+    )?;
     spark_decimal(spark_get(entries, "offset").expect("checked"), ctx)?;
     for key in ["decodedMin", "decodedMax", "encodedMin", "encodedMax"] {
         if let Some(v) = spark_get(entries, key) {
@@ -994,12 +992,22 @@ fn spark_frame(spec: &SparkSpec<'_>, year: &str, frame_name: &str) -> Result<(St
         };
         let opt_str = |key: &str| -> String {
             spark_get(e, key)
-                .map(|v| format!("Some({})", rust_string(spark_str(v, &ctx).expect("validated"))))
+                .map(|v| {
+                    format!(
+                        "Some({})",
+                        rust_string(spark_str(v, &ctx).expect("validated"))
+                    )
+                })
                 .unwrap_or_else(|| "None".to_owned())
         };
         let opt_dec = |key: &str| -> String {
             spark_get(e, key)
-                .map(|v| format!("Some({})", rust_string(&spark_decimal(v, &ctx).expect("validated"))))
+                .map(|v| {
+                    format!(
+                        "Some({})",
+                        rust_string(&spark_decimal(v, &ctx).expect("validated"))
+                    )
+                })
                 .unwrap_or_else(|| "None".to_owned())
         };
         body.push_str(&format!(
@@ -1023,7 +1031,12 @@ fn spark_frame(spec: &SparkSpec<'_>, year: &str, frame_name: &str) -> Result<(St
     }
     let opt_frame_str = |key: &str| -> String {
         spark_get(entries, key)
-            .map(|v| format!("Some({})", rust_string(spark_str(v, &ctx).expect("validated"))))
+            .map(|v| {
+                format!(
+                    "Some({})",
+                    rust_string(spark_str(v, &ctx).expect("validated"))
+                )
+            })
             .unwrap_or_else(|| "None".to_owned())
     };
     let kind = if is_periodic {
@@ -1031,7 +1044,10 @@ fn spark_frame(spec: &SparkSpec<'_>, year: &str, frame_name: &str) -> Result<(St
             "FrameKind::Periodic {{ default_period_ms: {}, enabled_by_default: {} }}",
             spark_uint(spark_get(entries, "defaultPeriodMs").expect("validated"))
                 .map_err(|e| format!("{ctx}: defaultPeriodMs: {e}"))?,
-            spark_bool(spark_get(entries, "enabledByDefault").expect("validated"), &ctx)?,
+            spark_bool(
+                spark_get(entries, "enabledByDefault").expect("validated"),
+                &ctx
+            )?,
         )
     } else {
         format!(
@@ -1042,7 +1058,10 @@ fn spark_frame(spec: &SparkSpec<'_>, year: &str, frame_name: &str) -> Result<(St
     let name = format!("{frame_name}_{year}");
     let text = format!(
         "\npub static {name}: Frame = Frame {{\n    name: {},\n    description: {},\n    api_class: {},\n    api_index: {},\n    arb_id: {},\n    length_bytes: {},\n    signals: &[\n{body}    ],\n    broadcast: {},\n    version_implemented: {},\n    version_deprecated: {},\n    version_removed: {},\n    frame_range_name: {},\n    kind: {kind},\n}};\n",
-        rust_string(spark_str(spark_get(entries, "name").expect("validated"), &ctx)?),
+        rust_string(spark_str(
+            spark_get(entries, "name").expect("validated"),
+            &ctx
+        )?),
         opt_frame_str("description"),
         spark_uint(spark_get(entries, "apiClass").expect("validated"))
             .map_err(|e| format!("{ctx}: apiClass: {e}"))?,
@@ -1053,7 +1072,10 @@ fn spark_frame(spec: &SparkSpec<'_>, year: &str, frame_name: &str) -> Result<(St
         spark_uint(spark_get(entries, "lengthBytes").expect("validated"))
             .map_err(|e| format!("{ctx}: lengthBytes: {e}"))?,
         spark_bool(spark_get(entries, "broadcast").expect("validated"), &ctx)?,
-        rust_string(spark_str(spark_get(entries, "versionImplemented").expect("validated"), &ctx)?),
+        rust_string(spark_str(
+            spark_get(entries, "versionImplemented").expect("validated"),
+            &ctx
+        )?),
         opt_frame_str("versionDeprecated"),
         opt_frame_str("versionRemoved"),
         opt_frame_str("frameRangeName"),

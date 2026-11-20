@@ -5,12 +5,12 @@
 //! clamped or failed values are dropped; they do not change return values.
 
 use super::BigNum;
+use super::SparkError;
 use super::bitstring::{
     BitString, bit_string_to_buffer, bit_string_to_uint, buffer_to_bit_string, concat,
     double_to_bit_string, float_to_bit_string, get_sub_bit_string, int_to_bit_string,
     uint_to_bit_string,
 };
-use super::SparkError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SignalType {
@@ -93,7 +93,10 @@ fn decimal(literal: &str) -> BigNum {
 
 /// `getCanSignalValue`: extract the signal's bits, coerce per type, then apply
 /// `scale` and `offset` in exact decimal arithmetic and clamp to the decoded range.
-pub fn get_can_signal_value(signal: &Signal, bit_string: BitString) -> Result<SignalValue, SparkError> {
+pub fn get_can_signal_value(
+    signal: &Signal,
+    bit_string: BitString,
+) -> Result<SignalValue, SparkError> {
     let signal_bits = get_sub_bit_string(bit_string, signal.bit_position, signal.length_bits);
     let signal_as_uint = bit_string_to_uint(signal_bits);
     if signal.signal_type == SignalType::Boolean {
@@ -220,16 +223,17 @@ pub fn build_can_frame_payload(
             .minus(&decimal(signal_spec.offset))
             .div(&decimal(signal_spec.decode_scale_factor));
         let mut encoded_value = adjusted_value.clone();
-        if matches!(
-            signal_spec.signal_type,
-            SignalType::Uint | SignalType::Int
-        ) {
+        if matches!(signal_spec.signal_type, SignalType::Uint | SignalType::Int) {
             encoded_value = adjusted_value.integer_value(super::bignum::ROUND_HALF_DOWN);
             let encoded_min = decimal(
-                signal_spec.encoded_min.expect("integer signals have encodedMin"),
+                signal_spec
+                    .encoded_min
+                    .expect("integer signals have encodedMin"),
             );
             let encoded_max = decimal(
-                signal_spec.encoded_max.expect("integer signals have encodedMax"),
+                signal_spec
+                    .encoded_max
+                    .expect("integer signals have encodedMax"),
             );
             if encoded_value.lt(&encoded_min) || encoded_value.gt(&encoded_max) {
                 encoded_value = adjusted_value.integer_value(super::bignum::ROUND_DOWN);
@@ -289,7 +293,10 @@ fn parse_bigint(s: &str) -> Result<i128, SparkError> {
         return Err(SparkError(format!("Cannot convert {s} to a BigInt")));
     }
     digits
-        .parse::<i128>()
+        .bytes()
+        .try_fold(0i128, |a, b| {
+            a.checked_mul(10)?.checked_add((b - b'0') as i128)
+        })
         .map(|v| if neg { -v } else { v })
-        .map_err(|_| SparkError(format!("Cannot convert {s} to a BigInt")))
+        .ok_or_else(|| SparkError(format!("Cannot convert {s} to a BigInt")))
 }
