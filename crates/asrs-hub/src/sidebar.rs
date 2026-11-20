@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use asrs_js::collation::locale_compare_numeric;
 use asrs_js::json;
-use asrs_js::math::{abs, floor, max2, rem, round};
+use asrs_js::math::{abs, floor, max2, min2, rem, round};
 use asrs_js::number;
 use asrs_js::sort::{array_sort, code_unit_cmp};
 use asrs_js::string::JsString;
@@ -156,7 +156,7 @@ struct NumberState {
     input_hidden: bool,
     span_hidden: bool,
     span_text: JsString,
-    placeholder: JsString,
+    placeholder: Option<JsString>,
     focused: bool,
     last_has_value: bool,
     first_update: bool,
@@ -171,18 +171,27 @@ struct TextState {
     last_sidebar_width: f64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 enum ValueState {
+    #[default]
     None,
     Bool(BoolState),
     Number(Box<NumberState>),
     Text(TextState),
 }
 
-impl Default for ValueState {
-    fn default() -> Self {
-        ValueState::None
-    }
+/// `searchExpandCallbacks`: `highlightForSearch` for full-key rows and
+/// `expandForSearch` for parents, in row-creation order. Never cleared.
+struct FieldEntry<'a> {
+    title: JsString,
+    full_title: JsString,
+    field: &'a LogFieldTree,
+}
+
+#[derive(Clone, Copy)]
+enum SearchCallback {
+    Highlight(usize),
+    Expand(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -192,6 +201,10 @@ struct Node {
     full_title: JsString,
     full_key: Option<JsString>,
     tree_children: JsObject<LogFieldTree>,
+    /// Replaced by a rebuild. Upstream keeps such rows' search callbacks live
+    /// (`searchExpandCallbacks` is never cleared), so they still expand,
+    /// materialize, and throw on detached elements.
+    detached: bool,
     has_children: bool,
     children_generated: bool,
     indent: f64,
@@ -219,6 +232,8 @@ pub struct SidebarRow {
     pub title: JsString,
     pub full_title: JsString,
     pub full_key: Option<JsString>,
+    /// Position among sibling `.field-item-container` elements, 1-indexed (`:nth-of-type`).
+    pub position: usize,
     pub indent: f64,
     pub generated: bool,
     pub known_label: bool,
@@ -248,24 +263,25 @@ pub enum RowValue {
         input_hidden: bool,
         span_hidden: bool,
         span_text: JsString,
-        placeholder: JsString,
+        placeholder: Option<JsString>,
     },
     Text {
         text: JsString,
     },
 }
 
-/// `#dragItem` contents plus the `startDrag` payload.
+/// The `span.field-text` inside `#dragItem`.
 #[derive(Clone, Debug)]
-pub struct DragEvent {
-    pub x: f64,
-    pub y: f64,
-    pub offset_x: f64,
-    pub offset_y: f64,
-    pub fields: Vec<JsString>,
-    pub children: Vec<JsString>,
+pub struct DragItem {
     pub text: JsString,
     pub bold: bool,
+}
+
+/// The `data` of `startDrag`/`drag-update` events.
+#[derive(Clone, Debug)]
+pub struct DragPayload {
+    pub fields: Vec<JsString>,
+    pub children: Vec<JsString>,
 }
 
 pub struct Sidebar {
@@ -285,6 +301,7 @@ pub struct Sidebar {
     tuning_value_cache: JsObject<JsString>,
     nodes: Vec<Node>,
     roots: Vec<usize>,
+    search_callbacks: Vec<SearchCallback>,
     next_node_id: u64,
     title_text: JsString,
     search_value: JsString,
@@ -297,8 +314,11 @@ pub struct Sidebar {
     shadow_shown: bool,
     last_handle_click: f64,
     menu_active: Vec<bool>,
-    drag_item: Option<DragEvent>,
-    drags: Vec<DragEvent>,
+    drag_active: bool,
+    drag_data: Option<DragPayload>,
+    drag_item: Option<DragItem>,
+    drag_item_hidden: bool,
+    drag_events: Vec<DragPayload>,
     main_messages: Vec<(JsString, JsValue)>,
     timers: Vec<Timer>,
     next_timer_seq: u64,
@@ -323,6 +343,7 @@ impl Sidebar {
             tuning_value_cache: JsObject::new(),
             nodes: Vec::new(),
             roots: Vec::new(),
+            search_callbacks: Vec::new(),
             next_node_id: 0,
             title_text: js(OPEN_LOG_TITLE),
             search_value: JsString::new(),
@@ -335,8 +356,11 @@ impl Sidebar {
             shadow_shown: false,
             last_handle_click: 0.0,
             menu_active: Vec::new(),
+            drag_active: false,
+            drag_data: None,
             drag_item: None,
-            drags: Vec::new(),
+            drag_item_hidden: false,
+            drag_events: Vec::new(),
             main_messages: Vec::new(),
             timers: Vec::new(),
             next_timer_seq: 0,
@@ -348,7 +372,11 @@ impl Sidebar {
     fn schedule_interval(&mut self, now: f64, interval: f64, kind: TimerKind) {
         let seq = self.next_timer_seq;
         self.next_timer_seq += 1;
-        self.timers.push(Timer { due: now + interval, seq, kind });
+        self.timers.push(Timer {
+            due: now + interval,
+            seq,
+            kind,
+        });
     }
 
     fn schedule_timeout(&mut self, now: f64, delay: f64, kind: TimerKind) {
@@ -357,7 +385,7 @@ impl Sidebar {
 
     /// Earliest pending timer `due`, if any.
     pub fn next_timer_due(&self) -> Option<f64> {
-        self.timers.iter().map(|t| t.due).reduce(f64::min)
+        self.timers.iter().map(|t| t.due).reduce(min2)
     }
 
     /// Runs every timer due at `now`, in `(due, seq)` order like env.ts.
@@ -369,7 +397,8 @@ impl Sidebar {
                 .enumerate()
                 .filter(|(_, t)| t.due <= now)
                 .min_by(|(_, a), (_, b)| {
-                    a.due.partial_cmp(&b.due)
+                    a.due
+                        .partial_cmp(&b.due)
                         .unwrap_or(Ordering::Equal)
                         .then(a.seq.cmp(&b.seq))
                 })
@@ -403,8 +432,9 @@ impl Sidebar {
         std::mem::take(&mut self.main_messages)
     }
 
-    pub fn take_drags(&mut self) -> Vec<DragEvent> {
-        std::mem::take(&mut self.drags)
+    /// `drag-update` event payloads emitted by hub.ts's `dragMove`/`dragEnd`.
+    pub fn take_drags(&mut self) -> Vec<DragPayload> {
+        std::mem::take(&mut self.drag_events)
     }
 
     /// `saveState`.
@@ -416,18 +446,23 @@ impl Sidebar {
     }
 
     /// `restoreState`.
-    pub fn restore_state(&mut self, env: &mut SidebarEnv<'_>, state: &SidebarState) -> EventOutcome {
+    pub fn restore_state(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        state: &SidebarState,
+    ) -> EventOutcome {
         let width_equal = state.width == self.sidebar_width;
         let expanded_set: IndexSet<JsString> = state.expanded.iter().cloned().collect();
         let expanded_equal = self.expanded_fields.len() == expanded_set.len()
-            && self.expanded_fields.iter().all(|k| expanded_set.contains(k));
+            && self
+                .expanded_fields
+                .iter()
+                .all(|k| expanded_set.contains(k));
         self.sidebar_width = state.width;
         self.expanded_fields = expanded_set;
         let _ = width_equal;
-        if !expanded_equal {
-            if let Err(outcome) = self.refresh(env, true) {
-                return outcome;
-            }
+        if !expanded_equal && let Err(outcome) = self.refresh(env, true) {
+            return outcome;
         }
         EventOutcome::Ok
     }
@@ -457,9 +492,25 @@ impl Sidebar {
         self.sidebar_handle_active = true;
     }
 
-    /// `window.mouseup`.
+    /// `window.mouseup`: the sidebar's handle listener runs before hub.ts's `dragEnd`.
     pub fn window_mouse_up(&mut self) {
         self.sidebar_handle_active = false;
+        self.drag_end();
+    }
+
+    /// `window.touchend`: `dragEnd` alone.
+    pub fn window_touch_end(&mut self) {
+        self.drag_end();
+    }
+
+    fn drag_end(&mut self) {
+        if self.drag_active {
+            self.drag_active = false;
+            if let Some(payload) = self.drag_data.take() {
+                self.drag_events.push(payload);
+            }
+            self.drag_item_hidden = true;
+        }
     }
 
     /// `window.mousemove`: handle drag, then per-field drag thresholds.
@@ -492,6 +543,20 @@ impl Sidebar {
                 self.drag_event(id, down[0], down[1], down[2], down[3]);
                 self.nodes[id].mouse_down = None;
             }
+        }
+        if self.drag_active
+            && let Some(payload) = self.drag_data.clone()
+        {
+            self.drag_events.push(payload);
+        }
+    }
+
+    /// `window.touchmove`: `dragMove` with the first touch.
+    pub fn window_touch_move(&mut self) {
+        if self.drag_active
+            && let Some(payload) = self.drag_data.clone()
+        {
+            self.drag_events.push(payload);
         }
     }
 
@@ -608,9 +673,8 @@ impl Sidebar {
     }
 
     fn search_periodic(&mut self) {
-        let hidden = !self.search_focused
-            || self.search_value.is_empty()
-            || self.search_results.is_empty();
+        let hidden =
+            !self.search_focused || self.search_value.is_empty() || self.search_results.is_empty();
         if hidden != self.search_results_hidden {
             if hidden && !self.search_results_hidden {
                 self.search_results_scroll_top = 0.0;
@@ -689,18 +753,18 @@ impl Sidebar {
             return EventOutcome::Ok;
         }
         self.search_key = Some(self.search_results[hovered].clone());
-        let snapshot = self.nodes.len();
-        for id in 0..snapshot {
-            let node = &self.nodes[id];
-            if node.full_key.is_some() {
-                if let Err(outcome) = self.highlight_for_search(id, now, env.can_scroll_into_view) {
-                    return outcome;
+        // `forEach` fixes the length up front; callbacks pushed by expansions
+        // during this pass run on the next `runSearch`.
+        let len = self.search_callbacks.len();
+        for i in 0..len {
+            let outcome = match self.search_callbacks[i] {
+                SearchCallback::Highlight(id) => {
+                    self.highlight_for_search(id, now, env.can_scroll_into_view)
                 }
-            }
-            if self.nodes[id].has_children {
-                if let Err(outcome) = self.expand_for_search(env, id, now) {
-                    return outcome;
-                }
+                SearchCallback::Expand(id) => self.expand_for_search(env, id, now),
+            };
+            if let Err(outcome) = outcome {
+                return outcome;
             }
         }
         self.search_key = None;
@@ -722,7 +786,11 @@ impl Sidebar {
         }
         self.nodes[id].highlighted = true;
         let node_id = self.nodes[id].id;
-        self.schedule_timeout(now, HIGHLIGHT_TIMEOUT_MS, TimerKind::ClearHighlight(node_id));
+        self.schedule_timeout(
+            now,
+            HIGHLIGHT_TIMEOUT_MS,
+            TimerKind::ClearHighlight(node_id),
+        );
         Ok(())
     }
 
@@ -742,8 +810,7 @@ impl Sidebar {
 
     fn tree_contains_key(&self, children: &JsObject<LogFieldTree>, key: &JsString) -> bool {
         for tree in children.values() {
-            if tree.full_key.as_ref() == Some(key) || self.tree_contains_key(&tree.children, key)
-            {
+            if tree.full_key.as_ref() == Some(key) || self.tree_contains_key(&tree.children, key) {
                 return true;
             }
         }
@@ -759,7 +826,8 @@ impl Sidebar {
     ) -> Attempt<()> {
         self.nodes[id].expanded = expanded;
         if expanded {
-            self.expanded_fields.insert(self.nodes[id].full_title.clone());
+            self.expanded_fields
+                .insert(self.nodes[id].full_title.clone());
         } else {
             self.expanded_fields
                 .shift_remove(&self.nodes[id].full_title.clone());
@@ -789,9 +857,11 @@ impl Sidebar {
                 full_title.push_str(&key);
                 self.add_fields(
                     env,
-                    key,
-                    full_title,
-                    &child,
+                    FieldEntry {
+                        title: key,
+                        full_title,
+                        field: &child,
+                    },
                     Some(id),
                     self.nodes[id].indent + INDENT_SIZE_PX,
                     self.nodes[id].children_generated,
@@ -828,10 +898,10 @@ impl Sidebar {
 
     /// `field-item-label` mousedown (only registered on full-key rows upstream).
     pub fn label_mouse_down(&mut self, flat_index: usize, x: f64, y: f64, ox: f64, oy: f64) {
-        if let Some(id) = self.flat_id(flat_index) {
-            if self.nodes[id].full_key.is_some() {
-                self.nodes[id].mouse_down = Some([x, y, ox, oy]);
-            }
+        if let Some(id) = self.flat_id(flat_index)
+            && self.nodes[id].full_key.is_some()
+        {
+            self.nodes[id].mouse_down = Some([x, y, ox, oy]);
         }
     }
 
@@ -850,10 +920,7 @@ impl Sidebar {
             && abs(x - down[0]) < FIELD_DRAG_THRESHOLD_PX
             && abs(y - down[1]) < FIELD_DRAG_THRESHOLD_PX
         {
-            let full_key = self.nodes[id]
-                .full_key
-                .clone()
-                .unwrap_or_else(JsString::new);
+            let full_key = self.nodes[id].full_key.clone().unwrap_or_default();
             match self.select_group.iter().position(|k| k == &full_key) {
                 None => {
                     self.select_group.push(full_key);
@@ -876,7 +943,10 @@ impl Sidebar {
         self.nodes[id].mouse_down = None;
         let mut data = JsObject::new();
         data.insert("title", JsValue::String(self.nodes[id].title.clone()));
-        data.insert("fullTitle", JsValue::String(self.nodes[id].full_title.clone()));
+        data.insert(
+            "fullTitle",
+            JsValue::String(self.nodes[id].full_title.clone()),
+        );
         data.insert(
             "position",
             JsValue::Array(vec![JsValue::Number(x), JsValue::Number(y)]),
@@ -911,26 +981,27 @@ impl Sidebar {
                 .filter(|key| !ends_with(key, "/length"))
                 .collect()
         };
-        let event = DragEvent {
-            x,
-            y,
-            offset_x,
-            offset_y,
+        let payload = DragPayload {
             fields: if is_group {
                 self.select_group.clone()
             } else {
                 vec![full_key]
             },
             children,
+        };
+        self.drag_item = Some(DragItem {
             text,
             bold: is_group,
-        };
-        self.drag_item = Some(event.clone());
-        self.drags.push(event);
+        });
+        self.drag_active = true;
+        self.drag_data = Some(payload);
+        let _ = (x, y, offset_x, offset_y);
         if is_group {
             self.select_group.clear();
             for node in &mut self.nodes {
-                node.label_bold = false;
+                if !node.detached {
+                    node.label_bold = false;
+                }
             }
         }
     }
@@ -979,6 +1050,9 @@ impl Sidebar {
     fn set_tuning_mode_active(&mut self, env: &SidebarEnv<'_>, active: bool) {
         self.is_tuning_mode = active;
         for node in &mut self.nodes {
+            if node.detached {
+                continue;
+            }
             let Some(full_key) = node.full_key.clone() else {
                 continue;
             };
@@ -1024,7 +1098,7 @@ impl Sidebar {
         if !state.tunable {
             return;
         }
-        let value = state.fill.as_ref() != Some(&js("red"));
+        let value = state.fill.as_ref() == Some(&js("red"));
         let Some(live_time) = env.selection.get_current_live_time() else {
             return;
         };
@@ -1039,18 +1113,18 @@ impl Sidebar {
 
     /// Number tuning input focus/blur/value/keydown (the DOM element's own state).
     pub fn number_input_focus(&mut self, flat_index: usize, focused: bool) {
-        if let Some(id) = self.flat_id(flat_index) {
-            if let ValueState::Number(state) = &mut self.nodes[id].value {
-                state.focused = focused;
-            }
+        if let Some(id) = self.flat_id(flat_index)
+            && let ValueState::Number(state) = &mut self.nodes[id].value
+        {
+            state.focused = focused;
         }
     }
 
     pub fn number_input_value(&mut self, flat_index: usize, value: JsString) {
-        if let Some(id) = self.flat_id(flat_index) {
-            if let ValueState::Number(state) = &mut self.nodes[id].value {
-                state.input_value = value;
-            }
+        if let Some(id) = self.flat_id(flat_index)
+            && let ValueState::Number(state) = &mut self.nodes[id].value
+        {
+            state.input_value = value;
         }
     }
 
@@ -1066,6 +1140,9 @@ impl Sidebar {
             return;
         }
         for node in &mut self.nodes {
+            if node.detached {
+                continue;
+            }
             let ValueState::Number(state) = &mut node.value else {
                 continue;
             };
@@ -1152,7 +1229,7 @@ impl Sidebar {
         } else {
             selected
         };
-        for (flat, id) in self.dfs_ids().into_iter().enumerate() {
+        for (flat, (id, _)) in self.dfs_ids().into_iter().enumerate() {
             let Some(rect) = rects.get(flat).copied() else {
                 break;
             };
@@ -1160,7 +1237,13 @@ impl Sidebar {
         }
     }
 
-    fn update_value(&mut self, env: &mut SidebarEnv<'_>, id: usize, time: Option<f64>, rect: RowRect) {
+    fn update_value(
+        &mut self,
+        env: &mut SidebarEnv<'_>,
+        id: usize,
+        time: Option<f64>,
+        rect: RowRect,
+    ) {
         if !rect.on_screen(env.inner_height) {
             return;
         }
@@ -1177,7 +1260,11 @@ impl Sidebar {
                 state.last_value = value;
                 if let Some(v) = value {
                     state.fill = Some(js(if v {
-                        if env.dark_theme { "lightgreen" } else { "green" }
+                        if env.dark_theme {
+                            "lightgreen"
+                        } else {
+                            "green"
+                        }
                     } else {
                         "red"
                     }));
@@ -1197,17 +1284,13 @@ impl Sidebar {
                     Some(v) if abs(v) < 1e-9 => js("0"),
                     Some(v) if abs(v) >= 1e5 || abs(v) < 1e-3 => {
                         number::to_exponential(v, Some(1.0))
-                            .map(|text| {
-                                JsString::from(text)
-                                    .replace(&js("+"), &js(""))
-                                    .unwrap()
-                            })
+                            .map(|text| JsString::from(text).replace(&js("+"), &js("")).unwrap())
                             .unwrap_or_default()
                     }
                     Some(v) if rem(v, 1.0) == 0.0 => JsString::from(number::to_string(v)),
                     Some(v) => JsString::from(number::to_fixed(v, 3.0).unwrap()),
                 };
-                state.placeholder = value_str.clone();
+                state.placeholder = Some(value_str.clone());
                 state.span_text = value_str;
             }
             ValueState::Text(state) => {
@@ -1227,8 +1310,7 @@ impl Sidebar {
                     Some(v) => {
                         let max_characters = round(self.sidebar_width * 0.03);
                         if (v.len() as f64) > max_characters {
-                            let mut truncated =
-                                v.substring(0.0, Some(max_characters - 1.0));
+                            let mut truncated = v.substring(0.0, Some(max_characters - 1.0));
                             truncated.push_str(&js("\u{2026}"));
                             truncated
                         } else {
@@ -1245,7 +1327,11 @@ impl Sidebar {
     // --- getActiveFields ---
 
     /// `getActiveFields`. `rects` are `.field-item` rects in display order.
-    pub fn get_active_fields(&mut self, env: &SidebarEnv<'_>, rects: &[RowRect]) -> IndexSet<JsString> {
+    pub fn get_active_fields(
+        &mut self,
+        env: &SidebarEnv<'_>,
+        rects: &[RowRect],
+    ) -> IndexSet<JsString> {
         if self.sidebar_width <= 0.0 {
             return IndexSet::new();
         }
@@ -1271,7 +1357,7 @@ impl Sidebar {
                         || r#type == Some(LoggableType::StringArray)
                         || (r#type != Some(LoggableType::Empty) && structured_type.is_some())
                         || (r#type == Some(LoggableType::Raw)
-                            && wpilib_type.is_some_and(|t| custom_schemas::has(t))))
+                            && wpilib_type.is_some_and(custom_schemas::has)))
                 {
                     is_active = true;
                 }
@@ -1288,13 +1374,13 @@ impl Sidebar {
                     self.active_fields.shift_remove(&full_key);
                 }
             }
-            if let Some(type_child) = self.nodes[id].tree_children.get(TYPE_KEY) {
-                if let Some(type_key) = type_child.full_key.clone() {
-                    if expanded {
-                        self.active_fields.insert(type_key);
-                    } else {
-                        self.active_fields.shift_remove(&type_key);
-                    }
+            if let Some(type_child) = self.nodes[id].tree_children.get(TYPE_KEY)
+                && let Some(type_key) = type_child.full_key.clone()
+            {
+                if expanded {
+                    self.active_fields.insert(type_key);
+                } else {
+                    self.active_fields.shift_remove(&type_key);
                 }
             }
         }
@@ -1310,24 +1396,26 @@ impl Sidebar {
         self.last_field_keys = field_keys;
         if !fields_changed {
             for id in 0..self.nodes.len() {
-                if self.nodes[id].full_key.is_some() {
+                if self.nodes[id].full_key.is_some() && !self.nodes[id].detached {
                     self.update_type_warning(env, id);
                 }
             }
             for id in 0..self.nodes.len() {
-                if self.nodes[id].full_key.is_some() {
+                if self.nodes[id].full_key.is_some() && !self.nodes[id].detached {
                     self.update_metadata(env, id);
                 }
             }
             for id in 0..self.nodes.len() {
-                if self.nodes[id].full_key.is_some() {
+                if self.nodes[id].full_key.is_some() && !self.nodes[id].detached {
                     self.update_loading(env, id);
                 }
             }
             return Ok(());
         }
         self.field_count = env.log.get_field_count();
-        self.nodes.clear();
+        for node in &mut self.nodes {
+            node.detached = true;
+        }
         self.roots.clear();
         self.active_fields.clear();
         let mut tree = env.log.get_field_tree(true, &JsString::new());
@@ -1360,7 +1448,18 @@ impl Sidebar {
             let node = tree.get_key(&key).unwrap().clone();
             let mut full_title = js("/");
             full_title.push_str(&key);
-            self.add_fields(env, key, full_title, &node, None, 0.0, false, 0.0)?;
+            self.add_fields(
+                env,
+                FieldEntry {
+                    title: key,
+                    full_title,
+                    field: &node,
+                },
+                None,
+                0.0,
+                false,
+                0.0,
+            )?;
         }
         self.update_search_results(env);
         Ok(())
@@ -1404,7 +1503,7 @@ impl Sidebar {
                     JsValue::String(text) => (0..text.len())
                         .map(|index| {
                             (
-                                JsString::from(index.to_string()),
+                                JsString::from(number::to_string(index as f64)),
                                 JsValue::String(
                                     text.substring(index as f64, Some(index as f64 + 1.0)),
                                 ),
@@ -1415,7 +1514,10 @@ impl Sidebar {
                         .iter()
                         .enumerate()
                         .map(|(index, value)| {
-                            (JsString::from(index.to_string()), value.clone())
+                            (
+                                JsString::from(number::to_string(index as f64)),
+                                value.clone(),
+                            )
                         })
                         .collect(),
                     JsValue::Null | JsValue::Undefined => {
@@ -1458,14 +1560,18 @@ impl Sidebar {
     fn add_fields(
         &mut self,
         env: &mut SidebarEnv<'_>,
-        title: JsString,
-        full_title: JsString,
-        field: &LogFieldTree,
+        entry: FieldEntry<'_>,
         parent: Option<usize>,
         indent: f64,
         generated: bool,
         now: f64,
     ) -> Attempt<usize> {
+        let FieldEntry {
+            title,
+            full_title,
+            field,
+        } = entry;
+        let detached = parent.is_some_and(|p| self.nodes[p].detached);
         let has_children = !field.children.is_empty();
         let children_generated = generated
             || (field
@@ -1481,6 +1587,7 @@ impl Sidebar {
             full_title: full_title.clone(),
             full_key: field.full_key.clone(),
             tree_children: field.children.clone(),
+            detached,
             has_children,
             children_generated,
             indent,
@@ -1489,8 +1596,7 @@ impl Sidebar {
                 || (indent == INDENT_SIZE_PX
                     && (starts_with(&full_title, "/AdvantageKit")
                         || starts_with(&full_title, "/Log"))))
-                && (KNOWN_KEYS.iter().any(|k| title == js(k))
-                    || starts_with(&title, MERGED_KEY)),
+                && (KNOWN_KEYS.iter().any(|k| title == js(k)) || starts_with(&title, MERGED_KEY)),
             label_loading: false,
             label_bold: false,
             label_title: None,
@@ -1518,17 +1624,16 @@ impl Sidebar {
                 label.push_str(structured_type);
                 self.nodes[id].type_label = Some(label);
             }
-            if let Err(outcome) = self.highlight_for_search(id, now, env.can_scroll_into_view) {
-                return Err(outcome);
-            }
+            self.search_callbacks.push(SearchCallback::Highlight(id));
+            self.highlight_for_search(id, now, env.can_scroll_into_view)?;
             match env.log.get_type(&full_key) {
                 Some(LoggableType::Boolean) => {
                     let mut state = BoolState {
                         first_update: true,
                         ..Default::default()
                     };
-                    state.tunable = self.is_tuning_mode
-                        && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    state.tunable =
+                        self.is_tuning_mode && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
                     if !state.tunable {
                         self.tuning_value_cache.remove_key(&full_key);
                     }
@@ -1540,8 +1645,8 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    let tunable = self.is_tuning_mode
-                        && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    let tunable =
+                        self.is_tuning_mode && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
                     state.input_hidden = !tunable;
                     state.span_hidden = tunable;
                     if !tunable {
@@ -1572,6 +1677,7 @@ impl Sidebar {
             }
         }
         if has_children {
+            self.search_callbacks.push(SearchCallback::Expand(id));
             self.expand_for_search(env, id, now)?;
             if self.expanded_fields.contains(&self.nodes[id].full_title) {
                 self.set_expanded(env, id, true, now)?;
@@ -1582,35 +1688,46 @@ impl Sidebar {
 
     // --- View data ---
 
-    /// Arena ids in display order (DFS pre-order of materialized rows).
-    fn dfs_ids(&self) -> Vec<usize> {
+    /// `(arena id, sibling position)` pairs in display order (DFS pre-order).
+    fn dfs_ids(&self) -> Vec<(usize, usize)> {
         let mut order = Vec::new();
-        let mut stack: Vec<usize> = self.roots.iter().rev().copied().collect();
-        while let Some(id) = stack.pop() {
-            order.push(id);
-            for &child in self.nodes[id].children.iter().rev() {
-                stack.push(child);
+        let mut stack: Vec<(usize, usize)> = self
+            .roots
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(i, id)| (*id, i + 1))
+            .collect();
+        while let Some((id, pos)) = stack.pop() {
+            order.push((id, pos));
+            for (i, &child) in self.nodes[id].children.iter().enumerate().rev() {
+                stack.push((child, i + 1));
             }
         }
         order
     }
 
     fn dfs_index_map(&self) -> std::collections::HashMap<usize, usize> {
-        self.dfs_ids().into_iter().enumerate().map(|(flat, id)| (id, flat)).collect()
+        self.dfs_ids()
+            .into_iter()
+            .enumerate()
+            .map(|(flat, (id, _))| (id, flat))
+            .collect()
     }
 
     fn flat_id(&self, flat_index: usize) -> Option<usize> {
-        self.dfs_ids().get(flat_index).copied()
+        self.dfs_ids().get(flat_index).map(|(id, _)| *id)
     }
 
     /// Rows in display order.
     pub fn rows(&self) -> Vec<SidebarRow> {
         self.dfs_ids()
             .into_iter()
-            .map(|id| {
+            .map(|(id, position)| {
                 let node = &self.nodes[id];
                 SidebarRow {
                     title: node.title.clone(),
+                    position,
                     full_title: node.full_title.clone(),
                     full_key: node.full_key.clone(),
                     indent: node.indent,
@@ -1678,8 +1795,12 @@ impl Sidebar {
         &self.select_group
     }
 
-    pub fn drag_item(&self) -> Option<&DragEvent> {
+    pub fn drag_item(&self) -> Option<&DragItem> {
         self.drag_item.as_ref()
+    }
+
+    pub fn drag_item_hidden(&self) -> bool {
+        self.drag_item_hidden
     }
 
     pub fn tuning_button_hidden(&self) -> bool {

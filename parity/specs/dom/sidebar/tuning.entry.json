@@ -1,0 +1,239 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/tuning.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/tuning.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".side-bar-tuning-button"
+          }
+        ],
+        "label": "button-hidden"
+      },
+      {
+        "tuner": [
+          "/Speed",
+          "/Enabled",
+          "/Name"
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".side-bar-tuning-button"
+          }
+        ],
+        "label": "button-shown"
+      },
+      {
+        "event": {
+          "target": ".side-bar-tuning-button",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "type",
+              "fill",
+              "value"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": ".side-bar-tuning-button"
+          }
+        ],
+        "label": "tuning-on"
+      },
+      {
+        "liveTime": 10.0
+      },
+      {
+        "event": {
+          "target": ".field-item-container input",
+          "type": "input",
+          "index": 0,
+          "props": {
+            "value": "45.9"
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "advance": 260
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "type",
+              "fill",
+              "value"
+            ]
+          }
+        ],
+        "label": "published"
+      },
+      {
+        "event": {
+          "target": ".field-value svg",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 260
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "type",
+              "fill",
+              "value"
+            ]
+          }
+        ],
+        "label": "bool-toggled"
+      },
+      {
+        "event": {
+          "target": ".field-item-container input",
+          "type": "input",
+          "index": 0,
+          "props": {
+            "value": ""
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "advance": 260
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "type",
+              "value"
+            ]
+          }
+        ],
+        "label": "unpublished"
+      },
+      {
+        "event": {
+          "target": ".side-bar-tuning-button",
+          "type": "contextmenu",
+          "init": {
+            "clientX": 50,
+            "clientY": 60
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".side-bar-tuning-button"
+          }
+        ],
+        "label": "context-menu"
+      },
+      {
+        "event": {
+          "target": ".side-bar-tuning-button",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".side-bar-tuning-button"
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "type",
+              "value"
+            ]
+          }
+        ],
+        "label": "tuning-off"
+      },
+      {
+        "tuner": null
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".side-bar-tuning-button"
+          }
+        ],
+        "label": "tuner-removed"
+      }
+    ]
+  }
+}

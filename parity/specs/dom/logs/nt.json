@@ -1,0 +1,17 @@
+[
+  ["putNumber", "/SmartDashboard/Arm/Angle", 0.0, 45.25],
+  ["putNumber", "/SmartDashboard/Arm/Angle", 0.05, 45.5],
+  ["putBoolean", "/SmartDashboard/Arm/Extended", 0.0, true],
+  ["putString", "/SmartDashboard/Arm/Mode", 0.0, "a very long mode name that will be truncated"],
+  ["putString", "/SmartDashboard/Choices/.type", 0.0, "string[]"],
+  ["putStringArray", "/SmartDashboard/Choices/options", 0.0, ["auto a", "auto b"]],
+  ["putString", "/SmartDashboard/Choices/default", 0.0, "auto a"],
+  ["putNumber", "/SmartDashboard/Count", 0.0, 42.0],
+  ["putNumber", "/SmartDashboard/Tiny", 0.0, 0.0005],
+  ["putNumber", "/SmartDashboard/Huge", 0.0, 123456.789],
+  ["putNumber", "/SmartDashboard/Zero", 0.0, 0.0],
+  ["putBooleanArray", "/FMSInfo/MatchBits", 0.0, [true, false, true]],
+  ["putNumber", "/DS:eventTime", 0.0, 100.0],
+  ["putString", "/SmartDashboard/Unicode \u65e5\u672c\u8a9e", 0.0, "value"],
+  ["createBlankField", "/SmartDashboard/Nothing", "Empty"]
+]

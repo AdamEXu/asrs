@@ -1,0 +1,6 @@
+[
+  ["putNumber", "/DS:/Dscomm/Arm/Angle", 0.0, 30.0],
+  ["putBoolean", "/DS:/Dscomm/Arm/Running", 0.0, true],
+  ["putNumber", "/DS:/Dscomm/DSLog/voltage", 0.0, 12.5],
+  ["putString", "/DS:/Dscomm/mode", 0.0, "auto"]
+]

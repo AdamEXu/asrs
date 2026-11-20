@@ -692,7 +692,10 @@ Steps:
 | `{"main": name, "data": value}` | delivers a main-to-hub message (`"cve1": value` instead of `data` for values JSON cannot express) |
 | `{"advance": ms}`, `{"frames": n}` | runs timers and frames for `ms`, or `n * framePeriod`, milliseconds |
 | `{"eval": "expression"}` | evaluates JavaScript in the page (`window` is the hub's) |
-| `{"event": {"target", "index", "kind", "type", "init"}}` | dispatches `new window[kind](type, {bubbles: true, cancelable: true, ...init})` on the `index`th match of the selector `target` (or `"window"`, `"document"`); `kind` defaults to `Event` |
+| `{"event": {"target", "index", "kind", "type", "init", "props"}}` | dispatches `new window[kind](type, {bubbles: true, cancelable: true, ...init})` on the `index`th match of the selector `target` (or `"window"`, `"document"`); `kind` defaults to `Event`; `props` assigns own properties (like an input's `value` or `scrollTop`) before dispatch |
+| `{"selection": [[method, ...args], ...]}` | calls `window.selection[method](...args)` with CVE-1 arguments (for example `["setHoveredTime", 1.5]`) |
+| `{"liveTime": t}` | calls `window.selection.setLiveConnected(() => t)`; `null` calls `setLiveDisconnected` |
+| `{"tuner": [keys...]}` | installs a stub `window.tuner` tunable for the listed keys and writes `{"tuner": ["publish", key, value]}` or `["unpublish", key]` records; `null` removes it |
 | `{"capture": [...], "label": ...}` | writes a `{"capture": label, "time": ms}` line, then each capture below |
 
 Captures (a string or `{"kind": ..., ...}`):
@@ -708,7 +711,9 @@ Captures (a string or `{"kind": ..., ...}`):
 | `measure` | `{"measure": {font, align, baseline, text}, "metrics": {...}}` per string of `texts`, from the recording canvas (`null` when the font is invalid) |
 
 Also written as they happen: `{"main": name, "data": ...}` for every hub-to-main message not
-ignored, and `{"exception": where, "error": "<name>: <message>"}` when upstream code throws in
+ignored, `{"drag": <payload>}` for every `drag-update` event the hub dispatches during a field
+drag, `{"tuner": ...}` records from a `{"tuner"}` stub step, and
+`{"exception": where, "error": "<name>: <message>"}` when upstream code throws in
 a timer, frame, event listener (reported by jsdom, `where` is `event`), message handler or
 `eval`, or a promise rejection goes unhandled (the run goes on, as a page would). Every value
 is CVE-1 inside a plain JSON object, so Rust reads it with `asrs_parity::record_vectors!` and

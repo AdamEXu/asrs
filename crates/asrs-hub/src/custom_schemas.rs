@@ -6,7 +6,5 @@ use asrs_js::string::JsString;
 const CUSTOM_SCHEMAS: &[&str] = &["URCL", "URCLr2_periodic", "URCLr3_periodic"];
 
 pub fn has(key: &JsString) -> bool {
-    CUSTOM_SCHEMAS
-        .iter()
-        .any(|k| key == &JsString::from(*k))
+    CUSTOM_SCHEMAS.iter().any(|k| key == &JsString::from(*k))
 }

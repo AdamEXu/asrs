@@ -1,0 +1,21 @@
+{
+  "entry": "dom",
+  "inputs": ["../logs/merged.json"],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      { "selector": "div.field-item", "rect": [0, 100, 300, 20] }
+    ],
+    "steps": [
+      { "log": "../logs/merged.json" },
+      { "frames": 1 },
+      {
+        "capture": [
+          { "kind": "dom", "selector": "#fieldList", "attributes": ["title"] },
+          { "kind": "dom", "selector": "div.side-bar-title" }
+        ],
+        "label": "merged-roots"
+      }
+    ]
+  }
+}

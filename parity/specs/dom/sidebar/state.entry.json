@@ -1,0 +1,357 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/nt.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/nt.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.sidebar.saveState()"
+          }
+        ],
+        "label": "saved-expanded"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 250,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc00000000000000000000000000",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": {
+                  "leftSources": [],
+                  "rightSources": [],
+                  "discreteSources": [],
+                  "leftLockedRange": null,
+                  "rightLockedRange": null,
+                  "leftUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "rightUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "leftFilter": 0,
+                  "rightFilter": 0,
+                  "showRobotMode": false
+                },
+                "controllerUUID": "line0000000000000000000000000",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 2,
+                "title": "",
+                "controller": {
+                  "sources": [],
+                  "field": "",
+                  "orientation": 0,
+                  "size": "large"
+                },
+                "controllerUUID": "odom0000000000000000000000000",
+                "renderer": {
+                  "zoom": 1,
+                  "pan": [
+                    0,
+                    0
+                  ],
+                  "trackingMode": 0,
+                  "isFTC": false
+                },
+                "controlsHeight": 200
+              },
+              {
+                "type": 3,
+                "title": "",
+                "controller": {
+                  "sources": [],
+                  "game": ""
+                },
+                "controllerUUID": "joy00000000000000000000000000",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "eval",
+            "expr": "window.sidebar.saveState()"
+          }
+        ],
+        "label": "restored-collapsed"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 250,
+            "expanded": [
+              "/SmartDashboard"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc00000000000000000000000000",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": {
+                  "leftSources": [],
+                  "rightSources": [],
+                  "discreteSources": [],
+                  "leftLockedRange": null,
+                  "rightLockedRange": null,
+                  "leftUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "rightUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "leftFilter": 0,
+                  "rightFilter": 0,
+                  "showRobotMode": false
+                },
+                "controllerUUID": "line0000000000000000000000000",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 2,
+                "title": "",
+                "controller": {
+                  "sources": [],
+                  "field": "",
+                  "orientation": 0,
+                  "size": "large"
+                },
+                "controllerUUID": "odom0000000000000000000000000",
+                "renderer": {
+                  "zoom": 1,
+                  "pan": [
+                    0,
+                    0
+                  ],
+                  "trackingMode": 0,
+                  "isFTC": false
+                },
+                "controlsHeight": 200
+              },
+              {
+                "type": 3,
+                "title": "",
+                "controller": {
+                  "sources": [],
+                  "game": ""
+                },
+                "controllerUUID": "joy00000000000000000000000000",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          }
+        ],
+        "label": "restored-expanded"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "hidden-active-empty"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "shown-again"
+      },
+      {
+        "event": {
+          "target": "div.side-bar-handle",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.side-bar-handle",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.sidebar.saveState()"
+          }
+        ],
+        "label": "double-click-hidden"
+      },
+      {
+        "event": {
+          "target": "div.side-bar-handle",
+          "type": "mousedown",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 350,
+            "clientY": 200
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.side-bar-handle",
+          "type": "mousedown",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 100,
+            "clientY": 200
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.sidebar.saveState()"
+          }
+        ],
+        "label": "resized"
+      }
+    ]
+  }
+}

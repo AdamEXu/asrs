@@ -12,5 +12,8 @@ asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 indexmap = "=2.14.2"
 
+[dev-dependencies]
+asrs-parity = { path = "../asrs-parity" }
+
 [lints]
 workspace = true

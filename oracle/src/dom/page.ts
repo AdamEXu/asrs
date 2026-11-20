@@ -6,6 +6,8 @@ import { fromTree, toTree } from "../cve1";
 import { measureFixed, parseFontSize } from "./recordingCanvas";
 
 const w = window as any;
+let liveValue: number | null = null;
+let liveConnected = false;
 const write = (record: object) => w.__oracleWrite(JSON.stringify(record));
 const ignoredMain = new Set(fixture.ignoreMain ?? ["save-state", "save-type-memory", "update-touch-bar-slider"]);
 
@@ -182,9 +184,39 @@ async function step(s: any, index: number) {
     if (target === undefined) throw new Error(`step ${index}: no element ${e.target}`);
     const Kind = w[e.kind ?? "Event"];
     try {
+      if (e.props !== undefined) Object.assign(target, e.props);
       target.dispatchEvent(new Kind(e.type, { bubbles: true, cancelable: true, ...(e.init ?? {}) }));
     } catch (error) {
       exception("event " + e.type, error);
+    }
+    await settle();
+  } else if ("selection" in s) {
+    const [method, ...args] = s.selection as [string, ...unknown[]];
+    w.selection[method](...args.map((a) => fromTree(a)));
+    await settle();
+  } else if ("liveTime" in s) {
+    if (s.liveTime === null) {
+      liveValue = null;
+      w.selection.setLiveDisconnected();
+    } else {
+      liveValue = s.liveTime;
+      if (!liveConnected) {
+        liveConnected = true;
+        w.selection.setLiveConnected(() => liveValue);
+      }
+    }
+    await settle();
+  } else if ("tuner" in s) {
+    if (s.tuner === null) {
+      w.tuner = null;
+    } else {
+      const keys = new Set((s.tuner as unknown[]).map((k) => String(fromTree(k))));
+      w.tuner = {
+        hasTunableFields: () => keys.size > 0,
+        isTunable: (key: string) => keys.has(key),
+        publish: (key: string, value: unknown) => write({ tuner: ["publish", toTree(key), toTree(value)] }),
+        unpublish: (key: string) => write({ tuner: ["unpublish", toTree(key)] })
+      };
     }
     await settle();
   } else if ("capture" in s) {
@@ -195,6 +227,9 @@ async function step(s: any, index: number) {
 
 w.__oracleRun = async () => {
   setExceptionHandler(exception);
+  w.addEventListener("drag-update", (event: Event) => {
+    write({ drag: toTree((event as CustomEvent).detail.data) });
+  });
   for (const listener of windowMessageListeners) listener({ data: "port", ports: [port] });
   const prefs = JSON.parse(JSON.stringify(DEFAULT_PREFS));
   if (fixture.preferences !== undefined) mergePreferences(prefs, fixture.preferences);

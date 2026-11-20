@@ -1,0 +1,10 @@
+[
+  ["putNumber", "/SmartDashboard/Main", 0.0, 1.0],
+  ["putNumber", "/Log0/SmartDashboard/Secondary", 0.0, 2.0],
+  ["putNumber", "/Log0/Timestamp", 0.0, 50.0],
+  ["putBoolean", "/Log0/DriverStation/Enabled", 0.0, true],
+  ["putNumber", "/Log1/SmartDashboard/Tertiary", 0.0, 3.0],
+  ["putNumber", "/Log1/Another/Field", 0.0, 4.0],
+  ["putString", "/Logistics/Note", 0.0, "not a merge key"],
+  ["putNumber", "/Zebra/Stripe", 0.0, 5.0]
+]
