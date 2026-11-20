@@ -2,7 +2,7 @@ use tiny_skia::{IntSize, Pixmap};
 
 use crate::display::ImageData;
 
-fn to_unorm(v: f32) -> u8 {
+pub fn to_unorm(v: f32) -> u8 {
     (v.clamp(0.0, 1.0) * 255.0).round_ties_even() as u8
 }
 

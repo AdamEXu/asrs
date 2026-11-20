@@ -618,12 +618,20 @@ impl<'a> Raster<'a> {
         });
     }
 
-    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, coverage_scale: u32) {
-        let Some(source) = self.source(fill, coverage_scale) else {
+    /// Fills a device-space path. `skia_points` is the point count Skia's own path would have,
+    /// which picks its scan converter; `None` means a shape Skia always fills analytically.
+    fn fill_device(&mut self, path: &tiny_skia::Path, fill: &Fill, skia_points: Option<usize>) {
+        let Some(source) = self.source(fill, 256) else {
             return;
         };
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        if let Some(coverage) = scan::rasterize(path, w, h) {
+        let analytic = skia_points.is_none_or(|n| scan::should_use_analytic(path, n));
+        let coverage = if analytic {
+            scan::rasterize(path, w, h)
+        } else {
+            scan::rasterize_supersampled(path, w, h)
+        };
+        if let Some(coverage) = coverage {
             self.paint(&coverage, &source);
         }
     }
@@ -635,7 +643,8 @@ impl<'a> Raster<'a> {
         let ctm = self.state.transform;
         if let Some(path) = self.path.to_skia(Some(&ctm), CONIC_TOLERANCE) {
             let fill = self.state.fill.clone();
-            self.fill_device(&path, &fill, 256);
+            let points = self.path.skia_point_count();
+            self.fill_device(&path, &fill, Some(points));
         }
     }
 
@@ -699,9 +708,7 @@ impl<'a> Raster<'a> {
             };
             let (w, h) = (self.pixmap.width(), self.pixmap.height());
             for (a, b) in hairline::segments(&device, self.state.line_cap) {
-                if let Some(band) = hairline::band(a, b)
-                    && let Some(coverage) = scan::rasterize(&band, w, h)
-                {
+                if let Some(coverage) = hairline::coverage(a, b, w, h) {
                     self.paint(&coverage, &source);
                 }
             }
@@ -711,7 +718,8 @@ impl<'a> Raster<'a> {
             return;
         };
         if let Some(device) = outline.transform(ctm) {
-            self.fill_device(&device, &stroke, 256);
+            let points = device.points().len();
+            self.fill_device(&device, &stroke, Some(points));
         }
     }
 
@@ -850,7 +858,7 @@ impl<'a> Raster<'a> {
         }
         if let Some(frame) = builder.finish() {
             let stroke = s.stroke.clone();
-            self.fill_device(&frame, &stroke, 256);
+            self.fill_device(&frame, &stroke, None);
         }
         true
     }
@@ -1072,7 +1080,7 @@ fn shift_bilinear(image: &Pixmap, fx: f32, fy: f32) -> Pixmap {
     let src = image.data();
     let at = |x: i64, y: i64, c: usize| {
         let (x, y) = (x.clamp(0, w - 1), y.clamp(0, h - 1));
-        f32::from(src[((y * w + x) * 4) as usize + c])
+        f32::from(src[((y * w + x) * 4) as usize + c]) * (1.0 / 255.0)
     };
     let mut out = vec![0u8; (ow * oh * 4) as usize];
     for y in 0..oh {
@@ -1084,12 +1092,17 @@ fn shift_bilinear(image: &Pixmap, fx: f32, fy: f32) -> Pixmap {
             let x0 = u.floor();
             let tx = u - x0;
             let (x0, y0) = (x0 as i64, y0 as i64);
+            let taps = [
+                (x0, y0, (1.0 - tx) * (1.0 - ty)),
+                (x0 + 1, y0, tx * (1.0 - ty)),
+                (x0, y0 + 1, (1.0 - tx) * ty),
+                (x0 + 1, y0 + 1, tx * ty),
+            ];
             for c in 0..4 {
-                let top = at(x0, y0, c) * (1.0 - tx) + at(x0 + 1, y0, c) * tx;
-                let bottom = at(x0, y0 + 1, c) * (1.0 - tx) + at(x0 + 1, y0 + 1, c) * tx;
-                let value = top * (1.0 - ty) + bottom * ty;
-                out[((y * ow + x) * 4) as usize + c] =
-                    value.round_ties_even().clamp(0.0, 255.0) as u8;
+                let value = taps.iter().fold(0.0f32, |sum, &(sx, sy, weight)| {
+                    sum + at(sx, sy, c) * weight
+                });
+                out[((y * ow + x) * 4) as usize + c] = pixels::to_unorm(value);
             }
         }
     }
@@ -1120,17 +1133,29 @@ mod tests {
     }
 
     #[test]
-    fn one_pixel_line_on_a_pixel_edge_is_two_half_columns() {
+    fn one_pixel_line_on_a_pixel_edge_matches_chromium() {
         let mut c = Canvas2d::new(8, 8);
         c.begin_path();
         c.move_to(4.0, 0.0);
         c.line_to(4.0, 8.0);
         c.stroke();
         let row = alpha_row(&render(&c), 4);
-        assert_eq!(row[3], row[4], "{row:?}");
-        assert!((120..=140).contains(&row[3]), "{row:?}");
-        assert_eq!(row[2], 0);
-        assert_eq!(row[5], 0);
+        assert_eq!(row, [0, 0, 0, 127, 128, 0, 0, 0]);
+    }
+
+    #[test]
+    fn thin_strokes_are_modulated_hairlines() {
+        let mut c = Canvas2d::new(4, 8);
+        c.set_line_width(0.25);
+        c.begin_path();
+        c.move_to(2.0, 0.0);
+        c.line_to(2.0, 8.0);
+        c.stroke();
+        let row = alpha_row(&render(&c), 4);
+        assert_eq!((row[0], row[3]), (0, 0));
+        for chromium in [row[1], row[2]] {
+            assert!(chromium.abs_diff(31) <= 1, "{row:?}");
+        }
     }
 
     #[test]
