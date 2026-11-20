@@ -1791,20 +1791,50 @@ fn shade(bounds: [i32; 4], shader: Shader<'_>) -> Option<Pixmap> {
 }
 
 /// `SkGradientBaseShader::onAsLuminanceColor`, which text masks are gamma-corrected for: the
-/// plain average of the stop colours, including the stops Skia pads at 0 and 1.
+/// plain average of the stop colours Skia keeps, after Blink pads stops at 0 and 1 and Skia's
+/// constructor drops the inner stops of any run of three or more at one offset.
 fn gradient_luminance(stops: &[(f32, Rgba)]) -> [u8; 3] {
-    let mut colors: Vec<Rgba> = stops.iter().map(|s| s.1).collect();
-    if let (Some(first), Some(last)) = (stops.first(), stops.last()) {
-        if first.0 != 0.0 {
-            colors.insert(0, first.1);
-        }
-        if last.0 != 1.0 {
-            colors.push(last.1);
-        }
+    let mut padded: Vec<(f32, Rgba)> = Vec::with_capacity(stops.len() + 2);
+    if let Some(&(offset, color)) = stops.first()
+        && offset > 0.0
+    {
+        padded.push((0.0, color));
     }
+    padded.extend_from_slice(stops);
+    if let Some(&(offset, color)) = padded.last()
+        && offset < 1.0
+    {
+        padded.push((1.0, color));
+    }
+    let colors: Vec<Rgba> = if skia_uniform_stops(&padded) {
+        padded.iter().map(|s| s.1).collect()
+    } else {
+        padded
+            .chunk_by(|x, y| x.0 == y.0)
+            .flat_map(|run| {
+                let last = (run.len() > 1).then(|| run[run.len() - 1].1);
+                std::iter::once(run[0].1).chain(last)
+            })
+            .collect()
+    };
     let scale = 1.0 / colors.len().max(1) as f32;
     let sum = |f: fn(&Rgba) -> f32| colors.iter().map(f).fold(0.0f32, |a, b| a + b) * scale;
     [sum(|c| c.r), sum(|c| c.g), sum(|c| c.b)].map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8)
+}
+
+/// Skia's test for evenly spaced stops, which it keeps as implicit positions without removing
+/// duplicates.
+fn skia_uniform_stops(stops: &[(f32, Rgba)]) -> bool {
+    let Some(&(step, _)) = stops.get(1) else {
+        return true;
+    };
+    let mut prev = 0.0f32;
+    stops[1..].iter().all(|&(offset, _)| {
+        let curr = offset.clamp(prev, 1.0);
+        let uniform = (step - (curr - prev)).abs() <= 1.0 / 4096.0;
+        prev = curr;
+        uniform
+    })
 }
 
 fn sample_stops(stops: &[(f32, Rgba)], t: f32) -> Rgba {
@@ -1881,6 +1911,24 @@ fn shift_bilinear(image: &Pixmap, fx: f32, fy: f32) -> Pixmap {
 mod tests {
     use super::*;
     use crate::display::Canvas2d;
+
+    #[test]
+    fn gradient_luminance_drops_inner_stops_of_a_shared_offset() {
+        let dark = Rgba::from_u8(0x22, 0x22, 0x22, 1.0);
+        let white = Rgba::from_u8(255, 255, 255, 1.0);
+        let stops = |middle: &[Rgba]| {
+            let mut v = vec![(0.0, dark), (0.5, dark)];
+            v.extend(middle.iter().map(|&c| (0.5, c)));
+            v.extend([(0.5, dark), (1.0, dark)]);
+            v
+        };
+        assert_eq!(gradient_luminance(&stops(&[white, white])), [0x22; 3]);
+        assert_eq!(gradient_luminance(&[(0.5, dark), (0.5, white)]), [0x91; 3]);
+        assert_eq!(
+            gradient_luminance(&[(0.0, white), (0.5, dark), (1.0, dark)]),
+            [0x6c; 3]
+        );
+    }
 
     fn render(canvas: &Canvas2d) -> Pixmap {
         let mut raster = Raster::new(canvas.width, canvas.height).unwrap();

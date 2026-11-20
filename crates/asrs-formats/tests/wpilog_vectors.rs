@@ -120,3 +120,54 @@ record_vectors!(public, "wpilog/public", |record: &Record| {
     }
     Ok(())
 });
+
+record_vectors!(search_key_sets, "log/search", |record: &Record| {
+    let case = record.string("case").unwrap_or_default();
+    let Some(file) = record
+        .field("source")
+        .and_then(|s| s.get("file"))
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy())
+    else {
+        return Ok(());
+    };
+    let path = asrs_parity::cache::public_log(&file).map_err(|e| format!("{case}: {e}"))?;
+    let data = fs::read(&path).map_err(|e| format!("{case}: {}: {e}", path.display()))?;
+    let mut names = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut error = None;
+    asrs_formats::wpilog::WpilogDecoder::new(&data)
+        .for_each(|r, _| {
+            if !r.is_start() || error.is_some() {
+                return;
+            }
+            match r.start_data() {
+                Ok(start) => {
+                    if seen.insert(start.name.clone()) {
+                        names.push(start.name);
+                    }
+                }
+                Err(e) => error = Some(e),
+            }
+        })
+        .map_err(|e| format!("{case}: {e:?}"))?;
+    if let Some(e) = error {
+        return Err(format!("{case}: start record: {e:?}"));
+    }
+    let expected: Vec<Vec<u16>> = record
+        .field("in")
+        .and_then(Json::as_array)
+        .ok_or_else(|| format!("{case}: no key list"))?
+        .iter()
+        .map(|k| k.as_str().map(|s| s.units().to_vec()).unwrap_or_default())
+        .collect();
+    let actual: Vec<Vec<u16>> = names.iter().map(|n| n.units().to_vec()).collect();
+    if actual != expected {
+        return Err(format!(
+            "{case}: entry names differ ({} port, {} oracle)",
+            actual.len(),
+            expected.len()
+        ));
+    }
+    Ok(())
+});

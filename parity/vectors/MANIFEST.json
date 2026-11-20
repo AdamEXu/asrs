@@ -74,6 +74,7 @@
     "log/proto-matrix": {"cases":776,"content":"4a7c6f536aa595f6","generator":"a60664bd26da315a","spec":"parity/specs/log/proto-matrix.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-renderer": {"cases":8,"content":"2b67d7217af978f6","generator":"edbd492f573162c5","spec":"parity/specs/log/proto-renderer.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-replay": {"cases":151,"content":"8f2d2f840b03ea0b","generator":"bc72ff357e0fc350","spec":"parity/specs/log/proto-replay.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/search": {"cases":8086,"content":"9dfa0fe69d3a41bf","generator":"e69ee6306d79deac","spec":"parity/specs/log/search.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/struct": {"cases":5,"content":"5b842ffa1a277c13","generator":"aa5a032f740880f1","spec":"parity/specs/log/struct.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/struct-fuzz": {"cases":2369,"content":"31b82a923741b434","generator":"2ab77310f67d637d","spec":"parity/specs/log/struct-fuzz.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/struct-replay": {"cases":363,"content":"b247e6a9d54a9c8f","generator":"665f94ba93d6225f","spec":"parity/specs/log/struct-replay.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

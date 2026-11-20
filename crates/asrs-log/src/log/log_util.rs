@@ -1,9 +1,10 @@
-//! `shared/log/LogUtil.ts`, except the Fuse.js `searchFields` (that is unit L10).
+//! `shared/log/LogUtil.ts`.
 
 use asrs_js::json::quote_into;
 use asrs_js::number;
 use asrs_js::string::JsString;
 
+use super::fuse::Fuse;
 use super::log_value_sets::RawValue;
 use super::{Log, LogValue, LogValueSet, LogValueSetAny};
 
@@ -164,6 +165,21 @@ pub fn get_urcl_keys(log: &Log) -> Vec<JsString> {
                 .is_some_and(|t| t.units().starts_with(&prefix))
         })
         .cloned()
+        .collect()
+}
+
+/// `searchFields`: the field keys Fuse.js ranks for `query`, best first, at most
+/// [`MAX_SEARCH_RESULTS`].
+pub fn search_fields(log: &Log, query: &JsString) -> Vec<JsString> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let keys = log.get_field_keys();
+    Fuse::new(&keys)
+        .search(query)
+        .into_iter()
+        .take(MAX_SEARCH_RESULTS)
+        .map(|result| keys[result.ref_index].clone())
         .collect()
 }
 
