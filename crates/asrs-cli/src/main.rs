@@ -3,6 +3,7 @@
 mod fn_cmd;
 mod functions;
 mod js_color;
+mod js_json;
 mod js_math;
 mod js_string;
 mod js_time;
