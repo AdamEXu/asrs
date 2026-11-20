@@ -70,10 +70,20 @@ globalThis.removeEventListener = (type, fn) => {
   if (type === "message" && i >= 0) listeners.splice(i, 1);
 };
 globalThis.close = () => process.exit(0);
+const reportError = (error) => parentPort.postMessage({ __oracleWorkerError: String(error && error.stack || error) });
 const dispatch = (data) => {
   const event = { data, target: globalThis, currentTarget: globalThis };
-  if (typeof globalThis.onmessage === "function") globalThis.onmessage(event);
-  for (const fn of listeners.slice()) fn(event);
+  const handlers = typeof globalThis.onmessage === "function" ? [globalThis.onmessage] : [];
+  handlers.push(...listeners);
+  const settled = handlers.map((fn) => {
+    try {
+      return Promise.resolve(fn(event)).catch(reportError);
+    } catch (error) {
+      reportError(error);
+      return undefined;
+    }
+  });
+  Promise.all(settled).then(() => parentPort.postMessage({ __oracleDone: true }));
 };
 parentPort.on("message", (data) => (ready ? dispatch(data) : queued.push(data)));
 import(workerData.url).then(
@@ -84,25 +94,76 @@ import(workerData.url).then(
 
 type Listener = (event: any) => void;
 
+/**
+ * Takes over delivery of worker messages, so a harness can decide the order in which messages
+ * from several workers reach the main thread. Without a router each message is delivered when
+ * it arrives.
+ */
+export interface WorkerRouter {
+  created(worker: OracleWorker): void;
+  received(worker: OracleWorker, raw: unknown): void;
+}
+
+let workerRouter: WorkerRouter | null = null;
+
+export function setWorkerRouter(router: WorkerRouter | null): void {
+  workerRouter = router;
+}
+
 export class OracleWorker {
   onmessage: Listener | null = null;
   onerror: Listener | null = null;
   private listeners: { [type: string]: Listener[] } = {};
   private thread: ThreadWorker;
+  private pending = 0;
+  private sent = 0;
+  private terminated = false;
+  private exited = false;
+  readonly script: string;
 
   constructor(script: string | URL, _options?: { type?: string; name?: string }) {
+    this.script = resolveWorkerScript(script);
     this.thread = new ThreadWorker(WORKER_BOOTSTRAP, {
       eval: true,
-      workerData: { url: resolveWorkerScript(script) }
+      workerData: { url: this.script }
     });
-    this.thread.on("message", (data: any) => {
-      if (data !== null && typeof data === "object" && "__oracleWorkerError" in data) {
-        this.emit("error", { message: data.__oracleWorkerError, error: data.__oracleWorkerError });
-        return;
-      }
-      this.emit("message", { data, target: this, currentTarget: this });
-    });
+    const router = workerRouter;
+    this.thread.on("message", (raw: unknown) => (router ? router.received(this, raw) : this.deliver(raw)));
     this.thread.on("error", (error) => this.emit("error", { message: String(error), error }));
+    this.thread.on("exit", () => {
+      this.exited = true;
+      if (stoppingThreads.delete(this) && stoppingThreads.size === 0) {
+        exitWaiters.splice(0).forEach((resolve) => resolve());
+      }
+      if (router) router.received(this, EXITED);
+    });
+    router?.created(this);
+  }
+
+  /** True while a posted message is still being handled inside the worker. */
+  get busy(): boolean {
+    return this.pending > 0 && !this.terminated && !this.exited;
+  }
+
+  /** How many messages the page has posted to this worker. */
+  get posted(): number {
+    return this.sent;
+  }
+
+  /** Hands one raw thread message to the page side, as the browser would. */
+  deliver(raw: unknown): void {
+    if (raw === EXITED) return;
+    if (raw !== null && typeof raw === "object" && "__oracleDone" in raw) {
+      this.pending--;
+      return;
+    }
+    if (this.terminated) return;
+    if (raw !== null && typeof raw === "object" && "__oracleWorkerError" in raw) {
+      const message = (raw as any).__oracleWorkerError;
+      this.emit("error", { message, error: message });
+      return;
+    }
+    this.emit("message", { data: raw, target: this, currentTarget: this });
   }
 
   private emit(type: string, event: any) {
@@ -115,6 +176,9 @@ export class OracleWorker {
   }
 
   postMessage(data: unknown, transfer?: any): void {
+    if (this.terminated) return;
+    this.pending++;
+    this.sent++;
     this.thread.postMessage(data, Array.isArray(transfer) ? transfer : transfer?.transfer);
   }
 
@@ -128,8 +192,27 @@ export class OracleWorker {
   }
 
   terminate(): void {
+    if (this.terminated) return;
+    this.terminated = true;
+    if (!this.exited) stoppingThreads.add(this);
     void this.thread.terminate();
   }
 }
+
+const stoppingThreads = new Set<OracleWorker>();
+const exitWaiters: (() => void)[] = [];
+
+/**
+ * Resolves once every terminated worker thread has exited. Starting a worker while a terminated
+ * one is still being torn down can abort the process (Node asserts `!flush_tasks_` in
+ * `PerIsolatePlatformData`), so harnesses that create many workers wait here in between.
+ */
+export function terminatedWorkersExited(): Promise<void> {
+  if (stoppingThreads.size === 0) return Promise.resolve();
+  return new Promise((resolve) => exitWaiters.push(resolve));
+}
+
+/** Marker a router receives when a worker thread has exited. */
+export const EXITED = Symbol("oracle worker exited");
 
 g.Worker = OracleWorker;

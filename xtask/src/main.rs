@@ -3,6 +3,7 @@
 mod assets;
 mod check;
 mod corpus;
+mod historical;
 mod layout;
 mod oracle;
 mod parity;

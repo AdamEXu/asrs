@@ -37,6 +37,9 @@ symlink, otherwise `target/cache`): `npm/`, `electron/`, `emsdk/`.
 | `cargo xtask oracle selftest` | CVE-1 encoder/decoder self test |
 | `cargo xtask oracle smoke` | `smoke/fn-requests.jsonl` against `smoke/fn-expected.jsonl` |
 | `cargo xtask oracle env` | electron binary, upstream, dist and cache paths as JSON |
+| `cargo xtask oracle decode <file>` | canonical `Log` dump of one log file (below) |
+| `cargo xtask oracle export <file> --options <json> [--out <file>]` | exact export bytes for one `ExportOptions` |
+| `cargo xtask oracle historical [<corpus>...] [--check] [--jobs N]` | decode dumps and the export matrix over a synthetic corpus |
 
 The runtime is not pinned to a locale or time zone. The default locale on the dev machine is
 `en-US`; set `LC_ALL`/`TZ` on the command when a vector depends on them.
@@ -135,6 +138,12 @@ Imported first by every entry point: `window` and `self` alias `globalThis`;
 worker URLs resolve against `target/oracle/upstream/www`, so upstream's
 `new Worker("../bundles/csvWorker.js")` loads the bundle rolldown built.
 
+As in a browser, an exception or rejection in a worker's message handler becomes an `error` event
+on the `Worker` and the worker keeps running. After each handled message (once an async handler
+settles) the thread posts an internal done marker, which `OracleWorker` consumes; `busy` is true
+while a posted message is still being handled. `setWorkerRouter` lets a harness take over message
+delivery (`src/historical/scheduler.ts` does).
+
 ## Build constants
 
 `build.mjs` applies the same `__distribution__`, `__version__` and `__copyright__` replacements
@@ -197,3 +206,80 @@ over the generated A and B corpora for `--deep` runs. Output goes to `target/par
 `parity/corpus/public.toml` lists real logs by pinned URL, sha256 and size. `cargo xtask corpus fetch` downloads
 them into `$ASRS_CACHE/public-logs/`, rejects any file whose size or hash differs, and keeps verified files;
 `--offline` only verifies. The logs are never committed.
+
+## Historical decode and export
+
+`decode`, `export` and `historicalRun` (`src/historical/`) open a log the way the hub does: a real
+`HistoricalDataSource` from `src/hub/dataSources` on a fresh `Log`, the real worker bundles under the
+`Worker` shim, and `src/historical/mainProcess.ts` standing in for main's `historical-start` and
+`historical-start-raw` (a `.dslog` is read with its `.dsevents` sibling; a child log with a
+`hoot`, `revlog` or `wpilogxz` extension gets a failed conversion, since the oracle has no
+converter; such top-level files are refused).
+
+Nothing depends on thread timing:
+
+- Page timers are fake (`timers.ts`). Timeouts run only when the scheduler runs them, earliest due
+  first, then in scheduling order; the 50 ms field-request intervals fire only on an explicit tick.
+- `Scheduler` delivers worker messages one at a time. After microtasks it runs the next timeout if
+  there is one; otherwise it takes the oldest worker (creation order) that has an undelivered
+  message or is still busy, waits for that worker's next message and delivers it. It stops when no
+  timeout is queued and no worker is busy.
+
+Decode order:
+
+1. `openFile(log, path, "")`, then settle: the `initial` phase.
+2. Fire every source's interval once (no active tab or sidebar fields) and settle; repeat until a
+   round creates no worker and posts no message.
+3. `loadAllFields()` on the root and settle; repeat from step 2 until a whole pass does nothing.
+   Child sources (embedded `log:` fields) go through the same steps. This is the `full` phase.
+
+The dump is CVE-1 JSONL, written for `initial` and then for `full`:
+
+```text
+{"phase", "status", "loadingFields", "fieldCount"}         status: HistoricalDataSourceStatus name
+{"key", "type", "timestamps", "values", "structuredType", "wpilibType", "metadataString",
+ "stripingReference", "typeWarning"}                         one line per field, getFieldKeys() order
+{"generatedParents"}
+{"timestampRange", "timestampZero"}                          raw state; null before any data
+{"structSchemaStrings", "structSchemas"}
+{"protoDescriptors"}
+{"queuedStructs", "queuedStructArrays", "queuedProtos"}
+```
+
+`export` decodes like `decode` (through `full`), then runs the real `exportWorker` bundle through
+upstream's `WorkerManager` on `log.toSerialized()`, as `prepare-export` does, and writes what main's
+`write-export` would: a string as UTF-8 (lone surrogates become U+FFFD), bytes as they are. Exit
+status 3 means the worker rejected (the hub's "Failed to export data"); 4 means the run was
+skipped. Two option sets are skipped because upstream would never finish:
+
+- `fixed` sampling when `(range[1] - range[0]) / (samplingPeriod / 1000)` is not at most the
+  sample limit (100000 by default), or when adding the step to either end of the range leaves it
+  unchanged;
+- `mcap` with `fixed` or `akit` sampling when this bound exceeds 1048576 (the writer's chunk size):
+  2048, plus for every field whose type is Boolean, Number, String, BooleanArray or NumberArray,
+  64 plus the key's UTF-8 length, plus for each sample timestamp with a value at or before it,
+  31 plus the UTF-8 length of `JSON.stringify({ value })`. The sampled MCAP branch calls
+  `addMessage` without awaiting it, so once a chunk fills, every later message re-finalizes an
+  ever larger chunk.
+
+The port's `asrs-cli decode <file>` must print the same dump and `asrs-cli export <file> --options
+<json>` the same bytes, with the same skip rules, so `cargo xtask parity decode` and `export` can
+compare the two with `cmp`.
+
+`cargo xtask oracle historical` runs every log file of a synthetic corpus (extensions with a
+worker; a `.dsevents` only when it has no `.dslog` sibling) through `decode` and the export matrix
+of `parity/corpus/historical.spec.json` (formats x sampling modes x generated on/off x prefix
+sets), in parallel processes. Outputs land in `target/parity/oracle/<corpus>/<input>/` with an
+`index.jsonl` of every output's hash; `parity/corpus/synthetic/<corpus>.historical.json` commits
+one decode hash and one export-set hash per input. `--check` reruns into
+`target/parity/oracle/<corpus>.check` and fails unless every output is byte-identical.
+
+## Renderer check for protobuf int64
+
+`protoRenderer` (vector `log/proto-renderer`) decodes corpus A's `payload/proto/*` files with the
+real `bundles/wpilogWorker.js` twice: in a module web worker of a hidden Electron `BrowserWindow`
+with the hub's default web preferences (no Node in the page or the worker), and under the oracle
+shims. It fails unless both produce identical `initial` and `fields` messages, then records the
+renderer's. The finding: protobufjs 8.3.0 bundles `long`, so the real renderer decodes 64-bit
+fields as `Long` objects and `putUnknownStruct` expands them into `/low`, `/high` and `/unsigned`
+child fields, exactly as the shim does.
