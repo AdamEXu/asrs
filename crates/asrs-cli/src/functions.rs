@@ -99,6 +99,7 @@ pub(crate) fn to_number(value: &Value) -> Result<f64, Response> {
             return Err(type_error("Cannot convert a Symbol value to a number"));
         }
         Value::Array(_) => number::to_number(&to_units(value)?),
+        Value::Boxed(inner) => to_number(inner)?,
         _ => f64::NAN,
     })
 }
