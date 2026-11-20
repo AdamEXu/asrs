@@ -41,6 +41,12 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
     }),
     ("String.prototype.padEnd", |a| method(a, "padEnd", pad_end)),
     ("String.prototype.repeat", |a| method(a, "repeat", repeat)),
+    ("String.prototype.replace", |a| {
+        method(a, "replace", replace)
+    }),
+    ("String.prototype.replaceAll", |a| {
+        method(a, "replaceAll", replace_all)
+    }),
     ("String.prototype.trim", |a| {
         method(a, "trim", |s, _| ok(s.trim()))
     }),
@@ -291,6 +297,26 @@ fn split(s: &JsString, args: &[Value]) -> Response {
                 .map(|part| Value::String(Utf16String::from_units(part.into_units())))
                 .collect(),
         )),
+        (Err(r), _) | (_, Err(r)) => r,
+    }
+}
+
+fn replace(s: &JsString, args: &[Value]) -> Response {
+    match (str_arg(args, 0), str_arg(args, 1)) {
+        (Ok(search), Ok(replacement)) => match s.replace(&search, &replacement) {
+            Ok(v) => ok(v),
+            Err(e) => throw(e),
+        },
+        (Err(r), _) | (_, Err(r)) => r,
+    }
+}
+
+fn replace_all(s: &JsString, args: &[Value]) -> Response {
+    match (str_arg(args, 0), str_arg(args, 1)) {
+        (Ok(search), Ok(replacement)) => match s.replace_all(&search, &replacement) {
+            Ok(v) => ok(v),
+            Err(e) => throw(e),
+        },
         (Err(r), _) | (_, Err(r)) => r,
     }
 }

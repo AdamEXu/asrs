@@ -366,3 +366,43 @@
 {"fn":"oracle:textDecode","args":[{"b": "6869"},"BOGUS"]}
 {"fn":"oracle:textDecode","args":[{"b": "6869"}," Bogus "]}
 {"fn":"oracle:textDecode","args":[{"b": "6869"},"HZ-GB-2312"]}
+{"fn":"String.prototype.replace","args":["abc",""," - "]}
+{"fn":"String.prototype.replaceAll","args":["abc",""," - "]}
+{"fn":"String.prototype.replace","args":["abc","","-"]}
+{"fn":"String.prototype.replaceAll","args":["abc","","-"]}
+{"fn":"String.prototype.replace","args":["","","x"]}
+{"fn":"String.prototype.replaceAll","args":["","","x"]}
+{"fn":"String.prototype.replace","args":["","a","x"]}
+{"fn":"String.prototype.replaceAll","args":["","a","x"]}
+{"fn":"String.prototype.replace","args":["a,b,,c",",",";"]}
+{"fn":"String.prototype.replaceAll","args":["a,b,,c",",",";"]}
+{"fn":"String.prototype.replace","args":["aaaa","aa","b"]}
+{"fn":"String.prototype.replaceAll","args":["aaaa","aa","b"]}
+{"fn":"String.prototype.replace","args":["aaa","aa","b"]}
+{"fn":"String.prototype.replaceAll","args":["aaa","aa","b"]}
+{"fn":"String.prototype.replace","args":["a.b.c",".","$&$$$`$'$1$<x>$"]}
+{"fn":"String.prototype.replaceAll","args":["a.b.c",".","$&$$$`$'$1$<x>$"]}
+{"fn":"String.prototype.replace","args":["a.b",".","$"]}
+{"fn":"String.prototype.replaceAll","args":["a.b",".","$"]}
+{"fn":"String.prototype.replace","args":["a.b",".","$$$"]}
+{"fn":"String.prototype.replaceAll","args":["a.b",".","$$$"]}
+{"fn":"String.prototype.replace","args":["x<message> y<message> ","<message> ",""]}
+{"fn":"String.prototype.replaceAll","args":["x<message> y<message> ","<message> ",""]}
+{"fn":"String.prototype.replace","args":["\ud83d\ude00\ud83d\ude01","\ude00","!"]}
+{"fn":"String.prototype.replaceAll","args":["\ud83d\ude00\ud83d\ude01","\ude00","!"]}
+{"fn":"String.prototype.replace","args":["\ud83d\ude00","","|"]}
+{"fn":"String.prototype.replaceAll","args":["\ud83d\ude00","","|"]}
+{"fn":"String.prototype.replace","args":["ab","ab","[$`|$'|$&]"]}
+{"fn":"String.prototype.replaceAll","args":["ab","ab","[$`|$'|$&]"]}
+{"fn":"String.prototype.replace","args":["abab","b","$'"]}
+{"fn":"String.prototype.replaceAll","args":["abab","b","$'"]}
+{"fn":"String.prototype.replace","args":["Talon FX","  ",""]}
+{"fn":"String.prototype.replaceAll","args":["Talon FX","  ",""]}
+{"fn":"String.prototype.replace","args":["Talon FX"," ",""]}
+{"fn":"String.prototype.replaceAll","args":["Talon FX"," ",""]}
+{"fn":"String.prototype.replace","args":["1.2.3",".","_"]}
+{"fn":"String.prototype.replaceAll","args":["1.2.3",".","_"]}
+{"fn":"String.prototype.replace","args":["a\u00e9b","\u00e9","$\u00e9"]}
+{"fn":"String.prototype.replaceAll","args":["a\u00e9b","\u00e9","$\u00e9"]}
+{"fn":"String.prototype.replace","args":["abc","d","x"]}
+{"fn":"String.prototype.replaceAll","args":["abc","d","x"]}

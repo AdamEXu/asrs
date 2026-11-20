@@ -363,6 +363,87 @@ impl JsString {
         Ok(JsString::from_units(out))
     }
 
+    /// `String.prototype.replace(search, replacement)` with a string pattern: only the
+    /// first occurrence. `$$`, `$&`, `` $` `` and `$'` in `replacement` are expanded.
+    pub fn replace(&self, search: &JsString, replacement: &JsString) -> Result<JsString, JsError> {
+        let position = usize::try_from(self.index_of(search, None)).ok();
+        self.replace_at(search, replacement, position.into_iter())
+    }
+
+    /// `String.prototype.replaceAll(search, replacement)` with a string pattern. An
+    /// empty `search` matches before every code unit and at the end.
+    pub fn replace_all(
+        &self,
+        search: &JsString,
+        replacement: &JsString,
+    ) -> Result<JsString, JsError> {
+        let advance = search.0.len().max(1);
+        let mut positions = Vec::new();
+        let mut from = 0;
+        while from <= self.0.len() {
+            let Ok(p) = usize::try_from(self.index_of(search, Some(from as f64))) else {
+                break;
+            };
+            positions.push(p);
+            from = p + advance;
+        }
+        self.replace_at(search, replacement, positions.into_iter())
+    }
+
+    fn replace_at(
+        &self,
+        search: &JsString,
+        replacement: &JsString,
+        positions: impl Iterator<Item = usize>,
+    ) -> Result<JsString, JsError> {
+        let mut out = Vec::with_capacity(self.0.len());
+        let mut end_of_last = 0;
+        for p in positions {
+            out.extend_from_slice(&self.0[end_of_last..p]);
+            self.push_substitution(search.0.len(), p, &replacement.0, &mut out);
+            end_of_last = p + search.0.len();
+            if out.len() > MAX_STRING_LENGTH {
+                return Err(JsError::range("Invalid string length"));
+            }
+        }
+        out.extend_from_slice(&self.0[end_of_last..]);
+        if out.len() > MAX_STRING_LENGTH {
+            return Err(JsError::range("Invalid string length"));
+        }
+        Ok(JsString::from_units(out))
+    }
+
+    /// GetSubstitution for a string pattern: there are no captures, so `$1` and `$<`
+    /// stay literal.
+    fn push_substitution(
+        &self,
+        match_len: usize,
+        position: usize,
+        template: &[u16],
+        out: &mut Vec<u16>,
+    ) {
+        let mut i = 0;
+        while i < template.len() {
+            let unit = template[i];
+            i += 1;
+            if unit != u16::from(b'$') {
+                out.push(unit);
+                continue;
+            }
+            match template.get(i).and_then(|&n| u8::try_from(n).ok()) {
+                Some(b'$') => out.push(unit),
+                Some(b'&') => out.extend_from_slice(&self.0[position..position + match_len]),
+                Some(b'`') => out.extend_from_slice(&self.0[..position]),
+                Some(b'\'') => out.extend_from_slice(&self.0[position + match_len..]),
+                _ => {
+                    out.push(unit);
+                    continue;
+                }
+            }
+            i += 1;
+        }
+    }
+
     /// `String.prototype.trim` on the JS whitespace set.
     pub fn trim(&self) -> JsString {
         self.trim_start().trim_end()

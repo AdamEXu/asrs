@@ -35,9 +35,9 @@
       "spec": "parity/specs/jstring/case-data.entry.json"
     },
     "jstring/ops": {
-      "cases": 368,
-      "content": "9df76108529a1db2",
-      "generator": "034974eb90b2906c",
+      "cases": 408,
+      "content": "6fc7fdfcfc585eee",
+      "generator": "4a5d45c4ad1a723f",
       "spec": "parity/specs/jstring/ops.jsonl"
     },
     "jstring/utf8": {
