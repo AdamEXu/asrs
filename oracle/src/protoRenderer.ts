@@ -54,7 +54,7 @@ try {
     console.error(run.stderr);
     throw new Error(`Electron renderer run exited with ${run.status ?? run.signal}`);
   }
-  [pageEnvironment, ...renderer] = run.stdout.split("\n").filter((l) => l.length > 0);
+  [pageEnvironment, ...renderer] = run.stdout.split(/\r?\n/).filter((l) => l.length > 0);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }

@@ -28,6 +28,7 @@ struct Spec {
     path: PathBuf,
     kind: Kind,
     zones: Option<Vec<String>>,
+    platforms: Option<Vec<String>>,
 }
 
 impl Spec {
@@ -38,22 +39,25 @@ impl Spec {
         }
     }
 
-    /// One vector per zone; a spec without `zones` makes one UTC vector named after the spec.
+    /// One vector per zone or per platform; a spec with neither makes one UTC vector named
+    /// after the spec.
     fn vectors(&self) -> Vec<Vector<'_>> {
-        match &self.zones {
-            None => vec![Vector {
-                id: self.id.clone(),
-                zone: oracle::DEFAULT_ZONE.to_owned(),
-                spec: self,
-            }],
-            Some(zones) => zones
+        let one = |id: String, zone: &str, platform: Option<&String>| Vector {
+            id,
+            zone: zone.to_owned(),
+            platform: platform.cloned(),
+            spec: self,
+        };
+        match (&self.zones, &self.platforms) {
+            (Some(zones), _) => zones
                 .iter()
-                .map(|zone| Vector {
-                    id: format!("{}/{zone}", self.id),
-                    zone: zone.clone(),
-                    spec: self,
-                })
+                .map(|zone| one(format!("{}/{zone}", self.id), zone, None))
                 .collect(),
+            (None, Some(platforms)) => platforms
+                .iter()
+                .map(|p| one(format!("{}/{p}", self.id), oracle::DEFAULT_ZONE, Some(p)))
+                .collect(),
+            (None, None) => vec![one(self.id.clone(), oracle::DEFAULT_ZONE, None)],
         }
     }
 }
@@ -61,7 +65,18 @@ impl Spec {
 struct Vector<'a> {
     id: String,
     zone: String,
+    /// Set for a vector of a platform-dependent spec: only a host of that platform can
+    /// generate it or check its content.
+    platform: Option<String>,
     spec: &'a Spec,
+}
+
+impl Vector<'_> {
+    fn is_foreign(&self) -> bool {
+        self.platform
+            .as_ref()
+            .is_some_and(|p| *p != oracle::host_tag())
+    }
 }
 
 /// What the manifest must say about a vector for it to count as current.
@@ -71,6 +86,7 @@ struct Expected {
     generator: String,
     spec: String,
     zone: String,
+    platform: Option<String>,
     committed_content: Option<String>,
 }
 
@@ -111,6 +127,18 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     if selected.is_empty() {
         return Err("oracle gen: no specs under parity/specs".to_owned());
     }
+    if !check
+        && let Some(v) = selected
+            .iter()
+            .find(|v| v.is_foreign() && wanted.iter().any(|w| **w == v.id))
+    {
+        return Err(format!(
+            "oracle gen: {} can only be generated on {}; run `cargo xtask host <name> gen {}` from the dev machine",
+            v.id,
+            v.platform.as_deref().unwrap_or_default(),
+            v.id
+        ));
+    }
 
     let install = oracle::installed(paths)?;
     let current = Current {
@@ -141,6 +169,7 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
                 generator: generator.clone(),
                 spec: spec_rel(paths, vector.spec),
                 zone: vector.zone.clone(),
+                platform: vector.platform.clone(),
                 committed_content,
             });
         }
@@ -168,7 +197,26 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
 
     oracle::build_harness(paths)?;
     let mut failures = Vec::new();
+    let mut foreign_stale = Vec::new();
     for (vector, generator) in selected.iter().zip(&generators) {
+        if vector.is_foreign() {
+            let platform = vector.platform.as_deref().unwrap_or_default();
+            if check {
+                eprintln!("==> {}: content is checked on {platform} only", vector.id);
+            } else if manifest
+                .get("vectors")
+                .and_then(|v| v.get(&vector.id))
+                .and_then(|e| string_field(e, "generator"))
+                .as_deref()
+                != Some(generator.as_str())
+            {
+                foreign_stale.push(format!(
+                    "{} ({platform}): `cargo xtask host <name> gen {}`",
+                    vector.id, vector.id
+                ));
+            }
+            continue;
+        }
         eprintln!("==> {} ({})", vector.id, vector.zone);
         let text = run_vector(paths, vector)?;
         let cases = text.lines().count();
@@ -225,7 +273,14 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     if full {
         remove_orphans(&mut manifest, &vectors_dir, &all)?;
     }
-    write_manifest(&vectors_dir, &install, manifest)
+    write_manifest(&vectors_dir, &install, manifest)?;
+    if !foreign_stale.is_empty() {
+        eprintln!(
+            "warning: these platform vectors are stale and must be regenerated on their host:\n  {}",
+            foreign_stale.join("\n  ")
+        );
+    }
+    Ok(())
 }
 
 fn spec_rel(paths: &Paths, spec: &Spec) -> String {
@@ -243,6 +298,71 @@ fn generator_hash(oracle_hash: &str, vector: &Vector<'_>) -> Result<String> {
     }
     parts.push(vector.zone.clone());
     Ok(oracle::hash_bytes(parts.join(":").as_bytes()))
+}
+
+/// Copies the vectors a render host just generated for its own platform, with their manifest
+/// entries, into the local `parity/vectors`. `wanted` are the vector or spec ids passed to
+/// `gen` there; `fetch(id, dest)` copies one vector file from the host.
+pub(crate) fn import_platform_vectors(
+    paths: &Paths,
+    remote: &Json,
+    wanted: &[String],
+    os: &str,
+    mut fetch: impl FnMut(&str, &Path) -> Result,
+) -> Result {
+    let vectors_dir = paths.root.join("parity/vectors");
+    let mut manifest = read_manifest(&vectors_dir)?;
+    let install = oracle::installed(paths)?;
+    let current = Current {
+        commit: install.upstream_commit.clone(),
+        electron: oracle::ELECTRON_VERSION.to_owned(),
+        environment: oracle::environment_policy(),
+    };
+    let mismatched = header_mismatches(remote, &current);
+    if !mismatched.is_empty() {
+        return Err(format!(
+            "the host's manifest was generated under a different {}",
+            mismatched.join(", ")
+        ));
+    }
+    let Some(Json::Object(entries)) = remote.get("vectors") else {
+        return Err("the host's MANIFEST.json has no vectors".to_owned());
+    };
+    let prefix = format!("{os}-");
+    let mut imported = 0;
+    for (key, entry) in entries {
+        let id = key.to_string_lossy();
+        let requested = wanted
+            .iter()
+            .any(|w| id == *w || id.starts_with(&format!("{w}/")));
+        let on_host = string_field(entry, "generatedOn").is_some_and(|g| g.starts_with(&prefix));
+        if !requested || !on_host {
+            continue;
+        }
+        let dest = vectors_dir.join(format!("{id}.jsonl.zst"));
+        fs::create_dir_all(dest.parent().expect("vector path has a parent"))
+            .map_err(|e| e.to_string())?;
+        fetch(&id, &dest)?;
+        let text = vectors::read_text(&dest)?;
+        if Some(oracle::hash_bytes(text.as_bytes())) != string_field(entry, "content") {
+            return Err(format!(
+                "{id}: the copied file does not match the host's manifest"
+            ));
+        }
+        set_entry(&mut manifest, &id, entry.clone());
+        eprintln!(
+            "  imported {id} ({})",
+            string_field(entry, "generatedOn").unwrap_or_default()
+        );
+        imported += 1;
+    }
+    if imported == 0 {
+        return Err(format!(
+            "no vector generated on {os} matches {}",
+            wanted.join(" ")
+        ));
+    }
+    write_manifest(&vectors_dir, &install, manifest)
 }
 
 fn header_mismatches(manifest: &Json, current: &Current) -> Vec<String> {
@@ -313,6 +433,14 @@ fn stale_entries(
                 "{id}: recorded zone {:?} is not {:?}",
                 field("zone"),
                 want.zone
+            ));
+        }
+        if let Some(platform) = &want.platform
+            && field("generatedOn") != *platform
+        {
+            out.push(format!(
+                "{id}: generated on {:?}, but it is the vector for {platform:?}",
+                field("generatedOn")
             ));
         }
         match &want.committed_content {
@@ -394,9 +522,11 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 .map(|a| a.as_str().map(|s| s.to_string_lossy()))
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| format!("{}: \"args\" must be strings", path.display()))?;
+            let (zones, platforms) = variants(&path, &json)?;
             found.push(Spec {
                 id: id.to_owned(),
-                zones: zones(&path, &json)?,
+                zones,
+                platforms,
                 kind: Kind::Entry { entry, args },
                 path,
             });
@@ -413,9 +543,11 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                         path.display()
                     )
                 })?;
+            let (zones, platforms) = variants(&path, &json)?;
             found.push(Spec {
                 id: id.to_owned(),
-                zones: zones(&path, &json)?,
+                zones,
+                platforms,
                 kind: Kind::Fn {
                     requests: path.parent().expect("spec has a directory").join(requests),
                 },
@@ -425,6 +557,7 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
             found.push(Spec {
                 id: id.to_owned(),
                 zones: None,
+                platforms: None,
                 kind: Kind::Fn {
                     requests: path.clone(),
                 },
@@ -440,11 +573,39 @@ fn read_json(path: &Path) -> Result<Json> {
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn zones(path: &Path, spec: &Json) -> Result<Option<Vec<String>>> {
-    let Some(list) = spec.get("zones") else {
+type Variants = (Option<Vec<String>>, Option<Vec<String>>);
+
+fn variants(path: &Path, spec: &Json) -> Result<Variants> {
+    let zones = string_list(path, spec, "zones", oracle::check_zone)?;
+    let platforms = string_list(path, spec, "platforms", check_platform)?;
+    if zones.is_some() && platforms.is_some() {
+        return Err(format!(
+            "{}: \"zones\" and \"platforms\" cannot be combined",
+            path.display()
+        ));
+    }
+    Ok((zones, platforms))
+}
+
+fn check_platform(platform: &str) -> Result {
+    match platform.split_once('-') {
+        Some(("macos" | "windows" | "linux", "aarch64" | "x86_64")) => Ok(()),
+        _ => Err(format!(
+            "platform {platform:?} is not <macos|windows|linux>-<aarch64|x86_64>"
+        )),
+    }
+}
+
+fn string_list(
+    path: &Path,
+    spec: &Json,
+    key: &str,
+    check: impl Fn(&str) -> Result,
+) -> Result<Option<Vec<String>>> {
+    let Some(list) = spec.get(key) else {
         return Ok(None);
     };
-    let zones = list
+    let items = list
         .as_array()
         .filter(|l| !l.is_empty())
         .and_then(|l| {
@@ -454,17 +615,20 @@ fn zones(path: &Path, spec: &Json) -> Result<Option<Vec<String>>> {
         })
         .ok_or_else(|| {
             format!(
-                "{}: \"zones\" must be a non-empty list of strings",
+                "{}: \"{key}\" must be a non-empty list of strings",
                 path.display()
             )
         })?;
-    for (i, zone) in zones.iter().enumerate() {
-        oracle::check_zone(zone).map_err(|e| format!("{}: {e}", path.display()))?;
-        if zones[..i].contains(zone) {
-            return Err(format!("{}: zone {zone:?} is listed twice", path.display()));
+    for (i, item) in items.iter().enumerate() {
+        check(item).map_err(|e| format!("{}: {e}", path.display()))?;
+        if items[..i].contains(item) {
+            return Err(format!(
+                "{}: {key} entry {item:?} is listed twice",
+                path.display()
+            ));
         }
     }
-    Ok(Some(zones))
+    Ok(Some(items))
 }
 
 fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
@@ -617,6 +781,7 @@ mod tests {
             generator: generator.to_owned(),
             spec: "parity/specs/a/b.jsonl".to_owned(),
             zone: "UTC".to_owned(),
+            platform: None,
             committed_content: Some("h1".to_owned()),
         }
     }
@@ -660,5 +825,50 @@ mod tests {
         let mut other = expected("g1");
         other.id = "c".to_owned();
         assert_eq!(stale_entries(&m, &current(), &[other], false).len(), 1);
+    }
+
+    #[test]
+    fn platform_vector_from_another_host_is_stale() {
+        let mut m = manifest(oracle::environment_policy(), "g1");
+        let mut want = expected("g1");
+        want.platform = Some("windows-aarch64".to_owned());
+        let stale = stale_entries(&m, &current(), &[want], true);
+        assert!(
+            stale.iter().any(|s| s.contains("windows-aarch64")),
+            "{stale:?}"
+        );
+        if let Some(Json::Object(vectors)) = m.get("vectors").cloned() {
+            let mut entry = vectors[0].1.clone();
+            set_field(&mut entry, "generatedOn", Json::string("windows-aarch64"));
+            set_entry(&mut m, "a/b", entry);
+        }
+        let mut want = expected("g1");
+        want.platform = Some("windows-aarch64".to_owned());
+        assert!(stale_entries(&m, &current(), &[want], true).is_empty());
+    }
+
+    #[test]
+    fn platform_specs_make_one_vector_per_platform() {
+        let spec = Json::object([(
+            "platforms",
+            Json::Array(vec![
+                Json::string("macos-aarch64"),
+                Json::string("windows-aarch64"),
+            ]),
+        )]);
+        let (zones, platforms) = variants(Path::new("s.fn.json"), &spec).unwrap();
+        let spec = Spec {
+            id: "js/x".to_owned(),
+            path: PathBuf::from("s.fn.json"),
+            kind: Kind::Fn {
+                requests: PathBuf::from("s.requests.jsonl"),
+            },
+            zones,
+            platforms,
+        };
+        let ids: Vec<String> = spec.vectors().into_iter().map(|v| v.id).collect();
+        assert_eq!(ids, ["js/x/macos-aarch64", "js/x/windows-aarch64"]);
+        let bad = Json::object([("platforms", Json::Array(vec![Json::string("beos-ppc")]))]);
+        assert!(variants(Path::new("s.fn.json"), &bad).is_err());
     }
 }

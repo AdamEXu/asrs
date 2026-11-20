@@ -1,0 +1,27 @@
+[package]
+name = "x02-shell"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+gpui-kit = { version = "=0.10.0", default-features = false, features = ["component"] }
+gpui-pre = { version = "=0.3.12", features = ["test-support"] }
+gpui-pre-platform = { version = "=0.3.12", features = ["test-support"] }
+image = "0.25"
+anyhow = "1"
+raw-window-handle = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+debug = 1

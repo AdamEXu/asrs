@@ -180,6 +180,16 @@ impl Canvas2d {
         }
     }
 
+    /// `measureText` under the `font`, `textAlign` and `textBaseline` the list has set so far.
+    pub fn measure_text(
+        &self,
+        backend: &mut dyn crate::text::TextBackend,
+        text: &str,
+    ) -> crate::text::TextMetrics {
+        let (font, align, baseline) = crate::text::text_state(&self.calls);
+        crate::text::measure_text(backend, &font, &align, &baseline, text)
+    }
+
     pub fn push(&mut self, call: Call) {
         self.calls.push(call);
     }
