@@ -273,6 +273,7 @@ impl CoreText {
         primary: u32,
         word: &str,
         origin: f32,
+        start: u32,
         out: &mut Vec<ShapedGlyph>,
     ) -> f32 {
         let font = self.faces[primary as usize].font.clone();
@@ -287,6 +288,7 @@ impl CoreText {
             let run_font = run_font(&run).unwrap_or_else(|| font.clone());
             let ids = run.glyphs();
             let positions = run.positions();
+            let indices = run.string_indices();
             let Some(first) = positions.first() else {
                 continue;
             };
@@ -312,6 +314,7 @@ impl CoreText {
                         id: u32::from(id),
                     },
                     x: origin + pen,
+                    cluster: start + indices.get(i).map_or(0, |&k| k as u32),
                 });
                 let next = positions.get(i + 1).map_or(run_end, |q| q.x);
                 let raw = advances[i].width;
@@ -360,8 +363,10 @@ impl TextBackend for CoreText {
         let primary = self.primary(spec);
         let mut glyphs = Vec::new();
         let mut width = 0.0f32;
+        let mut start = 0;
         for word in words(text) {
-            width += self.shape_word(spec, primary, word, width, &mut glyphs);
+            width += self.shape_word(spec, primary, word, width, start, &mut glyphs);
+            start += word.encode_utf16().count() as u32;
         }
         Shaped { glyphs, width }
     }
@@ -371,6 +376,7 @@ impl TextBackend for CoreText {
             return FontMetrics {
                 ascent: 0.0,
                 descent: 0.0,
+                line_gap: 0.0,
                 typo: None,
             };
         }
@@ -393,6 +399,7 @@ impl TextBackend for CoreText {
         FontMetrics {
             ascent,
             descent,
+            line_gap: round(font.leading() as f32),
             typo,
         }
     }
