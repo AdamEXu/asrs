@@ -478,6 +478,7 @@ fn stamped(
     }
     let _ = fs::remove_file(&stamp);
     action()?;
+    fs::create_dir_all(&paths.stamps).map_err(|e| format!("{}: {e}", paths.stamps.display()))?;
     fs::write(&stamp, inputs).map_err(|e| format!("{}: {e}", stamp.display()))
 }
 
