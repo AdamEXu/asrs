@@ -126,9 +126,8 @@ fn main() -> ExitCode {
     }
     rss.push(rss_mb());
 
-    let warm = rss.len().min(5);
-    let baseline = rss[warm - 1];
-    let peak = rss[warm..].iter().copied().fold(baseline, f64::max);
+    let baseline = rss[0];
+    let peak = rss.iter().copied().fold(baseline, f64::max);
     let last = *rss.last().expect("samples");
     let p50 = percentile(&present, 0.5);
     let p95 = percentile(&present, 0.95);
@@ -146,10 +145,7 @@ fn main() -> ExitCode {
     println!(
         "present (convert, replace, paint, atlas upload, draw): p50 {p50:.3} ms, p95 {p95:.3} ms"
     );
-    println!(
-        "rss: first {:.1} MB, after warm-up {baseline:.1} MB, peak {peak:.1} MB, last {last:.1} MB",
-        rss[0]
-    );
+    println!("rss: after the first frame {baseline:.1} MB, peak {peak:.1} MB, last {last:.1} MB");
     let mut ok = true;
     if p95 >= PRESENT_P95_MS {
         println!("FAIL: present p95 {p95:.3} ms is not under {PRESENT_P95_MS} ms");
@@ -157,7 +153,7 @@ fn main() -> ExitCode {
     }
     if peak - baseline > RSS_GROWTH_MB {
         println!(
-            "FAIL: rss grew {:.1} MB after warm-up (limit {RSS_GROWTH_MB})",
+            "FAIL: rss grew {:.1} MB after the first frame (limit {RSS_GROWTH_MB})",
             peak - baseline
         );
         ok = false;
