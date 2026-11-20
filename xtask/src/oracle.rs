@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use asrs_parity::json::{self, Json};
 
-use crate::{Result, pack, vectors, workspace_root};
+use crate::{Result, canvas, historical, pack, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 pub(crate) const EMSDK_VERSION: &str = "4.0.12";
@@ -43,8 +43,18 @@ commands:
   fn [--zone <zone>] [args]
                       run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)
+  decode <file>       canonical Log dump of one log file, after the initial load and after
+                      every field is loaded (real HistoricalDataSource and worker bundles)
+  export <file> --options <json> [--out <file>]
+                      exact bytes the real export worker produces for one ExportOptions
+  historical [<corpus>...] [--check] [--jobs N]
+                      decode dumps and the export matrix over the synthetic corpora
+                      (`cargo xtask oracle historical --help`)
   run [--zone <zone>] <entry> [args]
                       run target/oracle/dist/<entry>.mjs under the oracle runtime
+  canvas [<scene>...] Chromium canvas references (same as `cargo xtask canvas ref`)
+  canvas-lut [--check]
+                      mask-gamma LUT for this platform (same as `cargo xtask canvas lut`)
   selftest            CVE-1 encoder and decoder self test
   smoke               run oracle/smoke/fn-requests.jsonl and compare with fn-expected.jsonl
   env                 print the oracle paths and the environment policy as JSON
@@ -66,7 +76,13 @@ pub(crate) const ZONES: &[&str] = &[
 const POSIX_LOCALE: &str = "en_US.UTF-8";
 const APP_SWITCHES: &[&str] = &["--lang=en-US"];
 const ZONE_VARIABLE: &str = "ASRS_ORACLE_ZONE";
-const CLEARED_VARIABLES: &[&str] = &["LANGUAGE", "NODE_OPTIONS", "NODE_ICU_DATA"];
+const CLEARED_VARIABLES: &[&str] = &[
+    "LANGUAGE",
+    "NODE_OPTIONS",
+    "NODE_ICU_DATA",
+    "ICU_DATA",
+    "ICU_TIMEZONE_FILES_DIR",
+];
 
 pub(crate) fn environment_policy() -> Json {
     Json::object([
@@ -116,7 +132,7 @@ pub(crate) struct Paths {
     pub(crate) oracle_src: PathBuf,
     pub(crate) upstream: PathBuf,
     harness: PathBuf,
-    dist: PathBuf,
+    pub(crate) dist: PathBuf,
     stamps: PathBuf,
     pub(crate) cache: PathBuf,
     pub(crate) out: PathBuf,
@@ -155,7 +171,7 @@ impl Paths {
         self.cache.join("emsdk")
     }
 
-    fn electron(&self) -> Result<PathBuf> {
+    pub(crate) fn electron(&self) -> Result<PathBuf> {
         let package = self.upstream.join("node_modules/electron");
         let rel = fs::read_to_string(package.join("path.txt")).map_err(|_| {
             "Electron binary is not installed; run `cargo xtask oracle setup`".to_owned()
@@ -176,6 +192,12 @@ pub fn run(args: &[String]) -> Result {
             let (zone, rest) = zone_option(rest)?;
             run_entry(&paths, "fn", zone, rest)
         }
+        Some("decode") => run_entry(&paths, "decode", DEFAULT_ZONE, rest),
+        Some("export") => run_entry(&paths, "export", DEFAULT_ZONE, rest),
+        Some("historical") if rest.iter().any(|a| a == "--help") => {
+            Err(historical::USAGE.to_owned())
+        }
+        Some("historical") => historical::run(&paths, rest),
         Some("run") => {
             let (zone, rest) = zone_option(rest)?;
             match rest.split_first() {
@@ -183,6 +205,8 @@ pub fn run(args: &[String]) -> Result {
                 None => Err(USAGE.to_owned()),
             }
         }
+        Some("canvas") => canvas::reference(&paths, &canvas::reference_dir(&paths), rest),
+        Some("canvas-lut") => canvas::lut(&paths, rest.iter().any(|a| a == "--check")),
         Some("selftest") => run_entry(&paths, "selftest", DEFAULT_ZONE, &[]),
         Some("smoke") => smoke(&paths),
         Some("env") => print_env(&paths),
@@ -478,6 +502,7 @@ fn stamped(
     }
     let _ = fs::remove_file(&stamp);
     action()?;
+    fs::create_dir_all(&paths.stamps).map_err(|e| format!("{}: {e}", paths.stamps.display()))?;
     fs::write(&stamp, inputs).map_err(|e| format!("{}: {e}", stamp.display()))
 }
 

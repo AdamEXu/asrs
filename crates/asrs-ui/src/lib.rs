@@ -8,6 +8,9 @@ pub mod gpui {
     };
 }
 
+#[cfg(feature = "parity")]
+pub mod capture;
+
 use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};
 
 pub fn init(cx: &mut App) {

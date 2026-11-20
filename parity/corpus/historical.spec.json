@@ -1,0 +1,11 @@
+{
+  "entry": "historicalRun",
+  "export": {
+    "formats": ["csv-table", "csv-list", "wpilog", "mcap"],
+    "samplingModes": ["changes", "fixed", "akit"],
+    "samplingPeriod": 20,
+    "includeGenerated": [true, false],
+    "prefixes": ["", "Types/1,/PROTO, /Encoder,/.schema/,Missing,Encoder//boolean"],
+    "fixedSampleLimit": 100000
+  }
+}

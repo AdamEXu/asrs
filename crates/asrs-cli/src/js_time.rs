@@ -42,6 +42,11 @@ pub fn with_rng<T>(rng: Box<dyn Rng>, f: impl FnOnce() -> T) -> T {
     })
 }
 
+/// Runs `f` on the ambient `Math.random` stream.
+pub fn with_ambient_rng<T>(f: impl FnOnce(&mut dyn Rng) -> T) -> T {
+    RNG.with(|r| f(&mut **r.borrow_mut()))
+}
+
 /// Runs `f` with `clock` as the ambient `Date.now()`.
 #[allow(dead_code)]
 pub fn with_clock<T>(clock: Box<dyn Clock>, f: impl FnOnce() -> T) -> T {
@@ -241,10 +246,7 @@ fn format_time_fn(args: &[Value]) -> Response {
 }
 
 fn create_uuid_fn(_args: &[Value]) -> Response {
-    RNG.with(|r| {
-        let mut rng = r.borrow_mut();
-        ok_string(time::create_uuid(&mut **rng))
-    })
+    with_ambient_rng(|rng| ok_string(time::create_uuid(rng)))
 }
 
 fn ok_date(t: f64) -> Response {

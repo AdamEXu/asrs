@@ -8,7 +8,7 @@ use std::fmt;
 
 use crate::number;
 use crate::string::JsString;
-use crate::value::JsValue;
+use crate::value::{JsObject, JsValue};
 
 pub use iso_date::to_iso_string;
 pub use parse::{parse, parse_str, parse_units};
@@ -169,6 +169,14 @@ impl Writer<'_> {
                     self.out.push_str("null")
                 }
             }
+            JsValue::ExtData(..) => {
+                let object = ext_data_object(value);
+                self.object(
+                    object
+                        .iter()
+                        .map(|(k, v)| (k.units(), MemberValue::Value(v))),
+                )?;
+            }
         }
         Ok(true)
     }
@@ -265,4 +273,15 @@ impl Writer<'_> {
 enum MemberValue<'v> {
     Value(&'v JsValue),
     Number(f64),
+}
+
+/// The `{type, data}` own enumerable properties `JSON.stringify` sees on an `ExtData`.
+fn ext_data_object(value: &JsValue) -> JsObject {
+    let JsValue::ExtData(kind, data) = value else {
+        return JsObject::new();
+    };
+    let mut object = JsObject::new();
+    object.insert("type", JsValue::Number(f64::from(*kind)));
+    object.insert("data", JsValue::Bytes(data.clone()));
+    object
 }

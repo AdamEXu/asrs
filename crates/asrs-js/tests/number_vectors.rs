@@ -22,6 +22,10 @@ mod js_string;
 #[allow(dead_code)]
 mod js_time;
 
+mod js_msgpack {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use asrs_parity::{FnCase, Response, fn_vectors};
 
 fn dispatch(case: &FnCase<'_>) -> Response {
