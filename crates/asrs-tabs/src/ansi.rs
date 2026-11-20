@@ -107,6 +107,33 @@ pub struct AnsiStyle {
     pub underline: bool,
 }
 
+impl AnsiStyle {
+    /// The inline `style` attribute ansi_up writes for this rendition, or `None` for plain
+    /// text, which it emits without a `<span>`.
+    pub fn css(&self) -> Option<String> {
+        let mut parts: Vec<String> = Vec::new();
+        if self.bold {
+            parts.push("font-weight:bold".into());
+        }
+        if self.faint {
+            parts.push("opacity:0.7".into());
+        }
+        if self.italic {
+            parts.push("font-style:italic".into());
+        }
+        if self.underline {
+            parts.push("text-decoration:underline".into());
+        }
+        if let Some(Rgb(r, g, b)) = self.fg {
+            parts.push(format!("color:rgb({r},{g},{b})"));
+        }
+        if let Some(Rgb(r, g, b)) = self.bg {
+            parts.push(format!("background-color:rgb({r},{g},{b})"));
+        }
+        (!parts.is_empty()).then(|| parts.join(";"))
+    }
+}
+
 /// One output block of `ansi_to_html`: styled text, or an OSC 8 hyperlink. ansi_up drops
 /// hyperlinks whose scheme its allowlist rejects instead of emitting a block.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -214,8 +241,7 @@ impl AnsiUp {
         };
         if pos > 0 {
             pkt.kind = PacketKind::Text;
-            pkt.text = self.buffer[..pos].to_vec();
-            self.buffer = self.buffer[pos..].to_vec();
+            pkt.text = self.buffer.drain(..pos).collect();
             return pkt;
         }
         if len < 3 {
@@ -228,8 +254,7 @@ impl AnsiUp {
             && next_char != u16::from(b'(')
         {
             pkt.kind = PacketKind::Esc;
-            pkt.text = self.buffer[..1].to_vec();
-            self.buffer = self.buffer[1..].to_vec();
+            pkt.text = self.buffer.drain(..1).collect();
             return pkt;
         }
         if next_char == u16::from(b'[') {
@@ -239,8 +264,7 @@ impl AnsiUp {
             };
             if m.range(4).is_some() {
                 pkt.kind = PacketKind::Esc;
-                pkt.text = self.buffer[..1].to_vec();
-                self.buffer = self.buffer[1..].to_vec();
+                pkt.text = self.buffer.drain(..1).collect();
                 return pkt;
             }
             let private_mode = m.range(1).is_some_and(|(s, e)| e > s);
@@ -255,7 +279,7 @@ impl AnsiUp {
             if let Some((s, e)) = m.range(2) {
                 pkt.text = self.buffer[s..e].to_vec();
             }
-            self.buffer = self.buffer[m.end()..].to_vec();
+            self.buffer.drain(..m.end());
             pkt
         } else if next_char == u16::from(b']') {
             if len < 4 {
@@ -264,8 +288,7 @@ impl AnsiUp {
             }
             if self.buffer[2] != u16::from(b'8') || self.buffer[3] != u16::from(b';') {
                 pkt.kind = PacketKind::Esc;
-                pkt.text = self.buffer[..1].to_vec();
-                self.buffer = self.buffer[1..].to_vec();
+                pkt.text = self.buffer.drain(..1).collect();
                 return pkt;
             }
             let mut last_index = 0;
@@ -276,15 +299,13 @@ impl AnsiUp {
                 };
                 if m.range(3).is_some() {
                     pkt.kind = PacketKind::Esc;
-                    pkt.text = self.buffer[..1].to_vec();
-                    self.buffer = self.buffer[1..].to_vec();
+                    pkt.text = self.buffer.drain(..1).collect();
                     return pkt;
                 }
             }
             let Some(m) = OSC.exec(&self.buffer, &mut 0) else {
                 pkt.kind = PacketKind::Esc;
-                pkt.text = self.buffer[..1].to_vec();
-                self.buffer = self.buffer[1..].to_vec();
+                pkt.text = self.buffer.drain(..1).collect();
                 return pkt;
             };
             pkt.kind = PacketKind::OscUrl;
@@ -294,11 +315,11 @@ impl AnsiUp {
             if let Some((s, e)) = m.range(2) {
                 pkt.text = self.buffer[s..e].to_vec();
             }
-            self.buffer = self.buffer[m.end()..].to_vec();
+            self.buffer.drain(..m.end());
             pkt
         } else {
             pkt.kind = PacketKind::Unknown;
-            self.buffer = self.buffer[3..].to_vec();
+            self.buffer.drain(..3);
             pkt
         }
     }
@@ -442,46 +463,14 @@ pub fn blocks_to_html(blocks: &[AnsiBlock]) -> JsString {
                 if text.is_empty() {
                     continue;
                 }
-                let mut escaped = Vec::with_capacity(text.len());
-                escape(text.units(), &mut escaped);
-                let styled = style.bold
-                    || style.faint
-                    || style.italic
-                    || style.underline
-                    || style.fg.is_some()
-                    || style.bg.is_some();
-                if !styled {
-                    out.extend_from_slice(&escaped);
+                let Some(css) = style.css() else {
+                    escape(text.units(), &mut out);
                     continue;
-                }
-                let mut styles: Vec<Vec<u16>> = Vec::new();
-                if style.bold {
-                    styles.push(units("font-weight:bold"));
-                }
-                if style.faint {
-                    styles.push(units("opacity:0.7"));
-                }
-                if style.italic {
-                    styles.push(units("font-style:italic"));
-                }
-                if style.underline {
-                    styles.push(units("text-decoration:underline"));
-                }
-                if let Some(Rgb(r, g, b)) = style.fg {
-                    styles.push(units(&format!("color:rgb({r},{g},{b})")));
-                }
-                if let Some(Rgb(r, g, b)) = style.bg {
-                    styles.push(units(&format!("background-color:rgb({r},{g},{b})")));
-                }
+                };
                 out.extend("<span style=\"".encode_utf16());
-                for (i, part) in styles.iter().enumerate() {
-                    if i > 0 {
-                        out.push(u16::from(b';'));
-                    }
-                    out.extend_from_slice(part);
-                }
+                out.extend(css.encode_utf16());
                 out.extend("\">".encode_utf16());
-                out.extend_from_slice(&escaped);
+                escape(text.units(), &mut out);
                 out.extend("</span>".encode_utf16());
             }
             AnsiBlock::Link { url, text } => {
