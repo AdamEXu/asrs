@@ -77,6 +77,8 @@
     "regex/engine": {"cases":30000,"content":"e40a050ba624ab32","generator":"65f65355c900232d","spec":"parity/specs/regex/engine.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "regex/sites": {"cases":29428,"content":"094e81eb7469edfa","generator":"a9ad53bdb1fb3c40","spec":"parity/specs/regex/sites.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "spark/2025": {"cases":101233,"content":"1e1e04e36553bdd4","generator":"89696499ede0de77","spec":"parity/specs/spark/2025.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "spark/2026": {"cases":101387,"content":"63d71ee55046d700","generator":"26bac087029d339c","spec":"parity/specs/spark/2026.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
+    "spark/2026": {"cases":101387,"content":"63d71ee55046d700","generator":"26bac087029d339c","spec":"parity/specs/spark/2026.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "wpilog/corpus": {"cases":222,"content":"1893bd0e04348bcb","generator":"6eb7127d2386f1cc","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "wpilog/public": {"cases":5,"content":"3a0c9961a122df71","generator":"e8c73b5138a3d622","spec":"parity/specs/wpilog/public.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }
 }
