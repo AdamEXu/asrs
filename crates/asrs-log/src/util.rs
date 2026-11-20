@@ -289,6 +289,6 @@ pub fn get_spiral_index(x: f64, y: f64) -> f64 {
         let off2 = start2[0] - (-a);
         let off3 = a - y;
         let off4 = x - (-a);
-        interior_count + off1 + off2 + off3 + off4
+        off1 + off2 + off3 + off4 + interior_count
     }
 }

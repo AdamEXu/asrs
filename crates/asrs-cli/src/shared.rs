@@ -100,35 +100,45 @@ fn zone() -> NamedZone {
         .unwrap_or_else(NamedZone::system)
 }
 
-/// `.length` on a value: arrays, typed arrays, strings and byte buffers have
-/// one; objects may carry it as an own property; everything else is
-/// `undefined`.
-fn length_prop(v: &Value) -> Value {
-    match v {
+fn cannot_read(v: &Value, key: &str) -> Response {
+    let what = match v {
+        Value::Null => "null",
+        _ => "undefined",
+    };
+    type_error(format!(
+        "Cannot read properties of {what} (reading '{key}')"
+    ))
+}
+
+/// `.length` on a value: arrays, typed arrays and strings have one; objects
+/// may carry it as an own property; everything else is `undefined`.
+fn length_prop(v: &Value) -> Result<Value, Response> {
+    Ok(match v {
+        Value::Null | Value::Undefined => return Err(cannot_read(v, "length")),
         Value::Array(items) | Value::TypedArray(_, items) => Value::number(items.len() as f64),
-        Value::Bytes(b) | Value::ArrayBuffer(b) | Value::DataView(b) => {
-            Value::number(b.len() as f64)
-        }
+        Value::Bytes(b) => Value::number(b.len() as f64),
         Value::String(s) => Value::number(s.units().len() as f64),
         Value::Object(_) | Value::Instance(..) => {
             v.get("length").cloned().unwrap_or(Value::Undefined)
         }
         _ => Value::Undefined,
-    }
+    })
 }
 
 /// `.size`: only `Map` and `Set` have it.
-fn size_prop(v: &Value) -> Value {
-    match v {
+fn size_prop(v: &Value) -> Result<Value, Response> {
+    Ok(match v {
+        Value::Null | Value::Undefined => return Err(cannot_read(v, "size")),
         Value::Set(items) => Value::number(items.len() as f64),
         Value::Map(items) => Value::number(items.len() as f64),
         _ => Value::Undefined,
-    }
+    })
 }
 
 /// `.byteLength`.
-fn byte_length(v: &Value) -> Value {
-    match v {
+fn byte_length(v: &Value) -> Result<Value, Response> {
+    Ok(match v {
+        Value::Null | Value::Undefined => return Err(cannot_read(v, "byteLength")),
         Value::Bytes(b) | Value::ArrayBuffer(b) | Value::DataView(b) => {
             Value::number(b.len() as f64)
         }
@@ -142,7 +152,7 @@ fn byte_length(v: &Value) -> Value {
             Value::number(items.len() as f64 * width)
         }
         _ => Value::Undefined,
-    }
+    })
 }
 
 /// The property key `ToPropertyKey(v)` produces for reads on plain
@@ -168,14 +178,17 @@ fn prop_key(v: &Value) -> Vec<u16> {
 
 /// `container[name]` for the containers this harness models: arrays (and
 /// typed arrays) by canonical index, strings by index, objects by name.
-fn get_prop(container: &Value, name: &[u16]) -> Value {
+fn get_prop(container: &Value, name: &[u16]) -> Result<Value, Response> {
     let at_index = |len: usize, f: &dyn Fn(usize) -> Value| -> Value {
         match array_index(name) {
             Some(i) if (i as usize) < len => f(i as usize),
             _ => Value::Undefined,
         }
     };
-    match container {
+    Ok(match container {
+        Value::Null | Value::Undefined => {
+            return Err(cannot_read(container, &String::from_utf16_lossy(name)));
+        }
         Value::Array(items) => at_index(items.len(), &|i| match &items[i] {
             Value::Hole => Value::Undefined,
             v => v.clone(),
@@ -191,11 +204,11 @@ fn get_prop(container: &Value, name: &[u16]) -> Value {
             .map(|(_, v)| v.clone())
             .unwrap_or(Value::Undefined),
         _ => Value::Undefined,
-    }
+    })
 }
 
 /// `container[i]` where `i` is already a JS number.
-fn get_prop_num(container: &Value, i: f64) -> Value {
+fn get_prop_num(container: &Value, i: f64) -> Result<Value, Response> {
     get_prop(
         container,
         &number::to_string(i).encode_utf16().collect::<Vec<u16>>(),
@@ -399,17 +412,22 @@ fn js_add(a: &Value, b: &Value) -> Result<Value, Response> {
 fn arrays_equal_fn(args: &[Value]) -> Response {
     let a = arg(args, 0);
     let b = arg(args, 1);
-    if !strict_equal(&length_prop(&a), &length_prop(&b)) {
+    let (la, lb) = match (length_prop(&a), length_prop(&b)) {
+        (Ok(x), Ok(y)) => (x, y),
+        (Err(r), _) | (_, Err(r)) => return r,
+    };
+    if !strict_equal(&la, &lb) {
         return Response::Ok(Value::Bool(false));
     }
     let items: &[Value] = match &a {
         Value::Array(items) | Value::TypedArray(_, items) => items,
         Value::Bytes(bytes) => {
             for (i, byte) in bytes.iter().enumerate() {
-                if !strict_equal(
-                    &Value::number(f64::from(*byte)),
-                    &get_prop_num(&b, i as f64),
-                ) {
+                let other = match get_prop_num(&b, i as f64) {
+                    Ok(v) => v,
+                    Err(r) => return r,
+                };
+                if !strict_equal(&Value::number(f64::from(*byte)), &other) {
                     return Response::Ok(Value::Bool(false));
                 }
             }
@@ -421,7 +439,11 @@ fn arrays_equal_fn(args: &[Value]) -> Response {
         if matches!(item, Value::Hole) {
             continue;
         }
-        if !strict_equal(item, &get_prop_num(&b, i as f64)) {
+        let other = match get_prop_num(&b, i as f64) {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+        if !strict_equal(item, &other) {
             return Response::Ok(Value::Bool(false));
         }
     }
@@ -457,6 +479,11 @@ fn bound_fn(args: &[Value], kind: Bound) -> Response {
         };
         return ok_number(result);
     }
+    let start = if matches!(start, Value::Undefined) {
+        Value::number(0.0)
+    } else {
+        start
+    };
     match generic_bound(&array, &target, &start, kind) {
         Ok(v) => Response::Ok(v),
         Err(r) => r,
@@ -469,7 +496,7 @@ fn generic_bound(
     start: &Value,
     kind: Bound,
 ) -> Result<Value, Response> {
-    let length = length_prop(array);
+    let length = length_prop(array)?;
     if strict_equal(&length, &Value::number(0.0)) {
         return Ok(length);
     }
@@ -481,16 +508,16 @@ fn generic_bound(
         return Ok(length);
     }
     let length_n = to_number(&length)?;
-    if !rel_cmp(&get_prop_num(array, length_n - 1.0), target, direction)? {
+    if !rel_cmp(&get_prop_num(array, length_n - 1.0)?, target, direction)? {
         return Ok(length);
     }
     if rel_cmp(start, &Value::number(0.0), RelOp::Gt)? {
-        if rel_cmp(&get_prop(array, &prop_key(start)), target, direction)? {
+        if rel_cmp(&get_prop(array, &prop_key(start))?, target, direction)? {
             return Ok(start.clone());
         }
         let next = js_add(start, &Value::number(1.0))?;
         if rel_cmp(&next, &length, RelOp::Lt)?
-            && rel_cmp(&get_prop(array, &prop_key(&next)), target, direction)?
+            && rel_cmp(&get_prop(array, &prop_key(&next))?, target, direction)?
         {
             return Ok(next);
         }
@@ -504,7 +531,7 @@ fn generic_bound(
         let sum = js_add(&low, &high)?;
         let mid = to_number(&sum)?;
         let mid = f64::from(math::int::shift_right_unsigned(mid, 1.0));
-        if rel_cmp(&get_prop_num(array, mid), target, direction)? {
+        if rel_cmp(&get_prop_num(array, mid)?, target, direction)? {
             high = Value::number(mid);
         } else {
             low = Value::number(mid + 1.0);
@@ -515,7 +542,11 @@ fn generic_bound(
 fn sets_equal_fn(args: &[Value]) -> Response {
     let a = arg(args, 0);
     let b = arg(args, 1);
-    if !strict_equal(&size_prop(&a), &size_prop(&b)) {
+    let (sa, sb) = match (size_prop(&a), size_prop(&b)) {
+        (Ok(x), Ok(y)) => (x, y),
+        (Err(r), _) | (_, Err(r)) => return r,
+    };
+    if !strict_equal(&sa, &sb) {
         return Response::Ok(Value::Bool(false));
     }
     let entries: Vec<Value> = match &a {
@@ -558,10 +589,13 @@ fn check_array_type_fn(args: &[Value]) -> Response {
         _ => return Response::Ok(Value::Bool(false)),
     };
     let type_name = arg(args, 1);
-    let ok = items.iter().all(|item| match &type_name {
-        Value::String(s) => s.eq_str(js_typeof(item)),
-        _ => false,
-    });
+    let ok = items
+        .iter()
+        .filter(|item| !matches!(item, Value::Hole))
+        .all(|item| match &type_name {
+            Value::String(s) => s.eq_str(js_typeof(item)),
+            _ => false,
+        });
     Response::Ok(Value::Bool(ok))
 }
 
@@ -605,12 +639,12 @@ fn shift_color_fn(args: &[Value]) -> Response {
         Value::Boxed(inner) => match inner.as_ref() {
             Value::String(s) => JsString::from_units(s.units().to_vec()).slice(1.0, None),
             Value::Array(_) => {
-                return type_error("color.slice(...).match is not a function");
+                return type_error("color2.slice(...).match is not a function");
             }
-            _ => return type_error("color.slice is not a function"),
+            _ => return type_error("color2.slice is not a function"),
         },
         Value::Array(_) | Value::TypedArray(..) | Value::Bytes(_) => {
-            return type_error("color.slice(...).match is not a function");
+            return type_error("color2.slice(...).match is not a function");
         }
         Value::Null => {
             return type_error("Cannot read properties of null (reading 'slice')");
@@ -618,7 +652,7 @@ fn shift_color_fn(args: &[Value]) -> Response {
         Value::Undefined => {
             return type_error("Cannot read properties of undefined (reading 'slice')");
         }
-        _ => return type_error("color.slice is not a function"),
+        _ => return type_error("color2.slice is not a function"),
     };
     let shift = arg(args, 1);
     let pairs = asrs_js::regex::sites::pairs_of_units(&sliced);
@@ -662,7 +696,11 @@ fn zfill_fn(args: &[Value]) -> Response {
     let mut number = arg(args, 0);
     let length = arg(args, 1);
     loop {
-        let shorter = match rel_cmp(&length_prop(&number), &length, RelOp::Lt) {
+        let number_length = match length_prop(&number) {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+        let shorter = match rel_cmp(&number_length, &length, RelOp::Lt) {
             Ok(x) => x,
             Err(r) => return r,
         };
@@ -681,8 +719,8 @@ fn scale_ranges(args: &[Value]) -> Result<(f64, [f64; 2], [f64; 2]), Response> {
     let value = to_number(&arg(args, 0))?;
     let range = |v: &Value| -> Result<[f64; 2], Response> {
         Ok([
-            to_number(&get_prop_num(v, 0.0))?,
-            to_number(&get_prop_num(v, 1.0))?,
+            to_number(&get_prop_num(v, 0.0)?)?,
+            to_number(&get_prop_num(v, 1.0)?)?,
         ])
     };
     Ok((value, range(&arg(args, 1))?, range(&arg(args, 2))?))
@@ -705,8 +743,8 @@ fn scale_fn_clamped(args: &[Value]) -> Response {
 fn value_scaler_fn(args: &[Value]) -> Response {
     let range = |v: &Value| -> Result<[f64; 2], Response> {
         Ok([
-            to_number(&get_prop_num(v, 0.0))?,
-            to_number(&get_prop_num(v, 1.0))?,
+            to_number(&get_prop_num(v, 0.0)?)?,
+            to_number(&get_prop_num(v, 1.0)?)?,
         ])
     };
     let (old, new) = match (range(&arg(args, 0)), range(&arg(args, 1))) {
@@ -750,8 +788,8 @@ fn value_scaler_calculate_fn(args: &[Value]) -> Response {
 fn transform_px_fn(args: &[Value]) -> Response {
     let pair = |v: &Value| -> Result<[f64; 2], Response> {
         Ok([
-            to_number(&get_prop_num(v, 0.0))?,
-            to_number(&get_prop_num(v, 1.0))?,
+            to_number(&get_prop_num(v, 0.0)?)?,
+            to_number(&get_prop_num(v, 1.0)?)?,
         ])
     };
     let (origin, rel) = match (pair(&arg(args, 0)), pair(&arg(args, 2))) {
@@ -766,6 +804,16 @@ fn transform_px_fn(args: &[Value]) -> Response {
     Response::Ok(Value::Array(vec![Value::number(x), Value::number(y)]))
 }
 
+/// `ToIndex`: `ToIntegerOrInfinity`, then `0 <= i <= 2^53 - 1` (NaN is 0).
+fn to_index(x: f64) -> Result<f64, Response> {
+    let i = number::to_integer_or_infinity(x);
+    if i < 0.0 || i > 9007199254740991.0 {
+        Err(range_error("Invalid typed array length"))
+    } else {
+        Ok(i)
+    }
+}
+
 fn concat_buffers_fn(args: &[Value]) -> Response {
     let items: Vec<Value> = match &arg(args, 0) {
         Value::Array(items) | Value::TypedArray(_, items) => items.clone(),
@@ -778,34 +826,59 @@ fn concat_buffers_fn(args: &[Value]) -> Response {
         }
         _ => return type_error("arrays.forEach is not a function"),
     };
-    let mut size = 0.0;
+    let mut size = Value::number(0.0);
     for item in &items {
-        let len = match to_number(&byte_length(item)) {
-            Ok(x) => x,
+        size = match byte_length(item).and_then(|len| js_add(&size, &len)) {
+            Ok(v) => v,
             Err(r) => return r,
         };
-        size += len;
     }
-    if !(0.0..=4_294_967_295.0).contains(&size) {
-        return range_error("Invalid typed array length");
-    }
-    let mut out = Vec::with_capacity(size as usize);
+    let size = match to_number(&size).and_then(to_index) {
+        Ok(x) => x as usize,
+        Err(r) => return r,
+    };
+    let mut out = vec![0u8; size];
+    let mut position = Value::number(0.0);
     for item in &items {
-        match item {
-            Value::Bytes(bytes) | Value::ArrayBuffer(bytes) | Value::DataView(bytes) => {
-                out.extend_from_slice(bytes);
-            }
-            Value::TypedArray(_, elements) | Value::Array(elements) => {
-                for element in elements {
-                    let x = match to_number(element) {
-                        Ok(x) => x,
+        let offset = match to_number(&position).and_then(to_index) {
+            Ok(x) => x as usize,
+            Err(r) => return r,
+        };
+        let source: Vec<Value> = match item {
+            Value::Bytes(bytes) => bytes.iter().map(|&b| Value::number(f64::from(b))).collect(),
+            Value::TypedArray(_, elements) | Value::Array(elements) => elements.clone(),
+            other => {
+                let len = match length_prop(other)
+                    .and_then(|l| to_number(&l))
+                    .and_then(to_index)
+                {
+                    Ok(x) => x,
+                    Err(r) => return r,
+                };
+                let mut source = Vec::new();
+                for i in 0..len as usize {
+                    match get_prop_num(other, i as f64) {
+                        Ok(v) => source.push(v),
                         Err(r) => return r,
-                    };
-                    out.push(math::int::to_uint8(x));
+                    }
                 }
+                source
             }
-            _ => {}
+        };
+        if offset + source.len() > out.len() {
+            return range_error("offset is out of bounds");
         }
+        for (i, element) in source.iter().enumerate() {
+            let x = match to_number(element) {
+                Ok(x) => x,
+                Err(r) => return r,
+            };
+            out[offset + i] = math::int::to_uint8(x);
+        }
+        position = match byte_length(item).and_then(|len| js_add(&position, &len)) {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
     }
     Response::Ok(Value::Bytes(out))
 }
@@ -813,8 +886,8 @@ fn concat_buffers_fn(args: &[Value]) -> Response {
 fn calc_axis_step_size_fn(args: &[Value]) -> Response {
     let range = |v: &Value| -> Result<[f64; 2], Response> {
         Ok([
-            to_number(&get_prop_num(v, 0.0))?,
-            to_number(&get_prop_num(v, 1.0))?,
+            to_number(&get_prop_num(v, 0.0)?)?,
+            to_number(&get_prop_num(v, 1.0)?)?,
         ])
     };
     let data = match range(&arg(args, 0)) {

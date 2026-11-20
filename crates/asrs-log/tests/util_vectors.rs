@@ -144,7 +144,6 @@ fn bounds(spec: &mut Spec) {
         Some(n(7.9)),
         Some(n(f64::NAN)),
         Some(n(f64::INFINITY)),
-        Some(n(f64::NEG_INFINITY)),
         Some(n(4294967295.0)),
         Some(n(1e15)),
     ];
@@ -158,6 +157,21 @@ fn bounds(spec: &mut Spec) {
                 spec.push("shared/util:lowerBound", args.clone());
                 spec.push("shared/util:upperBound", args);
             }
+        }
+    }
+    // `-Infinity` is left out of the matrix: `(-Infinity + high) >>> 1` is
+    // always 0, so `low` never moves when `array[0] >= target` and upstream
+    // loops forever. The cases that still terminate are generated here.
+    for (array, target) in [
+        (nums(&[]), 0.0),
+        (nums(&[1.0, 3.0, 5.0]), 5.0),
+        (nums(&[1.0, 3.0, 5.0]), 4.0),
+        (nums(&[1.0, 3.0, 5.0]), 10.0),
+        (nums(&[0.0]), 1.0),
+        (nums(&[0.0]), f64::NAN),
+    ] {
+        for kind in ["shared/util:lowerBound", "shared/util:upperBound"] {
+            spec.push(kind, vec![array.clone(), n(target), n(f64::NEG_INFINITY)]);
         }
     }
     // Non-number startIndex and non-array / non-number-element inputs take the
@@ -555,10 +569,7 @@ fn misc(spec: &mut Spec) {
         n(5.0),
         Value::Undefined,
         Value::TypedArray("Uint16Array".into(), vec![n(4660.0), n(22136.0)]),
-        arr(vec![Value::TypedArray(
-            "Uint8Array".into(),
-            vec![n(222.0), n(173.0)],
-        )]),
+        arr(vec![bytes(&[0xde, 0xad])]),
     ] {
         spec.push("shared/util:concatBuffers", vec![arrays]);
     }

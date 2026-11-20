@@ -170,6 +170,14 @@
       "zone": "UTC",
       "generatedOn": "macos-aarch64"
     },
+    "log/util": {
+      "cases": 7138,
+      "content": "861036ad0cea6c83",
+      "generator": "f3bdb9d2fcd1e0df",
+      "spec": "parity/specs/log/util.jsonl",
+      "zone": "UTC",
+      "generatedOn": "macos-aarch64"
+    },
     "number/numberformat": {
       "cases": 182,
       "content": "44a96cd7bef54d21",
