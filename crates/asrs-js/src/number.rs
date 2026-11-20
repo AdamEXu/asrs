@@ -224,7 +224,7 @@ pub fn intl_format(value: f64, options: IntlOptions) -> String {
     }
     if options.grouping {
         for (i, c) in written.chars().enumerate() {
-            if i > 0 && (written.len() - i) % 3 == 0 {
+            if i > 0 && (written.len() - i).is_multiple_of(3) {
                 out.push(',');
             }
             out.push(c);
@@ -279,7 +279,7 @@ fn digit(c: u16, radix: i32) -> Option<u32> {
         c if (b'A' as u16..=b'Z' as u16).contains(&c) => (c - b'A' as u16) as i32 + 10,
         _ => return None,
     };
-    (d < radix).then(|| d as u32)
+    (d < radix).then_some(d as u32)
 }
 
 /// V8 `InternalStringToIntDouble` for radix 2, 4, 8, 16, 32.
@@ -720,24 +720,22 @@ fn radix_string(value: f64, radix: i32) -> String {
             buffer[fraction_cursor] = RADIX_CHARS[digit];
             fraction_cursor += 1;
             fraction -= digit as f64;
-            if fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0) {
-                if fraction + delta > 1.0 {
-                    loop {
-                        fraction_cursor -= 1;
-                        if fraction_cursor == mid {
-                            integer += 1.0;
-                            break;
-                        }
-                        let c = buffer[fraction_cursor];
-                        let d = if c > b'9' { c - b'a' + 10 } else { c - b'0' };
-                        if d + 1 < radix as u8 {
-                            buffer[fraction_cursor] = RADIX_CHARS[(d + 1) as usize];
-                            fraction_cursor += 1;
-                            break;
-                        }
+            if (fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0)) && fraction + delta > 1.0 {
+                loop {
+                    fraction_cursor -= 1;
+                    if fraction_cursor == mid {
+                        integer += 1.0;
+                        break;
                     }
-                    break;
+                    let c = buffer[fraction_cursor];
+                    let d = if c > b'9' { c - b'a' + 10 } else { c - b'0' };
+                    if d + 1 < radix as u8 {
+                        buffer[fraction_cursor] = RADIX_CHARS[(d + 1) as usize];
+                        fraction_cursor += 1;
+                        break;
+                    }
                 }
+                break;
             }
             if fraction < delta {
                 break;
@@ -845,18 +843,17 @@ fn exact_digits(x: f64) -> (Vec<u8>, i32) {
         return (vec![b'0'], 1);
     }
     let mut n = BigUint::from_u64(mantissa);
-    let digits;
-    let point;
-    if e >= 0 {
+    let (mut digits, point) = if e >= 0 {
         n.shl(e as u32);
-        digits = n.to_decimal();
-        point = digits.len() as i32;
+        let digits = n.to_decimal();
+        let point = digits.len() as i32;
+        (digits, point)
     } else {
         n.mul_pow5((-e) as u32);
-        digits = n.to_decimal();
-        point = digits.len() as i32 + e;
-    }
-    let mut digits = digits;
+        let digits = n.to_decimal();
+        let point = digits.len() as i32 + e;
+        (digits, point)
+    };
     while digits.last() == Some(&b'0') {
         digits.pop();
     }
