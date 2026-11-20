@@ -54,6 +54,7 @@ pub struct Nt4 {
     v41: bool,
     ports: Vec<f64>,
     offset_us: f64,
+    http_status: f64,
     topics: Vec<Topic>,
     next_topic_id: f64,
     conns: Vec<Connection>,
@@ -113,6 +114,29 @@ fn pack_value(ty: &str, value: &Json, at: &str) -> Result<Packed, String> {
     }
 }
 
+/// `binaryPieces`: hex, or a list of hex strings and `[hex, count]` repeats.
+fn binary_pieces(spec: &Json) -> Result<Vec<u8>, String> {
+    let Some(pieces) = spec.as_array() else {
+        return hex_to_bytes(spec);
+    };
+    let mut out = Vec::new();
+    for piece in pieces {
+        match piece.as_array() {
+            None => out.extend(hex_to_bytes(piece)?),
+            Some([hex, Json::Number(count)])
+                if hex.as_str().is_some() && is_safe_integer(*count) && *count >= 0.0 =>
+            {
+                let bytes = hex_to_bytes(hex)?;
+                for _ in 0..*count as u64 {
+                    out.extend_from_slice(&bytes);
+                }
+            }
+            Some(_) => return Err(format!("nt4: bad binary piece {}", piece.to_compact())),
+        }
+    }
+    Ok(out)
+}
+
 impl Nt4 {
     pub fn new(config: &Json, epoch_ms: f64) -> Result<Self, String> {
         let present = |key: &str| config.get(key).filter(|v| **v != Json::Null);
@@ -137,6 +161,7 @@ impl Nt4 {
             v41,
             ports,
             offset_us,
+            http_status: 200.0,
             topics: Vec::new(),
             next_topic_id: 1.0,
             conns: Vec::new(),
@@ -431,7 +456,7 @@ impl Protocol for Nt4 {
     }
 
     fn http(&mut self, _cx: &mut Cx<'_>, _url: &str) -> Result<Option<(f64, String)>, String> {
-        Ok(Some((200.0, String::new())))
+        Ok(Some((self.http_status, String::new())))
     }
 
     fn accept_ws(&mut self, _url: &str, protocols: &[String]) -> Option<String> {
@@ -592,8 +617,25 @@ impl Protocol for Nt4 {
                     cx.push_ws(self.conns[i].id, Payload::Text(value.to_compact()));
                 }
             }
+            "httpStatus" => {
+                self.http_status = op
+                    .get(1)
+                    .and_then(Json::as_f64)
+                    .filter(|n| is_safe_integer(*n))
+                    .ok_or("nt4: httpStatus needs an integer")?;
+            }
+            "textraw" => {
+                let text = op
+                    .get(1)
+                    .and_then(Json::as_str)
+                    .ok_or("nt4: textraw needs a string")?
+                    .to_string_lossy();
+                for i in self.main_conns(cx) {
+                    cx.push_ws(self.conns[i].id, Payload::Text(text.clone()));
+                }
+            }
             "binary" => {
-                let bytes = hex_to_bytes(op.get(1).unwrap_or(&Json::Null))?;
+                let bytes = binary_pieces(op.get(1).unwrap_or(&Json::Null))?;
                 for i in self.main_conns(cx) {
                     cx.push_ws(self.conns[i].id, Payload::Binary(bytes.clone()));
                 }

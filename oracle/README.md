@@ -499,7 +499,7 @@ exist yet is a harness change, not a session.
 | `epochMs` | `Date.now()` at session time 0 (default 1700000000000) |
 | `latencyMs` | one-way network delay, an integer of at least 1 (default 1) |
 | `endMs` | the session stops after this time; a final `dump` is recorded then |
-| `client.source` | `nt4` (needs `mode`: `default`, `akit`, `systemcore`, `ds`), `nt4-publisher` (`mode`: `sim` or `robot`), `rlog`, `phoenix`, `ftc` |
+| `client.source` | `nt4` (needs `mode`: `default`, `akit`, `systemcore`, `ds`), `nt4-publisher` (`mode`: `sim` or `robot`), `nt4-client` (upstream's `NT4_Client` on its own; optional `ports` and `appName`), `rlog`, `phoenix`, `ftc` |
 | `client.address` | what `connect` passes to the source (default `127.0.0.1`); the publisher derives its own |
 | `client.prefs` | merged over upstream's `DEFAULT_PREFS` into `window.preferences`; `null` makes it `null` |
 | `client.tabs`, `client.sidebar` | what `window.tabs.getActiveFields()` and `window.sidebar.getActiveFields()` return |
@@ -519,6 +519,7 @@ Client ops, applied the way `hub.ts` does:
 | `["select", selected, hovered]` | `window.selection.getSelectedTime()` and `getHoveredTime()` (numbers or `null`) |
 | `["tune", key, value]`, `["untune", key]` | `getTuner().publish` and `unpublish` |
 | `["dump"]` | records the canonical dump of `window.log` |
+| `["nt4", method, ...args]` | `nt4-client` only (`connect` builds the client once, then calls `connect()`; `stop` calls `disconnect()`). Methods: `subscribe`, `subscribeTopicsOnly`, `unsubscribe` (an argument `k` that indexes the subscription ids returned so far means that id; anything else is passed as is), `clearAllSubscriptions`, `publish`, `unpublish`, `setProperties`, `setPersistent`, `setRetained`, `sample` (`addSample`), `sampleAt` (`addTimestampedSample`), `connect`, `disconnect`, and `time` (records `nt4` `["time", client µs, server µs, latency µs]`). Args in CVE-1 (bare numbers allowed) |
 
 Server ops shared by every mock: `["up"]`; `["down", "refuse" \| "hang"]` (new connections and
 requests are refused or never answered, open ones stay); `["mute", bool]` (pushes on open
@@ -528,7 +529,7 @@ its own behaviour in detail):
 
 | Protocol | Config | Steps |
 |---|---|---|
-| `nt4` (`src/live/nt4Server.ts`) | `version` (`4.1` or `4.0`), `ports` ([5810]), `offsetUs` (server time is `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}]) | `announce`, `unannounce`, `properties`, `set`, `batch`, `setraw`, `text`, `binary` |
+| `nt4` (`src/live/nt4Server.ts`) | `version` (`4.1` or `4.0`), `ports` ([5810]), `offsetUs` (server time is `(epochMs + t) * 1000 + offsetUs`), `topics` ([{name, type, properties?, value?}]) | `announce`, `unannounce`, `properties`, `set`, `batch`, `setraw`, `text`, `textraw` (a string sent verbatim), `binary` (hex, or a list of hex pieces and `[hex, count]` repeats), `httpStatus` (the alive check's status from then on) |
 | `rlog` (`RLOGServer`) | `port` (5800) | `["send", hex]` (one length-prefixed frame), `["sendraw", hex]` |
 | `phoenix` (`PhoenixServer`) | `devices` ([{device, signals, values}]), `busUtil`, `startUs`, `points`, `stepUs` | `["devices", [...]]`, `["error", action, code]` |
 | `ftc` (`FTCServer`) | `status` | `["status", {...}]`, `["send", json]`, `["sendtext", text]` |
@@ -572,7 +573,7 @@ where an event has none, in the order things happen.
 |---|---|
 | client | `ws-open` ([url, [protocols]]), `ws-send` (string or bytes), `ws-close`, `http-get` (url), `http-abort`, `tcp-open` ([host, port]), `tcp-send` (bytes), `tcp-close` |
 | server | `ws-accept` (protocol, `""` for none), `ws-reject`, `ws-push` (string or bytes), `ws-drop`, `http-reply` ([status, body]), `http-refuse`, `tcp-accept`, `tcp-refuse`, `tcp-push` (bytes), `tcp-drop` |
-| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string) |
+| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string), `nt4` (an `nt4-client` callback: `["announce" \| "unannounce" \| "properties", uid, name, type, properties]`, `["data", uid, name, timestamp, value]`, `["connect"]`, `["disconnect"]`) |
 
 Log indexes number the distinct `Log` objects in the order the harness first sees them; 0 is
 the hub's initial log. TCP chunk boundaries are recorded as written, but only the byte stream
@@ -586,7 +587,9 @@ event)`, `next_time()`, `process(t)` returning server events), `ClientEvent::lin
 `ServerEvent::line` write trace lines, and `replay` checks a recorded trace's server events
 against the Rust mock line for line. A port's live test feeds its client's traffic to
 `ServerHost`, delivers the returned events `latencyMs` later under the loop rules above, and
-compares its own trace with the vector.
+compares its own trace with the vector. `crates/asrs-live/tests/support` is that client side for
+the N units: the loop, browser `WebSocket` and `fetch` over `ServerHost`, and a `Driver` trait a
+port implements to run a session (`tests/nt4_sessions.rs` uses it for every NT4 session).
 
 ## DOM harness
 

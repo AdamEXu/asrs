@@ -1,0 +1,571 @@
+{
+ "protocol": "nt4",
+ "seed": 777,
+ "latencyMs": 1,
+ "endMs": 623,
+ "client": {
+  "source": "nt4-client"
+ },
+ "server": {
+  "version": "4.0",
+  "offsetUs": 5
+ },
+ "steps": [
+  {
+   "t": 0,
+   "client": [
+    "connect"
+   ]
+  },
+  {
+   "t": 100,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": {
+       "name": "/m/a",
+       "id": 50,
+       "type": "double",
+       "properties": {
+        "p": 1
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 110,
+   "server": [
+    "text",
+    {
+     "method": "announce"
+    }
+   ]
+  },
+  {
+   "t": 120,
+   "server": [
+    "text",
+    [
+     1,
+     "s",
+     true,
+     [],
+     {
+      "method": "announce"
+     },
+     {
+      "params": {}
+     },
+     {
+      "method": 5,
+      "params": {}
+     },
+     {
+      "method": "announce",
+      "params": "str"
+     },
+     {
+      "method": "announce",
+      "params": 5
+     },
+     {
+      "method": "nonsense",
+      "params": {}
+     },
+     {
+      "method": "unannounce",
+      "params": {
+       "name": "/none"
+      }
+     },
+     {
+      "method": "properties",
+      "params": {
+       "name": "/none",
+       "update": {}
+      }
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/m/b",
+       "id": "51",
+       "type": "double"
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 130,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": []
+     }
+    ]
+   ]
+  },
+  {
+   "t": 140,
+   "server": [
+    "text",
+    [
+     null,
+     {
+      "method": "announce",
+      "params": {
+       "name": "/never",
+       "id": 70,
+       "type": "int",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 150,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": null
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/never",
+       "id": 71,
+       "type": "int",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 160,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": {
+       "name": 7,
+       "id": 60,
+       "type": "int",
+       "properties": "str"
+      }
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/m/s",
+       "id": 63,
+       "type": "int",
+       "properties": "str"
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 170,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": 7,
+       "update": {
+        "0": "x"
+       }
+      }
+     },
+     {
+      "method": "announce",
+      "params": {
+       "name": "/after7",
+       "id": 72,
+       "type": "int",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 180,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/m/b",
+       "update": {
+        "q": 1
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 190,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/m/a",
+       "update": null
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 200,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/m/a",
+       "update": "ab"
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 210,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/m/a",
+       "update": {
+        "p": null,
+        "z": [
+         1,
+         {
+          "k": null
+         }
+        ]
+       }
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 220,
+   "server": [
+    "text",
+    [
+     {
+      "method": "properties",
+      "params": {
+       "name": "/m/a",
+       "update": 5
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 230,
+   "server": [
+    "textraw",
+    "not json"
+   ]
+  },
+  {
+   "t": 240,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": {
+       "name": 0,
+       "id": 61,
+       "type": "int",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 250,
+   "server": [
+    "textraw",
+    "[{\"method\":\"unannounce\",\"params\":{\"name\":-0}}]"
+   ]
+  },
+  {
+   "t": 260,
+   "server": [
+    "textraw",
+    "[{\"method\":\"announce\",\"params\":{\"name\":\"\\ud800x\",\"id\":62,\"type\":\"string\",\"properties\":{\"\\udc00\":\"\\ud83d\\ude00\"}}}]"
+   ]
+  },
+  {
+   "t": 270,
+   "server": [
+    "binary",
+    "9432cf00060a24181e400001cb4004000000000000"
+   ]
+  },
+  {
+   "t": 280,
+   "server": [
+    "binary",
+    "c09432cf00060a24181e400001cb4008000000000000"
+   ]
+  },
+  {
+   "t": 290,
+   "server": [
+    "binary",
+    "9432cf00060a24181e400001cb4010000000000000059432cf00060a24181e400001cb4014000000000000"
+   ]
+  },
+  {
+   "t": 300,
+   "server": [
+    "binary",
+    "a36162639432cf00060a24181e400001cb4018000000000000"
+   ]
+  },
+  {
+   "t": 310,
+   "server": [
+    "binary",
+    "c40432ff0107"
+   ]
+  },
+  {
+   "t": 320,
+   "server": [
+    "binary",
+    "84a13032a13109a13201a133cb4023000000000000"
+   ]
+  },
+  {
+   "t": 330,
+   "server": [
+    "binary",
+    "94fbcf00060a24181e400001cb3ff000000000000094cb7ff8000000000000cf00060a24181e400001cb3ff00000000000009432cf00060a24181e400001cb4024000000000000"
+   ]
+  },
+  {
+   "t": 340,
+   "server": [
+    "binary",
+    "94ffcf00060a24181e400002a3313233"
+   ]
+  },
+  {
+   "t": 341,
+   "client": [
+    "nt4",
+    "time"
+   ]
+  },
+  {
+   "t": 351,
+   "server": [
+    "binary",
+    "94ffcf00060a24181e40050291cf00060a2418169ee0"
+   ]
+  },
+  {
+   "t": 352,
+   "client": [
+    "nt4",
+    "time"
+   ]
+  },
+  {
+   "t": 362,
+   "server": [
+    "binary",
+    "94ffcf00060a24181e400002c0"
+   ]
+  },
+  {
+   "t": 363,
+   "client": [
+    "nt4",
+    "time"
+   ]
+  },
+  {
+   "t": 373,
+   "server": [
+    "binary",
+    "94a178cf00060a24181e400002019432cf00060a24181e400001cb4026000000000000"
+   ]
+  },
+  {
+   "t": 383,
+   "server": [
+    "binary",
+    "9432a17401cb3ff0000000000000"
+   ]
+  },
+  {
+   "t": 393,
+   "server": [
+    "binary",
+    "9432cf00060a24181e4000c0cb3ff0000000000000"
+   ]
+  },
+  {
+   "t": 403,
+   "server": [
+    "binary",
+    "94cd03e7cf00060a24181e400001cb3ff00000000000009432cf00060a24181e400001cb4028000000000000"
+   ]
+  },
+  {
+   "t": 413,
+   "server": [
+    "binary",
+    "9432cf00060a24181e400001cb402a000000000000cb00"
+   ]
+  },
+  {
+   "t": 423,
+   "server": [
+    "binary",
+    "9232cf00060a24181e4000"
+   ]
+  },
+  {
+   "t": 433,
+   "server": [
+    "binary",
+    "9433cf00060a24181e400001cb3ff0000000000000"
+   ]
+  },
+  {
+   "t": 443,
+   "server": [
+    "binary",
+    "943ccf00060a24181e400001cb3ff0000000000000"
+   ]
+  },
+  {
+   "t": 453,
+   "client": [
+    "nt4",
+    "subscribe",
+    [
+     "/x"
+    ],
+    false
+   ]
+  },
+  {
+   "t": 463,
+   "server": [
+    "binary",
+    "9432cf00060a24181e4000018fa16100a16201a16302a16403a16504a16605a16706a16807a16908a16a09a16b0aa16c0ba16d0ca16e0da16f0e9432cf00060a24181e40000183a14100a14201a14302"
+   ]
+  },
+  {
+   "t": 473,
+   "client": [
+    "nt4",
+    "subscribe",
+    [
+     "/y"
+    ],
+    false
+   ]
+  },
+  {
+   "t": 483,
+   "server": [
+    "text",
+    [
+     {
+      "method": "announce",
+      "params": {
+       "name": "/m/a",
+       "id": 52,
+       "type": "double",
+       "properties": {}
+      }
+     }
+    ]
+   ]
+  },
+  {
+   "t": 493,
+   "server": [
+    "binary",
+    "9432cf00060a24181e400001cb4004000000000000"
+   ]
+  },
+  {
+   "t": 503,
+   "server": [
+    "binary",
+    [
+     "9434cf00060a24181e400001cb4004000000000000"
+    ]
+   ]
+  },
+  {
+   "t": 513,
+   "client": [
+    "nt4",
+    "setProperties",
+    "/m/b",
+    {
+     "o": [
+      [
+       "k",
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "t": 523,
+   "client": [
+    "nt4",
+    "setProperties",
+    "/m/s",
+    {
+     "o": [
+      [
+       "k",
+       1
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}
