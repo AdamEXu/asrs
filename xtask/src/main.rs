@@ -6,6 +6,7 @@ mod check;
 mod corpus;
 mod gpui;
 mod historical;
+mod host;
 mod layout;
 mod oracle;
 mod pack;
@@ -26,6 +27,7 @@ commands:
   assets    copy upstream assets into assets/
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
+  host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
   canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)";
@@ -41,6 +43,7 @@ fn main() -> ExitCode {
         Some("gpui") => gpui::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
+        Some("host") => host::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {
@@ -50,6 +53,14 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn workspace_root() -> PathBuf {

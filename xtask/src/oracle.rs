@@ -11,6 +11,8 @@ use crate::{Result, canvas, historical, pack, vectors, workspace_root};
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 pub(crate) const EMSDK_VERSION: &str = "4.0.12";
 pub(crate) const UPSTREAM_COMMIT: &str = "8fc5b89fc93be5dba5a66005ea6111fa16594aa8";
+const TESSERACT_DATA: &str = "eng.traineddata.gz";
+const TESSERACT_SHA256: &str = "45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91";
 const UPSTREAM_REPO: &str = "https://github.com/Mechanical-Advantage/AdvantageScope.git";
 const EMSDK_REPO: &str = "https://github.com/emscripten-core/emsdk.git";
 
@@ -20,7 +22,8 @@ commands:
   setup [--force]     build the oracle from a clean checkout, then run selftest and smoke.
                       Steps (each skipped when its inputs are unchanged, unless --force):
                         1. sync reference/AdvantageScope into target/oracle/upstream
-                        2. npm ci --ignore-scripts there, then upstream's getLicenses.mjs
+                        2. npm ci --ignore-scripts there, then upstream's getLicenses.mjs and
+                           tesseractLangDownload.mjs (the OCR data the real app loads at startup)
                         3. download the Electron 39.2.7 binary
                         4. upstream's rolldown -c (real app bundles in upstream/bundles)
                         5. emsdk 4.0.12 into the cache, then upstream's wasmCompile.mjs
@@ -131,7 +134,7 @@ pub(crate) struct Paths {
     pub(crate) reference: PathBuf,
     pub(crate) oracle_src: PathBuf,
     pub(crate) upstream: PathBuf,
-    harness: PathBuf,
+    pub(crate) harness: PathBuf,
     pub(crate) dist: PathBuf,
     stamps: PathBuf,
     pub(crate) cache: PathBuf,
@@ -268,6 +271,7 @@ fn setup(paths: &Paths, force: bool) -> Result {
         exec(node().arg("getLicenses.mjs").current_dir(&paths.upstream))?;
     }
 
+    install_tesseract_data(paths, force)?;
     install_electron(paths, force)?;
 
     let bundle_inputs = hash_tree(
@@ -328,6 +332,36 @@ pub(crate) fn install_upstream_packages(paths: &Paths, force: bool) -> Result {
         step("npm ci (upstream)");
         npm_ci(paths, &paths.upstream)
     })
+}
+
+fn install_tesseract_data(paths: &Paths, force: bool) -> Result {
+    let installed = paths.upstream.join(TESSERACT_DATA);
+    let cached = paths.cache.join("tesseract").join(TESSERACT_DATA);
+    let valid =
+        |path: &Path| fs::read(path).is_ok_and(|b| crate::sha256_hex(&b) == TESSERACT_SHA256);
+    if !force && valid(&installed) {
+        return Ok(());
+    }
+    if force || !valid(&cached) {
+        step("tesseractLangDownload.mjs");
+        exec(
+            node()
+                .arg("tesseractLangDownload.mjs")
+                .current_dir(&paths.upstream),
+        )?;
+        if !valid(&installed) {
+            return Err(format!(
+                "{}: sha256 is not {TESSERACT_SHA256}",
+                installed.display()
+            ));
+        }
+        fs::create_dir_all(cached.parent().expect("cache file has a parent"))
+            .map_err(|e| e.to_string())?;
+        fs::copy(&installed, &cached).map_err(|e| format!("{}: {e}", cached.display()))?;
+    } else {
+        fs::copy(&cached, &installed).map_err(|e| format!("{}: {e}", installed.display()))?;
+    }
+    Ok(())
 }
 
 pub(crate) fn install_electron(paths: &Paths, force: bool) -> Result {
