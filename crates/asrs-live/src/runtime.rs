@@ -17,6 +17,7 @@ impl LiveRuntime {
         let runtime = Builder::new_multi_thread()
             .worker_threads(Self::WORKER_THREADS)
             .thread_name("asrs-live")
+            .enable_io()
             .enable_time()
             .build()?;
         Ok(Self { runtime })

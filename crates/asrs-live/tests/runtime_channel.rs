@@ -93,3 +93,22 @@ fn runtime_uses_two_named_workers() {
         LiveRuntime::WORKER_THREADS
     );
 }
+
+#[test]
+fn tasks_can_open_sockets() {
+    let runtime = LiveRuntime::new().unwrap();
+    let (tx, mut rx) = event_channel::<std::io::Result<()>>();
+    let _task = runtime.spawn(async move {
+        let result = async {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+            let addr = listener.local_addr()?;
+            let client = tokio::spawn(tokio::net::TcpStream::connect(addr));
+            listener.accept().await?;
+            client.await.map_err(std::io::Error::other)??;
+            Ok(())
+        }
+        .await;
+        let _ = tx.send(result);
+    });
+    assert!(block_on_plain_thread(rx.recv()).unwrap().is_ok());
+}

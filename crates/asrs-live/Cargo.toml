@@ -9,7 +9,7 @@ publish.workspace = true
 [dependencies]
 asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
-tokio = { version = "=1.54.1", default-features = false, features = ["rt-multi-thread", "sync", "time"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["net", "rt-multi-thread", "sync", "time"] }
 
 [lints]
 workspace = true
