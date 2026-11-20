@@ -383,6 +383,7 @@ name = "asrs-tabs"
 version = "0.1.0"
 dependencies = [
  "asrs-js",
+ "asrs-parity",
 ]
 
 [[package]]

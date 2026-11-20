@@ -13,6 +13,22 @@ pub const FUNCTIONS: &[(&str, Function)] = &[
     ("oracle:ansiUp", |a| {
         with_str(a, 0, |s| string(AnsiUp::new().ansi_to_html(&s)))
     }),
+    ("oracle:ansiUpAppend", |a| {
+        let Some(chunks) = a.first().and_then(Value::as_array) else {
+            return Response::Error("argument 0 must be an array".to_owned());
+        };
+        let mut ansi_up = AnsiUp::new();
+        let mut out = Vec::with_capacity(chunks.len());
+        for chunk in chunks {
+            let Some(s) = chunk.as_str() else {
+                return Response::Error("argument 0 items must be strings".to_owned());
+            };
+            out.push(string(
+                ansi_up.ansi_to_html(&JsString::from_units(s.units().to_vec())),
+            ));
+        }
+        Response::Ok(Value::Array(out))
+    }),
     ("oracle:consoleFormatValue", |a| {
         match (str_arg(a, 0), str_arg(a, 1)) {
             (Ok(v), Ok(f)) => match console::format_value(&v, &f) {
