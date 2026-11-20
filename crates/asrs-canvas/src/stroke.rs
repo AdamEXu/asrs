@@ -299,8 +299,9 @@ struct Stroker {
     cusper: SkPath,
 }
 
-/// `kRecursiveLimits`, indexed tangent, cubic, conic, quad.
-const RECURSIVE_LIMITS: [i32; 4] = [5 * 3, 24, 16, 16];
+/// `kRecursiveLimits` as Chromium m142 ships them (later Skia lowers them to 15, 24, 16, 16),
+/// indexed tangent, cubic, conic, quad.
+const RECURSIVE_LIMITS: [i32; 4] = [5 * 3, 26 * 3, 11 * 3, 11 * 3];
 const TANGENT_LIMIT: usize = 0;
 const CUBIC_LIMIT: usize = 1;
 const CONIC_LIMIT: usize = 2;
@@ -1370,11 +1371,7 @@ pub fn stroke_path(src: &SkPath, style: &Style) -> SkPath {
     if radius.is_nan() || radius <= 0.0 {
         return SkPath::new();
     }
-    // Skia strokes a round-joined rect as an `addRRect` outline, which is not ported; those
-    // rects take the general stroker instead.
-    if let Some((rect, true, cw)) = src.rect_contour()
-        && style.join != LineJoin::Round
-    {
+    if let Some((rect, true, cw)) = src.rect_contour() {
         return stroke_rect(rect, cw, style);
     }
     let mut stroker = Stroker::new(
@@ -1473,6 +1470,7 @@ fn stroke_rect(rect: crate::skpath::Rect, cw: bool, style: &Style) -> SkPath {
             }
             dst.close();
         }
+        LineJoin::Round => add_rrect(&mut dst, outer, radius, cw),
         _ => add_rect(&mut dst, outer, cw),
     }
     if style.width < rw.min(rh) {
@@ -1485,6 +1483,102 @@ fn stroke_rect(rect: crate::skpath::Rect, cw: bool, style: &Style) -> SkPath {
         add_rect(&mut dst, inner, !cw);
     }
     dst
+}
+
+/// `SkPathBuilder::addRRect(SkRRect::MakeRectXY(r, radius, radius), dir)` with its default
+/// start index, including `SkRRect`'s reduction to a rect or an oval.
+fn add_rrect(dst: &mut SkPath, r: crate::skpath::Rect, radius: f32, cw: bool) {
+    let finite = [r.left, r.top, r.right, r.bottom]
+        .iter()
+        .all(|v| v.is_finite());
+    let bounds = if finite {
+        crate::skpath::Rect {
+            left: r.left.min(r.right),
+            top: r.top.min(r.bottom),
+            right: r.left.max(r.right),
+            bottom: r.top.max(r.bottom),
+        }
+    } else {
+        crate::skpath::Rect {
+            left: 0.0,
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+        }
+    };
+    let (w, h) = (bounds.right - bounds.left, bounds.bottom - bounds.top);
+    let index: usize = if cw { 6 } else { 7 };
+    let advance = |i: usize, n: usize| if cw { (i + 1) % n } else { (i + n - 1) % n };
+    let corners = [
+        p(bounds.left, bounds.top),
+        p(bounds.right, bounds.top),
+        p(bounds.right, bounds.bottom),
+        p(bounds.left, bounds.bottom),
+    ];
+    let (mut rx, mut ry) = if radius.is_finite() {
+        (radius, radius)
+    } else {
+        (0.0, 0.0)
+    };
+    if !(w > 0.0 && h > 0.0) || !finite {
+        rx = 0.0;
+    } else if w < rx + rx || h < ry + ry {
+        let scale = (w / (rx + rx)).min(h / (ry + ry));
+        rx *= scale;
+        ry *= scale;
+    }
+    if rx <= 0.0 || ry <= 0.0 {
+        let mut i = (index + 1) / 2 % 4;
+        dst.move_to(corners[i]);
+        for _ in 0..3 {
+            i = advance(i, 4);
+            dst.line_to(corners[i]);
+        }
+        dst.close();
+        return;
+    }
+    let w_conic = std::f32::consts::FRAC_1_SQRT_2;
+    let mut rect_i = (index / 2 + usize::from(!cw)) % 4;
+    if rx >= w / 2.0 && ry >= h / 2.0 {
+        let mid = |a: f32, b: f32| ((f64::from(a) + f64::from(b)) * 0.5) as f32;
+        let (cx, cy) = (mid(bounds.left, bounds.right), mid(bounds.top, bounds.bottom));
+        let oval = [
+            p(cx, bounds.top),
+            p(bounds.right, cy),
+            p(cx, bounds.bottom),
+            p(bounds.left, cy),
+        ];
+        let mut oval_i = index / 2 % 4;
+        dst.move_to(oval[oval_i]);
+        for _ in 0..4 {
+            rect_i = advance(rect_i, 4);
+            oval_i = advance(oval_i, 4);
+            dst.conic_to(corners[rect_i], oval[oval_i], w_conic);
+        }
+        dst.close();
+        return;
+    }
+    let (l, t, rr, b) = (bounds.left, bounds.top, bounds.right, bounds.bottom);
+    let pts = [
+        p(l + rx, t),
+        p(rr - rx, t),
+        p(rr, t + ry),
+        p(rr, b - ry),
+        p(rr - rx, b),
+        p(l + rx, b),
+        p(l, b - ry),
+        p(l, t + ry),
+    ];
+    let mut i = index % 8;
+    dst.move_to(pts[i]);
+    for _ in 0..4 {
+        i = advance(i, 8);
+        dst.line_to(pts[i]);
+        rect_i = advance(rect_i, 4);
+        i = advance(i, 8);
+        dst.conic_to(corners[rect_i], pts[i], w_conic);
+    }
+    dst.close();
 }
 
 /// `SkPathBuilder::addRect(rect, dir)` from the top-left corner.

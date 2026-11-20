@@ -1228,7 +1228,7 @@ function dashedLines(r: Rec, y0: number) {
   r.call("setLineDash", []);
 }
 
-function multiFrame(dpr: number, resize: boolean): Scene {
+function multiFrame(dpr: number, mode: "" | "-single" | "-resized"): Scene {
   const r = new Rec();
   r.call("scale", dpr, dpr);
   r.set("fillStyle", "#2b66a2");
@@ -1237,14 +1237,16 @@ function multiFrame(dpr: number, resize: boolean): Scene {
     r.call("rect", 10 + i * 20, 10, 12, 12);
     r.call("fill");
   }
-  r.call("frame");
-  if (resize) {
-    r.call("resize", 300 * dpr + 1, 100 * dpr);
-    r.call("resize", 300 * dpr, 100 * dpr);
+  if (mode !== "-single") {
+    r.call("frame");
+    if (mode === "-resized") {
+      r.call("resize", 300 * dpr + 1, 100 * dpr);
+      r.call("resize", 300 * dpr, 100 * dpr);
+    }
+    r.call("scale", dpr, dpr);
   }
-  r.call("scale", dpr, dpr);
   dashedLines(r, 0);
-  return scene(`multiframe${resize ? "-resized" : ""}-${dpr}x`, "coverage", "pixel", [300, 100], dpr, LIGHT, r.cmds);
+  return scene(`multiframe${mode}-${dpr}x`, "coverage", "pixel", [300, 100], dpr, LIGHT, r.cmds);
 }
 
 export function allScenes(): Scene[] {
@@ -1264,7 +1266,7 @@ export function allScenes(): Scene[] {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));
     out.push(gradients(dpr), images(dpr), imageData(dpr), heatmap(dpr), textStyles(dpr, false), textStyles(dpr, true));
     out.push(offCanvas(dpr), gradientText(dpr, false), gradientText(dpr, true));
-    out.push(curves(dpr), hugeCoords(dpr), strokeRects(dpr), multiFrame(dpr, false), multiFrame(dpr, true));
+    out.push(curves(dpr), hugeCoords(dpr), strokeRects(dpr), multiFrame(dpr, ""), multiFrame(dpr, "-single"), multiFrame(dpr, "-resized"));
   }
   return out;
 }

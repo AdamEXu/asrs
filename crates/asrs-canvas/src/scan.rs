@@ -3,6 +3,7 @@
 //! pixel of the union (after snapping edge end points); tiny-skia only has Skia's retired 4x
 //! supersampler, which quantizes thin and near-axis edges to quarter pixels.
 
+use crate::blit::Spans;
 use tiny_skia::{PathSegment, Pixmap};
 
 use crate::clip::{self, ClipRect, Piece};
@@ -528,8 +529,8 @@ fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<
 }
 
 impl Coverage {
-    pub fn to_spans(&self, width: u32, height: u32) -> crate::blit::Spans {
-        let mut spans = crate::blit::Spans::new(width, height);
+    pub fn to_spans(&self, width: u32, height: u32) -> Spans {
+        let mut spans = Spans::new(width, height);
         for row in 0..self.height {
             let alphas = &self.alpha[row * self.width..(row + 1) * self.width];
             if self.pair {
@@ -552,8 +553,8 @@ pub fn div255(v: u32) -> u32 {
 }
 
 /// `SkScan::AntiFillRect` (`antifilldot8`) for a device rect, clipped to the canvas.
-pub fn anti_fill_rect(r: [f32; 4], width: u32, height: u32) -> crate::blit::Spans {
-    let mut out = crate::blit::Spans::new(width, height);
+pub fn anti_fill_rect(r: [f32; 4], width: u32, height: u32) -> Spans {
+    let mut out = Spans::new(width, height);
     let l = r[0].max(0.0);
     let t = r[1].max(0.0);
     let rr = r[2].min(width as f32);
@@ -566,7 +567,7 @@ pub fn anti_fill_rect(r: [f32; 4], width: u32, height: u32) -> crate::blit::Span
     if l >= r || t >= b {
         return out;
     }
-    let scanline = |out: &mut crate::blit::Spans, top: i32, alpha: i32| {
+    let scanline = |out: &mut Spans, top: i32, alpha: i32| {
         let mul = |a: i32, b: i32| ((a * b) >> 8) as u8;
         if l >> 8 == (r - 1) >> 8 {
             out.v(l >> 8, top, 1, mul(alpha, r - l));
@@ -620,6 +621,182 @@ pub fn anti_fill_rect(r: [f32; 4], width: u32, height: u32) -> crate::blit::Span
     out
 }
 
+/// `SkScan::AntiFrameRect`: the stroke of an axis-aligned device rect with mitred corners,
+/// `stroke` being the device stroke size on each axis.
+pub fn anti_frame_rect(r: [f32; 4], stroke: (f32, f32), width: u32, height: u32) -> Spans {
+    let mut out = Spans::new(width, height);
+    let (mut rx, mut ry) = (stroke.0 / 2.0, stroke.1 / 2.0);
+    if r[2] - r[0] == 0.0 {
+        ry = 0.0;
+    }
+    if r[3] - r[1] == 0.0 {
+        rx = 0.0;
+    }
+    let dot8 = |v: f32| (v * 256.0) as i32;
+    let floor = |v: i32| v >> 8;
+    let ceil = |v: i32| (v + 0xFF) >> 8;
+    let (mut outer_l, mut outer_t) = (dot8(r[0] - rx), dot8(r[1] - ry));
+    let (mut outer_r, mut outer_b) = (dot8(r[2] + rx), dot8(r[3] + ry));
+    let bounds = [floor(outer_l), floor(outer_t), ceil(outer_r), ceil(outer_b)];
+    if bounds[0] >= width as i32 || bounds[1] >= height as i32 || bounds[2] <= 0 || bounds[3] <= 0
+    {
+        return out;
+    }
+    let (rx, ry) = (stroke.0 - rx, stroke.1 - ry);
+    let (mut inner_l, mut inner_t) = (dot8(r[0] + rx), dot8(r[1] + ry));
+    let (mut inner_r, mut inner_b) = (dot8(r[2] - rx), dot8(r[3] - ry));
+    if stroke.0 < 1.0 || stroke.1 < 1.0 {
+        let align = |e1: &mut i32, e2: &mut i32| {
+            if *e1 >> 8 == *e2 >> 8 {
+                *e2 -= *e1 & 0xFF;
+                *e1 &= !0xFF;
+            }
+        };
+        align(&mut outer_l, &mut inner_l);
+        align(&mut outer_t, &mut inner_t);
+        align(&mut inner_r, &mut outer_r);
+        align(&mut inner_b, &mut outer_b);
+    }
+    anti_fill_dot8(&mut out, [outer_l, outer_t, outer_r, outer_b], false);
+    let outer = [ceil(outer_l), ceil(outer_t), floor(outer_r), floor(outer_b)];
+    let fill_check = |out: &mut Spans, l: i32, t: i32, r: i32, b: i32| {
+        if l < r && t < b {
+            out.rect(l, t, r - l, b - t);
+        }
+    };
+    if inner_l >= inner_r || inner_t >= inner_b {
+        fill_check(&mut out, outer[0], outer[1], outer[2], outer[3]);
+        return out;
+    }
+    let inner = [floor(inner_l), floor(inner_t), ceil(inner_r), ceil(inner_b)];
+    fill_check(&mut out, outer[0], outer[1], outer[2], inner[1]);
+    fill_check(&mut out, outer[0], inner[1], inner[0], inner[3]);
+    fill_check(&mut out, inner[2], inner[1], outer[2], inner[3]);
+    fill_check(&mut out, outer[0], inner[3], outer[2], outer[3]);
+    inner_stroke_dot8(&mut out, [inner_l, inner_t, inner_r, inner_b]);
+    out
+}
+
+fn alpha_mul(a: i32, b: i32) -> u8 {
+    ((a * b) >> 8) as u8
+}
+
+/// `do_scanline` of `SkScan_Antihair`.
+fn dot8_scanline(out: &mut Spans, l: i32, top: i32, r: i32, alpha: i32) {
+    if l >> 8 == (r - 1) >> 8 {
+        out.v(l >> 8, top, 1, alpha_mul(alpha, r - l));
+        return;
+    }
+    let mut left = l >> 8;
+    if l & 0xFF != 0 {
+        out.v(left, top, 1, alpha_mul(alpha, 256 - (l & 0xFF)));
+        left += 1;
+    }
+    let rite = r >> 8;
+    if rite - left > 0 {
+        out.anti_h(left, top, &vec![alpha as u8; (rite - left) as usize]);
+    }
+    if r & 0xFF != 0 {
+        out.v(rite, top, 1, alpha_mul(alpha, r & 0xFF));
+    }
+}
+
+/// `antifilldot8`.
+fn anti_fill_dot8(out: &mut Spans, [l, t, r, b]: [i32; 4], fill_inner: bool) {
+    if l >= r || t >= b {
+        return;
+    }
+    let mut top = t >> 8;
+    if top == (b - 1) >> 8 {
+        dot8_scanline(out, l, top, r, b - t - 1);
+        return;
+    }
+    if t & 0xFF != 0 {
+        dot8_scanline(out, l, top, r, 256 - (t & 0xFF));
+        top += 1;
+    }
+    let bot = b >> 8;
+    let height = bot - top;
+    if height > 0 {
+        let mut left = l >> 8;
+        if left == (r - 1) >> 8 {
+            out.v(left, top, height, (r - l - 1) as u8);
+        } else {
+            if l & 0xFF != 0 {
+                out.v(left, top, height, (256 - (l & 0xFF)) as u8);
+                left += 1;
+            }
+            let rite = r >> 8;
+            if rite - left > 0 && fill_inner {
+                out.rect(left, top, rite - left, height);
+            }
+            if r & 0xFF != 0 {
+                out.v(rite, top, height, (r & 0xFF) as u8);
+            }
+        }
+    }
+    if b & 0xFF != 0 {
+        dot8_scanline(out, l, bot, r, b & 0xFF);
+    }
+}
+
+/// `1 - (1 - a)(1 - b)` with `SkMulDiv255Round`.
+fn inv_alpha_mul(a: i32, b: i32) -> u8 {
+    let prod = a * b + 128;
+    (a + b - ((prod + (prod >> 8)) >> 8)) as u8
+}
+
+/// `inner_scanline`.
+fn inner_scanline(out: &mut Spans, l: i32, top: i32, r: i32, alpha: i32) {
+    if l >> 8 == (r - 1) >> 8 {
+        let wid = r - l;
+        let wid = wid - (wid >> 8);
+        out.v(l >> 8, top, 1, inv_alpha_mul(alpha, wid));
+        return;
+    }
+    let mut left = l >> 8;
+    if l & 0xFF != 0 {
+        out.v(left, top, 1, inv_alpha_mul(alpha, l & 0xFF));
+        left += 1;
+    }
+    let rite = r >> 8;
+    if rite - left > 0 {
+        out.anti_h(left, top, &vec![alpha as u8; (rite - left) as usize]);
+    }
+    if r & 0xFF != 0 {
+        out.v(rite, top, 1, inv_alpha_mul(alpha, !r & 0xFF));
+    }
+}
+
+/// `innerstrokedot8`.
+fn inner_stroke_dot8(out: &mut Spans, [l, t, r, b]: [i32; 4]) {
+    let mut top = t >> 8;
+    if top == (b - 1) >> 8 {
+        let alpha = 256 - (b - t);
+        if alpha != 0 {
+            inner_scanline(out, l, top, r, alpha);
+        }
+        return;
+    }
+    if t & 0xFF != 0 {
+        inner_scanline(out, l, top, r, t & 0xFF);
+        top += 1;
+    }
+    let bot = b >> 8;
+    let height = bot - top;
+    if height > 0 {
+        if l & 0xFF != 0 {
+            out.v(l >> 8, top, height, (l & 0xFF) as u8);
+        }
+        if r & 0xFF != 0 {
+            out.v(r >> 8, top, height, (!r & 0xFF) as u8);
+        }
+    }
+    if b & 0xFF != 0 {
+        inner_scanline(out, l, bot, r, !b & 0xFF);
+    }
+}
+
 /// `SkPreMultiplyColor`.
 pub fn premultiply_color(c: [u8; 4]) -> [u8; 4] {
     let a = u32::from(c[3]);
@@ -636,7 +813,7 @@ pub fn premultiply_color(c: [u8; 4]) -> [u8; 4] {
 /// Blends an unpremultiplied solid colour through `spans` the way Chromium's CPU canvas does:
 /// with Skia's legacy ARGB32 blitters (`SkBlitter_ARGB32.cpp`), whose `blitAntiH`, `blitV` and
 /// `blitMask` scale by `alpha + 1` and shift, and whose `blitAntiH2`/`blitAntiV2` interpolate.
-pub fn blit_spans_solid(pixmap: &mut Pixmap, spans: &crate::blit::Spans, color: [u8; 4]) {
+pub fn blit_spans_solid(pixmap: &mut Pixmap, spans: &Spans, color: [u8; 4]) {
     if color[3] == 0 {
         return;
     }
@@ -689,7 +866,7 @@ pub fn blit_spans_solid(pixmap: &mut Pixmap, spans: &crate::blit::Spans, color: 
 /// arithmetic.
 pub fn blit_spans(
     pixmap: &mut Pixmap,
-    spans: &crate::blit::Spans,
+    spans: &Spans,
     blend: Blend,
     source: impl Fn(usize, usize) -> [u8; 4],
 ) {
