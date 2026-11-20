@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use asrs_js::string::JsString;
-use asrs_js::time::SetRng;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use asrs_js::time::Rng;
 use asrs_js::value::{JsObject, ToJs};
-use asrs_log::log::robot_state::{RobotMode, get_robot_state_ranges};
 use asrs_log::log::{
     Log, LogError, LogFieldIterator, LogFieldTree, LogValue, LogValueSet, LogValueSetAny,
     LogValues, LoggableType, QueuedStructure, SerializedLog, SerializedLogField, TimestampDisplay,
-    log_key_utils, log_util,
+    log_key_utils, log_util, merge_offset_fallback,
 };
 use asrs_log::realm::JsRealm;
 use asrs_parity::{Response, Utf16String, Value};
@@ -529,11 +530,14 @@ fn iterator_values(set: &Option<LogValueSetAny>, times: &[f64]) -> Vec<Value> {
 /// query results `run` reports.
 pub(crate) fn build_log(cache: bool, ops: &[Value]) -> Result<(Log, Vec<Value>), String> {
     let mut log = Log::new(cache);
-    let mut realm = JsRealm::new(Box::new(SetRng::new(Vec::new())));
+    let (mut realm, drawn, _) = script_realm(Vec::new());
     let mut results = Vec::new();
     for op in ops {
         let op = op.as_array().ok_or("an op must be an array")?;
         apply(&mut log, &mut realm, op, &mut results)?;
+    }
+    if drawn.load(Ordering::Relaxed) != 0 {
+        return Err("logRun scripts draw no Math.random values".to_owned());
     }
     Ok((log, results))
 }
@@ -554,18 +558,28 @@ fn log_run(args: &[Value]) -> Response {
     }
 }
 
-/// `getMergeOffset` up to its first return: without an enabled range in either log it is the
-/// difference of the range starts. The rest of it belongs to L14.
-fn merge_offset_fallback(target: &Log, source: &Log) -> Result<f64, String> {
-    let enabled = |log: &Log| {
-        get_robot_state_ranges(log)
-            .iter()
-            .any(|range| range.mode != RobotMode::Disabled)
-    };
-    if enabled(target) || enabled(source) {
-        return Err("getMergeOffset with robot state needs L14".to_owned());
+/// A realm's `Math.random`: the values upstream drew, in order. Drawing past them is an error the
+/// script reports, as is leaving any undrawn.
+struct ScriptRng {
+    values: Vec<f64>,
+    drawn: Arc<AtomicUsize>,
+}
+
+impl Rng for ScriptRng {
+    fn next_f64(&mut self) -> f64 {
+        let i = self.drawn.fetch_add(1, Ordering::Relaxed);
+        self.values.get(i).copied().unwrap_or(f64::NAN)
     }
-    Ok(target.get_timestamp_range()[0] - source.get_timestamp_range()[0])
+}
+
+fn script_realm(values: Vec<f64>) -> (JsRealm, Arc<AtomicUsize>, usize) {
+    let drawn = Arc::new(AtomicUsize::new(0));
+    let expected = values.len();
+    let rng = ScriptRng {
+        values,
+        drawn: Arc::clone(&drawn),
+    };
+    (JsRealm::new(Box::new(rng)), drawn, expected)
 }
 
 struct ScriptLog {
@@ -581,16 +595,16 @@ struct ScriptLog {
 ///   ["op", id, <logRun op>...]
 fn script(args: &[Value]) -> Result<Value, String> {
     let mut realms: Vec<(String, JsRealm)> = Vec::new();
+    let mut draws = Vec::new();
     for entry in arg(args, 0).as_array().ok_or("realms must be an array")? {
         let name = js_string(&arg(entry.as_array().ok_or("a realm is a pair")?, 0))?;
         let values = array(
             &arg(entry.as_array().ok_or("a realm is a pair")?, 1),
             number,
         )?;
-        realms.push((
-            name.to_string_lossy(),
-            JsRealm::new(Box::new(SetRng::new(values))),
-        ));
+        let (realm, drawn, expected) = script_realm(values);
+        draws.push((name.to_string_lossy(), drawn, expected));
+        realms.push((name.to_string_lossy(), realm));
     }
     let realm_index = |realms: &[(String, JsRealm)], name: &str| {
         realms
@@ -649,8 +663,8 @@ fn script(args: &[Value]) -> Result<Value, String> {
                     &prefix,
                     &mut realms[r].1,
                     |target, source| {
-                        merge_offset_fallback(target, source).unwrap_or_else(|e| {
-                            unported = Some(e);
+                        merge_offset_fallback(target, source).unwrap_or_else(|| {
+                            unported = Some("getMergeOffset alignment needs L14".to_owned());
                             0.0
                         })
                     },
@@ -669,6 +683,14 @@ fn script(args: &[Value]) -> Result<Value, String> {
                 apply(&mut logs[i].1.log, &mut realms[r].1, &op[2..], &mut results)?;
             }
             other => return Err(format!("logScript: unknown op {other:?}")),
+        }
+    }
+    for (name, drawn, expected) in draws {
+        let drawn = drawn.load(Ordering::Relaxed);
+        if drawn != expected {
+            return Err(format!(
+                "realm {name} drew {drawn} Math.random values, upstream drew {expected}"
+            ));
         }
     }
     Ok(Value::Array(results))

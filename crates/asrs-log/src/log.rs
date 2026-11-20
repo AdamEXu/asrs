@@ -24,5 +24,5 @@ pub use log_value_sets::{
     LogValueSetNumber, LogValueSetNumberArray, LogValueSetRaw, LogValueSetString,
     LogValueSetStringArray, LogValues, RawValue,
 };
-pub use log_writers::{LogError, QueuedStructure};
+pub use log_writers::{LogError, QueuedStructure, merge_offset_fallback};
 pub use loggable_type::LoggableType;

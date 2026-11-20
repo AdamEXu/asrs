@@ -107,7 +107,7 @@ fn child_key(key: &JsString, child: &str) -> JsString {
     child_key_js(key, &JsString::from(child))
 }
 
-fn child_key_js(key: &JsString, child: &JsString) -> JsString {
+pub(super) fn child_key_js(key: &JsString, child: &JsString) -> JsString {
     let mut out = key.clone();
     out.push_unit(u16::from(b'/'));
     out.push_str(child);

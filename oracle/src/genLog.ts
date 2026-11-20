@@ -18,7 +18,6 @@ import { runScript, serveRealm } from "./logScript";
 // each ends with a dump. The rest replay corpus A's `.ops.jsonl` write sequences that need no
 // struct, photon, proto or msgpack decoding, followed by a dump.
 //
-//
 //   genLog writers <count> <seed> <corpusSeed>
 //     {"fn":"oracle:logScript","args":[<realm random values>,[<op>...]],"ok":[<result>...]}
 // Structured writers across a hub and a worker realm (see logScript.ts): the first <count>
@@ -314,60 +313,60 @@ function emit(enableCache: boolean, ops: unknown[][]) {
 }
 
 function core(count: number, seed: number, corpusSeed: number) {
-for (let i = 0; i < count; i++) {
-  const [enableCache, ops] = makeCase(new Rng(seed, `log/${i}`));
-  emit(enableCache, ops);
-}
+  for (let i = 0; i < count; i++) {
+    const [enableCache, ops] = makeCase(new Rng(seed, `log/${i}`));
+    emit(enableCache, ops);
+  }
 
-emit(true, [
-  ["putNumber", "a", 0, 1],
-  ["putNumber", "b", -0, 2],
-  ["putNumber", "c", NaN, 3],
-  ["putNumber", "c", NaN, 4],
-  ["putNumber", "d", 1, 5],
-  ["getTimestamps", ["a", "b", "c", "d"], null],
-  ["getTimestamps", ["b", "a"], "u1"],
-  ["putNumber", "a", -0, 1],
-  ["putNumber", "b", 2, 2],
-  ["getTimestamps", ["b", "a"], "u1"],
-  ["getTimestamps", ["b", "a"], "u1"],
-  ["deleteField", "a"],
-  ["getTimestamps", ["b", "a"], "u1"],
-  ["clearBeforeTime", NaN, true],
-  ["range"],
-  ["getTimestamps", ["d", "c"], ""],
-  ["dump"]
-]);
+  emit(true, [
+    ["putNumber", "a", 0, 1],
+    ["putNumber", "b", -0, 2],
+    ["putNumber", "c", NaN, 3],
+    ["putNumber", "c", NaN, 4],
+    ["putNumber", "d", 1, 5],
+    ["getTimestamps", ["a", "b", "c", "d"], null],
+    ["getTimestamps", ["b", "a"], "u1"],
+    ["putNumber", "a", -0, 1],
+    ["putNumber", "b", 2, 2],
+    ["getTimestamps", ["b", "a"], "u1"],
+    ["getTimestamps", ["b", "a"], "u1"],
+    ["deleteField", "a"],
+    ["getTimestamps", ["b", "a"], "u1"],
+    ["clearBeforeTime", NaN, true],
+    ["range"],
+    ["getTimestamps", ["d", "c"], ""],
+    ["dump"]
+  ]);
 
-emit(true, [
-  ["putNumber", "n1", 1, 1],
-  ["putNumber", "n2", 2, 2],
-  ["putNumber", "n3", 4, 3],
-  ["getTimestamps", ["n1", "n2"], ""],
-  ["getTimestamps", ["n1", "n2"], "u1"],
-  ["getTimestamps", ["n1", "n2", "n3"], "u2"],
-  ["putNumber", "n1", 3, 1],
-  ["getTimestamps", ["n1", "n2"], ""],
-  ["getTimestamps", ["n1", "n2"], "u1"],
-  ["deleteField", "n3"],
-  ["getTimestamps", ["n1", "n2", "n3"], "u2"],
-  ["dump"]
-]);
+  emit(true, [
+    ["putNumber", "n1", 1, 1],
+    ["putNumber", "n2", 2, 2],
+    ["putNumber", "n3", 4, 3],
+    ["getTimestamps", ["n1", "n2"], ""],
+    ["getTimestamps", ["n1", "n2"], "u1"],
+    ["getTimestamps", ["n1", "n2", "n3"], "u2"],
+    ["putNumber", "n1", 3, 1],
+    ["getTimestamps", ["n1", "n2"], ""],
+    ["getTimestamps", ["n1", "n2"], "u1"],
+    ["deleteField", "n3"],
+    ["getTimestamps", ["n1", "n2", "n3"], "u2"],
+    ["dump"]
+  ]);
 
-const SUPPORTED = new Set(["putRaw", "putJSON"]);
-const corpus = new Corpus(corpusSeed);
-jsonMatrix(corpus);
-for (const c of [...corpus.cases].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
-  const file = c.files.find((f) => f.path.endsWith(".ops.jsonl"));
-  if (file === undefined) continue;
-  const lines = new TextDecoder().decode(file.bytes).split("\n").filter((l) => l.length > 0);
-  const calls = lines.map((l) => {
-    const call = JSON.parse(l) as { fn: string; args: unknown[] };
-    return { fn: call.fn, args: call.args.map(fromTree) };
-  });
-  if (!calls.every((call) => SUPPORTED.has(call.fn))) continue;
-  emit(true, [...calls.map((call) => [call.fn, ...call.args]), ["getChangedFields"], ["dump"]]);
-}
+  const SUPPORTED = new Set(["putRaw", "putJSON"]);
+  const corpus = new Corpus(corpusSeed);
+  jsonMatrix(corpus);
+  for (const c of [...corpus.cases].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    const file = c.files.find((f) => f.path.endsWith(".ops.jsonl"));
+    if (file === undefined) continue;
+    const lines = new TextDecoder().decode(file.bytes).split("\n").filter((l) => l.length > 0);
+    const calls = lines.map((l) => {
+      const call = JSON.parse(l) as { fn: string; args: unknown[] };
+      return { fn: call.fn, args: call.args.map(fromTree) };
+    });
+    if (!calls.every((call) => SUPPORTED.has(call.fn))) continue;
+    emit(true, [...calls.map((call) => [call.fn, ...call.args]), ["getChangedFields"], ["dump"]]);
+  }
 }
 
 type Op = any[];
@@ -434,7 +433,9 @@ const UNIT_METADATA = [
   "foo\nunits meters per second",
   "unitless",
   "UNIT ms\nunit: rotations",
-  '{"units":"m/s"}'
+  '{"units":"m/s"}',
+  '{"unit":"meters","Units":5}',
+  '{"Units":"volts","unit":[]}'
 ];
 const ARRAY_UNIT_KEYS = ["WheelPositionsRadians", "/Drive/VelocitiesMetersPerSec", "Currents"];
 const MERGE_PREFIXES = ["", "/Log1", "Log2", "/Replay", "/", "NT:", "/a/", "/Log1/Phoenix6"];
@@ -529,6 +530,50 @@ function msgpackBlock(r: Rng, t: () => number, corpusPayloads: Uint8Array[]): Op
   return ops;
 }
 
+function pbField(field: number, wire: number, payload: number[]): number[] {
+  return wire === 2 ? [(field << 3) | 2, payload.length, ...payload] : [(field << 3) | wire, ...payload];
+}
+
+function pbText(field: number, text: string): number[] {
+  return pbField(field, 2, [...utf8(text)]);
+}
+
+/** A FileDescriptorProto whose messages have only `double` fields. */
+function protoFile(file: string, pkg: string, messages: [string, string[]][]): Uint8Array {
+  const message = ([name, fields]: [string, string[]]) =>
+    pbField(4, 2, [
+      ...pbText(1, name),
+      ...fields.flatMap((field, i) =>
+        pbField(2, 2, [...pbText(1, field), ...pbField(3, 0, [i + 1]), ...pbField(4, 0, [1]), ...pbField(5, 0, [1])])
+      )
+    ]);
+  return Uint8Array.from([...pbText(1, file), ...pbText(2, pkg), ...messages.flatMap(message)]);
+}
+
+const PROTO_FILES = [
+  protoFile("l08/point.proto", "l08", [["ProtobufPoint", ["x", "y"]]]),
+  protoFile("l08/speed.proto", "l08", [["Speed", ["VelocityMetersPerSec", "omega"]]]),
+  protoFile("l08/dup.proto", "l08", [["ProtobufPoint", ["z"]]]),
+  protoFile("l08/point.proto", "l08", [["Other", ["w"]]])
+];
+
+function protoBlock(r: Rng, t: () => number): Op[] {
+  const ops: Op[] = [];
+  for (let i = r.range(1, 4); i > 0; i--) {
+    const type = r.pick(["l08.ProtobufPoint", "l08.Speed", "l08.Missing", "ProtobufPoint"]);
+    const doubles = Array.from({ length: r.range(0, 2) }, (_, k) => {
+      const value = new Uint8Array(8);
+      new DataView(value.buffer).setFloat64(0, r.pick([1.5, -0, NaN, 1e300, r.range(-9, 9)]), true);
+      return [((k + 1) << 3) | 1, ...value];
+    });
+    ops.push(["putProto", r.pick(["/Proto", "/Robot/Point", "Speeds"]), t(), Uint8Array.from(doubles.flat()), type]);
+  }
+  for (const file of PROTO_FILES) {
+    if (r.below(3) !== 0) ops.push(["putProto", r.pick(["/.schema/proto:l08", "NT:/.schema/proto:x"]), t(), file, "FileDescriptorProto"]);
+  }
+  return ops;
+}
+
 function unitBlock(r: Rng, t: () => number): Op[] {
   const ops: Op[] = [];
   const keys = Array.from({ length: r.range(2, 6) }, () => r.pick(UNIT_KEYS));
@@ -584,10 +629,13 @@ function writersCase(r: Rng, corpusCases: Op[][], msgpackPayloads: Uint8Array[])
   const t = timestampSource(r);
   let items: Op[] = [];
   for (let k = r.range(1, 3); k > 0; k--) {
-    switch (r.below(5)) {
+    switch (r.below(6)) {
       case 0:
       case 1:
         items.push(...r.pick(corpusCases));
+        break;
+      case 5:
+        items.push(...protoBlock(r, t));
         break;
       case 2:
         items.push(...structBlock(r, t));
@@ -616,9 +664,20 @@ function writersCase(r: Rng, corpusCases: Op[][], msgpackPayloads: Uint8Array[])
     ops.push(["new", "w", "worker", r.below(5) !== 0]);
     generation++;
   };
+  const workerMerge = r.below(4) === 0 ? r.below(items.length + 1) : -1;
+  let side = false;
   items.forEach((item, i) => {
     if (merges.has(i)) mergeWorker();
-    const target = r.below(4) < workerShare ? "w" : "h";
+    if (i === workerMerge) {
+      ops.push(["new", "w2", "worker", r.bool()]);
+      side = true;
+    }
+    if (side && r.below(6) === 0) {
+      ops.push(["merge", "w", "w2", r.pick(MERGE_PREFIXES)]);
+      side = false;
+    }
+    let target = r.below(4) < workerShare ? "w" : "h";
+    if (side && r.bool()) target = "w2";
     ops.push(["op", target, ...item]);
     const k = typeof item[1] === "string" ? item[1] : r.pick(queryKeys);
     switch (r.below(30)) {
@@ -636,12 +695,67 @@ function writersCase(r: Rng, corpusCases: Op[][], msgpackPayloads: Uint8Array[])
         break;
     }
   });
+  if (side) ops.push(["merge", "w", "w2", r.pick(MERGE_PREFIXES)]);
   if (generation === 0 || r.bool()) mergeWorker();
   ops.push(["op", "h", "getChangedFields"], ["op", "h", "units"], ["op", "h", "dumpAll"]);
   return ops;
 }
 
 const FIXED_SCRIPTS: Op[][] = [
+  [
+    ["new", "h", "hub", true],
+    ...UNIT_METADATA.flatMap((metadata, i) => [
+      ["op", "h", "putNumber", `/u${i}`, 1, i],
+      ["op", "h", "setMetadataString", `/u${i}`, metadata],
+      ["op", "h", "putNumber", `/u${i}Inches`, 1, i],
+      ["op", "h", "setMetadataString", `/u${i}Inches`, metadata]
+    ]),
+    ["op", "h", "units"]
+  ],
+  [
+    ["new", "h", "hub", true],
+    ["new", "w", "worker", true],
+    ["op", "h", "putNumber", "/Arm/Angle", 1, 1],
+    ["op", "h", "putNumber", "/Pose/x", 1, 1],
+    ["op", "h", "getUnit", "/Arm/Angle"],
+    ["op", "h", "getUnit", "/Pose/x"],
+    ["op", "h", "putRaw", "/.schema/struct:Translation2d", 1, utf8("double x;double y")],
+    ["op", "h", "putStruct", "/Pose", 2, new Uint8Array(16), "Translation2d", false],
+    ["op", "h", "getUnit", "/Pose/x"],
+    ["op", "w", "putNumber", "/Arm/Angle", 1, 2],
+    ["op", "w", "setMetadataString", "/Arm/Angle", '{"unit":"degrees"}'],
+    ["op", "w", "getUnit", "/Arm/Angle"],
+    ["transfer", "w", "s", "hub"],
+    ["merge", "h", "s", ""],
+    ["op", "h", "getUnit", "/Arm/Angle"],
+    ["op", "h", "setMetadataString", "/Arm/Angle", '{"unit":"degrees"}'],
+    ["op", "h", "getUnit", "/Arm/Angle"],
+    ["op", "h", "deleteField", "/Pose/x"],
+    ["op", "h", "putNumber", "/Pose/x", 3, 1],
+    ["op", "h", "units"]
+  ],
+  [
+    ["new", "h", "hub", true],
+    ["new", "w", "worker", true],
+    ["op", "w", "putProto", "/P", 1, Uint8Array.from([9, 0, 0, 0, 0, 0, 0, 248, 63]), "l08.ProtobufPoint"],
+    ["op", "w", "putProto", "/.schema/proto:a", 1, PROTO_FILES[0], "FileDescriptorProto"],
+    ["op", "w", "putProto", "/.schema/proto:b", 1, PROTO_FILES[2], "FileDescriptorProto"],
+    ["op", "w", "putProto", "/.schema/proto:c", 1, PROTO_FILES[3], "FileDescriptorProto"],
+    ["op", "w", "dumpAll"],
+    ["op", "h", "putProto", "/.schema/proto:s", 1, PROTO_FILES[1], "FileDescriptorProto"],
+    ["op", "h", "putProto", "/S", 1, Uint8Array.from([9, 0, 0, 0, 0, 0, 0, 248, 63]), "l08.Speed"],
+    ["transfer", "w", "s", "hub"],
+    ["op", "s", "dumpAll"],
+    ["new", "w", "worker", true],
+    ["op", "w", "putProto", "/.schema/proto:b", 1, PROTO_FILES[2], "FileDescriptorProto"],
+    ["op", "w", "putProto", "/Q", 2, Uint8Array.from([9, 0, 0, 0, 0, 0, 0, 248, 63]), "l08.ProtobufPoint"],
+    ["transfer", "w", "s2", "hub"],
+    ["op", "h", "putProto", "/.schema/proto:a", 2, PROTO_FILES[0], "FileDescriptorProto"],
+    ["merge", "h", "s2", "/Log1"],
+    ["op", "h", "dumpAll"],
+    ["op", "h", "reload"],
+    ["op", "h", "dumpAll"]
+  ],
   [
     ["new", "h", "hub", true],
     ["op", "h", "putStruct", "/Big", 1, new Uint8Array(5001), "Pose2d", true],

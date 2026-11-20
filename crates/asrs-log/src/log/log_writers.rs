@@ -10,13 +10,14 @@ use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 
 use super::LoggableType;
-use super::log_core::Log;
+use super::log_core::{Log, child_key_js};
 use super::log_field::LogField;
 use super::log_key_utils::apply_key_prefix;
 use super::log_value_sets::RawValue;
 use super::proto_decoder::{
     ProtoDecoder, ProtoError, SerializedProtoDecoder, friendly_schema_type,
 };
+use super::robot_state::{RobotMode, get_robot_state_ranges};
 use super::struct_decoder::{DecodeError, StructDecoder};
 use crate::msgpack;
 use crate::realm::JsRealm;
@@ -78,13 +79,6 @@ impl Clone for FieldUnitCache {
     }
 }
 
-fn child_key(key: &JsString, child: &JsString) -> JsString {
-    let mut out = key.clone();
-    out.push_unit(u16::from(b'/'));
-    out.push_str(child);
-    out
-}
-
 fn js(text: &str) -> JsString {
     JsString::from(text)
 }
@@ -120,8 +114,6 @@ impl Log {
         Ok(())
     }
 
-    /// Writes the decoded children, then an `Empty` field typed `schemaType` for every entry of
-    /// the decoder's schema-type map.
     fn put_decoded<'a>(
         &mut self,
         key: &JsString,
@@ -131,7 +123,7 @@ impl Log {
     ) -> Result<(), LogError> {
         self.put_unknown_struct(key, timestamp, data, false)?;
         for (child, schema_type) in schema_types {
-            let full_child_key = child_key(key, child);
+            let full_child_key = child_key_js(key, child);
             self.create_blank_field(&full_child_key, LoggableType::Empty);
             self.process_timestamp(&full_child_key, timestamp);
             self.set_structured_type(&full_child_key, Some(schema_type));
@@ -160,8 +152,8 @@ impl Log {
         }
         self.set_structured_type(key, Some(structured_type));
 
-        if BIG_GEOMETRY.iter().any(|name| *schema_type == js(name))
-            && value.len() > BIG_GEOMETRY_BYTES
+        if value.len() > BIG_GEOMETRY_BYTES
+            && BIG_GEOMETRY.iter().any(|name| *schema_type == js(name))
         {
             return Ok(());
         }
@@ -442,6 +434,20 @@ impl Log {
                 .map_err(LogError::Proto)?;
         Ok(offset)
     }
+}
+
+/// `getMergeOffset` when it returns before aligning: unless both logs have an enabled range, the
+/// offset is the difference of the range starts. `None` where the alignment (unit L14) applies.
+pub fn merge_offset_fallback(target: &Log, source: &Log) -> Option<f64> {
+    let enabled = |log: &Log| {
+        get_robot_state_ranges(log)
+            .iter()
+            .any(|range| range.mode != RobotMode::Disabled)
+    };
+    if enabled(target) && enabled(source) {
+        return None;
+    }
+    Some(target.get_timestamp_range()[0] - source.get_timestamp_range()[0])
 }
 
 /// The metadata-JSON step of `getUnit`: the last of `unit`, `units`, `Unit`, `Units` present,
