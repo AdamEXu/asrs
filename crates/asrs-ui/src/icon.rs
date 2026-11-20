@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
+use asrs_canvas::path::Affine;
 use gpui_kit::{
     App, Bounds, Corners, Global, IntoElement, ParentElement, Pixels, RenderImage, RenderOnce,
     SharedString, Styled, Window, canvas, div, point, px, size,
 };
 use image::{Frame, RgbaImage};
-use asrs_canvas::path::Affine;
 
 use crate::filter::FilterChain;
 use crate::svg::Document;
@@ -372,9 +372,6 @@ mod tests {
             max: 0.5,
             scale: 1.2,
         };
-        assert_eq!(
-            layout(lamp, half, 40.0, 40.0, 1.0).size,
-            [12.84375, 20.0]
-        );
+        assert_eq!(layout(lamp, half, 40.0, 40.0, 1.0).size, [12.84375, 20.0]);
     }
 }

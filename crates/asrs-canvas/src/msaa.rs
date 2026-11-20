@@ -169,12 +169,7 @@ pub fn sample_counts(path: &SkPath, width: u32, height: u32, even_odd: bool) -> 
         for &(sx, sy) in &SAMPLES {
             let y = row * 256 + sy;
             active.clear();
-            active.extend(
-                edges
-                    .iter()
-                    .filter(|e| (e[1] <= y) != (e[3] <= y))
-                    .copied(),
-            );
+            active.extend(edges.iter().filter(|e| (e[1] <= y) != (e[3] <= y)).copied());
             if active.is_empty() {
                 continue;
             }

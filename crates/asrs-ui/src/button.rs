@@ -97,13 +97,15 @@ impl RenderOnce for IconButton {
         let chain = self.tint.chain(appearance, self.blurred, self.disabled);
         let focus = (!self.disabled).then(|| {
             window
-                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle().tab_stop(true))
+                .use_keyed_state(self.id.clone(), cx, |_, cx| {
+                    cx.focus_handle().tab_stop(true)
+                })
                 .read(cx)
                 .clone()
         });
-        let focus_visible = focus
-            .as_ref()
-            .is_some_and(|f: &FocusHandle| f.is_focused(window) && window.last_input_was_keyboard());
+        let focus_visible = focus.as_ref().is_some_and(|f: &FocusHandle| {
+            f.is_focused(window) && window.last_input_was_keyboard()
+        });
         let radius = if focus_visible {
             FOCUS_RING_RADIUS
         } else {

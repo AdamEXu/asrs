@@ -1,8 +1,9 @@
 //! The subset of SVG upstream's `www/symbols` use, parsed with usvg's parser crates (roxmltree,
-//! simplecss, svgtypes) and painted the way Blink records it and CPU Skia rasterizes it: shapes
-//! keep their kind (`DrawRect`, `DrawOval`, rounded rects and arcs as conics), path data keeps
-//! its quads, strokes go through Skia's stroker or its modulated hairlines, and coverage comes
-//! from asrs-canvas's port of Skia's analytic AA.
+//! simplecss, svgtypes) and painted the way Blink records it: shapes keep their kind
+//! (`DrawRect`, `DrawOval`, round rects and arcs as conics) and path data keeps its quads. On
+//! macOS Chromium rasterizes the DOM with Graphite, which fills paths and strokes curves by MSAA
+//! (asrs-canvas's `msaa`) and draws rects, round rects, lines and circles with analytic coverage;
+//! elsewhere it is CPU Skia (asrs-canvas's analytic AA, stroker and hairlines).
 
 use std::str::FromStr;
 
@@ -69,11 +70,7 @@ impl Style {
 
     fn apply(&mut self, name: &str, value: &str) {
         let value = value.trim();
-        let number = || {
-            svgtypes::Number::from_str(value)
-                .ok()
-                .map(|n| n.0 as f32)
-        };
+        let number = || svgtypes::Number::from_str(value).ok().map(|n| n.0 as f32);
         let opacity = || number().map(|v| v.clamp(0.0, 1.0));
         match name {
             "color" => {
@@ -129,19 +126,23 @@ fn parse_paint(value: &str) -> Option<Paint> {
     match value {
         "none" => Some(Paint::None),
         "currentColor" => Some(Paint::CurrentColor),
-        _ => svgtypes::Color::from_str(value).ok().map(|c| {
-            Paint::Color([c.red, c.green, c.blue], f32::from(c.alpha) / 255.0)
-        }),
+        _ => svgtypes::Color::from_str(value)
+            .ok()
+            .map(|c| Paint::Color([c.red, c.green, c.blue], f32::from(c.alpha) / 255.0)),
     }
 }
 
 /// A length in user units: a number, optionally in `px`.
 fn length(value: &str) -> Option<f32> {
     let l = svgtypes::Length::from_str(value.trim()).ok()?;
-    matches!(l.unit, svgtypes::LengthUnit::None | svgtypes::LengthUnit::Px).then_some(l.number as f32)
+    matches!(
+        l.unit,
+        svgtypes::LengthUnit::None | svgtypes::LengthUnit::Px
+    )
+    .then_some(l.number as f32)
 }
 
-const PROPERTIES: [&str; 11] = [
+const PROPERTIES: [&str; 10] = [
     "color",
     "fill",
     "fill-opacity",
@@ -152,7 +153,6 @@ const PROPERTIES: [&str; 11] = [
     "stroke-miterlimit",
     "stroke-linecap",
     "stroke-linejoin",
-    "stroke-dasharray",
 ];
 
 /// How Chromium rasterizes the DOM on this platform: Graphite on macOS, CPU Skia on the
@@ -474,8 +474,7 @@ fn geometry(node: Node<'_, '_>) -> Option<Geometry> {
         }
         name @ ("polyline" | "polygon") => {
             let mut path = SkPath::new();
-            for (i, (x, y)) in svgtypes::PointsParser::from(node.attribute("points")?).enumerate()
-            {
+            for (i, (x, y)) in svgtypes::PointsParser::from(node.attribute("points")?).enumerate() {
                 let p = pt(x as f32, y as f32);
                 if i == 0 {
                     path.move_to(p);
@@ -730,7 +729,9 @@ fn arc_to(path: &mut SkPath, rad: [f32; 2], angle: f32, large: bool, sweep: bool
             y: s * q.x + c * q.y,
         }
     };
-    let segments = (theta_arc / (2.0 * std::f32::consts::PI / 3.0)).abs().ceil() as i32;
+    let segments = (theta_arc / (2.0 * std::f32::consts::PI / 3.0))
+        .abs()
+        .ceil() as i32;
     let width = theta_arc / segments as f32;
     let t = (0.5 * width).tan();
     if !t.is_finite() {
@@ -1095,7 +1096,10 @@ mod tests {
         .unwrap();
         assert_eq!(doc.shapes.len(), 2);
         assert_eq!(doc.shapes[0].style.fill, Paint::None);
-        assert_eq!(doc.shapes[0].style.stroke, Paint::Color([0x45, 0x55, 0xa5], 1.0));
+        assert_eq!(
+            doc.shapes[0].style.stroke,
+            Paint::Color([0x45, 0x55, 0xa5], 1.0)
+        );
         assert_eq!(doc.shapes[0].style.stroke_width, 6.0);
         assert!(matches!(doc.shapes[1].geometry, Geometry::RRect(_)));
     }
