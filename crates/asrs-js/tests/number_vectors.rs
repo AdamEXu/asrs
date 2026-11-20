@@ -26,6 +26,10 @@ mod js_msgpack {
     pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
 }
 
+mod log_field {
+    pub const FUNCTIONS: &[(&str, crate::functions::Function)] = &[];
+}
+
 use asrs_parity::{FnCase, Response, fn_vectors};
 
 fn dispatch(case: &FnCase<'_>) -> Response {
