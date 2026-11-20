@@ -299,9 +299,8 @@ struct Stroker {
     cusper: SkPath,
 }
 
-/// `kRecursiveLimits` as Chromium m142 ships them (later Skia lowers them to 15, 24, 16, 16),
-/// indexed tangent, cubic, conic, quad.
-const RECURSIVE_LIMITS: [i32; 4] = [5 * 3, 26 * 3, 11 * 3, 11 * 3];
+/// `kRecursiveLimits` as Chromium m142 ships them, indexed tangent, cubic, conic, quad.
+const RECURSIVE_LIMITS: [i32; 4] = [5 * 3, 24, 11 * 3, 11 * 3];
 const TANGENT_LIMIT: usize = 0;
 const CUBIC_LIMIT: usize = 1;
 const CONIC_LIMIT: usize = 2;
@@ -720,7 +719,6 @@ impl Stroker {
     fn init(&mut self, stroke_type: f32, q: &mut QuadConstruct, start: f32, end: f32) {
         self.stroke_type = stroke_type;
         self.found_tangents = false;
-        self.recursion_depth = 0;
         q.init(start, end);
     }
 
@@ -842,15 +840,12 @@ impl Stroker {
             self.sink().line_to(end);
             return true;
         }
-        if !(q.quad[2].x.is_finite() && q.quad[2].y.is_finite()) {
-            return false;
-        }
         let limit = RECURSIVE_LIMITS[if c.w.is_some() {
             CONIC_LIMIT
         } else {
             QUAD_LIMIT
         }];
-        self.split(q, limit, |s, half| s.curve_stroke(c, half))
+        self.split(q, limit, false, |s, half| s.curve_stroke(c, half))
     }
 
     fn add_degenerate_line(&mut self, q: &QuadConstruct) {
@@ -858,21 +853,23 @@ impl Stroker {
         self.sink().line_to(end);
     }
 
-    /// The recursive tail shared by `quadStroke`, `conicStroke` and `cubicStroke`.
+    /// The recursive tail shared by `quadStroke`, `conicStroke` and `cubicStroke` in m142: past
+    /// the limit the depth is left raised for the rest of the path, and only cubics stop on a
+    /// failed split.
     fn split(
         &mut self,
         q: &QuadConstruct,
         limit: i32,
+        cubic: bool,
         mut stroke: impl FnMut(&mut Self, &mut QuadConstruct) -> bool,
     ) -> bool {
         self.recursion_depth += 1;
         if self.recursion_depth > limit {
             self.add_degenerate_line(q);
-            self.recursion_depth -= 1;
             return true;
         }
         let mut half = QuadConstruct::default();
-        if !half.init_with_start(q) {
+        if !half.init_with_start(q) && cubic {
             self.add_degenerate_line(q);
             self.recursion_depth -= 1;
             return true;
@@ -880,7 +877,7 @@ impl Stroker {
         if !stroke(self, &mut half) {
             return false;
         }
-        if !half.init_with_end(q) {
+        if !half.init_with_end(q) && cubic {
             self.add_degenerate_line(q);
             self.recursion_depth -= 1;
             return true;
@@ -1092,7 +1089,7 @@ impl Stroker {
         } else {
             TANGENT_LIMIT
         }];
-        self.split(q, limit, |s, half| s.cubic_stroke(cubic, half))
+        self.split(q, limit, true, |s, half| s.cubic_stroke(cubic, half))
     }
 }
 

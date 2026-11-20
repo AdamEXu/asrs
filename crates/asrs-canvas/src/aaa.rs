@@ -433,11 +433,11 @@ impl Edge {
             let d = up(p3
                 .wrapping_add(p1.wrapping_sub(p2).wrapping_mul(3))
                 .wrapping_sub(p0));
-            let d3 = (3 * i64::from(d)) >> (shift - 1);
+            let d3 = d.wrapping_mul(3) >> (shift - 1);
             (
                 b.wrapping_add(c >> shift).wrapping_add(d >> (2 * shift)),
-                (2 * i64::from(c) + d3) as i32,
-                d3 as i32,
+                c.wrapping_mul(2).wrapping_add(d3),
+                d3,
             )
         };
         (e.qdx, e.qddx, e.cdddx) = coeffs(x0, x1, x2, x3);

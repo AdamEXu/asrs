@@ -64,9 +64,6 @@ fn quad_lines(pts: &[P; 3], level: u32) -> Vec<P> {
             x: (a.x * t + b.x) * t + c.x,
             y: (a.y * t + b.y) * t + c.y,
         };
-        if !finite(q) {
-            return Vec::new();
-        }
         out.push(q);
     }
     out.push(pts[2]);
@@ -474,10 +471,10 @@ mod tests {
     }
 
     #[test]
-    fn huge_quads_are_dropped_without_overflow() {
+    fn huge_quads_subdivide_without_overflow() {
         let q = [P::default(), P { x: 3e38, y: 3e38 }, P::default()];
         assert_eq!(quad_level(&q), 5);
-        assert!(quad_lines(&q, quad_level(&q)).is_empty());
+        assert_eq!(quad_lines(&q, quad_level(&q)).len(), 33);
     }
 
     #[test]
