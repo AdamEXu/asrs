@@ -299,10 +299,12 @@ dependencies = [
 name = "asrs-canvas"
 version = "0.1.0"
 dependencies = [
+ "asrs-js",
  "asrs-parity",
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
  "core-text",
+ "tiny-skia",
 ]
 
 [[package]]
