@@ -10,11 +10,11 @@ use std::rc::Rc;
 
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, V8MathRandom};
+use asrs_live::http::{FetchEvent, FetchTransport, Response};
 use asrs_live::nt4::{
     NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId,
     WsMessage,
 };
-use asrs_live::phoenix::{HttpEvent, PhoenixTransport};
 use asrs_live::{ManualClock, Thrown, TimerId, TimerQueue};
 use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
@@ -161,13 +161,13 @@ impl FakeNet {
     }
 
     /// Applies a delivery to the browser state and returns the events it dispatches.
-    pub fn apply(&mut self, delivery: Delivery) -> Vec<BrowserEvent> {
+    pub fn apply(&mut self, delivery: Delivery) -> Vec<NetEvent> {
         match delivery {
             Delivery::WsAccepted(id, protocol) => match self.sockets.get_mut(&id) {
                 Some(s) if s.ready == ReadyState::Connecting => {
                     s.ready = ReadyState::Open;
                     s.protocol = protocol.clone();
-                    vec![NetEvent::WsOpen(SocketId(id), protocol).into()]
+                    vec![NetEvent::WsOpen(SocketId(id), protocol)]
                 }
                 _ => Vec::new(),
             },
@@ -175,22 +175,22 @@ impl FakeNet {
                 Some(s) if s.ready != ReadyState::Closed => {
                     s.ready = ReadyState::Closed;
                     vec![
-                        NetEvent::WsError(SocketId(id)).into(),
-                        NetEvent::WsClose(SocketId(id)).into(),
+                        NetEvent::WsError(SocketId(id)),
+                        NetEvent::WsClose(SocketId(id)),
                     ]
                 }
                 _ => Vec::new(),
             },
             Delivery::WsReceived(id, data) => match self.sockets.get(&id) {
                 Some(s) if s.ready == ReadyState::Open => {
-                    vec![NetEvent::WsMessage(SocketId(id), data).into()]
+                    vec![NetEvent::WsMessage(SocketId(id), data)]
                 }
                 _ => Vec::new(),
             },
             Delivery::WsDropped(id) => match self.sockets.get_mut(&id) {
                 Some(s) if s.ready != ReadyState::Closed => {
                     s.ready = ReadyState::Closed;
-                    vec![NetEvent::WsClose(SocketId(id)).into()]
+                    vec![NetEvent::WsClose(SocketId(id))]
                 }
                 _ => Vec::new(),
             },
@@ -199,11 +199,11 @@ impl FakeNet {
                     s.ready = ReadyState::Closed;
                     if was_connecting {
                         vec![
-                            NetEvent::WsError(SocketId(id)).into(),
-                            NetEvent::WsClose(SocketId(id)).into(),
+                            NetEvent::WsError(SocketId(id)),
+                            NetEvent::WsClose(SocketId(id)),
                         ]
                     } else {
-                        vec![NetEvent::WsClose(SocketId(id)).into()]
+                        vec![NetEvent::WsClose(SocketId(id))]
                     }
                 }
                 _ => Vec::new(),
@@ -211,40 +211,22 @@ impl FakeNet {
             Delivery::HttpSettled(id, settled) => match self.requests.get_mut(&id) {
                 Some(r) if !r.done => {
                     r.done = true;
-                    match settled {
-                        Some((status, body)) => vec![
-                            NetEvent::FetchResponse(RequestId(id), status as u16, href(&r.url))
-                                .into(),
-                            HttpEvent::Response(RequestId(id), status as u16, body).into(),
-                        ],
-                        None => vec![
-                            NetEvent::FetchFailed(RequestId(id)).into(),
-                            HttpEvent::Failed(RequestId(id)).into(),
-                        ],
-                    }
+                    let event = match settled {
+                        Some((status, body)) => FetchEvent::Response(
+                            RequestId(id),
+                            Response {
+                                status: status as u16,
+                                url: href(&r.url),
+                                body,
+                            },
+                        ),
+                        None => FetchEvent::Failed(RequestId(id)),
+                    };
+                    vec![NetEvent::Fetch(event)]
                 }
                 _ => Vec::new(),
             },
         }
-    }
-}
-
-/// A browser event a delivery dispatched: NT4's net events plus `fetch` completions, so a
-/// driver sees whichever its transport uses.
-pub enum BrowserEvent {
-    Net(NetEvent),
-    Http(HttpEvent),
-}
-
-impl From<NetEvent> for BrowserEvent {
-    fn from(event: NetEvent) -> Self {
-        Self::Net(event)
-    }
-}
-
-impl From<HttpEvent> for BrowserEvent {
-    fn from(event: HttpEvent) -> Self {
-        Self::Http(event)
     }
 }
 
@@ -305,28 +287,10 @@ impl Nt4Transport for FakeNet {
             Delivery::WsCloseDone(id.0, was_connecting),
         );
     }
-
-    fn fetch(&mut self, url: &str) -> RequestId {
-        self.fetch_get(url)
-    }
-
-    fn fetch_abort(&mut self, id: RequestId) {
-        self.abort_request(id);
-    }
 }
 
-impl PhoenixTransport for FakeNet {
+impl FetchTransport for FakeNet {
     fn fetch(&mut self, url: &str) -> RequestId {
-        self.fetch_get(url)
-    }
-
-    fn fetch_abort(&mut self, id: RequestId) {
-        self.abort_request(id);
-    }
-}
-
-impl FakeNet {
-    fn fetch_get(&mut self, url: &str) -> RequestId {
         let id = self.next_id;
         self.next_id += 1;
         self.requests.insert(
@@ -343,7 +307,7 @@ impl FakeNet {
         RequestId(id)
     }
 
-    fn abort_request(&mut self, id: RequestId) {
+    fn fetch_abort(&mut self, id: RequestId) {
         let Some(request) = self.requests.get_mut(&id.0) else {
             return;
         };
@@ -394,7 +358,6 @@ impl Env {
 pub trait Driver {
     fn op(&mut self, op: &[Json], env: &mut Env) -> Result<(), Thrown>;
     fn notify(&mut self, event: NetEvent, env: &mut Env);
-    fn notify_http(&mut self, _event: HttpEvent, _env: &mut Env) {}
     fn timer(&mut self, id: TimerId, env: &mut Env);
     fn finish(&mut self, _env: &mut Env) {}
 }
@@ -451,6 +414,7 @@ pub fn run(
         }
         while let Some(step) = steps.get(next_step).filter(|s| s.t <= now) {
             next_step += 1;
+            env.timers.begin_task();
             if let Err(e) = driver.op(&step.op, &mut env) {
                 env.app(
                     "throw",
@@ -462,11 +426,9 @@ pub fn run(
         }
         loop {
             if let Some(delivery) = env.net.take_task(now) {
+                env.timers.begin_task();
                 for event in env.net.apply(delivery) {
-                    match event {
-                        BrowserEvent::Net(event) => driver.notify(event, &mut env),
-                        BrowserEvent::Http(event) => driver.notify_http(event, &mut env),
-                    }
+                    driver.notify(event, &mut env);
                 }
                 continue;
             }

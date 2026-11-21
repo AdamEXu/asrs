@@ -2,8 +2,7 @@
 //! [`TokioTransport::next_event`] applies the browser's `readyState` rules to one event at a
 //! time on the foreground thread, so each sees the state the previous one left behind.
 //!
-//! `fetch` is a plain HTTP/1.1 GET that resolves once the response headers are in, without
-//! following redirects. A server that selects no subprotocol fails the handshake (tungstenite's rule),
+//! `fetch` is [`crate::http`]'s GET, settling once the response headers are in. A server that selects no subprotocol fails the handshake (tungstenite's rule),
 //! where Chromium would open with an empty `protocol`; NT4 servers always select one.
 
 use std::collections::{BTreeMap, VecDeque};
@@ -18,9 +17,9 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 
-use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+use super::transport::{NetEvent, Nt4Transport, ReadyState, SocketId, WsMessage};
 use crate::channel::{EventReceiver, EventSender, event_channel};
-use crate::http::{get_head, host_port, percent_encode};
+use crate::http::{FetchTasks, FetchTransport, RequestId, host_port, percent_encode};
 use crate::thrown::Thrown;
 
 const CLOSE_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -43,20 +42,20 @@ pub struct TokioTransport {
     pending: VecDeque<NetEvent>,
     next_id: u32,
     sockets: BTreeMap<u32, Socket>,
-    requests: BTreeMap<u32, JoinHandle<()>>,
+    requests: FetchTasks,
 }
 
 impl TokioTransport {
     pub fn new(handle: Handle) -> Self {
         let (events_tx, events_rx) = event_channel();
         Self {
+            requests: FetchTasks::new(handle.clone(), false),
             handle,
             events_tx,
             events_rx,
             pending: VecDeque::new(),
             next_id: 1,
             sockets: BTreeMap::new(),
-            requests: BTreeMap::new(),
         }
     }
 
@@ -101,9 +100,7 @@ impl TokioTransport {
                 None => false,
             },
             NetEvent::WsClose(id) => self.sockets.remove(&id.0).is_some(),
-            NetEvent::FetchResponse(id, ..) | NetEvent::FetchFailed(id) => {
-                self.requests.remove(&id.0).is_some()
-            }
+            NetEvent::Fetch(event) => self.requests.admit(event.id()),
         }
     }
 
@@ -122,9 +119,6 @@ impl Drop for TokioTransport {
     fn drop(&mut self) {
         for socket in self.sockets.values() {
             socket.task.abort();
-        }
-        for task in self.requests.values() {
-            task.abort();
         }
     }
 }
@@ -194,26 +188,18 @@ impl Nt4Transport for TokioTransport {
             let _ = s.commands.send(Command::Close);
         }
     }
+}
 
+impl FetchTransport for TokioTransport {
     fn fetch(&mut self, url: &str) -> RequestId {
-        let id = self.next_id();
-        let events = self.events_tx.clone();
-        let url = url.to_owned();
-        let task = self.handle.spawn(async move {
-            let event = match get_head(&url).await {
-                Some((status, href)) => NetEvent::FetchResponse(RequestId(id), status, href),
-                None => NetEvent::FetchFailed(RequestId(id)),
-            };
-            let _ = events.send(event);
-        });
-        self.requests.insert(id, task);
-        RequestId(id)
+        let id = RequestId(self.next_id());
+        self.requests
+            .spawn(id, url, &self.events_tx, NetEvent::Fetch);
+        id
     }
 
     fn fetch_abort(&mut self, id: RequestId) {
-        if let Some(task) = self.requests.remove(&id.0) {
-            task.abort();
-        }
+        self.requests.abort(id);
     }
 }
 

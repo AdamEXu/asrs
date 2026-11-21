@@ -1,6 +1,6 @@
-//! The JS operations `NT4.ts` applies to values decoded from the wire, which can be any JSON or
-//! msgpack value when the server misbehaves. Module code is strict, so writes to primitives
-//! throw.
+//! The JS operations upstream's live sources apply to values decoded from the wire (NT4 msgpack
+//! and JSON, Phoenix JSON), which can be anything when the server misbehaves. Module code is
+//! strict, so writes to primitives throw.
 
 use asrs_js::number;
 use asrs_js::string::JsString;

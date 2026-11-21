@@ -549,8 +549,13 @@ due, where a delivery (server message, IPC message, socket event) due now goes b
 timer, oldest first, and timers follow Blink's rules (see `src/live/clock.ts` and
 `asrs_live::timers`). The emulated main process shares that one timer queue and those rules, so its heartbeat
 interval and socket timers order against the renderer's by creation. Every task is followed by a
-full microtask drain. `requestIdleCallback`
-fires at its `timeout`, `requestAnimationFrame` 16 ms later, both as ordinary timers. IPC
+full microtask drain. Timers carry the HTML nesting level: one created in a timer task (or its
+microtasks) at level n gets n + 1, an interval rises a level per repeat, and a delay under 4 ms
+is raised to 4 ms when the creating level is above 5, so a `setTimeout(0)` in a fresh
+`setInterval` callback waits 4 ms from the sixth repeat on (measured in Electron 39).
+`requestIdleCallback` fires at its `timeout`, `requestAnimationFrame` 16 ms later and
+`AbortSignal.timeout` at its delay, all as level-0 delayed tasks in the timers' due-time order;
+Chromium's ordering of those against short DOM timers at an equal due time differs (#204). IPC
 between the renderer and the emulated main process is a delivery with no delay.
 
 Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
@@ -558,8 +563,7 @@ client `latencyMs` later. Connection and request ids count up from 1 across webs
 requests and TCP sockets. Websockets behave like the browser's: `send` while connecting
 throws, a refused handshake fires `error` then `close`, a server drop fires `close` (1006),
 `close()` fires `close` a round trip later, and messages arriving when not open are dropped.
-`fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
-`http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
+`fetch` is GET only, and an abort reaches the server as `http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
 go out on connect, `setTimeout` is an idle timer refreshed by connecting, reads and writes, a
 refusal emits `error` then `close`; `error` is emitted at once and `close` as a later
 delivery, as Node emits it from the handle's close callback.

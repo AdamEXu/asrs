@@ -201,7 +201,12 @@ fn is(name: &JsString, text: &str) -> bool {
 
 /// `name in PhoenixEnums`.
 pub fn has(name: &JsString) -> bool {
-    TABLE.iter().any(|(n, _)| is(name, n)) || PROTOTYPE_KEYS.iter().any(|p| is(name, p))
+    TABLE.iter().any(|(n, _)| is(name, n)) || is_prototype_key(name)
+}
+
+/// Whether `name in {}` holds: an `Object.prototype` member.
+pub fn is_prototype_key(name: &JsString) -> bool {
+    PROTOTYPE_KEYS.iter().any(|p| is(name, p))
 }
 
 /// `PhoenixEnums[name][key]`: `None` when the value upstream reads back is `undefined`.

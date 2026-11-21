@@ -1,11 +1,8 @@
 //! Phoenix 6 diagnostics (`PhoenixDiagnosticsSource.ts`): device and signal discovery plus
-//! signal plots, over HTTP on port 1250.
+//! signal plots, over HTTP on port 1250. Real use pairs it with
+//! [`crate::http::TokioFetchTransport`].
 
 mod enums;
 mod source;
-mod tokio;
-mod transport;
 
-pub use source::{PhoenixSource, PhoenixWindow};
-pub use tokio::TokioPhoenixTransport;
-pub use transport::{HttpEvent, PhoenixContext, PhoenixTransport};
+pub use source::{PhoenixContext, PhoenixSource, PhoenixWindow};

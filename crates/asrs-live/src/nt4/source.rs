@@ -26,8 +26,8 @@ use super::client::{
     NT4_PORTS_DEFAULT, NT4_PORTS_DS, NT4_PORTS_SYSTEMCORE, Nt4Client, Nt4Context, Nt4Handler,
     Nt4Topic,
 };
-use super::js;
 use super::transport::NetEvent;
+use crate::js;
 use crate::live_data_source::{
     LiveDataSourceBase, LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback,
     StatusCallback,
@@ -101,7 +101,7 @@ impl Nt4Source {
                 no_fields_timeout: None,
             },
             client: None,
-            idle_timer: Some(timers.set_timeout(100.0)),
+            idle_timer: Some(timers.post_delayed_task(100.0)),
             logging_subscription: None,
             low_bandwidth_topic_subscription: None,
             low_bandwidth_data_subscriptions: JsObject::new(),
@@ -192,7 +192,7 @@ impl Nt4Source {
         if self.idle_timer == Some(id) {
             self.idle_timer = None;
             if self.periodic(window, cx).is_ok() {
-                self.idle_timer = Some(cx.timers.set_timeout(100.0));
+                self.idle_timer = Some(cx.timers.post_delayed_task(100.0));
             }
             return true;
         }

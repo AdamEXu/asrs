@@ -185,7 +185,7 @@ export class Net implements Outbox {
     g.fetch = (url: string, init?: { signal?: AbortSignal }) => this.fetch(String(url), init);
     (AbortSignal as any).timeout = (ms: number) => {
       const controller = new AbortController();
-      setTimeout(() => controller.abort(new DOMException("signal timed out", "TimeoutError")), ms);
+      this.loop.postDelayedTask(() => controller.abort(new DOMException("signal timed out", "TimeoutError")), ms);
       return controller.signal;
     };
     return () => {

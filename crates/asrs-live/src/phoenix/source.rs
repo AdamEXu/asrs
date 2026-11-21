@@ -1,7 +1,7 @@
 //! Port of `src/hub/dataSources/PhoenixDiagnosticsSource.ts`: CTRE's Phoenix 6 diagnostics,
 //! polled over HTTP on port 1250. Devices and their signal lists are discovered once a second;
 //! the fields the tabs selected are plotted every 50 ms. Async fetches become pending requests
-//! whose `AbortSignal.timeout` timers and settle events the caller drives.
+//! whose `AbortSignal.timeout` tasks and settle events the caller drives.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -14,16 +14,15 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_key_utils::PHOENIX_PREFIX;
 use asrs_log::log::{Log, LoggableType};
 
+use super::enums;
 use crate::Thrown;
+use crate::http::{FetchEvent, FetchTransport, RequestId};
+use crate::js;
 use crate::live_data_source::{
     LiveDataSourceBase, LiveDataSourceStatus, LivePreferences, OutputCallback, StatusCallback,
     TimeSupplier,
 };
-use crate::nt4::{RequestId, js};
-use crate::timers::TimerId;
-
-use super::enums;
-use super::transport::{HttpEvent, PhoenixContext};
+use crate::timers::{TimerId, TimerQueue};
 
 const PORT: f64 = 1250.0;
 const GET_DEVICES_PERIOD_MS: f64 = 1000.0;
@@ -37,6 +36,13 @@ fn js(s: &str) -> JsString {
     JsString::from(s)
 }
 
+/// What a Phoenix method may touch besides the source: the hub's timers and the browser's
+/// `fetch`.
+pub struct PhoenixContext<'a> {
+    pub timers: &'a mut TimerQueue,
+    pub net: &'a mut dyn FetchTransport,
+}
+
 /// `window` as the source sees it: only the tabs' active fields and the preferences the
 /// discard timer reads.
 pub struct PhoenixWindow {
@@ -46,42 +52,32 @@ pub struct PhoenixWindow {
     pub preferences: Option<LivePreferences>,
 }
 
-/// `this.deviceSignals[deviceName]`: whatever `json.Signals` was, which may not be an array.
-enum SignalList {
-    Array(Vec<JsValue>),
-    Other(JsValue),
+/// `this.deviceSignals[deviceName].length === 0`, the check that decides whether getsignals
+/// fires again; the list is whatever `json.Signals` was.
+fn is_empty_list(list: &JsValue) -> Result<bool, Thrown> {
+    Ok(js::strict_equals(
+        &js::get(list, "length")?,
+        &JsValue::Number(0.0),
+    ))
 }
 
-impl SignalList {
-    /// `.length === 0`, the check that decides whether getsignals fires again.
-    /// A null value throws reading `length`, as upstream's does.
-    fn is_empty(&self) -> Result<bool, Thrown> {
-        match self {
-            Self::Array(items) => Ok(items.is_empty()),
-            Self::Other(JsValue::String(s)) => Ok(s.is_empty()),
-            Self::Other(JsValue::Bytes(b)) => Ok(b.is_empty()),
-            Self::Other(JsValue::Null | JsValue::Undefined) => Err(Thrown::type_error(
-                "Cannot read properties of null (reading 'length')",
-            )),
-            Self::Other(_) => Ok(false),
+/// `list.find(signal => signal.Name === signalName)`; a receiver that is not an array throws.
+fn find_named<'a>(
+    list: &'a JsValue,
+    signal_name: &JsString,
+) -> Result<Option<&'a JsValue>, Thrown> {
+    let JsValue::Array(items) = list else {
+        return Err(Thrown::type_error(
+            "this.deviceSignals[deviceName].find is not a function",
+        ));
+    };
+    for signal in items {
+        let name = js::get(signal, "Name")?;
+        if js::strict_equals(&name, &JsValue::String(signal_name.clone())) {
+            return Ok(Some(signal));
         }
     }
-
-    /// `.find(signal => signal.Name === signalName)`; a non-array receiver throws.
-    fn find_named(&self, signal_name: &JsString) -> Result<Option<&JsValue>, Thrown> {
-        let Self::Array(items) = self else {
-            return Err(Thrown::type_error(
-                "this.deviceSignals[deviceName].find is not a function",
-            ));
-        };
-        for signal in items {
-            let name = js::get(signal, "Name")?;
-            if js::strict_equals(&name, &JsValue::String(signal_name.clone())) {
-                return Ok(Some(signal));
-            }
-        }
-        Ok(None)
-    }
+    Ok(None)
 }
 
 enum PendingKind {
@@ -114,7 +110,7 @@ pub struct PhoenixSource {
     /// Every plot interval id.
     plot_timers: Vec<TimerId>,
     device_descriptions: JsObject<JsValue>,
-    device_signals: JsObject<SignalList>,
+    device_signals: JsObject<JsValue>,
     live_start_real_time: Rc<Cell<Option<f64>>>,
     live_start_log_time: Option<f64>,
     pending: Vec<Pending>,
@@ -195,20 +191,18 @@ impl PhoenixSource {
         self.base.handle_timer(id, window.preferences.as_ref())
     }
 
-    /// The fetch settled: the response body (`response.json()`) or the network rejection.
-    pub fn on_http_event(&mut self, event: &HttpEvent, cx: &mut PhoenixContext<'_>) {
-        let (id, body) = match event {
-            HttpEvent::Response(id, _status, body) => (*id, Some(body.as_str())),
-            HttpEvent::Failed(id) => (*id, None),
-        };
-        let Some(i) = self.pending.iter().position(|p| p.request == id) else {
+    /// A fetch settled: the response body (`response.json()`) or the network rejection.
+    /// Requests that are not this source's are ignored.
+    pub fn on_fetch_event(&mut self, event: &FetchEvent, cx: &mut PhoenixContext<'_>) {
+        let Some(i) = self.pending.iter().position(|p| p.request == event.id()) else {
             return;
         };
         let pending = self.pending.remove(i);
-        let Some(body) = body else {
+        let FetchEvent::Response(_, response) = event else {
             self.reject(pending.kind);
             return;
         };
+        let body = response.body.as_str();
         match pending.kind {
             PendingKind::Devices => {
                 if self.devices_reply(body, cx).is_err() {
@@ -237,8 +231,8 @@ impl PhoenixSource {
         self.start_fetch(&url, GET_DEVICES_TIMEOUT_MS, PendingKind::Devices, cx);
     }
 
-    /// The async function's synchronous prefix: `AbortSignal.timeout` is created as the
-    /// `fetch` argument is evaluated, before `fetch` runs.
+    /// The async function's synchronous prefix: the URL, then `AbortSignal.timeout` as the
+    /// `fetch` options are evaluated, then `fetch`.
     fn start_fetch(
         &mut self,
         url: &str,
@@ -246,7 +240,7 @@ impl PhoenixSource {
         kind: PendingKind,
         cx: &mut PhoenixContext<'_>,
     ) {
-        let abort = cx.timers.set_timeout(timeout);
+        let abort = cx.timers.post_delayed_task(timeout);
         let request = cx.net.fetch(url);
         self.pending.push(Pending {
             request,
@@ -287,14 +281,10 @@ impl PhoenixSource {
             }
             if self.device_signals.get_key(&device_name).is_none() {
                 self.device_signals
-                    .insert(device_name.clone(), SignalList::Array(Vec::new()));
+                    .insert(device_name.clone(), JsValue::Array(Vec::new()));
             }
-            if self
-                .device_signals
-                .get_key(&device_name)
-                .map(SignalList::is_empty)
-                .transpose()?
-                .unwrap_or(false)
+            if let Some(list) = self.device_signals.get_key(&device_name)
+                && is_empty_list(list)?
             {
                 // A rejected getSignals is an unhandled rejection: nothing happens.
                 if let Ok(url) = self.signals_url(device) {
@@ -319,13 +309,8 @@ impl PhoenixSource {
         let json = json::parse_str(body).map_err(Thrown::from)?;
         check_error(&json)?;
         let signals = js::get(&json, "Signals")?;
-        self.device_signals.insert(
-            device_name.clone(),
-            match &signals {
-                JsValue::Array(items) => SignalList::Array(items.clone()),
-                other => SignalList::Other(other.clone()),
-            },
-        );
+        self.device_signals
+            .insert(device_name.clone(), signals.clone());
         let JsValue::Array(items) = &signals else {
             return Err(Thrown::type_error("signals.forEach is not a function"));
         };
@@ -389,13 +374,19 @@ impl PhoenixSource {
                 }
                 _ => continue,
             };
+            if enums::is_prototype_key(&device_name) {
+                // Both `in` checks below see the inherited member, which has no `find`.
+                return Err(Thrown::type_error(
+                    "this.deviceSignals[deviceName].find is not a function",
+                ));
+            }
             if active.get_key(&device_name).is_none() {
                 active.insert(device_name.clone(), Vec::new());
             }
             let Some(list) = self.device_signals.get_key(&device_name) else {
                 continue;
             };
-            let Some(signal) = list.find_named(&signal_name)?.cloned() else {
+            let Some(signal) = find_named(list, &signal_name)?.cloned() else {
                 continue;
             };
             let id = js::get(&signal, "Id")?;
@@ -506,11 +497,18 @@ impl PhoenixSource {
                         log.borrow_mut()
                             .put_string(&key, timestamp, JsString::from(value_str));
                     }
-                } else if let JsValue::Number(number) = value {
-                    // `putNumber` stores any non-null value upstream; the `Log` model only
-                    // holds numbers, which is all a Phoenix reply can carry.
-                    if let Some(log) = self.base.log() {
-                        log.borrow_mut().put_number(&key, timestamp, number);
+                } else if let Some(log) = self.base.log() {
+                    match value {
+                        JsValue::Number(number) => {
+                            log.borrow_mut().put_number(&key, timestamp, number)
+                        }
+                        JsValue::Null => {
+                            log.borrow_mut()
+                                .put_null(&key, timestamp, LoggableType::Number)
+                        }
+                        // Upstream stores any other JSON value in the Number field as is, which
+                        // the `Log` cannot hold (#205).
+                        _ => {}
                     }
                 }
             }

@@ -16,8 +16,9 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_log::msgpack::{self, MultiDecoder};
 use asrs_log::realm::JsRealm;
 
-use super::js;
-use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+use super::transport::{NetEvent, Nt4Transport, ReadyState, SocketId, WsMessage};
+use crate::http::{FetchEvent, RequestId};
+use crate::js;
 use crate::thrown::Thrown;
 use crate::timers::{TimerId, TimerQueue};
 
@@ -340,7 +341,7 @@ impl Nt4Client {
         let check = self.next_alive_check;
         self.next_alive_check += 1;
         for port in self.server_ports.clone() {
-            let timer = cx.timers.set_timeout(ALIVE_TIMEOUT_MS);
+            let timer = cx.timers.post_delayed_task(ALIVE_TIMEOUT_MS);
             let url = format!("http://{}:{port}", self.server_addr);
             let request = cx.net.fetch(&url);
             self.abort_timers.push((timer, request));
@@ -1063,11 +1064,11 @@ impl Nt4Client {
                 Ok(())
             }
             NetEvent::WsClose(id) => self.on_ws_close(*id, handler, cx),
-            NetEvent::FetchResponse(id, status, url) => {
-                self.on_fetch_response(*id, f64::from(*status), url, cx);
+            NetEvent::Fetch(FetchEvent::Response(id, response)) => {
+                self.on_fetch_response(*id, f64::from(response.status), &response.url, cx);
                 Ok(())
             }
-            NetEvent::FetchFailed(id) => {
+            NetEvent::Fetch(FetchEvent::Failed(id)) => {
                 self.on_fetch_failed(*id, cx);
                 Ok(())
             }

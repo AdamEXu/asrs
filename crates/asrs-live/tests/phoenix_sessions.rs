@@ -14,7 +14,8 @@ use std::rc::Rc;
 
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
-use asrs_live::phoenix::{HttpEvent, PhoenixSource, PhoenixWindow};
+use asrs_live::nt4::NetEvent;
+use asrs_live::phoenix::{PhoenixSource, PhoenixWindow};
 use asrs_live::{LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId};
 use asrs_log::log::Log;
 use asrs_parity::Value;
@@ -230,11 +231,12 @@ impl Driver for PhoenixDriver {
         Ok(())
     }
 
-    fn notify(&mut self, _event: asrs_live::nt4::NetEvent, _env: &mut Env) {}
-
-    fn notify_http(&mut self, event: HttpEvent, env: &mut Env) {
+    fn notify(&mut self, event: NetEvent, env: &mut Env) {
+        let NetEvent::Fetch(event) = event else {
+            return;
+        };
         for source in &mut self.sources {
-            source.on_http_event(&event, &mut env.phoenix_cx());
+            source.on_fetch_event(&event, &mut env.phoenix_cx());
         }
     }
 
