@@ -8,7 +8,7 @@ use std::fmt;
 
 use crate::number;
 use crate::string::JsString;
-use crate::value::JsValue;
+use crate::value::{JsValue, ObjectIter};
 
 pub use iso_date::to_iso_string;
 pub use parse::{parse, parse_str, parse_units};
@@ -182,11 +182,45 @@ fn push_unit_escape(u: u16, out: &mut String) {
     }
 }
 
-type Members<'v> = Box<dyn Iterator<Item = (MemberKey<'v>, MemberValue<'v>)> + 'v>;
+/// The members of an object being written: a `JsObject`'s, a typed array's indices, or the
+/// `type` and `data` of an `ExtData` instance.
+enum Members<'v> {
+    Object(ObjectIter<'v>),
+    Bytes(std::iter::Enumerate<std::slice::Iter<'v, u8>>),
+    Ext { kind: i8, data: &'v [u8], next: u8 },
+}
+
+impl<'v> Iterator for Members<'v> {
+    type Item = (MemberKey<'v>, MemberValue<'v>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Members::Object(entries) => entries
+                .next()
+                .map(|(k, v)| (MemberKey::Units(k.units()), MemberValue::Value(v))),
+            Members::Bytes(bytes) => bytes
+                .next()
+                .map(|(i, b)| (MemberKey::Index(i), MemberValue::Number(f64::from(*b)))),
+            Members::Ext { kind, data, next } => {
+                let member = match next {
+                    0 => (
+                        MemberKey::Ascii("type"),
+                        MemberValue::Number(f64::from(*kind)),
+                    ),
+                    1 => (MemberKey::Ascii("data"), MemberValue::Bytes(data)),
+                    _ => return None,
+                };
+                *next += 1;
+                Some(member)
+            }
+        }
+    }
+}
 
 enum MemberKey<'v> {
-    Ref(&'v [u16]),
-    Owned(Vec<u16>),
+    Units(&'v [u16]),
+    Index(usize),
+    Ascii(&'static str),
 }
 
 /// An object member's value as the serializer sees it: a tree value, or a `Number`/`Bytes`
@@ -275,13 +309,8 @@ impl Writer<'_> {
                         let start = self.out.len();
                         self.out.push('{');
                         self.indent.push_str(self.gap);
-                        let members: Members<'_> = Box::new(
-                            object
-                                .iter()
-                                .map(|(k, v)| (MemberKey::Ref(k.units()), MemberValue::Value(v))),
-                        );
                         frames.push(Frame::Object {
-                            members,
+                            members: Members::Object(object.object_iter()),
                             any: false,
                             start,
                             member_start: None,
@@ -301,17 +330,8 @@ impl Writer<'_> {
                         let start = self.out.len();
                         self.out.push('{');
                         self.indent.push_str(self.gap);
-                        let members: Members<'_> =
-                            Box::new(bytes.iter().enumerate().map(|(i, b)| {
-                                (
-                                    MemberKey::Owned(
-                                        number::to_string(i as f64).encode_utf16().collect(),
-                                    ),
-                                    MemberValue::Number(f64::from(*b)),
-                                )
-                            }));
                         frames.push(Frame::Object {
-                            members,
+                            members: Members::Bytes(bytes.iter().enumerate()),
                             any: false,
                             start,
                             member_start: None,
@@ -345,21 +365,12 @@ impl Writer<'_> {
                         let start = self.out.len();
                         self.out.push('{');
                         self.indent.push_str(self.gap);
-                        let members: Members<'_> = Box::new(
-                            [
-                                (
-                                    MemberKey::Owned(b"type".map(u16::from).to_vec()),
-                                    MemberValue::Number(f64::from(*kind)),
-                                ),
-                                (
-                                    MemberKey::Owned(b"data".map(u16::from).to_vec()),
-                                    MemberValue::Bytes(data),
-                                ),
-                            ]
-                            .into_iter(),
-                        );
                         frames.push(Frame::Object {
-                            members,
+                            members: Members::Ext {
+                                kind: *kind,
+                                data,
+                                next: 0,
+                            },
                             any: false,
                             start,
                             member_start: None,
@@ -421,9 +432,18 @@ impl Writer<'_> {
                                     self.newline_indent();
                                 }
                                 match key {
-                                    MemberKey::Ref(units) => Self::quote_into(units, &mut self.out),
-                                    MemberKey::Owned(units) => {
-                                        Self::quote_into(&units, &mut self.out)
+                                    MemberKey::Units(units) => {
+                                        Self::quote_into(units, &mut self.out)
+                                    }
+                                    MemberKey::Index(i) => {
+                                        self.out.push('"');
+                                        self.out.push_str(&i.to_string());
+                                        self.out.push('"');
+                                    }
+                                    MemberKey::Ascii(name) => {
+                                        self.out.push('"');
+                                        self.out.push_str(name);
+                                        self.out.push('"');
                                     }
                                 }
                                 self.out.push(':');

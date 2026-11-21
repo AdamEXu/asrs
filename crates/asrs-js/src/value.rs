@@ -1,6 +1,7 @@
 //! JS values and ordinary objects with V8's own-property order: array-index keys (canonical
 //! decimal integers up to 2^32 - 2) ascending, then every other key in insertion order.
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -93,9 +94,50 @@ impl JsValue {
     }
 }
 
+thread_local! {
+    static NESTING: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Containers nested deeper than this are dropped, cloned and compared on a heap worklist;
+/// shallower ones take the plain recursive path, which is faster.
+const MAX_RECURSIVE_NESTING: usize = 256;
+
+/// Runs `f` one container level deeper on this thread, or returns `None` once
+/// [`MAX_RECURSIVE_NESTING`] levels are already on the stack.
+fn nested<R>(f: impl FnOnce() -> R) -> Option<R> {
+    struct Restore<'a>(&'a Cell<usize>, usize);
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.1);
+        }
+    }
+    NESTING.with(|nesting| {
+        let depth = nesting.get();
+        if depth >= MAX_RECURSIVE_NESTING {
+            return None;
+        }
+        nesting.set(depth + 1);
+        let _restore = Restore(nesting, depth);
+        Some(f())
+    })
+}
+
 impl Drop for JsValue {
     fn drop(&mut self) {
-        if !matches!(self, JsValue::Array(_) | JsValue::Object(_)) {
+        let has_children = match self {
+            JsValue::Array(items) => !items.is_empty(),
+            JsValue::Object(object) => !object.is_empty(),
+            _ => false,
+        };
+        if !has_children {
+            return;
+        }
+        let shallow = nested(|| match self {
+            JsValue::Array(items) => drop(std::mem::take(items)),
+            JsValue::Object(object) => drop(std::mem::take(object)),
+            _ => {}
+        });
+        if shallow.is_some() {
             return;
         }
         let mut worklist = Vec::new();
@@ -108,6 +150,17 @@ impl Drop for JsValue {
 
 impl Clone for JsValue {
     fn clone(&self) -> Self {
+        match self {
+            JsValue::Array(items) => nested(|| JsValue::Array(items.clone())),
+            JsValue::Object(object) => nested(|| JsValue::Object(object.clone())),
+            leaf => return leaf.clone_leaf(),
+        }
+        .unwrap_or_else(|| self.clone_iterative())
+    }
+}
+
+impl JsValue {
+    fn clone_iterative(&self) -> Self {
         enum Frame<'a> {
             Array(Vec<JsValue>, std::slice::Iter<'a, JsValue>),
             Object(JsObject, ObjectIter<'a>, JsString),
@@ -171,33 +224,56 @@ impl Clone for JsValue {
 
 impl PartialEq for JsValue {
     fn eq(&self, other: &Self) -> bool {
-        let mut worklist = vec![(self, other)];
-        while let Some((a, b)) = worklist.pop() {
-            match (a, b) {
-                (JsValue::Undefined, JsValue::Undefined) | (JsValue::Null, JsValue::Null) => {}
-                (JsValue::Bool(x), JsValue::Bool(y)) if x == y => {}
-                (JsValue::Number(x), JsValue::Number(y)) if x == y => {}
-                (JsValue::String(x), JsValue::String(y)) if x == y => {}
-                (JsValue::Array(x), JsValue::Array(y)) if x.len() == y.len() => {
-                    worklist.extend(x.iter().zip(y.iter()));
-                }
-                (JsValue::Object(x), JsValue::Object(y)) if x.len() == y.len() => {
-                    for ((ka, va), (kb, vb)) in x.iter().zip(y.iter()) {
-                        if ka != kb {
-                            return false;
-                        }
-                        worklist.push((va, vb));
-                    }
-                }
-                (JsValue::Bytes(x), JsValue::Bytes(y)) if x == y => {}
-                (JsValue::BigInt(x), JsValue::BigInt(y)) if x == y => {}
-                (JsValue::Date(x), JsValue::Date(y)) if x == y => {}
-                (JsValue::ExtData(k1, d1), JsValue::ExtData(k2, d2)) if k1 == k2 && d1 == d2 => {}
-                _ => return false,
-            }
+        match (self, other) {
+            (JsValue::Array(x), JsValue::Array(y)) => nested(|| x == y),
+            (JsValue::Object(x), JsValue::Object(y)) => nested(|| x == y),
+            _ => return leaf_eq(self, other),
         }
-        true
+        .unwrap_or_else(|| eq_iterative(self, other))
     }
+}
+
+/// Derived `PartialEq` for every pair that is not two arrays or two objects.
+fn leaf_eq(a: &JsValue, b: &JsValue) -> bool {
+    match (a, b) {
+        (JsValue::Undefined, JsValue::Undefined) | (JsValue::Null, JsValue::Null) => true,
+        (JsValue::Bool(x), JsValue::Bool(y)) => x == y,
+        (JsValue::Number(x), JsValue::Number(y)) => x == y,
+        (JsValue::String(x), JsValue::String(y)) => x == y,
+        (JsValue::Bytes(x), JsValue::Bytes(y)) => x == y,
+        (JsValue::BigInt(x), JsValue::BigInt(y)) => x == y,
+        (JsValue::Date(x), JsValue::Date(y)) => x == y,
+        (JsValue::ExtData(k1, d1), JsValue::ExtData(k2, d2)) => k1 == k2 && d1 == d2,
+        _ => false,
+    }
+}
+
+fn eq_iterative<'a>(a: &'a JsValue, b: &'a JsValue) -> bool {
+    let mut worklist = vec![(a, b)];
+    while let Some((a, b)) = worklist.pop() {
+        match (a, b) {
+            (JsValue::Array(x), JsValue::Array(y)) => {
+                if x.len() != y.len() {
+                    return false;
+                }
+                worklist.extend(x.iter().zip(y.iter()));
+            }
+            (JsValue::Object(x), JsValue::Object(y)) => {
+                if x.len() != y.len() {
+                    return false;
+                }
+                for ((ka, va), (kb, vb)) in x.iter().zip(y.iter()) {
+                    if ka != kb {
+                        return false;
+                    }
+                    worklist.push((va, vb));
+                }
+            }
+            _ if leaf_eq(a, b) => {}
+            _ => return false,
+        }
+    }
+    true
 }
 
 impl fmt::Debug for JsValue {
@@ -253,8 +329,9 @@ impl fmt::Debug for JsValue {
     }
 }
 
-/// `JsObject::iter` as a named type, so `Clone` can hold one per pending object frame.
-struct ObjectIter<'a> {
+/// `JsObject::iter` as a named type, so `Clone` and the JSON writer can hold one per pending
+/// object frame.
+pub(crate) struct ObjectIter<'a> {
     indexed: std::collections::btree_map::Values<'a, u32, (JsString, JsValue)>,
     named: indexmap::map::Iter<'a, JsString, JsValue>,
 }
@@ -271,7 +348,7 @@ impl<'a> Iterator for ObjectIter<'a> {
 }
 
 impl JsObject<JsValue> {
-    fn object_iter(&self) -> ObjectIter<'_> {
+    pub(crate) fn object_iter(&self) -> ObjectIter<'_> {
         ObjectIter {
             indexed: self.indexed.values(),
             named: self.named.iter(),

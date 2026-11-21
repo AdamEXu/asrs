@@ -96,3 +96,39 @@ fn deep_array_join_to_string() {
         assert_eq!(ops::to_string(&value).to_string_lossy(), "1");
     });
 }
+
+/// The hand-written `Clone`, `PartialEq` and `Debug` behave as the derived ones did, on both
+/// sides of the depth where they switch from recursion to a worklist.
+#[test]
+fn hand_written_impls_match_derived_semantics() {
+    run(|| {
+        for depth in [0, 255, 256, 257, 600] {
+            let leaf = |doc: &str| json::parse_str(doc).unwrap();
+            let wrap = |inner: JsValue| {
+                (0..depth).fold(inner, |v, _| JsValue::Array(vec![JsValue::Null, v]))
+            };
+            let nan = wrap(JsValue::Number(f64::NAN));
+            assert_ne!(nan, nan.clone(), "NaN != NaN at {depth}");
+            assert_eq!(wrap(JsValue::Number(-0.0)), wrap(JsValue::Number(0.0)));
+            assert_ne!(
+                wrap(leaf(r#"{"a":1,"b":2}"#)),
+                wrap(leaf(r#"{"b":2,"a":1}"#))
+            );
+            assert_eq!(
+                wrap(leaf(r#"{"1":1,"0":2}"#)),
+                wrap(leaf(r#"{"0":2,"1":1}"#))
+            );
+            assert_ne!(wrap(leaf("[1,2]")), wrap(leaf("[1,2,3]")));
+            assert_ne!(wrap(JsValue::Null), wrap(JsValue::Undefined));
+            let value = wrap(leaf(r#"{"b":[true,"x"],"1":{},"a":null}"#));
+            let clone = value.clone();
+            assert_eq!(value, clone);
+            assert_eq!(format!("{clone:?}"), format!("{value:?}"));
+        }
+        let value = json::parse_str(r#"[1,"s",{"k":[null,{}]},[]]"#).unwrap();
+        assert_eq!(
+            format!("{value:?}"),
+            r#"Array([Number(1.0), String("s"), Object({"k": Array([Null, Object({})])}), Array([])])"#
+        );
+    });
+}
