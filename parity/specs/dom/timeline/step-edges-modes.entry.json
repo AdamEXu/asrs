@@ -1,0 +1,119 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-modes.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/timeline-modes.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0,
+            19.99
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-0-19.99"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0.01,
+            19.995
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-0.01-19.995"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            2,
+            7.999
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-2-7.999"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0,
+            20
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-0-20"
+      }
+    ]
+  }
+}
