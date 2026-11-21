@@ -12,14 +12,14 @@ use std::rc::Rc;
 
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
-use asrs_live::ftc::{FtcContext, FtcSource};
+use asrs_live::ftc::{FtcContext, FtcSource, config};
 use asrs_live::nt4::NetEvent;
 use asrs_live::{LiveLog, OutputCallback, Thrown, TimerId, TunedValue};
 use asrs_log::log::Log;
-use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
 use asrs_parity::vectors;
+use asrs_parity::{FnCase, Response, Utf16String, Value, fn_vectors};
 
 use support::{Driver, Env, Prefs, initial_prefs, log_id, prefs_op, status_callback};
 
@@ -278,3 +278,24 @@ fn a_mutated_wire_value_is_caught() {
     let error = replay(&id, &session).unwrap_err();
     assert!(error.contains("differs"), "{error}");
 }
+
+fn config_reducer_case(case: &FnCase<'_>) -> Response {
+    let arg = |i| support::js_json::to_js(case.arg(i)).expect("reducer argument");
+    match config::config_reducer(&arg(0), &arg(1)) {
+        Ok((state, _)) => Response::Ok(support::js_value(&state)),
+        Err(Thrown(text)) => {
+            let text = text.to_string_lossy();
+            let (name, message) = text.split_once(": ").unwrap_or(("", &text));
+            Response::Throw(Value::Error(
+                Utf16String::from(name),
+                Utf16String::from(message),
+            ))
+        }
+    }
+}
+
+fn_vectors!(
+    config_reducer_matches_upstream,
+    "live/ftc/config-reducer",
+    config_reducer_case
+);

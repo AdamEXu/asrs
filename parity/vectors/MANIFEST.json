@@ -120,6 +120,7 @@
     "jstring/utf8": {"cases":12844,"content":"8e595ceab22ed01c","generator":"45dc79646c31d2e4","spec":"parity/specs/jstring/utf8.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/base": {"cases":408,"content":"ac8ad6d3b797cfcd","generator":"6faa303629e0359f","spec":"parity/specs/live/base.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/ftc/config-actions": {"cases":49,"content":"e58c1ab26273522d","generator":"1da07e5c3643cba3","spec":"parity/specs/live/ftc/config-actions.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "live/ftc/config-reducer": {"cases":45,"content":"cc3a857532978e70","generator":"f04c60097ba24e05","spec":"parity/specs/live/ftc/config-reducer.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/ftc/config-tuner": {"cases":21,"content":"a3e5c682f5409ef2","generator":"3878e5cae22de4cd","spec":"parity/specs/live/ftc/config-tuner.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/ftc/config-types": {"cases":44,"content":"d64edb597a9ef0f5","generator":"70a1570ef883863b","spec":"parity/specs/live/ftc/config-types.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/ftc/disconnect": {"cases":60,"content":"2b05301182c69eb5","generator":"d827e78f73cd8b76","spec":"parity/specs/live/ftc/disconnect.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
