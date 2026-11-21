@@ -82,6 +82,9 @@ struct Source {
     key_prefix: JsString,
     status: Status,
     worker: Option<Box<dyn DecodeWorker>>,
+    /// True once the worker threw inside a request: upstream never notices and keeps
+    /// posting to it, so every later reply is simply lost.
+    worker_dead: bool,
     is_partial: bool,
     merge_offset: f64,
     requested: IndexSet<JsString>,
@@ -98,6 +101,7 @@ impl Source {
             status: Status::Reading,
             worker: None,
             is_partial: false,
+            worker_dead: false,
             merge_offset: 0.0,
             requested: IndexSet::new(),
             finished: IndexSet::new(),
@@ -127,8 +131,9 @@ impl Session {
     where
         F: WorkerFactory,
     {
+        // `path.slice(0, -8) + "dslog"`: the dot stays, so `.dsevents` becomes `.dslog`.
         let path = path
-            .strip_suffix(".dsevents")
+            .strip_suffix("dsevents")
             .map_or_else(|| path.to_owned(), |stem| format!("{stem}dslog"));
         let mut session = Session {
             log: Log::new(true),
@@ -313,6 +318,9 @@ impl Session {
 
     /// `postMessage({type: "parseField"})` plus every reply, applied in order.
     fn send_parse_field(&mut self, index: usize, key: JsString) -> Result<(), Abort> {
+        if self.sources[index].worker_dead {
+            return Ok(());
+        }
         let Some(worker) = self.sources[index].worker.as_mut() else {
             return Ok(());
         };
@@ -320,7 +328,13 @@ impl Session {
         for reply in replies {
             self.handle_response(index, reply)?;
         }
-        end
+        match end {
+            Err(Abort::Threw) => {
+                self.sources[index].worker_dead = true;
+                Ok(())
+            }
+            end => end,
+        }
     }
 
     /// The `start` exchange for one source. Returns whether a worker was created.
@@ -353,7 +367,10 @@ impl Session {
             self.handle_response(index, reply)?;
         }
         self.sources[index].worker = Some(worker);
-        end?;
+        match end {
+            Err(Abort::Threw) => self.sources[index].worker_dead = true,
+            end => end?,
+        }
         Ok(true)
     }
 

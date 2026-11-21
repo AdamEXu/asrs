@@ -4,9 +4,13 @@
 use std::fs;
 
 pub fn read_files(path: &str) -> Vec<Option<Vec<u8>>> {
+    // `path.slice(0, -8) + "dslog"`: the dot stays, so `.dsevents` becomes `.dslog`.
+    let path = path
+        .strip_suffix("dsevents")
+        .map_or_else(|| path.to_owned(), |stem| format!("{stem}dslog"));
     match path.strip_suffix(".dslog") {
         Some(stem) => vec![
-            fs::read(path).ok(),
+            fs::read(&path).ok(),
             fs::read(format!("{stem}.dsevents")).ok(),
         ],
         None => vec![fs::read(path).ok()],
