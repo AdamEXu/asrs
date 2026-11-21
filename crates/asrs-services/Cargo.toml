@@ -7,6 +7,12 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+asrs-js = { path = "../asrs-js" }
+asrs-model = { path = "../asrs-model" }
+
+[dev-dependencies]
+asrs-cli = { path = "../asrs-cli" }
+asrs-parity = { path = "../asrs-parity" }
 
 [lints]
 workspace = true
