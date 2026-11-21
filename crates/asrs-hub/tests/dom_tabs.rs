@@ -1317,10 +1317,10 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
                 ),
                 _ => (arg, None),
             };
-            let JsValue::String(key) = parse_arg(key)? else {
+            let JsValue::String(key) = &parse_arg(key)? else {
                 return Err(err("addField needs a string key"));
             };
-            with_env(host, |env| list.add_field(env, &[], &key, parent))
+            with_env(host, |env| list.add_field(env, &[], key, parent))
                 .map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
