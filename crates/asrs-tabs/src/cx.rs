@@ -22,6 +22,10 @@ pub trait TabCx {
     /// `window.preferences`; `None` before `set-preferences` arrives.
     fn tab_preferences(&self) -> Option<&Preferences>;
 
+    /// `window.preferences` for the handlers that assign into it before telling main
+    /// (`prefersFTC` on a field select); main's next `set-preferences` replaces it.
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences>;
+
     /// `window.assets`; `None` before `set-assets` arrives.
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets>;
 

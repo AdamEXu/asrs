@@ -1352,6 +1352,60 @@ impl ConfigJoystick {
 }
 
 impl AdvantageScopeAssets {
+    /// `window.assets = message.data`: the hub stores what `set-assets` carried. Each config
+    /// arrives as `loadAssets` produced it, so re-parsing keeps every entry that is a config.
+    /// The hub reads `path` and `id` as sent rather than recomputing them: the loader stamps
+    /// `path` after parsing, and nothing ties a received `id` to its `name`.
+    pub fn from_js(value: &JsValue) -> AdvantageScopeAssets {
+        fn configs<T>(
+            value: &JsValue,
+            key: &str,
+            parse: fn(&JsValue) -> ParseResult<T>,
+            fields: fn(&mut T) -> [Option<&mut JsString>; 2],
+        ) -> Vec<T> {
+            let mut out = Vec::new();
+            if let Some(raw) = value.get(key)
+                && let Some(items) = raw.as_array()
+            {
+                for item in items {
+                    if let Ok(Parsed::Config(mut config)) = parse(item) {
+                        for (field, key) in fields(&mut config).into_iter().zip(["path", "id"]) {
+                            if let (Some(field), Some(JsValue::String(s))) = (field, item.get(key))
+                            {
+                                *field = s.clone();
+                            }
+                        }
+                        out.push(config);
+                    }
+                }
+            }
+            out
+        }
+        let mut load_failures = Vec::new();
+        if let Some(raw) = value.get("loadFailures")
+            && let Some(items) = raw.as_array()
+        {
+            for item in items {
+                if let Some(s) = item.as_str() {
+                    load_failures.push(s.clone());
+                }
+            }
+        }
+        AdvantageScopeAssets {
+            field2ds: configs(value, "field2ds", parse_field_2d, |c| {
+                [Some(&mut c.path), Some(&mut c.id)]
+            }),
+            field3ds: configs(value, "field3ds", parse_field_3d, |c| {
+                [Some(&mut c.path), Some(&mut c.id)]
+            }),
+            robots: configs(value, "robots", parse_robot, |c| [Some(&mut c.path), None]),
+            joysticks: configs(value, "joysticks", parse_joystick, |c| {
+                [Some(&mut c.path), None]
+            }),
+            load_failures,
+        }
+    }
+
     pub fn to_js(&self) -> JsValue {
         let mut o = JsObject::new();
         o.insert(
