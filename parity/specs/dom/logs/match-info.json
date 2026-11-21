@@ -1,0 +1,6 @@
+[
+  ["putString", "/DriverStation/EventName", 1, "TEST EVENT"],
+  ["putNumber", "/DriverStation/MatchType", 1, 2],
+  ["putNumber", "/DriverStation/MatchNumber", 1, 37],
+  ["putNumber", "/SystemStats/EpochTime", 1, 1735689600000000000]
+]

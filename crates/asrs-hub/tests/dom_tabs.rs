@@ -54,6 +54,7 @@ use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
+use asrs_tabs::video::{VideoController, VideoCx};
 
 fn err(message: impl Into<String>) -> String {
     message.into()
@@ -320,6 +321,24 @@ fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
     )
 }
 
+/// `div.controls-content > #controller7 > .video-source > button`: the three source
+/// buttons of the selected (visible) Video tab. `button_pos` is 1-based among the
+/// same-tag siblings, matching `sourceSection.children[n]`.
+fn video_source_button_el(button_pos: usize) -> ElDesc {
+    let controls = ElDesc {
+        tag: "div",
+        classes: &["controls-content"],
+        hidden: false,
+        pos: 1,
+        child_pos: None,
+        data_i: None,
+        parent: None,
+    };
+    let controller_root = el("div", &[], false, 1, controls);
+    let source = el("div", &["video-source"], false, 1, controller_root);
+    el("button", &[], false, button_pos, source)
+}
+
 fn field_2d_container_el(hidden: bool, pos: usize) -> ElDesc {
     el(
         "div",
@@ -549,6 +568,14 @@ impl TabFactory<Host> for Factory {
                     slot,
                 }),
             },
+            Some(TabType::Video) => TabParts {
+                uuid: uuid.clone(),
+                controller: Box::new(VideoController::new()),
+                renderer: Box::new(Recorder {
+                    inner: PendingRenderer,
+                    slot,
+                }),
+            },
             Some(TabType::Field2d) => {
                 let dom = Rc::new(RefCell::new(Field2dDom::default()));
                 self.doms.borrow_mut().last_mut().unwrap().1 = DomKind::Field2d(dom.clone());
@@ -640,6 +667,14 @@ struct Host {
     /// `window.typeMemory`.
     type_memory: SourceListTypeMemory,
     dark: bool,
+    /// `new Date().getTime()` — the same scripted clock the selection reads.
+    clock: Rc<Cell<f64>>,
+}
+
+impl VideoCx for Host {
+    fn now(&self) -> f64 {
+        self.clock.get()
+    }
 }
 
 impl TabCx for Host {
@@ -1222,6 +1257,70 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
 }
 
 /// `window.eval` is restricted to the expressions the fixtures use.
+/// `/*video:view*/`: per Video tab, in tab order, what `updateButtons`, the slider, the
+/// progress bar and the source animations show, plus the controller's private fields.
+fn video_view(r: &Runner) -> JsValue {
+    let bool_ = JsValue::Bool;
+    let pair = |hidden: bool, disabled: bool| JsValue::Array(vec![bool_(hidden), bool_(disabled)]);
+    let tabs = r
+        .tabs
+        .tabs()
+        .filter_map(|tab| {
+            let video = tab.controller().downcast_ref::<VideoController>()?;
+            let b = video.buttons();
+            let slider = video.slider();
+            let (play_frame, play_real) = video.play_start();
+            Some(ops::object([
+                ("uuid", tab.uuid().clone()),
+                (
+                    "buttons",
+                    JsValue::Array(vec![
+                        pair(b.lock_hidden, b.lock_disabled),
+                        pair(b.unlock_hidden, b.unlock_disabled),
+                        pair(false, b.controls_disabled),
+                        pair(false, b.controls_disabled),
+                        pair(b.play_hidden, b.controls_disabled),
+                        pair(b.pause_hidden, b.controls_disabled),
+                        pair(false, b.controls_disabled),
+                        pair(false, b.controls_disabled),
+                    ]),
+                ),
+                (
+                    "slider",
+                    JsValue::Array(vec![
+                        JsValue::String(slider.value().clone()),
+                        JsValue::String(slider.max().clone()),
+                        bool_(b.controls_disabled),
+                    ]),
+                ),
+                ("progress", JsValue::String(video.progress_width().clone())),
+                (
+                    "animating",
+                    JsValue::Array(vec![
+                        bool_(video.youtube_animating()),
+                        bool_(video.tba_animating()),
+                    ]),
+                ),
+                (
+                    "data",
+                    JsValue::Array(video.data().into_iter().cloned().collect()),
+                ),
+                ("locked", bool_(video.is_locked())),
+                ("lockedStartLog", JsValue::Number(video.locked_start_log())),
+                ("playing", bool_(video.is_playing())),
+                (
+                    "play",
+                    JsValue::Array(vec![
+                        JsValue::Number(play_frame),
+                        JsValue::Number(play_real),
+                    ]),
+                ),
+            ]))
+        })
+        .collect();
+    JsValue::Array(tabs)
+}
+
 fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
     if expr.starts_with("/*table:tag*/") {
         let uuid = r
@@ -1233,6 +1332,9 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         r.tagged_tables.push(uuid);
         r.sync_dom();
         return Ok(JsValue::Undefined);
+    }
+    if expr.starts_with("/*video:view*/") {
+        return Ok(video_view(r));
     }
     if let Some(inner) = expr
         .strip_prefix("[...")
@@ -1752,6 +1854,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         assets: None,
         type_memory: SourceListTypeMemory::new(),
         dark: theme_dark,
+        clock: clock_cell.clone(),
     };
     // Boot `set-assets`: `window.assets` is assigned before any controller exists, so
     // `tabs.newAssets()` at boot only reaches the stub tab.
@@ -1778,6 +1881,12 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             .merge(&prefs)
             .map_err(|e| err(format!("preferences: {e:?}")))?;
     }
+    // `window.platform` comes from the boot `set-version`, upstream's darwin by default.
+    let version = match fixture.get("version") {
+        Some(v) => js_json::to_js(&Value::from_json_lenient(v))?,
+        None => ops::object([("platform", JsValue::String(JsString::from("darwin")))]),
+    };
+    set_platform(&mut host.selection, &version);
     if let Some(boot) = fixture.get("boot") {
         host.preferences = None;
         for message in boot.as_array().ok_or_else(|| err("boot is a list"))? {
@@ -1807,8 +1916,8 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 "restore-type-memory" => {
                     host.type_memory = type_memory_from_js(&js_json::to_js(&data)?).map_err(err)?;
                 }
-                "set-version"
-                | "set-fullscreen"
+                "set-version" => set_platform(&mut host.selection, &js_json::to_js(&data)?),
+                "set-fullscreen"
                 | "set-battery"
                 | "show-update-button"
                 | "show-feedback-button"
@@ -1938,8 +2047,9 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 .map(to_js)
                 .transpose()?
                 .unwrap_or(JsValue::Undefined);
+            // `handleMainMessage` is async, so a throw surfaces as an unhandled rejection.
             if let Err(e) = runner.main_message(&name, &data) {
-                runner.exception(format!("main {name}"), e.to_string());
+                runner.exception("unhandledRejection".to_owned(), e.to_string());
             }
         } else if let Some(event) = step.get("event") {
             let result = runner.dispatch_event(event);
@@ -1974,6 +2084,15 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         }
     }
     Ok(runner.emitted)
+}
+
+/// `window.platform = data.platform` from `set-version`.
+fn set_platform(selection: &mut SelectionImpl, data: &JsValue) {
+    if let Some(platform) = data.get("platform").and_then(JsValue::as_str) {
+        let mut ctx = selection.context().clone();
+        ctx.platform = platform.to_string_lossy();
+        selection.set_context(ctx);
+    }
 }
 
 fn spec_dir_join(spec: &Path, rel: &str) -> PathBuf {
@@ -2081,6 +2200,15 @@ impl Runner {
             "restore-type-memory" => {
                 self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
             }
+            "video-data" => {
+                for (uuid, controller) in self
+                    .tabs
+                    .controllers_with_uuid::<VideoController>(TabType::Video)
+                {
+                    controller.process_video_data(&mut self.host, data, uuid)?;
+                }
+            }
+            "set-version" => set_platform(&mut self.host.selection, data),
             "set-2d-camera" => {
                 if let Some(r) = self
                     .tabs
@@ -2090,8 +2218,7 @@ impl Runner {
                         .set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN));
                 }
             }
-            "set-version"
-            | "set-fullscreen"
+            "set-fullscreen"
             | "set-battery"
             | "show-update-button"
             | "show-feedback-button"
@@ -2235,6 +2362,18 @@ impl Runner {
             (t, "click") if t.contains(".source-list .list .item button.remove") => {
                 self.source_item_click(index, true)?
             }
+            // Video controls: `index` is the querySelectorAll position inside the
+            // selected tab's controls (`div.controls-content > :not([hidden])`).
+            (t, "click") if t.contains(".video-source button") => self.video_source_click(index)?,
+            (t, "click") if t.contains(".video-timeline-section > button") => {
+                self.video_lock_click()?
+            }
+            (t, "click") if t.contains(".video-timeline-controls button") => {
+                self.video_transport_click(index)?
+            }
+            (t, "input") if t.contains("input.video-timeline-slider") => {
+                self.video_slider_input(props)?
+            }
             _ => return Err(format!("event {etype} on {target} is not modeled")),
         }
         // Every keydown bubbles to `SelectionImpl`'s window listener after the target's own.
@@ -2253,9 +2392,47 @@ impl Runner {
             } else {
                 KeyTarget::Other
             };
+            // `window.tabs` reads that SelectionImpl resolves per keydown upstream:
+            // `getSelectedTabType()` and `isUnlockedVideoSelected()`.
+            {
+                let mut ctx = self.host.selection.context().clone();
+                if let Some(i) = self.tabs.selected_index()
+                    && let Some(tab) = self.tabs.tab(i)
+                {
+                    if let Some(kind) = tab.tab_type() {
+                        ctx.selected_tab_type = kind;
+                    }
+                    ctx.unlocked_video_selected = tab.tab_type() == Some(TabType::Video)
+                        && tab
+                            .controller()
+                            .downcast_ref::<VideoController>()
+                            .is_some_and(|v| !v.is_locked());
+                }
+                self.host.selection.set_context(ctx);
+            }
+            let command_held = if self.host.selection.context().platform == "darwin" {
+                flag("metaKey")
+            } else {
+                flag("ctrlKey")
+            };
             self.host
                 .selection
                 .key_down(&code, flag("metaKey"), flag("ctrlKey"), key_target);
+            // VideoController's window listener was registered when the tab was
+            // created, after SelectionImpl's, so it runs second.
+            if key_target == KeyTarget::Other && !command_held {
+                let is_visible_video = self
+                    .tabs
+                    .selected_index()
+                    .and_then(|i| self.tabs.tab(i))
+                    .is_some_and(|t| t.tab_type() == Some(TabType::Video) && !t.content_hidden());
+                if is_visible_video
+                    && let Some(tab) = self.tabs.selected_tab_mut()
+                    && let Some(video) = tab.controller.downcast_mut::<VideoController>()
+                {
+                    video.key_down(&mut self.host, &code);
+                }
+            }
         }
         Ok(())
     }
@@ -2591,6 +2768,83 @@ impl Runner {
         }
     }
 
+    /// `.video-source button` clicks on the selected Video tab. `index` is the
+    /// `children[]` position: 0 local, 1 YouTube, 2 TBA (which also reads the
+    /// button's `getBoundingClientRect`).
+    fn video_source_click(&mut self, index: usize) -> Result<(), String> {
+        if index == 2 {
+            let rect = self.layout.rect_of(&video_source_button_el(3));
+            let Some(tab) = self.tabs.selected_tab_mut() else {
+                return Err("video source click with no selected tab".to_owned());
+            };
+            let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+                return Err("video source click on a non-Video selected tab".to_owned());
+            };
+            video.select_tba(&mut self.host, tab.uuid, [rect.right(), rect.top()]);
+            Ok(())
+        } else {
+            let Some(tab) = self.tabs.selected_tab_mut() else {
+                return Err("video source click with no selected tab".to_owned());
+            };
+            let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+                return Err("video source click on a non-Video selected tab".to_owned());
+            };
+            match index {
+                0 => video.select_local(&mut self.host, tab.uuid),
+                _ => video.select_youtube(&mut self.host, tab.uuid),
+            }
+            Ok(())
+        }
+    }
+
+    /// `.video-timeline-section > button` clicks: LOCK_BUTTON / UNLOCK_BUTTON both
+    /// call `toggleLock`.
+    fn video_lock_click(&mut self) -> Result<(), String> {
+        let Some(tab) = self.tabs.selected_tab_mut() else {
+            return Err("video lock click with no selected tab".to_owned());
+        };
+        let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+            return Err("video lock click on a non-Video selected tab".to_owned());
+        };
+        video.toggle_lock(&mut self.host);
+        Ok(())
+    }
+
+    /// `.video-timeline-controls button` clicks. `index` is the `children[]` position:
+    /// skip-back, frame-back, play, pause, frame-forward, skip-forward.
+    fn video_transport_click(&mut self, index: usize) -> Result<(), String> {
+        let Some(tab) = self.tabs.selected_tab_mut() else {
+            return Err("video transport click with no selected tab".to_owned());
+        };
+        let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+            return Err("video transport click on a non-Video selected tab".to_owned());
+        };
+        match index {
+            0 => video.skip_time(&mut self.host, -5.0),
+            1 => video.change_frame(-1.0),
+            2 | 3 => video.toggle_play_pause(&mut self.host),
+            4 => video.change_frame(1.0),
+            _ => video.skip_time(&mut self.host, 5.0),
+        }
+        Ok(())
+    }
+
+    /// `input` on `input.video-timeline-slider`: the browser has already assigned the
+    /// value (sanitized), then the listener re-anchors playback when playing.
+    fn video_slider_input(&mut self, props: Option<&Json>) -> Result<(), String> {
+        let Some(tab) = self.tabs.selected_tab_mut() else {
+            return Err("video slider input with no selected tab".to_owned());
+        };
+        let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+            return Err("video slider input on a non-Video selected tab".to_owned());
+        };
+        if let Some(value) = Self::prop_value(props)? {
+            video.set_slider(value);
+        }
+        video.slider_input(&mut self.host);
+        Ok(())
+    }
+
     fn capture(&mut self, spec: &Json, label: Option<String>) -> Result<(), String> {
         self.emitted.push(Emit {
             values: vec![
@@ -2765,7 +3019,7 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             .find(|(k, _)| *k == "command")
             .and_then(|(_, v)| v.get("type"))
             .and_then(Value::as_f64)
-            .is_some_and(|t| matches!(t, 0.0 | 1.0 | 6.0 | 7.0));
+            .is_some_and(|t| matches!(t, 0.0 | 1.0 | 6.0));
         for (key, value) in &emit.values {
             let expected_value = record.value(key).map_err(|e| {
                 format!(

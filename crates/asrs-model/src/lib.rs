@@ -10,3 +10,4 @@ pub mod source_list;
 pub mod source_list_config;
 pub mod tab_controller;
 pub mod tab_type;
+pub mod video;

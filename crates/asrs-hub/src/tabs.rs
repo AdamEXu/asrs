@@ -206,6 +206,14 @@ struct Tab<Cx: ?Sized> {
     controls_height: JsValue,
 }
 
+/// The mutable halves of one tab and the `controller.UUID` `Tabs` owns: control events
+/// that read the UUID (`VideoController`'s source buttons) route through this.
+pub struct TabMut<'a, Cx: ?Sized> {
+    pub uuid: &'a JsValue,
+    pub controller: &'a mut dyn TabController<Cx>,
+    pub renderer: &'a mut dyn TabRenderer<Cx>,
+}
+
 /// A read-only view of one tab.
 pub struct TabRef<'a, Cx: ?Sized>(&'a Tab<Cx>);
 
@@ -376,6 +384,25 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     pub fn tab(&self, index: usize) -> Option<TabRef<'_, Cx>> {
         self.tabs.get(index).map(TabRef)
+    }
+
+    /// `tabList[i]` mutable, with the UUID `addTab` drew or a restore set. Control events
+    /// dispatched through `Tabs` that reach for `this.UUID` use this.
+    pub fn tab_mut(&mut self, index: usize) -> Option<TabMut<'_, Cx>> {
+        let tab = self.tabs.get_mut(index)?;
+        let uuid = &tab.uuid;
+        let controller = &mut *tab.controller;
+        let renderer = &mut *tab.renderer;
+        Some(TabMut {
+            uuid,
+            controller,
+            renderer,
+        })
+    }
+
+    /// `tabList[selectedTab]` mutable, like `tab_mut`.
+    pub fn selected_tab_mut(&mut self) -> Option<TabMut<'_, Cx>> {
+        self.selected_index().and_then(|i| self.tab_mut(i))
     }
 
     /// `tabList[i].controller`, for `eval` steps that reach a tab by index.
@@ -809,15 +836,21 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         })
     }
 
-    /// Every `kind` tab's controller, in tab order (`processVideoData`).
-    pub fn controllers_as<T: 'static>(
+    /// Every `kind` tab's `(controllerUUID, controller)` pair, in tab order
+    /// (`processVideoData` filters on `data.uuid !== this.UUID`).
+    pub fn controllers_with_uuid<T: 'static>(
         &mut self,
         kind: TabType,
-    ) -> impl Iterator<Item = &mut T> + '_ {
+    ) -> impl Iterator<Item = (&JsValue, &mut T)> + '_ {
         self.tabs
             .iter_mut()
             .filter(move |t| t.kind == Some(kind))
-            .filter_map(|t| t.controller.downcast_mut::<T>())
+            .filter_map(|t| {
+                let uuid = &t.uuid;
+                t.controller
+                    .downcast_mut::<T>()
+                    .map(|controller| (uuid, controller))
+            })
     }
 
     /// `addTableRange(controllerUUID, rendererUUID, range)`. Upstream hands the range to the
