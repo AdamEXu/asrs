@@ -125,8 +125,9 @@ fn bigint_bytes(v: &Sample<'_>) -> Result<[u8; 8], ExportError> {
     let bigint = match v {
         Sample::Number(n) => BigInt::from_f64(*n).map_err(|_| ExportError::Rejected)?,
         Sample::Boolean(b) => BigInt::from_u64(u64::from(*b)),
-        other => BigInt::parse(&js_string(other).to_string_lossy())
-            .map_err(|_| ExportError::Rejected)?,
+        other => {
+            BigInt::parse(&js_string(other).to_string_lossy()).map_err(|_| ExportError::Rejected)?
+        }
     };
     Ok(bigint.as_int64().to_le_bytes())
 }
