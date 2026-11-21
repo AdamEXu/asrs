@@ -60,13 +60,10 @@ fn check_scores(
     Ok(())
 }
 
-fn search_queries(
-    check: fn(&str, &mut dyn FnMut(&Record) -> Result<(), String>),
-    id: &str,
-) -> usize {
+fn search_queries(id: &str, local: bool) -> usize {
     let mut sets: HashMap<String, (Log, Vec<JsString>)> = HashMap::new();
     let mut queries = 0usize;
-    check(id, &mut |record: &Record| {
+    let check = |record: &Record| {
         let case = record.string("case").unwrap_or_default();
         if let Some(set) = case.strip_prefix("keys/") {
             let mut log = Log::new(false);
@@ -114,17 +111,22 @@ fn search_queries(
             actual.get(at).map(show),
             expected.get(at).map(|k| show(k)),
         ))
-    });
+    };
+    if local {
+        check_local_records(id, check);
+    } else {
+        check_records(id, check);
+    }
     queries
 }
 
 #[test]
 fn search_fields_vectors() {
-    let queries = search_queries(|id, f| check_records(id, f), "log/search");
+    let queries = search_queries("log/search", false);
     assert!(queries >= 2000, "only {queries} queries checked");
 }
 
 #[test]
 fn search_fields_public_vectors() {
-    search_queries(|id, f| check_local_records(id, f), "log/search-public");
+    search_queries("log/search-public", true);
 }
