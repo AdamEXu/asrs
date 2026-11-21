@@ -30,6 +30,7 @@ import {
   statusFrame
 } from "./corpus/urcl";
 import { WpilogBuilder } from "./corpus/wpilog";
+import { generatedFiles } from "./corpus/generated";
 
 // Emits replay vectors for the URCL custom schemas (URCLSchema.ts, URCLSchemaLegacy.ts).
 //
@@ -742,11 +743,17 @@ if (dir === undefined) {
   console.error(USAGE);
   process.exit(2);
 }
-out({ t: "meta", generator: "urcl" });
-for (const rel of listFiles(path.join(dir, "urcl"), "urcl")) {
-  await corpusCase(dir, rel);
+const expected = new Set(
+  generatedFiles(dir, (rel) => (rel.startsWith("urcl/") || rel.startsWith("fuzz/urcl/")) && rel.endsWith(".wpilog"))
+);
+const listed = [...listFiles(path.join(dir, "urcl"), "urcl"), ...listFiles(path.join(dir, "fuzz/urcl"), "fuzz/urcl")];
+const unlisted = listed.filter((rel) => !expected.has(rel));
+if (unlisted.length > 0) {
+  console.error(`${dir}: ${unlisted.join(", ")} not in the committed manifest; run \`cargo xtask corpus gen\``);
+  process.exit(1);
 }
-for (const rel of listFiles(path.join(dir, "fuzz/urcl"), "fuzz/urcl")) {
+out({ t: "meta", generator: "urcl" });
+for (const rel of listed) {
   await corpusCase(dir, rel);
 }
 const generatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "genUrcl-"));

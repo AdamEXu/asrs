@@ -225,6 +225,7 @@ fn decode_suite(args: &[String]) -> Result {
     }
     let paths = Paths::new()?;
     let files = if positional.is_empty() {
+        crate::corpus::ensure(&paths, &crate::corpus::names(&paths.root)?)?;
         decode_cases(&paths)?
     } else {
         positional.iter().map(PathBuf::from).collect()
