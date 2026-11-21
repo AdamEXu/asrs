@@ -33,6 +33,12 @@ suites:
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
         output up to that point must be a prefix of the oracle's.
         --plant flips a bit in the first asrs-cli dump, so the run fails on purpose.
+  glb [--zips <dir>] [--jobs N] [--plant]
+        load every Field3d_/Robot_ asset from the release zips (default <cache>/asset-zips)
+        in all three render modes with upstream's real loadField/loadRobot workers and with
+        asrs-field3d, and compare the merged buffers. Zips are extracted once, one per asset
+        folder, into target/parity/glb-release.
+        --plant flips a bit in the first asrs-cli line, so the run fails on purpose.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
         anything else byte by byte
@@ -48,6 +54,7 @@ pub fn run(args: &[String]) -> Result {
         Some("cve1") => cve1(rest),
         Some("fn") => fn_suite(rest),
         Some("decode") => decode_suite(rest),
+        Some("glb") => crate::glb::run(rest),
         Some("diff") => match rest {
             [expected, actual] => diff_files(Path::new(expected), Path::new(actual)),
             _ => Err(USAGE.to_owned()),

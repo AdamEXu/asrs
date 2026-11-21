@@ -8,8 +8,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use asrs_field3d::glb::{self, MeshMaterial, ObjectKind, Optimized, OptimizedMesh, SceneGraph, SceneObject, SourceMaterial};
-use asrs_field3d::three::{ArrayData, BufferAttribute, BufferGeometry, Color, ObjectId, Quaternion, Vector3};
+use asrs_field3d::glb::{
+    self, MeshMaterial, ObjectKind, Optimized, OptimizedMesh, SceneGraph, SceneObject,
+    SourceMaterial,
+};
+use asrs_field3d::three::{
+    ArrayData, BufferAttribute, BufferGeometry, Color, ObjectId, Quaternion, Vector3,
+};
 use asrs_js::string::JsString;
 use asrs_parity::vectors::{load, workspace_root};
 use asrs_parity::{Json, Record, Value, diff};
@@ -17,19 +22,31 @@ use cli_glb::{Outcome, Result, mesh_value, mode};
 
 fn optimized_value(o: &Optimized) -> Value {
     let list = |l: &[OptimizedMesh]| Value::Array(l.iter().map(mesh_value).collect());
-    Value::object([("normal", list(&o.normal)), ("transparent", list(&o.transparent)), ("carpet", list(&o.carpet))])
+    Value::object([
+        ("normal", list(&o.normal)),
+        ("transparent", list(&o.transparent)),
+        ("carpet", list(&o.carpet)),
+    ])
 }
 
 fn json_numbers(json: &Json) -> Result<Vec<f64>> {
     json.as_array()
         .ok_or("expected an array")?
         .iter()
-        .map(|j| Value::from_json(j).ok().and_then(|v| v.as_f64()).or_else(|| j.as_f64()).ok_or_else(|| "expected a number".to_owned()))
+        .map(|j| {
+            Value::from_json(j)
+                .ok()
+                .and_then(|v| v.as_f64())
+                .or_else(|| j.as_f64())
+                .ok_or_else(|| "expected a number".to_owned())
+        })
         .collect()
 }
 
 fn json_text(json: &Json) -> Result<String> {
-    json.as_str().map(|s| s.to_string_lossy()).ok_or_else(|| "expected a string".to_owned())
+    json.as_str()
+        .map(|s| s.to_string_lossy())
+        .ok_or_else(|| "expected a string".to_owned())
 }
 
 fn typed_from_hex(kind: &str, text: &str) -> Result<ArrayData> {
@@ -37,9 +54,30 @@ fn typed_from_hex(kind: &str, text: &str) -> Result<ArrayData> {
         .map(|i| u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).map_err(|e| e.to_string()))
         .collect::<Result<_>>()?;
     Ok(match kind {
-        "Float32Array" => ArrayData::Float32(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect()),
-        "Uint16Array" => ArrayData::Uint16(bytes.as_chunks::<2>().0.iter().map(|b| u16::from_le_bytes(*b)).collect()),
-        "Uint32Array" => ArrayData::Uint32(bytes.as_chunks::<4>().0.iter().map(|b| u32::from_le_bytes(*b)).collect()),
+        "Float32Array" => ArrayData::Float32(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect(),
+        ),
+        "Uint16Array" => ArrayData::Uint16(
+            bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| u16::from_le_bytes(*b))
+                .collect(),
+        ),
+        "Uint32Array" => ArrayData::Uint32(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| u32::from_le_bytes(*b))
+                .collect(),
+        ),
         "Uint8Array" => ArrayData::Uint8(bytes),
         other => return Err(format!("unexpected array type {other}")),
     })
@@ -68,15 +106,29 @@ fn scene_from_dump(nodes: &Json) -> Result<(SceneGraph, ObjectId)> {
             "Mesh" => {
                 let g = field("geometry")?;
                 let mut geometry = BufferGeometry::new();
-                for a in g.get("attributes").and_then(Json::as_array).ok_or("attributes")? {
+                for a in g
+                    .get("attributes")
+                    .and_then(Json::as_array)
+                    .ok_or("attributes")?
+                {
                     let a = a.as_array().ok_or("attribute")?;
-                    let item_size = a[1].as_f64().or_else(|| Value::from_json(&a[1]).ok()?.as_f64()).ok_or("itemSize")? as usize;
+                    let item_size = a[1]
+                        .as_f64()
+                        .or_else(|| Value::from_json(&a[1]).ok()?.as_f64())
+                        .ok_or("itemSize")? as usize;
                     let normalized = matches!(a[2], Json::Bool(true));
                     let array = typed_from_hex(&json_text(&a[3])?, &json_text(&a[4])?)?;
-                    geometry.set_attribute(&json_text(&a[0])?, BufferAttribute::new(array, item_size, normalized));
+                    geometry.set_attribute(
+                        &json_text(&a[0])?,
+                        BufferAttribute::new(array, item_size, normalized),
+                    );
                 }
                 if let Some(index) = g.get("index").and_then(Json::as_array) {
-                    geometry.index = Some(BufferAttribute::new(typed_from_hex(&json_text(&index[0])?, &json_text(&index[1])?)?, 1, false));
+                    geometry.index = Some(BufferAttribute::new(
+                        typed_from_hex(&json_text(&index[0])?, &json_text(&index[1])?)?,
+                        1,
+                        false,
+                    ));
                 }
                 let m = field("material")?;
                 let material = if m.get("array").is_some() {
@@ -100,7 +152,10 @@ fn scene_from_dump(nodes: &Json) -> Result<(SceneGraph, ObjectId)> {
                         opacity,
                     }))
                 };
-                ObjectKind::Mesh { geometry: Arc::new(geometry), material }
+                ObjectKind::Mesh {
+                    geometry: Arc::new(geometry),
+                    material,
+                }
             }
             "Group" => ObjectKind::Group,
             "Object3D" => ObjectKind::Object3D,
@@ -126,9 +181,16 @@ fn run_optimize(nodes: &Json, args: &Value) -> Result<Value> {
     let (mut graph, root) = scene_from_dump(nodes)?;
     let get = |k: &str| args.get(k).ok_or_else(|| format!("args without {k}"));
     let mode = mode(&get("mode")?.as_str().ok_or("mode")?.to_string_lossy())?;
-    let specular = get("specular")?.as_array().ok_or("specular")?.iter().map(|v| v.as_f64().unwrap_or(f64::NAN)).collect::<Vec<_>>();
+    let specular = get("specular")?
+        .as_array()
+        .ok_or("specular")?
+        .iter()
+        .map(|v| v.as_f64().unwrap_or(f64::NAN))
+        .collect::<Vec<_>>();
     let shininess = get("shininess")?.as_f64().ok_or("shininess")?;
-    let simplify = get("enableSimplification")?.as_bool().ok_or("enableSimplification")?;
+    let simplify = get("enableSimplification")?
+        .as_bool()
+        .ok_or("enableSimplification")?;
     let is_ftc = get("isFTC")?.as_bool().ok_or("isFTC")?;
     let slicing = get("slicingSize")?.as_f64();
     let optimized = glb::optimize_geometries(
@@ -145,13 +207,14 @@ fn run_optimize(nodes: &Json, args: &Value) -> Result<Value> {
     Ok(optimized_value(&optimized))
 }
 
-
 fn upstream() -> PathBuf {
     workspace_root().join("reference/AdvantageScope")
 }
 
 fn hex_bytes(text: &str) -> Vec<u8> {
-    (0..text.len() / 2).map(|i| u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).expect("hex")).collect()
+    (0..text.len() / 2)
+        .map(|i| u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).expect("hex"))
+        .collect()
 }
 
 fn compare(record: &Record, actual: &Outcome) -> Result<()> {
@@ -190,22 +253,40 @@ fn check_assets(id: &str) {
                 cases += 1;
                 let result = (|| -> Result<()> {
                     let mut inputs = HashMap::new();
-                    for file in record.field("files").and_then(Json::as_array).ok_or("files")? {
+                    for file in record
+                        .field("files")
+                        .and_then(Json::as_array)
+                        .ok_or("files")?
+                    {
                         let pair = file.as_array().ok_or("file")?;
                         let name = json_text(&pair[0])?;
                         let bytes = if let Some(bundled) = pair[1].get("bundled") {
-                            std::fs::read(upstream().join(json_text(bundled)?)).map_err(|e| e.to_string())?
+                            std::fs::read(upstream().join(json_text(bundled)?))
+                                .map_err(|e| e.to_string())?
                         } else {
-                            files.get(&json_text(pair[1].get("sha256").ok_or("sha256")?)?).cloned().ok_or("unknown file")?
+                            files
+                                .get(&json_text(pair[1].get("sha256").ok_or("sha256")?)?)
+                                .cloned()
+                                .ok_or("unknown file")?
                         };
                         inputs.insert(name, bytes);
                     }
                     let mode = mode(&record.string("mode").ok_or("mode")?)?;
-                    let outcome = cli_glb::run_asset(kind, &record.string("config").ok_or("config")?, mode, &inputs)?;
+                    let outcome = cli_glb::run_asset(
+                        kind,
+                        &record.string("config").ok_or("config")?,
+                        mode,
+                        &inputs,
+                    )?;
                     compare(record, &outcome)
                 })();
                 if let Err(e) = result {
-                    failures.push(format!("line {} ({} {}): {e}", record.line, record.string("case").unwrap_or_default(), record.string("mode").unwrap_or_default()));
+                    failures.push(format!(
+                        "line {} ({} {}): {e}",
+                        record.line,
+                        record.string("case").unwrap_or_default(),
+                        record.string("mode").unwrap_or_default()
+                    ));
                 }
             }
             other => failures.push(format!("line {}: unexpected kind {other:?}", record.line)),
@@ -217,7 +298,16 @@ fn check_assets(id: &str) {
 fn finish(id: &str, cases: usize, failures: Vec<String>) {
     assert!(cases > 0, "vectors {id}: no cases");
     if !failures.is_empty() {
-        panic!("vectors {id}: {} of {cases} cases differ\n\n{}", failures.len(), failures.iter().take(5).cloned().collect::<Vec<_>>().join("\n\n"));
+        panic!(
+            "vectors {id}: {} of {cases} cases differ\n\n{}",
+            failures.len(),
+            failures
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        );
     }
 }
 
@@ -240,21 +330,77 @@ fn glb_procedural() {
     for record in &records {
         match record.string("kind").as_deref() {
             Some("scene") => {
-                scenes.insert(record.string("scene").expect("scene id"), record.field("nodes").expect("nodes").clone());
+                scenes.insert(
+                    record.string("scene").expect("scene id"),
+                    record.field("nodes").expect("nodes").clone(),
+                );
             }
             Some("optimize") => {
                 cases += 1;
                 let result = (|| -> Result<()> {
-                    let nodes = scenes.get(&record.string("scene").ok_or("scene")?).ok_or("unknown scene")?;
+                    let nodes = scenes
+                        .get(&record.string("scene").ok_or("scene")?)
+                        .ok_or("unknown scene")?;
                     let args = record.value("args").map_err(|e| e.to_string())?;
                     compare(record, &Outcome::Value(run_optimize(nodes, &args)?))
                 })();
                 if let Err(e) = result {
-                    failures.push(format!("line {} ({} {}): {e}", record.line, record.string("case").unwrap_or_default(), record.string("mode").unwrap_or_default()));
+                    failures.push(format!(
+                        "line {} ({} {}): {e}",
+                        record.line,
+                        record.string("case").unwrap_or_default(),
+                        record.string("mode").unwrap_or_default()
+                    ));
                 }
             }
             other => failures.push(format!("line {}: unexpected kind {other:?}", record.line)),
         }
     }
     finish("field3d/glb-procedural", cases, failures);
+}
+
+#[test]
+fn load_job_matches_direct_load_and_converts_for_the_renderer() {
+    use asrs_field3d::render::Side;
+    use asrs_model::preferences::Field3dMode;
+
+    let folder = upstream().join("bundledAssets/Robot_FRCKitBot");
+    let text = std::fs::read_to_string(folder.join("config.json")).expect("bundled config");
+    let raw = asrs_js::json::parse_str(&text).expect("config JSON");
+    let asrs_model::assets::Parsed::Config(mut config) =
+        asrs_model::assets::parse_robot(&raw).expect("parses")
+    else {
+        panic!("bundled robot config does not parse");
+    };
+    config.path = JsString::from(folder.join("model.glb").to_string_lossy().as_ref());
+    let options = glb::LoadOptions::for_mode(Field3dMode::Cinematic);
+    let direct =
+        glb::load_robot(&config, config.is_ftc, &options, &glb::read_file_url).expect("loads");
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let job = glb::spawn_load_robot(
+        config.clone(),
+        config.is_ftc,
+        options,
+        Arc::new(glb::read_file_url),
+        move || {
+            let _ = tx.send(());
+        },
+    );
+    rx.recv().expect("waker fires");
+    let background = job.try_take().expect("result is ready").expect("loads");
+    assert_eq!(background, direct);
+
+    let mesh = background[0][0].to_render_mesh();
+    assert_eq!(mesh.material.specular.get_hex(), f64::from(0x666666));
+    assert_eq!(mesh.material.shininess, 100.0);
+    assert_eq!(mesh.material.side, Side::Double);
+    assert!(mesh.material.vertex_colors && mesh.cast_shadow && !mesh.receive_shadow);
+    let (rendered, source) = (&mesh.geometry.geometry, &background[0][0].geometry);
+    assert!(rendered.index == source.index && rendered.attributes().eq(source.attributes()));
+
+    config.path = JsString::from("/nonexistent/model.glb");
+    let failed =
+        glb::spawn_load_robot(config, false, options, Arc::new(glb::read_file_url), || {}).wait();
+    assert!(matches!(failed, Err(glb::LoadError::Fetch(_))));
 }

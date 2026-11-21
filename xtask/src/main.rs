@@ -5,6 +5,7 @@ mod canvas;
 mod check;
 mod corpus;
 mod field3d;
+mod glb;
 mod gpui;
 mod historical;
 mod host;
