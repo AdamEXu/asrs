@@ -1,0 +1,79 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../assets/field3d.json",
+  "../logs/field3d-objects.json"
+ ],
+ "fixture": {
+  "seed": 1004,
+  "assets": "../assets/field3d.json",
+  "steps": [
+   {
+    "log": "../logs/field3d-objects.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"robot\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}},{\"type\":\"component\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{}},{\"type\":\"mechanism\",\"logKey\":\"/Mech\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{\"plane\":\"xz\"}},{\"type\":\"mechanism\",\"logKey\":\"/Mech2\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{\"plane\":\"yz\"}},{\"type\":\"vision\",\"logKey\":\"/Vision3\",\"logType\":\"Translation3d[]\",\"visible\":true,\"options\":{\"color\":\"#00ff00\",\"size\":\"bold\"}},{\"type\":\"swerveModuleVelocities\",\"logKey\":\"/SwerveVel\",\"logType\":\"SwerveModuleVelocity[]\",\"visible\":true,\"options\":{\"color\":\"#ff0000\",\"arrangement\":\"3,2,1,0\"}},{\"type\":\"rotationOverride\",\"logKey\":\"/Rot3\",\"logType\":\"Rotation3d\",\"visible\":true,\"options\":{}},{\"type\":\"rotationOverrideLegacy\",\"logKey\":\"/RotNum\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"units\":\"degrees\"}},{\"type\":\"robot\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}},{\"type\":\"swerveModuleVelocities\",\"logKey\":\"/SwerveState\",\"logType\":\"SwerveModuleState[]\",\"visible\":true,\"options\":{\"color\":\"#00ffff\"}},{\"type\":\"ghost\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"model\":\"GhostBot\",\"color\":\"#0000ff\"}},{\"type\":\"gamePiece\",\"logKey\":\"/Raw3ds\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"Note\"}},{\"type\":\"gamePiece\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"Fuel\"}},{\"type\":\"trajectory\",\"logKey\":\"/Traj\",\"logType\":\"Trajectory\",\"visible\":true,\"options\":{\"color\":\"#ff8800\",\"size\":\"normal\"}},{\"type\":\"trajectory\",\"logKey\":\"/Choreo\",\"logType\":\"SwerveSample[]\",\"visible\":true,\"options\":{\"color\":\"#ff0088\",\"size\":\"bold\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"visible\"}},{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"36h11-6.5in\"}},{\"type\":\"aprilTagIDs\",\"logKey\":\"/TagIDs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{}},{\"type\":\"aprilTag\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"variant\":\"16h5-6in\"}},{\"type\":\"axes\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{}},{\"type\":\"cone\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"color\":\"#ffff00\",\"position\":\"front\"}},{\"type\":\"cone\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":false,\"options\":{\"color\":\"#00ffff\",\"position\":\"sideways\"}},{\"type\":\"cameraOverride\",\"logKey\":\"/Cam\",\"logType\":\"Transform3d\",\"visible\":true,\"options\":{}}])"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     2.5
+    ]
+   },
+   {
+    "selection": [
+     "setTimelineRange",
+     [
+      2,
+      6
+     ],
+     false
+    ]
+   },
+   {
+    "advance": 50
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "all-objects"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     7
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "late-time"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     null
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "null-time"
+   }
+  ]
+ }
+}

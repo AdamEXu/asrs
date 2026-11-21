@@ -5,6 +5,7 @@
 use std::cell::Ref;
 
 use asrs_js::time::Rng;
+use asrs_js::value::JsValue;
 use asrs_log::log::{Log, TimestampDisplay};
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
@@ -22,6 +23,10 @@ pub trait TabCx {
     /// `window.preferences`; `None` before `set-preferences` arrives.
     fn tab_preferences(&self) -> Option<&Preferences>;
 
+    /// `window.preferences` for the handlers that assign into it before telling main
+    /// (`prefersFTC` on a field select); main's next `set-preferences` replaces it.
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences>;
+
     /// `window.assets`; `None` before `set-assets` arrives.
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets>;
 
@@ -30,6 +35,10 @@ pub trait TabCx {
 
     /// `window.sendMainMessage(name, data)`.
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>);
+
+    /// `window.sendMainMessage("open-xr", uuid)` from the Field3d XR button. XR is out of
+    /// scope, so `HubToMain` leaves the name out and main ignores it; the hub still sends it.
+    fn send_open_xr(&mut self, uuid: JsValue);
 }
 
 /// `window.log.getTimestampDisplayOffset()`.

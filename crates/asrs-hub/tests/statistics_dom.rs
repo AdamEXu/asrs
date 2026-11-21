@@ -161,6 +161,10 @@ impl TabCx for Host {
         None
     }
 
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
+        None
+    }
+
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
         None
     }
@@ -171,6 +175,10 @@ impl TabCx for Host {
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         self.messages.push(message);
+    }
+
+    fn send_open_xr(&mut self, _uuid: JsValue) {
+        unreachable!("the statistics harness has no Field3d tab")
     }
 }
 

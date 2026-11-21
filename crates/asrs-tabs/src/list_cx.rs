@@ -4,11 +4,12 @@
 
 use std::cell::Ref;
 
+use asrs_js::ops;
 use asrs_js::string::JsError;
 use asrs_js::value::JsValue;
 use asrs_log::log::Log;
 use asrs_model::selection::Selection;
-use asrs_model::source_list::{Env, SourceListError};
+use asrs_model::source_list::{Env, SourceList, SourceListError};
 use asrs_model::source_list_config::{SourceListItemState, SourceListTypeMemory};
 
 use crate::cx::TabCx;
@@ -77,4 +78,30 @@ pub fn source_state(value: &JsValue) -> Result<Vec<SourceListItemState>, JsError
                 .ok_or_else(|| unmodeled("a restored source item of another shape"))
         })
         .collect()
+}
+
+/// `sourceList.setState(value)`: `clear()`, then `value.forEach(addListItem)`. An item
+/// `SourceListItemState` cannot hold stays in upstream's state after `addListItem`
+/// pushes it, so the port reports it as unmodeled instead of guessing.
+pub fn set_source_state<C: SourceListCx + ?Sized>(
+    list: &mut SourceList,
+    cx: &mut C,
+    value: &JsValue,
+) -> Result<(), JsError> {
+    let JsValue::Array(items) = value else {
+        list.clear();
+        if let JsValue::Bytes(_) = value {
+            return Err(JsError::new("Unmodeled", "a typed array of sources"));
+        }
+        ops::get(value, "forEach")?;
+        return Err(JsError::type_error("state.forEach is not a function"));
+    };
+    let items = items
+        .iter()
+        .map(|item| {
+            SourceListItemState::from_js(item)
+                .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    with_env(cx, |env| list.set_state(env, items)).map_err(js_error)
 }
