@@ -3,13 +3,11 @@
 //! `close()` after closing does nothing, messages are only delivered while open) and report
 //! events back through the client's `on_*` methods, one event per task, in arrival order.
 
+use crate::http::{FetchEvent, FetchTransport};
 use crate::thrown::Thrown;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SocketId(pub u32);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct RequestId(pub u32);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadyState {
@@ -33,13 +31,16 @@ pub enum NetEvent {
     WsMessage(SocketId, WsMessage),
     WsError(SocketId),
     WsClose(SocketId),
-    /// `fetch` fulfilled: the response status and `response.url`.
-    FetchResponse(RequestId, u16, String),
-    /// `fetch` rejected with a network error.
-    FetchFailed(RequestId),
+    Fetch(FetchEvent),
 }
 
-pub trait Nt4Transport {
+impl From<FetchEvent> for NetEvent {
+    fn from(event: FetchEvent) -> Self {
+        Self::Fetch(event)
+    }
+}
+
+pub trait Nt4Transport: FetchTransport {
     /// `new WebSocket(url, protocols)`.
     fn ws_open(&mut self, url: &str, protocols: &[&str]) -> Result<SocketId, Thrown>;
 
@@ -50,10 +51,4 @@ pub trait Nt4Transport {
 
     /// `ws.close()`.
     fn ws_close(&mut self, id: SocketId);
-
-    /// `fetch(url)` (a GET). Completion arrives as `on_fetch_response` or `on_fetch_failed`.
-    fn fetch(&mut self, url: &str) -> RequestId;
-
-    /// Aborts a request that has not completed; it then never completes.
-    fn fetch_abort(&mut self, id: RequestId);
 }

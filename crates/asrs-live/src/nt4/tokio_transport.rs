@@ -2,29 +2,27 @@
 //! [`TokioTransport::next_event`] applies the browser's `readyState` rules to one event at a
 //! time on the foreground thread, so each sees the state the previous one left behind.
 //!
-//! `fetch` is a plain HTTP/1.1 GET that resolves once the response headers are in, without
-//! following redirects. A server that selects no subprotocol fails the handshake (tungstenite's rule),
+//! `fetch` is [`crate::http`]'s GET, settling once the response headers are in. A server that selects no subprotocol fails the handshake (tungstenite's rule),
 //! where Chromium would open with an empty `protocol`; NT4 servers always select one.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::{HeaderValue, Uri};
+use tokio_tungstenite::tungstenite::http::HeaderValue;
 
-use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+use super::transport::{NetEvent, Nt4Transport, ReadyState, SocketId, WsMessage};
 use crate::channel::{EventReceiver, EventSender, event_channel};
+use crate::http::{FetchTasks, FetchTransport, RequestId, host_port, percent_encode};
 use crate::thrown::Thrown;
 
 const CLOSE_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_HEAD: usize = 65536;
 
 enum Command {
     Send(WsMessage),
@@ -44,20 +42,20 @@ pub struct TokioTransport {
     pending: VecDeque<NetEvent>,
     next_id: u32,
     sockets: BTreeMap<u32, Socket>,
-    requests: BTreeMap<u32, JoinHandle<()>>,
+    requests: FetchTasks,
 }
 
 impl TokioTransport {
     pub fn new(handle: Handle) -> Self {
         let (events_tx, events_rx) = event_channel();
         Self {
+            requests: FetchTasks::new(handle.clone(), false),
             handle,
             events_tx,
             events_rx,
             pending: VecDeque::new(),
             next_id: 1,
             sockets: BTreeMap::new(),
-            requests: BTreeMap::new(),
         }
     }
 
@@ -102,9 +100,7 @@ impl TokioTransport {
                 None => false,
             },
             NetEvent::WsClose(id) => self.sockets.remove(&id.0).is_some(),
-            NetEvent::FetchResponse(id, ..) | NetEvent::FetchFailed(id) => {
-                self.requests.remove(&id.0).is_some()
-            }
+            NetEvent::Fetch(event) => self.requests.admit(event.id()),
         }
     }
 
@@ -124,9 +120,6 @@ impl Drop for TokioTransport {
         for socket in self.sockets.values() {
             socket.task.abort();
         }
-        for task in self.requests.values() {
-            task.abort();
-        }
     }
 }
 
@@ -135,15 +128,6 @@ fn invalid_url(url: &str) -> Thrown {
         "SyntaxError",
         format!("Failed to construct 'WebSocket': The URL '{url}' is invalid."),
     )
-}
-
-fn host_port(uri: &Uri, default_port: u16) -> Option<(String, u16)> {
-    let host = uri.host()?;
-    let host = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    Some((host.to_owned(), uri.port_u16().unwrap_or(default_port)))
 }
 
 impl Nt4Transport for TokioTransport {
@@ -204,46 +188,19 @@ impl Nt4Transport for TokioTransport {
             let _ = s.commands.send(Command::Close);
         }
     }
+}
 
+impl FetchTransport for TokioTransport {
     fn fetch(&mut self, url: &str) -> RequestId {
-        let id = self.next_id();
-        let events = self.events_tx.clone();
-        let url = url.to_owned();
-        let task = self.handle.spawn(async move {
-            let event = match http_get(&url).await {
-                Some((status, href)) => NetEvent::FetchResponse(RequestId(id), status, href),
-                None => NetEvent::FetchFailed(RequestId(id)),
-            };
-            let _ = events.send(event);
-        });
-        self.requests.insert(id, task);
-        RequestId(id)
+        let id = RequestId(self.next_id());
+        self.requests
+            .spawn(id, url, &self.events_tx, NetEvent::Fetch);
+        id
     }
 
     fn fetch_abort(&mut self, id: RequestId) {
-        if let Some(task) = self.requests.remove(&id.0) {
-            task.abort();
-        }
+        self.requests.abort(id);
     }
-}
-
-/// What the URL parser does to a path before the request goes out: bytes a URI cannot carry
-/// are percent-encoded.
-fn percent_encode(url: &str) -> String {
-    let mut out = String::with_capacity(url.len());
-    for b in url.bytes() {
-        if b.is_ascii_graphic()
-            && !matches!(
-                b,
-                b'"' | b'<' | b'>' | b'`' | b'{' | b'}' | b'|' | b'\\' | b'^'
-            )
-        {
-            out.push(char::from(b));
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
 }
 
 fn to_message(data: WsMessage) -> Message {
@@ -313,63 +270,4 @@ async fn run_socket(
         }
     }
     let _ = events.send(NetEvent::WsClose(id));
-}
-
-/// `fetch(url)` reduced to the status and `response.url`; `None` is a network error.
-async fn http_get(url: &str) -> Option<(u16, String)> {
-    let uri = Uri::try_from(percent_encode(url)).ok()?;
-    if uri.scheme_str() != Some("http") {
-        return None;
-    }
-    let (host, port) = host_port(&uri, 80)?;
-    let authority = uri.authority()?.as_str().to_owned();
-    let path = uri.path_and_query().map_or("/", |p| p.as_str());
-    let path = if path.is_empty() { "/" } else { path };
-    let mut stream = TcpStream::connect((host.as_str(), port)).await.ok()?;
-    let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: {authority}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
-    );
-    stream.write_all(request.as_bytes()).await.ok()?;
-    let mut buffer = Vec::new();
-    let mut chunk = [0u8; 1024];
-    let status = loop {
-        let head_end = loop {
-            if let Some(i) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                break i + 4;
-            }
-            if buffer.len() > MAX_HEAD {
-                return None;
-            }
-            let n = stream.read(&mut chunk).await.ok()?;
-            if n == 0 {
-                return None;
-            }
-            buffer.extend_from_slice(&chunk[..n]);
-        };
-        let status = status_code(&buffer[..head_end])?;
-        buffer.drain(..head_end);
-        if !(100..200).contains(&status) {
-            break status;
-        }
-    };
-    let authority = if port == 80 {
-        authority.trim_end_matches(":80").to_owned()
-    } else {
-        authority
-    };
-    Some((status, format!("http://{authority}{path}")))
-}
-
-fn status_code(head: &[u8]) -> Option<u16> {
-    let line_end = head.windows(2).position(|w| w == b"\r\n")?;
-    let line = std::str::from_utf8(&head[..line_end]).ok()?;
-    let mut parts = line.split(' ');
-    if !parts.next()?.starts_with("HTTP/1.") {
-        return None;
-    }
-    let code = parts.next()?;
-    if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    Some(code.bytes().fold(0u16, |n, b| n * 10 + u16::from(b - b'0')))
 }

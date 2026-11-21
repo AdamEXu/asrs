@@ -2,7 +2,7 @@
 // as bundled by V8 under third_party/glibc.
 // Copyright (C) 2001-2022 Free Software Foundation, Inc.
 // Licensed under the GNU Lesser General Public License, version 2.1 or (at your option) any
-// later version. See licenses/LGPL-2.1.txt and THIRD_PARTY_NOTICES.md.
+// later version. See LICENSE in this crate.
 
 #![allow(
     clippy::approx_constant,
@@ -12,8 +12,15 @@
     clippy::needless_range_loop
 )]
 
-use super::bits::{hi, lo};
 use super::sincostab::SINCOSTAB;
+
+fn hi(x: f64) -> i32 {
+    (x.to_bits() >> 32) as i32
+}
+
+fn lo(x: f64) -> u32 {
+    x.to_bits() as u32
+}
 
 const S1: f64 = f64::from_bits(0xbfc5555555555555);
 const S2: f64 = f64::from_bits(0x3f81111111110ece);

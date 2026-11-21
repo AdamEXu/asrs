@@ -10,8 +10,14 @@
 //! - A repeating timer is rescheduled before its callback runs, drift free: when it fires late
 //!   it fires once and the next fire returns to its grid.
 //!
-//! Blink's nesting clamp is reduced to one rule, that intervals repeat no faster than every
-//! 4 ms; upstream's live sources never use delays below 16 ms.
+//! - Timers carry the HTML timer nesting level. A timer created while a timer task runs at
+//!   level n gets level n + 1 (one created by any other task gets 1), an interval's level rises
+//!   by one per repeat, and a delay under 4 ms is raised to 4 ms when the creating task's level
+//!   is above 5. In a `setInterval` callback a `setTimeout(0)` therefore runs at once on the
+//!   first five repeats and 4 ms later from the sixth on (`PhoenixDiagnosticsSource` relies on
+//!   this). Intervals repeat no faster than every 4 ms regardless of level.
+//! - `AbortSignal.timeout`, `requestIdleCallback` and `requestAnimationFrame` are delayed tasks,
+//!   not `DOMTimer`s: [`TimerQueue::post_delayed_task`], never clamped, run at level 0.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -33,15 +39,18 @@ struct Timer {
     id: TimerId,
     due: f64,
     repeat: Option<f64>,
+    level: u32,
 }
 
 pub struct TimerQueue {
     clock: Rc<dyn Clock>,
     next_id: u32,
     timers: Vec<Timer>,
+    running_level: u32,
 }
 
-const MIN_REPEAT_MS: f64 = 4.0;
+const MIN_DELAY_MS: f64 = 4.0;
+const MAX_UNCLAMPED_LEVEL: u32 = 5;
 
 fn webidl_delay(delay: f64) -> f64 {
     f64::from(to_int32(delay).max(0))
@@ -55,6 +64,7 @@ impl TimerQueue {
             clock,
             next_id: 1,
             timers: Vec::new(),
+            running_level: 0,
         }
     }
 
@@ -62,28 +72,49 @@ impl TimerQueue {
         self.clock.now()
     }
 
-    fn add(&mut self, delay: f64, repeat: bool) -> TimerId {
+    fn add(&mut self, delay: f64, repeat: bool, nested: bool) -> TimerId {
         let id = TimerId(self.next_id);
         self.next_id += 1;
-        let delay = webidl_delay(delay);
+        let mut delay = webidl_delay(delay);
+        let level = if nested {
+            if self.running_level > MAX_UNCLAMPED_LEVEL && delay < MIN_DELAY_MS {
+                delay = MIN_DELAY_MS;
+            }
+            self.running_level + 1
+        } else {
+            0
+        };
         self.timers.push(Timer {
             id,
             due: self.clock.now() + delay,
-            repeat: repeat.then_some(if delay < MIN_REPEAT_MS {
-                MIN_REPEAT_MS
+            repeat: repeat.then_some(if delay < MIN_DELAY_MS {
+                MIN_DELAY_MS
             } else {
                 delay
             }),
+            level,
         });
         id
     }
 
     pub fn set_timeout(&mut self, delay: f64) -> TimerId {
-        self.add(delay, false)
+        self.add(delay, false, true)
     }
 
     pub fn set_interval(&mut self, delay: f64) -> TimerId {
-        self.add(delay, true)
+        self.add(delay, true, true)
+    }
+
+    /// A one-shot delayed task that is not a `DOMTimer`: never clamped, and its task runs at
+    /// nesting level 0. Shares the timer id space and the due-time order.
+    pub fn post_delayed_task(&mut self, delay: f64) -> TimerId {
+        self.add(delay, false, false)
+    }
+
+    /// Call before dispatching any task that is not a timer (a network event, an IPC message,
+    /// a script step), so timers it creates start a new nesting chain.
+    pub fn begin_task(&mut self) {
+        self.running_level = 0;
     }
 
     /// `clearTimeout` and `clearInterval`, which share one id space.
@@ -121,8 +152,12 @@ impl TimerQueue {
             return None;
         }
         let id = timer.id;
+        self.running_level = timer.level;
         match timer.repeat {
-            Some(interval) => timer.due = now + (interval - (now - timer.due) % interval),
+            Some(interval) => {
+                timer.due = now + (interval - (now - timer.due) % interval);
+                timer.level += 1;
+            }
             None => {
                 self.timers.remove(i);
             }
@@ -250,6 +285,60 @@ mod tests {
         assert_eq!(q.fire_next(), Some(id));
         assert_eq!(q.fire_next(), None);
         assert_eq!(q.next_due(), Some(128.0));
+    }
+
+    #[test]
+    fn short_delays_clamp_to_4_ms_past_nesting_level_5() {
+        let (clock, mut q) = queue(0.0);
+        let interval = q.set_interval(50.0);
+        let mut zero_delays = Vec::new();
+        q.advance_to(&clock, 410.0, |q, id| {
+            if id == interval {
+                q.set_timeout(0.0);
+            } else {
+                zero_delays.push(clock.now() % 50.0);
+            }
+        });
+        assert_eq!(zero_delays, vec![0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 4.0, 4.0]);
+
+        let (clock, mut q) = queue(0.0);
+        q.set_timeout(0.0);
+        let mut fired = Vec::new();
+        q.advance_to(&clock, 100.0, |q, _| {
+            fired.push(clock.now());
+            if fired.len() < 8 {
+                q.set_timeout(0.0);
+            }
+        });
+        assert_eq!(fired, vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 8.0]);
+    }
+
+    #[test]
+    fn delayed_tasks_and_other_tasks_restart_the_nesting_chain() {
+        let (clock, mut q) = queue(0.0);
+        let interval = q.set_interval(10.0);
+        let mut fired = Vec::new();
+        let mut task = None;
+        q.advance_to(&clock, 75.0, |q, id| {
+            if id == interval && clock.now() == 70.0 {
+                task = Some(q.post_delayed_task(0.0));
+            } else if Some(id) == task {
+                fired.push(clock.now());
+                q.set_timeout(0.0);
+                q.clear(interval);
+            } else if id != interval {
+                fired.push(clock.now());
+            }
+        });
+        assert_eq!(fired, vec![70.0, 70.0]);
+
+        let (clock, mut q) = queue(0.0);
+        let interval = q.set_interval(10.0);
+        q.advance_to(&clock, 60.0, |_, _| {});
+        q.clear(interval);
+        q.begin_task();
+        q.set_timeout(0.0);
+        assert_eq!(q.next_due(), Some(60.0));
     }
 
     #[test]
