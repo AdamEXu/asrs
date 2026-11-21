@@ -135,7 +135,7 @@ struct Host {
     restores: Vec<(usize, &'static str, JsValue)>,
     rendered: Vec<Option<JsValue>>,
     created: usize,
-    messages: Vec<NamedMessage<HubToMain>>,
+    messages: Vec<NamedMessage<JsString>>,
 }
 
 impl TabsHost for Host {
@@ -174,7 +174,12 @@ impl TabCx for Host {
     }
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
-        self.messages.push(message);
+        self.messages
+            .push(NamedMessage::new(JsString::from(message.name.name()), message.data));
+    }
+
+    fn send_main_adhoc(&mut self, name: &str, data: JsValue) {
+        self.messages.push(NamedMessage::new(JsString::from(name), data));
     }
 }
 
@@ -530,10 +535,17 @@ impl Runner {
             ]));
         }
         let controller_messages = std::mem::take(&mut self.host.messages);
-        for NamedMessage { name, data } in controller_messages
-            .into_iter()
-            .chain(self.host.selection.take_messages())
-        {
+        for NamedMessage { name, data } in controller_messages {
+            let name = name.to_string_lossy();
+            if self.ignored.contains(&name) {
+                continue;
+            }
+            self.emitted.push(Emit::new(vec![
+                ("main", cve_str(&name)),
+                ("data", js_json::from_js(&data)),
+            ]));
+        }
+        for NamedMessage { name, data } in self.host.selection.take_messages() {
             if self.ignored.contains(name.name()) {
                 continue;
             }

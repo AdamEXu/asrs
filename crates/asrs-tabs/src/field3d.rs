@@ -13,22 +13,21 @@ use asrs_log::geometry::{
     PoseAnnotations, RotationUnits,
 };
 use asrs_log::log::log_util::get_or_default;
-use asrs_log::log::mechanism_state::{get_mechanism_state, merge_mechanism_states, MechanismState};
+use asrs_log::log::mechanism_state::{MechanismState, get_mechanism_state, merge_mechanism_states};
 use asrs_log::log::robot_state::{self, ALLIANCE_KEYS, DRIVER_STATION_KEYS};
-use asrs_model::assets::{built_in_3d_fields, Config3dField, CoordinateSystem as FieldCoordinates};
+use asrs_model::assets::{Config3dField, CoordinateSystem as FieldCoordinates, built_in_3d_fields};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::CoordinateSystemPreference;
-use asrs_model::source_list::{configs, SourceList};
+use asrs_model::source_list::{SourceList, configs};
 use asrs_model::source_list_config::{
     SourceListConfig, SourceListItemState, SourceListOptionValueConfig,
 };
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{self, with_env, SourceListCx};
+use crate::list_cx::{self, SourceListCx, with_env};
 
-const FRC_APRIL_TAG_VARIANTS: [(&str, &str); 2] =
-    [("36h11-6.5in", "36h11"), ("16h5-6in", "16h5")];
+const FRC_APRIL_TAG_VARIANTS: [(&str, &str); 2] = [("36h11-6.5in", "36h11"), ("16h5-6in", "16h5")];
 const FTC_APRIL_TAG_VARIANTS: [(&str, &str); 6] = [
     ("36h11-2in", "2 in"),
     ("36h11-3in", "3 in"),
@@ -86,7 +85,10 @@ impl TabCommand for Field3dCommand {
         );
         o.insert("objects", JsValue::Array(self.objects.clone()));
         o.insert("cameraOverride", self.camera_override.clone());
-        o.insert("autoDriverStation", JsValue::Number(self.auto_driver_station));
+        o.insert(
+            "autoDriverStation",
+            JsValue::Number(self.auto_driver_station),
+        );
         o.insert(
             "allRobotModels",
             JsValue::Array(self.all_robot_models.clone()),
@@ -145,8 +147,8 @@ fn annotation_js(a: &PoseAnnotations) -> JsValue {
                 .map_or(JsValue::Undefined, |v| JsValue::String(v.clone())),
         );
     }
-    if !a.has_april_tag_id && a.april_tag_id.is_some() {
-        o.insert("aprilTagId", number(a.april_tag_id.unwrap()));
+    if let Some(id) = a.april_tag_id.filter(|_| !a.has_april_tag_id) {
+        o.insert("aprilTagId", number(id));
     }
     JsValue::Object(o)
 }
@@ -181,9 +183,7 @@ fn mechanism_js(state: &MechanismState) -> JsValue {
                 .map(|line| {
                     let mut l = JsObject::new();
                     let coords = |c: &[Option<f64>]| {
-                        JsValue::Array(
-                            c.iter().map(|x| x.map_or(JsValue::Null, number)).collect(),
-                        )
+                        JsValue::Array(c.iter().map(|x| x.map_or(JsValue::Null, number)).collect())
                     };
                     l.insert("start", coords(&line.start));
                     l.insert("end", coords(&line.end));
@@ -275,7 +275,7 @@ fn april_tag_variant_js(options: &JsObject<JsString>) -> Result<JsValue, JsError
 }
 
 /// `[...(assets?.field3ds ?? []), ...BuiltIn3dFields]`.
-fn all_fields<'a>(cx: &'a impl TabCx) -> Vec<&'a Config3dField> {
+fn all_fields(cx: &impl TabCx) -> Vec<&Config3dField> {
     match cx.tab_assets() {
         Some(assets) => assets.field3ds.iter().chain(built_in_3d_fields()).collect(),
         None => built_in_3d_fields().iter().collect(),
@@ -337,7 +337,7 @@ impl Field3dController {
 
     /// `XR_BUTTON` click; `uuid` is the tab's `controller.UUID` (`Tabs` restores it).
     pub fn xr_click(&mut self, cx: &mut impl TabCx, uuid: &JsValue) {
-        cx.send_main_message(NamedMessage::new(HubToMain::OpenXr, uuid.clone()));
+        cx.send_main_adhoc("open-xr", uuid.clone());
     }
 
     /// `setXRActive`.
@@ -386,8 +386,7 @@ impl Field3dController {
                     .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        with_env(cx, |env| self.source_list.set_state(env, items))
-            .map_err(list_cx::js_error)
+        with_env(cx, |env| self.source_list.set_state(env, items)).map_err(list_cx::js_error)
     }
 
     /// `FIELD_SELECT.value = ...`; the assignment sticks only when an option matches.
@@ -451,7 +450,7 @@ impl Field3dController {
                 }
             }
         }
-        if options.iter().any(|v| *v == value) {
+        if options.contains(&value) {
             self.field_value = Some(value);
         } else {
             self.select_default_field(cx);
@@ -727,10 +726,8 @@ impl Field3dController {
                                 geometry::APRIL_TAG_36H11_COUNT
                             };
                             for id in values {
-                                let id = math::min2(
-                                    math::max2(math::floor(id), 0.0),
-                                    tag_count - 1.0,
-                                );
+                                let id =
+                                    math::min2(math::max2(math::floor(id), 0.0), tag_count - 1.0);
                                 if let Some(pose) = poses
                                     .iter_mut()
                                     .find(|p| p.annotation.april_tag_id.is_none())
@@ -759,10 +756,7 @@ impl Field3dController {
                     o.insert("components", poses_js(&components));
                     o.insert("mechanisms", mechanisms_js(&mechanisms));
                     o.insert("visionTargets", poses_js(&vision_targets));
-                    o.insert(
-                        "swerveModuleVelocities",
-                        swerve_js(&swerve_velocities),
-                    );
+                    o.insert("swerveModuleVelocities", swerve_js(&swerve_velocities));
                 }
                 Some("ghost") => {
                     o.insert("type", "ghost".to_js());
@@ -772,10 +766,7 @@ impl Field3dController {
                     o.insert("components", poses_js(&components));
                     o.insert("mechanisms", mechanisms_js(&mechanisms));
                     o.insert("visionTargets", poses_js(&vision_targets));
-                    o.insert(
-                        "swerveModuleVelocities",
-                        swerve_js(&swerve_velocities),
-                    );
+                    o.insert("swerveModuleVelocities", swerve_js(&swerve_velocities));
                 }
                 Some("gamePiece") => {
                     o.insert("type", "gamePiece".to_js());
@@ -804,9 +795,7 @@ impl Field3dController {
                 }
                 Some("cone") => {
                     let position = match source.options.get("position").map(|v| v.as_string()) {
-                        Some(Some(p))
-                            if p == "center" || p == "back" || p == "front" =>
-                        {
+                        Some(Some(p)) if p == "center" || p == "back" || p == "front" => {
                             JsValue::String(JsString::from(p))
                         }
                         _ => JsValue::String(JsString::from("center")),
@@ -819,9 +808,8 @@ impl Field3dController {
                 Some("cameraOverride") => {
                     if !seen_camera_override {
                         seen_camera_override = true;
-                        camera_override = poses
-                            .first()
-                            .map_or(JsValue::Undefined, annotated_pose_js);
+                        camera_override =
+                            poses.first().map_or(JsValue::Undefined, annotated_pose_js);
                     }
                     continue;
                 }
@@ -902,13 +890,7 @@ impl<Cx: SourceListCx> TabController<Cx> for Field3dController {
         let mut o = JsObject::new();
         o.insert(
             "sources",
-            JsValue::Array(
-                self.source_list
-                    .state()
-                    .iter()
-                    .map(ToJs::to_js)
-                    .collect(),
-            ),
+            JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect()),
         );
         o.insert("game", JsValue::String(self.field_value()));
         JsValue::Object(o)
@@ -987,23 +969,21 @@ impl<Cx: SourceListCx> TabController<Cx> for Field3dController {
             }
         }
 
-        let is_red_alliance = render_time.is_some_and(|t| {
-            robot_state::get_is_red_alliance(&cx.tab_log(), t)
-        });
+        let is_red_alliance =
+            render_time.is_some_and(|t| robot_state::get_is_red_alliance(&cx.tab_log(), t));
         let uuid_str = uuid.as_str().map(|s| s.to_string_lossy());
-        let (objects, camera_override) = self.command_objects(
-            cx,
-            uuid_str.as_deref(),
-            render_time,
-            field_data.as_ref(),
-        )?;
+        let (objects, camera_override) =
+            self.command_objects(cx, uuid_str.as_deref(), render_time, field_data.as_ref())?;
 
         let mut all_robot_models: Vec<JsValue> = Vec::new();
         for source in self.source_list.state() {
             let model_type = source.item_type.as_string();
             if matches!(model_type.as_deref(), Some("robot") | Some("ghost")) {
                 let model = option(&source.options, "model");
-                if !all_robot_models.iter().any(|m| ops::same_value_zero(m, &model)) {
+                if !all_robot_models
+                    .iter()
+                    .any(|m| ops::same_value_zero(m, &model))
+                {
                     all_robot_models.push(model);
                 }
             }

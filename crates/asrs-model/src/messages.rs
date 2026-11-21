@@ -66,7 +66,6 @@ message_names!(HubToMain {
     HistoricalStart = "historical-start",
     FrcCoordinateSystemWarning = "frc-coordinate-system-warning",
     FtcCoordinateSystemWarning = "ftc-coordinate-system-warning",
-    OpenXr = "open-xr",
     LiveRlogStart = "live-rlog-start",
     LiveRlogStop = "live-rlog-stop",
     OpenLink = "open-link",

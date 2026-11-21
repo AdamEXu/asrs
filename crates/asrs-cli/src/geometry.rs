@@ -181,21 +181,17 @@ fn annotation_value(a: &PoseAnnotations) -> Value {
     if a.has_vision_color {
         pairs.push((
             "visionColor".into(),
-            a.vision_color
-                .as_ref()
-                .map_or(Value::Undefined, |c| string(c)),
+            a.vision_color.as_ref().map_or(Value::Undefined, string),
         ));
     }
     if a.has_vision_size {
         pairs.push((
             "visionSize".into(),
-            a.vision_size
-                .as_ref()
-                .map_or(Value::Undefined, |s| string(s)),
+            a.vision_size.as_ref().map_or(Value::Undefined, string),
         ));
     }
-    if !a.has_april_tag_id && a.april_tag_id.is_some() {
-        pairs.push(("aprilTagId".into(), n(a.april_tag_id.unwrap())));
+    if let Some(id) = a.april_tag_id.filter(|_| !a.has_april_tag_id) {
+        pairs.push(("aprilTagId".into(), n(id)));
     }
     Value::Object(pairs)
 }

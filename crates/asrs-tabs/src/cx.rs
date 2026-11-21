@@ -5,6 +5,7 @@
 use std::cell::Ref;
 
 use asrs_js::time::Rng;
+use asrs_js::value::JsValue;
 use asrs_log::log::{Log, TimestampDisplay};
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
@@ -34,6 +35,10 @@ pub trait TabCx {
 
     /// `window.sendMainMessage(name, data)`.
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>);
+
+    /// `window.sendMainMessage` for a name outside the `HubToMain` union (`open-xr`
+    /// is handled in main.ts but deliberately not modeled in the enum).
+    fn send_main_adhoc(&mut self, name: &str, data: JsValue);
 }
 
 /// `window.log.getTimestampDisplayOffset()`.

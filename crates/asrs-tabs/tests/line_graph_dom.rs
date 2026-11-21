@@ -274,6 +274,10 @@ impl TabCx for Host {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         self.sent.push(message);
     }
+
+    fn send_main_adhoc(&mut self, name: &str, _data: JsValue) {
+        panic!("the line graph layer never sends {name}");
+    }
 }
 
 impl SourceListCx for Host {

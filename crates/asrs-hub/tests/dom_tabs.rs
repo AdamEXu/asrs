@@ -142,10 +142,7 @@ fn assets_from_js(v: &JsValue) -> AdvantageScopeAssets {
         }
     }
     if let Some(JsValue::Array(items)) = o.get("loadFailures") {
-        assets.load_failures = items
-            .iter()
-            .filter_map(|i| i.as_str().cloned())
-            .collect();
+        assets.load_failures = items.iter().filter_map(|i| i.as_str().cloned()).collect();
     }
     assets
 }
@@ -675,7 +672,9 @@ struct Host {
     rng: DomRng,
     inner_height: f64,
     renderer_top: f64,
-    messages: Vec<NamedMessage<HubToMain>>,
+    /// `sendMainMessage` queue; names are open strings upstream, so ad-hoc
+    /// messages like `open-xr` share the queue and keep their order.
+    messages: Vec<NamedMessage<JsString>>,
 }
 
 impl TabCx for Host {
@@ -704,7 +703,14 @@ impl TabCx for Host {
     }
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
-        self.messages.push(message);
+        self.messages.push(NamedMessage::new(
+            JsString::from(message.name.name()),
+            message.data,
+        ));
+    }
+
+    fn send_main_adhoc(&mut self, name: &str, data: JsValue) {
+        self.messages.push(NamedMessage::new(JsString::from(name), data));
     }
 }
 
@@ -917,8 +923,11 @@ impl Runner {
     fn flush_messages(&mut self) {
         let messages = self.tabs.take_messages();
         let from_tabs = std::mem::take(&mut self.host.messages);
-        for message in messages.into_iter().chain(from_tabs) {
+        for message in messages {
             self.emit_main(message.name.name(), js_json::from_js(&message.data));
+        }
+        for message in from_tabs {
+            self.emit_main(&message.name.to_string_lossy(), js_json::from_js(&message.data));
         }
     }
 
@@ -1358,11 +1367,7 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
 
 /// `.controller.<rest>` on a Field3d tab: `sourceList` calls and `setXRActive`.
 /// `None` falls through to the generic suffixes.
-fn field3d_eval(
-    r: &mut Runner,
-    rest: &str,
-    index: &JsValue,
-) -> Result<Option<JsValue>, String> {
+fn field3d_eval(r: &mut Runner, rest: &str, index: &JsValue) -> Result<Option<JsValue>, String> {
     let parse_arg = |arg: &str| -> Result<JsValue, String> {
         let json = json::parse(arg).map_err(|e| err(e.to_string()))?;
         js_json::to_js(&Value::from_json_lenient(&json))
@@ -1745,7 +1750,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 }
                 asrs_hub::tabs::TabsError::Thrown(e) => format!("{}: {}", e.name, e.message),
                 asrs_hub::tabs::TabsError::Unmodeled(what) => {
-                    return Err(err(format!("unmodeled upstream state: {what}")))
+                    return Err(err(format!("unmodeled upstream state: {what}")));
                 }
             };
             runner.exception("unhandledRejection".to_owned(), error);
@@ -1754,18 +1759,18 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
 
     // `fixture.state` boots through `restore-state` (the tabs half went above);
     // the sidebar half lives outside `Tabs`.
-    if let Some(state) = fixture.get("state") {
-        if let Some(sidebar) = state.get("sidebar") {
-            if let Some(w) = sidebar.get("width").and_then(Json::as_f64) {
-                runner.sidebar_width = w;
-            }
-            if let Some(expanded) = sidebar.get("expanded").and_then(Json::as_array) {
-                runner.sidebar_expanded = expanded
-                    .iter()
-                    .filter_map(|e| e.as_str())
-                    .map(|s| js(&s.to_string_lossy()))
-                    .collect();
-            }
+    if let Some(state) = fixture.get("state")
+        && let Some(sidebar) = state.get("sidebar")
+    {
+        if let Some(w) = sidebar.get("width").and_then(Json::as_f64) {
+            runner.sidebar_width = w;
+        }
+        if let Some(expanded) = sidebar.get("expanded").and_then(Json::as_array) {
+            runner.sidebar_expanded = expanded
+                .iter()
+                .filter_map(|e| e.as_str())
+                .map(|s| js(&s.to_string_lossy()))
+                .collect();
         }
     }
 
@@ -1923,9 +1928,8 @@ impl Runner {
                     .add_table_range(&mut self.host, &controller, &renderer_uuid, range)?;
             }
             "set-assets" => {
-                let old_failed = load_failures_failed(
-                    &self.host.assets_raw.clone().unwrap_or(JsValue::Null),
-                )?;
+                let old_failed =
+                    load_failures_failed(&self.host.assets_raw.clone().unwrap_or(JsValue::Null))?;
                 let new_failed = load_failures_failed(data)?;
                 let same = asrs_js::json::stringify(
                     &self.host.assets_raw.clone().unwrap_or(JsValue::Null),
@@ -2294,14 +2298,12 @@ impl Runner {
             .tab(tab)
             .map(|t| t.uuid().clone())
             .unwrap_or(JsValue::Null);
-        if let Ok(controller) = self
+        if let Ok(Some(controller)) = self
             .tabs
             .controller_mut(&JsValue::Number(tab as f64))
             .map(|c| c.downcast_mut::<Field3dController>())
         {
-            if let Some(controller) = controller {
-                controller.xr_click(&mut self.host, &uuid);
-            }
+            controller.xr_click(&mut self.host, &uuid);
         }
         Ok(())
     }
@@ -2480,11 +2482,7 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     if std::env::var("DOM_DUMP").is_ok() {
         eprintln!("== {vector_id}");
         for e in &emitted {
-            let parts: Vec<String> = e
-                .values
-                .iter()
-                .map(|(k, v)| format!("{k}={v:?}"))
-                .collect();
+            let parts: Vec<String> = e.values.iter().map(|(k, v)| format!("{k}={v:?}")).collect();
             eprintln!("emit {}", parts.join(" "));
         }
     }
