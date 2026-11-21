@@ -1,7 +1,6 @@
 //! NetworkTables 4: the client (`NT4.ts`).
 
 mod client;
-mod js;
 mod source;
 mod tokio_transport;
 mod transport;

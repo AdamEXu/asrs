@@ -26,7 +26,7 @@ use super::client::{
     NT4_PORTS_DEFAULT, NT4_PORTS_DS, NT4_PORTS_SYSTEMCORE, Nt4Client, Nt4Context, Nt4Handler,
     Nt4Topic,
 };
-use super::js;
+use crate::js;
 use super::transport::NetEvent;
 use crate::live_data_source::{
     LiveDataSourceBase, LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback,

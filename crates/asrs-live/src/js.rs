@@ -1,6 +1,6 @@
-//! The JS operations `NT4.ts` applies to values decoded from the wire, which can be any JSON or
-//! msgpack value when the server misbehaves. Module code is strict, so writes to primitives
-//! throw.
+//! The JS operations the live sources apply to values decoded from the wire, which can be any
+//! JSON or msgpack value when the server misbehaves. Module code is strict, so writes to
+//! primitives throw.
 
 use asrs_js::number;
 use asrs_js::string::JsString;
@@ -111,6 +111,81 @@ pub fn get_key(value: &JsValue, key: &JsString) -> Result<JsValue, Thrown> {
         JsValue::Object(o) => Ok(o.get_key(key).cloned().unwrap_or_default()),
         other => get(other, &key.to_string_lossy()),
     }
+}
+
+/// `Object.getOwnPropertyNames(value)`: the wrapper's index keys plus `length` for strings,
+/// arrays and typed arrays; nothing for the other primitives.
+pub fn own_property_names(value: &JsValue) -> Vec<JsString> {
+    let mut names: Vec<JsString> = match value {
+        JsValue::Object(o) => return o.keys().cloned().collect(),
+        JsValue::Array(items) => (0..items.len()).map(|i| JsString::from(format!("{i}"))).collect(),
+        JsValue::Bytes(bytes) => (0..bytes.len()).map(|i| JsString::from(format!("{i}"))).collect(),
+        JsValue::String(s) => (0..s.len()).map(|i| JsString::from(format!("{i}"))).collect(),
+        _ => return Vec::new(),
+    };
+    names.push(JsString::from("length"));
+    names
+}
+
+/// `Object.hasOwn(value, key)`: own properties only, including `length` on strings, arrays and
+/// typed arrays, and `false` for the other primitives.
+pub fn has_own(value: &JsValue, key: &JsString) -> bool {
+    let index = array_index(key.units()).map(|i| i as usize);
+    match value {
+        JsValue::Object(o) => o.get_key(key).is_some(),
+        JsValue::Array(items) => index.is_some_and(|i| i < items.len()) || key == &JsString::from("length"),
+        JsValue::Bytes(bytes) => index.is_some_and(|i| i < bytes.len()) || key == &JsString::from("length"),
+        JsValue::String(s) => index.is_some_and(|i| i < s.len()) || key == &JsString::from("length"),
+        _ => false,
+    }
+}
+
+/// `key in value` where the outcome matches the `in` operator: inherited `Object.prototype`
+/// members resolve to non-config objects upstream, which every reducer branch treats the same
+/// as a missing key, so own properties decide. A primitive operand throws.
+pub fn has_key_in(value: &JsValue, key: &JsString) -> Result<bool, Thrown> {
+    match value {
+        JsValue::Object(_) | JsValue::Array(_) | JsValue::Bytes(_) | JsValue::String(_) => {
+            Ok(has_own(value, key))
+        }
+        other => Err(Thrown::type_error(format!(
+            "Cannot use 'in' operator to search for '{}' in {}",
+            key.to_string_lossy(),
+            to_display(other)
+        ))),
+    }
+}
+
+/// `{...value}`: own enumerable properties, which for a string primitive are its index keys.
+pub fn spread(value: &JsValue) -> JsObject<JsValue> {
+    let mut object = JsObject::new();
+    match value {
+        JsValue::Object(o) => {
+            for (k, v) in o.iter() {
+                object.insert(k.clone(), v.clone());
+            }
+        }
+        JsValue::Array(items) => {
+            for (i, v) in items.iter().enumerate() {
+                object.insert(JsString::from(format!("{i}")), v.clone());
+            }
+        }
+        JsValue::Bytes(bytes) => {
+            for (i, b) in bytes.iter().enumerate() {
+                object.insert(JsString::from(format!("{i}")), JsValue::Number(f64::from(*b)));
+            }
+        }
+        JsValue::String(s) => {
+            for (i, &u) in s.units().iter().enumerate() {
+                object.insert(
+                    JsString::from(format!("{i}")),
+                    JsValue::String(JsString::from_units(vec![u])),
+                );
+            }
+        }
+        _ => {}
+    }
+    object
 }
 
 // JS arrays go sparse; growing a dense Vec past this many holes would exhaust memory on a
