@@ -1,0 +1,489 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-long.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "preferences": {
+      "timestamps": "original"
+    },
+    "steps": [
+      {
+        "log": "../logs/timeline-long.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 433,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-0"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-1"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-2"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-3"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-4"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-5"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-6"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-7"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-8"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-9"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-10"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-11"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-12"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -350, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "in-13"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(173, 0, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-0"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(173, 0, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-1"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(173, 0, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-2"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(173, 0, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-3"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(173, 0, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-4"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(173, 0, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-5"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-0"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-1"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-2"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-3"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-4"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-5"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-6"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 900, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "out-7"
+      }
+    ]
+  }
+}
