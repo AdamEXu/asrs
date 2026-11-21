@@ -8,9 +8,11 @@
 //!   iteration looks up `log.getRange(undefined)`, which is the field keyed `"undefined"`
 //!   when the log has one.
 //!
-//! The sampled branch calls `addMessage` without awaiting it. That only changes the output
-//! once a chunk fills mid-loop, and those option sets never finish upstream (the harness
-//! skips them before export), so here every call completes in order.
+//! The sampled branch calls `addValue` without awaiting it. Its writes still happen in order
+//! until a chunk fills mid-loop, and those option sets never finish upstream (the harness
+//! skips them before export), so here every call completes in order. A sample whose
+//! `addValue` throws is an unhandled rejection, which Chromium only logs: the message is lost
+//! and the export goes on.
 
 use asrs_js::json;
 use asrs_js::math;
@@ -159,19 +161,14 @@ pub fn generate_mcap(
                 for (i, &timestamp) in timestamps.iter().enumerate() {
                     next_index = upper_bound(field_timestamps, timestamp, next_index);
                     if next_index != 0 {
-                        add_value(
+                        let _ = add_value(
                             &mut writer,
                             channel_id,
                             &field_data,
                             timestamp,
                             next_index - 1,
                             i,
-                        )
-                        .map_err(|()| {
-                            ExportError::Unported(
-                                "an unhandled rejection from the unawaited MCAP addValue",
-                            )
-                        })?;
+                        );
                     }
                 }
             }
@@ -185,28 +182,71 @@ pub fn generate_mcap(
 mod tests {
     use super::*;
 
-    fn summary_channels(file: &[u8]) -> Vec<(u16, u16, String)> {
+    fn summary_records(file: &[u8]) -> Vec<(u8, &[u8])> {
         let u64_at = |at: usize| u64::from_le_bytes(file[at..at + 8].try_into().unwrap()) as usize;
-        let u32_at = |at: usize| u32::from_le_bytes(file[at..at + 4].try_into().unwrap()) as usize;
-        let u16_at = |at: usize| u16::from_le_bytes(file[at..at + 2].try_into().unwrap());
         let footer = file.len() - 8 - 29;
         let (mut at, end) = (u64_at(footer + 9), u64_at(footer + 17));
-        let mut channels = Vec::new();
+        let mut records = Vec::new();
         while at < end {
             let length = u64_at(at + 1);
-            let body = at + 9;
-            if file[at] == 0x04 {
-                let topic_length = u32_at(body + 4);
-                let topic = &file[body + 8..body + 8 + topic_length];
-                channels.push((
-                    u16_at(body),
-                    u16_at(body + 2),
-                    String::from_utf8(topic.to_vec()).unwrap(),
-                ));
-            }
-            at = body + length;
+            records.push((file[at], &file[at + 9..at + 9 + length]));
+            at += 9 + length;
         }
-        channels
+        records
+    }
+
+    fn summary_channels(file: &[u8]) -> Vec<(u16, u16, String)> {
+        let u16_at = |body: &[u8], at: usize| u16::from_le_bytes([body[at], body[at + 1]]);
+        summary_records(file)
+            .into_iter()
+            .filter(|&(opcode, _)| opcode == 0x04)
+            .map(|(_, body)| {
+                let topic_length = u32::from_le_bytes(body[4..8].try_into().unwrap()) as usize;
+                let topic = &body[8..8 + topic_length];
+                (
+                    u16_at(body, 0),
+                    u16_at(body, 2),
+                    String::from_utf8(topic.to_vec()).unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    /// The Statistics record's message count and its per-channel counts.
+    fn summary_message_counts(file: &[u8]) -> (u64, Vec<(u16, u64)>) {
+        let (_, body) = summary_records(file)
+            .into_iter()
+            .find(|&(opcode, _)| opcode == 0x0b)
+            .unwrap();
+        let u64_at = |at: usize| u64::from_le_bytes(body[at..at + 8].try_into().unwrap());
+        let counts = body[46..]
+            .chunks(10)
+            .map(|entry| {
+                let count = u64::from_le_bytes(entry[2..10].try_into().unwrap());
+                (u16::from_le_bytes([entry[0], entry[1]]), count)
+            })
+            .collect();
+        (u64_at(0), counts)
+    }
+
+    fn chunk_message_count(file: &[u8]) -> usize {
+        summary_records(file)
+            .into_iter()
+            .filter(|&(opcode, _)| opcode == 0x08)
+            .map(|(_, body)| {
+                let body = u64::from_le_bytes(body[16..24].try_into().unwrap()) as usize + 9;
+                let size = u64::from_le_bytes(file[body + 32..body + 40].try_into().unwrap());
+                let records = &file[body + 40..body + 40 + size as usize];
+                let mut at = 0;
+                let mut messages = 0;
+                while at < records.len() {
+                    messages += usize::from(records[at] == 0x05);
+                    at += 9 + u64::from_le_bytes(records[at + 1..at + 9].try_into().unwrap())
+                        as usize;
+                }
+                messages
+            })
+            .sum()
     }
 
     #[test]
@@ -228,5 +268,26 @@ mod tests {
                 (3, 2, String::new()),
             ]
         );
+    }
+
+    #[test]
+    fn sampled_export_loses_messages_whose_add_value_throws() {
+        let key = |k: &str| JsString::from(k);
+        let mut log = Log::new(true);
+        log.put_string_array(&key("undefined"), 1.0, vec![key("a")]);
+        log.put_number(&key("/Value"), 1.0, 2.0);
+        let fields = ["/Value", "undefined"].map(key);
+        assert!(matches!(
+            generate_mcap(&log, &fields, &None),
+            Err(ExportError::Rejected)
+        ));
+
+        let file = generate_mcap(&log, &fields, &Some(vec![1.0, 2.0, 1.8e299])).unwrap();
+        assert_eq!(
+            summary_channels(&file),
+            [(0, 2, "/Value".to_owned()), (1, 0, String::new())]
+        );
+        assert_eq!(summary_message_counts(&file), (4, vec![(0, 2), (1, 2)]));
+        assert_eq!(chunk_message_count(&file), 2);
     }
 }

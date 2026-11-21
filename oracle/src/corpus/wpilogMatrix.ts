@@ -755,6 +755,25 @@ function entryCases(corpus: Corpus) {
       b.bytes()
     );
   }
+  {
+    const b = new WpilogBuilder();
+    b.start(0, 1, "undefined", "string[]");
+    b.start(0, 2, "/Timestamp", "int64");
+    b.start(0, 3, "/Value", "double");
+    b.start(0, 4, "/Flags", "boolean[]");
+    for (let i = 0; i < 4; i++) {
+      const t = i * 20000 + 1000;
+      b.record(2, t, payload.int64(t));
+      b.record(1, t + 500, payload.stringArray(["a", String(i)]));
+      b.record(3, t + 1000, payload.double(i / 2));
+      b.record(4, t + 1500, payload.booleanArray([i % 2 === 0]));
+    }
+    corpus.wpilog(
+      "wpilog/entries/key-undefined-unschema",
+      "a field keyed 'undefined' with no MCAP schema: its channel's first message throws, so changes export rejects and sampled export drops its messages but counts them",
+      b.bytes()
+    );
+  }
 }
 
 function headerCases(corpus: Corpus) {
