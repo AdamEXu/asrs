@@ -56,24 +56,23 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for MetadataController {
                     entry.insert("replay", JsValue::Null);
                     command.insert(clean_key.clone(), JsValue::Object(entry));
                 }
-                let log_data = log.get_string(&key, f64::INFINITY, f64::INFINITY, None, None);
-                if let Some(log_data) = log_data {
-                    let value = log_data
-                        .values
-                        .first()
-                        .map_or(JsValue::Undefined, |v| JsValue::String(v.clone()));
-                    let slot = if metadata_key.includes(&JsString::from("RealMetadata"), None) {
-                        "real"
-                    } else if metadata_key.includes(&JsString::from("ReplayMetadata"), None) {
-                        "replay"
-                    } else {
-                        "generic"
-                    };
-                    if let Some(JsValue::Object(entry)) = command.get_key(&clean_key).cloned() {
-                        let mut entry = entry;
-                        entry.insert(slot, value);
-                        command.insert(clean_key.clone(), JsValue::Object(entry));
-                    }
+                let Some(log_data) = log.get_string(&key, f64::INFINITY, f64::INFINITY, None, None)
+                else {
+                    continue;
+                };
+                let value = log_data
+                    .values
+                    .first()
+                    .map_or(JsValue::Undefined, |v| JsValue::String(v.clone()));
+                let slot = if metadata_key.includes(&JsString::from("RealMetadata"), None) {
+                    "real"
+                } else if metadata_key.includes(&JsString::from("ReplayMetadata"), None) {
+                    "replay"
+                } else {
+                    "generic"
+                };
+                if let Some(JsValue::Object(entry)) = command.get_units_mut(clean_key.units()) {
+                    entry.insert(slot, value);
                 }
             }
         }

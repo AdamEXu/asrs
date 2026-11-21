@@ -7,6 +7,10 @@
 //! records (they are other units' work); their UUID draws still come from the fixture's
 //! seeded `Math.random`. `dom`, `canvas`, `measure` and `sourceLists` capture kinds belong to
 //! other layers and are skipped while comparing.
+//!
+//! jsdom's `:nth-child` and `:nth-of-type` go stale once the table header is rebuilt, so
+//! table fixtures lay header cells out by `data-i`, set by a `/*table:tag*/` eval step right
+//! before each event that reads header rects. Events the harness does not model fail the run.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
@@ -24,6 +28,8 @@ use asrs_js::time::{Clock, Rng, create_uuid};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
+use asrs_model::assets::AdvantageScopeAssets;
+use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
@@ -87,7 +93,12 @@ struct ElDesc {
     tag: &'static str,
     classes: &'static [&'static str],
     hidden: bool,
+    /// Position among same-tag siblings, for `:nth-of-type`.
     pos: usize,
+    /// Position among all siblings, for `:nth-child`, where the tree knows it.
+    child_pos: Option<usize>,
+    /// The `data-i` attribute a `/*table:tag*/` eval step set.
+    data_i: Option<usize>,
     parent: Option<Box<ElDesc>>,
 }
 
@@ -103,14 +114,29 @@ fn el(
         classes,
         hidden,
         pos,
+        child_pos: None,
+        data_i: None,
         parent: Some(Box::new(parent)),
     }
 }
 
 fn matches_compound(el: &ElDesc, compound: &str) -> bool {
-    let (compound, nth) = match compound.split_once(":nth-of-type(") {
-        Some((head, arg)) => (head, Some(arg.trim_end_matches(')'))),
-        None => (compound, None),
+    let compound = match compound.split_once("[data-i=\"") {
+        Some((head, rest)) => {
+            let value = rest.trim_end_matches("\"]").parse::<usize>().ok();
+            if value.is_none() || el.data_i != value {
+                return false;
+            }
+            head
+        }
+        None => compound,
+    };
+    let (compound, nth, pos) = if let Some((head, arg)) = compound.split_once(":nth-of-type(") {
+        (head, Some(arg.trim_end_matches(')')), Some(el.pos))
+    } else if let Some((head, arg)) = compound.split_once(":nth-child(") {
+        (head, Some(arg.trim_end_matches(')')), el.child_pos)
+    } else {
+        (compound, None, None)
     };
     let mut parts = compound.split('.');
     let tag = parts.next().unwrap_or("");
@@ -123,8 +149,11 @@ fn matches_compound(el: &ElDesc, compound: &str) -> bool {
         }
     }
     if let Some(arg) = nth {
+        let Some(pos) = pos else {
+            return false;
+        };
         let arg = arg.trim();
-        let pos = el.pos as f64;
+        let pos = pos as f64;
         let ok = match arg {
             "odd" => pos % 2.0 == 1.0,
             "even" => pos % 2.0 == 0.0,
@@ -230,6 +259,8 @@ fn root_el(hidden: bool, pos: usize) -> ElDesc {
         classes: &["renderer-content"],
         hidden: false,
         pos: 1,
+        child_pos: None,
+        data_i: None,
         parent: None,
     };
     el("div", &[], hidden, pos, renderer_content)
@@ -256,9 +287,13 @@ fn table_body(hidden: bool, pos: usize) -> ElDesc {
     el("tbody", &[], false, 1, table)
 }
 
-fn table_th(hidden: bool, tab_pos: usize, th_pos: usize) -> ElDesc {
+fn table_th(hidden: bool, tab_pos: usize, th_pos: usize, tagged: bool) -> ElDesc {
     let header = el("tr", &[], false, 1, table_body(hidden, tab_pos));
-    el("th", &[], false, th_pos, header)
+    ElDesc {
+        child_pos: Some(th_pos),
+        data_i: tagged.then(|| th_pos - 1),
+        ..el("th", &[], false, th_pos, header)
+    }
 }
 
 fn table_tr(hidden: bool, tab_pos: usize, tr_pos: usize) -> ElDesc {
@@ -273,21 +308,6 @@ fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
         2,
         root_el(hidden, pos),
     )
-}
-
-fn console_body(hidden: bool, pos: usize) -> ElDesc {
-    let table = el(
-        "table",
-        &["console-table"],
-        false,
-        1,
-        console_container_el(hidden, pos),
-    );
-    el("tbody", &[], false, 1, table)
-}
-
-fn console_tr(hidden: bool, tab_pos: usize, tr_pos: usize) -> ElDesc {
-    el("tr", &[], false, tr_pos, console_body(hidden, tab_pos))
 }
 
 #[derive(Clone)]
@@ -415,7 +435,7 @@ impl TabFactory<Host> for Factory {
                     uuid: uuid.clone(),
                     controller: Box::new(TableController::new(&uuid, dom.clone())),
                     renderer: Box::new(Recorder {
-                        inner: TableRenderer::new(renderer_uuid, dom, true),
+                        inner: TableRenderer::new(renderer_uuid, dom),
                         slot,
                     }),
                 }
@@ -427,7 +447,7 @@ impl TabFactory<Host> for Factory {
                     uuid: uuid.clone(),
                     controller: Box::new(ConsoleController::new(dom.clone())),
                     renderer: Box::new(Recorder {
-                        inner: ConsoleRenderer::new(dom, true),
+                        inner: ConsoleRenderer::new(dom),
                         slot,
                     }),
                 }
@@ -488,6 +508,7 @@ struct Host {
     rng: DomRng,
     inner_height: f64,
     renderer_top: f64,
+    messages: Vec<NamedMessage<HubToMain>>,
 }
 
 impl TabCx for Host {
@@ -503,12 +524,16 @@ impl TabCx for Host {
         self.preferences.as_ref()
     }
 
+    fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
+        None
+    }
+
     fn tab_rng(&mut self) -> &mut dyn Rng {
         &mut self.rng
     }
 
-    fn tab_renderer_top(&self) -> f64 {
-        self.renderer_top
+    fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
+        self.messages.push(message);
     }
 }
 
@@ -578,6 +603,7 @@ struct Runner {
     doms: Doms,
     commands: CommandSlots,
     emitted: Vec<Emit>,
+    clock: Rc<Cell<f64>>,
     now: f64,
     start: f64,
     last_frame: f64,
@@ -585,6 +611,10 @@ struct Runner {
     show_pending: bool,
     frame_loop_dead: bool,
     active_drag: Option<JsValue>,
+    /// Table tabs whose header cells carry `data-i` tags. Upstream drops the tags when
+    /// `updateFields` rebuilds the header; the harness drops them every frame, so a fixture
+    /// re-tags right before each event that reads header rects.
+    tagged_tables: Vec<String>,
     sidebar_width: f64,
     sidebar_expanded: Vec<JsString>,
     ignored: Vec<String>,
@@ -630,12 +660,13 @@ impl Runner {
             let pos = i + 1;
             match self.tab_dom(&uuid) {
                 DomKind::Table(dom) => {
+                    let tagged = self.tagged_tables.contains(&uuid);
                     let mut dom = dom.borrow_mut();
                     dom.hidden = hidden;
                     dom.container = self.layout.rect_of(&table_container_el(hidden, pos));
                     let cells = dom.header_count.max(1);
                     dom.header_cells = (1..=cells)
-                        .map(|n| self.layout.rect_of(&table_th(hidden, pos, n)))
+                        .map(|n| self.layout.rect_of(&table_th(hidden, pos, n, tagged)))
                         .collect();
                     dom.header_row = self.layout.rect_of(&table_tr(hidden, pos, 1));
                     dom.data_row = self.layout.rect_of(&table_tr(hidden, pos, 2));
@@ -645,7 +676,6 @@ impl Runner {
                     dom.hidden = hidden;
                     dom.container = self.layout.rect_of(&console_container_el(hidden, pos));
                     dom.scroll_height = asrs_js::math::round(dom.container.height);
-                    dom.data_row = self.layout.rect_of(&console_tr(hidden, pos, 2));
                 }
                 DomKind::Other => {}
             }
@@ -658,6 +688,8 @@ impl Runner {
             classes: &["tab-list"],
             hidden: false,
             pos: 1,
+            child_pos: None,
+            data_i: None,
             parent: None,
         };
         self.layout.rect_of(&tab_list).top()
@@ -675,6 +707,7 @@ impl Runner {
             return;
         }
         self.host.renderer_top = self.renderer_top();
+        self.tagged_tables.clear();
         self.sync_dom();
         let out = self.tabs.periodic(&mut self.host);
         if let Some(e) = out.error {
@@ -685,12 +718,18 @@ impl Runner {
             let message = update.to_message();
             self.emit_main(message.name.name(), js_json::from_js(&message.data));
         }
-        for message in self.tabs.take_messages() {
-            self.emit_main(message.name.name(), js_json::from_js(&message.data));
-        }
+        self.flush_messages();
         if self.show_pending {
             self.show_pending = false;
             self.emit_main("show", Value::Undefined);
+        }
+    }
+
+    fn flush_messages(&mut self) {
+        let messages = self.tabs.take_messages();
+        let from_tabs = std::mem::take(&mut self.host.messages);
+        for message in messages.into_iter().chain(from_tabs) {
+            self.emit_main(message.name.name(), js_json::from_js(&message.data));
         }
     }
 
@@ -700,10 +739,12 @@ impl Runner {
             let frame_at = self.last_frame + self.frame_period;
             if frame_at <= end {
                 self.now = frame_at;
+                self.clock.set(frame_at);
                 self.last_frame = frame_at;
                 self.frame();
             } else {
                 self.now = end;
+                self.clock.set(end);
                 break;
             }
         }
@@ -792,16 +833,11 @@ impl Runner {
         }
     }
 
-    /// `startDrag({tableIndex})`: hub's own drag dispatch begins emitting `drag-update`s.
+    /// `startDrag({tableIndex})`. The `mousemove` that started it then bubbles to the hub's
+    /// window listener, which sends the first `drag-update`.
     fn drag_start_table(&mut self, drag: asrs_tabs::table::ColumnDrag) {
         let mut data = JsObject::new();
         data.insert("tableIndex", JsValue::Number(drag.table_index as f64));
-        let mut detail = JsObject::new();
-        detail.insert("data", JsValue::Object(data.clone()));
-        detail.insert("end", JsValue::Bool(false));
-        detail.insert("x", JsValue::Number(drag.x));
-        detail.insert("y", JsValue::Number(drag.y));
-        self.dispatch_drag(&JsValue::Object(detail));
         self.active_drag = Some(JsValue::Object(data));
     }
 }
@@ -952,6 +988,41 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
 
 /// `window.eval` is restricted to the expressions the fixtures use.
 fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
+    if expr.starts_with("/*table:tag*/") {
+        let uuid = r
+            .tabs
+            .selected_index()
+            .and_then(|i| r.tabs.tab(i))
+            .and_then(|t| t.uuid().as_str().map(|s| s.to_string_lossy()))
+            .ok_or_else(|| err("table:tag needs a selected tab"))?;
+        r.tagged_tables.push(uuid);
+        r.sync_dom();
+        return Ok(JsValue::Undefined);
+    }
+    if let Some(inner) = expr
+        .strip_prefix("[...")
+        .and_then(|e| e.strip_suffix(']'))
+        .filter(|e| e.starts_with("window.tabs.tabList["))
+    {
+        return run_eval(r, inner);
+    }
+    if let Some(container) = expr
+        .strip_prefix("document.querySelector('div.renderer-content > :not([hidden]) div.")
+        .and_then(|e| e.strip_suffix("').scrollTop"))
+    {
+        let uuid = r
+            .tabs
+            .selected_index()
+            .and_then(|i| r.tabs.tab(i))
+            .and_then(|t| t.uuid().as_str().map(|s| s.to_string_lossy()))
+            .unwrap_or_default();
+        let scroll_top = match (container, r.tab_dom(&uuid)) {
+            ("data-table-container", DomKind::Table(dom)) => dom.borrow().scroll_top,
+            ("console-table-container", DomKind::Console(dom)) => dom.borrow().scroll_top,
+            _ => return Err(err(format!("unsupported eval {expr}"))),
+        };
+        return Ok(JsValue::Number(scroll_top));
+    }
     if let Some(rest) = expr.strip_prefix("window.tabs.tabList[")
         && let Some(close) = rest.find(']')
     {
@@ -1125,7 +1196,11 @@ fn skippable(record: &Record) -> bool {
             .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
 }
 
-fn selection_step(sel: &mut SelectionImpl, parts: &[Json]) -> Result<(), String> {
+fn selection_step(
+    sel: &mut SelectionImpl,
+    parts: &[Json],
+    live_time: &Rc<Cell<Option<f64>>>,
+) -> Result<(), String> {
     let method = parts
         .first()
         .and_then(Json::as_str)
@@ -1172,7 +1247,11 @@ fn selection_step(sel: &mut SelectionImpl, parts: &[Json]) -> Result<(), String>
         "applyTimelineScroll" => {
             sel.apply_timeline_scroll(num(0)?, num(1)?, num(2)?);
         }
-        "setLiveConnected" | "setLiveDisconnected" => {}
+        "setLiveConnected" => {
+            let live_time = live_time.clone();
+            sel.set_live_connected(Rc::new(move || live_time.get().unwrap_or(f64::NAN)));
+        }
+        "setLiveDisconnected" => sel.set_live_disconnected(),
         other => return Err(format!("unknown selection method {other}")),
     }
     Ok(())
@@ -1198,6 +1277,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     let layout = json_to_layout(fixture)?;
 
     let clock_cell = Rc::new(Cell::new(start));
+    let live_time: Rc<Cell<Option<f64>>> = Rc::new(Cell::new(None));
     let log = Rc::new(RefCell::new(Log::new(true)));
     let selection = SelectionImpl::new(log.clone(), Rc::new(ScriptedClock(clock_cell.clone())));
     let mut host = Host {
@@ -1207,6 +1287,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         rng: DomRng(seed),
         inner_height,
         renderer_top: 92.0,
+        messages: Vec::new(),
     };
     if let Some(prefs) = fixture.get("preferences") {
         let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;
@@ -1276,6 +1357,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         doms,
         commands,
         emitted: Vec::new(),
+        clock: clock_cell.clone(),
         now: start,
         start,
         last_frame: start,
@@ -1283,6 +1365,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         show_pending: true,
         frame_loop_dead: false,
         active_drag: None,
+        tagged_tables: Vec::new(),
         sidebar_width: 300.0,
         sidebar_expanded: Vec::new(),
         ignored,
@@ -1348,7 +1431,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             let parts = sel_step
                 .as_array()
                 .ok_or_else(|| err("selection step is [method, ...args]"))?;
-            if let Err(e) = selection_step(&mut runner.host.selection, parts) {
+            if let Err(e) = selection_step(&mut runner.host.selection, parts, &live_time) {
                 let method = parts
                     .first()
                     .and_then(Json::as_str)
@@ -1357,7 +1440,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 runner.exception(format!("selection {method}"), e);
             }
         } else if let Some(live) = step.get("liveTime") {
-            let _ = live;
+            live_time.set(Value::from_json_lenient(live).as_f64());
         } else if let Some(main) = step.get("main") {
             let name = main
                 .as_str()
@@ -1372,7 +1455,9 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 runner.exception(format!("main {name}"), e.to_string());
             }
         } else if let Some(event) = step.get("event") {
-            if let Err(e) = runner.dispatch_event(event) {
+            let result = runner.dispatch_event(event);
+            runner.flush_messages();
+            if let Err(e) = result {
                 let etype = event
                     .get("type")
                     .and_then(Json::as_str)
@@ -1533,7 +1618,9 @@ impl Runner {
         let index = event.get("index").and_then(Json::as_f64).unwrap_or(0.0) as usize;
         let init = event.get("init").unwrap_or(&Json::Null);
         let iv = |name: &str| init.get(name).and_then(Json::as_f64).unwrap_or(0.0);
+        let (x, y) = (iv("clientX"), iv("clientY"));
         let props = event.get("props");
+        self.sync_dom();
 
         match (target.as_str(), etype.as_str()) {
             ("window", "drag-update") => {
@@ -1543,89 +1630,101 @@ impl Runner {
                 let detail = js_json::to_js(&Value::from_json_lenient(detail))?;
                 self.dispatch_drag(&detail);
             }
-            ("window", "mousemove") => {
-                if let Some(data) = self.active_drag.clone() {
-                    let mut detail = JsObject::new();
-                    detail.insert("data", data);
-                    detail.insert("end", JsValue::Bool(false));
-                    detail.insert("x", JsValue::Number(iv("clientX")));
-                    detail.insert("y", JsValue::Number(iv("clientY")));
-                    self.dispatch_drag(&JsValue::Object(detail));
-                }
-            }
-            ("window", "mouseup") | ("window", "mouseleave") | ("window", "touchend") => {
-                if let Some(data) = self.active_drag.take() {
-                    let mut detail = JsObject::new();
-                    detail.insert("data", data);
-                    detail.insert("end", JsValue::Bool(true));
-                    detail.insert("x", JsValue::Number(iv("clientX")));
-                    detail.insert("y", JsValue::Number(iv("clientY")));
-                    self.dispatch_drag(&JsValue::Object(detail));
-                }
-            }
+            ("window", _) => self.window_mouse(&etype, x, y),
             ("div.renderer-content > :not([hidden])", _) => {
-                self.root_event(&etype, iv("clientX"), iv("clientY"));
+                self.root_event(&etype, x, y);
+                self.window_mouse(&etype, x, y);
             }
-            (t, "mousemove") | (t, "mouseleave") if t.contains("tbody") => {
-                self.body_event(&etype, iv("clientY"));
+            (t, "mousemove" | "mouseleave") if t.ends_with("tbody") => {
+                self.body_event(&etype, y);
+                self.window_mouse(&etype, x, y);
             }
-            (t, "click") if t.contains("jump-button") => {
+            (t, "input") if t.contains("data-table-jump-input") => self.set_jump_value(props),
+            (t, "keydown") if t.contains("data-table-jump-input") => {
                 self.set_jump_value(props);
-                self.jump();
-            }
-            (t, "click") if t.contains("data-table-key-delete") => {
-                self.close_field(Some(index as f64));
-            }
-            (t, "click") if t.contains("console-table") => {
-                self.close_field(None);
-            }
-            (t, "click") if t.contains("highlight") => {
-                self.console_highlight_click();
-            }
-            (t, "scroll") => {
-                self.scroll_event(t, props);
-            }
-            (t, "keydown") => {
-                let code = init
+                if init
                     .get("code")
                     .and_then(Json::as_str)
-                    .map(|s| s.to_string_lossy())
-                    .unwrap_or_default();
-                if code == "Enter" && t.contains("jump-input") {
-                    self.set_jump_value(props);
+                    .map(|c| c.to_string_lossy())
+                    == Some("Enter".to_owned())
+                {
                     self.jump();
                 }
             }
-            _ => {}
+            (t, "click") if t.contains("data-table-jump-button") => self.jump(),
+            // Match 0 is the hidden header template's button; match i + 1 closes field i.
+            (t, "click") if t.contains("data-table-key-delete") => {
+                if let Some(field) = index.checked_sub(1) {
+                    self.close_field(Some(field as f64));
+                }
+            }
+            (t, "click") if t.contains("console-table-key-delete") => self.close_field(None),
+            (t, "click") if t.contains("highlight-button") => self.console_highlight_click(),
+            // Match 0 is the header row; match i + 1 is data row i.
+            (t, "click" | "contextmenu") if t.ends_with(" tr") => {
+                if let Some(row) = index.checked_sub(1) {
+                    self.row_event(&etype, row);
+                }
+            }
+            (t, "scroll") => self.scroll_event(t, props),
+            // DOM-only (row filtering and the console jump scroll belong to the view layer).
+            (t, "input") if t.contains("input.filter") => {}
+            (t, "keydown" | "click") if t.contains("console-table-jump") => {}
+            _ => return Err(format!("event {etype} on {target} is not modeled")),
         }
         Ok(())
     }
 
-    fn set_jump_value(&mut self, props: Option<&Json>) {
-        let Some(value) = props.and_then(|p| p.get("value")) else {
-            return;
+    /// The hub's window listeners that drive a drag session (`dragMove`, `dragEnd`).
+    fn window_mouse(&mut self, etype: &str, x: f64, y: f64) {
+        let end = match etype {
+            "mousemove" => false,
+            "mouseup" | "mouseleave" | "touchend" => true,
+            _ => return,
         };
-        let Ok(value) = js_json::to_js(&Value::from_json_lenient(value)) else {
-            return;
+        let data = if end {
+            self.active_drag.take()
+        } else {
+            self.active_drag.clone()
         };
-        let JsValue::String(value) = value else {
-            return;
-        };
-        let Some(i) = self.tabs.selected_index() else {
-            return;
-        };
-        let Some(uuid) = self
+        if let Some(data) = data {
+            let mut detail = JsObject::new();
+            detail.insert("data", data);
+            detail.insert("end", JsValue::Bool(end));
+            detail.insert("x", JsValue::Number(x));
+            detail.insert("y", JsValue::Number(y));
+            self.dispatch_drag(&JsValue::Object(detail));
+        }
+    }
+
+    fn selected_table_dom(&self) -> Option<Rc<RefCell<TableDom>>> {
+        let uuid = self
             .tabs
-            .tab(i)
-            .and_then(|t| t.uuid().as_str())
-            .map(|s| s.to_string_lossy())
-        else {
-            return;
-        };
+            .tab(self.tabs.selected_index()?)?
+            .uuid()
+            .as_str()?
+            .to_string_lossy();
         match self.tab_dom(&uuid) {
-            DomKind::Table(dom) => dom.borrow_mut().jump_value = value,
-            DomKind::Console(dom) => dom.borrow_mut().jump_value = value,
-            _ => {}
+            DomKind::Table(dom) => Some(dom),
+            _ => None,
+        }
+    }
+
+    fn selected_table_renderer(&mut self) -> Option<&mut TableRenderer> {
+        let index = JsValue::Number(self.tabs.selected_index()? as f64);
+        self.tabs
+            .renderer_mut(&index)
+            .ok()?
+            .downcast_mut::<Recorder<TableRenderer>>()
+            .map(|r| &mut r.inner)
+    }
+
+    fn set_jump_value(&mut self, props: Option<&Json>) {
+        let value = props
+            .and_then(|p| p.get("value"))
+            .and_then(|v| js_json::to_js(&Value::from_json_lenient(v)).ok());
+        if let (Some(JsValue::String(value)), Some(dom)) = (value, self.selected_table_dom()) {
+            dom.borrow_mut().jump_value = value;
         }
     }
 
@@ -1654,6 +1753,15 @@ impl Runner {
     }
 
     fn body_event(&mut self, etype: &str, y: f64) {
+        if let Some(r) = self.selected_table_renderer() {
+            match etype {
+                "mousemove" => r.body_mouse_move(y),
+                _ => r.body_mouse_leave(),
+            }
+        }
+    }
+
+    fn row_event(&mut self, etype: &str, row: usize) {
         let Some(i) = self.tabs.selected_index() else {
             return;
         };
@@ -1665,9 +1773,8 @@ impl Runner {
             .and_then(|r| r.downcast_mut::<Recorder<TableRenderer>>())
         {
             match etype {
-                "mousemove" => r.inner.body_mouse_move(y),
-                "mouseleave" => r.inner.body_mouse_leave(),
-                _ => {}
+                "click" => r.inner.row_click(&mut self.host, row),
+                _ => r.inner.row_context_menu(&mut self.host),
             }
         }
     }
@@ -1684,15 +1791,6 @@ impl Runner {
             .and_then(|r| r.downcast_mut::<Recorder<TableRenderer>>())
         {
             r.inner.jump(&mut self.host);
-            return;
-        }
-        if let Some(r) = self
-            .tabs
-            .renderer_mut(&index)
-            .ok()
-            .and_then(|r| r.downcast_mut::<Recorder<ConsoleRenderer>>())
-        {
-            r.inner.jump();
         }
     }
 
@@ -1930,15 +2028,19 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             if *key == "state" {
                 patch_state(&expected_value, &mut actual);
             }
-            if actual != expected_value {
-                return Err(format!(
-                    "line {} ({key}): expected {} got {}",
-                    record.line,
-                    expected_value.encode(),
-                    actual.encode()
-                ));
+            if let Some(report) = asrs_parity::diff::report(&expected_value, &actual) {
+                return Err(format!("line {} ({key}): {report}", record.line));
             }
         }
+    }
+    for record in expected {
+        if !skippable(record) {
+            return Err(format!(
+                "line {}: the port emitted nothing for this record",
+                record.line
+            ));
+        }
+        skipped += 1;
     }
     Ok(skipped)
 }

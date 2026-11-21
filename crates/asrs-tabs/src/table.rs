@@ -37,7 +37,8 @@ pub struct TableDom {
     pub header_cells: Vec<Rect>,
     /// `HEADER.getBoundingClientRect()` (the header row).
     pub header_row: Rect,
-    /// `dataRows[i].getBoundingClientRect()`; every row resolves alike in the harness.
+    /// `dataRows[i].getBoundingClientRect()` for every visible row. The DOM oracle's layout
+    /// resolves all rows alike, so one rect stands for them; hidden rows are skipped.
     pub data_row: Rect,
     /// `TABLE_CONTAINER.scrollTop`, persisted across frames.
     pub scroll_top: f64,
@@ -220,16 +221,6 @@ fn splice_start(index: f64, len: usize) -> usize {
     }
 }
 
-fn js_truthy(value: &JsValue) -> bool {
-    match value {
-        JsValue::Undefined | JsValue::Null => false,
-        JsValue::Bool(b) => *b,
-        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
-        JsValue::String(s) => !s.is_empty(),
-        _ => true,
-    }
-}
-
 /// `startDrag`'s `data` payload for a column drag: `{tableIndex: n}`.
 pub struct ColumnDrag {
     pub x: f64,
@@ -244,7 +235,7 @@ pub struct TableController {
     dom: Rc<RefCell<TableDom>>,
     /// The `fields` list; drags can splice non-string values in.
     fields: Vec<JsValue>,
-    ranges: JsObject,
+    ranges: JsObject<[f64; 2]>,
     mouse_down: Option<[f64; 2]>,
 }
 
@@ -354,7 +345,7 @@ impl TableController {
 
         let x = ops::value_to_number(&ops::get(detail, "x")?).unwrap_or(f64::NAN);
         let y = ops::value_to_number(&ops::get(detail, "y")?).unwrap_or(f64::NAN);
-        let end = js_truthy(&ops::get(detail, "end")?);
+        let end = ops::to_boolean(&ops::get(detail, "end")?);
 
         let table_box = self.dom.borrow().container;
         let mut selected = None;
@@ -466,31 +457,21 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for TableController {
             let log = cx.tab_log();
             let available_keys = log.get_field_keys();
 
-            let mut ranges: Vec<[f64; 2]> = self
-                .ranges
-                .values()
-                .map(|v| match v {
-                    JsValue::Array(items) => [
-                        items.first().map_or(JsValue::Undefined, Clone::clone),
-                        items.get(1).map_or(JsValue::Undefined, Clone::clone),
-                    ],
-                    _ => [JsValue::Undefined, JsValue::Undefined],
-                })
-                .map(|pair| {
-                    [
-                        ops::value_to_number(&pair[0]).unwrap_or(f64::NAN),
-                        ops::value_to_number(&pair[1]).unwrap_or(f64::NAN),
-                    ]
-                })
-                .collect();
-            array_sort(&mut ranges, |a, b| a[0] - b[0]);
-            let mut merged: Vec<[f64; 2]> = Vec::new();
-            for range in ranges {
+            let mut ranges: Vec<(JsString, [f64; 2])> =
+                self.ranges.iter().map(|(k, r)| (k.clone(), *r)).collect();
+            array_sort(&mut ranges, |a, b| a.1[0] - b.1[0]);
+            let mut merged: Vec<(JsString, [f64; 2])> = Vec::new();
+            for (key, range) in ranges {
                 match merged.last_mut() {
-                    Some(last) if range[0] <= last[1] => {
+                    Some((owner, last)) if range[0] <= last[1] => {
                         last[1] = math::max2(last[1], range[1]);
+                        // Upstream extends the stored range array in place, so a satellite's
+                        // range stays extended until its next `add-table-range`.
+                        if let Some(stored) = self.ranges.get_units_mut(owner.units()) {
+                            stored[1] = last[1];
+                        }
                     }
-                    _ => merged.push(range),
+                    _ => merged.push((key, range)),
                 }
             }
 
@@ -513,7 +494,7 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for TableController {
                     } else {
                         let k = key_str.unwrap();
                         let mut data = None;
-                        for range in &merged {
+                        for (_, range) in &merged {
                             if let Some(new) = log.get_range(k, range[0], range[1], Some(&uuid)) {
                                 push_range_data(&mut data, new);
                             }
@@ -560,11 +541,8 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for TableController {
             None => {
                 self.ranges.remove_units(renderer_uuid.units());
             }
-            Some([a, b]) => {
-                self.ranges.insert(
-                    renderer_uuid.clone(),
-                    JsValue::Array(vec![JsValue::Number(a), JsValue::Number(b)]),
-                );
+            Some(range) => {
+                self.ranges.insert(renderer_uuid.clone(), range);
             }
         }
         Ok(())
@@ -590,9 +568,9 @@ pub struct TableRenderer {
 }
 
 impl TableRenderer {
-    /// `new TableRenderer(element, hasController)`: draws a second `createUUID`, then
-    /// `updateFields([])` leaves the single jump-input header cell.
-    pub fn new(uuid: JsString, dom: Rc<RefCell<TableDom>>, _has_controller: bool) -> Self {
+    /// `new TableRenderer(element, hasController)`; `uuid` is its `createUUID()`, drawn after
+    /// the controller's. `updateFields([])` leaves the single jump-input header cell.
+    pub fn new(uuid: JsString, dom: Rc<RefCell<TableDom>>) -> Self {
         dom.borrow_mut().header_count = 1;
         Self {
             uuid,
@@ -613,7 +591,7 @@ impl TableRenderer {
         }
     }
 
-    /// `TABLE_BODY`'s `mousemove`; the harness resolves `clientY`.
+    /// `TABLE_BODY`'s `mousemove`.
     pub fn body_mouse_move(&mut self, client_y: f64) {
         self.dom.borrow_mut().hover_cursor_y = Some(client_y);
     }
@@ -799,10 +777,9 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
         match hover_y {
             Some(y) if y > header_bottom => {
                 let rect = self.dom.borrow().data_row;
-                for index in 0..self.data_rows {
+                for &time in &self.data_row_timestamps {
                     if y >= rect.top() && y < rect.bottom() {
-                        cx.tab_selection()
-                            .set_hovered_time(self.data_row_timestamps.get(index).copied());
+                        cx.tab_selection().set_hovered_time(Some(time));
                         self.did_clear_hovered_time = false;
                     }
                 }
