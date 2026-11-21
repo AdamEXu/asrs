@@ -8,7 +8,7 @@ use std::fmt;
 
 use crate::number;
 use crate::string::JsString;
-use crate::value::{JsObject, JsValue};
+use crate::value::JsValue;
 
 pub use iso_date::to_iso_string;
 pub use parse::{parse, parse_str, parse_units};
@@ -40,24 +40,45 @@ impl std::error::Error for JsonError {}
 
 /// `JSON.stringify(value)`. `Ok(None)` is the `undefined` result for a top-level `undefined`.
 /// The output is always well-formed: lone surrogates are written as `\uXXXX` escapes.
+/// With no `replacer` or `space` argument V8 takes an iterative serializer, so any depth
+/// succeeds.
 pub fn stringify(value: &JsValue) -> Result<Option<String>, JsonError> {
-    stringify_gap(value, "")
+    serialize(value, "", usize::MAX)
 }
 
-/// `JSON.stringify(value, null, 2)`.
+/// `JSON.stringify(value, null, 2)`. A defined argument puts V8 on its recursive
+/// serializer, which throws `RangeError` past a depth limit.
 pub fn stringify_pretty(value: &JsValue) -> Result<Option<String>, JsonError> {
     stringify_gap(value, "  ")
 }
 
-/// `JSON.stringify(value, null, gap)` with `gap` already reduced to the string the spec uses:
-/// see [`gap_from_number`] and [`gap_from_string`].
+/// `JSON.stringify` after argument normalization. Callers pass `""` for a `space` that
+/// reduced to nothing; V8 still takes its recursive serializer whenever `replacer` or
+/// `space` was a defined value, so this entry stays depth-limited either way.
 pub fn stringify_gap(value: &JsValue, gap: &str) -> Result<Option<String>, JsonError> {
+    serialize(value, gap, MAX_SERIALIZE_DEPTH)
+}
+
+fn serialize(value: &JsValue, gap: &str, max_depth: usize) -> Result<Option<String>, JsonError> {
     let mut writer = Writer {
         out: String::new(),
         gap,
         indent: String::new(),
     };
-    Ok(writer.value(value)?.then_some(writer.out))
+    Ok(writer.serialize(value, max_depth)?.then_some(writer.out))
+}
+
+/// V8's general `JSON.stringify` path recurses per level and throws `RangeError` at a
+/// stack-size-dependent depth (~6183 on the oracle). The port serializes iteratively but
+/// reproduces the throw; the bound sits under the oracle's so vector input deep enough to
+/// fail upstream fails here too.
+const MAX_SERIALIZE_DEPTH: usize = 6000;
+
+fn range_error() -> JsonError {
+    JsonError {
+        name: "RangeError",
+        message: JsString::from("Maximum call stack size exceeded"),
+    }
 }
 
 /// The gap for a numeric `space` argument: `min(10, ToIntegerOrInfinity(space))` spaces.
@@ -121,6 +142,41 @@ fn push_unit_escape(u: u16, out: &mut String) {
     }
 }
 
+type Members<'v> = Box<dyn Iterator<Item = (MemberKey<'v>, MemberValue<'v>)> + 'v>;
+
+enum MemberKey<'v> {
+    Ref(&'v [u16]),
+    Owned(Vec<u16>),
+}
+
+/// An object member's value as the serializer sees it: a tree value, or a `Number`/`Bytes`
+/// member `ExtData` and `Bytes` produce without a `JsValue`.
+enum MemberValue<'v> {
+    Value(&'v JsValue),
+    Number(f64),
+    Bytes(&'v [u8]),
+}
+
+enum Frame<'v> {
+    /// Items still to write, and whether a child was dispatched (a `false` result writes
+    /// `null`, as `JSON.stringify` does for `undefined` array elements).
+    Array(std::iter::Enumerate<std::slice::Iter<'v, JsValue>>, bool),
+    Object {
+        members: Members<'v>,
+        any: bool,
+        /// `out` length before the `{`, for the `!any` `{}` rewrite.
+        start: usize,
+        /// `out` length where the member being serialized began, for `undefined` rollback.
+        member_start: Option<usize>,
+    },
+}
+
+/// The next thing to serialize: a value, or the bytes `{"0": b, ...}` serializes.
+enum Target<'v> {
+    Value(&'v JsValue),
+    Bytes(&'v [u8]),
+}
+
 struct Writer<'a> {
     out: String,
     gap: &'a str,
@@ -128,57 +184,256 @@ struct Writer<'a> {
 }
 
 impl Writer<'_> {
-    /// SerializeJSONProperty. Returns false (writing nothing) when the value serializes to
-    /// `undefined`.
-    fn value(&mut self, value: &JsValue) -> Result<bool, JsonError> {
-        match value {
-            JsValue::Undefined => return Ok(false),
-            JsValue::Null => self.out.push_str("null"),
-            JsValue::Bool(b) => self.out.push_str(if *b { "true" } else { "false" }),
-            JsValue::Number(x) => self.number(*x),
-            JsValue::String(s) => quote_into(s.units(), &mut self.out),
-            JsValue::Array(items) => self.array(items)?,
-            JsValue::Object(object) => self.object(
-                object
-                    .iter()
-                    .map(|(k, v)| (k.units(), MemberValue::Value(v))),
-            )?,
-            JsValue::Bytes(bytes) => {
-                let keys: Vec<Vec<u16>> = (0..bytes.len())
-                    .map(|i| number::to_string(i as f64).encode_utf16().collect())
-                    .collect();
-                self.object(
-                    keys.iter()
-                        .zip(bytes)
-                        .map(|(k, b)| (k.as_slice(), MemberValue::Number(f64::from(*b)))),
-                )?
-            }
-            JsValue::BigInt(_) => {
-                return Err(JsonError {
-                    name: "TypeError",
-                    message: JsString::from("Do not know how to serialize a BigInt"),
-                });
-            }
-            JsValue::Date(t) => {
-                if t.is_finite() {
-                    quote_into(
-                        &to_iso_string(*t).encode_utf16().collect::<Vec<u16>>(),
-                        &mut self.out,
-                    )
-                } else {
-                    self.out.push_str("null")
+    /// SerializeJSONProperty on a worklist. Returns false (writing nothing) when the value
+    /// serializes to `undefined`.
+    fn serialize(&mut self, root: &JsValue, max_depth: usize) -> Result<bool, JsonError> {
+        let mut frames: Vec<Frame<'_>> = Vec::new();
+        let mut target = Target::Value(root);
+        'descend: loop {
+            let mut wrote = loop {
+                match target {
+                    Target::Value(JsValue::Undefined) => break false,
+                    Target::Value(JsValue::Null) => {
+                        self.out.push_str("null");
+                        break true;
+                    }
+                    Target::Value(JsValue::Bool(b)) => {
+                        self.out
+                            .push_str(if *b { "true" } else { "false" });
+                        break true;
+                    }
+                    Target::Value(JsValue::Number(x)) => {
+                        let x = *x;
+                        self.number(x);
+                        break true;
+                    }
+                    Target::Value(JsValue::String(s)) => {
+                        Self::quote_into(s.units(), &mut self.out);
+                        break true;
+                    }
+                    Target::Value(JsValue::Array(items)) => {
+                        if items.is_empty() {
+                            self.out.push_str("[]");
+                            break true;
+                        }
+                        if frames.len() >= max_depth {
+                            return Err(range_error());
+                        }
+                        self.out.push('[');
+                        self.indent.push_str(self.gap);
+                        frames.push(Frame::Array(items.iter().enumerate(), false));
+                        // `wrote` is ignored below: the fresh frame has nothing pending.
+                        break true;
+                    }
+                    Target::Value(JsValue::Object(object)) => {
+                        if frames.len() >= max_depth {
+                            return Err(range_error());
+                        }
+                        let start = self.out.len();
+                        self.out.push('{');
+                        self.indent.push_str(self.gap);
+                        let members: Members<'_> = Box::new(
+                            object
+                                .iter()
+                                .map(|(k, v)| (MemberKey::Ref(k.units()), MemberValue::Value(v))),
+                        );
+                        frames.push(Frame::Object {
+                            members,
+                            any: false,
+                            start,
+                            member_start: None,
+                        });
+                        break true;
+                    }
+                    Target::Value(JsValue::Bytes(bytes)) => {
+                        target = Target::Bytes(bytes);
+                    }
+                    Target::Bytes(bytes) => {
+                        if bytes.is_empty() {
+                            self.out.push_str("{}");
+                            break true;
+                        }
+                        if frames.len() >= max_depth {
+                            return Err(range_error());
+                        }
+                        let start = self.out.len();
+                        self.out.push('{');
+                        self.indent.push_str(self.gap);
+                        let members: Members<'_> = Box::new(bytes.iter().enumerate().map(|(i, b)| {
+                            (
+                                MemberKey::Owned(number::to_string(i as f64).encode_utf16().collect()),
+                                MemberValue::Number(f64::from(*b)),
+                            )
+                        }));
+                        frames.push(Frame::Object {
+                            members,
+                            any: false,
+                            start,
+                            member_start: None,
+                        });
+                        break true;
+                    }
+                    Target::Value(JsValue::BigInt(_)) => {
+                        return Err(JsonError {
+                            name: "TypeError",
+                            message: JsString::from("Do not know how to serialize a BigInt"),
+                        });
+                    }
+                    Target::Value(JsValue::Date(t)) => {
+                        let t = *t;
+                        if t.is_finite() {
+                            Self::quote_into(
+                                &to_iso_string(t).encode_utf16().collect::<Vec<u16>>(),
+                                &mut self.out,
+                            );
+                        } else {
+                            self.out.push_str("null");
+                        }
+                        break true;
+                    }
+                    Target::Value(JsValue::ExtData(kind, data)) => {
+                        if frames.len() >= max_depth {
+                            return Err(range_error());
+                        }
+                        let start = self.out.len();
+                        self.out.push('{');
+                        self.indent.push_str(self.gap);
+                        let members: Members<'_> = Box::new(
+                            [
+                                (
+                                    MemberKey::Owned(b"type".map(u16::from).to_vec()),
+                                    MemberValue::Number(f64::from(*kind)),
+                                ),
+                                (
+                                    MemberKey::Owned(b"data".map(u16::from).to_vec()),
+                                    MemberValue::Bytes(data),
+                                ),
+                            ]
+                            .into_iter(),
+                        );
+                        frames.push(Frame::Object {
+                            members,
+                            any: false,
+                            start,
+                            member_start: None,
+                        });
+                        break true;
+                    }
+                }
+            };
+            loop {
+                match frames.last_mut() {
+                    None => return Ok(wrote),
+                    Some(Frame::Array(items, pending)) => {
+                        if *pending && !wrote {
+                            self.out.push_str("null");
+                        }
+                        match items.next() {
+                            Some((i, item)) => {
+                                if i > 0 {
+                                    self.out.push(',');
+                                }
+                                if !self.gap.is_empty() {
+                                    self.newline_indent();
+                                }
+                                *pending = true;
+                                target = Target::Value(item);
+                                continue 'descend;
+                            }
+                            None => {
+                                frames.pop();
+                                self.indent
+                                    .truncate(self.indent.len() - self.gap.len());
+                                if !self.gap.is_empty() {
+                                    self.newline_indent();
+                                }
+                                self.out.push(']');
+                                wrote = true;
+                            }
+                        }
+                    }
+                    Some(Frame::Object {
+                        members,
+                        any,
+                        start,
+                        member_start,
+                    }) => {
+                        if let Some(member_start) = member_start.take() {
+                            if wrote {
+                                *any = true;
+                            } else {
+                                self.out.truncate(member_start);
+                            }
+                        }
+                        match members.next() {
+                            Some((key, member)) => {
+                                let ms = self.out.len();
+                                if *any {
+                                    self.out.push(',');
+                                }
+                                if !self.gap.is_empty() {
+                                    self.newline_indent();
+                                }
+                                match key {
+                                    MemberKey::Ref(units) => {
+                                        Self::quote_into(units, &mut self.out)
+                                    }
+                                    MemberKey::Owned(units) => {
+                                        Self::quote_into(&units, &mut self.out)
+                                    }
+                                }
+                                self.out.push(':');
+                                if !self.gap.is_empty() {
+                                    self.out.push(' ');
+                                }
+                                match member {
+                                    MemberValue::Number(x) => {
+                                        self.number(x);
+                                        *any = true;
+                                        wrote = true;
+                                    }
+                                    MemberValue::Value(v) => {
+                                        *member_start = Some(ms);
+                                        target = Target::Value(v);
+                                        continue 'descend;
+                                    }
+                                    MemberValue::Bytes(b) => {
+                                        *member_start = Some(ms);
+                                        target = Target::Bytes(b);
+                                        continue 'descend;
+                                    }
+                                }
+                            }
+                            None => {
+                                let (start, any) = (*start, *any);
+                                frames.pop();
+                                self.indent
+                                    .truncate(self.indent.len() - self.gap.len());
+                                if !any {
+                                    self.out.truncate(start);
+                                    self.out.push_str("{}");
+                                } else {
+                                    if !self.gap.is_empty() {
+                                        self.newline_indent();
+                                    }
+                                    self.out.push('}');
+                                }
+                                wrote = true;
+                            }
+                        }
+                    }
                 }
             }
-            JsValue::ExtData(..) => {
-                let object = ext_data_object(value);
-                self.object(
-                    object
-                        .iter()
-                        .map(|(k, v)| (k.units(), MemberValue::Value(v))),
-                )?;
-            }
         }
-        Ok(true)
+    }
+
+    fn newline_indent(&mut self) {
+        self.out.push('\n');
+        self.out.push_str(&self.indent);
+    }
+
+    fn quote_into(units: &[u16], out: &mut String) {
+        quote_into(units, out);
     }
 
     fn number(&mut self, x: f64) {
@@ -188,100 +443,4 @@ impl Writer<'_> {
             self.out.push_str("null");
         }
     }
-
-    fn newline_indent(&mut self) {
-        self.out.push('\n');
-        self.out.push_str(&self.indent);
-    }
-
-    fn array(&mut self, items: &[JsValue]) -> Result<(), JsonError> {
-        if items.is_empty() {
-            self.out.push_str("[]");
-            return Ok(());
-        }
-        let stepback = self.indent.len();
-        self.indent.push_str(self.gap);
-        self.out.push('[');
-        for (i, item) in items.iter().enumerate() {
-            if i > 0 {
-                self.out.push(',');
-            }
-            if !self.gap.is_empty() {
-                self.newline_indent();
-            }
-            if !self.value(item)? {
-                self.out.push_str("null");
-            }
-        }
-        self.indent.truncate(stepback);
-        if !self.gap.is_empty() {
-            self.newline_indent();
-        }
-        self.out.push(']');
-        Ok(())
-    }
-
-    fn object<'v>(
-        &mut self,
-        members: impl Iterator<Item = (&'v [u16], MemberValue<'v>)>,
-    ) -> Result<(), JsonError> {
-        let start = self.out.len();
-        let stepback = self.indent.len();
-        self.indent.push_str(self.gap);
-        self.out.push('{');
-        let mut any = false;
-        for (key, value) in members {
-            let member_start = self.out.len();
-            if any {
-                self.out.push(',');
-            }
-            if !self.gap.is_empty() {
-                self.newline_indent();
-            }
-            quote_into(key, &mut self.out);
-            self.out.push(':');
-            if !self.gap.is_empty() {
-                self.out.push(' ');
-            }
-            let written = match value {
-                MemberValue::Value(v) => self.value(v)?,
-                MemberValue::Number(x) => {
-                    self.number(x);
-                    true
-                }
-            };
-            if written {
-                any = true;
-            } else {
-                self.out.truncate(member_start);
-            }
-        }
-        self.indent.truncate(stepback);
-        if !any {
-            self.out.truncate(start);
-            self.out.push_str("{}");
-            return Ok(());
-        }
-        if !self.gap.is_empty() {
-            self.newline_indent();
-        }
-        self.out.push('}');
-        Ok(())
-    }
-}
-
-enum MemberValue<'v> {
-    Value(&'v JsValue),
-    Number(f64),
-}
-
-/// The `{type, data}` own enumerable properties `JSON.stringify` sees on an `ExtData`.
-fn ext_data_object(value: &JsValue) -> JsObject {
-    let JsValue::ExtData(kind, data) = value else {
-        return JsObject::new();
-    };
-    let mut object = JsObject::new();
-    object.insert("type", JsValue::Number(f64::from(*kind)));
-    object.insert("data", JsValue::Bytes(data.clone()));
-    object
 }

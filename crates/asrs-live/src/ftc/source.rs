@@ -312,7 +312,7 @@ impl FtcSource {
         path: &JsString,
         log_rc: &LiveLog,
     ) -> Result<(), Thrown> {
-        let JsValue::String(type_name) = ops::get(state, "__type")? else {
+        let Some(type_name) = ops::get(state, "__type")?.into_string() else {
             return Ok(());
         };
         let type_name = type_name.to_string_lossy();
@@ -343,10 +343,9 @@ impl FtcSource {
                 (BasicVarType::Boolean, value) => {
                     log.put_boolean(path, timestamp, matches!(value, JsValue::Bool(true)));
                 }
-                (BasicVarType::String, JsValue::String(text)) => {
-                    log.put_string(path, timestamp, text);
+                (BasicVarType::String, value) => {
+                    log.put_string(path, timestamp, value.into_string().unwrap_or_default());
                 }
-                (BasicVarType::String, _) => log.put_string(path, timestamp, JsString::new()),
                 (_, value) => log.put_number(path, timestamp, to_number(&value)),
             }
         }

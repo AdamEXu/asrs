@@ -529,7 +529,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.tabs.clear();
         self.selected = num(0.0);
         let list = match read(state, "tabs")? {
-            JsValue::Array(items) => items,
+            v @ JsValue::Array(_) => v.into_array().unwrap(),
             v @ (JsValue::Undefined | JsValue::Null) => {
                 return Err(type_error(read_error(&v, "forEach")));
             }

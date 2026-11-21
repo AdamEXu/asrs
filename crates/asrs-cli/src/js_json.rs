@@ -51,6 +51,48 @@ pub fn to_js(value: &Value) -> Result<JsValue, String> {
     })
 }
 
+/// Upstream's harness converts each fn result with a recursive `tree()`: a `JSON.parse` of
+/// very deep input succeeds upstream, then `tree` throws `RangeError`. Parsed values are
+/// the only unbounded `JsValue` source here, so this bounds the conversion before the
+/// recursion - and the recursive CVE-1 encoder downstream of it - can overflow.
+const MAX_TREE_DEPTH: usize = 2800;
+
+pub fn from_js_parsed(value: &JsValue) -> Result<Value, JsonError> {
+    from_js_at(value, 0)
+}
+
+fn from_js_at(value: &JsValue, depth: usize) -> Result<Value, JsonError> {
+    if depth > MAX_TREE_DEPTH {
+        return Err(JsonError {
+            name: "RangeError",
+            message: JsString::from("Maximum call stack size exceeded"),
+        });
+    }
+    Ok(match value {
+        JsValue::Undefined => Value::Undefined,
+        JsValue::Null => Value::Null,
+        JsValue::Bool(b) => Value::Bool(*b),
+        JsValue::Number(x) => Value::number(*x),
+        JsValue::String(s) => Value::String(utf16(s)),
+        JsValue::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| from_js_at(item, depth + 1))
+                .collect::<Result<_, _>>()?,
+        ),
+        JsValue::Object(object) => Value::Object(
+            object
+                .iter()
+                .map(|(k, v)| Ok((utf16(k), from_js_at(v, depth + 1)?)))
+                .collect::<Result<_, _>>()?,
+        ),
+        JsValue::Bytes(bytes) => Value::Bytes(bytes.clone()),
+        JsValue::BigInt(b) => Value::BigInt(format!("{b}")),
+        JsValue::Date(t) => Value::Date(t.to_bits()),
+        JsValue::ExtData(kind, data) => ext_data_value(*kind, data),
+    })
+}
+
 pub fn from_js(value: &JsValue) -> Value {
     match value {
         JsValue::Undefined => Value::Undefined,
@@ -65,15 +107,19 @@ pub fn from_js(value: &JsValue) -> Value {
         JsValue::Bytes(bytes) => Value::Bytes(bytes.clone()),
         JsValue::BigInt(b) => Value::BigInt(format!("{b}")),
         JsValue::Date(t) => Value::Date(t.to_bits()),
-        JsValue::ExtData(kind, data) => Value::Instance(
-            // The bundled oracle mangles the class name to `ExtData2`.
-            Utf16String::from("ExtData2"),
-            vec![
-                (Utf16String::from("type"), Value::number(f64::from(*kind))),
-                (Utf16String::from("data"), Value::Bytes(data.clone())),
-            ],
-        ),
+        JsValue::ExtData(kind, data) => ext_data_value(*kind, data),
     }
+}
+
+fn ext_data_value(kind: i8, data: &[u8]) -> Value {
+    Value::Instance(
+        // The bundled oracle mangles the class name to `ExtData2`.
+        Utf16String::from("ExtData2"),
+        vec![
+            (Utf16String::from("type"), Value::number(f64::from(kind))),
+            (Utf16String::from("data"), Value::Bytes(data.to_vec())),
+        ],
+    )
 }
 
 fn utf16(s: &JsString) -> Utf16String {
@@ -82,6 +128,13 @@ fn utf16(s: &JsString) -> Utf16String {
 
 fn throw(e: JsonError) -> Response {
     Response::Throw(Value::Error(e.name.into(), utf16(&e.message)))
+}
+
+fn tree_result(value: &JsValue) -> Response {
+    match from_js_parsed(value) {
+        Ok(v) => Response::Ok(v),
+        Err(e) => throw(e),
+    }
 }
 
 fn parse(args: &[Value]) -> Response {
@@ -100,7 +153,7 @@ fn parse(args: &[Value]) -> Response {
         Some(other) => return Response::Error(format!("JSON.parse: unsupported {}", other.kind())),
     };
     match json::parse_units(&text) {
-        Ok(v) => Response::Ok(from_js(&v)),
+        Ok(v) => tree_result(&v),
         Err(e) => throw(e),
     }
 }
@@ -135,7 +188,16 @@ fn stringify(args: &[Value]) -> Response {
         Ok(g) => g,
         Err(e) => return Response::Error(e),
     };
-    match json::stringify_gap(&value, &gap) {
+    // V8 only takes its unbounded iterative serializer when `replacer` and `space` are
+    // both `undefined`; any defined argument recurses and can throw `RangeError`.
+    let fast = matches!(args.get(1), None | Some(Value::Undefined))
+        && matches!(args.get(2), None | Some(Value::Undefined));
+    let result = if fast {
+        json::stringify(&value)
+    } else {
+        json::stringify_gap(&value, &gap)
+    };
+    match result {
         Ok(Some(text)) => Response::Ok(Value::String(Utf16String::from(text))),
         Ok(None) => Response::Ok(Value::Undefined),
         Err(e) => throw(e),
@@ -148,7 +210,7 @@ fn json_copy(args: &[Value]) -> Response {
         Err(e) => return Response::Error(e),
     };
     match json::json_copy(&value) {
-        Ok(v) => Response::Ok(from_js(&v)),
+        Ok(v) => tree_result(&v),
         Err(e) => throw(e),
     }
 }

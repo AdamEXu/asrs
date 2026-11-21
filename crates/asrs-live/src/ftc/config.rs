@@ -18,7 +18,18 @@ fn custom(value: JsValue) -> JsValue {
     ]))
 }
 
-fn inflate(var: &JsValue) -> Result<JsValue, Thrown> {
+/// Upstream's reduce cycle recurses per `__value` level; past V8's stack it throws
+/// `RangeError`, which the action dispatch surfaces as a thrown error.
+const MAX_CONFIG_DEPTH: usize = 2000;
+
+fn deep() -> Thrown {
+    Thrown::error("RangeError", "Maximum call stack size exceeded")
+}
+
+fn inflate(var: &JsValue, depth: usize) -> Result<JsValue, Thrown> {
+    if depth > MAX_CONFIG_DEPTH {
+        return Err(deep());
+    }
     if str_eq(&ops::get(var, "__type")?, "custom") {
         let value = ops::get(var, "__value")?;
         if value.is_null() {
@@ -26,7 +37,7 @@ fn inflate(var: &JsValue) -> Result<JsValue, Thrown> {
         } else {
             let mut children = JsObject::new();
             for key in ops::object_keys(&value)? {
-                children.insert(key.clone(), inflate(&ops::get_key(&value, &key)?)?);
+                children.insert(key.clone(), inflate(&ops::get_key(&value, &key)?, depth + 1)?);
             }
             Ok(custom(JsValue::Object(children)))
         }
@@ -39,7 +50,10 @@ fn inflate(var: &JsValue) -> Result<JsValue, Thrown> {
     }
 }
 
-fn merge_modified(base: &JsValue, latest: &JsValue) -> Result<JsValue, Thrown> {
+fn merge_modified(base: &JsValue, latest: &JsValue, depth: usize) -> Result<JsValue, Thrown> {
+    if depth > MAX_CONFIG_DEPTH {
+        return Err(deep());
+    }
     let base_type = ops::get(base, "__type")?;
     let latest_type = ops::get(latest, "__type")?;
     if str_eq(&base_type, "custom") && str_eq(&latest_type, "custom") {
@@ -56,9 +70,10 @@ fn merge_modified(base: &JsValue, latest: &JsValue) -> Result<JsValue, Thrown> {
                 merge_modified(
                     &ops::get_key(&base_value, &key)?,
                     &ops::get_key(&latest_value, &key)?,
+                    depth + 1,
                 )?
             } else {
-                inflate(&ops::get_key(&latest_value, &key)?)?
+                inflate(&ops::get_key(&latest_value, &key)?, depth + 1)?
             };
             out.insert(key, child);
         }
@@ -83,12 +98,15 @@ fn merge_modified(base: &JsValue, latest: &JsValue) -> Result<JsValue, Thrown> {
             var.insert(JsString::from("__value"), ops::get(latest, "__value")?);
             Ok(JsValue::Object(var))
         } else {
-            inflate(latest)
+            inflate(latest, depth + 1)
         }
     }
 }
 
-fn revert_modified(state: &JsValue) -> Result<JsValue, Thrown> {
+fn revert_modified(state: &JsValue, depth: usize) -> Result<JsValue, Thrown> {
+    if depth > MAX_CONFIG_DEPTH {
+        return Err(deep());
+    }
     if str_eq(&ops::get(state, "__type")?, "custom") {
         let value = ops::get(state, "__value")?;
         if value.is_null() {
@@ -96,7 +114,10 @@ fn revert_modified(state: &JsValue) -> Result<JsValue, Thrown> {
         } else {
             let mut out = JsObject::new();
             for key in ops::object_keys(&value)? {
-                out.insert(key.clone(), inflate(&ops::get_key(&value, &key)?)?);
+                out.insert(
+                    key.clone(),
+                    inflate(&ops::get_key(&value, &key)?, depth + 1)?,
+                );
             }
             Ok(custom(JsValue::Object(out)))
         }
@@ -128,6 +149,7 @@ pub fn config_reducer(state: &JsValue, action: &JsValue) -> Result<(JsValue, boo
             with_root(merge_modified(
                 &ops::get(state, "configRoot")?,
                 &ops::get(action, "configRoot")?,
+                0,
             )?),
             true,
         ))
@@ -135,7 +157,7 @@ pub fn config_reducer(state: &JsValue, action: &JsValue) -> Result<(JsValue, boo
         Ok((with_root(ops::get(action, "configRoot")?), true))
     } else if str_eq(&action_type, "REFRESH_CONFIG") {
         Ok((
-            with_root(revert_modified(&ops::get(state, "configRoot")?)?),
+            with_root(revert_modified(&ops::get(state, "configRoot")?, 0)?),
             true,
         ))
     } else {

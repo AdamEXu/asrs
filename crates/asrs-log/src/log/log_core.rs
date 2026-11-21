@@ -111,6 +111,45 @@ pub enum MapValue {
     Array(Vec<MapValue>),
 }
 
+/// What `put_unknown_tree` writes for one node of either input shape: a leaf field, a
+/// uniform-array candidate, named children, or the `ExtData` pair.
+enum UnknownPut<'a, V> {
+    Skip,
+    Bool(bool),
+    Number(f64),
+    Text(&'a JsString),
+    Raw(&'a [u8]),
+    Items(&'a [V]),
+    Entries(Box<dyn DoubleEndedIterator<Item = (&'a JsString, &'a V)> + 'a>),
+    Ext(i8, &'a [u8]),
+}
+
+fn js_value_put(value: &JsValue) -> UnknownPut<'_, JsValue> {
+    match value {
+        JsValue::Bool(b) => UnknownPut::Bool(*b),
+        JsValue::Number(x) => UnknownPut::Number(*x),
+        JsValue::String(s) => UnknownPut::Text(s),
+        JsValue::Bytes(bytes) => UnknownPut::Raw(bytes),
+        JsValue::Array(items) => UnknownPut::Items(items),
+        JsValue::Object(object) => UnknownPut::Entries(Box::new(object.iter())),
+        JsValue::ExtData(kind, data) => UnknownPut::Ext(*kind, data),
+        _ => UnknownPut::Skip,
+    }
+}
+
+fn map_value_put(value: &MapValue) -> UnknownPut<'_, MapValue> {
+    match value {
+        MapValue::Bool(b) => UnknownPut::Bool(*b),
+        MapValue::Number(x) => UnknownPut::Number(*x),
+        MapValue::Text(s) => UnknownPut::Text(s),
+        MapValue::Map(entries) => {
+            UnknownPut::Entries(Box::new(entries.iter().map(|(k, v)| (k, v))))
+        }
+        MapValue::Array(items) => UnknownPut::Items(items),
+        MapValue::Undefined | MapValue::BigInt(_) => UnknownPut::Skip,
+    }
+}
+
 /// An element of an array `putUnknownStruct` flattens, as `checkArrayType` and the typed
 /// array writers see it.
 trait UnknownItem {
@@ -831,7 +870,7 @@ impl Log {
 
     /// Flattens a decoded value into the children of `key`. Primitives and byte arrays are only
     /// written below the root unless `allow_root_write`; uniform arrays below the root become
-    /// typed array fields; anything else recurses per element or per property, in JS property
+    /// typed array fields; anything else descends per element or per property, in JS property
     /// order.
     pub fn put_unknown_struct(
         &mut self,
@@ -840,99 +879,7 @@ impl Log {
         value: &JsValue,
         allow_root_write: bool,
     ) -> Result<(), LogError> {
-        match value {
-            JsValue::Bool(b) => {
-                if allow_root_write {
-                    self.put_boolean(key, timestamp, *b);
-                }
-            }
-            JsValue::Number(x) => {
-                if allow_root_write {
-                    self.put_number(key, timestamp, *x);
-                }
-            }
-            JsValue::String(s) => {
-                if allow_root_write {
-                    self.put_string(key, timestamp, s.clone());
-                }
-            }
-            JsValue::Bytes(bytes) => {
-                if allow_root_write {
-                    self.put_raw(key, timestamp, Arc::<[u8]>::from(bytes.as_slice()))?;
-                }
-            }
-            JsValue::Array(items) => self.put_unknown_items(
-                key,
-                timestamp,
-                items,
-                allow_root_write,
-                Log::put_unknown_struct,
-            )?,
-            JsValue::Object(object) => {
-                for (name, item) in object.iter() {
-                    self.put_unknown_struct(&child_key_js(key, name), timestamp, item, true)?;
-                }
-            }
-            JsValue::ExtData(kind, data) => {
-                self.put_number(&child_key(key, "type"), timestamp, f64::from(*kind));
-                self.put_raw(
-                    &child_key(key, "data"),
-                    timestamp,
-                    Arc::<[u8]>::from(data.as_slice()),
-                )?;
-            }
-            JsValue::Null | JsValue::Undefined | JsValue::BigInt(_) | JsValue::Date(_) => {}
-        }
-        Ok(())
-    }
-
-    /// The array branch of `putUnknownStruct`: a uniform array is one typed array field,
-    /// anything else a `length` field plus one `put_item` call per element.
-    fn put_unknown_items<V: UnknownItem>(
-        &mut self,
-        key: &JsString,
-        timestamp: f64,
-        items: &[V],
-        allow_root_write: bool,
-        put_item: fn(&mut Log, &JsString, f64, &V, bool) -> Result<(), LogError>,
-    ) -> Result<(), LogError> {
-        let existing_type = self.get_type(key);
-        let uniform = |type_name: &str, array_type: LoggableType| {
-            if items.is_empty() {
-                existing_type == Some(array_type)
-            } else {
-                items.iter().all(|item| item.type_of() == type_name)
-            }
-        };
-        if allow_root_write && uniform("boolean", LoggableType::BooleanArray) {
-            let values = items.iter().filter_map(V::as_bool).collect();
-            self.put_boolean_array(key, timestamp, values);
-        } else if allow_root_write && uniform("number", LoggableType::NumberArray) {
-            let values = items.iter().filter_map(V::as_f64).collect();
-            self.put_number_array(key, timestamp, values);
-        } else if allow_root_write && uniform("string", LoggableType::StringArray) {
-            let values = items
-                .iter()
-                .filter_map(|item| item.as_text().cloned())
-                .collect();
-            self.put_string_array(key, timestamp, values);
-        } else {
-            let length_key = child_key(key, "length");
-            self.create_blank_field(&length_key, LoggableType::Number);
-            self.process_timestamp(&length_key, timestamp);
-            self.field_mut_existing(&length_key)
-                .put_number(timestamp, items.len() as f64);
-            for (i, item) in items.iter().enumerate() {
-                put_item(
-                    self,
-                    &child_key(key, &format!("{i}")),
-                    timestamp,
-                    item,
-                    true,
-                )?;
-            }
-        }
-        Ok(())
+        self.put_unknown_tree(key, timestamp, value, allow_root_write, js_value_put)
     }
 
     /// `putUnknownStruct` for a `Map`-shaped input: `Map.entries()` iterates in insertion
@@ -944,35 +891,90 @@ impl Log {
         value: &MapValue,
         allow_root_write: bool,
     ) -> Result<(), LogError> {
-        match value {
-            MapValue::Bool(b) => {
-                if allow_root_write {
-                    self.put_boolean(key, timestamp, *b);
+        self.put_unknown_tree(key, timestamp, value, allow_root_write, map_value_put)
+    }
+
+    /// `putUnknownStruct` on a worklist: each pending `(key, value)` writes a leaf, a typed
+    /// array, or queues its children. The DFS order matches upstream's recursion, so field
+    /// creation order and `length` writes land the same.
+    fn put_unknown_tree<'a, V: UnknownItem>(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: &'a V,
+        allow_root_write: bool,
+        classify: impl Fn(&'a V) -> UnknownPut<'a, V>,
+    ) -> Result<(), LogError> {
+        let mut pending = vec![(key.clone(), value, allow_root_write)];
+        while let Some((key, value, allow_write)) = pending.pop() {
+            match classify(value) {
+                UnknownPut::Skip => {}
+                UnknownPut::Bool(b) => {
+                    if allow_write {
+                        self.put_boolean(&key, timestamp, b);
+                    }
+                }
+                UnknownPut::Number(x) => {
+                    if allow_write {
+                        self.put_number(&key, timestamp, x);
+                    }
+                }
+                UnknownPut::Text(s) => {
+                    if allow_write {
+                        self.put_string(&key, timestamp, s.clone());
+                    }
+                }
+                UnknownPut::Raw(bytes) => {
+                    if allow_write {
+                        self.put_raw(&key, timestamp, Arc::<[u8]>::from(bytes))?;
+                    }
+                }
+                UnknownPut::Items(items) => {
+                    let existing_type = self.get_type(&key);
+                    let uniform = |type_name: &str, array_type: LoggableType| {
+                        if items.is_empty() {
+                            existing_type == Some(array_type)
+                        } else {
+                            items.iter().all(|item| item.type_of() == type_name)
+                        }
+                    };
+                    if allow_write && uniform("boolean", LoggableType::BooleanArray) {
+                        let values = items.iter().filter_map(V::as_bool).collect();
+                        self.put_boolean_array(&key, timestamp, values);
+                    } else if allow_write && uniform("number", LoggableType::NumberArray) {
+                        let values = items.iter().filter_map(V::as_f64).collect();
+                        self.put_number_array(&key, timestamp, values);
+                    } else if allow_write && uniform("string", LoggableType::StringArray) {
+                        let values = items
+                            .iter()
+                            .filter_map(|item| item.as_text().cloned())
+                            .collect();
+                        self.put_string_array(&key, timestamp, values);
+                    } else {
+                        let length_key = child_key(&key, "length");
+                        self.create_blank_field(&length_key, LoggableType::Number);
+                        self.process_timestamp(&length_key, timestamp);
+                        self.field_mut_existing(&length_key)
+                            .put_number(timestamp, items.len() as f64);
+                        for (i, item) in items.iter().enumerate().rev() {
+                            pending.push((child_key(&key, &format!("{i}")), item, true));
+                        }
+                    }
+                }
+                UnknownPut::Entries(entries) => {
+                    for (name, item) in entries.rev() {
+                        pending.push((child_key_js(&key, name), item, true));
+                    }
+                }
+                UnknownPut::Ext(kind, data) => {
+                    self.put_number(&child_key(&key, "type"), timestamp, f64::from(kind));
+                    self.put_raw(
+                        &child_key(&key, "data"),
+                        timestamp,
+                        Arc::<[u8]>::from(data),
+                    )?;
                 }
             }
-            MapValue::Number(x) => {
-                if allow_root_write {
-                    self.put_number(key, timestamp, *x);
-                }
-            }
-            MapValue::Text(s) => {
-                if allow_root_write {
-                    self.put_string(key, timestamp, s.clone());
-                }
-            }
-            MapValue::Map(entries) => {
-                for (name, item) in entries {
-                    self.put_unknown_map(&child_key_js(key, name), timestamp, item, true)?;
-                }
-            }
-            MapValue::Array(items) => self.put_unknown_items(
-                key,
-                timestamp,
-                items,
-                allow_root_write,
-                Log::put_unknown_map,
-            )?,
-            MapValue::Undefined | MapValue::BigInt(_) => {}
         }
         Ok(())
     }

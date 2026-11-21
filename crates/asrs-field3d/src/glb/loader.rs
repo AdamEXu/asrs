@@ -1332,7 +1332,8 @@ impl Parser<'_> {
             }
             let sampler = sampler.expect("checked above");
             let accessor = |key: &str| {
-                let reference = prop(sampler, key).unwrap_or(&JsValue::Undefined);
+                let undefined = JsValue::Undefined;
+                let reference = prop(sampler, key).unwrap_or(&undefined);
                 match parameters {
                     Some(parameters) => element(Some(parameters), reference)
                         .cloned()

@@ -162,7 +162,7 @@ impl ProtoDecoder {
         let message = self.root.decode(ty, &mut reader, None, 0, None)?;
         let mut schema_types = self.root.schema_types(&message);
         let mut data = self.root.message_to_object(ty, &message)?;
-        self.apply_post_processors(ty, &mut data, &mut schema_types, &JsString::new());
+        self.apply_post_processors(ty, &mut data, &mut schema_types, &JsString::new(), 0);
         Ok(Decoded { data, schema_types })
     }
 
@@ -172,7 +172,13 @@ impl ProtoDecoder {
         data: &mut JsValue,
         schema_types: &mut JsObject<JsString>,
         prefix: &JsString,
+        depth: usize,
     ) {
+        // A self-referential schema lets wire input nest arbitrarily deep; upstream's
+        // recursion throws `RangeError` and the decode fails, so the port stops descending.
+        if depth > 2000 {
+            return;
+        }
         let full = self.root.full_name(Member::Node(ty));
         let full = match full.units().first() {
             Some(&c) if c == u16::from(b'.') => JsString::from_units(full.units()[1..].to_vec()),
@@ -210,12 +216,13 @@ impl ProtoDecoder {
                                 item,
                                 schema_types,
                                 &item_prefix,
+                                depth + 1,
                             );
                         }
                     }
                 }
                 JsValue::Object(_) => {
-                    self.apply_post_processors(field_type, value, schema_types, &child);
+                    self.apply_post_processors(field_type, value, schema_types, &child, depth + 1);
                 }
                 _ => {}
             }
