@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -706,20 +707,28 @@ fn export_suite(args: &[String]) -> Result {
             )
         })?;
         let mut oracle_records: Vec<(String, String, String)> = Vec::new();
+        let mut listings: HashMap<String, String> = HashMap::new();
         for line in index.lines() {
             let record = json::parse(line).map_err(|e| format!("oracle index: {e}"))?;
-            oracle_records.push((
+            let (input, output, outcome) = (
                 export_str_field(&record, "input")?,
                 export_str_field(&record, "output")?,
                 export_str_field(&record, "outcome")?,
-            ));
+            );
+            let listing = listings.entry(input.clone()).or_default();
+            if output != "decode" {
+                let hash = export_str_field(&record, "hash")?;
+                listing.push_str(&format!("{output}\0{outcome}\0{hash}\n"));
+            }
+            oracle_records.push((input, output, outcome));
         }
         let inputs = historical::corpus_inputs(&paths, name)?;
+        check_recorded_run(&paths, name, &listings, &inputs)?;
         let out_root = paths.root.join("target/parity/port-export").join(name);
         corpus::remove_dir(&out_root)?;
         std::fs::create_dir_all(&out_root).map_err(|e| e.to_string())?;
         let records = export_shards(&paths, name, &cli, &inputs, &out_root, &spec, jobs)?;
-        let port: std::collections::HashMap<String, ExportOutputs> = records.into_iter().collect();
+        let port: HashMap<String, ExportOutputs> = records.into_iter().collect();
         for (input, output, outcome) in &oracle_records {
             if output == "decode" {
                 continue;
@@ -768,11 +777,71 @@ fn export_suite(args: &[String]) -> Result {
                 failures.push(format!("{input}/{output}: {report}"));
             }
         }
+        let recorded: HashSet<(&str, &str)> = oracle_records
+            .iter()
+            .map(|(input, output, _)| (input.as_str(), output.as_str()))
+            .collect();
+        for (input, outputs) in &port {
+            for (output, _, _) in outputs {
+                if output != "error" && !recorded.contains(&(input.as_str(), output.as_str())) {
+                    failures.push(format!("{input}/{output}: no recorded oracle outcome"));
+                }
+            }
+        }
     }
     if unmodeled > 0 {
         eprintln!("export: {unmodeled} cases listed as unmodeled (later units' writers)");
     }
     finish("export", total, failures)
+}
+
+/// The recorded oracle run must be the one the committed `<corpus>.historical.json`
+/// describes, input for input, so a stale or partial `target/parity/oracle/<corpus>` fails
+/// instead of silently comparing fewer cases.
+fn check_recorded_run(
+    paths: &Paths,
+    name: &str,
+    listings: &HashMap<String, String>,
+    inputs: &[String],
+) -> Result {
+    let manifest_path =
+        corpus::synthetic_dir(&paths.root).join(format!("{name}{}", historical::MANIFEST_SUFFIX));
+    let text = String::from_utf8(oracle::read(&manifest_path)?).map_err(|e| e.to_string())?;
+    let manifest = json::parse(&text).map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+    let mut committed = HashMap::new();
+    for entry in manifest
+        .get("list")
+        .and_then(Json::as_array)
+        .unwrap_or_default()
+    {
+        committed.insert(
+            export_str_field(entry, "input")?,
+            export_str_field(entry, "exports")?,
+        );
+    }
+    let stale = |what: String| {
+        Err(format!(
+            "{name}: {what}; the recorded oracle run is stale, rerun `cargo xtask oracle historical {name}`"
+        ))
+    };
+    if committed.len() != inputs.len() || listings.len() != inputs.len() {
+        return stale(format!(
+            "{} corpus inputs, {} in {}, {} recorded",
+            inputs.len(),
+            committed.len(),
+            manifest_path.display(),
+            listings.len()
+        ));
+    }
+    for input in inputs {
+        let recorded = listings
+            .get(input)
+            .map(|listing| oracle::hash_bytes(listing.as_bytes()));
+        if recorded.is_none() || recorded.as_ref() != committed.get(input) {
+            return stale(format!("{input} differs from {}", manifest_path.display()));
+        }
+    }
+    Ok(())
 }
 
 fn export_shards(

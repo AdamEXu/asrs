@@ -26,7 +26,7 @@ per input for the decode dump and for the export set.
 The corpus must already be generated (`cargo xtask corpus gen`).";
 
 pub(crate) const SPEC: &str = "parity/corpus/historical.spec.json";
-const MANIFEST_SUFFIX: &str = ".historical.json";
+pub(crate) const MANIFEST_SUFFIX: &str = ".historical.json";
 pub(crate) const LOG_EXTENSIONS: &[&str] =
     &[".wpilog", ".rlog", ".csv", ".dslog", ".log", ".dsevents"];
 
