@@ -1,6 +1,6 @@
 //! `src/hub/exportWorker.ts` (F10): field selection, timestamp sampling and the CSV
-//! writers. The `wpilog` and `mcap` branches dispatch to [`ExportError::Unported`] until
-//! F11's `WPILOGEncoder` and F12's `McapWriter` land.
+//! writers. The `wpilog` branch dispatches to [`ExportError::Unported`] until F11's
+//! `WPILOGEncoder` lands; `mcap` is [`crate::mcap_export`].
 
 use asrs_js::collation::locale_compare_numeric;
 use asrs_js::number;
@@ -58,7 +58,7 @@ impl Output {
 pub enum ExportError {
     /// The worker posted `reject()`: an exception or a missing AdvantageKit timestamp.
     Rejected,
-    /// A branch assigned to a later unit (F11's `wpilog`, F12's `mcap`).
+    /// A branch or input the port does not model yet.
     Unported(&'static str),
 }
 
@@ -70,7 +70,11 @@ pub fn export(log: &Log, options: &ExportOptions) -> Result<Output, ExportError>
         Format::CsvTable => Ok(Output::Text(csv_table(log, &fields, &timestamps))),
         Format::CsvList => Ok(Output::Text(csv_list(log, &fields, &timestamps))),
         Format::Wpilog => Err(ExportError::Unported("wpilog export is unit F11")),
-        Format::Mcap => Err(ExportError::Unported("mcap export is unit F12")),
+        Format::Mcap => Ok(Output::Bytes(crate::mcap_export::generate_mcap(
+            log,
+            &fields,
+            &timestamps,
+        )?)),
     }
 }
 
