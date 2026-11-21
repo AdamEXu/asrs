@@ -4,7 +4,7 @@ import Log from "@upstream/shared/log/Log";
 import LoggableType from "@upstream/shared/log/LoggableType";
 import { AKIT_TIMESTAMP_KEYS } from "@upstream/shared/log/RobotState";
 import { cleanFloat, upperBound } from "@upstream/shared/util";
-import { terminatedWorkersExited, setWorkerRouter } from "../shims";
+import { resolveWorkerScript, terminatedWorkersExited, setWorkerRouter } from "../shims";
 import { dumpLog } from "./dump";
 import { MainProcess } from "./mainProcess";
 import { Scheduler } from "./scheduler";
@@ -44,6 +44,19 @@ function mcapChunkBound(log: Log, timestamps: number[]): number {
     }
   }
   return bound;
+}
+
+/**
+ * The export worker behind an `unhandledRejection` handler. Chromium logs a rejection nobody
+ * handles inside a worker and the worker keeps running; a Node worker thread dies of one.
+ * generateMCAP's sampled branch does not await `addValue`, so a message that throws there (a
+ * timestamp too large for `BigInt`, a channel without a schema) is lost while the export
+ * finishes, as in the app.
+ */
+function exportWorkerScript(): string {
+  const worker = JSON.stringify(resolveWorkerScript("../bundles/exportWorker.js"));
+  const source = `process.on("unhandledRejection", () => {});\nawait import(${worker});`;
+  return `data:text/javascript,${encodeURIComponent(source)}`;
 }
 
 export interface ExportOptions {
@@ -170,7 +183,7 @@ export class HistoricalSession {
     setWorkerRouter(null);
     let request: Promise<string | Uint8Array>;
     try {
-      request = WorkerManager.request("../bundles/exportWorker.js", { options, log: this.log.toSerialized() });
+      request = WorkerManager.request(exportWorkerScript(), { options, log: this.log.toSerialized() });
     } finally {
       setWorkerRouter(this.scheduler);
     }
