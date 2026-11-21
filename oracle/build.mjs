@@ -195,23 +195,40 @@ function recordInputs(metafile) {
 }
 
 const common = { absWorkingDir: here, metafile: true, bundle: true, target: "esnext", logLevel: "warning" };
+const nodeCommon = {
+  ...common,
+  outExtension: { ".js": ".mjs" },
+  format: "esm",
+  platform: "node",
+  sourcemap: "linked",
+  nodePaths: [path.join(args.upstream, "node_modules")],
+  define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream), __HARNESS_DIR__: JSON.stringify(args.harness) },
+  banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; import { fileURLToPath as __oracleFileURLToPath } from "node:url"; import { dirname as __oracleDirname } from "node:path"; const require = __oracleCreateRequire(import.meta.url); const __filename = __oracleFileURLToPath(import.meta.url); const __dirname = __oracleDirname(__filename);' },
+  external: ["electron"],
+  logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
+};
 
+// genFiles builds apart from the shared entry graph: its fakes rewire jsonfile's fs for every
+// importer, and entries sharing the graph (genModel) must keep real fs.
 recordInputs(
   (
     await esbuild.build({
-      ...common,
-      entryPoints: Object.fromEntries(entries.map((name) => [name, path.join(here, "src", name + ".ts")])),
+      ...nodeCommon,
+      entryPoints: Object.fromEntries(
+        entries.filter((name) => name !== "genFiles").map((name) => [name, path.join(here, "src", name + ".ts")])
+      ),
       outdir: args.out,
-      outExtension: { ".js": ".mjs" },
-      format: "esm",
-      platform: "node",
-      sourcemap: "linked",
-      nodePaths: [path.join(args.upstream, "node_modules")],
-      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream), __HARNESS_DIR__: JSON.stringify(args.harness) },
-      banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; import { fileURLToPath as __oracleFileURLToPath } from "node:url"; import { dirname as __oracleDirname } from "node:path"; const require = __oracleCreateRequire(import.meta.url); const __filename = __oracleFileURLToPath(import.meta.url); const __dirname = __oracleDirname(__filename);' },
-      external: ["electron"],
-      plugins: [filesPlugin, oraclePlugin],
-      logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
+      plugins: [oraclePlugin]
+    })
+  ).metafile
+);
+recordInputs(
+  (
+    await esbuild.build({
+      ...nodeCommon,
+      entryPoints: { genFiles: path.join(here, "src", "genFiles.ts") },
+      outdir: args.out,
+      plugins: [filesPlugin, oraclePlugin]
     })
   ).metafile
 );
