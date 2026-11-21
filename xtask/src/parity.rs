@@ -24,8 +24,9 @@ suites:
   decode [<log file>...] [--timeout SECS] [--plant]
         decode log files with both sides and compare the canonical dumps (`decode`) and
         the decode worker's messages, initial log and per-field responses
-        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the corpus a and b
-        trees, the public log cache and the fuzz corpora, or just the files listed. An oracle that does not finish in time and an asrs-cli that
+        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the
+        corpus a and b trees, the public log cache and the fuzz corpora, or just the files
+        listed. An oracle that does not finish in time and an asrs-cli that
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its

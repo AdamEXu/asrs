@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use asrs_parity::diff;
-use asrs_parity::json::Json;
+use asrs_parity::json::{self, Json};
 
 use crate::oracle::{self, Paths};
 use crate::parity::{SHOWN, decode_cases, finish, plant};
@@ -219,14 +219,30 @@ fn run_capture(command: &mut Command) -> std::result::Result<Vec<u8>, String> {
     }
 }
 
+/// The name in a `{"session": name}` trace line, unescaped.
+fn session_name(line: &str) -> Option<String> {
+    let record = json::parse(line.trim_end()).ok()?;
+    let [entry] = record.get("o")?.as_array()? else {
+        return None;
+    };
+    let [tag, name] = entry.as_array()? else {
+        return None;
+    };
+    tag.as_str()?
+        .eq_str("session")
+        .then(|| name.as_str().map(ToString::to_string))
+        .flatten()
+}
+
 /// Splits a run's output into one trace per session, keyed by name.
 fn split(out: &[u8]) -> HashMap<String, Vec<u8>> {
     let mut traces = HashMap::new();
     let mut current: Option<(String, Vec<u8>)> = None;
     for line in out.split_inclusive(|&b| b == b'\n') {
         let text = String::from_utf8_lossy(line);
-        if let Some(rest) = text.strip_prefix(r#"{"o":[["session",""#) {
-            let name = rest.trim_end().trim_end_matches(r#""]]}"#).to_owned();
+        if text.starts_with(r#"{"o":[["session","#)
+            && let Some(name) = session_name(&text)
+        {
             current = Some((name, line.to_vec()));
             continue;
         }
@@ -418,4 +434,26 @@ pub(crate) fn run(args: &[String]) -> Result {
         eprintln!("  not modeled: {name}");
     }
     finish("historical", all.len() - unmodeled.len(), failures)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_keys_traces_by_the_unescaped_session_name() {
+        let out = concat!(
+            r#"{"o":[["session","main:C:\\logs\\a \"b\".wpilog"]]}"#,
+            "\n",
+            r#"{"o":[["step",{"n":"0000000000000000"}]]}"#,
+            "\n",
+            r#"{"o":[["end","main:C:\\logs\\a \"b\".wpilog"]]}"#,
+            "\n",
+        );
+        let traces = split(out.as_bytes());
+        assert_eq!(
+            traces.get(r#"main:C:\logs\a "b".wpilog"#).map(Vec::len),
+            Some(out.len())
+        );
+    }
 }

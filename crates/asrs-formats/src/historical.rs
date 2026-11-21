@@ -191,6 +191,8 @@ pub trait SourceHost {
     fn worker_realm(&mut self) -> (Box<dyn Rng + Send>, Box<dyn Clock + Send>);
     fn spawn_worker(&mut self, source: &str, name: WorkerName, worker: Box<dyn DecodeWorker>);
     fn post_worker(&mut self, source: &str, request: Request);
+    /// `worker.terminate()`: no message of that worker may reach the source afterwards. Called
+    /// again when an errored source is stopped.
     fn terminate_worker(&mut self, source: &str);
     /// `window.tabs.getActiveFields()` then `window.sidebar.getActiveFields()`.
     fn active_fields(&mut self) -> Vec<JsString>;
