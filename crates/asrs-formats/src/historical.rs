@@ -9,6 +9,7 @@ use asrs_js::time::{Clock, Rng};
 use asrs_log::log::Log;
 use asrs_log::realm::JsRealm;
 
+use crate::csv::CsvWorker;
 use crate::dslog::DsLogWorker;
 use crate::rlog::RlogWorker;
 use crate::roadrunner::RoadRunnerWorker;
@@ -82,10 +83,10 @@ pub fn create_worker(
 ) -> Result<Box<dyn DecodeWorker>, UnportedWorker> {
     match name {
         WorkerName::Wpilog => Ok(Box::new(WpilogWorker::new(JsRealm::new(random)))),
+        WorkerName::Csv => Ok(Box::new(CsvWorker)),
         WorkerName::Rlog => Ok(Box::new(RlogWorker::new(JsRealm::new(random), clock))),
         WorkerName::DsLog => Ok(Box::new(DsLogWorker)),
         WorkerName::RoadRunner => Ok(Box::new(RoadRunnerWorker::new(clock))),
-        other => Err(UnportedWorker(other)),
     }
 }
 

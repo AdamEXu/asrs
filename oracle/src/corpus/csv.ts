@@ -89,6 +89,7 @@ const HAND: [string, string, string | Uint8Array][] = [
   ["raw-uppercase", "an uppercase byte list is not raw and not JSON: the load fails", "Timestamp,/R\n0,00-01\n1,AB-CD"],
   ["raw-dangling", "a byte list with a trailing dash: the load fails", "Timestamp,/R\n0,0a-"],
   ["arrays", "array cells split on '; ': empty, single empty element, trailing \"...\", strings, nested", 'Timestamp,/A\n0,[]\n1,[""]\n2,[1; 2; 3]\n3,[1; 2; "..."]\n4,["a"; "b"]\n5,[true; false]\n6,[[1]; [2]]'],
+  ["array-ellipsis", "an unquoted ... last element is dropped, and an element split inside a string falls back to JSON.parse of the whole cell", 'Timestamp,/A,/B,/C,/D\n0,[1; 2; ...],["a; b"],[...],[ ]'],
   ["array-no-space", "an array split only on ';' without the space: the elements do not parse and the load fails", "Timestamp,/A\n0,[1;2]"],
   ["json-values", "JSON cells: numbers, booleans, strings, null, single-key objects, big integers, -0", 'Timestamp,/V\n0,1\n1,true\n2,"text"\n3,null\n4,{"k":1}\n5,9007199254740993\n6,-0\n7,1e400\n8,"\\ud800"\n9,{"10":{"2":3}}'],
   ["mixed-types", "one column whose values change type: later writes are type warnings", 'Timestamp,/M\n0,1\n1,"s"\n2,true\n3,[1]\n4,00-01'],

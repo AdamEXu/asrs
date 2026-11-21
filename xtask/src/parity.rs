@@ -24,7 +24,7 @@ suites:
   decode [<log file>...] [--timeout SECS] [--plant]
         decode log files with both sides and compare the canonical dumps (`decode`) and
         the decode worker's messages, initial log and per-field responses
-        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log file under the corpus a and b
+        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the corpus a and b
         trees, the public log cache and the fuzz corpora, or just the files listed. A
         WPILOG's `decode` dump is compared on its initial phase only until lazy loading
         is ported (F09). An oracle that does not finish in time and an asrs-cli that
@@ -360,13 +360,18 @@ impl DecodeMode {
     }
 }
 
-/// The `.dslog`/`.dsevents`/`.wpilog`/`.rlog` files the suite decodes: corpora a and b, the
-/// public log cache and the generated fuzz corpora.
+/// The `.dslog`/`.dsevents`/`.wpilog`/`.rlog`/`.log`/`.csv` files the suite decodes: corpora a
+/// and b, the public log cache and the generated fuzz corpora.
 fn decode_cases(paths: &Paths) -> Result<Vec<PathBuf>> {
     let mut cases = Vec::new();
     let is_ported = |p: &Path| {
         p.extension().is_some_and(|e| {
-            e == "dslog" || e == "dsevents" || e == "wpilog" || e == "rlog" || e == "log"
+            e == "dslog"
+                || e == "dsevents"
+                || e == "wpilog"
+                || e == "rlog"
+                || e == "log"
+                || e == "csv"
         })
     };
     let root = crate::workspace_root();
