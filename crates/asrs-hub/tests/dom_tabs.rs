@@ -797,6 +797,9 @@ struct Runner {
     show_pending: bool,
     frame_loop_dead: bool,
     active_drag: Option<JsValue>,
+    /// Tab uuids in `.controls-content` order: `addTab` appends controls even when the tab
+    /// splices into the middle of `tabList`, so selector indices follow creation order.
+    controls_order: Vec<JsValue>,
     /// Table tabs whose header cells carry `data-i` tags. Upstream drops the tags when
     /// `updateFields` rebuilds the header; the harness drops them every frame, so a fixture
     /// re-tags right before each event that reads header rects.
@@ -1109,6 +1112,19 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                 log.put_raw(&key(0)?, ts(1)?, v)
                     .map_err(|e| format!("{e:?}"))?;
             }
+            "putStruct" => {
+                let v = match &args[2] {
+                    JsValue::Bytes(b) => b.clone(),
+                    _ => return Err(err("putStruct value is bytes")),
+                };
+                let schema = match &args[3] {
+                    JsValue::String(s) => s.clone(),
+                    _ => return Err(err("putStruct schema is a string")),
+                };
+                let is_array = truthy(&js_json::from_js(&args[4]));
+                log.put_struct(&key(0)?, ts(1)?, v.into(), &schema, is_array)
+                    .map_err(|e| format!("{e:?}"))?;
+            }
             "putJSON" => {
                 let v = match &args[2] {
                     JsValue::String(s) => s.clone(),
@@ -1374,6 +1390,15 @@ fn field3d_eval(
             .map_err(|e| e.message)?;
         return Ok(Some(JsValue::Undefined));
     }
+    if rest == "sourceList.getState()" {
+        let state: Vec<JsValue> = field3d_mut(&mut r.tabs, index)?
+            .source_list()
+            .state()
+            .iter()
+            .map(ToJs::to_js)
+            .collect();
+        return Ok(Some(JsValue::Array(state)));
+    }
     if let Some(arg) = rest
         .strip_prefix("setXRActive(")
         .and_then(|s| s.strip_suffix(')'))
@@ -1500,7 +1525,11 @@ fn selection_step(
         "unlock" => sel.unlock(),
         "toggleLock" => sel.toggle_lock(),
         "stepCycle" => sel.step_cycle(truthy(&arg(0))),
-        "setSelectedTime" => sel.set_selected_time(num(0)?),
+        "setSelectedTime" => sel.set_selected_time(match arg(0) {
+            Value::Null => 0.0,
+            Value::Undefined => f64::NAN,
+            v => v.as_f64().ok_or_else(|| err("expected a number"))?,
+        }),
         "setHoveredTime" => sel.set_hovered_time(arg(0).as_f64()),
         "setPlaybackSpeed" => sel.set_playback_speed(num(0)?),
         "setPlaybackLooping" => sel.set_playback_looping(truthy(&arg(0))),
@@ -1681,6 +1710,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     };
     host.rng.next_f64();
     let tabs = Tabs::new(Box::new(factory), &mut host);
+    let controls_order: Vec<JsValue> = tabs.tabs().map(|t| t.uuid().clone()).collect();
     let mut runner = Runner {
         layout,
         host,
@@ -1696,6 +1726,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         show_pending: true,
         frame_loop_dead: false,
         active_drag: None,
+        controls_order,
         tagged_tables: Vec::new(),
         sidebar_width: 300.0,
         sidebar_expanded: Vec::new(),
@@ -2039,7 +2070,7 @@ impl Runner {
             (t, "change") if t.contains("field-select") => {
                 self.field_select_change(index, props)?;
             }
-            (t, "click") if t.contains("xr-button") => self.xr_click(index),
+            (t, "click") if t.contains("xr-button") => self.xr_click(index)?,
             // Match 0 is the header row; match i + 1 is data row i.
             (t, "click" | "contextmenu") if t.ends_with(" tr") => {
                 if let Some(row) = index.checked_sub(1) {
@@ -2205,17 +2236,38 @@ impl Runner {
         }
     }
 
-    /// `index` is the nth `.field-select` in DOM order, one per Field3d tab.
+    fn sync_controls_order(&mut self) {
+        let uuids: Vec<JsValue> = self.tabs.tabs().map(|t| t.uuid().clone()).collect();
+        self.controls_order.retain(|u| uuids.contains(u));
+        for u in uuids {
+            if !self.controls_order.contains(&u) {
+                self.controls_order.push(u);
+            }
+        }
+    }
+
+    /// `querySelectorAll` order for Field3d controls elements. `index == hits.len()` is the
+    /// hidden `#controller3` template, which has no listeners; past that throws upstream.
+    fn field3d_tab_at(&mut self, index: usize, target: &str) -> Result<Option<usize>, String> {
+        self.sync_controls_order();
+        let mut hits = Vec::new();
+        for u in &self.controls_order {
+            for (i, t) in self.tabs.tabs().enumerate() {
+                if t.uuid() == u && t.tab_type() == Some(TabType::Field3d) {
+                    hits.push(i);
+                }
+            }
+        }
+        match hits.get(index) {
+            Some(&i) => Ok(Some(i)),
+            None if index == hits.len() => Ok(None),
+            None => Err(err(format!("no element {target}"))),
+        }
+    }
+
     fn field_select_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
-        let Some(tab) = self
-            .tabs
-            .tabs()
-            .enumerate()
-            .filter(|(_, t)| t.tab_type() == Some(TabType::Field3d))
-            .nth(index)
-            .map(|(i, _)| i)
-        else {
-            return Err(err(format!("no Field3d tab for field-select {index}")));
+        let Some(tab) = self.field3d_tab_at(index, "field-select")? else {
+            return Ok(());
         };
         let value = props
             .and_then(|p| p.get("value"))
@@ -2233,16 +2285,9 @@ impl Runner {
             .map_err(|e| e.message)
     }
 
-    fn xr_click(&mut self, index: usize) {
-        let Some(tab) = self
-            .tabs
-            .tabs()
-            .enumerate()
-            .filter(|(_, t)| t.tab_type() == Some(TabType::Field3d))
-            .nth(index)
-            .map(|(i, _)| i)
-        else {
-            return;
+    fn xr_click(&mut self, index: usize) -> Result<(), String> {
+        let Some(tab) = self.field3d_tab_at(index, "xr-button")? else {
+            return Ok(());
         };
         let uuid = self
             .tabs
@@ -2258,6 +2303,7 @@ impl Runner {
                 controller.xr_click(&mut self.host, &uuid);
             }
         }
+        Ok(())
     }
 
     fn console_highlight_click(&mut self) {
@@ -2443,10 +2489,24 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
         }
     }
     let records = vectors::load(vector_id)?;
-    let mut expected = records.iter().peekable();
+    // A coordinate warning belongs to the Field3d layer when the next rendered command in
+    // the vector is a Field3d tab's; then it must compare, even if the port dropped it.
+    let field3d_warning = |i: usize| -> bool {
+        let r = &records[i];
+        r.field("main")
+            .and_then(Json::as_str)
+            .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
+            && records[i + 1..]
+                .iter()
+                .find(|r| r.field("command").is_some())
+                .and_then(|r| r.value("command").ok())
+                .and_then(|c| c.get("type").and_then(Value::as_f64))
+                .is_some_and(|t| t == 3.0)
+    };
+    let mut expected = records.iter().enumerate().peekable();
     let mut skipped = 0;
     for emit in &emitted {
-        while let Some(record) = expected.peek() {
+        while let Some(&(i, record)) = expected.peek() {
             // A skippable record still compares when the emit produces it: the
             // Field3d controller really does send the coordinate warning.
             let emit_matches = emit.values.iter().any(|(k, v)| {
@@ -2456,14 +2516,14 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
                         .and_then(Json::as_str)
                         .is_some_and(|m| m.to_string_lossy() == s.to_string_lossy()))
             });
-            if skippable(record) && !emit_matches {
+            if skippable(record) && !emit_matches && !field3d_warning(i) {
                 expected.next();
                 skipped += 1;
                 continue;
             }
             break;
         }
-        let record = expected
+        let (_, record) = expected
             .next()
             .ok_or_else(|| err("port emitted more records than the vector has"))?;
         let stub_command = emit
@@ -2489,8 +2549,8 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             }
         }
     }
-    for record in expected {
-        if !skippable(record) {
+    for (i, record) in expected {
+        if !skippable(record) || field3d_warning(i) {
             return Err(format!(
                 "line {}: the port emitted nothing for this record",
                 record.line

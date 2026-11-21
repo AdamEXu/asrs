@@ -1,0 +1,104 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../assets/field3d.json",
+  "../logs/field3d-objects.json"
+ ],
+ "fixture": {
+  "seed": 1005,
+  "assets": "../assets/field3d.json",
+  "steps": [
+   {
+    "log": "../logs/field3d-objects.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Pose2d\")"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "props": {
+      "value": "FTC:2026"
+     },
+     "index": 0
+    }
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.getState()"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     3
+    ]
+   },
+   {
+    "advance": 50
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "ftc-field"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "props": {
+      "value": "FRC:Axes"
+     },
+     "index": 0
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "axes-field"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "props": {
+      "value": "FRC:2026"
+     },
+     "index": 0
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "click",
+     "index": 0
+    }
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.setXRActive(true)"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"ghost\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"model\":\"GhostBot\",\"color\":\"#00ff00\"}}],\"game\":\"FTC:2026\"})"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "restored"
+   }
+  ]
+ }
+}
