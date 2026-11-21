@@ -1,0 +1,50 @@
+{
+  "protocol": "ftc",
+  "seed": 1201,
+  "latencyMs": 2,
+  "endMs": 11800,
+  "client": { "source": "ftc", "address": "192.168.43.1" },
+  "server": {
+    "status": { "enabled": true, "available": true, "activeOpMode": "$Stop$Robot$", "activeOpModeStatus": "STOPPED", "warningMessage": "", "errorMessage": "", "batteryVoltage": 13.25 }
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1500, "server": ["status", { "enabled": true, "available": true, "activeOpMode": "TeleOp", "activeOpModeStatus": "INIT", "warningMessage": "", "errorMessage": "", "batteryVoltage": 13.25 }] },
+    { "t": 2300, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000002250, "data": { "loop": "1" }, "log": ["init line"], "fieldOverlay": { "ops": [
+        { "type": "setStrokeWidth", "width": 1 },
+        { "type": "stroke", "color": "#3F51B5" },
+        { "type": "circle", "x": 12.5, "y": -3, "radius": 9, "stroke": true },
+        { "type": "polyline", "xPoints": [0, 1.5, 3], "yPoints": [0, 2, 4] },
+        { "type": "polygon", "xPoints": [0, 1, 1], "yPoints": [0, 0, 1], "stroke": false },
+        { "type": "fill", "color": "#FF000080" },
+        { "type": "text", "text": "robot", "x": 1, "y": 2, "font": "16px sans-serif", "theta": 0.5, "stroke": false, "usePageFrame": true },
+        { "type": "image", "path": "/dash/field.png", "x": 0, "y": 0, "width": 144, "height": 144, "theta": 0, "pivotX": 0, "pivotY": 0, "usePageFrame": false },
+        { "type": "grid", "x": 0, "y": 0, "width": 144, "height": 144, "numTicksX": 7, "numTicksY": 7, "theta": 0, "pivotX": 0, "pivotY": 0, "usePageFrame": false },
+        { "type": "setRotation", "rotation": 1.25 },
+        { "type": "setTranslation", "x": 72, "y": 72 },
+        { "type": "setScale", "scaleX": 1, "scaleY": -1 },
+        { "type": "setAlpha", "alpha": 0.5 }
+      ] } }
+    ] }] },
+    { "t": 2400, "client": ["dump"] },
+    { "t": 2500, "server": ["status", { "enabled": true, "available": true, "activeOpMode": "TeleOp", "activeOpModeStatus": "RUNNING", "warningMessage": "", "errorMessage": "", "batteryVoltage": 13.125 }] },
+    { "t": 3200, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000003150, "data": { "loop": "2" }, "log": [], "fieldOverlay": { "ops": [{ "type": "circle", "x": 1, "y": 1, "radius": 2, "stroke": false }] } }
+    ] }] },
+    { "t": 3500, "server": ["status", { "enabled": true, "available": true, "activeOpMode": "TeleOp", "activeOpModeStatus": "STOPPED", "warningMessage": "", "errorMessage": "", "batteryVoltage": 13.125 }] },
+    { "t": 4200, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000004150, "data": { "loop": "3" }, "log": [], "fieldOverlay": { "ops": [] } }
+    ] }] },
+    { "t": 4300, "client": ["dump"] },
+    { "t": 4500, "server": ["status", { "activeOpMode": "$Stop$Robot$", "activeOpModeStatus": "RUNNING" }] },
+    { "t": 5500, "server": ["status", { "activeOpMode": "Auto" }] },
+    { "t": 6500, "server": ["status", { "activeOpMode": ["$Stop$Robot$"], "activeOpModeStatus": "RUNNING" }] },
+    { "t": 7500, "server": ["status", { "activeOpMode": "Auto", "activeOpModeStatus": ["RUNNING"] }] },
+    { "t": 8500, "server": ["status", { "activeOpMode": 0, "activeOpModeStatus": "RUNNING" }] },
+    { "t": 9500, "server": ["status", { "activeOpMode": "Auto", "activeOpModeStatus": true }] },
+    { "t": 10500, "server": ["status", { "activeOpMode": null, "activeOpModeStatus": "RUNNING", "warningMessage": "low battery" }] },
+    { "t": 11200, "server": ["send", { "type": "RECEIVE_ROBOT_STATUS", "status": { "activeOpMode": { "name": "Auto" }, "activeOpModeStatus": "RUNNING" } }] },
+    { "t": 11400, "server": ["send", { "type": "RECEIVE_ROBOT_STATUS", "status": { "activeOpMode": "Auto", "activeOpModeStatus": "RUNNING" } }] }
+  ]
+}

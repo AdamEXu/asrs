@@ -1,12 +1,9 @@
-//! The JS operations `NT4.ts` applies to values decoded from the wire, which can be any JSON or
-//! msgpack value when the server misbehaves. Module code is strict, so writes to primitives
-//! throw.
+//! JS operators and property access on [`JsValue`], for upstream code that handles values decoded
+//! from untyped JSON or msgpack. Module code is strict, so writes to primitives throw.
 
-use asrs_js::number;
-use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, JsValue, array_index};
-
-use crate::thrown::Thrown;
+use crate::number;
+use crate::string::{JsError, JsString};
+use crate::value::{JsObject, JsValue, array_index};
 
 fn describe(value: &JsValue) -> String {
     match value {
@@ -16,9 +13,9 @@ fn describe(value: &JsValue) -> String {
 }
 
 /// `value[key]` for a string key.
-pub fn get(value: &JsValue, key: &str) -> Result<JsValue, Thrown> {
+pub fn get(value: &JsValue, key: &str) -> Result<JsValue, JsError> {
     match value {
-        JsValue::Undefined | JsValue::Null => Err(Thrown::type_error(format!(
+        JsValue::Undefined | JsValue::Null => Err(JsError::type_error(format!(
             "Cannot read properties of {} (reading '{key}')",
             describe(value)
         ))),
@@ -52,26 +49,33 @@ pub fn get(value: &JsValue, key: &str) -> Result<JsValue, Thrown> {
 }
 
 /// `value[i]`.
-pub fn index(value: &JsValue, i: usize) -> Result<JsValue, Thrown> {
+pub fn index(value: &JsValue, i: usize) -> Result<JsValue, JsError> {
     get(value, &format!("{i}"))
 }
 
 /// `key in value` for an object operand; a primitive operand throws.
-pub fn has(value: &JsValue, key: &str) -> Result<bool, Thrown> {
+pub fn has(value: &JsValue, key: &str) -> Result<bool, JsError> {
+    has_key(value, &JsString::from(key))
+}
+
+/// `key in value` with a JS string key. Inherited members (`Object.prototype`'s, a typed
+/// array's `length`) are not modelled.
+pub fn has_key(value: &JsValue, key: &JsString) -> Result<bool, JsError> {
+    let index = array_index(key.units()).map(|i| i as usize);
     match value {
-        JsValue::Object(o) => Ok(o.contains_key(key)),
-        JsValue::Array(items) => Ok(match array_index(&key.encode_utf16().collect::<Vec<_>>()) {
-            Some(i) => (i as usize) < items.len(),
-            None => key == "length",
+        JsValue::Object(o) => Ok(o.get_key(key).is_some()),
+        JsValue::Array(items) => Ok(match index {
+            Some(i) => i < items.len(),
+            None => key.units() == JsString::from("length").units(),
         }),
-        JsValue::Bytes(bytes) => Ok(match array_index(&key.encode_utf16().collect::<Vec<_>>()) {
-            Some(i) => (i as usize) < bytes.len(),
-            None => false,
-        }),
-        JsValue::ExtData(..) => Ok(key == "type" || key == "data"),
+        JsValue::Bytes(bytes) => Ok(index.is_some_and(|i| i < bytes.len())),
+        JsValue::ExtData(..) => {
+            Ok(*key == JsString::from("type") || *key == JsString::from("data"))
+        }
         JsValue::Date(_) => Ok(false),
-        other => Err(Thrown::type_error(format!(
-            "Cannot use 'in' operator to search for '{key}' in {}",
+        other => Err(JsError::type_error(format!(
+            "Cannot use 'in' operator to search for '{}' in {}",
+            key.to_string_lossy(),
             to_display(other)
         ))),
     }
@@ -85,9 +89,9 @@ fn to_display(value: &JsValue) -> String {
 }
 
 /// `Object.keys(value)`.
-pub fn object_keys(value: &JsValue) -> Result<Vec<JsString>, Thrown> {
+pub fn object_keys(value: &JsValue) -> Result<Vec<JsString>, JsError> {
     match value {
-        JsValue::Undefined | JsValue::Null => Err(Thrown::type_error(
+        JsValue::Undefined | JsValue::Null => Err(JsError::type_error(
             "Cannot convert undefined or null to object",
         )),
         JsValue::Object(o) => Ok(o.keys().cloned().collect()),
@@ -106,11 +110,78 @@ pub fn object_keys(value: &JsValue) -> Result<Vec<JsString>, Thrown> {
 }
 
 /// `value[key]` for a key from [`object_keys`].
-pub fn get_key(value: &JsValue, key: &JsString) -> Result<JsValue, Thrown> {
+pub fn get_key(value: &JsValue, key: &JsString) -> Result<JsValue, JsError> {
     match value {
         JsValue::Object(o) => Ok(o.get_key(key).cloned().unwrap_or_default()),
         other => get(other, &key.to_string_lossy()),
     }
+}
+
+fn indexed_len(value: &JsValue) -> Option<usize> {
+    match value {
+        JsValue::Array(items) => Some(items.len()),
+        JsValue::Bytes(bytes) => Some(bytes.len()),
+        JsValue::String(s) => Some(s.len()),
+        _ => None,
+    }
+}
+
+/// `Object.getOwnPropertyNames(value)`: the wrapper's index keys plus `length` for strings,
+/// arrays and typed arrays; nothing for the other primitives.
+pub fn own_property_names(value: &JsValue) -> Result<Vec<JsString>, JsError> {
+    let mut names = object_keys(value)?;
+    if indexed_len(value).is_some() {
+        names.push(JsString::from("length"));
+    }
+    Ok(names)
+}
+
+/// `Object.hasOwn(value, key)`: own properties only, including `length` on strings, arrays and
+/// typed arrays.
+pub fn has_own(value: &JsValue, key: &JsString) -> Result<bool, JsError> {
+    if let Some(len) = indexed_len(value) {
+        return Ok(array_index(key.units()).is_some_and(|i| (i as usize) < len)
+            || *key == JsString::from("length"));
+    }
+    Ok(match value {
+        JsValue::Object(o) => o.get_key(key).is_some(),
+        other => object_keys(other)?.contains(key),
+    })
+}
+
+/// `{...value}`: own enumerable properties, which for a string primitive are its index keys.
+pub fn spread(value: &JsValue) -> JsObject<JsValue> {
+    let mut object = JsObject::new();
+    match value {
+        JsValue::Object(o) => {
+            for (k, v) in o.iter() {
+                object.insert(k.clone(), v.clone());
+            }
+        }
+        JsValue::Array(items) => {
+            for (i, v) in items.iter().enumerate() {
+                object.insert(JsString::from(format!("{i}")), v.clone());
+            }
+        }
+        JsValue::Bytes(bytes) => {
+            for (i, b) in bytes.iter().enumerate() {
+                object.insert(
+                    JsString::from(format!("{i}")),
+                    JsValue::Number(f64::from(*b)),
+                );
+            }
+        }
+        JsValue::String(s) => {
+            for (i, &u) in s.units().iter().enumerate() {
+                object.insert(
+                    JsString::from(format!("{i}")),
+                    JsValue::String(JsString::from_units(vec![u])),
+                );
+            }
+        }
+        _ => {}
+    }
+    object
 }
 
 // JS arrays go sparse; growing a dense Vec past this many holes would exhaust memory on a
@@ -126,7 +197,7 @@ fn grow(items: &mut Vec<JsValue>, len: usize) {
 /// Strict-mode `target[key] = value`. Named properties on arrays are invisible to everything
 /// upstream does with them (`JSON.stringify`, `Object.keys` aside from indices), so they are not
 /// kept; nor is an assignment to an object's inherited `__proto__` accessor.
-pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(), Thrown> {
+pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(), JsError> {
     let name = key.to_string_lossy();
     match target {
         JsValue::Object(o) => {
@@ -145,7 +216,7 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
             } else if name == "length" {
                 let n = value_to_number(&value)?;
                 if !(0.0..=4294967295.0).contains(&n) || n.fract() != 0.0 {
-                    return Err(Thrown::error("RangeError", "Invalid array length"));
+                    return Err(JsError::range("Invalid array length"));
                 }
                 let n = n as usize;
                 if n < items.len() {
@@ -156,7 +227,7 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
             }
             Ok(())
         }
-        JsValue::Undefined | JsValue::Null => Err(Thrown::type_error(format!(
+        JsValue::Undefined | JsValue::Null => Err(JsError::type_error(format!(
             "Cannot set properties of {} (setting '{name}')",
             describe(target)
         ))),
@@ -164,13 +235,13 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
             if name == "length"
                 || array_index(key.units()).is_some_and(|i| (i as usize) < s.len()) =>
         {
-            Err(Thrown::type_error(format!(
+            Err(JsError::type_error(format!(
                 "Cannot assign to read only property '{name}' of string '{}'",
                 s.to_string_lossy()
             )))
         }
         JsValue::Bool(_) | JsValue::Number(_) | JsValue::String(_) | JsValue::BigInt(_) => {
-            Err(Thrown::type_error(format!(
+            Err(JsError::type_error(format!(
                 "Cannot create property '{name}' on {} '{}'",
                 target.type_of(),
                 to_display(target)
@@ -181,10 +252,10 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
 }
 
 /// Strict-mode `delete target[key]`.
-pub fn delete_key(target: &mut JsValue, key: &JsString) -> Result<(), Thrown> {
+pub fn delete_key(target: &mut JsValue, key: &JsString) -> Result<(), JsError> {
     let name = key.to_string_lossy();
     let undeletable = |kind: &str| {
-        Err(Thrown::type_error(format!(
+        Err(JsError::type_error(format!(
             "Cannot delete property '{name}' of [object {kind}]"
         )))
     };
@@ -204,7 +275,7 @@ pub fn delete_key(target: &mut JsValue, key: &JsString) -> Result<(), Thrown> {
             }
             Ok(())
         }
-        JsValue::Undefined | JsValue::Null => Err(Thrown::type_error(
+        JsValue::Undefined | JsValue::Null => Err(JsError::type_error(
             "Cannot convert undefined or null to object",
         )),
         JsValue::String(s) => {
@@ -247,6 +318,30 @@ pub fn strict_equals(a: &JsValue, b: &JsValue) -> bool {
     }
 }
 
+/// `==` for the values `JSON.parse` produces. Objects compare by identity, so two object
+/// operands are never equal.
+pub fn loose_equals(a: &JsValue, b: &JsValue) -> bool {
+    match (a, b) {
+        (JsValue::Undefined | JsValue::Null, JsValue::Undefined | JsValue::Null) => true,
+        (JsValue::Undefined | JsValue::Null, _) | (_, JsValue::Undefined | JsValue::Null) => false,
+        (JsValue::Number(x), JsValue::String(s)) | (JsValue::String(s), JsValue::Number(x)) => {
+            *x == number::to_number(s.units())
+        }
+        (JsValue::Bool(x), other) | (other, JsValue::Bool(x)) => {
+            loose_equals(&JsValue::Number(f64::from(u8::from(*x))), other)
+        }
+        (
+            JsValue::Array(_) | JsValue::Object(_) | JsValue::Bytes(_),
+            JsValue::String(_) | JsValue::Number(_),
+        ) => loose_equals(&JsValue::String(to_string(a)), b),
+        (
+            JsValue::String(_) | JsValue::Number(_),
+            JsValue::Array(_) | JsValue::Object(_) | JsValue::Bytes(_),
+        ) => loose_equals(a, &JsValue::String(to_string(b))),
+        _ => strict_equals(a, b),
+    }
+}
+
 /// `ToString` for the values a decoder produces. Dates and objects never reach a numeric
 /// context upstream as anything but `NaN`, so their exact text is not modelled.
 pub fn to_string(value: &JsValue) -> JsString {
@@ -282,7 +377,7 @@ pub fn to_string(value: &JsValue) -> JsString {
 }
 
 /// `ToNumber`, as a binary `-` applies it.
-pub fn value_to_number(value: &JsValue) -> Result<f64, Thrown> {
+pub fn value_to_number(value: &JsValue) -> Result<f64, JsError> {
     Ok(match value {
         JsValue::Undefined => f64::NAN,
         JsValue::Null => 0.0,
@@ -290,7 +385,7 @@ pub fn value_to_number(value: &JsValue) -> Result<f64, Thrown> {
         JsValue::Number(x) => *x,
         JsValue::String(s) => number::to_number(s.units()),
         JsValue::BigInt(_) => {
-            return Err(Thrown::type_error(
+            return Err(JsError::type_error(
                 "Cannot mix BigInt and other types, use explicit conversions",
             ));
         }
