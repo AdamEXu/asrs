@@ -396,7 +396,11 @@ fn decode_data_url(url: &str) -> Option<Vec<u8>> {
     let comma = rest.find(',')?;
     let (meta, data) = (&rest[..comma], &rest[comma + 1..]);
     let bytes = percent_decode(data.as_bytes());
-    if meta.to_ascii_lowercase().trim_end_matches(' ').ends_with(";base64") {
+    if meta
+        .to_ascii_lowercase()
+        .trim_end_matches(' ')
+        .ends_with(";base64")
+    {
         base64_decode(&bytes)
     } else {
         Some(bytes)
