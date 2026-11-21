@@ -10,6 +10,8 @@ const UNSAFE_ROOTS: &[&str] = &[
     "asrs-canvas/src/text/mac",
     "asrs-canvas/src/text/win",
     "asrs-canvas/src/text/linux",
+    "asrs-js/src/math/libm.rs",
+    "asrs-libm-lgpl/src/lib.rs",
 ];
 
 struct Rule {
@@ -20,6 +22,7 @@ struct Rule {
 
 const RULES: &[Rule] = &[
     rule("asrs-js", false, &[]),
+    rule("asrs-libm-lgpl", false, &[]),
     rule("asrs-log", true, &["asrs-js"]),
     rule("asrs-formats", true, &["asrs-js", "asrs-log"]),
     rule("asrs-live", true, &["asrs-js", "asrs-log", "asrs-formats"]),
