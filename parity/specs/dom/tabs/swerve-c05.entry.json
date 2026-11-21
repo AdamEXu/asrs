@@ -131,6 +131,21 @@
           "target": "div.controls-content > :not([hidden]) input.max-speed",
           "type": "change",
           "props": {
+            "value": "1e400"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "speed-overflow"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.max-speed",
+          "type": "change",
+          "props": {
             "value": "8"
           }
         }
