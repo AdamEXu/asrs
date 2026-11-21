@@ -25,17 +25,19 @@ use asrs_hub::tabs::{TabFactory, TabParts, Tabs, TabsHost};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng, create_uuid};
-use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
-use asrs_model::selection_impl::SelectionImpl;
-use asrs_model::source_list::Rect;
-use asrs_model::source_list_config::SourceListTypeMemory;
-use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
+use asrs_model::selection_impl::{KeyTarget, SelectionImpl};
+use asrs_model::source_list::{Rect, SourceList};
+use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
+use asrs_model::tab_controller::{
+    Command, TabCommand, TabController, TabRenderer, keyboard_clicks,
+};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
@@ -44,8 +46,12 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
-use asrs_tabs::list_cx::{ListParts, SourceListCx};
+use asrs_tabs::joysticks::JoysticksController;
+use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
+use asrs_tabs::mechanism::MechanismController;
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
+use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
+use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 
 fn err(message: impl Into<String>) -> String {
@@ -336,11 +342,9 @@ enum DomKind {
 }
 
 type Doms = Rc<RefCell<Vec<(String, DomKind)>>>;
-type CommandSlots = Rc<RefCell<HashMap<String, Rc<RefCell<Option<JsValue>>>>>>;
 
 struct Factory {
     doms: Doms,
-    commands: CommandSlots,
 }
 
 struct Recorder<T> {
@@ -376,6 +380,27 @@ where
     fn timestamp_range(&self, cx: &Cx) -> Option<[f64; 2]> {
         self.inner.timestamp_range(cx)
     }
+}
+
+/// The slot of the `Recorder` wrapping a tab's renderer. A restore replaces the tab's UUID,
+/// so the slot is found through the renderer rather than the UUID it was created with.
+fn recorded_command(renderer: &dyn TabRenderer<Host>) -> Option<Rc<RefCell<Option<JsValue>>>> {
+    macro_rules! slot_of {
+        ($($inner:ty),*) => {$(
+            if let Some(recorder) = renderer.downcast_ref::<Recorder<$inner>>() {
+                return Some(recorder.slot.clone());
+            }
+        )*};
+    }
+    slot_of!(
+        TableRenderer,
+        ConsoleRenderer,
+        MetadataRenderer,
+        Field2dRenderer,
+        PendingRenderer,
+        StubRenderer
+    );
+    None
 }
 
 /// The halves of tab kinds other units own. `command` returns `null` and every state is
@@ -434,13 +459,32 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for StubRenderer {
     }
 }
 
+/// Stands in for the R07 and R08 renderers, which are not ported yet: their `saveState()`
+/// returns `null`, and drawing is left to those units.
+struct PendingRenderer;
+
+impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for PendingRenderer {
+    fn save_state(&self, _cx: &Cx) -> JsValue {
+        JsValue::Null
+    }
+
+    fn restore_state(&mut self, _cx: &mut Cx, _state: &JsValue) -> Result<(), JsError> {
+        Ok(())
+    }
+
+    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
+        None
+    }
+
+    fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
+        Ok(())
+    }
+}
+
 impl TabFactory<Host> for Factory {
     fn create(&mut self, cx: &mut Host, tab_type: Option<TabType>) -> TabParts<Host> {
         let uuid = JsString::from(create_uuid(&mut cx.rng));
         let slot: Rc<RefCell<Option<JsValue>>> = Rc::new(RefCell::new(None));
-        self.commands
-            .borrow_mut()
-            .insert(uuid.to_string_lossy(), slot.clone());
         self.doms
             .borrow_mut()
             .push((uuid.to_string_lossy(), DomKind::Other));
@@ -490,6 +534,25 @@ impl TabFactory<Host> for Factory {
                     }),
                 }
             }
+            Some(
+                kind
+                @ (TabType::Joysticks | TabType::Swerve | TabType::Mechanism | TabType::Points),
+            ) => {
+                let controller: Box<dyn TabController<Host>> = match kind {
+                    TabType::Joysticks => Box::new(JoysticksController::new(cx)),
+                    TabType::Swerve => Box::new(SwerveController::new(cx)),
+                    TabType::Mechanism => Box::new(MechanismController::new(cx)),
+                    _ => Box::new(PointsController::new(cx)),
+                };
+                TabParts {
+                    uuid: uuid.clone(),
+                    controller,
+                    renderer: Box::new(Recorder {
+                        inner: PendingRenderer,
+                        slot,
+                    }),
+                }
+            }
             other => {
                 let timeline = !matches!(
                     other,
@@ -505,13 +568,7 @@ impl TabFactory<Host> for Factory {
                 // owns, after its own UUID.
                 let source_lists = match other {
                     Some(TabType::LineGraph) => 3,
-                    Some(
-                        TabType::Field3d
-                        | TabType::Statistics
-                        | TabType::Swerve
-                        | TabType::Mechanism
-                        | TabType::Points,
-                    ) => 1,
+                    Some(TabType::Field3d | TabType::Statistics) => 1,
                     _ => 0,
                 };
                 for _ in 0..source_lists {
@@ -534,14 +591,17 @@ struct Host {
     log: Rc<RefCell<Log>>,
     selection: SelectionImpl,
     preferences: Option<Preferences>,
-    assets: Option<AdvantageScopeAssets>,
-    assets_raw: JsValue,
-    type_memory: SourceListTypeMemory,
-    dark: bool,
     rng: DomRng,
     inner_height: f64,
     renderer_top: f64,
     messages: Vec<NamedMessage<HubToMain>>,
+    /// `window.assets`: the raw `set-assets` payload for `JSON.stringify` compare, and
+    /// the parsed view controllers read.
+    assets_raw: JsValue,
+    assets: Option<AdvantageScopeAssets>,
+    /// `window.typeMemory`.
+    type_memory: SourceListTypeMemory,
+    dark: bool,
 }
 
 impl TabCx for Host {
@@ -587,6 +647,57 @@ impl SourceListCx for Host {
             dark: self.dark,
         }
     }
+}
+
+/// `window.assets = message.data`, parsed into the typed assets controllers read. An entry
+/// the config parsers drop, and load failures (whose alert belongs to D07's hub lifecycle),
+/// fail the run.
+fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String> {
+    let JsValue::Object(o) = data else {
+        return match data {
+            JsValue::Null => Ok(None),
+            _ => Err(format!("set-assets with {data:?} is not modeled")),
+        };
+    };
+    let list = |key: &str| match o.get(key) {
+        Some(JsValue::Array(items)) => Ok(items.len()),
+        _ => Err(format!("set-assets without a {key} array is not modeled")),
+    };
+    if list("loadFailures")? > 0 {
+        return Err("set-assets with load failures is not modeled".to_owned());
+    }
+    let assets = AdvantageScopeAssets::from_js(data);
+    for (key, parsed) in [
+        ("field2ds", assets.field2ds.len()),
+        ("field3ds", assets.field3ds.len()),
+        ("robots", assets.robots.len()),
+        ("joysticks", assets.joysticks.len()),
+    ] {
+        if list(key)? != parsed {
+            return Err(format!("set-assets {key} has an entry that does not parse"));
+        }
+    }
+    Ok(Some(assets))
+}
+
+fn type_memory_from_js(data: &JsValue) -> Result<SourceListTypeMemory, String> {
+    let JsValue::Object(ids) = data else {
+        return Err(format!("type memory {data:?} is not an object"));
+    };
+    let mut memory = SourceListTypeMemory::new();
+    for (id, entries) in ids.iter() {
+        let JsValue::Object(entries) = entries else {
+            return Err(format!("type memory for {id:?} is not an object"));
+        };
+        let mut map = JsObject::new();
+        for (key, entry) in entries.iter() {
+            let entry = SourceListTypeMemoryEntry::from_js(entry)
+                .ok_or_else(|| format!("type memory entry {entry:?} has another shape"))?;
+            map.insert(key.clone(), entry);
+        }
+        memory.insert(id.clone(), map);
+    }
+    Ok(memory)
 }
 
 impl TabsHost for Host {
@@ -653,7 +764,6 @@ struct Runner {
     host: Host,
     tabs: Tabs<Host>,
     doms: Doms,
-    commands: CommandSlots,
     emitted: Vec<Emit>,
     clock: Rc<Cell<f64>>,
     now: f64,
@@ -1110,6 +1220,16 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         };
         return eval_tab_suffix(r, suffix, &index);
     }
+    if let Some(index) = expr
+        .strip_prefix("window.tabs.setSelected(")
+        .and_then(|e| e.strip_suffix(')'))
+    {
+        let index = index.parse::<f64>().map_err(|_| err("bad tab index"))?;
+        r.tabs
+            .set_selected(&r.host, &JsValue::Number(index))
+            .map_err(|e| err(e.to_string()))?;
+        return Ok(JsValue::Undefined);
+    }
     match expr {
         "window.tabs.saveState()" => Ok(r.tabs.save_state(&r.host)),
         "[...window.tabs.getActiveFields()]" => {
@@ -1136,6 +1256,27 @@ fn tab_index(r: &Runner, index: &JsValue) -> Option<usize> {
         JsValue::Number(n) if *n >= 0.0 && (*n as usize) < r.tabs.len() => Some(*n as usize),
         _ => None,
     }
+}
+
+/// A harness-side gap reported as an exception the vector can never contain.
+fn unmodeled(what: String) -> asrs_hub::tabs::TabsError {
+    asrs_hub::tabs::TabsError::Thrown(JsError::new("Unmodeled", what))
+}
+
+fn c5_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut SourceList> {
+    let any = controller.as_any_mut();
+    if any.is::<SwerveController>() {
+        return any
+            .downcast_mut::<SwerveController>()
+            .map(SwerveController::source_list_mut);
+    }
+    if any.is::<MechanismController>() {
+        return any
+            .downcast_mut::<MechanismController>()
+            .map(MechanismController::source_list_mut);
+    }
+    any.downcast_mut::<PointsController>()
+        .map(PointsController::source_list_mut)
 }
 
 fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsValue, String> {
@@ -1183,11 +1324,89 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
         let is_stub = i
             .and_then(|i| r.tabs.tab(i))
             .and_then(|t| t.tab_type())
-            .map(|k| !matches!(k, TabType::Table | TabType::Console | TabType::Metadata))
+            .map(|k| {
+                !matches!(
+                    k,
+                    TabType::Table
+                        | TabType::Console
+                        | TabType::Metadata
+                        | TabType::Joysticks
+                        | TabType::Swerve
+                        | TabType::Mechanism
+                        | TabType::Points
+                )
+            })
             .unwrap_or(false);
         if is_stub {
             return Ok(JsValue::Undefined);
         }
+    }
+    if suffix == ".controller.saveState()" {
+        return Ok(r
+            .tabs
+            .controller_mut(index)
+            .map_err(|e| err(e.to_string()))?
+            .save_state(&r.host));
+    }
+    if let Some(op) = suffix.strip_prefix(".controller.sourceList.") {
+        let controller = r
+            .tabs
+            .controller_mut(index)
+            .map_err(|e| err(e.to_string()))?;
+        let Some(list) = c5_source_list(controller) else {
+            return Err(err(format!("unsupported tab eval suffix {suffix}")));
+        };
+        let host = &mut r.host;
+        if let Some(arg) = op
+            .strip_prefix("addField(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            let (key, parent) = match arg.rfind(',') {
+                Some(pos) if arg[pos + 1..].trim().parse::<f64>().is_ok() => (
+                    &arg[..pos],
+                    Some(arg[pos + 1..].trim().parse::<f64>().unwrap() as usize),
+                ),
+                _ => (arg, None),
+            };
+            let JsValue::String(key) = &parse_arg(key)? else {
+                return Err(err("addField needs a string key"));
+            };
+            with_env(host, |env| list.add_field(env, &[], key, parent))
+                .map_err(|e| js_error(e).message)?;
+            return Ok(JsValue::Undefined);
+        }
+        if let Some(arg) = op
+            .strip_prefix("setState(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            let items = source_state(&parse_arg(arg)?).map_err(|e| e.message)?;
+            with_env(host, |env| list.set_state(env, items)).map_err(|e| js_error(e).message)?;
+            return Ok(JsValue::Undefined);
+        }
+        if op == "refresh()" {
+            with_env(host, |env| list.refresh(env)).map_err(|e| js_error(e).message)?;
+            return Ok(JsValue::Undefined);
+        }
+        if let Some(arg) = op.strip_prefix("remove(").and_then(|s| s.strip_suffix(')')) {
+            let i = arg
+                .trim()
+                .parse::<f64>()
+                .map_err(|_| err("remove needs an index"))? as usize;
+            list.remove(i);
+            return Ok(JsValue::Undefined);
+        }
+        if let Some(arg) = op
+            .strip_prefix("toggleHidden(")
+            .and_then(|s| s.strip_suffix(')'))
+        {
+            let i = arg
+                .trim()
+                .parse::<f64>()
+                .map_err(|_| err("toggleHidden needs an index"))? as usize;
+            with_env(host, |env| list.toggle_hidden(env, i)).map_err(|e| js_error(e).message)?;
+            return Ok(JsValue::Undefined);
+        }
+        return Err(err(format!("unsupported tab eval suffix {suffix}")));
     }
     if suffix == ".controller.getActiveFields()" {
         let fields = r
@@ -1269,10 +1488,6 @@ fn skippable(record: &Record) -> bool {
         || record.field("sourceLists").is_some()
         || record.field("measure").is_some()
         || record.field("tuner").is_some()
-        || record
-            .field("main")
-            .and_then(Json::as_str)
-            .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
 }
 
 fn selection_step(
@@ -1384,22 +1599,32 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         log: log.clone(),
         selection,
         preferences: Some(Preferences::default()),
-        assets: fixture
-            .get("assets")
-            .map(|a| to_js(a).unwrap_or_default())
-            .filter(|a| matches!(a, JsValue::Object(_)))
-            .map(|a| AdvantageScopeAssets::from_js(&a)),
-        assets_raw: fixture
-            .get("assets")
-            .map(|a| to_js(a).unwrap_or_default())
-            .unwrap_or(JsValue::Null),
-        type_memory: SourceListTypeMemory::default(),
-        dark: theme_dark,
         rng: DomRng(seed),
         inner_height,
         renderer_top: 92.0,
         messages: Vec::new(),
+        assets_raw: JsValue::Null,
+        assets: None,
+        type_memory: SourceListTypeMemory::new(),
+        dark: theme_dark,
     };
+    // Boot `set-assets`: `window.assets` is assigned before any controller exists, so
+    // `tabs.newAssets()` at boot only reaches the stub tab.
+    if let Some(assets) = fixture.get("assets") {
+        let assets = match assets.as_str() {
+            Some(path) => {
+                let json = load_json(&spec_dir_join(spec_path, &path.to_string_lossy()))?;
+                js_json::to_js(&Value::from_json_lenient(&json))?
+            }
+            None => js_json::to_js(&Value::from_json_lenient(assets))?,
+        };
+        host.assets_raw = assets.clone();
+        host.assets = assets_from_js(&assets).map_err(err)?;
+    }
+    if let Some(memory) = fixture.get("typeMemory") {
+        host.type_memory = type_memory_from_js(&js_json::to_js(&Value::from_json_lenient(memory))?)
+            .map_err(err)?;
+    }
     if let Some(prefs) = fixture.get("preferences") {
         let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;
         host.preferences
@@ -1430,17 +1655,12 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                     host.preferences = Some(p);
                 }
                 "set-assets" => {
-                    let data = js_json::to_js(&data).unwrap_or_default();
-                    let same = asrs_js::json::stringify(&host.assets_raw).ok().flatten()
-                        == asrs_js::json::stringify(&data).ok().flatten();
-                    if !same {
-                        host.assets_raw = data.clone();
-                        host.assets = if matches!(data, JsValue::Object(_)) {
-                            Some(AdvantageScopeAssets::from_js(&data))
-                        } else {
-                            None
-                        };
-                    }
+                    let data = js_json::to_js(&data)?;
+                    host.assets = assets_from_js(&data).map_err(err)?;
+                    host.assets_raw = data;
+                }
+                "restore-type-memory" => {
+                    host.type_memory = type_memory_from_js(&js_json::to_js(&data)?).map_err(err)?;
                 }
                 "set-version"
                 | "set-fullscreen"
@@ -1466,11 +1686,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     };
 
     let doms: Doms = Rc::new(RefCell::new(Vec::new()));
-    let commands: CommandSlots = Rc::new(RefCell::new(HashMap::new()));
-    let factory = Factory {
-        doms: doms.clone(),
-        commands: commands.clone(),
-    };
+    let factory = Factory { doms: doms.clone() };
     host.rng.next_f64();
     let tabs = Tabs::new(Box::new(factory), &mut host);
     let mut runner = Runner {
@@ -1478,7 +1694,6 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         host,
         tabs,
         doms,
-        commands,
         emitted: Vec::new(),
         clock: clock_cell.clone(),
         now: start,
@@ -1709,36 +1924,15 @@ impl Runner {
                 }
             }
             "set-assets" => {
-                let same = asrs_js::json::stringify(&self.host.assets_raw)
-                    .ok()
-                    .flatten()
-                    == asrs_js::json::stringify(data).ok().flatten();
-                if !same {
-                    let failures = |v: &JsValue| {
-                        truthy(&js_json::from_js(v))
-                            && v.get("loadFailures")
-                                .and_then(JsValue::as_array)
-                                .is_some_and(|f| !f.is_empty())
-                    };
-                    let old_had_failed = failures(&self.host.assets_raw);
-                    let new_had_failed = failures(data);
+                if asrs_js::json::stringify(&self.host.assets_raw) != asrs_js::json::stringify(data)
+                {
+                    self.host.assets = assets_from_js(data).map_err(unmodeled)?;
                     self.host.assets_raw = data.clone();
-                    self.host.assets = if matches!(data, JsValue::Object(_)) {
-                        Some(AdvantageScopeAssets::from_js(data))
-                    } else {
-                        None
-                    };
                     self.tabs.new_assets(&mut self.host)?;
-                    if new_had_failed && !old_had_failed {
-                        let mut data = JsObject::new();
-                        data.insert("title", "Failed to load assets".to_js());
-                        data.insert(
-                            "content",
-                            "Some asset files failed to load. Check the developer console for details.".to_js(),
-                        );
-                        self.emit_main("error", js_json::from_js(&JsValue::Object(data)));
-                    }
                 }
+            }
+            "restore-type-memory" => {
+                self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
             }
             "set-2d-camera" => {
                 if let Some(r) = self
@@ -1835,7 +2029,69 @@ impl Runner {
             // DOM-only (row filtering and the console jump scroll belong to the view layer).
             (t, "input") if t.contains("input.filter") => {}
             (t, "keydown" | "click") if t.contains("console-table-jump") => {}
+            (t, "change") if t.contains("input.max-speed") => {
+                self.swerve_change(SwerveInput::MaxSpeed, props)?
+            }
+            (t, "change") if t.contains("input.size-x") => {
+                self.swerve_change(SwerveInput::SizeX, props)?
+            }
+            (t, "change") if t.contains("input.size-y") => {
+                self.swerve_change(SwerveInput::SizeY, props)?
+            }
+            (t, "click") if t.contains("orientation-switcher") => self.swerve_rotate(index)?,
+            (t, "keydown") if t.contains("orientation-switcher") => {
+                let key = init
+                    .get("key")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| err("keydown needs a key"))?;
+                if keyboard_clicks(&js(&key.to_string_lossy())) {
+                    self.swerve_rotate(index)?;
+                }
+            }
+            (t, "change") if t.contains("input.dimensions-width") => {
+                self.points_change(Dimension::Width, props)?
+            }
+            (t, "change") if t.contains("input.dimensions-height") => {
+                self.points_change(Dimension::Height, props)?
+            }
+            (t, "change") if t.contains("select.orientation") => {
+                self.points_select(PointsSelect::Orientation, props)?
+            }
+            (t, "change") if t.contains("select.origin") => {
+                self.points_select(PointsSelect::Origin, props)?
+            }
+            (t, "change") if t.contains("table.joystick-selector select") => {
+                self.joystick_change(index, props)?
+            }
+            // One `button.hide` and one `button.remove` per `.source-list .item`, so `index`
+            // is the item's position in the list.
+            (t, "click") if t.contains(".source-list .list .item button.hide") => {
+                self.source_item_click(index, false)?
+            }
+            (t, "click") if t.contains(".source-list .list .item button.remove") => {
+                self.source_item_click(index, true)?
+            }
             _ => return Err(format!("event {etype} on {target} is not modeled")),
+        }
+        // Every keydown bubbles to `SelectionImpl`'s window listener after the target's own.
+        if etype == "keydown" {
+            let flag = |name: &str| matches!(init.get(name), Some(Json::Bool(true)));
+            let code = init
+                .get("code")
+                .and_then(Json::as_str)
+                .map(|c| c.to_string_lossy())
+                .unwrap_or_default();
+            let element = target.rsplit(' ').next().unwrap_or_default();
+            let key_target = if element.starts_with("input") {
+                KeyTarget::Input
+            } else if element.starts_with("textarea") {
+                KeyTarget::TextArea
+            } else {
+                KeyTarget::Other
+            };
+            self.host
+                .selection
+                .key_down(&code, flag("metaKey"), flag("ctrlKey"), key_target);
         }
         Ok(())
     }
@@ -1990,6 +2246,107 @@ impl Runner {
         }
     }
 
+    fn selected_controller<T: 'static>(&mut self) -> Result<&mut T, String> {
+        let i = self
+            .tabs
+            .selected_index()
+            .ok_or_else(|| err("no tab is selected"))?;
+        self.tabs
+            .controller_mut(&JsValue::Number(i as f64))
+            .map_err(|e| err(e.to_string()))?
+            .downcast_mut::<T>()
+            .ok_or_else(|| {
+                err(format!(
+                    "the selected tab is not a {}",
+                    std::any::type_name::<T>()
+                ))
+            })
+    }
+
+    /// `props.value`, assigned to the target before the event is dispatched.
+    fn prop_value(props: Option<&Json>) -> Result<Option<JsString>, String> {
+        match props.and_then(|p| p.get("value")) {
+            None => Ok(None),
+            Some(v) => v
+                .as_str()
+                .map(|v| Some(js(&v.to_string_lossy())))
+                .ok_or_else(|| err("props.value must be a string")),
+        }
+    }
+
+    fn swerve_change(&mut self, input: SwerveInput, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<SwerveController>()?;
+        if let Some(value) = value {
+            controller.input_mut(input).set_value(value);
+        }
+        controller.input_changed(input);
+        Ok(())
+    }
+
+    fn swerve_rotate(&mut self, index: usize) -> Result<(), String> {
+        let controller = self.selected_controller::<SwerveController>()?;
+        match index {
+            0 => controller.rotate_left(),
+            1 => controller.rotate_right(),
+            _ => return Err(err(format!("orientation switcher has no child {index}"))),
+        }
+        Ok(())
+    }
+
+    fn points_change(&mut self, dimension: Dimension, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<PointsController>()?;
+        if let Some(value) = value {
+            controller.dimension_mut(dimension).set_value(value);
+        }
+        controller.dimension_changed(dimension);
+        Ok(())
+    }
+
+    /// The selects have no `change` listener; only the assigned value matters.
+    fn points_select(&mut self, select: PointsSelect, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<PointsController>()?;
+        if let Some(value) = value {
+            controller.select_mut(select).set_value(&value);
+        }
+        Ok(())
+    }
+
+    /// The selects have no `change` listener; only the assigned value matters.
+    fn joystick_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<JoysticksController>()?;
+        let select = controller
+            .select_mut(index)
+            .ok_or_else(|| err(format!("no joystick select {index}")))?;
+        if let Some(value) = value {
+            select.set_value(&value);
+        }
+        Ok(())
+    }
+
+    fn source_item_click(&mut self, index: usize, remove: bool) -> Result<(), String> {
+        let i = self
+            .tabs
+            .selected_index()
+            .ok_or_else(|| err("no tab is selected"))?;
+        let controller = self
+            .tabs
+            .controller_mut(&JsValue::Number(i as f64))
+            .map_err(|e| err(e.to_string()))?;
+        let list = c5_source_list(controller)
+            .ok_or_else(|| err("source list item clicks are modeled for C05 tabs only"))?;
+        if remove {
+            list.remove(index);
+            Ok(())
+        } else {
+            with_env(&mut self.host, |env| list.toggle_hidden(env, index))
+                .map_err(|e| js_error(e).message)
+        }
+    }
+
     fn console_highlight_click(&mut self) {
         let Some(i) = self.tabs.selected_index() else {
             return;
@@ -2035,12 +2392,8 @@ impl Runner {
                         let Some(uuid) = tab.uuid().as_str().map(|s| s.to_string_lossy()) else {
                             continue;
                         };
-                        let slot = self
-                            .commands
-                            .borrow()
-                            .get(&uuid)
-                            .cloned()
-                            .unwrap_or_default();
+                        let slot = recorded_command(tab.renderer())
+                            .ok_or_else(|| err(format!("tab {i} has no recording renderer")))?;
                         let Some(command) = slot.borrow_mut().take() else {
                             continue;
                         };
@@ -2142,7 +2495,7 @@ fn patch_state(expected: &Value, actual: &mut Value) {
     };
     for (expected_tab, actual_tab) in expected_tabs.iter().zip(actual_tabs.iter_mut()) {
         let ty = expected_tab.get("type").and_then(Value::as_f64);
-        if matches!(ty, Some(4.0 | 5.0 | 12.0)) {
+        if matches!(ty, Some(4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0)) {
             continue;
         }
         let Value::Object(fields) = actual_tab else {
@@ -2164,6 +2517,16 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     let records = vectors::load(vector_id)?;
     let mut expected = records.iter().peekable();
     let mut skipped = 0;
+    // The Field3d controller is still a stub, so its coordinate-system warnings have no
+    // port side yet.
+    let stub_warning = |record: &Record| {
+        vector_id.ends_with("/field-3d")
+            && record
+                .field("main")
+                .and_then(Json::as_str)
+                .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
+    };
+    let skippable = |record: &Record| skippable(record) || stub_warning(record);
     for emit in &emitted {
         while let Some(record) = expected.peek() {
             if skippable(record) {
@@ -2182,11 +2545,14 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             .find(|(k, _)| *k == "command")
             .and_then(|(_, v)| v.get("type"))
             .and_then(Value::as_f64)
-            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 12.0));
+            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0));
         for (key, value) in &emit.values {
-            let expected_value = record
-                .value(key)
-                .map_err(|e| format!("line {} missing {key}: {e}", record.line))?;
+            let expected_value = record.value(key).map_err(|e| {
+                format!(
+                    "line {} missing {key}: {e}; the port emitted {value:?}",
+                    record.line
+                )
+            })?;
             if *key == "value" && stub_command {
                 continue;
             }

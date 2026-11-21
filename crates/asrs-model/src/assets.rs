@@ -1353,14 +1353,15 @@ impl ConfigJoystick {
 
 impl AdvantageScopeAssets {
     /// `window.assets = message.data`: the hub stores what `set-assets` carried. Each config
-    /// arrives as `loadAssets` produced it, so re-parsing keeps every entry that is a config;
-    /// `path` is the loader's, stamped after parsing, so it is copied across.
+    /// arrives as `loadAssets` produced it, so re-parsing keeps every entry that is a config.
+    /// The hub reads `path` and `id` as sent rather than recomputing them: the loader stamps
+    /// `path` after parsing, and nothing ties a received `id` to its `name`.
     pub fn from_js(value: &JsValue) -> AdvantageScopeAssets {
         fn configs<T>(
             value: &JsValue,
             key: &str,
             parse: fn(&JsValue) -> ParseResult<T>,
-            path: fn(&mut T) -> &mut JsString,
+            fields: fn(&mut T) -> [Option<&mut JsString>; 2],
         ) -> Vec<T> {
             let mut out = Vec::new();
             if let Some(raw) = value.get(key)
@@ -1368,8 +1369,11 @@ impl AdvantageScopeAssets {
             {
                 for item in items {
                     if let Ok(Parsed::Config(mut config)) = parse(item) {
-                        if let Some(JsValue::String(s)) = item.get("path") {
-                            *path(&mut config) = s.clone();
+                        for (field, key) in fields(&mut config).into_iter().zip(["path", "id"]) {
+                            if let (Some(field), Some(JsValue::String(s))) = (field, item.get(key))
+                            {
+                                *field = s.clone();
+                            }
                         }
                         out.push(config);
                     }
@@ -1388,10 +1392,16 @@ impl AdvantageScopeAssets {
             }
         }
         AdvantageScopeAssets {
-            field2ds: configs(value, "field2ds", parse_field_2d, |c| &mut c.path),
-            field3ds: configs(value, "field3ds", parse_field_3d, |c| &mut c.path),
-            robots: configs(value, "robots", parse_robot, |c| &mut c.path),
-            joysticks: configs(value, "joysticks", parse_joystick, |c| &mut c.path),
+            field2ds: configs(value, "field2ds", parse_field_2d, |c| {
+                [Some(&mut c.path), Some(&mut c.id)]
+            }),
+            field3ds: configs(value, "field3ds", parse_field_3d, |c| {
+                [Some(&mut c.path), Some(&mut c.id)]
+            }),
+            robots: configs(value, "robots", parse_robot, |c| [Some(&mut c.path), None]),
+            joysticks: configs(value, "joysticks", parse_joystick, |c| {
+                [Some(&mut c.path), None]
+            }),
             load_failures,
         }
     }

@@ -1,0 +1,73 @@
+{
+  "field2ds": [],
+  "field3ds": [],
+  "robots": [],
+  "joysticks": [
+    {
+      "name": "Xbox Controller",
+      "path": "bundledAssets/Joystick_Xbox/",
+      "components": [
+        {
+          "type": "button",
+          "isYellow": false,
+          "isEllipse": true,
+          "centerPx": [50, 50],
+          "sizePx": [20, 20],
+          "sdlSourceIndex": 0,
+          "niSourceIndex": 1
+        },
+        {
+          "type": "button",
+          "isYellow": false,
+          "isEllipse": false,
+          "centerPx": [90, 60],
+          "sizePx": [30, 15],
+          "sdlSourceIndex": 0,
+          "sdlSourcePov": "up"
+        },
+        {
+          "type": "joystick",
+          "isYellow": false,
+          "centerPx": [150, 100],
+          "radiusPx": 30,
+          "sdlXSourceIndex": 0,
+          "sdlYSourceIndex": 1,
+          "sdlYSourceInverted": true,
+          "sdlButtonSourceIndex": 9
+        },
+        {
+          "type": "axis",
+          "isYellow": false,
+          "centerPx": [200, 100],
+          "sizePx": [30, 15],
+          "sdlSourceIndex": 2,
+          "sdlSourceRange": [0, 1],
+          "niSourceIndex": 5,
+          "niSourceRange": [-1, 1]
+        },
+        {
+          "type": "touchpad",
+          "isYellow": false,
+          "centerPx": [300, 150],
+          "sizePx": [100, 60],
+          "sdlSourceIndex": 0
+        }
+      ]
+    },
+    {
+      "name": "PS5 Controller",
+      "path": "bundledAssets/Joystick_PS5/",
+      "components": [
+        {
+          "type": "button",
+          "isYellow": true,
+          "isEllipse": true,
+          "centerPx": [40, 40],
+          "sizePx": [18, 18],
+          "sdlSourceIndex": 1
+        }
+      ]
+    }
+  ],
+  "loadFailures": []
+}
