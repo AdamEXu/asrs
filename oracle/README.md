@@ -592,10 +592,12 @@ requests and TCP sockets. Websockets behave like the browser's: `send` while con
 throws, a refused handshake fires `error` then `close`, a server drop fires `close` (1006),
 `close()` fires `close` a round trip later, and messages arriving when not open are dropped.
 `fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
-`http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
-go out on connect, `setTimeout` is an idle timer refreshed by connecting, reads and writes, a
-refusal emits `error` then `close`; `error` is emitted at once and `close` as a later
-delivery, as Node emits it from the handle's close callback.
+`http-abort`. A URL that `new URL` rejects (a robot address of `""`) makes `fetch` reject at
+once, as Chromium's does, without reaching the server; it still takes an id. TCP sockets
+follow the Node behaviour main.ts relies on: writes while connecting go out on connect,
+`setTimeout` is an idle timer refreshed by connecting, reads and writes, a refusal emits
+`error` then `close`; `error` is emitted at once and `close` as a later delivery, as Node
+emits it from the handle's close callback.
 
 ### Trace
 
