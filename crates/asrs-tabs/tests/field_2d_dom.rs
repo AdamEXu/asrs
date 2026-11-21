@@ -4,9 +4,10 @@
 //! `oracle/tools/field2dSpecs.mjs`) against `asrs_tabs::field_2d`. `slLog` records
 //! build the log, `sl` ops drive the controller's `SourceList`, `f2d` records carry
 //! each controller call with the selection reads upstream made during it, and
-//! `f2dr` records carry renderer renders, camera calls, scroll/mouse events and the
-//! DOM values upstream read. Commands, controls, saved state, main messages, list
-//! dumps, pending scroll callbacks and exceptions are all compared bit-exact.
+//! `f2dr` records carry renderer renders (with the camera fields after each), camera
+//! calls, wheel/mouse events and the DOM values upstream read. Commands, controls, saved
+//! state, camera state, main messages, list dumps, type memory, scroll callbacks and
+//! exceptions are all compared bit-exact, and any record the harness does not know fails.
 
 #[path = "../../asrs-cli/src/functions.rs"]
 #[allow(dead_code)]
@@ -80,7 +81,9 @@ use asrs_model::tab_controller::{TabController, TabRenderer};
 use asrs_parity::Value;
 use asrs_parity::vectors::{Record, load, vectors_dir};
 use asrs_tabs::cx::TabCx;
-use asrs_tabs::field_2d::{Field2dCommand, Field2dController, Field2dDom, Field2dRenderer};
+use asrs_tabs::field_2d::{
+    Field2dCommand, Field2dController, Field2dDom, Field2dRenderer, ScrollArgs,
+};
 use asrs_tabs::list_cx::{ListParts, SourceListCx};
 
 const CASES: &str = "dom/field-2d";
@@ -247,21 +250,10 @@ struct Host {
     memory: SourceListTypeMemory,
     selection: ScriptedSelection,
     preferences: Option<Preferences>,
-    /// Raw `window.assets` JSON for the set-assets loadFailures transition.
-    assets_raw: JsValue,
     assets: Option<AdvantageScopeAssets>,
     dark: bool,
     rng: NoRandom,
     sent: VecDeque<NamedMessage<HubToMain>>,
-}
-
-impl Host {
-    fn had_load_failures(raw: &JsValue) -> bool {
-        raw.as_object()
-            .and_then(|o| o.get("loadFailures"))
-            .and_then(JsValue::as_array)
-            .is_some_and(|a| !a.is_empty())
-    }
 }
 
 impl TabCx for Host {
@@ -273,6 +265,10 @@ impl TabCx for Host {
     }
     fn tab_preferences(&self) -> Option<&Preferences> {
         self.preferences.as_ref()
+    }
+
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
+        self.preferences.as_mut()
     }
     fn tab_rng(&mut self) -> &mut dyn Rng {
         &mut self.rng
@@ -476,6 +472,7 @@ struct Stats {
     events: usize,
     dumps: usize,
     ops: usize,
+    cameras: usize,
 }
 
 struct Harness {
@@ -490,6 +487,10 @@ struct Harness {
     /// `main` records upstream emitted before the port call that produced them ran.
     upstream_main: VecDeque<(String, String)>,
     pending_errors: VecDeque<String>,
+    /// Scroll callbacks the port dispatched, per renderer, awaiting upstream's `scroll`.
+    scrolls: Vec<VecDeque<ScrollArgs>>,
+    /// What the last replayed controller or renderer call threw, for an `eval` exception.
+    last_threw: Option<String>,
     stats: Stats,
 }
 
@@ -516,8 +517,7 @@ impl Harness {
                 log: RefCell::new(Log::new(true)),
                 memory: JsObject::new(),
                 selection: ScriptedSelection::default(),
-                preferences: Some(Preferences::default()),
-                assets_raw: JsValue::Null,
+                preferences: None,
                 assets: None,
                 dark: false,
                 rng: NoRandom,
@@ -531,6 +531,8 @@ impl Harness {
             bound: HashMap::new(),
             upstream_main: VecDeque::new(),
             pending_errors: VecDeque::new(),
+            scrolls: Vec::new(),
+            last_threw: None,
             stats: Stats::default(),
         }
     }
@@ -551,8 +553,7 @@ impl Harness {
     }
 
     /// `dark`/`prefs`/`assets` context fields carried on `f2d` and `f2dr` records.
-    /// Returns `true` when the record carries assets that newly have loadFailures.
-    fn apply_context(&mut self, record: &Record) -> Result<bool, String> {
+    fn apply_context(&mut self, record: &Record) -> Result<(), String> {
         if let Ok(Value::Bool(dark)) = record.value("dark") {
             self.host.dark = dark;
         }
@@ -561,14 +562,25 @@ impl Harness {
                 Value::Object(_) => {
                     let p = js(record, "prefs")?;
                     let o = p.as_object().ok_or("prefs")?;
-                    let mut preferences = Preferences::default();
+                    let mut preferences = self.host.preferences.clone().unwrap_or_default();
+                    if let Some(ftc) = o.get("ftc").and_then(JsValue::as_bool)
+                        && self.host.preferences.is_some()
+                        && preferences.prefers_ftc != ftc
+                    {
+                        return Err(format!(
+                            "window.preferences.prefersFTC upstream {ftc}, port {}",
+                            preferences.prefers_ftc
+                        ));
+                    }
                     if let Some(cs) = o.get("cs")
                         && let Some(s) = cs.as_str()
                     {
                         preferences.coordinate_system =
                             CoordinateSystemPreference::from_js_str(s).ok_or("prefs.cs")?;
                     }
-                    if let Some(ftc) = o.get("ftc").and_then(JsValue::as_bool) {
+                    if self.host.preferences.is_none()
+                        && let Some(ftc) = o.get("ftc").and_then(JsValue::as_bool)
+                    {
                         preferences.prefers_ftc = ftc;
                     }
                     if let Some(ts) = o.get("ts").and_then(JsValue::as_str) {
@@ -583,18 +595,11 @@ impl Harness {
                 _ => None,
             };
         }
-        if let Ok(_assets) = record.value("assets") {
-            let old_failed = Host::had_load_failures(&self.host.assets_raw);
-            self.host.assets_raw = js(record, "assets")?;
-            self.host.assets = if self.host.assets_raw.is_null() {
-                None
-            } else {
-                Some(AdvantageScopeAssets::from_js(&self.host.assets_raw))
-            };
-            let new_failed = Host::had_load_failures(&self.host.assets_raw);
-            return Ok(new_failed && !old_failed);
+        if record.value("assets").is_ok() {
+            let raw = js(record, "assets")?;
+            self.host.assets = (!raw.is_null()).then(|| AdvantageScopeAssets::from_js(&raw));
         }
-        Ok(false)
+        Ok(())
     }
 
     /// After a port call, pair queued port messages with `main` records upstream
@@ -705,7 +710,7 @@ impl Harness {
     ) -> Result<(), String> {
         let id = record_id(record)?;
         let name = record.string("f2d").unwrap_or_default();
-        let error_assets = self.apply_context(record)?;
+        self.apply_context(record)?;
         let args = js(record, "args")?;
         let args = args.as_array().ok_or("bracket args")?.to_vec();
         let result = match name.as_str() {
@@ -719,19 +724,8 @@ impl Harness {
             other => return Err(format!("unknown controller call {other}")),
         };
         self.stats.calls += 1;
+        self.last_threw = threw(end);
         same_error(&name, threw(end), result.err().map(|e| error_text(&e)))?;
-        if name == "newAssets" && error_assets && threw(end).is_none() {
-            // hub's set-assets handler alerts on new loadFailures after newAssets.
-            let mut data = JsObject::new();
-            data.insert("title", "Failed to load assets".to_js());
-            data.insert(
-                "content",
-                "Some asset files failed to load. Check the developer console for details.".to_js(),
-            );
-            self.host
-                .sent
-                .push_back(NamedMessage::new(HubToMain::Error, JsValue::Object(data)));
-        }
         for r in &inner {
             if r.field("sl").is_some() && r.field("op").is_some() {
                 continue;
@@ -848,7 +842,6 @@ impl Harness {
             .get("satellite")
             .and_then(JsValue::as_bool)
             .unwrap_or(false);
-        d.now = num(o.get("now").ok_or("dom.now")?)?;
         if let Some(images) = o.get("images").and_then(JsValue::as_object) {
             d.images.clear();
             for (src, size) in images.iter() {
@@ -868,12 +861,20 @@ impl Harness {
             // setTimeout image "load" events land between frames.
             self.renderers[id].0.flush_image_loads();
         }
-        let command = Field2dCommand::from_js(&js(record, "command")?)
-            .ok_or("render command does not parse")?;
+        let recorded = js(record, "command")?;
+        let command = Field2dCommand::from_js(&recorded).ok_or("render command does not parse")?;
+        if encode(&command.to_js()) != encode(&recorded) {
+            return Err(format!(
+                "render command does not round-trip\n recorded {}\n parsed   {}",
+                encode(&recorded),
+                encode(&command.to_js())
+            ));
+        }
         self.renderers[id].0.render_command(&self.host, &command);
         self.had_last_command[id] = true;
         self.stats.renders += 1;
         same_error("render", threw(record), None)?;
+        self.camera(id, record)?;
         let dom = js(record, "dom")?;
         let o = dom.as_object().ok_or("dom")?;
         let loads = num(o.get("loads").ok_or("dom.loads")?)? as u64;
@@ -884,6 +885,28 @@ impl Harness {
             ));
         }
         Ok(())
+    }
+
+    fn camera(&self, id: usize, record: &Record) -> Result<(), String> {
+        let expected = encode(&js(record, "camera")?);
+        let actual = encode(&self.renderers[id].0.camera_state());
+        if expected != actual {
+            return Err(format!(
+                "camera state\n upstream {expected}\n port     {actual}"
+            ));
+        }
+        Ok(())
+    }
+
+    fn scroll_args(record: &Record) -> Result<ScrollArgs, String> {
+        let args = js(record, "args")?;
+        let args = args.as_array().ok_or("scroll args")?;
+        Ok(ScrollArgs {
+            dx: num(at(args, 0))?,
+            dy: num(at(args, 1))?,
+            is_pan: at(args, 2).as_bool().ok_or("scroll isPan")?,
+            cursor: [num(at(args, 3))?, num(at(args, 4))?],
+        })
     }
 
     fn f2dr_bracket(
@@ -897,10 +920,14 @@ impl Harness {
         self.apply_context(record)?;
         let args = js(record, "args")?;
         let args = args.as_array().ok_or("bracket args")?.to_vec();
-        let expected_renders = inner
+        let inner_renders: Vec<&Record> = inner
             .iter()
             .filter(|r| r.string("f2dr").as_deref() == Some("render"))
-            .count();
+            .collect();
+        let expected_renders = inner_renders.len();
+        if let Some(render) = inner_renders.first() {
+            self.apply_dom(id, &js(render, "dom")?)?;
+        }
         let result: Result<(), JsError> = match name.as_str() {
             "restoreState" => {
                 TabRenderer::restore_state(&mut self.renderers[id].0, &mut self.host, at(&args, 0))
@@ -913,12 +940,17 @@ impl Harness {
                         "set2DCamera({index}): upstream rendered {expected_renders} times inside"
                     ));
                 }
-                self.renderers[id].0.set_2d_camera(&mut self.host, index);
+                self.renderers[id].0.set_2d_camera(&self.host, index);
+                if let Some(render) = inner_renders.first() {
+                    self.stats.renders += 1;
+                    self.camera(id, render)?;
+                }
                 Ok(())
             }
             other => return Err(format!("unknown renderer call {other}")),
         };
         self.stats.calls += 1;
+        self.last_threw = threw(end);
         same_error(&name, threw(end), result.err().map(|e| error_text(&e)))?;
         for r in &inner {
             if r.string("f2dr").as_deref() == Some("render") {
@@ -941,6 +973,7 @@ impl Harness {
                 self.renderers
                     .push((Field2dRenderer::new(dom.clone()), dom));
                 self.had_last_command.push(false);
+                self.scrolls.push(VecDeque::new());
                 Ok(())
             }
             "render" => self.render(record, true),
@@ -972,44 +1005,42 @@ impl Harness {
             }
             "scroll" => {
                 let id = record_id(record)?;
-                let args = js(record, "args")?;
-                let args = args.as_array().ok_or("scroll args")?;
-                let (dx, dy, is_pan, cx, cy) = (
-                    num(at(args, 0))?,
-                    num(at(args, 1))?,
-                    at(args, 2).as_bool().ok_or("scroll isPan")?,
-                    num(at(args, 3))?,
-                    num(at(args, 4))?,
-                );
-                let pending = self.renderers[id]
-                    .0
-                    .pending_scrolls
-                    .first()
-                    .copied()
-                    .ok_or("upstream dispatched a scroll callback the port did not queue")?;
-                let expected = [dx, dy, f64::from(is_pan), cx, cy];
-                for (a, b) in expected.iter().zip(pending.iter()) {
-                    if a.to_bits() != b.to_bits() {
-                        return Err(format!(
-                            "scroll callback args {pending:?}, upstream {expected:?}"
-                        ));
-                    }
+                let expected = Self::scroll_args(record)?;
+                let port = self.scrolls[id]
+                    .pop_front()
+                    .ok_or("upstream dispatched a scroll callback the port did not")?;
+                if port.is_pan != expected.is_pan
+                    || port.dx.to_bits() != expected.dx.to_bits()
+                    || port.dy.to_bits() != expected.dy.to_bits()
+                    || port.cursor.map(f64::to_bits) != expected.cursor.map(f64::to_bits)
+                {
+                    return Err(format!(
+                        "scroll callback upstream {expected:?}, port {port:?}"
+                    ));
                 }
-                self.renderers[id].0.pending_scrolls.remove(0);
                 self.stats.events += 1;
-                self.renderers[id]
-                    .0
-                    .scroll(&mut self.host, dx, dy, is_pan, cx, cy);
                 self.drain_main()
             }
             "scrollEvent" => {
+                // The DOM scroll field is U08's to replace: a `scroll` event is a wheel
+                // input only when the sensor turned it into a callback, whose deltas the
+                // host's wheel mapping supplies. The cursor is the port's own.
                 let id = record_id(record)?;
                 self.stats.events += 1;
-                self.renderers[id].0.scroll_event(
-                    num(&js(record, "scrollLeft")?)?,
-                    num(&js(record, "scrollTop")?)?,
-                    num(&js(record, "now")?)?,
-                );
+                let next = records.clone().next();
+                if let Some(next) = next
+                    && next.string("f2dr").as_deref() == Some("scroll")
+                    && record_id(next)? == id
+                {
+                    let upstream = Self::scroll_args(next)?;
+                    if upstream.is_pan {
+                        return Err("a scroll event dispatched a pan callback".to_owned());
+                    }
+                    let args = self.renderers[id]
+                        .0
+                        .wheel(&self.host, upstream.dx, upstream.dy);
+                    self.scrolls[id].push_back(args);
+                }
                 Ok(())
             }
             "mouse" => {
@@ -1021,6 +1052,8 @@ impl Harness {
                     .strip_prefix("mouse")
                     .unwrap_or_default()
                     .to_owned();
+                // A drag's callback is the constructor-captured one, which upstream cannot
+                // record; the fixtures' `camera` snapshots check its effect instead.
                 self.renderers[id].0.mouse(
                     &mut self.host,
                     &kind,
@@ -1030,6 +1063,11 @@ impl Harness {
                     num(&js(record, "y")?)?,
                 );
                 self.drain_main()
+            }
+            "camera" => {
+                let id = record_id(record)?;
+                self.stats.cameras += 1;
+                self.camera(id, record)
             }
             "restoreState" | "set2DCamera" => self.bracket(record, "f2dr", records),
             other => Err(format!("unexpected f2dr record {other}")),
@@ -1246,6 +1284,23 @@ impl Harness {
                 )),
             };
         }
+        if record.string("exception").as_deref() == Some("eval") {
+            let error = record.string("error").unwrap_or_default();
+            return match self.last_threw.take() {
+                Some(port) if port == error => Ok(()),
+                port => Err(format!("eval exception: upstream {error:?}, port {port:?}")),
+            };
+        }
+        if record.field("slMemory").is_some() {
+            let expected = encode(&js(record, "slMemory")?);
+            let actual = encode(&self.host.memory.to_js());
+            if expected != actual {
+                return Err(format!(
+                    "type memory\n upstream {expected}\n port     {actual}"
+                ));
+            }
+            return Ok(());
+        }
         if record.field("capture").is_some() {
             self.drain_main()?;
             if !self.host.sent.is_empty() {
@@ -1266,9 +1321,10 @@ impl Harness {
                     self.pending_errors
                 ));
             }
+            return Ok(());
         }
         let Some(sl) = record.field("sl") else {
-            return Ok(());
+            return Err("a record the harness does not know".to_owned());
         };
         let sl = index(&js_json::to_js(&Value::from_json(sl).map_err(|e| e.0)?)?)?;
         if record.field("create").is_some() {
@@ -1282,13 +1338,17 @@ impl Harness {
             self.list_uuids.insert(sl, uuid);
             return Ok(());
         }
+        // Lists of the hub's other tabs.
         let Some(ctrl) = self.list_of(sl) else {
             return Ok(());
         };
         if record.field("op").is_some() {
             return self.op(record, ctrl);
         }
-        if record.field("dump").is_some() {
+        if record.field("dump").is_none() {
+            return Err("an sl record that is neither create, op nor dump".to_owned());
+        }
+        {
             self.stats.dumps += 1;
             let mut expected = js(record, "dump")?;
             expected.as_object_mut().and_then(|o| o.remove("config"));
@@ -1331,6 +1391,11 @@ fn run_case(id: &str) -> Result<Stats, String> {
             .map_err(|e| format!("{id} line {}: {e}", record.line))?;
     }
     harness.drain_main().map_err(|e| format!("{id}: {e}"))?;
+    if harness.scrolls.iter().any(|q| !q.is_empty()) {
+        return Err(format!(
+            "{id}: port wheel callbacks upstream never dispatched"
+        ));
+    }
     if !harness.host.sent.is_empty() {
         return Err(format!(
             "{id}: port sent main messages upstream never recorded"
@@ -1357,7 +1422,7 @@ fn field_2d_fixtures() {
         match run_case(id) {
             Ok(s) => {
                 eprintln!(
-                    "{id}: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops",
+                    "{id}: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} cameras",
                     s.commands,
                     s.renders,
                     s.saves,
@@ -1366,7 +1431,8 @@ fn field_2d_fixtures() {
                     s.controls,
                     s.events,
                     s.dumps,
-                    s.ops
+                    s.ops,
+                    s.cameras
                 );
                 total.commands += s.commands;
                 total.renders += s.renders;
@@ -1377,12 +1443,13 @@ fn field_2d_fixtures() {
                 total.events += s.events;
                 total.dumps += s.dumps;
                 total.ops += s.ops;
+                total.cameras += s.cameras;
             }
             Err(e) => failures.push(e),
         }
     }
     eprintln!(
-        "{} fixtures: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} failing",
+        "{} fixtures: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} cameras, {} failing",
         ids.len(),
         total.commands,
         total.renders,
@@ -1393,6 +1460,7 @@ fn field_2d_fixtures() {
         total.events,
         total.dumps,
         total.ops,
+        total.cameras,
         failures.len()
     );
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));

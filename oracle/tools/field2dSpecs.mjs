@@ -182,6 +182,25 @@ const RECORDER = String.raw`(() => {
     });
   };
 
+  const camera = (r) =>
+    tree({
+      zoom: r.zoom,
+      pan: r.pan,
+      trackingMode: r.trackingMode,
+      lastTrackingMode: r.lastTrackingMode,
+      jumpToRobot: r.jumpToRobot,
+      lastFieldCenter: r.lastFieldCenter,
+      isFTC: r.isFTC,
+      aspectRatio: r.aspectRatio,
+      lastImageSource: r.lastImageSource
+    });
+  // The sensor's drag pan calls the callback its constructor captured, which the
+  // recorder cannot wrap, so fixtures snapshot the camera after dispatching mouse events.
+  w.__f2dCamera = (r) => {
+    const entry = renderers.find((e) => e.renderer === r);
+    write({ f2dr: "camera", id: tree(entry.index), camera: camera(r) });
+  };
+
   const hookRenderer = (r, id) => {
     write({ f2dr: "create", id: tree(id) });
     const base = () => ({ id: tree(id), assets: assetsT() });
@@ -191,7 +210,6 @@ const RECORDER = String.raw`(() => {
         cw: r.CONTAINER.clientWidth,
         ch: r.CONTAINER.clientHeight,
         scroll: [scroll.x, scroll.y, scroll.width, scroll.height],
-        now: new Date().getTime(),
         dpr: w.devicePixelRatio,
         satellite: document.body.classList.contains("satellite")
       };
@@ -214,6 +232,7 @@ const RECORDER = String.raw`(() => {
         dom.images = { [src]: [r.IMAGE.naturalWidth, r.IMAGE.naturalHeight] };
         dom.loads = r.imageLoadCount;
         record.dom = tree(dom);
+        record.camera = camera(r);
         write(record);
       }
     };
@@ -280,7 +299,7 @@ const RECORDER = String.raw`(() => {
       }, true);
     }
     r.SCROLL_CONTAINER.addEventListener("scroll", () => {
-      write(Object.assign({ f2dr: "scrollEvent", scrollLeft: tree(r.SCROLL_CONTAINER.scrollLeft), scrollTop: tree(r.SCROLL_CONTAINER.scrollTop), now: tree(new Date().getTime()) }, base()));
+      write(Object.assign({ f2dr: "scrollEvent" }, base()));
     }, true);
   };
 
@@ -384,6 +403,26 @@ const logs = {
     ["putNumber", "/DriverStation/Enabled", 4.0, 0],
     ["putNumber", "/DriverStation/Autonomous", 0.0, 0],
     ["putNumber", "/DriverStation/Autonomous", 1.5, 0]
+  ],
+  "field-2d-multi.json": [
+    ...SCHEMA_OPS,
+    ["putStruct", "/Multi", 0.0, bytev(pose2d(1.0, 1.0, 0.0) + pose2d(4.0, 2.0, 0.5)), "Pose2d", true],
+    ["putStruct", "/Multi", 0.5, bytev(pose2d(1.2, 1.1, 0.1) + pose2d(4.1, 2.2, 0.6) + pose2d(6.0, 3.0, 1.0)), "Pose2d", true],
+    ["putStruct", "/Multi", 1.0, bytev(pose2d(1.5, 1.3, 0.2) + pose2d(4.3, 2.5, 0.7)), "Pose2d", true],
+    ["putStruct", "/Multi", 2.0, bytev(pose2d(2.0, 1.6, 0.3) + pose2d(4.6, 2.9, 0.8)), "Pose2d", true],
+    ["putStruct", "/Multi", 3.0, bytev(pose2d(2.4, 1.9, 0.4) + pose2d(5.0, 3.2, 0.9)), "Pose2d", true],
+    ["putStruct", "/Single", 0.0, bytev(pose2d(3.0, 2.0, 0.25)), "Pose2d", false],
+    ["putStruct", "/Single", 2.0, bytev(pose2d(5.0, 3.0, 1.25)), "Pose2d", false],
+    ["putStruct", "/Empty", 0.0, bytev(""), "Pose2d", true],
+    ["putStruct", "/Rot", 0.0, bytev(f64(0.75)), "Rotation2d", false],
+    ["putStruct", "/Rot", 1.5, bytev(f64(-1.25)), "Rotation2d", false],
+    ["putStruct", "/Vis1", 0.0, bytev(trans2d(0.5, 0.25) + trans2d(1.5, 0.75)), "Translation2d", true],
+    ["putStruct", "/Vis2", 0.0, bytev(pose2d(7.0, 3.5, 0.0)), "Pose2d", false],
+    ["putStruct", "/SwerveA", 0.0, bytev(moduleState(2.5, 0.0) + moduleState(-1.0, 0.5) + moduleState(0.0005, 1.0) + moduleState(4.0, -0.5)), "SwerveModuleState", true],
+    ["putStruct", "/SwerveB", 0.0, bytev(moduleState(0.25, 3.0) + moduleState(0.5, 2.0)), "SwerveModuleState", true],
+    ["putNumber", "/DriverStation/AllianceStation", 0.0, 1],
+    ["putNumber", "/DriverStation/AllianceStation", 1.75, 4],
+    ["putNumber", "/DriverStation/Enabled", 0.0, 1]
   ],
   "field-2d-trail.json": [
     ...SCHEMA_OPS,
@@ -684,6 +723,80 @@ const fixtures = [
     ]
   },
   {
+    id: "aliasing",
+    seed: 7217,
+    log: "field-2d-multi.json",
+    steps: [
+      { eval: sl([
+        item("/Multi", "robot", "Pose2d[]"),
+        item("/Rot", "rotationOverride", "Rotation2d"),
+        item("/Vis1", "vision", "Translation2d[]", { color: "#ffff00" }),
+        item("/Vis2", "vision", "Pose2d", { size: "bold" }),
+        item("/SwerveA", "swerveModuleVelocities", "SwerveModuleState[]"),
+        item("/SwerveB", "swerveModuleVelocities", "SwerveModuleState[]", { color: "#0000ff", arrangement: "1,0" }),
+        item("/Multi", "ghost", "Pose2d[]", { color: "#ff00ff" }),
+        item("/SwerveA", "swerveModuleVelocities", "SwerveModuleState[]", { arrangement: "3,2,1,0" }),
+        item("/Vis1", "vision", "Translation2d[]"),
+        item("/Single", "robot", "Pose2d", { bumpers: "#00ff00" }),
+        item("/Rot", "rotationOverride", "Rotation2d")
+      ]) },
+      { frames: 1 },
+      { eval: selTime(0.25) },
+      { frames: 1 },
+      { eval: selTime(1.0) },
+      { frames: 1 },
+      { eval: selTime(2.5) },
+      { frames: 1 },
+      { eval: `(() => { window.preferences.coordinateSystem = "wall-alliance"; })()` },
+      { eval: selTime(1.0) },
+      { frames: 1 },
+      { eval: selTime(2.0) },
+      { frames: 1 },
+      { eval: field("FTC:FTC Decode") },
+      { eval: `(() => { window.preferences.coordinateSystem = "automatic"; })()` },
+      { frames: 1 }
+    ]
+  },
+  {
+    id: "pan",
+    seed: 7218,
+    log: "field-2d-multi.json",
+    steps: [
+      { eval: sl([item("/Single", "robot", "Pose2d"), item("/Empty", "robot", "Pose2d[]")]) },
+      { eval: selTime(1.0) },
+      { frames: 1 },
+      { eval: `${rend} r.set2DCamera(1); })()` },
+      { frames: 1 },
+      { eval: sl([item("/Empty", "robot", "Pose2d[]"), item("/Single", "robot", "Pose2d")]) },
+      { frames: 1 },
+      { eval: `${rend} r.set2DCamera(2); })()` },
+      { frames: 1 },
+      { eval: `${rend} r.set2DCamera(0); })()` },
+      { frames: 1 },
+      { eval: `${rend} const c = r.SCROLL_CONTAINER; const d = (e) => { c.dispatchEvent(e); window.__f2dCamera(r); }; d(new MouseEvent("mousedown", { button: 0, clientX: 400, clientY: 300 })); d(new MouseEvent("mousemove", { clientX: 420, clientY: 290 })); d(new MouseEvent("mousemove", { clientX: 470, clientY: 330 })); d(new MouseEvent("mouseup", { button: 0, clientX: 470, clientY: 330 })); })()` },
+      { frames: 1 },
+      { eval: `${rend} const c = r.SCROLL_CONTAINER; const d = (e) => { c.dispatchEvent(e); window.__f2dCamera(r); }; d(new MouseEvent("mousemove", { clientX: 600, clientY: 250 })); c.scrollTop = c.scrollTop - 120; c.dispatchEvent(new Event("scroll")); })()` },
+      { frames: 1 },
+      { eval: `${rend} const c = r.SCROLL_CONTAINER; const d = (e) => { c.dispatchEvent(e); window.__f2dCamera(r); }; d(new MouseEvent("mousedown", { button: 0, shiftKey: true, clientX: 300, clientY: 200 })); d(new MouseEvent("mousemove", { clientX: 320, clientY: 210 })); d(new MouseEvent("mousedown", { button: 0, clientX: 320, clientY: 210 })); d(new MouseEvent("mousemove", { clientX: 2000, clientY: 1500 })); d(new MouseEvent("mouseup", { button: 0, clientX: 2000, clientY: 1500 })); })()` },
+      { frames: 1 },
+      { eval: `${rend} const c = r.SCROLL_CONTAINER; const d = (e) => { c.dispatchEvent(e); window.__f2dCamera(r); }; c.scrollTop = c.scrollTop + 5000; c.dispatchEvent(new Event("scroll")); })()` },
+      { frames: 1 },
+      { eval: `${rend} r.restoreState({ zoom: 3, pan: ["5", [2]], trackingMode: 0 }); })()` },
+      { eval: `${rend} const c = r.SCROLL_CONTAINER; const d = (e) => { c.dispatchEvent(e); window.__f2dCamera(r); }; d(new MouseEvent("mousedown", { button: 0, clientX: 100, clientY: 100 })); d(new MouseEvent("mousemove", { clientX: 90, clientY: 95 })); d(new MouseEvent("mouseup", { button: 0, clientX: 90, clientY: 95 })); r.saveState(); })()` },
+      { eval: `${rend} r.saveState(); })()` },
+      { frames: 1 },
+      { eval: `${rend} r.saveState(); })()` },
+      { eval: `${rend} r.restoreState({ zoom: 2, pan: [{}, null], trackingMode: 0 }); r.saveState(); })()` },
+      { frames: 1 },
+      { eval: `${rend} r.saveState(); })()` },
+      { eval: `${rend} r.restoreState({ zoom: 1.5, pan: ["x", -10], trackingMode: 0 }); })()` },
+      { frames: 1 },
+      { eval: field("FTC:FTC Decode") },
+      { frames: 1 },
+      { eval: `${rend} r.saveState(); })()` }
+    ]
+  },
+  {
     id: "swerve",
     seed: 7212,
     log: "field-2d-struct.json",
@@ -772,7 +885,7 @@ for (const f of fixtures) {
   const fixture = { sourceLists: true, seed: f.seed };
   if (f.window) fixture.window = f.window;
   if (f.preferences) fixture.preferences = f.preferences;
-  if (f.assets !== undefined) fixture.assets = f.assets;
+  fixture.assets = f.assets !== undefined ? f.assets : ASSETS_ALL;
   fixture.images = f.images !== undefined ? f.images : IMAGES_ALL;
   fixture.steps = [
     { eval: RECORDER },
