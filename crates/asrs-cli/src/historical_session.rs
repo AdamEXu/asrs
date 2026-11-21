@@ -197,7 +197,10 @@ impl SourceHost for Host {
                     Value::Array(
                         files
                             .iter()
-                            .map(|f| f.as_ref().map_or(Value::Null, |f| Value::number(f.len() as f64)))
+                            .map(|f| {
+                                f.as_ref()
+                                    .map_or(Value::Null, |f| Value::number(f.len() as f64))
+                            })
                             .collect(),
                     ),
                 ),
@@ -390,7 +393,9 @@ impl Session {
                     }
                     Queued::Main(reply) => {
                         for root in self.open.clone() {
-                            self.with_root(root, |source, cx| source.handle_main_message(&reply, cx));
+                            self.with_root(root, |source, cx| {
+                                source.handle_main_message(&reply, cx)
+                            });
                         }
                     }
                 }
@@ -410,8 +415,9 @@ impl Session {
                 Some(WorkerMessage::Response(response)) => {
                     let uuid = slot.source.clone();
                     if let Some(root) = self.route(&uuid) {
-                        let result = self
-                            .with_root(root, |source, cx| source.worker_message(&uuid, response, cx));
+                        let result = self.with_root(root, |source, cx| {
+                            source.worker_message(&uuid, response, cx)
+                        });
                         self.page_result(result)?;
                     }
                     self.microtasks();
@@ -419,7 +425,9 @@ impl Session {
                 Some(WorkerMessage::Done(end)) => {
                     slot.pending -= 1;
                     match end {
-                        Err(Abort::NeverReturns) if self.stop_on_hang => return Err(End::NeverReturns),
+                        Err(Abort::NeverReturns) if self.stop_on_hang => {
+                            return Err(End::NeverReturns);
+                        }
                         Err(Abort::NeverReturns) => slot.hung = true,
                         Err(Abort::Unmodeled(what)) => return Err(End::Unmodeled(what)),
                         Ok(()) | Err(Abort::Threw) => {}
@@ -532,7 +540,12 @@ impl Session {
             }
         }
         let statuses: Vec<&str> = self.host.statuses.iter().map(|s| s.name()).collect();
-        dump_log(&self.log.to_serialized(), phase, &statuses.join(","), &loading)
+        dump_log(
+            &self.log.to_serialized(),
+            phase,
+            &statuses.join(","),
+            &loading,
+        )
     }
 
     fn step(&mut self, index: usize, step: &Json) -> Result<(), StepError> {
@@ -551,7 +564,8 @@ impl Session {
             "tick" => self.tick(),
             "frame" => self.frame(number(step, "ms")?),
             "pick" => {
-                self.host.active = self.pick(&numbers(step, "indices")?, &numbers(step, "parents")?);
+                self.host.active =
+                    self.pick(&numbers(step, "indices")?, &numbers(step, "parents")?);
                 let fields = Value::Array(self.host.active.iter().map(string_value).collect());
                 self.host.trace(Value::object([
                     ("event", Value::string("active")),
@@ -560,7 +574,11 @@ impl Session {
             }
             "loadAll" => self.load_all(),
             "loadEverything" => return Ok(self.load_everything()?),
-            "stop" => self.stop(step.get("source").and_then(Json::as_f64).map(|s| s as usize)),
+            "stop" => self.stop(
+                step.get("source")
+                    .and_then(Json::as_f64)
+                    .map(|s| s as usize),
+            ),
             "dump" => {
                 let lines = self.dump(&text(step, "phase")?);
                 if let Some(trace) = &mut self.host.trace {
@@ -577,7 +595,11 @@ impl Session {
     }
 
     fn take_trace(&mut self) -> Vec<String> {
-        self.host.trace.as_mut().map(std::mem::take).unwrap_or_default()
+        self.host
+            .trace
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
     }
 }
 
@@ -628,7 +650,10 @@ fn numbers(step: &Json, key: &str) -> Result<Vec<f64>, String> {
         .and_then(Json::as_array)
         .ok_or_else(|| format!("step needs an array {key:?}"))?
         .iter()
-        .map(|v| v.as_f64().ok_or_else(|| format!("{key:?} must hold numbers")))
+        .map(|v| {
+            v.as_f64()
+                .ok_or_else(|| format!("{key:?} must hold numbers"))
+        })
         .collect()
 }
 
@@ -660,7 +685,10 @@ pub fn run(args: &[String]) -> ExitCode {
             .unwrap_or_default();
         let mut lines = vec![Value::object([("session", Value::string(&name))]).encode()];
         let mut session = Session::new(true, false);
-        let steps = spec.get("steps").and_then(Json::as_array).unwrap_or_default();
+        let steps = spec
+            .get("steps")
+            .and_then(Json::as_array)
+            .unwrap_or_default();
         for (i, step) in steps.iter().enumerate() {
             let result = session.step(i, step);
             lines.extend(session.take_trace());
@@ -672,7 +700,9 @@ pub fn run(args: &[String]) -> ExitCode {
                     StepError::End(End::NeverReturns) => {
                         Value::object([("error", Value::string("a worker never returns"))])
                     }
-                    StepError::Invalid(message) => Value::object([("error", Value::string(&message))]),
+                    StepError::Invalid(message) => {
+                        Value::object([("error", Value::string(&message))])
+                    }
                 };
                 lines.push(line.encode());
                 break;

@@ -495,7 +495,11 @@ impl HistoricalDataSource {
         }
     }
 
-    fn handle_worker_message(&mut self, response: Response, cx: &mut PageContext<'_>) -> Result<(), Abort> {
+    fn handle_worker_message(
+        &mut self,
+        response: Response,
+        cx: &mut PageContext<'_>,
+    ) -> Result<(), Abort> {
         match response {
             Response::Progress(value) => {
                 self.mock_progress_active = false;
@@ -521,7 +525,8 @@ impl HistoricalDataSource {
                 for field in fields {
                     let key = apply_key_prefix(&self.key_prefix, &field.key);
                     let mut data = field.data.structured_clone();
-                    data.timestamps = Arc::new(data.timestamps.iter().map(|t| t + self.offset).collect());
+                    data.timestamps =
+                        Arc::new(data.timestamps.iter().map(|t| t + self.offset).collect());
                     cx.log.set_field(&key, LogField::from_serialized(data));
                     if field.generated_parent {
                         cx.log.set_generated_parent(&key);
@@ -630,7 +635,8 @@ impl HistoricalDataSource {
         cx: &mut PageContext<'_>,
     ) {
         let log = &*cx.log;
-        let field_keys: Vec<&JsString> = log.field_keys().filter(|k| !log.is_generated(k)).collect();
+        let field_keys: Vec<&JsString> =
+            log.field_keys().filter(|k| !log.is_generated(k)).collect();
         for &key in &field_keys {
             if is_schema(key) {
                 request_fields.insert(key.clone());
@@ -775,4 +781,211 @@ fn with_slash(key: &JsString) -> JsString {
     let mut out = key.clone();
     out.push_unit(u16::from(b'/'));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use asrs_js::time::{SetClock, SetRng};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct Recorder {
+        log: Vec<String>,
+        intervals: Vec<String>,
+    }
+
+    impl SourceHost for Recorder {
+        fn now(&self) -> f64 {
+            0.0
+        }
+        fn send_main_message(&mut self, request: MainRequest) {
+            if let MainRequest::HistoricalStart { path, .. } = request {
+                self.log.push(format!("main {}", path.to_string_lossy()));
+            }
+        }
+        fn set_timeout(&mut self, _: Timeout) {
+            self.log.push("timeout".into());
+        }
+        fn set_interval(&mut self, source: &str) {
+            self.intervals.push(source.to_owned());
+        }
+        fn clear_interval(&mut self, source: &str) {
+            self.intervals.retain(|s| s != source);
+        }
+        fn request_animation_frame(&mut self, _: &str) {}
+        fn worker_realm(&mut self) -> (Box<dyn Rng + Send>, Box<dyn Clock + Send>) {
+            (Box::new(SetRng::new(vec![0.5])), Box::new(SetClock(0.0)))
+        }
+        fn spawn_worker(&mut self, _: &str, name: WorkerName, _: Box<dyn DecodeWorker>) {
+            self.log.push(format!("worker {}", name.script()));
+        }
+        fn post_worker(&mut self, _: &str, _: Request) {
+            self.log.push("post".into());
+        }
+        fn terminate_worker(&mut self, _: &str) {
+            self.log.push("terminate".into());
+        }
+        fn active_fields(&mut self) -> Vec<JsString> {
+            Vec::new()
+        }
+        fn event(&mut self, event: SourceEvent) {
+            if let SourceEvent::Status {
+                status,
+                custom_error,
+            } = event
+            {
+                let error = custom_error.map(|e| format!(" ({})", e.to_string_lossy()));
+                self.log
+                    .push(format!("{}{}", status.name(), error.unwrap_or_default()));
+            }
+        }
+    }
+
+    fn open(
+        path: &str,
+        host: &mut Recorder,
+        log: &mut Log,
+        realm: &mut JsRealm,
+    ) -> HistoricalDataSource {
+        let mut source = HistoricalDataSource::new(realm);
+        let mut cx = PageContext { log, realm, host };
+        source.open_file(&JsString::from(path), &JsString::new(), &mut cx);
+        source
+    }
+
+    fn reply(
+        source: &HistoricalDataSource,
+        files: Vec<Option<Arc<[u8]>>>,
+        error: Option<&str>,
+    ) -> MainReply {
+        MainReply {
+            uuid: source.uuid().to_owned(),
+            files,
+            error: error.map(JsString::from),
+        }
+    }
+
+    #[test]
+    fn worker_selection_takes_the_last_matching_extension() {
+        let select = |p: &str| select_worker(&JsString::from(p));
+        assert_eq!(select("a.dsevents"), Some(WorkerName::DsLog));
+        assert_eq!(select("child.x.log"), Some(WorkerName::RoadRunner));
+        assert_eq!(select("a.wpilogxz"), Some(WorkerName::Wpilog));
+        assert_eq!(select("a.txt"), None);
+    }
+
+    #[test]
+    fn unreadable_files_and_unknown_extensions_end_in_error() {
+        let (mut log, mut realm) = (
+            Log::new(true),
+            JsRealm::new(Box::new(SetRng::new(vec![0.25]))),
+        );
+        let mut host = Recorder::default();
+        let mut source = open("/x/a.dsevents", &mut host, &mut log, &mut realm);
+        let missing = reply(&source, vec![None, None], None);
+        let mut cx = PageContext {
+            log: &mut log,
+            realm: &mut realm,
+            host: &mut host,
+        };
+        source.handle_main_message(&missing, &mut cx);
+        source.handle_main_message(&missing, &mut cx);
+        assert_eq!(
+            host.log,
+            ["Reading", "main /x/a.dslog", "DecodingInitial", "Error"]
+        );
+        assert!(host.intervals.is_empty());
+
+        let mut host = Recorder::default();
+        let mut source = open("/x/a.txt", &mut host, &mut log, &mut realm);
+        let data = reply(&source, vec![Some(Arc::from(&b"1"[..]))], Some("why"));
+        let mut cx = PageContext {
+            log: &mut log,
+            realm: &mut realm,
+            host: &mut host,
+        };
+        source.handle_main_message(&data, &mut cx);
+        assert_eq!(
+            host.log,
+            ["Reading", "main /x/a.txt", "DecodingInitial", "Error (why)"]
+        );
+    }
+
+    #[test]
+    fn stopped_is_terminal_and_other_uuids_are_ignored() {
+        let (mut log, mut realm) = (
+            Log::new(true),
+            JsRealm::new(Box::new(SetRng::new(vec![0.75]))),
+        );
+        let mut host = Recorder::default();
+        let mut source = open("a.csv", &mut host, &mut log, &mut realm);
+        let mut other = reply(&source, vec![Some(Arc::from(&b"x"[..]))], None);
+        other.uuid.push('!');
+        let mut cx = PageContext {
+            log: &mut log,
+            realm: &mut realm,
+            host: &mut host,
+        };
+        source.handle_main_message(&other, &mut cx);
+        source.stop(&mut cx);
+        let data = reply(&source, vec![Some(Arc::from(&b"x"[..]))], None);
+        source.handle_main_message(&data, &mut cx);
+        source.stop(&mut cx);
+        assert_eq!(source.status(), Status::Stopped);
+        assert_eq!(host.log, ["Reading", "main a.csv", "Stopped"]);
+        assert!(host.intervals.is_empty());
+    }
+
+    #[test]
+    fn an_unchanged_request_set_posts_nothing_and_load_all_puts_schemas_first() {
+        let (mut log, mut realm) = (
+            Log::new(true),
+            JsRealm::new(Box::new(SetRng::new(vec![0.5]))),
+        );
+        let mut host = Recorder::default();
+        let mut source = open("a.wpilog", &mut host, &mut log, &mut realm);
+        let data = reply(&source, vec![Some(Arc::from(&b"x"[..]))], None);
+        let mut worker_log = Log::new(true);
+        for key in [
+            "/Data",
+            "/.schema/struct:A",
+            "/DriverStation/Enabled",
+            "/Other",
+        ] {
+            worker_log.create_blank_field(&JsString::from(key), LoggableType::Raw);
+        }
+        let mut cx = PageContext {
+            log: &mut log,
+            realm: &mut realm,
+            host: &mut host,
+        };
+        source.handle_main_message(&data, &mut cx);
+        let initial = Response::Initial {
+            log: Box::new(worker_log.to_serialized()),
+            is_partial: true,
+        };
+        source
+            .worker_message(&source.uuid().to_owned(), initial, &mut cx)
+            .unwrap();
+        let uuid = source.uuid().to_owned();
+        source.fire_interval(&uuid, &mut cx);
+        assert_eq!(source.status(), Status::Idle);
+        assert!(!source.load_all_fields(&mut cx));
+        assert_eq!(source.status(), Status::DecodingField);
+        let loading: Vec<String> = source
+            .get_loading_fields()
+            .iter()
+            .map(|k| k.to_string_lossy())
+            .collect();
+        assert_eq!(
+            loading,
+            [
+                "/.schema/struct:A",
+                "/Data",
+                "/DriverStation/Enabled",
+                "/Other"
+            ]
+        );
+    }
 }

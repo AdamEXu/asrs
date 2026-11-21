@@ -16,7 +16,8 @@ use crate::oracle::{self, Paths};
 use crate::parity::{SHOWN, decode_cases, finish, plant};
 use crate::{Result, cargo, public};
 
-pub(crate) const USAGE: &str = "usage: cargo xtask parity historical [<log file>...] [--jobs N] [--shard N] [--plant]
+pub(crate) const USAGE: &str =
+    "usage: cargo xtask parity historical [<log file>...] [--jobs N] [--shard N] [--plant]
 
 For every log file of the decode suite (corpus a and b, the public log cache, the fuzz corpora)
 or just the files listed, runs two scripted hub sessions through both sides and compares the
@@ -49,7 +50,10 @@ fn numbers(values: &[f64]) -> Json {
 }
 
 fn open(path: &str, prefix: &str, settle: bool) -> Json {
-    let mut extra = vec![("path", Json::string(path)), ("prefix", Json::string(prefix))];
+    let mut extra = vec![
+        ("path", Json::string(path)),
+        ("prefix", Json::string(prefix)),
+    ];
     if !settle {
         extra.push(no_settle());
     }
@@ -258,7 +262,9 @@ pub(crate) fn run(args: &[String]) -> Result {
             "--shard" => shard = count("--shard")?,
             "--plant" => plant_first = true,
             "--help" => return Err(USAGE.to_owned()),
-            flag if flag.starts_with("--") => return Err(format!("unknown option {flag}\n\n{USAGE}")),
+            flag if flag.starts_with("--") => {
+                return Err(format!("unknown option {flag}\n\n{USAGE}"));
+            }
             _ => positional.push(PathBuf::from(arg)),
         }
     }
@@ -297,7 +303,10 @@ pub(crate) fn run(args: &[String]) -> Result {
         shards.len()
     );
 
-    type Outputs = (std::result::Result<Vec<u8>, String>, std::result::Result<Vec<u8>, String>);
+    type Outputs = (
+        std::result::Result<Vec<u8>, String>,
+        std::result::Result<Vec<u8>, String>,
+    );
     let results: Vec<Mutex<Option<Outputs>>> = shards.iter().map(|_| Mutex::new(None)).collect();
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
@@ -315,7 +324,8 @@ pub(crate) fn run(args: &[String]) -> Result {
                     let mut rust = Command::new(&cli);
                     oracle::pin_environment(&mut rust, oracle::DEFAULT_ZONE);
                     let rust_out = run_capture(rust.arg("historical-session").arg(&file));
-                    *results[i].lock().expect("shard result poisoned") = Some((oracle_out, rust_out));
+                    *results[i].lock().expect("shard result poisoned") =
+                        Some((oracle_out, rust_out));
                     let n = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if n % 20 == 0 || n == shards.len() {
                         eprintln!("  {n}/{} shards", shards.len());
@@ -348,16 +358,30 @@ pub(crate) fn run(args: &[String]) -> Result {
         let (want, mut got) = (split(&oracle_out), split(&rust_out));
         for (name, _) in chunk.iter() {
             let (Some(want), Some(got)) = (want.get(name), got.get_mut(name)) else {
-                failures.push(format!("{name}: missing from the {} output", if want.contains_key(name) { "asrs-cli" } else { "oracle" }));
+                failures.push(format!(
+                    "{name}: missing from the {} output",
+                    if want.contains_key(name) {
+                        "asrs-cli"
+                    } else {
+                        "oracle"
+                    }
+                ));
                 continue;
             };
             if !planted {
-                let mut lines: Vec<String> = String::from_utf8_lossy(got).lines().map(str::to_owned).collect();
+                let mut lines: Vec<String> = String::from_utf8_lossy(got)
+                    .lines()
+                    .map(str::to_owned)
+                    .collect();
                 if let Some(at) = lines.iter().position(|l| l.contains(r#"{"n":""#))
                     && let Some(flipped) = plant(&lines[at])
                 {
                     lines[at] = flipped;
-                    *got = lines.iter().map(|l| format!("{l}\n")).collect::<String>().into_bytes();
+                    *got = lines
+                        .iter()
+                        .map(|l| format!("{l}\n"))
+                        .collect::<String>()
+                        .into_bytes();
                     planted = true;
                     eprintln!("planted a one-bit change in the Rust trace of {name}");
                 }
@@ -371,7 +395,9 @@ pub(crate) fn run(args: &[String]) -> Result {
                 let prefix = &got[..at];
                 if want.starts_with(prefix) {
                     unmodeled.push(name.clone());
-                } else if let Some(report) = diff::report_bytes(&want[..prefix.len().min(want.len())], prefix) {
+                } else if let Some(report) =
+                    diff::report_bytes(&want[..prefix.len().min(want.len())], prefix)
+                {
                     failures.push(format!("{name}: before the unmodeled step, {report}"));
                 } else {
                     failures.push(format!("{name}: asrs-cli printed more than the oracle"));

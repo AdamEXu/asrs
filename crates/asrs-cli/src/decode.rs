@@ -98,21 +98,28 @@ pub fn run(args: &[String]) -> ExitCode {
     let root = session.open(&JsString::from(path.as_str()), &JsString::new());
     let mut out = String::new();
     let mut dump = |session: &Session, phase: &str| {
-        let loading: Vec<JsString> = session.source(root).get_loading_fields().into_iter().collect();
+        let loading: Vec<JsString> = session
+            .source(root)
+            .get_loading_fields()
+            .into_iter()
+            .collect();
         let serialized = session.log().to_serialized();
         for line in dump_log(&serialized, phase, session.status(root).name(), &loading) {
             out.push_str(&line);
             out.push('\n');
         }
     };
-    let result = session.settle().map(|()| dump(&session, "initial")).and_then(|()| {
-        if initial_only {
-            return Ok(());
-        }
-        session.load_everything()?;
-        dump(&session, "full");
-        Ok(())
-    });
+    let result = session
+        .settle()
+        .map(|()| dump(&session, "initial"))
+        .and_then(|()| {
+            if initial_only {
+                return Ok(());
+            }
+            session.load_everything()?;
+            dump(&session, "full");
+            Ok(())
+        });
     match result {
         Ok(()) => {
             print!("{out}");

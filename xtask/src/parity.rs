@@ -349,7 +349,6 @@ impl DecodeMode {
             DecodeMode::Worker => "decode-worker",
         }
     }
-
 }
 
 /// The `.dslog`/`.dsevents`/`.wpilog`/`.rlog`/`.log`/`.csv` files the suite decodes: corpora a
