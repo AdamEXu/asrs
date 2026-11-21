@@ -116,7 +116,7 @@ fn random_case(arrays: &mut HashMap<String, JsValue>, record: &Record) -> Result
         Err(StatsError::Thrown(e)) if e.name == "Unmodeled" => format!("unmodeled {}", e.message),
         Err(StatsError::Thrown(e)) => format!("throw {}", thrown(&e).encode()),
     };
-    if actual == expected {
+    if asrs_parity::vectors::encoded_match(&expected, &actual) {
         Ok(())
     } else {
         Err(format!(

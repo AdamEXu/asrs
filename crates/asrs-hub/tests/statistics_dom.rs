@@ -1502,7 +1502,7 @@ fn compare(emitted: &[Emit], records: &[Record]) -> Result<(), String> {
             let expected = record
                 .value(key)
                 .map_err(|e| format!("line {}: missing {key}: {}", record.line, e.0))?;
-            if *value != expected {
+            if !vectors::values_match(&expected, value) {
                 return Err(format!(
                     "line {} ({key}):\n  expected {}\n  actual   {}",
                     record.line,

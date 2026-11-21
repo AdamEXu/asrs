@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 
 use crate::ci::{skip_in_ci, skip_notice};
 use crate::cve1::{DecodeError, Value};
@@ -8,7 +9,6 @@ use crate::json::{self, Json};
 use crate::protocol::{Request, Response};
 
 pub const VECTORS_ENV: &str = "ASRS_PARITY_VECTORS";
-const X86_64_PLATFORM_VECTORS_ISSUE: &str = "https://github.com/AdamEXu/asrs/issues/258";
 const ZSTD_LEVEL: i32 = 19;
 const SHOWN_FAILURES: usize = 5;
 
@@ -25,6 +25,54 @@ pub fn vectors_dir() -> PathBuf {
     std::env::var_os(VECTORS_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace_root().join("parity/vectors"))
+}
+
+/// x86_64 makes NaNs with other sign and payload bits than the aarch64 hosts every vector
+/// comes from (its default NaN is `0xfff8000000000000`), so x86_64 builds compare NaN bits
+/// loosely until there are x86_64 vectors. Every other bit is still compared exactly.
+const LOOSE_NAN_BITS: bool = cfg!(target_arch = "x86_64");
+static LOOSE_NAN_NOTICE: Once = Once::new();
+
+/// Whether CVE-1 texts `expected` and `actual` match: equal, or on x86_64 equal once every
+/// NaN is the canonical `0x7ff8000000000000`.
+pub fn encoded_match(expected: &str, actual: &str) -> bool {
+    if expected == actual {
+        return true;
+    }
+    if !LOOSE_NAN_BITS || canonical_nans(expected) != canonical_nans(actual) {
+        return false;
+    }
+    LOOSE_NAN_NOTICE.call_once(|| {
+        skip_notice(
+            "exact NaN bits",
+            "x86_64 NaN sign and payload bits differ from the aarch64 vectors",
+        );
+    });
+    true
+}
+
+/// [`encoded_match`] for decoded values.
+pub fn values_match(expected: &Value, actual: &Value) -> bool {
+    expected == actual || encoded_match(&expected.encode(), &actual.encode())
+}
+
+fn canonical_nans(text: &str) -> String {
+    const NUMBER: &str = "\"n\":\"";
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find(NUMBER) {
+        let (head, tail) = rest.split_at(i + NUMBER.len());
+        out.push_str(head);
+        rest = tail;
+        if let Some(bits) = tail.get(..16).and_then(|h| u64::from_str_radix(h, 16).ok())
+            && f64::from_bits(bits).is_nan()
+        {
+            out.push_str("7ff8000000000000");
+            rest = &tail[16..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Where vectors derived from public logs without a redistribution license live:
@@ -190,10 +238,7 @@ pub fn check_local_fn_vectors(id: &str, f: impl FnMut(&FnCase<'_>) -> Response) 
 pub fn check_platform_fn_vectors(spec: &str, f: impl FnMut(&FnCase<'_>) -> Response) {
     let id = platform_vector(spec);
     if std::env::consts::ARCH == "x86_64" && vector_path(&vectors_dir(), &id).is_none() {
-        skip_notice(
-            &id,
-            &format!("no x86_64 platform vectors yet ({X86_64_PLATFORM_VECTORS_ISSUE})"),
-        );
+        skip_notice(&id, "x86_64 platform vectors have not been generated yet");
         return;
     }
     check_fn_vectors(&id, f);
@@ -215,7 +260,7 @@ fn check_fn_records(id: &str, records: &[Record], mut f: impl FnMut(&FnCase<'_>)
         let case = FnCase { record, request };
         let actual = f(&case).encode();
         let expected = expected.encode();
-        if actual != expected {
+        if !encoded_match(&expected, &actual) {
             let detail = diff::report_responses(&expected, &actual).unwrap_or_default();
             failures.push(format!(
                 "line {}: {}\n  {}",
@@ -294,4 +339,18 @@ macro_rules! record_vectors {
             $crate::vectors::check_records($id, $f)
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_nans_rewrites_only_nan_numbers() {
+        let text = r#"[{"n":"fff8000000000000"},{"n":"7ff8000000000123"},{"n":"7ff0000000000000"},{"n":"3ff0000000000000"},"n"]"#;
+        assert_eq!(
+            canonical_nans(text),
+            r#"[{"n":"7ff8000000000000"},{"n":"7ff8000000000000"},{"n":"7ff0000000000000"},{"n":"3ff0000000000000"},"n"]"#
+        );
+    }
 }

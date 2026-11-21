@@ -60,8 +60,9 @@ ubuntu-latest job runs. CI sets `ASRS_CI=1`, under which these tests skip with a
 Tests that need the Electron oracle (the `*_sweep` tests) are `#[ignore]`d everywhere, and no
 default test reads the generated corpora under `target/parity`. On x86_64 the per-platform
 vector tests (`math_vectors::math_remainder`, `util_vectors::util_platform_nan`,
-`statistics_vectors::simple_statistics`) skip until x86_64 vectors exist
-([#258](https://github.com/AdamEXu/asrs/issues/258)).
+`statistics_vectors::simple_statistics`) skip until x86_64 vectors exist, and NaN sign and
+payload bits are compared loosely, since x86_64 makes different NaNs from the aarch64 hosts
+the vectors come from; every other bit is still compared exactly.
 
 ## License
 
