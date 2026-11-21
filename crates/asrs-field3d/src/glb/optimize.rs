@@ -10,7 +10,9 @@ use asrs_model::preferences::Field3dMode;
 
 use super::{MeshMaterial, ObjectKind, SceneGraph};
 use crate::render::{Geometry, Mesh, PhongMaterial, Side};
-use crate::three::{ArrayData, BufferAttribute, BufferGeometry, Color, ObjectId, Vector3, merge_geometries};
+use crate::three::{
+    ArrayData, BufferAttribute, BufferGeometry, Color, ObjectId, Vector3, merge_geometries,
+};
 
 pub const LOW_POWER_MAX_RADIUS: f64 = 0.08;
 pub const STANDARD_MAX_RADIUS: f64 = 0.04;
@@ -132,7 +134,10 @@ pub fn optimize_geometries(
             geometry.delete_attribute(&name);
         }
 
-        let position = geometry.attribute("position").expect("checked above").clone();
+        let position = geometry
+            .attribute("position")
+            .expect("checked above")
+            .clone();
         let mut is_transparent = false;
         if let MeshMaterial::Single(material) = &material {
             is_transparent = material.transparent && material.opacity < 0.75;
@@ -142,7 +147,10 @@ pub fn optimize_geometries(
                 for (i, c) in colors.iter_mut().enumerate() {
                     *c = math::to_uint8(rgb[i % 3]);
                 }
-                geometry.set_attribute("color", BufferAttribute::new(ArrayData::Uint8(colors), 3, true));
+                geometry.set_attribute(
+                    "color",
+                    BufferAttribute::new(ArrayData::Uint8(colors), 3, true),
+                );
             }
         }
 
@@ -157,7 +165,8 @@ pub fn optimize_geometries(
             if dist > prev { dist } else { prev }
         });
         let name = &graph.node(id).data.name;
-        let include = !(enable_simplification && !name.includes(&no_simplify, None) && max_radius < limit);
+        let include =
+            !(enable_simplification && !name.includes(&no_simplify, None) && max_radius < limit);
         if !include {
             continue;
         }
@@ -182,7 +191,10 @@ pub fn optimize_geometries(
         } else {
             &mut normal
         };
-        bucket.entry(output_index as u64).or_default().push(geometry);
+        bucket
+            .entry(output_index as u64)
+            .or_default()
+            .push(geometry);
     }
 
     let merged = |buckets: Buckets, name: &'static str| -> Vec<OptimizedMesh> {

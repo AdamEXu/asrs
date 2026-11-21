@@ -5,6 +5,8 @@
 //! `optimizeGeometries` (`loader`), `field3d/OptimizeGeometries.ts` (`optimize`), and the
 //! `loadField` / `loadRobot` workers as a background job (`workers`).
 
+#![deny(clippy::disallowed_methods)]
+
 mod loader;
 mod optimize;
 mod workers;

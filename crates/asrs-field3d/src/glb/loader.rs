@@ -9,7 +9,9 @@ use asrs_js::string::encoding::TextDecoder;
 use asrs_js::value::JsValue;
 
 use super::{MeshMaterial, ObjectKind, SceneGraph, SceneObject, SourceMaterial, to_number, truthy};
-use crate::three::{ArrayData, ArrayKind, BufferAttribute, BufferGeometry, Matrix4, ObjectId, Quaternion, Vector3};
+use crate::three::{
+    ArrayData, ArrayKind, BufferAttribute, BufferGeometry, Matrix4, ObjectId, Quaternion, Vector3,
+};
 
 /// Why `GLTFLoader` rejected a file (upstream's worker then never answers), or a glTF feature
 /// the port does not model.
@@ -73,7 +75,13 @@ pub fn sanitize_node_name(name: &JsString) -> JsString {
     let units = name
         .units()
         .iter()
-        .map(|&u| if is_js_whitespace(u) { u16::from(b'_') } else { u })
+        .map(|&u| {
+            if is_js_whitespace(u) {
+                u16::from(b'_')
+            } else {
+                u
+            }
+        })
         .filter(|&u| !matches!(u, 0x5b | 0x5d | 0x2e | 0x3a | 0x2f))
         .collect();
     JsString::from_units(units)
@@ -144,15 +152,21 @@ fn element<'a>(array: Option<&'a JsValue>, index: &JsValue) -> Option<&'a JsValu
     let i = index_of(index)?;
     match array? {
         JsValue::Array(items) => items.get(i),
-        object @ JsValue::Object(_) => object.get(&i.to_string()),
+        object @ JsValue::Object(_) => object.get(&format!("{i}")),
         _ => None,
     }
 }
 
 fn index_of(value: &JsValue) -> Option<usize> {
     match value {
-        JsValue::Number(n) if *n >= 0.0 && n.fract() == 0.0 && *n < 4294967295.0 => Some(*n as usize),
-        JsValue::String(s) => s.as_string()?.parse().ok().filter(|i: &usize| i.to_string() == s.to_string_lossy()),
+        JsValue::Number(n) if *n >= 0.0 && n.fract() == 0.0 && *n < 4294967295.0 => {
+            Some(*n as usize)
+        }
+        JsValue::String(s) => {
+            let n = asrs_js::number::to_number(s.units());
+            let i = index_of(&JsValue::Number(n))?;
+            (format!("{i}") == s.to_string_lossy()).then_some(i)
+        }
         _ => None,
     }
 }
@@ -174,7 +188,12 @@ fn items(value: Option<&JsValue>) -> &[JsValue] {
 fn number_elem(value: Option<&JsValue>, i: usize) -> f64 {
     match value {
         Some(JsValue::Array(items)) => to_number(items.get(i)),
-        Some(JsValue::String(s)) => to_number(s.units().get(i).map(|&u| JsValue::String(JsString::from_units(vec![u]))).as_ref()),
+        Some(JsValue::String(s)) => to_number(
+            s.units()
+                .get(i)
+                .map(|&u| JsValue::String(JsString::from_units(vec![u])))
+                .as_ref(),
+        ),
         _ => f64::NAN,
     }
 }
@@ -280,10 +299,17 @@ fn item_size(type_name: Option<&JsValue>) -> Result<usize> {
 }
 
 /// `new TypedArray(buffer, byteOffset, length)`.
-fn typed_array(buffer: &[u8], kind: ArrayKind, byte_offset: usize, length: usize) -> Result<ArrayData> {
+fn typed_array(
+    buffer: &[u8],
+    kind: ArrayKind,
+    byte_offset: usize,
+    length: usize,
+) -> Result<ArrayData> {
     let width = element_bytes(kind);
-    if byte_offset % width != 0 {
-        return reject("RangeError: start offset of TypedArray should be a multiple of its element size");
+    if !byte_offset.is_multiple_of(width) {
+        return reject(
+            "RangeError: start offset of TypedArray should be a multiple of its element size",
+        );
     }
     let Some(bytes) = length
         .checked_mul(width)
@@ -295,12 +321,54 @@ fn typed_array(buffer: &[u8], kind: ArrayKind, byte_offset: usize, length: usize
     Ok(match kind {
         ArrayKind::Int8 => ArrayData::Int8(bytes.iter().map(|&b| b as i8).collect()),
         ArrayKind::Uint8 => ArrayData::Uint8(bytes.to_vec()),
-        ArrayKind::Int16 => ArrayData::Int16(bytes.as_chunks::<2>().0.iter().map(|b| i16::from_le_bytes(*b)).collect()),
-        ArrayKind::Uint16 => ArrayData::Uint16(bytes.as_chunks::<2>().0.iter().map(|b| u16::from_le_bytes(*b)).collect()),
-        ArrayKind::Uint32 => ArrayData::Uint32(bytes.as_chunks::<4>().0.iter().map(|b| u32::from_le_bytes(*b)).collect()),
-        ArrayKind::Int32 => ArrayData::Int32(bytes.as_chunks::<4>().0.iter().map(|b| i32::from_le_bytes(*b)).collect()),
-        ArrayKind::Float32 => ArrayData::Float32(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect()),
-        ArrayKind::Float64 => ArrayData::Float64(bytes.as_chunks::<8>().0.iter().map(|b| f64::from_le_bytes(*b)).collect()),
+        ArrayKind::Int16 => ArrayData::Int16(
+            bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| i16::from_le_bytes(*b))
+                .collect(),
+        ),
+        ArrayKind::Uint16 => ArrayData::Uint16(
+            bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| u16::from_le_bytes(*b))
+                .collect(),
+        ),
+        ArrayKind::Uint32 => ArrayData::Uint32(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| u32::from_le_bytes(*b))
+                .collect(),
+        ),
+        ArrayKind::Int32 => ArrayData::Int32(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| i32::from_le_bytes(*b))
+                .collect(),
+        ),
+        ArrayKind::Float32 => ArrayData::Float32(
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect(),
+        ),
+        ArrayKind::Float64 => ArrayData::Float64(
+            bytes
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|b| f64::from_le_bytes(*b))
+                .collect(),
+        ),
     })
 }
 
@@ -309,10 +377,18 @@ fn slice_buffer(buffer: &[u8], start: f64, end: f64) -> Vec<u8> {
     let len = buffer.len() as f64;
     let clamp = |x: f64| -> usize {
         let x = if x.is_nan() { 0.0 } else { x.trunc() };
-        (if x < 0.0 { (len + x).max(0.0) } else { x.min(len) }) as usize
+        (if x < 0.0 {
+            math::max2(len + x, 0.0)
+        } else {
+            math::min2(x, len)
+        }) as usize
     };
     let (from, to) = (clamp(start), clamp(end));
-    if to > from { buffer[from..to].to_vec() } else { Vec::new() }
+    if to > from {
+        buffer[from..to].to_vec()
+    } else {
+        Vec::new()
+    }
 }
 
 fn decode_data_url(url: &str) -> Option<Vec<u8>> {
@@ -320,7 +396,7 @@ fn decode_data_url(url: &str) -> Option<Vec<u8>> {
     let comma = rest.find(',')?;
     let (meta, data) = (&rest[..comma], &rest[comma + 1..]);
     let bytes = percent_decode(data.as_bytes());
-    if meta.to_ascii_lowercase().trim_end().ends_with(";base64") {
+    if meta.to_ascii_lowercase().trim_end_matches(' ').ends_with(";base64") {
         base64_decode(&bytes)
     } else {
         Some(bytes)
@@ -348,10 +424,14 @@ fn percent_decode(input: &[u8]) -> Vec<u8> {
 
 /// WHATWG forgiving-base64 decode.
 fn base64_decode(input: &[u8]) -> Option<Vec<u8>> {
-    let mut data: Vec<u8> = input.iter().copied().filter(|b| !matches!(b, b' ' | b'\t' | b'\n' | b'\x0c' | b'\r')).collect();
-    if data.len() % 4 == 0 && data.ends_with(b"==") {
+    let mut data: Vec<u8> = input
+        .iter()
+        .copied()
+        .filter(|b| !matches!(b, b' ' | b'\t' | b'\n' | b'\x0c' | b'\r'))
+        .collect();
+    if data.len().is_multiple_of(4) && data.ends_with(b"==") {
         data.truncate(data.len() - 2);
-    } else if data.len() % 4 == 0 && data.ends_with(b"=") {
+    } else if data.len().is_multiple_of(4) && data.ends_with(b"=") {
         data.truncate(data.len() - 1);
     }
     if data.len() % 4 == 1 {
@@ -395,7 +475,9 @@ fn resolve_url(url: &JsValue, path: &JsString) -> JsString {
     if lower.starts_with("http://") || lower.starts_with("https://") || text.starts_with("//") {
         return url.clone();
     }
-    if (lower.starts_with("data:") && text.contains(',') && !text.contains('\n')) || lower.starts_with("blob:") {
+    if (lower.starts_with("data:") && text.contains(',') && !text.contains('\n'))
+        || lower.starts_with("blob:")
+    {
         return url.clone();
     }
     let mut out = path.clone();
@@ -460,11 +542,16 @@ pub fn load_gltf(
     } else {
         (decode_text(data), None, false)
     };
-    let json = asrs_js::json::parse(&text).map_err(|e| GltfError::Rejected(format!("SyntaxError: {}", e.message.to_string_lossy())))?;
+    let json = asrs_js::json::parse(&text).map_err(|e| {
+        GltfError::Rejected(format!("SyntaxError: {}", e.message.to_string_lossy()))
+    })?;
     check_asset(&json)?;
     let used = items(prop(&json, "extensionsUsed"));
     let required = items(prop(&json, "extensionsRequired"));
-    let named = |list: &[JsValue], name: &str| list.iter().any(|v| matches!(v, JsValue::String(s) if *s == JsString::from(name)));
+    let named = |list: &[JsValue], name: &str| {
+        list.iter()
+            .any(|v| matches!(v, JsValue::String(s) if *s == JsString::from(name)))
+    };
     if named(used, "KHR_draco_mesh_compression") {
         return reject("THREE.GLTFLoader: No DRACOLoader instance provided.");
     }
@@ -495,7 +582,9 @@ pub fn load_gltf(
 
 fn check_asset(json: &JsValue) -> Result<()> {
     let asset = match json {
-        JsValue::Null | JsValue::Undefined => return reject("TypeError: Cannot read properties of null"),
+        JsValue::Null | JsValue::Undefined => {
+            return reject("TypeError: Cannot read properties of null");
+        }
         JsValue::Object(_) => json.get("asset"),
         _ => None,
     };
@@ -508,8 +597,13 @@ fn check_asset(json: &JsValue) -> Result<()> {
         _ => None,
     };
     let first = match version {
-        None | Some(JsValue::Undefined | JsValue::Null) => return reject("TypeError: Cannot read properties of undefined (reading '0')"),
-        Some(JsValue::String(s)) => s.units().first().map(|&u| JsValue::String(JsString::from_units(vec![u]))),
+        None | Some(JsValue::Undefined | JsValue::Null) => {
+            return reject("TypeError: Cannot read properties of undefined (reading '0')");
+        }
+        Some(JsValue::String(s)) => s
+            .units()
+            .first()
+            .map(|&u| JsValue::String(JsString::from_units(vec![u]))),
         Some(JsValue::Array(items)) => items.first().cloned(),
         Some(_) => None,
     };
@@ -593,7 +687,11 @@ impl Parser<'_> {
             roots.push(root);
         }
         let chosen = prop(self.json, "scene");
-        let index = if truthy(chosen) { chosen.and_then(index_of) } else { Some(0) };
+        let index = if truthy(chosen) {
+            chosen.and_then(index_of)
+        } else {
+            Some(0)
+        };
         match index.and_then(|i| roots.get(i)) {
             Some(&scene) => Ok(GltfScene { graph, scene }),
             None => reject("TypeError: gltf.scene is undefined"),
@@ -688,7 +786,9 @@ impl Parser<'_> {
         }
         let type_name = match kind {
             Some(JsValue::String(s)) if *s == JsString::from("perspective") => "PerspectiveCamera",
-            Some(JsValue::String(s)) if *s == JsString::from("orthographic") => "OrthographicCamera",
+            Some(JsValue::String(s)) if *s == JsString::from("orthographic") => {
+                "OrthographicCamera"
+            }
             _ => return reject("TypeError: camera is undefined"),
         };
         let name = if truthy(prop(&def, "name")) {
@@ -696,7 +796,12 @@ impl Parser<'_> {
         } else {
             JsString::new()
         };
-        self.cameras.insert(index, CameraTemplate { object: SceneObject::new(name, ObjectKind::Other(type_name)) });
+        self.cameras.insert(
+            index,
+            CameraTemplate {
+                object: SceneObject::new(name, ObjectKind::Other(type_name)),
+            },
+        );
         Ok(())
     }
 
@@ -717,11 +822,17 @@ impl Parser<'_> {
         let pbr = prop(&def, "pbrMetallicRoughness").filter(|v| truthy(Some(v)));
         let mut material = SourceMaterial::white();
         if is_unlit && !self.unlit {
-            return reject("TypeError: Cannot read properties of undefined (reading 'getMaterialType')");
+            return reject(
+                "TypeError: Cannot read properties of undefined (reading 'getMaterialType')",
+            );
         }
         if let Some(pbr) = pbr {
             if let Some(factor @ JsValue::Array(values)) = prop(pbr, "baseColorFactor") {
-                material.color = Some([number_elem(Some(factor), 0), number_elem(Some(factor), 1), number_elem(Some(factor), 2)]);
+                material.color = Some([
+                    number_elem(Some(factor), 0),
+                    number_elem(Some(factor), 1),
+                    number_elem(Some(factor), 2),
+                ]);
                 material.opacity = match values.get(3) {
                     None | Some(JsValue::Undefined) => 1.0,
                     value => to_number(value),
@@ -733,7 +844,8 @@ impl Parser<'_> {
             }
         }
         let alpha_mode = prop(&def, "alphaMode").filter(|v| truthy(Some(v)));
-        material.transparent = matches!(alpha_mode, Some(JsValue::String(s)) if *s == JsString::from("BLEND"));
+        material.transparent =
+            matches!(alpha_mode, Some(JsValue::String(s)) if *s == JsString::from("BLEND"));
         if !is_unlit {
             for key in ["normalTexture", "occlusionTexture", "emissiveTexture"] {
                 self.check_texture(prop(&def, key))?;
@@ -783,7 +895,9 @@ impl Parser<'_> {
         let bytes = if uri.is_undefined() && index == 0 {
             match &self.body {
                 Some(body) => body.clone(),
-                None => return reject("TypeError: Cannot read properties of null (reading 'slice')"),
+                None => {
+                    return reject("TypeError: Cannot read properties of null (reading 'slice')");
+                }
             }
         } else {
             let url = resolve_url(&uri, &self.path);
@@ -797,7 +911,14 @@ impl Parser<'_> {
             };
             match loaded {
                 Some(bytes) => bytes,
-                None => return reject(format!("THREE.GLTFLoader: Failed to load buffer \"{}\".", uri.as_str().map(|s| s.to_string_lossy()).unwrap_or_default())),
+                None => {
+                    return reject(format!(
+                        "THREE.GLTFLoader: Failed to load buffer \"{}\".",
+                        uri.as_str()
+                            .map(|s| s.to_string_lossy())
+                            .unwrap_or_default()
+                    ));
+                }
             }
         };
         let bytes = Arc::new(bytes);
@@ -814,7 +935,9 @@ impl Parser<'_> {
             && truthy(prop(extensions, "EXT_meshopt_compression"))
             && self.meshopt_required
         {
-            return reject("THREE.GLTFLoader: setMeshoptDecoder must be called before loading compressed files");
+            return reject(
+                "THREE.GLTFLoader: setMeshoptDecoder must be called before loading compressed files",
+            );
         }
         let Some(buffer) = defined(prop(&def, "buffer")).and_then(index_of) else {
             return reject("TypeError: bufferDef is undefined");
@@ -823,7 +946,11 @@ impl Parser<'_> {
         let or_zero = |v: Option<&JsValue>| if truthy(v) { to_number(v) } else { 0.0 };
         let byte_length = or_zero(prop(&def, "byteLength"));
         let byte_offset = or_zero(prop(&def, "byteOffset"));
-        Ok(slice_buffer(&buffer, byte_offset, byte_offset + byte_length))
+        Ok(slice_buffer(
+            &buffer,
+            byte_offset,
+            byte_offset + byte_length,
+        ))
     }
 
     fn load_accessor(&mut self, index_value: &JsValue) -> Result<BufferAttribute> {
@@ -843,10 +970,18 @@ impl Parser<'_> {
         let width = element_bytes(kind);
 
         let mut attribute = match buffer_view_index {
-            None => BufferAttribute::new(ArrayData::zeroed(kind, to_index(count * size as f64)?), size, normalized),
+            None => BufferAttribute::new(
+                ArrayData::zeroed(kind, to_index(count * size as f64)?),
+                size,
+                normalized,
+            ),
             Some(view_index) => {
                 let view = self.load_buffer_view(view_index)?;
-                let byte_offset = if truthy(prop(&def, "byteOffset")) { to_number(prop(&def, "byteOffset")) } else { 0.0 };
+                let byte_offset = if truthy(prop(&def, "byteOffset")) {
+                    to_number(prop(&def, "byteOffset"))
+                } else {
+                    0.0
+                };
                 let stride = index_of(view_index)
                     .and_then(|i| self.defs("bufferViews").get(i))
                     .and_then(|v| prop(v, "byteStride"))
@@ -855,16 +990,37 @@ impl Parser<'_> {
                 match stride {
                     Some(stride) if stride != (width * size) as f64 => {
                         let slice = math::floor(byte_offset / stride);
-                        let array = typed_array(&view, kind, to_index(slice * stride)?, to_index(count * stride / width as f64)?)?;
+                        let array = typed_array(
+                            &view,
+                            kind,
+                            to_index(slice * stride)?,
+                            to_index(count * stride / width as f64)?,
+                        )?;
                         let stride_elements = stride / width as f64;
                         let offset = (byte_offset % stride) / width as f64;
                         if sparse.is_some() {
                             BufferAttribute::new(array, size, normalized)
                         } else {
-                            deinterleave(&array, stride_elements, offset, size, to_index(count)?, normalized)?
+                            deinterleave(
+                                &array,
+                                stride_elements,
+                                offset,
+                                size,
+                                to_index(count)?,
+                                normalized,
+                            )?
                         }
                     }
-                    _ => BufferAttribute::new(typed_array(&view, kind, to_index(byte_offset)?, to_index(count * size as f64)?)?, size, normalized),
+                    _ => BufferAttribute::new(
+                        typed_array(
+                            &view,
+                            kind,
+                            to_index(byte_offset)?,
+                            to_index(count * size as f64)?,
+                        )?,
+                        size,
+                        normalized,
+                    ),
                 }
             }
         };
@@ -873,13 +1029,32 @@ impl Parser<'_> {
             let sparse = sparse.clone();
             let indices_def = prop(&sparse, "indices").cloned().unwrap_or_default();
             let values_def = prop(&sparse, "values").cloned().unwrap_or_default();
-            let indices_view = self.load_buffer_view(prop(&indices_def, "bufferView").unwrap_or(&JsValue::Undefined))?;
-            let values_view = self.load_buffer_view(prop(&values_def, "bufferView").unwrap_or(&JsValue::Undefined))?;
+            let indices_view = self.load_buffer_view(
+                prop(&indices_def, "bufferView").unwrap_or(&JsValue::Undefined),
+            )?;
+            let values_view = self
+                .load_buffer_view(prop(&values_def, "bufferView").unwrap_or(&JsValue::Undefined))?;
             let sparse_count = to_number(prop(&sparse, "count"));
-            let offset_of = |d: &JsValue| if truthy(prop(d, "byteOffset")) { to_number(prop(d, "byteOffset")) } else { 0.0 };
+            let offset_of = |d: &JsValue| {
+                if truthy(prop(d, "byteOffset")) {
+                    to_number(prop(d, "byteOffset"))
+                } else {
+                    0.0
+                }
+            };
             let index_kind = component_kind(prop(&indices_def, "componentType"))?;
-            let indices = typed_array(&indices_view, index_kind, to_index(offset_of(&indices_def))?, to_index(sparse_count)?)?;
-            let values = typed_array(&values_view, kind, to_index(offset_of(&values_def))?, to_index(sparse_count * size as f64)?)?;
+            let indices = typed_array(
+                &indices_view,
+                index_kind,
+                to_index(offset_of(&indices_def))?,
+                to_index(sparse_count)?,
+            )?;
+            let values = typed_array(
+                &values_view,
+                kind,
+                to_index(offset_of(&values_def))?,
+                to_index(sparse_count * size as f64)?,
+            )?;
             if size >= 5 && !indices.is_empty() {
                 return reject("THREE.GLTFLoader: Unsupported itemSize in sparse BufferAttribute.");
             }
@@ -900,7 +1075,9 @@ impl Parser<'_> {
         if let Some(extensions) = prop(primitive, "extensions")
             && truthy(prop(extensions, "KHR_draco_mesh_compression"))
         {
-            return reject("TypeError: Cannot read properties of undefined (reading 'decodePrimitive')");
+            return reject(
+                "TypeError: Cannot read properties of undefined (reading 'decodePrimitive')",
+            );
         }
         if defined(prop(primitive, "targets")).is_some() {
             return unmodeled("morph targets");
@@ -924,7 +1101,10 @@ impl Parser<'_> {
                 let attribute = self.load_accessor(accessor)?;
                 geometry.set_attribute(&name, attribute);
             }
-        } else if !matches!(prop(primitive, "attributes"), None | Some(JsValue::Undefined | JsValue::Null)) {
+        } else if !matches!(
+            prop(primitive, "attributes"),
+            None | Some(JsValue::Undefined | JsValue::Null)
+        ) {
             return unmodeled("primitive attributes that are not an object");
         }
         if let Some(indices) = defined(prop(primitive, "indices")) {
@@ -976,19 +1156,29 @@ impl Parser<'_> {
                         "fan" => to_triangles_draw_mode(geometry, true),
                         _ => geometry,
                     };
-                    ObjectKind::Mesh { geometry: Arc::new(geometry), material: MeshMaterial::Single(material) }
+                    ObjectKind::Mesh {
+                        geometry: Arc::new(geometry),
+                        material: MeshMaterial::Single(material),
+                    }
                 }
                 Some(other) => ObjectKind::Other(other),
             };
             let name = self.names.unique(&base_name);
             objects.push(SceneObject::new(name, object));
         }
-        Ok(MeshTemplate { primitives: objects })
+        Ok(MeshTemplate {
+            primitives: objects,
+        })
     }
 
     /// The object `_loadNodeShallow` resolves for a node, with `_getNodeRef`'s clones for meshes
     /// and cameras that several nodes reference.
-    fn build_node(&mut self, graph: &mut SceneGraph, index: usize, name: JsString) -> Result<ObjectId> {
+    fn build_node(
+        &mut self,
+        graph: &mut SceneGraph,
+        index: usize,
+        name: JsString,
+    ) -> Result<ObjectId> {
         let def = self.node_def(index)?.clone();
         let mut objects = Vec::new();
         if let Some(mesh) = defined(prop(&def, "mesh")).and_then(index_of) {
@@ -1040,20 +1230,37 @@ impl Parser<'_> {
             object.apply_matrix4(&Matrix4::from_array(e));
         } else {
             if let Some(t) = defined(prop(&def, "translation")) {
-                object.position = Vector3::new(number_elem(Some(t), 0), number_elem(Some(t), 1), number_elem(Some(t), 2));
+                object.position = Vector3::new(
+                    number_elem(Some(t), 0),
+                    number_elem(Some(t), 1),
+                    number_elem(Some(t), 2),
+                );
             }
             if let Some(r) = defined(prop(&def, "rotation")) {
-                object.set_quaternion(Quaternion::new(number_elem(Some(r), 0), number_elem(Some(r), 1), number_elem(Some(r), 2), number_elem(Some(r), 3)));
+                object.set_quaternion(Quaternion::new(
+                    number_elem(Some(r), 0),
+                    number_elem(Some(r), 1),
+                    number_elem(Some(r), 2),
+                    number_elem(Some(r), 3),
+                ));
             }
             if let Some(s) = defined(prop(&def, "scale")) {
-                object.scale = Vector3::new(number_elem(Some(s), 0), number_elem(Some(s), 1), number_elem(Some(s), 2));
+                object.scale = Vector3::new(
+                    number_elem(Some(s), 0),
+                    number_elem(Some(s), 1),
+                    number_elem(Some(s), 2),
+                );
             }
         }
         Ok(node)
     }
 
     fn instance_suffix(&mut self, mesh: bool, index: usize) -> Option<JsString> {
-        let (refs, uses) = if mesh { (&self.mesh_refs, &mut self.mesh_uses) } else { (&self.camera_refs, &mut self.camera_uses) };
+        let (refs, uses) = if mesh {
+            (&self.mesh_refs, &mut self.mesh_uses)
+        } else {
+            (&self.camera_refs, &mut self.camera_uses)
+        };
         if refs.get(&index).copied().unwrap_or(0) <= 1 {
             return None;
         }
@@ -1076,17 +1283,31 @@ fn add_checked(graph: &mut SceneGraph, parent: ObjectId, child: ObjectId) -> Res
     Ok(())
 }
 
-fn deinterleave(array: &ArrayData, stride: f64, offset: f64, size: usize, count: usize, normalized: bool) -> Result<BufferAttribute> {
+fn deinterleave(
+    array: &ArrayData,
+    stride: f64,
+    offset: f64,
+    size: usize,
+    count: usize,
+    normalized: bool,
+) -> Result<BufferAttribute> {
     if stride.fract() != 0.0 || offset.fract() != 0.0 {
         return unmodeled("interleaved accessor not aligned to its component size");
     }
     let (stride, offset) = (stride as usize, offset as usize);
-    let count = if stride == 0 { 0 } else { count.min(array.len() / stride) };
+    let count = array.len().checked_div(stride).map_or(0, |n| count.min(n));
     let mut out = ArrayData::zeroed(array.kind(), count * size);
     for j in 0..count {
         for c in 0..size {
             let at = j * stride + offset + c;
-            out.set(j * size + c, if at < array.len() { array.get(at) } else { f64::NAN });
+            out.set(
+                j * size + c,
+                if at < array.len() {
+                    array.get(at)
+                } else {
+                    f64::NAN
+                },
+            );
         }
     }
     let mut attribute = BufferAttribute::new(out, size, normalized);

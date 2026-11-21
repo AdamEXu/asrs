@@ -2,7 +2,7 @@
 // THIRD_PARTY_NOTICES.md.
 
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
 use asrs_js::string::JsString;
@@ -158,7 +158,11 @@ pub fn load_robot(
 
 /// `workers/loadField.ts`: the field model with its staged game pieces pulled out, spatially
 /// sliced, plus one model per game piece.
-pub fn load_field(config: &Config3dField, options: &LoadOptions, fetch: &Fetch<'_>) -> Result<LoadedField, LoadError> {
+pub fn load_field(
+    config: &Config3dField,
+    options: &LoadOptions,
+    fetch: &Fetch<'_>,
+) -> Result<LoadedField, LoadError> {
     let mut scenes = load_all(&model_urls(&config.path, config.game_pieces.len()), fetch)?;
     let specular = Color::from_array(options.material_specular);
     let mut result = LoadedField::default();
@@ -194,9 +198,15 @@ pub fn load_field(config: &Config3dField, options: &LoadOptions, fetch: &Fetch<'
                 config.is_ftc,
                 None,
             )?;
-            result.staged_pieces.extend(staged_meshes.normal.into_iter().next());
-            result.staged_pieces.extend(staged_meshes.transparent.into_iter().next());
-            result.staged_pieces.extend(staged_meshes.carpet.into_iter().next());
+            result
+                .staged_pieces
+                .extend(staged_meshes.normal.into_iter().next());
+            result
+                .staged_pieces
+                .extend(staged_meshes.transparent.into_iter().next());
+            result
+                .staged_pieces
+                .extend(staged_meshes.carpet.into_iter().next());
 
             place(scene, &config.rotations, config.position);
             let field = optimize_geometries(
@@ -259,15 +269,14 @@ impl<T: Send + 'static> LoadJob<T> {
 
     /// The result, once; `None` while the load is still running.
     pub fn try_take(&self) -> Option<Result<T, LoadError>> {
-        match self.rx.try_recv() {
-            Ok(result) => Some(result),
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => None,
-        }
+        self.rx.try_recv().ok()
     }
 
     /// Blocks until the load finishes.
     pub fn wait(self) -> Result<T, LoadError> {
-        self.rx.recv().expect("the load thread always sends a result")
+        self.rx
+            .recv()
+            .expect("the load thread always sends a result")
     }
 }
 
@@ -287,5 +296,8 @@ pub fn spawn_load_robot(
     fetch: Arc<Fetch<'static>>,
     waker: impl Fn() + Send + 'static,
 ) -> LoadJob<Vec<Vec<OptimizedMesh>>> {
-    LoadJob::spawn(move || load_robot(&config, is_ftc, &options, &*fetch), waker)
+    LoadJob::spawn(
+        move || load_robot(&config, is_ftc, &options, &*fetch),
+        waker,
+    )
 }

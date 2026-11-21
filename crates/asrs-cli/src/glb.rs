@@ -37,7 +37,10 @@ fn array_value(array: &ArrayData) -> Value {
     Value::object([
         ("type", Value::string(array.kind().name())),
         ("count", Value::number(array.len() as f64)),
-        ("sha256", Value::string(&hex(&Sha256::digest(bytes_of(array))))),
+        (
+            "sha256",
+            Value::string(&hex(&Sha256::digest(bytes_of(array)))),
+        ),
     ])
 }
 
@@ -60,7 +63,12 @@ fn geometry_value(g: &BufferGeometry) -> Value {
         .collect();
     Value::object([
         ("type", Value::string("BufferGeometry")),
-        ("index", g.index.as_ref().map_or(Value::Null, |i| array_value(&i.array))),
+        (
+            "index",
+            g.index
+                .as_ref()
+                .map_or(Value::Null, |i| array_value(&i.array)),
+        ),
         ("attributes", Value::Array(attributes)),
         ("other", Value::Array(Vec::new())),
     ])
@@ -109,7 +117,10 @@ fn group_value(meshes: &[OptimizedMesh]) -> Value {
     Value::object([
         ("type", Value::string("Group")),
         ("object", Value::Array(Vec::new())),
-        ("children", Value::Array(meshes.iter().map(mesh_value).collect())),
+        (
+            "children",
+            Value::Array(meshes.iter().map(mesh_value).collect()),
+        ),
     ])
 }
 
@@ -123,7 +134,12 @@ pub fn field_value(field: &LoadedField) -> Value {
                 field
                     .pieces
                     .iter()
-                    .map(|(name, mesh)| Value::Array(vec![Value::String(Utf16String::from_units(name.units().to_vec())), mesh_value(mesh)]))
+                    .map(|(name, mesh)| {
+                        Value::Array(vec![
+                            Value::String(Utf16String::from_units(name.units().to_vec())),
+                            mesh_value(mesh),
+                        ])
+                    })
                     .collect(),
             ),
         ),
@@ -131,7 +147,12 @@ pub fn field_value(field: &LoadedField) -> Value {
 }
 
 pub fn robot_value(scenes: &[Vec<OptimizedMesh>]) -> Value {
-    Value::Array(scenes.iter().map(|s| Value::Array(s.iter().map(mesh_value).collect())).collect())
+    Value::Array(
+        scenes
+            .iter()
+            .map(|s| Value::Array(s.iter().map(mesh_value).collect()))
+            .collect(),
+    )
 }
 
 pub fn mode(text: &str) -> Result<Field3dMode> {
@@ -167,7 +188,12 @@ pub const MODEL_DIR: &str = "/asset/";
 
 /// Runs the `kind` worker on `config.json` text with `config.path` set to
 /// `/asset/model.glb`; `files` maps file names in that directory to their bytes.
-pub fn run_asset(kind: &str, config: &str, mode: Field3dMode, files: &HashMap<String, Vec<u8>>) -> Result<Outcome> {
+pub fn run_asset(
+    kind: &str,
+    config: &str,
+    mode: Field3dMode,
+    files: &HashMap<String, Vec<u8>>,
+) -> Result<Outcome> {
     let raw = asrs_js::json::parse_str(config).map_err(|e| e.message.to_string_lossy())?;
     let fetch = |url: &JsString| -> Option<Vec<u8>> {
         let text = url.to_string_lossy();
@@ -225,9 +251,13 @@ pub fn run(args: &[String]) -> Result<()> {
         .collect();
     folders.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
     let modes = ["low-power", "standard", "cinematic"];
-    let tasks: Vec<(String, &str)> = folders.iter().flat_map(|f| modes.iter().map(move |m| (f.clone(), *m))).collect();
+    let tasks: Vec<(String, &str)> = folders
+        .iter()
+        .flat_map(|f| modes.iter().map(move |m| (f.clone(), *m)))
+        .collect();
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let results: std::sync::Mutex<Vec<Option<String>>> = std::sync::Mutex::new(vec![None; tasks.len()]);
+    let results: std::sync::Mutex<Vec<Option<String>>> =
+        std::sync::Mutex::new(vec![None; tasks.len()]);
     let written = std::sync::Mutex::new(0usize);
     let error: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     std::thread::scope(|scope| {
@@ -235,7 +265,9 @@ pub fn run(args: &[String]) -> Result<()> {
             scope.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some((folder, mode_name)) = tasks.get(i) else { break };
+                    let Some((folder, mode_name)) = tasks.get(i) else {
+                        break;
+                    };
                     let line = release_line(&dir.join(folder), folder, mode_name);
                     let line = match line {
                         Ok(l) => l,
@@ -265,16 +297,24 @@ pub fn run(args: &[String]) -> Result<()> {
 }
 
 fn release_line(asset: &Path, folder: &str, mode_name: &str) -> Result<String> {
-    let config = std::fs::read_to_string(asset.join("config.json")).map_err(|e| format!("{}: {e}", asset.display()))?;
+    let config = std::fs::read_to_string(asset.join("config.json"))
+        .map_err(|e| format!("{}: {e}", asset.display()))?;
     let mut files = HashMap::new();
     for entry in std::fs::read_dir(asset).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.ends_with(".glb") {
-            files.insert(name, std::fs::read(entry.path()).map_err(|e| e.to_string())?);
+            files.insert(
+                name,
+                std::fs::read(entry.path()).map_err(|e| e.to_string())?,
+            );
         }
     }
-    let kind = if folder.starts_with("Robot_") { "robot" } else { "field" };
+    let kind = if folder.starts_with("Robot_") {
+        "robot"
+    } else {
+        "field"
+    };
     let started = std::time::Instant::now();
     let outcome = run_asset(kind, &config, mode(mode_name)?, &files)?;
     if let Outcome::Never(e) = &outcome {
