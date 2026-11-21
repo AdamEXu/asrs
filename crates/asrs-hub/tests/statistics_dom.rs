@@ -38,7 +38,8 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::statistics::{StatisticsController, StatisticsEnv};
 
 const DEFAULT_IGNORED: [&str; 3] = ["save-state", "save-type-memory", "update-touch-bar-slider"];
-const INPUT_TARGETS: [(&str, fn(&mut StatisticsController, JsString)); 4] = [
+type InputSetter = fn(&mut StatisticsController, JsString);
+const INPUT_TARGETS: [(&str, InputSetter); 4] = [
     ("select.time-range", StatisticsController::time_range_input),
     ("input.range-min", StatisticsController::range_min_input),
     ("input.range-max", StatisticsController::range_max_input),
@@ -485,9 +486,7 @@ fn item_states_or_throw(
                 let matched = matches!(&type_value, JsValue::String(s)
                     if config.types.iter().any(|t| t.key == s.to_string_lossy()));
                 let failure = if matched {
-                    JsError::type_error(
-                        "Cannot read properties of undefined (reading 'color')",
-                    )
+                    JsError::type_error("Cannot read properties of undefined (reading 'color')")
                 } else {
                     source_error(SourceListError::UnknownType(asrs_js::ops::to_string(
                         &type_value,
@@ -535,11 +534,7 @@ impl Runner {
             .filter(|&i| {
                 self.tabs
                     .tab(i)
-                    .is_some_and(|t| {
-                        t.controller()
-                            .downcast_ref::<StatsHalf>()
-                            .is_some()
-                    })
+                    .is_some_and(|t| t.controller().downcast_ref::<StatsHalf>().is_some())
             })
             .nth(nth)
             .ok_or_else(|| format!("no statistics tab {nth}"))
@@ -581,7 +576,7 @@ impl Runner {
             Ok(()) => self.report(where_, Ok(())),
             Err(TabsError::Thrown(e)) => self.report(where_, Err(e)),
             Err(TabsError::Unmodeled(what)) => {
-                return Err(err(format!("unmodeled upstream state: {what}")))
+                return Err(err(format!("unmodeled upstream state: {what}")));
             }
         }
         Ok(())
@@ -673,8 +668,14 @@ impl Runner {
                 cx.selection.set_context(ctx);
                 Ok(())
             }
-            "set-fullscreen" | "set-battery" | "show-update-button" | "show-feedback-button"
-            | "show-when-ready" | "set-preferences" | "set-focused" | "set-active-xr-uuid"
+            "set-fullscreen"
+            | "set-battery"
+            | "show-update-button"
+            | "show-feedback-button"
+            | "show-when-ready"
+            | "set-preferences"
+            | "set-focused"
+            | "set-active-xr-uuid"
             | "call-selection-setter" => Ok(()),
             other => return Err(err(format!("unsupported main message {other}"))),
         };
@@ -688,10 +689,11 @@ impl Runner {
         };
         let sel = &mut self.host.selection;
         match method {
-            "setSelectedTime" => match arg(0) {
-                JsValue::Number(t) => sel.set_selected_time(t),
-                _ => {}
-            },
+            "setSelectedTime" => {
+                if let JsValue::Number(t) = arg(0) {
+                    sel.set_selected_time(t)
+                }
+            }
             "setHoveredTime" => match arg(0) {
                 JsValue::Number(t) => sel.set_hovered_time(Some(t)),
                 JsValue::Null => sel.set_hovered_time(None),
@@ -741,7 +743,7 @@ impl Runner {
             other => {
                 return Err(JsError::type_error(format!(
                     "window.selection.{other} is not a function"
-                )))
+                )));
             }
         }
         Ok(())
@@ -766,24 +768,24 @@ impl Runner {
             return Ok(());
         }
         if expr.starts_with("window.selection.") {
-            if let Some(rest) = expr.strip_prefix("window.selection.") {
-                if let Some((method, arg_s)) = rest.split_once('(') {
-                    let arg_s = arg_s
-                        .strip_suffix(')')
-                        .ok_or_else(|| err(format!("eval {expr}")))?;
-                    let list = asrs_parity::json::parse(&format!("[{arg_s}]"))
-                        .map_err(|e| e.to_string())?;
-                    let args: Vec<Value> = list
-                        .as_array()
-                        .map(|a| a.iter().map(Value::from_json_lenient).collect())
-                        .unwrap_or_default();
-                    let method = method.to_owned();
-                    return {
-                        let r = self.selection_call(&method, &args);
-                        self.report("eval", r);
-                        Ok(())
-                    };
-                }
+            if let Some(rest) = expr.strip_prefix("window.selection.")
+                && let Some((method, arg_s)) = rest.split_once('(')
+            {
+                let arg_s = arg_s
+                    .strip_suffix(')')
+                    .ok_or_else(|| err(format!("eval {expr}")))?;
+                let list =
+                    asrs_parity::json::parse(&format!("[{arg_s}]")).map_err(|e| e.to_string())?;
+                let args: Vec<Value> = list
+                    .as_array()
+                    .map(|a| a.iter().map(Value::from_json_lenient).collect())
+                    .unwrap_or_default();
+                let method = method.to_owned();
+                return {
+                    let r = self.selection_call(&method, &args);
+                    self.report("eval", r);
+                    Ok(())
+                };
             }
             return Err(err(format!("unsupported eval {expr}")));
         }
@@ -835,7 +837,9 @@ impl Runner {
                     };
                     let r = self.stats(tab_i, |c, host| {
                         host.with_source_env(|env| {
-                            c.source_list_mut().set_state(env, states).map_err(source_error)
+                            c.source_list_mut()
+                                .set_state(env, states)
+                                .map_err(source_error)
                         })
                     })?;
                     match failure {
@@ -843,9 +847,7 @@ impl Runner {
                         None => r,
                     }
                 }
-                "restoreState" => {
-                    self.stats(tab_i, |c, host| c.restore_state(host, &arg))?
-                }
+                "restoreState" => self.stats(tab_i, |c, host| c.restore_state(host, &arg))?,
                 other => return Err(err(format!("unsupported eval member {other}"))),
             });
         }
@@ -853,14 +855,18 @@ impl Runner {
             let json = asrs_parity::json::parse(value_s).map_err(|e| e.to_string())?;
             let value = asrs_js::ops::to_string(&to_js(&json)?);
             let f = match input {
-                "RANGE_MIN" => StatisticsController::set_range_min
-                    as fn(&mut StatisticsController, JsString),
-                "RANGE_MAX" => StatisticsController::set_range_max
-                    as fn(&mut StatisticsController, JsString),
-                "STEP_SIZE" => StatisticsController::set_step_size
-                    as fn(&mut StatisticsController, JsString),
-                "TIME_RANGE" => StatisticsController::set_time_range
-                    as fn(&mut StatisticsController, JsString),
+                "RANGE_MIN" => {
+                    StatisticsController::set_range_min as fn(&mut StatisticsController, JsString)
+                }
+                "RANGE_MAX" => {
+                    StatisticsController::set_range_max as fn(&mut StatisticsController, JsString)
+                }
+                "STEP_SIZE" => {
+                    StatisticsController::set_step_size as fn(&mut StatisticsController, JsString)
+                }
+                "TIME_RANGE" => {
+                    StatisticsController::set_time_range as fn(&mut StatisticsController, JsString)
+                }
                 other => return Err(err(format!("unsupported eval assign {other}"))),
             };
             self.stats(tab_i, |c, _| f(c, value.clone()))?;
@@ -873,11 +879,10 @@ impl Runner {
     /// controller/Tabs probes answered from the port.
     fn eval_capture(&mut self, expr: &str) -> Result<Value, EvalError> {
         if expr.starts_with("/*tabs:info*/") {
-            let info = self
-                .infos
-                .get(self.info_seen)
-                .cloned()
-                .ok_or_else(|| EvalError::Fatal(err("more info captures than the vector has")))?;
+            let info =
+                self.infos.get(self.info_seen).cloned().ok_or_else(|| {
+                    EvalError::Fatal(err("more info captures than the vector has"))
+                })?;
             self.info_seen += 1;
             let current = current_from(&info).map_err(EvalError::Fatal)?;
             if current.len() != self.host.created {
@@ -923,8 +928,7 @@ impl Runner {
         let member = member.strip_suffix("()").unwrap_or(&member);
         let Some(tab) = self.tabs.tab(index) else {
             return Err(EvalError::Thrown(
-                "TypeError: Cannot read properties of undefined (reading 'controller')"
-                    .to_owned(),
+                "TypeError: Cannot read properties of undefined (reading 'controller')".to_owned(),
             ));
         };
         let uuid = tab.uuid().clone();
@@ -933,7 +937,7 @@ impl Runner {
             "showTimeline" => {
                 return Ok(js_json::from_js(&JsValue::Bool(
                     tab.controller().show_timeline(&self.host),
-                )))
+                )));
             }
             "getActiveFields" => {
                 return Ok(js_json::from_js(&JsValue::Array(
@@ -942,11 +946,9 @@ impl Runner {
                         .into_iter()
                         .map(JsValue::String)
                         .collect(),
-                )))
+                )));
             }
-            "saveState" => {
-                return Ok(js_json::from_js(&tab.controller().save_state(&self.host)))
-            }
+            "saveState" => return Ok(js_json::from_js(&tab.controller().save_state(&self.host))),
             "UUID" => return Ok(js_json::from_js(&uuid)),
             _ => {}
         }
@@ -978,9 +980,7 @@ impl Runner {
                 let displayed = controller
                     .source_list()
                     .displayed_state(&self.host.log.borrow());
-                js_json::from_js(&JsValue::Array(
-                    displayed.iter().map(ToJs::to_js).collect(),
-                ))
+                js_json::from_js(&JsValue::Array(displayed.iter().map(ToJs::to_js).collect()))
             }
             other => return Err(fatal(format!("unsupported eval member {other}"))),
         })
@@ -1015,13 +1015,15 @@ fn run_log_step(log: &SharedLog, calls: &[Value]) -> Result<(), JsError> {
             }
         };
         let num = |i: usize| -> Result<f64, JsError> {
-            args.get(i)
-                .and_then(Value::as_f64)
-                .ok_or_else(|| bad(&format!("log op arg {}", args.get(i).unwrap_or(&Value::Null).encode())))
+            args.get(i).and_then(Value::as_f64).ok_or_else(|| {
+                bad(&format!(
+                    "log op arg {}",
+                    args.get(i).unwrap_or(&Value::Null).encode()
+                ))
+            })
         };
         let js = |i: usize| -> Result<JsValue, JsError> {
-            js_json::to_js(args.get(i).unwrap_or(&Value::Null))
-                .map_err(|t| bad(&t))
+            js_json::to_js(args.get(i).unwrap_or(&Value::Null)).map_err(|t| bad(&t))
         };
         let log = &mut *log.borrow_mut();
         match method.as_str() {
@@ -1076,8 +1078,12 @@ fn run_log_step(log: &SharedLog, calls: &[Value]) -> Result<(), JsError> {
                     Some(Value::Bytes(b)) => b.clone(),
                     other => return Err(bad(&format!("putRaw value {other:?}"))),
                 };
-                log.put_raw(&key(0)?, num(1)?, std::sync::Arc::<[u8]>::from(bytes.into_boxed_slice()))
-                    .map_err(|e| JsError::new("Error", format!("{e:?}")))?
+                log.put_raw(
+                    &key(0)?,
+                    num(1)?,
+                    std::sync::Arc::<[u8]>::from(bytes.into_boxed_slice()),
+                )
+                .map_err(|e| JsError::new("Error", format!("{e:?}")))?
             }
             "putPose" => {
                 let pose = js(2)?;
@@ -1169,11 +1175,7 @@ fn capture(runner: &mut Runner, spec: &Json) -> Result<(), String> {
                 meta.insert("uuid", tab.uuid().clone());
                 let mut values: Vec<(&'static str, Value)> =
                     vec![("command", js_json::from_js(&JsValue::Object(meta)))];
-                if tab
-                    .controller()
-                    .downcast_ref::<StatsHalf>()
-                    .is_some()
-                {
+                if tab.controller().downcast_ref::<StatsHalf>().is_some() {
                     values.push(("value", js_json::from_js(&command)));
                 }
                 runner.emitted.push(Emit { values });
@@ -1206,10 +1208,9 @@ fn capture(runner: &mut Runner, spec: &Json) -> Result<(), String> {
                 .and_then(str_of)
                 .ok_or("eval capture needs expr")?;
             match runner.eval_capture(&expr) {
-                Ok(value) => runner.emitted.push(Emit::new(vec![
-                    ("eval", cve_str(&expr)),
-                    ("value", value),
-                ])),
+                Ok(value) => runner
+                    .emitted
+                    .push(Emit::new(vec![("eval", cve_str(&expr)), ("value", value)])),
                 Err(EvalError::Thrown(text)) => runner.emitted.push(Emit::new(vec![
                     ("eval", cve_str(&expr)),
                     ("throw", cve_str(&text)),
@@ -1313,10 +1314,16 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
             })
             .collect::<Result<_, String>>()?,
         None => [
-            ("set-assets".to_owned(), fixture.get("assets").cloned().unwrap_or(Json::Null)),
+            (
+                "set-assets".to_owned(),
+                fixture.get("assets").cloned().unwrap_or(Json::Null),
+            ),
             ("set-fullscreen".to_owned(), Json::Bool(false)),
             ("set-battery".to_owned(), Json::Bool(false)),
-            ("set-version".to_owned(), fixture.get("version").cloned().unwrap_or(Json::Null)),
+            (
+                "set-version".to_owned(),
+                fixture.get("version").cloned().unwrap_or(Json::Null),
+            ),
             ("show-update-button".to_owned(), Json::Bool(false)),
             ("show-feedback-button".to_owned(), Json::Bool(false)),
             ("show-when-ready".to_owned(), Json::Null),
@@ -1376,11 +1383,10 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
             let r = runner.selection_call(&method, &args);
             runner.report(&format!("selection {method}"), r);
         } else if let Some(live) = step.get("liveTime") {
-            let t = match Value::from_json_lenient(live) {
-                v => v
-                    .as_f64()
-                    .ok_or_else(|| format!("step {index}: liveTime {v:?}"))?,
-            };
+            let v = Value::from_json_lenient(live);
+            let t = v
+                .as_f64()
+                .ok_or_else(|| format!("step {index}: liveTime {v:?}"))?;
             runner.live_time.set(t);
         } else if let Some(event) = step.get("event") {
             let target = event
@@ -1388,7 +1394,10 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
                 .and_then(str_of)
                 .ok_or("event needs a target")?;
             let nth = event.get("index").and_then(Json::as_f64).unwrap_or(0.0) as usize;
-            let etype = event.get("type").and_then(str_of).ok_or("event needs a type")?;
+            let etype = event
+                .get("type")
+                .and_then(str_of)
+                .ok_or("event needs a type")?;
             if etype != "change" {
                 return Err(where_(format!("unsupported event {etype}")));
             }
@@ -1420,7 +1429,10 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
                 .map_or(Value::number(index as f64), Value::from_json_lenient);
             runner.emitted.push(Emit::new(vec![
                 ("capture", label),
-                ("time", Value::number(runner.host.clock.get() - runner.start)),
+                (
+                    "time",
+                    Value::number(runner.host.clock.get() - runner.start),
+                ),
             ]));
             for spec in specs.as_array().ok_or("capture is a list")? {
                 capture(&mut runner, spec).map_err(where_)?;

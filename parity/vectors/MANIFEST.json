@@ -230,7 +230,9 @@
     "tabs/console-filter": {"cases":3022,"content":"d9772c459e0a5ef6","generator":"821933e38ce82e97","spec":"parity/specs/tabs/console-filter.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-format": {"cases":3041,"content":"76e5265a66c5b13f","generator":"70a1eb36aa392aa5","spec":"parity/specs/tabs/console-format.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/heatmap": {"cases":36,"content":"a0c28ccb88ad4846","generator":"5ed6a4a143dfdbf8","spec":"parity/specs/tabs/heatmap.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "tabs/simple-statistics/linux-aarch64": {"cases":742,"content":"9bd6b2a1e9b15ecc","generator":"7cce302d31bf7d76","spec":"parity/specs/tabs/simple-statistics.fn.json","zone":"UTC","generatedOn":"linux-aarch64"},
     "tabs/simple-statistics/macos-aarch64": {"cases":742,"content":"34133ea6dc107fc2","generator":"7cce302d31bf7d76","spec":"parity/specs/tabs/simple-statistics.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "tabs/simple-statistics/windows-aarch64": {"cases":742,"content":"9bd6b2a1e9b15ecc","generator":"7cce302d31bf7d76","spec":"parity/specs/tabs/simple-statistics.fn.json","zone":"UTC","generatedOn":"windows-aarch64"},
     "urcl/urcl": {"cases":63,"content":"0234af7989d75049","generator":"b97c600a55ea7ce1","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/corpus": {"cases":222,"content":"1893bd0e04348bcb","generator":"ea371e485e20304c","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/public": {"cases":5,"content":"3a0c9961a122df71","generator":"6447471c733d14a2","spec":"parity/specs/wpilog/public.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}

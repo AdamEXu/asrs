@@ -2,7 +2,7 @@
 //! `asrs_tabs::simple_statistics`, requested as `npm:simple-statistics:<fn>`.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::disallowed_methods)]
 mod js_json;
 
 use asrs_js::string::JsError;
@@ -29,9 +29,7 @@ fn arr(args: &[JsValue], i: usize) -> Result<Vec<JsValue>, JsError> {
 fn respond(result: Result<JsValue, JsError>) -> Response {
     match result {
         Ok(v) => Response::Ok(js_json::from_js(&v)),
-        Err(e) if e.name.is_empty() => {
-            Response::Throw(Value::String(Utf16String::from(e.message)))
-        }
+        Err(e) if e.name.is_empty() => Response::Throw(Value::String(Utf16String::from(e.message))),
         Err(e) => Response::Throw(Value::Error(
             Utf16String::from(e.name),
             Utf16String::from(e.message),
@@ -65,7 +63,11 @@ fn dispatch(case: &FnCase<'_>) -> Response {
         "quantile" => x().and_then(|x| ss::quantile(&x, &p())),
         "quantileSorted" => x().and_then(|x| ss::quantile_sorted(&x, &p())),
         "sumNthPowerDeviations" => x().and_then(|x| ss::sum_nth_power_deviations(&x, &p())),
-        "sum" => return x().map(|x| plain(ss::sum(&x))).unwrap_or_else(|e| respond(Err(e))),
+        "sum" => {
+            return x()
+                .map(|x| plain(ss::sum(&x)))
+                .unwrap_or_else(|e| respond(Err(e)));
+        }
         "minSorted" => {
             return x()
                 .map(|x| plain(ss::min_sorted(&x)))

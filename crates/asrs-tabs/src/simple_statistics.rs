@@ -8,6 +8,7 @@
 use asrs_js::math::{self, BigInt};
 use asrs_js::number;
 use asrs_js::ops;
+use asrs_js::sort;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue};
 
@@ -286,10 +287,11 @@ pub fn quantile_sorted(x: &[JsValue], p: &JsValue) -> Result<JsValue> {
         Ok(elem(x, 0.0))
     } else if math::rem(idx, 1.0) != 0.0 {
         Ok(elem(x, math::ceil(idx) - 1.0))
-    } else if x.len() % 2 == 0 {
-        Ok(num(
-            ops::value_to_number(&add(&elem(x, idx - 1.0), &elem(x, idx))?)? / 2.0,
-        ))
+    } else if x.len().is_multiple_of(2) {
+        Ok(num(ops::value_to_number(&add(
+            &elem(x, idx - 1.0),
+            &elem(x, idx),
+        )?)? / 2.0))
     } else {
         Ok(elem(x, idx))
     }
@@ -332,7 +334,9 @@ pub fn harmonic_mean(x: &[JsValue]) -> Result<JsValue> {
     let mut reciprocal_sum = 0.0;
     for v in x {
         if le(v, &num(0.0)) {
-            return Err(error("harmonicMean requires only positive numbers as input"));
+            return Err(error(
+                "harmonicMean requires only positive numbers as input",
+            ));
         }
         reciprocal_sum += 1.0 / ops::value_to_number(v)?;
     }
@@ -400,7 +404,7 @@ fn multi_quantile_select(arr: &mut JsArray, p: &[JsValue]) -> Result<()> {
         indices.push(quantile_index(length, p_i)?);
     }
     indices.push(length - 1.0);
-    indices.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sort::array_sort(&mut indices, |a, b| a - b);
     let mut stack = vec![0.0, indices.len() as f64 - 1.0];
     while !stack.is_empty() {
         let r = math::ceil(stack.pop().unwrap());
@@ -480,7 +484,9 @@ pub fn sample_skewness(x: &[JsValue]) -> Result<JsValue> {
     let s = math::sqrt(sum_squared_deviations / bessel_correction);
     let n = x.len() as f64;
     let cubed_s = math::pow(s, 3.0);
-    Ok(num((n * sum_cubed_deviations) / ((n - 1.0) * (n - 2.0) * cubed_s)))
+    Ok(num(
+        (n * sum_cubed_deviations) / ((n - 1.0) * (n - 2.0) * cubed_s)
+    ))
 }
 
 /// `logAverage` from `StatisticsController.ts`.
@@ -491,7 +497,9 @@ pub fn log_average(x: &[JsValue]) -> Result<JsValue> {
     let mut value = 0.0;
     for v in x {
         if lt(v, &num(0.0)) {
-            return Err(error("logAverage requires only non-negative numbers as input"));
+            return Err(error(
+                "logAverage requires only non-negative numbers as input",
+            ));
         }
         value += math::log(math_num(v)?);
     }
@@ -515,7 +523,10 @@ pub fn field_stats(
     stats.insert("harmonicMean", harmonic_mean(positive_sorted)?);
     stats.insert("quadraticMean", root_mean_square(values)?);
     stats.insert("standardDeviation", sample_standard_deviation(values)?);
-    stats.insert("medianAbsoluteDeviation", median_absolute_deviation(values)?);
+    stats.insert(
+        "medianAbsoluteDeviation",
+        median_absolute_deviation(values)?,
+    );
     stats.insert("interquartileRange", interquartile_range(values)?);
     stats.insert("skewness", sample_skewness(values)?);
     for p in [0.01f64, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99] {

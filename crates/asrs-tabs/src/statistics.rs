@@ -12,10 +12,12 @@ use asrs_js::sort::{self, Slot};
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time;
 use asrs_js::value::{JsObject, JsValue, ToJs};
-use asrs_log::log::robot_state::{get_robot_state_ranges, RobotMode, RobotStateRange, AKIT_TIMESTAMP_KEYS};
 use asrs_log::log::Log;
+use asrs_log::log::robot_state::{
+    AKIT_TIMESTAMP_KEYS, RobotMode, RobotStateRange, get_robot_state_ranges,
+};
 use asrs_model::selection::Selection;
-use asrs_model::source_list::{configs, Env, SourceList, SourceListError};
+use asrs_model::source_list::{Env, SourceList, SourceListError, configs};
 use asrs_model::source_list_config::{SourceListItemState, SourceListTypeConfig};
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
@@ -195,10 +197,15 @@ impl StatisticsController {
         if range / value_to_number(&self.step_size) > MAX_BINS {
             self.step_size = JsString::from(number::to_string(clean_float(range / MAX_BINS)));
         }
-        let step = math::pow(10.0, math::floor(math::log10(value_to_number(&self.step_size))));
+        let step = math::pow(
+            10.0,
+            math::floor(math::log10(value_to_number(&self.step_size))),
+        );
         self.step_size_step = JsString::from(number::to_string(step));
-        let min_max_step =
-            math::pow(10.0, math::ceil(math::log10(value_to_number(&self.step_size))));
+        let min_max_step = math::pow(
+            10.0,
+            math::ceil(math::log10(value_to_number(&self.step_size))),
+        );
         self.range_min_step = JsString::from(number::to_string(min_max_step));
         self.range_max_step = JsString::from(number::to_string(min_max_step));
     }
@@ -366,7 +373,10 @@ impl StatisticsController {
     }
 }
 
-fn type_key<'a>(config: &'a [SourceListTypeConfig], t: &JsString) -> Option<&'a SourceListTypeConfig> {
+fn type_key<'a>(
+    config: &'a [SourceListTypeConfig],
+    t: &JsString,
+) -> Option<&'a SourceListTypeConfig> {
     config.iter().find(|c| eq_str(t, &c.key))
 }
 
@@ -382,7 +392,13 @@ fn field_command(
 ) -> Result<(), JsError> {
     let (data, ref_data) = cx.with_log(|log| {
         (
-            log.get_number(&source.log_key, f64::NEG_INFINITY, f64::INFINITY, None, None),
+            log.get_number(
+                &source.log_key,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                None,
+                None,
+            ),
             ref_source.and_then(|r| {
                 log.get_number(&r.log_key, f64::NEG_INFINITY, f64::INFINITY, None, None)
             }),
@@ -464,7 +480,11 @@ fn field_command(
     }
 
     let non_negative: Vec<JsValue> = samples.iter().filter(|v| ge(v)).cloned().collect();
-    let positive: Vec<JsValue> = samples.iter().filter(|v| stats::gt(v, &num(0.0))).cloned().collect();
+    let positive: Vec<JsValue> = samples
+        .iter()
+        .filter(|v| stats::gt(v, &num(0.0)))
+        .cloned()
+        .collect();
     let stats_obj = field_stats(&samples, &non_negative, &positive)?;
 
     let color = source
@@ -503,11 +523,7 @@ fn value_to_number(s: &JsString) -> f64 {
 
 fn clean_float(x: f64) -> f64 {
     let output = math::round(x * 1e6) / 1e6;
-    if output == 0.0 {
-        0.0
-    } else {
-        output
-    }
+    if output == 0.0 { 0.0 } else { output }
 }
 
 /// `input[type=number]` sanitization: `^-?(?:\d+|\d*\.\d+)(?:[eE][-+]?\d+)?$`.
@@ -792,25 +808,25 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
             }
             result?;
         }
-        if ops::has(state, "timeRange")? {
-            if let JsValue::String(v) = ops::get(state, "timeRange")? {
-                self.set_select(v);
-            }
+        if ops::has(state, "timeRange")?
+            && let JsValue::String(v) = ops::get(state, "timeRange")?
+        {
+            self.set_select(v);
         }
-        if ops::has(state, "rangeMin")? {
-            if let JsValue::Number(v) = ops::get(state, "rangeMin")? {
-                Self::set_number_input(&mut self.range_min, JsString::from(number::to_string(v)));
-            }
+        if ops::has(state, "rangeMin")?
+            && let JsValue::Number(v) = ops::get(state, "rangeMin")?
+        {
+            Self::set_number_input(&mut self.range_min, JsString::from(number::to_string(v)));
         }
-        if ops::has(state, "rangeMax")? {
-            if let JsValue::Number(v) = ops::get(state, "rangeMax")? {
-                Self::set_number_input(&mut self.range_max, JsString::from(number::to_string(v)));
-            }
+        if ops::has(state, "rangeMax")?
+            && let JsValue::Number(v) = ops::get(state, "rangeMax")?
+        {
+            Self::set_number_input(&mut self.range_max, JsString::from(number::to_string(v)));
         }
-        if ops::has(state, "stepSize")? {
-            if let JsValue::Number(v) = ops::get(state, "stepSize")? {
-                Self::set_number_input(&mut self.step_size, JsString::from(number::to_string(v)));
-            }
+        if ops::has(state, "stepSize")?
+            && let JsValue::Number(v) = ops::get(state, "stepSize")?
+        {
+            Self::set_number_input(&mut self.step_size, JsString::from(number::to_string(v)));
         }
         self.update_histogram_inputs();
         Ok(())
@@ -836,20 +852,17 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
-        let sources_js = JsValue::Array(
-            self.source_list
-                .state()
-                .iter()
-                .map(ToJs::to_js)
-                .collect(),
-        );
+        let sources_js = JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect());
         let sources_str = json::stringify(&sources_js)
-            .map_err(|e| JsError::new("Error", e.to_string()))?
+            .map_err(|e| JsError {
+                name: e.name,
+                message: e.message.to_string_lossy(),
+            })?
             .unwrap_or_default();
         let current_time = time::time_clip(cx.now());
         let time_range = self.time_range_value();
-        let is_live_mode = cx.selection().get_current_live_time().is_some()
-            && starts_with(&time_range, "live");
+        let is_live_mode =
+            cx.selection().get_current_live_time().is_some() && starts_with(&time_range, "live");
         let visible_changed = eq_str(&time_range, "visible")
             && cx.selection().get_timeline_range() != self.last_timeline_range;
         if (self.should_update
@@ -869,7 +882,8 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
 }
 
 fn starts_with(s: &JsString, prefix: &str) -> bool {
-    s.units().starts_with(&prefix.encode_utf16().collect::<Vec<u16>>())
+    s.units()
+        .starts_with(&prefix.encode_utf16().collect::<Vec<u16>>())
 }
 
 /// `SourceListError` out of a controller call. `UnknownType` is a thrown string upstream,
