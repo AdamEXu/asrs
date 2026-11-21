@@ -343,6 +343,14 @@ function timestampCases(corpus: Corpus) {
     put(tail.cycle(0.55), 2);
     file(`r${rev}-corrupt-tail`, "a backwards final timestamp starts the resync scan over the file's last bytes", tail.bytes());
   }
+
+  const overflow = new RlogBuilder(2).cycle(1.8e299).key(1, "/Timestamp", "double").key(2, "/V", "double");
+  overflow.value(1, r2Payload.double(1)).value(2, r2Payload.double(2));
+  file(
+    "r2-overflow-nanos",
+    "a timestamp whose nanoseconds overflow to Infinity, so BigInt throws: changes MCAP export rejects, sampled export drops every message",
+    overflow.bytes()
+  );
 }
 
 function emptyAndHeader(corpus: Corpus) {

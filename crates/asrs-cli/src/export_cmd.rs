@@ -3,7 +3,7 @@
 //! session's pre-export skip checks and runs the export port on the resulting `Log`.
 //! Bytes go to `--out` or stdout. Exit 0 when the worker produced output, 3 when it
 //! rejected (or the decode worker never returns), 4 when the run was skipped or the
-//! branch is a later unit's (`wpilog`, `mcap`). The skip checks are the oracle session's
+//! branch is one the port does not model yet. The skip checks are the oracle session's
 //! (oracle/src/historical/session.ts), for the two option sets upstream never finishes.
 //!
 //! `asrs-cli export-run --root <dir> --out <dir> --spec <spec.json>` mirrors oracle
@@ -21,10 +21,10 @@ use std::process::ExitCode;
 use std::cmp::Ordering;
 
 use asrs_formats::export::{self, ExportOptions, Format, Sampling};
+use asrs_formats::mcap_export::value_json;
 use asrs_js::json;
 use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, JsValue};
-use asrs_log::log::log_value_sets::LogValueSetAny;
+use asrs_js::value::JsValue;
 use asrs_log::log::{Log, LoggableType};
 use asrs_log::util::upper_bound;
 use asrs_parity::json::Json;
@@ -277,38 +277,11 @@ fn mcap_chunk_bound(log: &Log, timestamps: &[f64]) -> f64 {
         for &timestamp in timestamps {
             next = upper_bound(set.timestamps(), timestamp, next);
             if next != 0 {
-                bound += 31.0 + mcap_value_json_len(&set, next - 1);
+                bound += 31.0 + value_json(&set, next - 1).map_or(0.0, |json| json.len() as f64);
             }
         }
     }
     bound
-}
-
-/// `encoder.encode(JSON.stringify({ value })).length` for the sample at `index`.
-fn mcap_value_json_len(set: &LogValueSetAny, index: usize) -> f64 {
-    let value = match set {
-        LogValueSetAny::Boolean(set) => JsValue::Bool(set.values[index]),
-        LogValueSetAny::Number(set) => JsValue::Number(set.values[index]),
-        LogValueSetAny::String(set) => JsValue::String(set.values[index].clone()),
-        LogValueSetAny::BooleanArray(set) => JsValue::Array(
-            set.values[index]
-                .iter()
-                .map(|&v| JsValue::Bool(v))
-                .collect(),
-        ),
-        LogValueSetAny::NumberArray(set) => JsValue::Array(
-            set.values[index]
-                .iter()
-                .map(|&v| JsValue::Number(v))
-                .collect(),
-        ),
-        _ => JsValue::Undefined,
-    };
-    let object: JsObject<JsValue> = [(JsString::from("value"), value)].into_iter().collect();
-    json::stringify(&JsValue::Object(object))
-        .ok()
-        .flatten()
-        .map_or(0.0, |json| json.len() as f64)
 }
 
 fn matrix_cases(spec: &JsValue) -> Result<Vec<(Case, f64)>, String> {
