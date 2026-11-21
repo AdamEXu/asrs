@@ -9,6 +9,7 @@ mod functions;
 mod geometry;
 mod glb;
 mod heatmap;
+mod historical_session;
 mod js_color;
 mod js_json;
 mod js_math;
@@ -40,6 +41,9 @@ commands:
                 decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
   decode-worker <file>
                 run the file's decode worker alone and print its messages (same as oracle decodeWorker)
+  historical-session <sessions.jsonl>
+                run scripted HistoricalDataSource sessions and print their traces (same as
+                oracle historicalSession)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
   canvas render rasterize the oracle's canvas scenes with asrs-canvas
   heatmap       replay the oracle's heatmap fixtures with asrs-tabs
@@ -53,6 +57,7 @@ fn main() -> ExitCode {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
         Some("decode-worker") => return decode_worker::run(&args[1..]),
+        Some("historical-session") => return historical_session::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
         Some("heatmap") => heatmap::run(&args[1..]),
         Some("wpilog") => wpilog::run(&args[1..]),

@@ -24,15 +24,17 @@ suites:
   decode [<log file>...] [--timeout SECS] [--plant]
         decode log files with both sides and compare the canonical dumps (`decode`) and
         the decode worker's messages, initial log and per-field responses
-        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the corpus a and b
-        trees, the public log cache and the fuzz corpora, or just the files listed. A
-        WPILOG's `decode` dump is compared on its initial phase only until lazy loading
-        is ported (F09). An oracle that does not finish in time and an asrs-cli that
+        (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the
+        corpus a and b trees, the public log cache and the fuzz corpora, or just the files
+        listed. An oracle that does not finish in time and an asrs-cli that
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
         output up to that point must be a prefix of the oracle's.
         --plant flips a bit in the first asrs-cli dump, so the run fails on purpose.
+  historical [<log file>...] [--jobs N] [--shard N] [--plant]
+        scripted hub sessions through the real HistoricalDataSource and the port,
+        compared trace for trace (`cargo xtask parity historical --help`)
   glb [--zips <dir>] [--jobs N] [--plant]
         load every Field3d_/Robot_ asset from the release zips (default <cache>/asset-zips)
         in all three render modes with upstream's real loadField/loadRobot workers and with
@@ -46,7 +48,7 @@ suites:
 --plant flips one bit in one Rust response before comparing, to show what a mismatch
 report looks like; the run then fails on purpose.";
 
-const SHOWN: usize = 5;
+pub(crate) const SHOWN: usize = 5;
 
 pub fn run(args: &[String]) -> Result {
     let rest = args.get(1..).unwrap_or_default();
@@ -54,6 +56,7 @@ pub fn run(args: &[String]) -> Result {
         Some("cve1") => cve1(rest),
         Some("fn") => fn_suite(rest),
         Some("decode") => decode_suite(rest),
+        Some("historical") => crate::sessions::run(rest),
         Some("glb") => crate::glb::run(rest),
         Some("diff") => match rest {
             [expected, actual] => diff_files(Path::new(expected), Path::new(actual)),
@@ -206,8 +209,7 @@ fn resolve_spec(root: &Path, spec: &str) -> Result<PathBuf> {
 
 /// `cargo xtask parity decode`: for every case, `oracle decode` and `asrs-cli decode` must give
 /// the same verdict and the same dump bytes, and so must `oracle decodeWorker` and
-/// `asrs-cli decode-worker`. A WPILOG is compared on its "initial" phase only: its "full" phase
-/// needs lazy field loading (unit F09); the worker run covers its per-field responses.
+/// `asrs-cli decode-worker`.
 fn decode_suite(args: &[String]) -> Result {
     let mut timeout = 60u64;
     let mut plant = false;
@@ -247,8 +249,7 @@ fn decode_suite(args: &[String]) -> Result {
         .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
     let mut cases = Vec::new();
     for file in &files {
-        let partial = file.extension().is_some_and(|e| e == "wpilog");
-        cases.push((file, DecodeMode::Decode { partial }));
+        cases.push((file, DecodeMode::Decode));
         cases.push((file, DecodeMode::Worker));
     }
     let timeout = Duration::from_secs(timeout);
@@ -269,13 +270,12 @@ fn decode_suite(args: &[String]) -> Result {
                         return;
                     }
                     let (path, mode) = &cases[i];
-                    let flags = mode.flags();
                     let mut oracle_command = oracle::oracle_command(&paths, mode.oracle_entry())
                         .expect("oracle decode command");
-                    oracle_command.args(&flags).arg(path);
+                    oracle_command.arg(path);
                     let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, timeout));
                     let mut rust_command = Command::new(&target);
-                    rust_command.arg(mode.cli_command()).args(&flags).arg(path);
+                    rust_command.arg(mode.cli_command()).arg(path);
                     let rust = DecodeVerdict::port(run_decode(&mut rust_command, timeout));
                     *results[i].lock().expect("decode result poisoned") = Some((oracle, rust));
                 }
@@ -340,37 +340,29 @@ fn decode_suite(args: &[String]) -> Result {
 }
 
 enum DecodeMode {
-    Decode { partial: bool },
+    Decode,
     Worker,
 }
 
 impl DecodeMode {
     fn oracle_entry(&self) -> &'static str {
         match self {
-            DecodeMode::Decode { .. } => "decode",
+            DecodeMode::Decode => "decode",
             DecodeMode::Worker => "decodeWorker",
         }
     }
 
     fn cli_command(&self) -> &'static str {
         match self {
-            DecodeMode::Decode { .. } => "decode",
+            DecodeMode::Decode => "decode",
             DecodeMode::Worker => "decode-worker",
-        }
-    }
-
-    fn flags(&self) -> Vec<String> {
-        match self {
-            DecodeMode::Decode { partial: true } => vec!["--initial".to_owned()],
-            DecodeMode::Decode { partial: false } => Vec::new(),
-            DecodeMode::Worker => Vec::new(),
         }
     }
 }
 
 /// The `.dslog`/`.dsevents`/`.wpilog`/`.rlog`/`.log`/`.csv` files the suite decodes: corpora a
 /// and b, the public log cache and the generated fuzz corpora.
-fn decode_cases(paths: &Paths) -> Result<Vec<PathBuf>> {
+pub(crate) fn decode_cases(paths: &Paths) -> Result<Vec<PathBuf>> {
     let mut cases = Vec::new();
     let is_ported = |p: &Path| {
         p.extension().is_some_and(|e| {
@@ -568,7 +560,7 @@ fn compare(cases: &[Case], plant_at: Option<usize>) -> Result<Vec<String>> {
 }
 
 /// Flips the lowest bit of the middle number in a response line.
-fn plant(line: &str) -> Option<String> {
+pub(crate) fn plant(line: &str) -> Option<String> {
     let starts: Vec<usize> = line
         .match_indices(r#"{"n":""#)
         .map(|(i, _)| i + 6)
@@ -583,7 +575,7 @@ fn plant(line: &str) -> Option<String> {
     ))
 }
 
-fn finish(suite: &str, total: usize, failures: Vec<String>) -> Result {
+pub(crate) fn finish(suite: &str, total: usize, failures: Vec<String>) -> Result {
     if failures.is_empty() {
         eprintln!("parity {suite}: {total}/{total} cases match");
         return Ok(());
