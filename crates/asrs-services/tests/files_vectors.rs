@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::{format_date, NamedZone, SetClock};
+use asrs_js::time::{NamedZone, SetClock, format_date};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_model::json_file;
 use asrs_model::preferences::Preferences;
@@ -173,31 +173,34 @@ impl Env {
                 self.first_load.push(id);
             }
             WindowKind::Satellite => {
-                if let Some(state) = &state {
-                    if let Some(uuid) = ops::get(state, "uuid")
+                if let Some(state) = &state
+                    && let Some(uuid) = ops::get(state, "uuid")
                         .ok()
                         .and_then(|u| u.as_str().cloned())
-                    {
-                        let uuid_str = uuid.to_string_lossy();
-                        match self.satellites.iter_mut().find(|(u, _)| *u == uuid_str) {
-                            Some((_, ids)) => ids.push(id),
-                            None => self.satellites.push((uuid_str, vec![id])),
-                        }
-                        let mut collection = JsValue::Object(JsObject::new());
-                        for (u, ids) in &self.satellites {
-                            let arr: Vec<JsValue> = ids
-                                .iter()
-                                .map(|id| {
-                                    let mut o = JsObject::new();
-                                    o.insert(JsString::from("id"), JsValue::Number(*id));
-                                    JsValue::Object(o)
-                                })
-                                .collect();
-                            ops::set_key(&mut collection, &JsString::from(u.as_str()), JsValue::Array(arr))
-                                .expect("collection set");
-                        }
-                        let _ = self.trackers[0].save_satellite_ids(&collection);
+                {
+                    let uuid_str = uuid.to_string_lossy();
+                    match self.satellites.iter_mut().find(|(u, _)| *u == uuid_str) {
+                        Some((_, ids)) => ids.push(id),
+                        None => self.satellites.push((uuid_str, vec![id])),
                     }
+                    let mut collection = JsValue::Object(JsObject::new());
+                    for (u, ids) in &self.satellites {
+                        let arr: Vec<JsValue> = ids
+                            .iter()
+                            .map(|id| {
+                                let mut o = JsObject::new();
+                                o.insert(JsString::from("id"), JsValue::Number(*id));
+                                JsValue::Object(o)
+                            })
+                            .collect();
+                        ops::set_key(
+                            &mut collection,
+                            &JsString::from(u.as_str()),
+                            JsValue::Array(arr),
+                        )
+                        .expect("collection set");
+                    }
+                    let _ = self.trackers[0].save_satellite_ids(&collection);
                 }
             }
             WindowKind::Other => {}
@@ -305,15 +308,12 @@ impl Env {
         }
         let first = self.first_load.contains(&id);
         let created_state = self.window_states.get(&window_key(id)).cloned();
-        let restore = if first && created_state.is_some() {
-            Some(ops::get(&created_state.unwrap(), "state")?)
-        } else {
-            let cached = self.trackers[0].get_renderer_state(id);
-            if cached == JsValue::Undefined {
-                None
-            } else {
-                Some(cached)
-            }
+        let restore = match (first, &created_state) {
+            (true, Some(state)) => Some(ops::get(state, "state")?),
+            _ => match self.trackers[0].get_renderer_state(id) {
+                JsValue::Undefined => None,
+                cached => Some(cached),
+            },
         };
         if let Some(state) = restore {
             self.sent.push((JsString::from("restore-state"), state));
@@ -328,7 +328,12 @@ impl Env {
             )?) {
                 let welcome = self.create_window(
                     WindowKind::Other,
-                    Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+                    Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 0.0,
+                        height: 0.0,
+                    },
                     None,
                 );
                 self.beta_welcomes.push(welcome);
@@ -338,7 +343,12 @@ impl Env {
                 self.beta.as_ref(),
                 &self.clock,
             )? {
-                beta::open_beta_survey(&self.fs, Some(&self.beta_file), self.beta.as_ref(), |_| ())?;
+                beta::open_beta_survey(
+                    &self.fs,
+                    Some(&self.beta_file),
+                    self.beta.as_ref(),
+                    |_| (),
+                )?;
             }
         }
         Ok(())
@@ -374,7 +384,12 @@ impl Env {
     fn click_edit_conversion(&mut self, preset: &JsValue) -> Result<(), JsError> {
         let id = self.create_window(
             WindowKind::Other,
-            Rect { x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
             None,
         );
         self.destroy_window(id);
@@ -409,8 +424,7 @@ impl Env {
 
     /// The "Import Layout..." click: merge, version gate, close windows, recreate them.
     fn import_layout(&mut self, paths: &[String], answer: f64) -> Result<(), JsError> {
-        let Ok(outcome) = layout::import(&self.fs, paths, self.packaged, &self.app_version)
-        else {
+        let Ok(outcome) = layout::import(&self.fs, paths, self.packaged, &self.app_version) else {
             return Ok(());
         };
         let layout::Import::Windows {
@@ -531,7 +545,10 @@ fn dispatch(env: &mut Env, op: &str, args: &JsValue) -> Result<JsValue, JsError>
             ("prefsFile", JsValue::string(env.prefs_file.as_str())),
             ("stateFile", JsValue::string(env.state_file.as_str())),
             ("typeMemoryFile", JsValue::string(env.tm_file.as_str())),
-            ("recentUnitsFile", JsValue::string(env.recents_file.as_str())),
+            (
+                "recentUnitsFile",
+                JsValue::string(env.recents_file.as_str()),
+            ),
             ("betaFile", JsValue::string(env.beta_file.as_str())),
         ])),
         "putFile" => {
@@ -586,8 +603,7 @@ fn dispatch(env: &mut Env, op: &str, args: &JsValue) -> Result<JsValue, JsError>
         }
         "saveRendererState" => {
             let tracker = js_number(&get("tracker")?)? as usize;
-            env.trackers[tracker]
-                .save_renderer_state(js_number(&get("id")?)?, get("state")?);
+            env.trackers[tracker].save_renderer_state(js_number(&get("id")?)?, get("state")?);
             Ok(JsValue::Null)
         }
         "getRendererState" => {
@@ -646,9 +662,7 @@ fn dispatch(env: &mut Env, op: &str, args: &JsValue) -> Result<JsValue, JsError>
             env.ds_layout(js_number(&get("window")?)?)?;
             Ok(JsValue::Null)
         }
-        "isBetaWelcomeComplete" => {
-            beta::is_beta_welcome_complete(&env.fs, Some(&env.beta_file))
-        }
+        "isBetaWelcomeComplete" => beta::is_beta_welcome_complete(&env.fs, Some(&env.beta_file)),
         "isBetaExpired" => Ok(JsValue::Bool(beta::is_beta_expired(
             env.beta.as_ref(),
             &env.clock,
@@ -686,25 +700,16 @@ fn dispatch(env: &mut Env, op: &str, args: &JsValue) -> Result<JsValue, JsError>
 /// `JSON.stringify` all act on own enumerable properties, which is all these files see.
 fn demote(value: &Value) -> Value {
     match value {
-        Value::Instance(_, pairs) => Value::Object(
-            pairs
-                .iter()
-                .map(|(k, v)| (k.clone(), demote(v)))
-                .collect(),
-        ),
-        Value::Object(pairs) => Value::Object(
-            pairs
-                .iter()
-                .map(|(k, v)| (k.clone(), demote(v)))
-                .collect(),
-        ),
+        Value::Instance(_, pairs) => {
+            Value::Object(pairs.iter().map(|(k, v)| (k.clone(), demote(v))).collect())
+        }
+        Value::Object(pairs) => {
+            Value::Object(pairs.iter().map(|(k, v)| (k.clone(), demote(v))).collect())
+        }
         Value::Array(items) => Value::Array(items.iter().map(demote).collect()),
-        Value::Map(pairs) => Value::Map(
-            pairs
-                .iter()
-                .map(|(k, v)| (demote(k), demote(v)))
-                .collect(),
-        ),
+        Value::Map(pairs) => {
+            Value::Map(pairs.iter().map(|(k, v)| (demote(k), demote(v))).collect())
+        }
         Value::Set(items) => Value::Set(items.iter().map(demote).collect()),
         Value::TypedArray(name, items) => {
             Value::TypedArray(name.clone(), items.iter().map(demote).collect())
@@ -714,7 +719,7 @@ fn demote(value: &Value) -> Value {
 }
 
 fn expected_value(record: &Record, key: &str) -> Option<Value> {
-    record.field(key).map(|j| Value::from_json_lenient(j))
+    record.field(key).map(Value::from_json_lenient)
 }
 
 fn json_f64_array(record: &Record, key: &str) -> Vec<f64> {
@@ -757,23 +762,23 @@ fn sent_values(env: &Env) -> Vec<(String, Value)> {
 
 fn check_record(env: &mut Env, record: &Record) -> Result<(), String> {
     let op = record.string("op").unwrap_or_default();
-    if op == "config" {
-        if let Ok(result) = record.value("result") {
-            let packaged = result
-                .get("packaged")
-                .is_some_and(|v| *v == Value::Bool(true));
-            let app_version = result
-                .get("appVersion")
-                .and_then(|v| {
-                    if let Value::String(s) = v {
-                        Some(s.to_string_lossy())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_default();
-            env.configure(&app_version, packaged);
-        }
+    if op == "config"
+        && let Ok(result) = record.value("result")
+    {
+        let packaged = result
+            .get("packaged")
+            .is_some_and(|v| *v == Value::Bool(true));
+        let app_version = result
+            .get("appVersion")
+            .and_then(|v| {
+                if let Value::String(s) = v {
+                    Some(s.to_string_lossy())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+        env.configure(&app_version, packaged);
     }
     let args = match record.value("args") {
         Ok(value) => js_json::to_js(&demote(&value)).map_err(|e| format!("args: {e}"))?,
@@ -825,7 +830,9 @@ fn check_record(env: &mut Env, record: &Record) -> Result<(), String> {
                         item.get("name")
                             .and_then(|n| n.as_str().map(|s| s.to_string_lossy()))
                             .unwrap_or_default(),
-                        item.get("data").map(Value::from_json_lenient).unwrap_or(Value::Null),
+                        item.get("data")
+                            .map(Value::from_json_lenient)
+                            .unwrap_or(Value::Null),
                     )
                 })
                 .collect()
@@ -885,7 +892,13 @@ fn check(id: &str, zone_name: &str) {
     let mut failures = Vec::new();
     for record in &records {
         if let Err(e) = check_record(&mut env, record) {
-            failures.push(format!("line {} (case {:?} step {:?}): {}", record.line, record.string("case"), record.string("step"), e));
+            failures.push(format!(
+                "line {} (case {:?} step {:?}): {}",
+                record.line,
+                record.string("case"),
+                record.string("step"),
+                e
+            ));
         }
     }
     if !failures.is_empty() {
@@ -893,7 +906,12 @@ fn check(id: &str, zone_name: &str) {
             "vectors {id}: {} of {} records differ\n\n{}",
             failures.len(),
             records.len(),
-            failures.iter().take(5).map(String::as_str).collect::<Vec<_>>().join("\n\n")
+            failures
+                .iter()
+                .take(5)
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("\n\n")
         );
     }
 }
