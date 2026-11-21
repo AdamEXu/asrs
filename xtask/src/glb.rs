@@ -147,7 +147,9 @@ fn capture(command: &mut Command, side: &str) -> Result<String> {
     String::from_utf8(output.stdout).map_err(|e| format!("{side} output: {e}"))
 }
 
-/// Extracts each distinct `Field3d_*`/`Robot_*` zip under `zips` into `<out>/<zip stem>`.
+/// Extracts each distinct `Field3d_*`/`Robot_*` zip under `zips` into `<out>/<zip stem>`. An
+/// extraction is reused only while its stamp (zip path, size, mtime) matches, and folders of
+/// zips no longer in the set are removed, since both sides load every folder in `out`.
 fn extract(zips: &Path, out: &Path) -> Result<usize> {
     let mut found = BTreeMap::new();
     collect(zips, &mut found)?;
@@ -155,10 +157,27 @@ fn extract(zips: &Path, out: &Path) -> Result<usize> {
         return Err(format!("no Field3d_/Robot_ zips under {}", zips.display()));
     }
     fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    for entry in fs::read_dir(out).map_err(|e| format!("{}: {e}", out.display()))? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if path.is_dir() && !name.starts_with('.') && !found.contains_key(name) {
+            fs::remove_dir_all(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+    }
     for (stem, zip) in &found {
         let target = out.join(stem);
-        if target.join("config.json").is_file() {
+        let stamp = stamp_of(zip)?;
+        let stamp_file = target.join(".source");
+        if target.join("config.json").is_file()
+            && fs::read_to_string(&stamp_file).is_ok_and(|s| s == stamp)
+        {
             continue;
+        }
+        if target.exists() {
+            fs::remove_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
         }
         let partial = out.join(format!(".{stem}.partial"));
         if partial.exists() {
@@ -174,9 +193,22 @@ fn extract(zips: &Path, out: &Path) -> Result<usize> {
         if !status.success() {
             return Err(format!("unzip {} failed ({status})", zip.display()));
         }
+        fs::write(partial.join(".source"), &stamp)
+            .map_err(|e| format!("{}: {e}", partial.display()))?;
         fs::rename(&partial, &target).map_err(|e| format!("{}: {e}", target.display()))?;
     }
     Ok(found.len())
+}
+
+fn stamp_of(zip: &Path) -> Result<String> {
+    let meta = fs::metadata(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    let path = fs::canonicalize(zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    Ok(format!("{}\n{}\n{mtime}\n", path.display(), meta.len()))
 }
 
 fn collect(dir: &Path, found: &mut BTreeMap<String, PathBuf>) -> Result {

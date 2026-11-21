@@ -644,6 +644,33 @@ export function syntheticCases(): AssetCase[] {
     const values = b.accessor(FLOAT, "VEC3", [0, 0, 0, 1, 2, 3]);
     b.json.animations = [{ channels: [{ sampler: 0, target: { node: 0, path: "translation" } }], samplers: [{ input: times, output: values, ...sampler }], ...extra }];
   };
+  // GLTFLoader writes sparse values through setX, which normalizes the already-encoded integers
+  // again, and for a strided view it keeps the whole interleaved array as the attribute, doubling
+  // its count. Upstream bugs, reproduced on purpose.
+  const e = blob([0.2, 0.1, 0], 0.3, 7);
+  const sparseOf = (b: Builder, values: Buffer) => ({ count: 2, indices: { bufferView: b.view(encodeValues(U16, [1, 4])), componentType: U16 }, values: { bufferView: b.view(values) } });
+  const only = (b: Builder, name: string, attributes: object) => {
+    b.json.meshes = [{ name, primitives: [{ attributes, indices: b.accessor(U16, "SCALAR", e.indices) }] }];
+    b.json.nodes = [{ name, mesh: 0 }];
+  };
+  variant("sparse-normalized", (b) => {
+    const normals = e.normals.map((v) => Math.round(v * 127));
+    const sparse = sparseOf(b, encodeValues(5120, [64, -90, 100, 1, 2, 127]));
+    only(b, "normalized sparse", { POSITION: b.accessor(FLOAT, "VEC3", e.positions), NORMAL: b.accessor(5120, "VEC3", normals, { normalized: true, sparse }) });
+  });
+  variant("sparse-strided", (b) => {
+    const interleaved: number[] = [];
+    for (let i = 0; i < 7; i++) interleaved.push(...e.positions.slice(i * 3, i * 3 + 3), ...e.normals.slice(i * 3, i * 3 + 3));
+    const view = b.view(encodeValues(FLOAT, interleaved), { byteStride: 24 });
+    const sparse = sparseOf(b, encodeValues(FLOAT, [0.5, 0.5, 0.5, -0.5, 0.25, 0]));
+    only(b, "strided sparse", {
+      POSITION: b.raw({ bufferView: view, byteOffset: 0, componentType: FLOAT, count: 7, type: "VEC3", sparse }),
+      NORMAL: b.raw({ bufferView: view, byteOffset: 12, componentType: FLOAT, count: 7, type: "VEC3", sparse })
+    });
+  });
+  variant("error/huge-zero-accessor", (b) => {
+    b.json.meshes[0].primitives[0].attributes.NORMAL = b.raw({ componentType: FLOAT, count: 1e12, type: "VEC3" });
+  });
   variant("error/deep-hierarchy", (b) => {
     let node = b.json.scenes[0].nodes[0];
     for (let i = 0; i < 8000; i++) node = b.node({ name: `level ${i}`, children: [node] });

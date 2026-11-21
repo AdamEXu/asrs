@@ -198,6 +198,11 @@ fn number_elem(value: Option<&JsValue>, i: usize) -> f64 {
     }
 }
 
+/// An accessor without a bufferView allocates `count` zeros from the JSON alone. V8 throws once
+/// the allocation fails, which the port cannot predict; it refuses anything this large instead
+/// of letting the allocator abort the process.
+const MAX_ZERO_FILL_BYTES: usize = 1 << 30;
+
 /// `meshDef.primitives` as `loadMesh` and `loadGeometries` walk it: `for (i < primitives.length)`.
 fn primitives_of(mesh: &JsValue) -> Result<Vec<JsValue>> {
     match prop(mesh, "primitives") {
@@ -333,12 +338,10 @@ fn item_size(type_name: Option<&JsValue>) -> Result<usize> {
     Ok(match s.to_string_lossy().as_str() {
         "SCALAR" => 1,
         "VEC2" => 2,
-        "VEC3" | "MAT2" | "VEC4" | "MAT3" | "MAT4" => match s.to_string_lossy().as_str() {
-            "VEC3" => 3,
-            "VEC4" | "MAT2" => 4,
-            "MAT3" => 9,
-            _ => 16,
-        },
+        "VEC3" => 3,
+        "VEC4" | "MAT2" => 4,
+        "MAT3" => 9,
+        "MAT4" => 16,
         _ => return unmodeled("accessor without a known type"),
     })
 }
@@ -1113,11 +1116,15 @@ impl Parser<'_> {
         let width = element_bytes(kind);
 
         let mut attribute = match buffer_view_index {
-            None => BufferAttribute::new(
-                ArrayData::zeroed(kind, to_index(count * size as f64)?),
-                size,
-                normalized,
-            ),
+            None => {
+                let length = to_index(count * size as f64)?;
+                if length.saturating_mul(width) > MAX_ZERO_FILL_BYTES {
+                    return unmodeled(format!(
+                        "a zero-filled accessor of {length} components (over {MAX_ZERO_FILL_BYTES} bytes)"
+                    ));
+                }
+                BufferAttribute::new(ArrayData::zeroed(kind, length), size, normalized)
+            }
             Some(view_index) => {
                 let view = self.load_buffer_view(view_index)?;
                 let byte_offset = if truthy(prop(&def, "byteOffset")) {
