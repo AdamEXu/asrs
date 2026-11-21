@@ -1044,8 +1044,12 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
             ))
         }
         "window.tabs.isValidUUID(window.tabs.tabList[window.tabs.selectedTab].controller.UUID)" => {
-            let selected = r.tabs.selected().clone();
-            Ok(JsValue::Bool(r.tabs.is_valid_uuid(&selected)))
+            let uuid = r
+                .tabs
+                .selected_index()
+                .and_then(|i| r.tabs.tab(i))
+                .map_or(JsValue::Undefined, |t| t.uuid().clone());
+            Ok(JsValue::Bool(r.tabs.is_valid_uuid(&uuid)))
         }
         _ => eval_selection_expr(&mut r.host.selection, expr)
             .ok_or_else(|| err(format!("unsupported eval {expr}"))),
