@@ -54,8 +54,6 @@ pub trait Nt4Transport {
     /// `fetch(url)` (a GET). Completion arrives as `on_fetch_response` or `on_fetch_failed`.
     fn fetch(&mut self, url: &str) -> RequestId;
 
-    /// `AbortSignal.abort` on the request's signal. True when the request was still pending and
-    /// is now aborted; false when it already settled, where upstream's listener returns early
-    /// and the promise keeps whatever state it had.
-    fn fetch_abort(&mut self, id: RequestId) -> bool;
+    /// Aborts a request that has not completed; it then never completes.
+    fn fetch_abort(&mut self, id: RequestId);
 }

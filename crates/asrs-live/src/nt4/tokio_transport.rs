@@ -220,14 +220,9 @@ impl Nt4Transport for TokioTransport {
         RequestId(id)
     }
 
-    fn fetch_abort(&mut self, id: RequestId) -> bool {
-        match self.requests.get(&id.0) {
-            Some(task) if task.is_finished() => false,
-            Some(_) => {
-                self.requests.remove(&id.0).expect("present").abort();
-                true
-            }
-            None => false,
+    fn fetch_abort(&mut self, id: RequestId) {
+        if let Some(task) = self.requests.remove(&id.0) {
+            task.abort();
         }
     }
 }

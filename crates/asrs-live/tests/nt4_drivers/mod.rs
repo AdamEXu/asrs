@@ -2,11 +2,9 @@
 //! `oracle/src/liveSession.ts` does: `window` is `Nt4Window` plus the session's tabs, sidebar
 //! and preferences, the output callback assigns `window.log` and records `output` events with
 //! the oracle's `logId` numbering, and `dump` ops serialize `window.log`. Stopped sources stay
-//! alive so their idle loops keep running, as upstream's do. The publisher driver is
-//! `publisher.rs` in this directory, compiled from `asrs-model`'s tests because it needs
-//! `SelectionImpl`, which asrs-live may not depend on.
+//! alive so their idle loops keep running, as upstream's do.
 
-#![allow(dead_code)]
+mod publisher;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,15 +22,17 @@ use asrs_parity::live::Session;
 
 use crate::support::{self, Driver, Env, Trace};
 
+pub use publisher::PublisherDriver;
+
 fn js(s: &str) -> JsString {
     JsString::from(s)
 }
 
 /// `window.preferences`, reduced to what the NT4 classes read; `None` is `null`.
-pub struct Prefs {
+struct Prefs {
     live_subscribe_mode: String,
     live_discard: f64,
-    pub publisher: PublisherPreferences,
+    publisher: PublisherPreferences,
 }
 
 impl Prefs {
@@ -75,14 +75,14 @@ impl Prefs {
     }
 }
 
-pub fn prefs_op(prefs: &mut Option<Prefs>, arg: &Json) {
+fn prefs_op(prefs: &mut Option<Prefs>, arg: &Json) {
     match arg {
         Json::Null => *prefs = None,
         update => prefs.get_or_insert_with(Prefs::defaults).merge(update),
     }
 }
 
-pub fn initial_prefs(session: &Session) -> Option<Prefs> {
+fn initial_prefs(session: &Session) -> Option<Prefs> {
     match session.client.get("prefs") {
         Some(Json::Null) => None,
         Some(update) => {
@@ -264,7 +264,7 @@ impl SourceDriver {
     }
 }
 
-pub fn op_name(op: &[Json]) -> String {
+fn op_name(op: &[Json]) -> String {
     op[0].as_str().expect("op name").to_string_lossy()
 }
 

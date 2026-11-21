@@ -1,10 +1,7 @@
-//! The `nt4-publisher` half of the session drivers, compiled only from
-//! `asrs-model/tests/publisher_sessions.rs`: `SessionSelection` routes `window.selection`
-//! through `SelectionImpl`, which asrs-live may not depend on (the layout rules keep
-//! asrs-model above asrs-live).
+//! The `nt4-publisher` driver: `window.selection` is the oracle's stub, two plain values
+//! the session's `select` op assigns.
 
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use asrs_js::time::Clock;
 use asrs_live::nt4::{
@@ -12,44 +9,40 @@ use asrs_live::nt4::{
 };
 use asrs_live::{Thrown, TimerId};
 use asrs_log::log::Log;
-use asrs_model::selection::Selection;
-use asrs_model::selection_impl::SelectionImpl;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::Session;
 
-use crate::nt4_drivers::{Prefs, initial_prefs, op_name, prefs_op};
+use super::{Prefs, initial_prefs, op_name, prefs_op};
 use crate::support::{self, Driver, Env};
 
-/// `window.selection`, driven through the real `SelectionImpl` so the publisher reads the
-/// same getter the hub's selection produces. The session's `select` op is a raw assignment
-/// upstream (`selected`, `hovered`), which maps to Idle/Static here: playback and locked
-/// modes are never entered.
-pub struct SessionSelection {
-    inner: SelectionImpl,
+#[derive(Default)]
+struct SessionSelection {
+    selected: Option<f64>,
+    hovered: Option<f64>,
 }
 
 impl PublisherSelection for SessionSelection {
     fn get_hovered_time(&self) -> Option<f64> {
-        self.inner.get_hovered_time()
+        self.hovered
     }
 
     fn get_selected_time(&mut self) -> Option<f64> {
-        self.inner.get_selected_time()
+        self.selected
     }
 }
 
 pub struct PublisherDriver {
     is_sim: bool,
     platform: String,
-    log: Rc<RefCell<Log>>,
+    log: RefCell<Log>,
     prefs: Option<Prefs>,
     selection: SessionSelection,
     publishers: Vec<Nt4Publisher>,
 }
 
 impl PublisherDriver {
-    pub fn new(session: &Session, env: &mut Env) -> Self {
+    pub fn new(session: &Session) -> Self {
         let c = &session.client;
         let is_sim = match c
             .get("mode")
@@ -61,17 +54,14 @@ impl PublisherDriver {
             Some("robot") => false,
             other => panic!("publisher mode must be \"sim\" or \"robot\", got {other:?}"),
         };
-        let log: Rc<RefCell<Log>> = Rc::new(RefCell::new(Log::new(true)));
         PublisherDriver {
             is_sim,
             platform: c
                 .get("platform")
                 .and_then(Json::as_str)
                 .map_or_else(|| "darwin".to_owned(), |s| s.to_string_lossy()),
-            selection: SessionSelection {
-                inner: SelectionImpl::new(Rc::clone(&log), Rc::new(env.wall.clone())),
-            },
-            log,
+            selection: SessionSelection::default(),
+            log: RefCell::new(Log::new(true)),
             prefs: initial_prefs(session),
             publishers: Vec::new(),
         }
@@ -79,7 +69,7 @@ impl PublisherDriver {
 
     fn window(&mut self) -> PublisherWindow<'_> {
         PublisherWindow {
-            log: self.log.as_ref(),
+            log: &self.log,
             preferences: self.prefs.as_ref().map(|p| &p.publisher),
             platform: &self.platform,
             selection: &mut self.selection,
@@ -120,18 +110,8 @@ impl Driver for PublisherDriver {
             "stop" => self.stop_current(env)?,
             "prefs" => prefs_op(&mut self.prefs, &op[1]),
             "select" => {
-                let selection = &mut self.selection.inner;
-                match op[1].as_f64() {
-                    Some(time) => {
-                        selection.pause();
-                        selection.set_selected_time(time);
-                    }
-                    None => {
-                        selection.pause();
-                        selection.go_idle();
-                    }
-                }
-                selection.set_hovered_time(op[2].as_f64());
+                self.selection.selected = op[1].as_f64();
+                self.selection.hovered = op[2].as_f64();
             }
             "log" => support::log_op(&mut self.log.borrow_mut(), &mut env.realm, op)?,
             "dump" => {
@@ -158,7 +138,7 @@ impl Driver for PublisherDriver {
     fn timer(&mut self, id: TimerId, env: &mut Env) {
         let mut cx = env.cx();
         let mut window = PublisherWindow {
-            log: self.log.as_ref(),
+            log: &self.log,
             preferences: self.prefs.as_ref().map(|p| &p.publisher),
             platform: &self.platform,
             selection: &mut self.selection,

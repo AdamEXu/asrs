@@ -320,9 +320,7 @@ pub fn replay(id: &str, session: &Session) -> Result<usize, String> {
         match source.as_str() {
             "nt4-client" => Box::new(client_driver(session)),
             "nt4" => Box::new(nt4_drivers::SourceDriver::new(session, env)),
-            "nt4-publisher" => {
-                panic!("nt4-publisher sessions replay in asrs-model's publisher_sessions test")
-            }
+            "nt4-publisher" => Box::new(nt4_drivers::PublisherDriver::new(session)),
             other => panic!("{other} is not an NT4 source"),
         }
     })?;
@@ -334,12 +332,7 @@ fn nt4_sessions() -> Vec<(String, Session)> {
         .into_iter()
         .filter_map(|path| {
             let session = Session::load(&path).unwrap_or_else(|e| panic!("{e}"));
-            let is_publisher = session
-                .client
-                .get("source")
-                .and_then(Json::as_str)
-                .is_some_and(|s| s.to_string_lossy() == "nt4-publisher");
-            (session.protocol == "nt4" && !is_publisher).then(|| (live::vector_id(&path), session))
+            (session.protocol == "nt4").then(|| (live::vector_id(&path), session))
         })
         .collect()
 }
@@ -368,6 +361,22 @@ fn a_one_millisecond_clock_skew_is_caught() {
         .find(|(id, _)| id == "live/nt4/client-v41-api")
         .expect("session");
     session.epoch_ms += 1.0;
+    let error = replay(&id, &session).unwrap_err();
+    assert!(error.contains("differs"), "{error}");
+}
+
+#[test]
+fn a_wrong_published_sample_is_caught() {
+    let (id, mut session) = nt4_sessions()
+        .into_iter()
+        .find(|(id, _)| id == "live/nt4/publisher-sim")
+        .expect("session");
+    let step = session
+        .client_steps
+        .iter_mut()
+        .find(|s| s.op[0].as_str().is_some_and(|op| op.eq_str("select")))
+        .expect("select step");
+    step.op[1] = Json::Number(1.9);
     let error = replay(&id, &session).unwrap_err();
     assert!(error.contains("differs"), "{error}");
 }

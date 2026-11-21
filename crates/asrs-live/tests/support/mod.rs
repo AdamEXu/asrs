@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 
 use asrs_js::string::JsString;
@@ -85,6 +85,7 @@ pub struct FakeNet {
     requests: BTreeMap<u32, FakeRequest>,
     tasks: Vec<(f64, u64, Delivery)>,
     seq: u64,
+    microtasks: VecDeque<NetEvent>,
 }
 
 fn payload(data: &WsMessage) -> Payload {
@@ -94,27 +95,9 @@ fn payload(data: &WsMessage) -> Payload {
     }
 }
 
-/// `new URL(url).href` for the URLs the sources build.
+/// `new URL(url).href`; only URLs that parse reach the server.
 fn href(url: &str) -> String {
-    let after_scheme = url.find("://").map_or(0, |i| i + 3);
-    if url[after_scheme..].contains('/') {
-        url.to_owned()
-    } else {
-        format!("{url}/")
-    }
-}
-
-/// Whether `new URL(url)` throws; special schemes reject an empty host, so a robot publisher
-/// with no preferences produces "http://:5810" whose reply settles but never resolves
-/// upstream (`request.done` is already true, so even the abort is silent).
-fn url_throws(url: &str) -> bool {
-    let Some((_, rest)) = url.split_once("://") else {
-        return true;
-    };
-    rest.split('/')
-        .next()
-        .and_then(|authority| authority.split(':').next())
-        .is_none_or(str::is_empty)
+    url::Url::parse(url).expect("fetched URLs parse").into()
 }
 
 impl FakeNet {
@@ -225,7 +208,6 @@ impl FakeNet {
                 Some(r) if !r.done => {
                     r.done = true;
                     match status {
-                        Some(_) if url_throws(&r.url) => Vec::new(),
                         Some(status) => {
                             vec![NetEvent::FetchResponse(
                                 RequestId(id),
@@ -303,6 +285,11 @@ impl Nt4Transport for FakeNet {
     fn fetch(&mut self, url: &str) -> RequestId {
         let id = self.next_id;
         self.next_id += 1;
+        if url::Url::parse(url).is_err() {
+            self.microtasks
+                .push_back(NetEvent::FetchFailed(RequestId(id)));
+            return RequestId(id);
+        }
         self.requests.insert(
             id,
             FakeRequest {
@@ -317,16 +304,15 @@ impl Nt4Transport for FakeNet {
         RequestId(id)
     }
 
-    fn fetch_abort(&mut self, id: RequestId) -> bool {
+    fn fetch_abort(&mut self, id: RequestId) {
         let Some(request) = self.requests.get_mut(&id.0) else {
-            return false;
+            return;
         };
         if request.done {
-            return false;
+            return;
         }
         request.done = true;
         self.send_to_server(ClientEvent::HttpAbort { id: id.0 });
-        true
     }
 }
 
@@ -366,6 +352,12 @@ pub trait Driver {
     fn finish(&mut self, _env: &mut Env) {}
 }
 
+fn drain_microtasks(driver: &mut dyn Driver, env: &mut Env) {
+    while let Some(event) = env.net.microtasks.pop_front() {
+        driver.notify(event, env);
+    }
+}
+
 /// Runs a session the way `LiveLoop.run` does and returns the trace.
 pub fn run(
     session: &Session,
@@ -385,6 +377,7 @@ pub fn run(
             requests: BTreeMap::new(),
             tasks: Vec::new(),
             seq: 0,
+            microtasks: VecDeque::new(),
         },
         wall: WallClock {
             loop_clock: clock.clone(),
@@ -426,19 +419,19 @@ pub fn run(
                     ))),
                 );
             }
+            drain_microtasks(driver.as_mut(), &mut env);
         }
         loop {
             if let Some(delivery) = env.net.take_task(now) {
                 for event in env.net.apply(delivery) {
                     driver.notify(event, &mut env);
                 }
-                continue;
-            }
-            if let Some(id) = env.timers.fire_next() {
+            } else if let Some(id) = env.timers.fire_next() {
                 driver.timer(id, &mut env);
-                continue;
+            } else {
+                break;
             }
-            break;
+            drain_microtasks(driver.as_mut(), &mut env);
         }
     }
     if session.end_ms > clock.now() {

@@ -222,7 +222,6 @@ impl Nt4Publisher {
                 };
                 if let Some(wpilib) = log.get_wpilib_type(topic) {
                     ty = wpilib.clone();
-                    // NT4 uses "int" but wpilog uses "int64"
                     if ty == js("int64") {
                         ty = js("int");
                     }

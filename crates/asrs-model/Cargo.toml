@@ -14,7 +14,6 @@ asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 
 [dev-dependencies]
-asrs-live = { path = "../asrs-live" }
 asrs-parity = { path = "../asrs-parity" }
 
 [lints]
