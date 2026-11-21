@@ -1,3 +1,5 @@
+// Ported from camera-controls 2.9.0 (MIT, Copyright (c) 2017 @yomotsu). See THIRD_PARTY_NOTICES.md.
+
 //! The part of camera-controls 2.9.0 that upstream's `Field3dRendererImpl` drives: mouse
 //! rotate, truck and dolly, wheel dolly with `infinityDolly`, the programmatic moves
 //! (`rotate`, `dolly`, `dollyInFixed`, `truck`, `elevate`, `moveTo`, `setLookAt`, `setTarget`)

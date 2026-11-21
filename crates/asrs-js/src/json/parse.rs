@@ -1,3 +1,5 @@
+// Ported from V8 14.2 (BSD-3-Clause, Copyright the V8 project authors). See THIRD_PARTY_NOTICES.md.
+
 //! A port of V8's `JsonParser` (src/json/json-parser.cc): the same grammar checks in the same
 //! order, so every malformed input fails with V8's message and position.
 

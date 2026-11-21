@@ -1,3 +1,5 @@
+// Ported from V8 14.2 (BSD-3-Clause, Copyright the V8 project authors). See THIRD_PARTY_NOTICES.md.
+
 //! ECMAScript number formatting and parsing, matching V8 (Electron 39.2.7).
 //!
 //! Formatting for `toFixed`, `toPrecision`, `toExponential` and `Intl.NumberFormat`

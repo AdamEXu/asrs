@@ -1,3 +1,5 @@
+// Ported from protobufjs 8.3.0 (BSD-3-Clause, Copyright (c) 2016 Daniel Wirtz). See THIRD_PARTY_NOTICES.md.
+
 //! protobufjs's `Reader`, and the behaviour of the code its `decoder`, `toObject` and
 //! constructor generators emit for a reflected type.
 

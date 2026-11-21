@@ -1,3 +1,5 @@
+// Ported from REV Robotics CAN spec utilities (MIT, Copyright 2024 REV Robotics). See THIRD_PARTY_NOTICES.md.
+
 //! Port of `can-spec-util.ts`: `getCanSignalValue` and `parseCanFrame`. Bit positions
 //! are LSB-first. `isBigEndian` is kept in the spec structs but ignored on decode,
 //! matching upstream (it has a TODO and never applies it). `console.warn` calls on

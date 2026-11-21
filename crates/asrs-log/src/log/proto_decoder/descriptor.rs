@@ -1,3 +1,5 @@
+// Ported from protobufjs 8.3.0 (BSD-3-Clause, Copyright (c) 2016 Daniel Wirtz). See THIRD_PARTY_NOTICES.md.
+
 //! `protobufjs/ext/descriptor`: decoding a `FileDescriptorProto` and the `fromDescriptor`
 //! builders `ProtoDecoder.addDescriptor` calls.
 

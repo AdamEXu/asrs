@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Skia's stroker (`SkStroke.cpp`, `SkStrokerPriv.cpp`) for lines, quads, conics and
 //! cubics. Round caps and joins are emitted as conics, which the scan converter later splits
 //! into quads in device space, exactly as Chromium does; tiny-skia's port splits them in user

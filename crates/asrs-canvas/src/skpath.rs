@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! A device-space path with Skia's `SkPath` layout (verbs, points, conic weights) and the queries
 //! the scan converters make of it: bounds, convexity, `isRect` and the auto-closing edge walk.
 

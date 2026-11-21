@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 use super::{ArrayData, BufferAttribute, BufferGeometry};
 
 /// Why `mergeGeometries` returned `null`.

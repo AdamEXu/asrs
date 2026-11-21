@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Skia's `SkLineClipper` and the curve half of `SkEdgeClipper`: device geometry is cut to the
 //! clip before the scan converters turn it into fixed point, which overflows a few thousand
 //! pixels off the canvas.

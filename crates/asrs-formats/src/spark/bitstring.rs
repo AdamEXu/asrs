@@ -1,3 +1,5 @@
+// Ported from REV Robotics CAN spec utilities (MIT, Copyright 2024 REV Robotics). See THIRD_PARTY_NOTICES.md.
+
 //! Port of `bitstring.ts`. A "bit string" is the LSB-first character list upstream
 //! builds; here it is a `u64` value plus a bit count, where bit `i` is character `i`
 //! of the upstream string. Only the decode helpers are ported (see `can_spec`).

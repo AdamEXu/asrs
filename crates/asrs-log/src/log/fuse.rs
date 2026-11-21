@@ -1,3 +1,6 @@
+// Ported from Fuse.js 7.0.0 (Apache-2.0, Copyright 2017 Kirollos Risk); translated to Rust and
+// modified (subset, see below). See THIRD_PARTY_NOTICES.md.
+
 //! Fuse.js 7.0.0 string-list search (`Fuse#search` over `Array<string>` with the Bitap
 //! searcher) in the one configuration upstream uses, `searchFields`'s
 //! `{ findAllMatches: true, ignoreLocation: true }` over the defaults. Other options, extended

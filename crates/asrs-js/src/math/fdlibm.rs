@@ -1,3 +1,14 @@
+// Ported from V8 14.2 src/base/ieee754.cc (BSD-3-Clause, Copyright 2016 the V8 project
+// authors), which is adapted from fdlibm:
+// ====================================================
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//
+// Developed at SunSoft, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this
+// software is freely granted, provided that this notice
+// is preserved.
+// ====================================================
+
 #![allow(
     clippy::approx_constant,
     clippy::eq_op,

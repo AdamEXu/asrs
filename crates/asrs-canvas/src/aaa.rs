@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Skia's analytic anti-aliasing (`SkScan_AAAPath.cpp`, `SkAnalyticEdge.cpp` and the analytic
 //! half of `SkEdgeBuilder.cpp`, Chromium m142), ported operation for operation in 16.16 fixed
 //! point. Chromium's CPU canvas fills every antialiased path with it, so its rounding (quarter

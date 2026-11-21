@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 // MeshPhongMaterial from three 0.168 (meshphong.glsl.js and its chunks), statement for statement,
 // so the arithmetic order matches the GLSL that ANGLE compiles.
 

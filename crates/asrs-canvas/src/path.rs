@@ -1,3 +1,5 @@
+// Ported from Skia and Blink, Chromium m142 (BSD-3-Clause, Copyright Google Inc. and The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 use std::f32::consts::{FRAC_1_SQRT_2, PI, TAU};
 
 use tiny_skia::PathBuilder;

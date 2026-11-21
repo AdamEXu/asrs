@@ -1,3 +1,5 @@
+// Ported from Blink, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 //! Text in a CSS block box as Blink lays it out and paints it, for the subset of CSS upstream's
 //! stylesheets use: one font per box, `line-height`, `text-align`, `direction`, `white-space`
 //! (`normal`, `nowrap`, `pre`) and `text-overflow` (`clip`, `ellipsis`).

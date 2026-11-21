@@ -1,0 +1,206 @@
+# Third-party notices
+
+asrs contains code ported or derived from the projects below, plus data and
+assets copied from them. Full license texts are in [`licenses/`](licenses/).
+Rust crates compiled into the app are listed separately: run
+`cargo xtask licenses` to generate `target/licenses/THIRD_PARTY_LICENSES.txt`,
+which release builds bundle together with this file, `LICENSE` and `licenses/`.
+
+Files that are line-by-line ports carry a short header naming their origin.
+
+## AdvantageScope
+
+- License: BSD-3-Clause style ([`licenses/AdvantageScope.txt`](licenses/AdvantageScope.txt))
+- Copyright (c) 2021-2026 Littleton Robotics
+- Source: https://github.com/Mechanical-Advantage/AdvantageScope (pinned in `assets/UPSTREAM`)
+
+asrs as a whole is a derived work of AdvantageScope: every crate ports its
+TypeScript, CSS and C sources (including the WPILOG indexer,
+`src/hub/dataSources/wpilog/indexer/wpilogIndexer.c`). Also taken from upstream:
+
+- `www/symbols` icons, embedded into `asrs-ui` at build time, and `www/textures`,
+  `icons`, `bundledAssets` and `licenses`, copied into `assets/` by `cargo xtask assets`.
+- `crates/asrs-model/src/source_list/configs/*.json`: upstream's tab controller
+  source list configs.
+- `crates/asrs-log/src/units/tables.rs` and `crates/asrs-formats/src/spark/tables.rs`,
+  generated from upstream TypeScript by `cargo xtask tables`.
+- `parity/specs/assets/release`: asset `config.json` files from AdvantageScopeAssets
+  releases (test data, with its own [`LICENSE`](parity/specs/assets/release/LICENSE)).
+
+asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
+
+## Google Material Symbols
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt))
+- Copyright Google LLC
+- Used in: upstream's `www/symbols` icons, embedded into the app by `crates/asrs-ui/build.rs`
+
+## three.js
+
+- License: MIT ([`licenses/three.js.txt`](licenses/three.js.txt))
+- Copyright (c) 2010-2024 three.js authors
+- Version: r168 (npm `three` 0.168.0)
+- Used in: `crates/asrs-field3d/src/three/`, `crates/asrs-field3d/src/render/mod.rs`,
+  `render/scene.rs`, and `render/phong.wgsl` (`MeshPhongMaterial` shader chunks)
+
+## camera-controls
+
+- License: MIT ([`licenses/camera-controls.txt`](licenses/camera-controls.txt))
+- Copyright (c) 2017 yomotsu
+- Version: 2.9.0
+- Used in: `crates/asrs-field3d/src/camera_controls.rs`
+
+## Fuse.js
+
+- License: Apache-2.0 ([`licenses/Fuse.js.txt`](licenses/Fuse.js.txt))
+- Copyright 2017 Kirollos Risk
+- Version: 7.0.0
+- Used in: `crates/asrs-log/src/log/fuse.rs`, translated to Rust and modified (only the
+  string-list Bitap search configuration upstream uses)
+
+## ansi_up
+
+- License: MIT ([`licenses/ansi_up.txt`](licenses/ansi_up.txt))
+- Copyright (c) 2011 github.com/drudru
+- Version: 6.0.6
+- Used in: `crates/asrs-tabs/src/ansi.rs`
+
+## heatmap.js
+
+- License: MIT ([`licenses/heatmap.js.txt`](licenses/heatmap.js.txt))
+- Copyright (c) 2015 Patrick Wied
+- Version: 2.0.5, the fork at `github.com/jwbonner/heatmap.js#24b4455`
+- Used in: `crates/asrs-tabs/src/heatmap.rs`
+
+## @msgpack/msgpack
+
+- License: ISC ([`licenses/msgpack-javascript.txt`](licenses/msgpack-javascript.txt))
+- Copyright 2019 The MessagePack Community
+- Version: 3.0.0-beta2
+- Used in: `crates/asrs-log/src/msgpack.rs`
+
+## protobufjs
+
+- License: BSD-3-Clause ([`licenses/protobufjs.txt`](licenses/protobufjs.txt))
+- Copyright (c) 2016 Daniel Wirtz
+- Version: 8.3.0
+- Used in: `crates/asrs-log/src/log/proto_decoder.rs` and `proto_decoder/`
+
+## bignumber.js
+
+- License: MIT ([`licenses/bignumber.js.txt`](licenses/bignumber.js.txt))
+- Copyright (c) 2023 Michael Mclaughlin
+- Version: 9.1.2
+- Used in: `crates/asrs-formats/src/spark/bignum.rs`
+
+## color-convert
+
+- License: MIT ([`licenses/color-convert.txt`](licenses/color-convert.txt))
+- Copyright (c) 2011-2016 Heather Arthur
+- Version: 2.0.1
+- Used in: `crates/asrs-js/src/color.rs`
+
+## REV Robotics CAN specs
+
+- License: MIT ([`licenses/REV Robotics.txt`](licenses/REV%20Robotics.txt))
+- Copyright 2024 REV Robotics
+- Source: upstream's `src/hub/dataSources/schema/spark/` (`can-spec-util.ts`, `bitstring.ts`,
+  and `spark-frames-{2025,2026}.ts`, generated from https://github.com/REVrobotics/can-specs)
+- Used in: `crates/asrs-formats/src/spark/` (`can_spec.rs`, `bitstring.rs`, generated `tables.rs`)
+
+The generated `spark-frames` files carry no license header of their own; the MIT notice
+above is the one REV attached to the utilities shipped alongside them.
+
+## V8
+
+- License: BSD-3-Clause ([`licenses/V8.txt`](licenses/V8.txt))
+- Copyright 2006-2011 the V8 project authors
+- Version: 14.2 (as shipped in Electron 39)
+- Used in: `crates/asrs-js/src/sort.rs` (TimSort from `array-sort.tq`),
+  `crates/asrs-js/src/number.rs` (number formatting and parsing),
+  `crates/asrs-js/src/json/parse.rs` (`JsonParser`), `crates/asrs-js/src/math/fdlibm.rs`
+  (`src/base/ieee754.cc`). Other `asrs-js` modules reproduce V8's observable behaviour
+  (Irregexp matching, BigInt conversion, string encoding, error messages) without porting code.
+
+### fdlibm
+
+- License: fdlibm notice ([`licenses/fdlibm.txt`](licenses/fdlibm.txt)), preserved in
+  `crates/asrs-js/src/math/fdlibm.rs`
+- Copyright (C) 1993-2004 Sun Microsystems, Inc.
+
+## GNU C Library (IBM Accurate Mathematical Library)
+
+- License: LGPL-2.1-or-later ([`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt))
+- Copyright (C) 2001-2022 Free Software Foundation, Inc.
+- Source: `sysdeps/ieee754/dbl-64/s_sin.c` and `sincostab.c`, as V8 bundles them under
+  `third_party/glibc` for `Math.sin` and `Math.cos`
+- Used in: `crates/asrs-js/src/math/glibc.rs` and `crates/asrs-js/src/math/sincostab.rs`
+
+These two files are licensed under the LGPL, not under the project's BSD license. The
+corresponding source is this repository.
+
+## Skia
+
+- License: BSD-3-Clause ([`licenses/Skia.txt`](licenses/Skia.txt))
+- Copyright (c) 2011 Google Inc.
+- Version: Chromium m142
+- Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
+  `stroke.rs`; `dash.rs`; `clip.rs`; `geometry.rs`; `hairline.rs`; `skpath.rs`; `pixels.rs`;
+  Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and the raster pipeline in
+  `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in `text/layout.rs`)
+
+## Chromium and Blink
+
+- License: BSD-3-Clause ([`licenses/Chromium.txt`](licenses/Chromium.txt)); Blink's
+  combined notices, including the Apple and WebKit sources Blink inherits, are in
+  [`licenses/Blink.txt`](licenses/Blink.txt)
+- Copyright The Chromium Authors
+- Version: m142 (as shipped in Electron 39)
+- Used in: `crates/asrs-canvas/src/` (`color.rs` CSS colour parsing, `path.rs` and `raster.rs`
+  `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/layout.rs`,
+  `text/metrics.rs` text layout and `TextMetrics`), and behaviour reproduced in
+  `crates/asrs-ui` (SVG painting, filters, theme) and `crates/asrs-live/src/timers.rs`
+  (`DOMTimer` scheduling)
+
+## ICU, CLDR and Unicode data
+
+- License: Unicode License v3 ([`licenses/ICU.txt`](licenses/ICU.txt))
+- Copyright Unicode, Inc. and others
+- Versions: ICU 74.2, CLDR 44.1, Unicode 15.1
+- Used in: `crates/asrs-js/src/string/case_table.rs` and
+  `crates/asrs-js/src/collation/tables.rs`, generated from ICU's output inside Electron;
+  the ICU4X 1.4 crates and their CLDR data are listed in the crate license listing
+
+## Time zone database
+
+- License: public domain
+- Bundled through the `jiff-tzdb` crate (IANA tzdata), listed in the crate license listing
+
+## gpui-pre (vendored and modified)
+
+- License: Apache-2.0 ([`vendor/gpui-pre/LICENSE-APACHE`](vendor/gpui-pre/LICENSE-APACHE))
+- Copyright Zed Industries, Inc. and contributors
+- Version: 0.3.12, from https://github.com/zed-industries/zed
+- Used in: `vendor/gpui-pre/`, modified by asrs. The changes are recorded in
+  [`patches/gpui-pre-0.3.12.patch`](patches/gpui-pre-0.3.12.patch), which modifies
+  `src/app/headless_app_context.rs`, `src/taffy.rs`, `src/util.rs` and `src/window.rs`.
+
+gpui-component, gpui-kit and the other gpui crates are unmodified crate dependencies and
+appear in the crate license listing.
+
+## Notices carried over from upstream
+
+Upstream AdvantageScope bundles these notices for code and services its features use.
+asrs copies them into `assets/licenses` and keeps them here for the same features
+(the FTC Dashboard source and The Blue Alliance integration).
+
+- ACME Robotics, MIT, Copyright (c) 2018-2022 ACME Robotics
+  ([`licenses/ACME Robotics.txt`](licenses/ACME%20Robotics.txt))
+- The Blue Alliance, MIT, Copyright (c) 2020 The Blue Alliance
+  ([`licenses/The Blue Alliance.txt`](licenses/The%20Blue%20Alliance.txt))
+
+## Not yet ported
+
+Upstream also depends on mathjs (Apache-2.0), simple-statistics (ISC) and Chart.js
+(MIT). No code from them has been ported yet; add an entry here and a file header when
+one is.
