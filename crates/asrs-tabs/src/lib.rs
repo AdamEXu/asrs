@@ -9,5 +9,7 @@ pub mod list_cx;
 pub mod mechanism;
 pub mod metadata;
 pub mod points;
+pub mod simple_statistics;
+pub mod statistics;
 pub mod swerve;
 pub mod table;

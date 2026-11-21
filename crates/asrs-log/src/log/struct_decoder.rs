@@ -457,7 +457,7 @@ impl StructDecoder {
                 let decoded = if is_char(ty) {
                     let mut joined = JsString::new();
                     for item in items {
-                        if let JsValue::String(s) = item {
+                        if let Some(s) = item.into_string() {
                             joined.push_str(&s);
                         }
                     }

@@ -821,7 +821,7 @@ impl Nt4Client {
         self.ws_reset_timeout(cx);
         match data {
             WsMessage::Text(text) => {
-                let JsValue::Array(messages) = json::parse_str(text)? else {
+                let Some(messages) = json::parse_str(text)?.into_array() else {
                     return Ok(());
                 };
                 for message in messages {

@@ -139,7 +139,7 @@ impl ScriptedSelection {
     }
 
     fn pair(&self, name: &str) -> Option<[f64; 2]> {
-        match self.next(name) {
+        match &self.next(name) {
             JsValue::Array(a) => match a.as_slice() {
                 [JsValue::Number(x), JsValue::Number(y)] => Some([*x, *y]),
                 _ => None,
@@ -291,7 +291,8 @@ fn js(record: &Record, key: &str) -> Result<JsValue, String> {
 }
 
 fn at(args: &[JsValue], i: usize) -> &JsValue {
-    args.get(i).unwrap_or(&JsValue::Undefined)
+    static UNDEFINED: JsValue = JsValue::Undefined;
+    args.get(i).unwrap_or(&UNDEFINED)
 }
 
 fn num(v: &JsValue) -> Result<f64, String> {
