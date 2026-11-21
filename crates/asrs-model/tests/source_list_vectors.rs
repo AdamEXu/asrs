@@ -113,7 +113,7 @@ fn js(record: &Record, key: &str) -> Result<JsValue, String> {
     js_json::to_js(&record.value(key).map_err(|e| e.0)?)
 }
 
-fn at<'a>(args: &'a [JsValue], i: usize) -> &'a JsValue {
+fn at(args: &[JsValue], i: usize) -> &JsValue {
     args.get(i).unwrap_or_else(|| undefined())
 }
 
