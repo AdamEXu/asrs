@@ -1257,6 +1257,70 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
 }
 
 /// `window.eval` is restricted to the expressions the fixtures use.
+/// `/*video:view*/`: per Video tab, in tab order, what `updateButtons`, the slider, the
+/// progress bar and the source animations show, plus the controller's private fields.
+fn video_view(r: &Runner) -> JsValue {
+    let bool_ = JsValue::Bool;
+    let pair = |hidden: bool, disabled: bool| JsValue::Array(vec![bool_(hidden), bool_(disabled)]);
+    let tabs = r
+        .tabs
+        .tabs()
+        .filter_map(|tab| {
+            let video = tab.controller().downcast_ref::<VideoController>()?;
+            let b = video.buttons();
+            let slider = video.slider();
+            let (play_frame, play_real) = video.play_start();
+            Some(ops::object([
+                ("uuid", tab.uuid().clone()),
+                (
+                    "buttons",
+                    JsValue::Array(vec![
+                        pair(b.lock_hidden, b.lock_disabled),
+                        pair(b.unlock_hidden, b.unlock_disabled),
+                        pair(false, b.controls_disabled),
+                        pair(false, b.controls_disabled),
+                        pair(b.play_hidden, b.controls_disabled),
+                        pair(b.pause_hidden, b.controls_disabled),
+                        pair(false, b.controls_disabled),
+                        pair(false, b.controls_disabled),
+                    ]),
+                ),
+                (
+                    "slider",
+                    JsValue::Array(vec![
+                        JsValue::String(slider.value().clone()),
+                        JsValue::String(slider.max().clone()),
+                        bool_(b.controls_disabled),
+                    ]),
+                ),
+                ("progress", JsValue::String(video.progress_width().clone())),
+                (
+                    "animating",
+                    JsValue::Array(vec![
+                        bool_(video.youtube_animating()),
+                        bool_(video.tba_animating()),
+                    ]),
+                ),
+                (
+                    "data",
+                    JsValue::Array(video.data().into_iter().cloned().collect()),
+                ),
+                ("locked", bool_(video.is_locked())),
+                ("lockedStartLog", JsValue::Number(video.locked_start_log())),
+                ("playing", bool_(video.is_playing())),
+                (
+                    "play",
+                    JsValue::Array(vec![
+                        JsValue::Number(play_frame),
+                        JsValue::Number(play_real),
+                    ]),
+                ),
+            ]))
+        })
+        .collect();
+    JsValue::Array(tabs)
+}
+
 fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
     if expr.starts_with("/*table:tag*/") {
         let uuid = r
@@ -1268,6 +1332,9 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         r.tagged_tables.push(uuid);
         r.sync_dom();
         return Ok(JsValue::Undefined);
+    }
+    if expr.starts_with("/*video:view*/") {
+        return Ok(video_view(r));
     }
     if let Some(inner) = expr
         .strip_prefix("[...")
@@ -1814,6 +1881,12 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             .merge(&prefs)
             .map_err(|e| err(format!("preferences: {e:?}")))?;
     }
+    // `window.platform` comes from the boot `set-version`, upstream's darwin by default.
+    let version = match fixture.get("version") {
+        Some(v) => js_json::to_js(&Value::from_json_lenient(v))?,
+        None => ops::object([("platform", JsValue::String(JsString::from("darwin")))]),
+    };
+    set_platform(&mut host.selection, &version);
     if let Some(boot) = fixture.get("boot") {
         host.preferences = None;
         for message in boot.as_array().ok_or_else(|| err("boot is a list"))? {
@@ -1843,8 +1916,8 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 "restore-type-memory" => {
                     host.type_memory = type_memory_from_js(&js_json::to_js(&data)?).map_err(err)?;
                 }
-                "set-version"
-                | "set-fullscreen"
+                "set-version" => set_platform(&mut host.selection, &js_json::to_js(&data)?),
+                "set-fullscreen"
                 | "set-battery"
                 | "show-update-button"
                 | "show-feedback-button"
@@ -1974,8 +2047,9 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 .map(to_js)
                 .transpose()?
                 .unwrap_or(JsValue::Undefined);
+            // `handleMainMessage` is async, so a throw surfaces as an unhandled rejection.
             if let Err(e) = runner.main_message(&name, &data) {
-                runner.exception(format!("main {name}"), e.to_string());
+                runner.exception("unhandledRejection".to_owned(), e.to_string());
             }
         } else if let Some(event) = step.get("event") {
             let result = runner.dispatch_event(event);
@@ -2010,6 +2084,15 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         }
     }
     Ok(runner.emitted)
+}
+
+/// `window.platform = data.platform` from `set-version`.
+fn set_platform(selection: &mut SelectionImpl, data: &JsValue) {
+    if let Some(platform) = data.get("platform").and_then(JsValue::as_str) {
+        let mut ctx = selection.context().clone();
+        ctx.platform = platform.to_string_lossy();
+        selection.set_context(ctx);
+    }
 }
 
 fn spec_dir_join(spec: &Path, rel: &str) -> PathBuf {
@@ -2125,13 +2208,7 @@ impl Runner {
                     controller.process_video_data(&mut self.host, data, uuid)?;
                 }
             }
-            "set-version" => {
-                if let Some(platform) = data.get("platform").and_then(JsValue::as_str) {
-                    let mut ctx = self.host.selection.context().clone();
-                    ctx.platform = platform.to_string_lossy();
-                    self.host.selection.set_context(ctx);
-                }
-            }
+            "set-version" => set_platform(&mut self.host.selection, data),
             "set-2d-camera" => {
                 if let Some(r) = self
                     .tabs
@@ -2703,9 +2780,8 @@ impl Runner {
             let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
                 return Err("video source click on a non-Video selected tab".to_owned());
             };
-            video
-                .select_tba(&mut self.host, tab.uuid, [rect.right(), rect.top()])
-                .map_err(|e| err(format!("{}: {}", e.name, e.message)))
+            video.select_tba(&mut self.host, tab.uuid, [rect.right(), rect.top()]);
+            Ok(())
         } else {
             let Some(tab) = self.tabs.selected_tab_mut() else {
                 return Err("video source click with no selected tab".to_owned());

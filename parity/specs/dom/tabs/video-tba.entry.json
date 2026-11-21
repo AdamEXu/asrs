@@ -51,7 +51,11 @@
       },
       {
         "capture": [
-          "commands"
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "tba-no-key"
       },
@@ -70,7 +74,11 @@
       },
       {
         "capture": [
-          "commands"
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "tba-no-match-info"
       },
@@ -86,7 +94,11 @@
       },
       {
         "capture": [
-          "commands"
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "tba-qual"
       },
@@ -109,7 +121,11 @@
       },
       {
         "capture": [
-          "commands"
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "tba-practice"
       },
@@ -138,7 +154,11 @@
       },
       {
         "capture": [
-          "commands"
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "tba-elim"
       },
@@ -166,7 +186,11 @@
         "capture": [
           "commands",
           "state",
-          "selection"
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "autolock"
       },
@@ -186,7 +210,11 @@
       },
       {
         "capture": [
-          "commands"
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
         ],
         "label": "fps-change-still-locked"
       }

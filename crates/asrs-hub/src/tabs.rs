@@ -836,17 +836,6 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         })
     }
 
-    /// Every `kind` tab's controller, in tab order (`processVideoData`).
-    pub fn controllers_as<T: 'static>(
-        &mut self,
-        kind: TabType,
-    ) -> impl Iterator<Item = &mut T> + '_ {
-        self.tabs
-            .iter_mut()
-            .filter(move |t| t.kind == Some(kind))
-            .filter_map(|t| t.controller.downcast_mut::<T>())
-    }
-
     /// Every `kind` tab's `(controllerUUID, controller)` pair, in tab order
     /// (`processVideoData` filters on `data.uuid !== this.UUID`).
     pub fn controllers_with_uuid<T: 'static>(

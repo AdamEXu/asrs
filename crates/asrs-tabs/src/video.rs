@@ -27,7 +27,7 @@ pub trait VideoCx: TabCx {
 }
 
 /// The `hidden` and `disabled` flags `updateButtons` writes to the controls.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Buttons {
     pub lock_disabled: bool,
     pub unlock_disabled: bool,
@@ -39,6 +39,7 @@ pub struct Buttons {
 }
 
 pub struct VideoController {
+    buttons: Buttons,
     slider: RangeInput,
     progress_width: JsString,
     youtube_animating: bool,
@@ -60,7 +61,8 @@ impl VideoController {
     /// `<input class="video-timeline-slider" type="range" value="0" min="1" max="1"
     /// step="1">` and the starting field values.
     pub fn new() -> VideoController {
-        VideoController {
+        let mut controller = VideoController {
+            buttons: Buttons::default(),
             slider: RangeInput::new("0", "1", "1"),
             progress_width: JsString::new(),
             youtube_animating: false,
@@ -76,7 +78,9 @@ impl VideoController {
             playing: false,
             play_start_frame: 0.0,
             play_start_real: 0.0,
-        }
+        };
+        controller.update_buttons();
+        controller
     }
 
     pub fn is_locked(&self) -> bool {
@@ -91,10 +95,16 @@ impl VideoController {
             && !self.completed_frames.is_null()
     }
 
-    /// The flags `updateButtons` last wrote.
+    /// The flags `updateButtons` last wrote. They go stale where upstream skips it: a
+    /// `video-data` without `totalFrames` or `completedFrames` drops the data but leaves
+    /// the controls enabled.
     pub fn buttons(&self) -> Buttons {
+        self.buttons
+    }
+
+    fn update_buttons(&mut self) {
         let has_data = self.has_data();
-        Buttons {
+        self.buttons = Buttons {
             lock_disabled: !has_data,
             unlock_disabled: !has_data,
             lock_hidden: self.locked,
@@ -102,7 +112,32 @@ impl VideoController {
             play_hidden: self.playing,
             pause_hidden: !self.playing,
             controls_disabled: self.locked || !has_data,
-        }
+        };
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.playing
+    }
+
+    pub fn locked_start_log(&self) -> f64 {
+        self.locked_start_log
+    }
+
+    pub fn play_start(&self) -> (f64, f64) {
+        (self.play_start_frame, self.play_start_real)
+    }
+
+    /// `imgFolder`, `lastImgFolder`, `fps`, `totalFrames`, `completedFrames` and
+    /// `autoEndFrame` as `video-data` left them.
+    pub fn data(&self) -> [&JsValue; 6] {
+        [
+            &self.img_folder,
+            &self.last_img_folder,
+            &self.fps,
+            &self.total_frames,
+            &self.completed_frames,
+            &self.auto_end_frame,
+        ]
     }
 
     pub fn slider(&self) -> &RangeInput {
@@ -137,12 +172,7 @@ impl VideoController {
 
     /// `TBA_SOURCE` click: the API key, match info and practice-match checks send `error`
     /// and return early. `menu` is `[rect.right, rect.top]` off the button.
-    pub fn select_tba(
-        &mut self,
-        cx: &mut (impl VideoCx + ?Sized),
-        uuid: &JsValue,
-        menu: [f64; 2],
-    ) -> Result<(), JsError> {
+    pub fn select_tba(&mut self, cx: &mut (impl VideoCx + ?Sized), uuid: &JsValue, menu: [f64; 2]) {
         let has_key = cx
             .tab_preferences()
             .map(|p| !p.tba_api_key.is_empty())
@@ -155,7 +185,7 @@ impl VideoController {
                  preferences. An API key can be obtained from the Account page on The \
                  Blue Alliance website.",
             );
-            return Ok(());
+            return;
         }
         let clock = SetClock(cx.now());
         let info = get_match_info(&cx.tab_log(), &clock);
@@ -166,7 +196,7 @@ impl VideoController {
                 "Failed to read event and match info from the log. Please load the \
                  video using a YouTube URL or local file instead.",
             );
-            return Ok(());
+            return;
         };
         if info.match_type == MatchType::Practice {
             send_error(
@@ -176,7 +206,7 @@ impl VideoController {
                  for practice matches, please load the video using a YouTube URL or \
                  local file instead.",
             );
-            return Ok(());
+            return;
         }
         self.youtube_animating = false;
         self.tba_animating = true;
@@ -187,7 +217,6 @@ impl VideoController {
             match_info_to_js(&info),
             JsValue::Array(menu.map(JsValue::Number).to_vec()),
         );
-        Ok(())
     }
 
     /// `toggleLock`: no-op without data.
@@ -201,6 +230,7 @@ impl VideoController {
             let selected = cx.tab_selection().get_selected_time().unwrap_or(0.0);
             self.locked_start_log = selected - (self.slider.number() - 1.0) / num(&self.fps);
         }
+        self.update_buttons();
     }
 
     /// `togglePlayPause`: no-op while locked or without data.
@@ -213,6 +243,7 @@ impl VideoController {
             self.play_start_frame = self.slider.number();
             self.play_start_real = cx.now() / 1000.0;
         }
+        self.update_buttons();
     }
 
     /// The slider's `input` listener: re-anchors playback at the dragged frame.
@@ -289,10 +320,11 @@ impl VideoController {
             if self.total_frames.is_null() || self.completed_frames.is_null() {
                 return Ok(());
             }
-            self.progress_width = JsString::from(format!(
-                "{}%",
-                number::to_string(num(&self.completed_frames) / num(&self.total_frames) * 100.0)
-            ));
+            let percent = num(&self.completed_frames) / num(&self.total_frames) * 100.0;
+            // CSS rejects a NaN, infinite or negative width and keeps the previous one.
+            if percent >= 0.0 && percent.is_finite() {
+                self.progress_width = JsString::from(format!("{}%", number::to_string(percent)));
+            }
             self.slider.set_max(member_to_string(&self.total_frames)?);
             if !ops::strict_equals(&self.img_folder, &self.last_img_folder) {
                 self.last_img_folder = self.img_folder.clone();
@@ -315,6 +347,7 @@ impl VideoController {
             self.locked = false;
             self.playing = false;
         }
+        self.update_buttons();
         Ok(())
     }
 }
@@ -375,14 +408,9 @@ impl<Cx: VideoCx + ?Sized> TabController<Cx> for VideoController {
                 while filename.len() < 8 {
                     filename = format!("0{filename}");
                 }
-                let result = add(
-                    &add(&self.img_folder, &JsValue::String(JsString::from(filename))),
-                    &JsValue::String(JsString::from(".jpg")),
-                );
-                path = result
-                    .as_str()
-                    .cloned()
-                    .unwrap_or_else(|| ops::to_string(&result));
+                path = ops::to_string(&self.img_folder);
+                path.push_str(&JsString::from(filename));
+                path.push_str(&JsString::from(".jpg"));
             }
         }
         Ok(Rc::new(path))
@@ -455,27 +483,6 @@ fn member_to_string(value: &JsValue) -> Result<JsString, JsError> {
             "Cannot read properties of null (reading 'toString')",
         )),
         other => Ok(ops::to_string(other)),
-    }
-}
-
-/// `a + b`: string concatenation when either primitive is a string (objects and arrays
-/// stringify), else numeric addition.
-fn add(a: &JsValue, b: &JsValue) -> JsValue {
-    let prim = |v: &JsValue| match v {
-        JsValue::Object(_)
-        | JsValue::Array(_)
-        | JsValue::Bytes(_)
-        | JsValue::ExtData(..)
-        | JsValue::Date(_) => JsValue::String(ops::to_string(v)),
-        other => other.clone(),
-    };
-    let (a, b) = (prim(a), prim(b));
-    if matches!(a, JsValue::String(_)) || matches!(b, JsValue::String(_)) {
-        let mut s = ops::to_string(&a);
-        s.push_str(&ops::to_string(&b));
-        JsValue::String(s)
-    } else {
-        JsValue::Number(num(&a) + num(&b))
     }
 }
 
