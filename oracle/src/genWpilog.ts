@@ -64,17 +64,18 @@ type IndexerModule = {
   HEAPU32: Uint32Array;
 };
 
-let indexerModule: IndexerModule | null = null;
+let indexerInit: (() => Promise<IndexerModule>) | null = null;
 
+// Upstream's wpilogIndexer.ts instantiates a fresh module for every run, and negative extra
+// header sizes read the memory below the input buffer, so each file gets its own instance too.
 async function indexer(): Promise<IndexerModule> {
-  if (indexerModule === null) {
+  if (indexerInit === null) {
     const dir = path.join(UPSTREAM_DIR, "bundles");
     const { default: init } = await import(pathToFileURL(path.join(dir, "wpilogIndexer.js")).href);
-    indexerModule = (await init({
-      wasmBinary: fs.readFileSync(path.join(dir, "wpilogIndexer.wasm"))
-    })) as IndexerModule;
+    const wasmBinary = fs.readFileSync(path.join(dir, "wpilogIndexer.wasm"));
+    indexerInit = async () => (await init({ wasmBinary })) as IndexerModule;
   }
-  return indexerModule;
+  return indexerInit();
 }
 
 type IndexResult = { min: number; max: number; records: [number, number][] } | { throw: Cve1 };

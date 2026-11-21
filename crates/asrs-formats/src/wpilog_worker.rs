@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn an_indexer_trap_fails_and_a_missing_file_throws() {
         let mut worker = worker();
-        let responses = run_start(&mut worker, header(-100));
+        let responses = run_start(&mut worker, header(-70_000));
         assert!(matches!(responses.as_slice(), [Response::Failed]));
         let (responses, end) = run_request(&mut self::worker(), Request::Start(vec![None]));
         assert!(responses.is_empty());
