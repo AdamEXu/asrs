@@ -155,6 +155,8 @@ fn main() -> Result<(), String> {
         width,
         height,
         samples,
+        viewport: [f64::from(width), f64::from(height)],
+        shadow_map: false,
     };
     let frame = build_frame(&mut scene, &mut camera, options);
     println!(

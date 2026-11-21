@@ -1,7 +1,10 @@
 // Builds a reference scene with upstream's three 0.168 and renders it the way
-// Field3dRendererImpl does in standard mode, then reads the WebGL drawing buffer right after
-// render(), before the compositor sees it.
+// Field3dRendererImpl does (standard mode, or cinematic with `shadows`), then reads the WebGL
+// drawing buffer right after render(), before the compositor sees it.
 import * as THREE from "three";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
 type Vec3 = [number, number, number];
 
@@ -20,7 +23,7 @@ type MaterialSpec = {
 };
 
 type NodeSpec = {
-  type: "group" | "mesh" | "instanced" | "hemisphere" | "point" | "spot";
+  type: "group" | "mesh" | "instanced" | "hemisphere" | "point" | "spot" | "line2" | "line" | "grid";
   name?: string;
   parent?: string;
   position?: Vec3;
@@ -40,11 +43,22 @@ type NodeSpec = {
   angle?: number;
   penumbra?: number;
   target?: Vec3;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  frustumCulled?: boolean;
+  shadow?: { mapSize?: number; bias?: number };
+  points?: number[] | Vec3[];
+  linewidth?: number;
+  size?: number;
+  divisions?: number;
+  color1?: number;
+  color2?: number;
 };
 
 type SceneSpec = {
   size: [number, number];
   antialias: boolean;
+  shadows?: boolean;
   fov: number;
   camera: { position: Vec3; target: Vec3 };
   nodes: NodeSpec[];
@@ -174,14 +188,38 @@ function build(spec: SceneSpec, scene: THREE.Scene) {
       case "spot": {
         const light = new THREE.SpotLight(node.color, node.intensity, node.distance, node.angle, node.penumbra, node.decay);
         light.target.position.set(...node.target!);
+        if (node.castShadow !== undefined) light.castShadow = node.castShadow;
+        if (node.shadow?.mapSize !== undefined) {
+          light.shadow.mapSize.width = node.shadow.mapSize;
+          light.shadow.mapSize.height = node.shadow.mapSize;
+        }
+        if (node.shadow?.bias !== undefined) light.shadow.bias = node.shadow.bias;
         spotTarget = light.target;
         object = light;
         break;
       }
+      case "line2": {
+        const geometry = new LineGeometry();
+        geometry.setPositions(node.points as number[]);
+        object = new Line2(geometry, new LineMaterial({ color: node.color, linewidth: node.linewidth }));
+        break;
+      }
+      case "line":
+        object = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints((node.points as Vec3[]).map((p) => new THREE.Vector3(...p))),
+          new THREE.LineBasicMaterial({ color: node.color })
+        );
+        break;
+      case "grid":
+        object = new THREE.GridHelper(node.size, node.divisions, node.color1, node.color2);
+        break;
     }
     place(object, node);
     if (node.visible !== undefined) object.visible = node.visible;
     if (node.renderOrder !== undefined) object.renderOrder = node.renderOrder;
+    if (node.frustumCulled !== undefined) object.frustumCulled = node.frustumCulled;
+    if (node.castShadow !== undefined && !(object instanceof THREE.Light)) object.castShadow = node.castShadow;
+    if (node.receiveShadow !== undefined) object.receiveShadow = node.receiveShadow;
     parent.add(object);
     if (spotTarget !== null) parent.add(spotTarget);
     if (node.name !== undefined) named.set(node.name, object);
@@ -199,7 +237,7 @@ function toBase64(bytes: Uint8Array): string {
   document.body.appendChild(canvas);
   const renderer = new THREE.WebGLRenderer({ canvas, powerPreference: "default", antialias: spec.antialias });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.shadowMap.enabled = false;
+  renderer.shadowMap.enabled = spec.shadows === true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(spec.fov, 2, 0.15, 1000);

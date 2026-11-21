@@ -6,6 +6,7 @@
 const MAX_HEMI: u32 = 4u;
 const MAX_POINT: u32 = 8u;
 const MAX_SPOT: u32 = 8u;
+const MAX_SPOT_SHADOWS: u32 = 4u;
 const RECIPROCAL_PI: f32 = 0.3183098861837907;
 
 struct HemisphereLight {
@@ -29,6 +30,14 @@ struct SpotLight {
     params: vec4<f32>,
 };
 
+struct SpotShadow {
+    matrix: mat4x4<f32>,
+    // shadowIntensity, shadowBias, shadowNormalBias, shadowRadius
+    params: vec4<f32>,
+    // shadowMapSize
+    map_size: vec4<f32>,
+};
+
 struct Frame {
     projection: mat4x4<f32>,
     // hemisphere, point, spot
@@ -38,6 +47,10 @@ struct Frame {
     hemisphere: array<HemisphereLight, MAX_HEMI>,
     point: array<PointLight, MAX_POINT>,
     spot: array<SpotLight, MAX_SPOT>,
+    view: mat4x4<f32>,
+    // spot light shadows, 0 unless the shadow map is enabled
+    shadow_counts: vec4<u32>,
+    spot_shadow: array<SpotShadow, MAX_SPOT_SHADOWS>,
 };
 
 struct Draw {
@@ -48,11 +61,14 @@ struct Draw {
     specular_shininess: vec4<f32>,
     // vertex colors (0 none, 3 rgb, 4 rgba), FLIP_SIDED, DOUBLE_SIDED, OPAQUE
     flags: vec4<u32>,
-    // USE_MAP, object id for the auxiliary pass
+    // USE_MAP, object id for the auxiliary pass, receiveShadow
     extra: vec4<u32>,
+    model: mat4x4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(1) var shadow_maps: texture_2d_array<f32>;
+@group(0) @binding(2) var shadow_sampler: sampler;
 @group(1) @binding(0) var<uniform> draw: Draw;
 @group(2) @binding(0) var map: texture_2d<f32>;
 @group(2) @binding(1) var map_sampler: sampler;
@@ -77,7 +93,25 @@ struct VertexOut {
     @location(1) normal: vec3<f32>,
     @location(2) color: vec4<f32>,
     @location(3) uv: vec2<f32>,
+    @location(4) spot_coord0: vec4<f32>,
+    @location(5) spot_coord1: vec4<f32>,
+    @location(6) spot_coord2: vec4<f32>,
+    @location(7) spot_coord3: vec4<f32>,
 };
+
+// ANGLE's Metal epilogue for gl_Position, with its factors read from a uniform as ANGLE does so
+// the compiler cannot fold them into the matrix product: depth sign, GL's [-w, w] depth mapped
+// to [0, w], and y flipped because WebGL renders bottom-up into its drawing buffer and render
+// targets alike. Drawing upside down puts the multisample pattern and the fill rule's
+// tie-breaks on the same image pixels as upstream's; readback and texture sampling both see
+// GL's row order.
+fn angle_epilogue(clip: vec4<f32>) -> vec4<f32> {
+    var out = clip;
+    out.z = out.z * frame.clip_factors.y;
+    out.z = (out.z + out.w) * 0.5;
+    out.y = out.y * frame.clip_factors.x;
+    return out;
+}
 
 fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> VertexOut {
     var out: VertexOut;
@@ -98,16 +132,22 @@ fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> 
     }
     out.normal = fast_normalize(transformed_normal);
     let mv_position = draw.model_view * mv_input;
-    out.clip = frame.projection * mv_position;
-    // ANGLE's Metal epilogue for gl_Position, with its factors read from a uniform as ANGLE
-    // does so the compiler cannot fold them into the matrix product: depth sign, GL's [-w, w]
-    // depth mapped to [0, w], and y flipped because WebGL renders bottom-up. Drawing upside
-    // down puts the multisample pattern and the fill rule's tie-breaks on the same image
-    // pixels as upstream's; the readback reverses the rows again.
-    out.clip.z = out.clip.z * frame.clip_factors.y;
-    out.clip.z = (out.clip.z + out.clip.w) * 0.5;
-    out.clip.y = out.clip.y * frame.clip_factors.x;
+    out.clip = angle_epilogue(frame.projection * mv_position);
     out.view_position = -mv_position.xyz;
+
+    // worldpos_vertex and shadowmap_vertex
+    let world_position = draw.model * mv_input;
+    let shadow_world_normal = fast_normalize((vec4<f32>(transformed_normal, 0.0) * frame.view).xyz);
+    var coords = array<vec4<f32>, MAX_SPOT_SHADOWS>();
+    for (var i = 0u; i < frame.shadow_counts.x; i++) {
+        var shadow_world_position = world_position;
+        shadow_world_position = vec4<f32>(shadow_world_position.xyz + shadow_world_normal * frame.spot_shadow[i].params.z, shadow_world_position.w);
+        coords[i] = frame.spot_shadow[i].matrix * shadow_world_position;
+    }
+    out.spot_coord0 = coords[0];
+    out.spot_coord1 = coords[1];
+    out.spot_coord2 = coords[2];
+    out.spot_coord3 = coords[3];
     return out;
 }
 
@@ -230,6 +270,7 @@ fn fs(in: VertexOut, @builtin(front_facing) front_facing: bool) -> FragmentOut {
         re_direct(direction, color, geometry_normal, geometry_view_dir, material_diffuse, &r);
     }
 
+    let spot_coords = array<vec4<f32>, MAX_SPOT_SHADOWS>(in.spot_coord0, in.spot_coord1, in.spot_coord2, in.spot_coord3);
     for (var i = 0u; i < frame.counts.z; i++) {
         let light = frame.spot[i];
         let l_vector = light.position.xyz - geometry_position;
@@ -237,10 +278,16 @@ fn fs(in: VertexOut, @builtin(front_facing) front_facing: bool) -> FragmentOut {
         let angle_cos = dot(direction, light.direction.xyz);
         let spot_attenuation = smoothstep(light.params.z, light.params.w, angle_cos);
         var color = vec3<f32>(0.0);
+        var visible = false;
         if (spot_attenuation > 0.0) {
             let light_distance = length(l_vector);
             color = light.color.xyz * spot_attenuation;
             color *= distance_attenuation(light_distance, light.params.x, light.params.y);
+            visible = any(color != vec3<f32>(0.0));
+        }
+        if (i < frame.shadow_counts.x && visible && draw.extra.z != 0u) {
+            let shadow = frame.spot_shadow[i];
+            color *= get_shadow(i, shadow.map_size.xy, shadow.params.x, shadow.params.y, shadow.params.w, spot_coords[i]);
         }
         re_direct(direction, color, geometry_normal, geometry_view_dir, material_diffuse, &r);
     }

@@ -53,6 +53,8 @@ fn readback_is_top_row_first_with_the_background_clear() {
         width: W,
         height: H,
         samples: 4,
+        viewport: [f64::from(W), f64::from(H)],
+        shadow_map: false,
     };
     let frame = build_frame(&mut scene, &mut camera, options);
     let mut bgra = Vec::new();
@@ -77,6 +79,8 @@ fn render_thread_delivers_the_latest_frame_and_wakes() {
         width: W,
         height: H,
         samples: 1,
+        viewport: [f64::from(W), f64::from(H)],
+        shadow_map: false,
     };
     let (mut scene, mut camera) = scene_with_box_at(-1.2);
     thread.submit(build_frame(&mut scene, &mut camera, options));
@@ -104,6 +108,8 @@ fn an_instanced_mesh_with_no_instances_draws_nothing() {
         width: W,
         height: H,
         samples: 4,
+        viewport: [f64::from(W), f64::from(H)],
+        shadow_map: false,
     };
     let frame = build_frame(&mut scene, &mut camera, options);
     let mut bgra = Vec::new();

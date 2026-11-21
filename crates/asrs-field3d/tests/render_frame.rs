@@ -10,6 +10,8 @@ const OPTIONS: FrameOptions = FrameOptions {
     width: 200,
     height: 100,
     samples: 4,
+    viewport: [200.0, 100.0],
+    shadow_map: false,
 };
 
 fn camera() -> PerspectiveCamera {

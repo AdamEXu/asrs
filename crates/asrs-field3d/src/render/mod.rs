@@ -13,12 +13,14 @@ mod thread;
 
 pub use edges::edge_mask;
 pub use frame::{
-    Draw, Frame, FrameOptions, HemisphereUniform, Lights, PointUniform, SpotUniform, build_frame,
+    Draw, DrawKind, Frame, FrameOptions, HemisphereUniform, Lights, PointUniform, ShadowPass,
+    SpotShadowUniform, SpotUniform, build_frame,
 };
 pub use gpu::{AuxBuffers, COLOR_FORMAT, RenderError, Renderer, Timings};
 pub use scene::{
-    Filter, Geometry, HemisphereLight, Instances, Mesh, MinFilter, NodeKind, PhongMaterial,
-    PointLight, Scene, SceneNode, Side, SpotLight, Texture,
+    FatLine, Filter, Geometry, HemisphereLight, Instances, LightShadow, Line, LineBasicMaterial,
+    LineMaterial, LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, PointLight,
+    Scene, SceneNode, Side, SpotLight, Texture,
 };
 pub use thread::{RenderThread, RenderedFrame};
 

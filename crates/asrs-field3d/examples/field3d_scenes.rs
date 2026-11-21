@@ -10,8 +10,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use asrs_field3d::render::{
-    Filter, FrameOptions, Geometry, Mesh, MinFilter, NodeKind, PhongMaterial, Renderer, Scene,
-    Side, Texture, build_frame, edge_mask, swap_red_blue,
+    FatLine, Filter, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial,
+    LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, Renderer, Scene, Side,
+    Texture, build_frame, edge_mask, swap_red_blue,
 };
 use asrs_field3d::three::{
     ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, Object3D, ObjectId,
@@ -33,6 +34,20 @@ fn text(j: &Json, key: &str) -> Option<String> {
 fn vec3(j: &Json, key: &str) -> Option<Vector3> {
     let a = j.get(key)?.as_array()?;
     Some(Vector3::new(a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?))
+}
+
+fn flag(j: &Json, key: &str) -> Option<bool> {
+    match j.get(key) {
+        Some(Json::Bool(b)) => Some(*b),
+        _ => None,
+    }
+}
+
+fn numbers(j: &Json, key: &str) -> Vec<f64> {
+    j.get(key)
+        .and_then(Json::as_array)
+        .map(|a| a.iter().filter_map(Json::as_f64).collect())
+        .unwrap_or_default()
 }
 
 fn arg(args: &[Json], i: usize) -> f64 {
@@ -176,6 +191,39 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
                 geometry(node.get("geometry").expect("geometry")),
                 material(node.get("material")),
             ))),
+            Some("line2") => scene.create(NodeKind::FatLine(FatLine {
+                geometry: LineSegmentsGeometry::from_points(&numbers(node, "points")),
+                material: Arc::new(LineMaterial::new(
+                    color("color"),
+                    num(node, "linewidth").unwrap_or(1.0),
+                )),
+            })),
+            Some("line") => {
+                let points: Vec<Vector3> = node
+                    .get("points")
+                    .and_then(Json::as_array)
+                    .expect("points")
+                    .iter()
+                    .map(|p| {
+                        let a = p.as_array().expect("point");
+                        Vector3::new(
+                            a[0].as_f64().unwrap_or(0.0),
+                            a[1].as_f64().unwrap_or(0.0),
+                            a[2].as_f64().unwrap_or(0.0),
+                        )
+                    })
+                    .collect();
+                scene.create(NodeKind::Line(Line::from_points(
+                    &points,
+                    LineBasicMaterial::new(color("color")),
+                )))
+            }
+            Some("grid") => scene.create(NodeKind::Line(Line::grid_helper(
+                num(node, "size").unwrap_or(10.0),
+                num(node, "divisions").unwrap_or(10.0),
+                Color::hex(num(node, "color1").unwrap_or(4473924.0)),
+                Color::hex(num(node, "color2").unwrap_or(8947848.0)),
+            ))),
             Some("instanced") => {
                 let count = num(node, "count").expect("count") as usize;
                 let geometry = geometry(node.get("geometry").expect("geometry"));
@@ -194,7 +242,9 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
                     dummy.update_matrix();
                     data.set_matrix_at(i, &dummy.matrix);
                 }
-                scene.create(NodeKind::Mesh(mesh))
+                let id = scene.create(NodeKind::Mesh(mesh));
+                scene.node_mut(id).frustum_culled = false;
+                id
             }
             Some("hemisphere") => {
                 let id = scene.add_hemisphere_light(
@@ -225,6 +275,17 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
                     num(node, "decay").unwrap_or(2.0),
                 );
                 scene.graph.object_mut(target).position = vec3(node, "target").expect("target");
+                if let NodeKind::SpotLight(spot) = &mut scene.node_mut(light).kind {
+                    spot.cast_shadow = flag(node, "castShadow").unwrap_or(false);
+                    if let Some(shadow) = node.get("shadow") {
+                        if let Some(size) = num(shadow, "mapSize") {
+                            spot.shadow.map_size = [size, size];
+                        }
+                        if let Some(bias) = num(shadow, "bias") {
+                            spot.shadow.bias = bias;
+                        }
+                    }
+                }
                 spot_target = Some(target);
                 light
             }
@@ -236,6 +297,13 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
         }
         if let Some(order) = num(node, "renderOrder") {
             scene.node_mut(id).render_order = order;
+        }
+        if let Some(culled) = flag(node, "frustumCulled") {
+            scene.node_mut(id).frustum_culled = culled;
+        }
+        if let Some(mesh) = scene.mesh_mut(id) {
+            mesh.cast_shadow = flag(node, "castShadow").unwrap_or(false);
+            mesh.receive_shadow = flag(node, "receiveShadow").unwrap_or(false);
         }
         scene.graph.add(parent, id);
         if let Some(target) = spot_target {
@@ -281,19 +349,14 @@ fn main() -> Result<(), String> {
             size[0].as_f64().unwrap_or(0.0),
             size[1].as_f64().unwrap_or(0.0),
         );
-        let samples = if matches!(spec.get("antialias"), Some(Json::Bool(true))) {
-            4
-        } else {
-            1
-        };
+        let antialias = flag(&spec, "antialias").unwrap_or(false);
         for scale in [1.0, 2.0] {
             let (mut scene, mut camera) = build(&spec);
             camera.aspect = w / h;
             camera.update_projection_matrix();
             let options = FrameOptions {
-                width: (w * scale) as u32,
-                height: (h * scale) as u32,
-                samples,
+                shadow_map: flag(&spec, "shadows").unwrap_or(false),
+                ..FrameOptions::new(w, h, scale, antialias)
             };
             for dark in [true, false] {
                 let background = if dark { "#222222" } else { "#ffffff" };

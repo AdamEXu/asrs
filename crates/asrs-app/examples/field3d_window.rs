@@ -141,6 +141,8 @@ impl Field3dWindow {
             width,
             height,
             samples: 4,
+            viewport: [f64::from(width), f64::from(height)],
+            shadow_map: false,
         };
         self.thread
             .submit(build_frame(&mut self.scene, &mut self.camera, options));
