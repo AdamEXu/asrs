@@ -217,6 +217,14 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Used in: `crates/asrs-tabs/src/simple_statistics.rs`, the subset of functions the
   Statistics controller calls, translated to Rust
 
+## @mcap/core and @foxglove/crc
+
+- License: MIT ([`licenses/mcap.txt`](licenses/mcap.txt); both packages carry the same text)
+- Copyright (c) Foxglove Technologies Inc
+- Version: @mcap/core 1.3.0, @foxglove/crc 0.0.3
+- Used in: `crates/asrs-formats/src/mcap.rs` (`McapWriter`, `McapRecordBuilder`,
+  `ChunkBuilder`, `BufferBuilder` and the CRC-32, translated to Rust)
+
 ## Not yet ported
 
 Upstream also depends on mathjs (Apache-2.0) and Chart.js (MIT). No code from them has

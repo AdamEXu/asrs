@@ -1,0 +1,110 @@
+{
+  "field2ds": [],
+  "field3ds": [
+    {
+      "name": "2026 Field",
+      "path": "bundledAssets/Field3d_2026FRCFieldV1/model.glb",
+      "id": "FRC:2026",
+      "isFTC": false,
+      "coordinateSystem": "wall-blue",
+      "useGrid": false,
+      "rotations": [],
+      "position": [0, 0, 0],
+      "widthInches": 651.22,
+      "heightInches": 317.69,
+      "driverStations": [[-8.1, 1.9], [-8.1, 0], [-8.1, -1.9], [8.1, 1.9], [8.1, 0], [8.1, -1.9]],
+      "gamePieces": [
+        {
+          "name": "Note",
+          "position": [0.25, 0, 0],
+          "rotations": [],
+          "stagedObjects": []
+        },
+        {
+          "name": "Fuel",
+          "position": [0.1, 0, 0],
+          "rotations": [{ "axis": "y", "degrees": 90 }],
+          "stagedObjects": []
+        }
+      ],
+      "aprilTags": [
+        {
+          "variant": "36h11-6.5in",
+          "id": 3,
+          "position": [1, 2, 0.25],
+          "rotations": [{ "axis": "z", "degrees": 45 }]
+        },
+        {
+          "variant": "36h11-6.5in",
+          "id": 4,
+          "position": [2, 3, 0.25],
+          "rotations": []
+        },
+        {
+          "variant": "16h5-6in",
+          "id": 7,
+          "position": [3, 1, 0.5],
+          "rotations": [{ "axis": "x", "degrees": 90 }]
+        }
+      ]
+    },
+    {
+      "name": "2026 FTC Field",
+      "path": "bundledAssets/Field3d_2026FTCField/model.glb",
+      "id": "FTC:2026",
+      "isFTC": true,
+      "coordinateSystem": "center-red",
+      "useGrid": true,
+      "rotations": [],
+      "position": [0, 0, 0],
+      "widthInches": 141.73,
+      "heightInches": 141.73,
+      "driverStations": [[-1.8, 0], [1.8, 0]],
+      "gamePieces": [
+        {
+          "name": "Sample",
+          "position": [0.05, 0, 0],
+          "rotations": [],
+          "stagedObjects": []
+        }
+      ],
+      "aprilTags": []
+    }
+  ],
+  "robots": [
+    {
+      "name": "KitBot",
+      "path": "bundledAssets/Robot_KitBot/model.glb",
+      "isFTC": false,
+      "disableSimplification": false,
+      "rotations": [{ "axis": "z", "degrees": 90 }],
+      "position": [0, 0, 0],
+      "cameras": [],
+      "components": [
+        { "name": "Arm", "zeroedPosition": [0.2, 0, 0.4], "zeroedRotations": [], "disabledRotations": [] }
+      ]
+    },
+    {
+      "name": "GhostBot",
+      "path": "bundledAssets/Robot_GhostBot/model.glb",
+      "isFTC": false,
+      "disableSimplification": false,
+      "rotations": [],
+      "position": [0, 0, 0],
+      "cameras": [],
+      "components": []
+    },
+    {
+      "name": "FTCBot",
+      "path": "bundledAssets/Robot_FTCBot/model.glb",
+      "isFTC": true,
+      "disableSimplification": false,
+      "rotations": [],
+      "position": [0, 0, 0],
+      "cameras": [],
+      "components": []
+    }
+  ],
+  "joysticks": [],
+  "loadFailures": []
+}

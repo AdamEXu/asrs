@@ -279,6 +279,10 @@ impl TabCx for Host {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         self.sent.push_back(message);
     }
+
+    fn send_open_xr(&mut self, _uuid: JsValue) {
+        unreachable!("the field2d harness has no Field3d tab")
+    }
 }
 
 impl SourceListCx for Host {

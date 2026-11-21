@@ -25,7 +25,7 @@ use asrs_hub::tabs::{TabFactory, TabParts, Tabs, TabsHost};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng, create_uuid};
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
 use asrs_model::assets::AdvantageScopeAssets;
@@ -46,6 +46,7 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
+use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use asrs_tabs::mechanism::MechanismController;
@@ -397,6 +398,7 @@ fn recorded_command(renderer: &dyn TabRenderer<Host>) -> Option<Rc<RefCell<Optio
         ConsoleRenderer,
         MetadataRenderer,
         Field2dRenderer,
+        Field3dStubRenderer,
         PendingRenderer,
         StubRenderer
     );
@@ -481,6 +483,31 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for PendingRenderer {
     }
 }
 
+/// `oracle/src/dom/field3dStub.ts`: keeps whatever `restoreState` was given (`null` before)
+/// and draws nothing.
+struct Field3dStubRenderer {
+    state: JsValue,
+}
+
+impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for Field3dStubRenderer {
+    fn save_state(&self, _cx: &Cx) -> JsValue {
+        self.state.clone()
+    }
+
+    fn restore_state(&mut self, _cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
+        self.state = state.clone();
+        Ok(())
+    }
+
+    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
+        None
+    }
+
+    fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
+        Ok(())
+    }
+}
+
 impl TabFactory<Host> for Factory {
     fn create(&mut self, cx: &mut Host, tab_type: Option<TabType>) -> TabParts<Host> {
         let uuid = JsString::from(create_uuid(&mut cx.rng));
@@ -534,6 +561,16 @@ impl TabFactory<Host> for Factory {
                     }),
                 }
             }
+            Some(TabType::Field3d) => TabParts {
+                uuid: uuid.clone(),
+                controller: Box::new(Field3dController::new(cx)),
+                renderer: Box::new(Recorder {
+                    inner: Field3dStubRenderer {
+                        state: JsValue::Null,
+                    },
+                    slot,
+                }),
+            },
             Some(
                 kind
                 @ (TabType::Joysticks | TabType::Swerve | TabType::Mechanism | TabType::Points),
@@ -568,7 +605,7 @@ impl TabFactory<Host> for Factory {
                 // owns, after its own UUID.
                 let source_lists = match other {
                     Some(TabType::LineGraph) => 3,
-                    Some(TabType::Field3d | TabType::Statistics) => 1,
+                    Some(TabType::Statistics) => 1,
                     _ => 0,
                 };
                 for _ in 0..source_lists {
@@ -594,7 +631,8 @@ struct Host {
     rng: DomRng,
     inner_height: f64,
     renderer_top: f64,
-    messages: Vec<NamedMessage<HubToMain>>,
+    /// `sendMainMessage` calls in order; `open-xr` is outside `HubToMain`.
+    messages: Vec<NamedMessage<&'static str>>,
     /// `window.assets`: the raw `set-assets` payload for `JSON.stringify` compare, and
     /// the parsed view controllers read.
     assets_raw: JsValue,
@@ -630,7 +668,12 @@ impl TabCx for Host {
     }
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
-        self.messages.push(message);
+        self.messages
+            .push(NamedMessage::new(message.name.name(), message.data));
+    }
+
+    fn send_open_xr(&mut self, uuid: JsValue) {
+        self.messages.push(NamedMessage::new("open-xr", uuid));
     }
 }
 
@@ -773,6 +816,10 @@ struct Runner {
     show_pending: bool,
     frame_loop_dead: bool,
     active_drag: Option<JsValue>,
+    /// Tabs (by controller address) in `.controls-content` order. `addTab` splices the tab in
+    /// after the selected one but appends its controls, and `shiftSelected` moves only the
+    /// tab, so a selector's match index follows creation order, not `tabList`.
+    controls_order: Vec<usize>,
     /// Table tabs whose header cells carry `data-i` tags. Upstream drops the tags when
     /// `updateFields` rebuilds the header; the harness drops them every frame, so a fixture
     /// re-tags right before each event that reads header rects.
@@ -912,8 +959,11 @@ impl Runner {
     fn flush_messages(&mut self) {
         let messages = self.tabs.take_messages();
         let from_tabs = std::mem::take(&mut self.host.messages);
-        for message in messages.into_iter().chain(from_tabs) {
+        for message in messages {
             self.emit_main(message.name.name(), js_json::from_js(&message.data));
+        }
+        for message in from_tabs {
+            self.emit_main(message.name, js_json::from_js(&message.data));
         }
     }
 
@@ -1263,7 +1313,7 @@ fn unmodeled(what: String) -> asrs_hub::tabs::TabsError {
     asrs_hub::tabs::TabsError::Thrown(JsError::new("Unmodeled", what))
 }
 
-fn c5_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut SourceList> {
+fn tab_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut SourceList> {
     let any = controller.as_any_mut();
     if any.is::<SwerveController>() {
         return any
@@ -1275,8 +1325,68 @@ fn c5_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut Sourc
             .downcast_mut::<MechanismController>()
             .map(MechanismController::source_list_mut);
     }
+    if any.is::<Field2dController>() {
+        return any
+            .downcast_mut::<Field2dController>()
+            .map(Field2dController::source_list_mut);
+    }
+    if any.is::<Field3dController>() {
+        return any
+            .downcast_mut::<Field3dController>()
+            .map(Field3dController::source_list_mut);
+    }
     any.downcast_mut::<PointsController>()
         .map(PointsController::source_list_mut)
+}
+
+/// `setupKeyboardControls`: `event.key` is `undefined` unless the event is a `KeyboardEvent`
+/// built with one.
+fn event_key_clicks(init: &InitDict<'_>) -> Result<bool, String> {
+    match init.get("key") {
+        None => Ok(false),
+        Some(key) => key
+            .as_str()
+            .map(|k| keyboard_clicks(&js(&k.to_string_lossy())))
+            .ok_or_else(|| err("init.key must be a string")),
+    }
+}
+
+struct InitDict<'a> {
+    raw: &'a Json,
+    kind: &'a str,
+}
+
+impl<'a> InitDict<'a> {
+    fn get(&self, name: &str) -> Option<&'a Json> {
+        const MODIFIERS: [&str; 4] = ["ctrlKey", "shiftKey", "altKey", "metaKey"];
+        let mouse = [
+            "clientX", "clientY", "screenX", "screenY", "button", "buttons",
+        ];
+        let member = match self.kind {
+            "CustomEvent" => name == "detail",
+            "MouseEvent" | "PointerEvent" | "DragEvent" => {
+                name == "detail" || MODIFIERS.contains(&name) || mouse.contains(&name)
+            }
+            "WheelEvent" => {
+                name == "detail"
+                    || MODIFIERS.contains(&name)
+                    || mouse.contains(&name)
+                    || ["deltaX", "deltaY", "deltaZ", "deltaMode"].contains(&name)
+            }
+            "KeyboardEvent" => {
+                MODIFIERS.contains(&name) || ["key", "code", "location", "repeat"].contains(&name)
+            }
+            _ => false,
+        };
+        member.then(|| self.raw.get(name)).flatten()
+    }
+}
+
+fn field3d_controller(tabs: &mut Tabs<Host>, tab: usize) -> Result<&mut Field3dController, String> {
+    tabs.controller_mut(&JsValue::Number(tab as f64))
+        .map_err(|e| err(e.to_string()))?
+        .downcast_mut::<Field3dController>()
+        .ok_or_else(|| err(format!("tab {tab} is not Field3d")))
 }
 
 fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsValue, String> {
@@ -1301,7 +1411,16 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
         let is_stub = i
             .and_then(|i| r.tabs.tab(i))
             .and_then(|t| t.tab_type())
-            .map(|k| !matches!(k, TabType::Table | TabType::Console | TabType::Metadata))
+            .map(|k| {
+                !matches!(
+                    k,
+                    TabType::Table
+                        | TabType::Console
+                        | TabType::Metadata
+                        | TabType::Field2d
+                        | TabType::Field3d
+                )
+            })
             .unwrap_or(false);
         if is_stub {
             return Ok(JsValue::Undefined);
@@ -1334,12 +1453,29 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
                         | TabType::Swerve
                         | TabType::Mechanism
                         | TabType::Points
+                        | TabType::Field2d
+                        | TabType::Field3d
                 )
             })
             .unwrap_or(false);
         if is_stub {
             return Ok(JsValue::Undefined);
         }
+    }
+    if let Some(arg) = suffix
+        .strip_prefix(".controller.setXRActive(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
+        let JsValue::Bool(active) = parse_arg(arg)? else {
+            return Err(err(format!("setXRActive({arg}) is not modeled")));
+        };
+        r.tabs
+            .controller_mut(index)
+            .map_err(|e| err(e.to_string()))?
+            .downcast_mut::<Field3dController>()
+            .ok_or_else(|| err("setXRActive on a tab that is not Field3d"))?
+            .set_xr_active(active);
+        return Ok(JsValue::Undefined);
     }
     if suffix == ".controller.saveState()" {
         return Ok(r
@@ -1353,7 +1489,7 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .tabs
             .controller_mut(index)
             .map_err(|e| err(e.to_string()))?;
-        let Some(list) = c5_source_list(controller) else {
+        let Some(list) = tab_source_list(controller) else {
             return Err(err(format!("unsupported tab eval suffix {suffix}")));
         };
         let host = &mut r.host;
@@ -1382,6 +1518,11 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             let items = source_state(&parse_arg(arg)?).map_err(|e| e.message)?;
             with_env(host, |env| list.set_state(env, items)).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
+        }
+        if op == "getState()" {
+            return Ok(JsValue::Array(
+                list.state().iter().map(ToJs::to_js).collect(),
+            ));
         }
         if op == "refresh()" {
             with_env(host, |env| list.refresh(env)).map_err(|e| js_error(e).message)?;
@@ -1518,7 +1659,11 @@ fn selection_step(
         "unlock" => sel.unlock(),
         "toggleLock" => sel.toggle_lock(),
         "stepCycle" => sel.step_cycle(truthy(&arg(0))),
-        "setSelectedTime" => sel.set_selected_time(num(0)?),
+        "setSelectedTime" => sel.set_selected_time(match arg(0) {
+            Value::Null => 0.0,
+            Value::Undefined => f64::NAN,
+            v => v.as_f64().ok_or_else(|| err("expected a number"))?,
+        }),
         "setHoveredTime" => sel.set_hovered_time(arg(0).as_f64()),
         "setPlaybackSpeed" => sel.set_playback_speed(num(0)?),
         "setPlaybackLooping" => sel.set_playback_looping(truthy(&arg(0))),
@@ -1703,6 +1848,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         show_pending: true,
         frame_loop_dead: false,
         active_drag: None,
+        controls_order: Vec::new(),
         tagged_tables: Vec::new(),
         sidebar_width: 300.0,
         sidebar_expanded: Vec::new(),
@@ -1741,6 +1887,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         .unwrap_or_default();
     for (i, step) in steps.iter().enumerate() {
         let where_ = || format!("step {i}");
+        runner.sync_controls_order(false);
         if let Some(log_step) = step.get("log") {
             let calls: Vec<Value> = match log_step.as_str() {
                 Some(path) => {
@@ -1960,6 +2107,7 @@ impl Runner {
         for message in self.tabs.take_messages() {
             self.emit_main(message.name.name(), js_json::from_js(&message.data));
         }
+        self.sync_controls_order(name == "restore-state");
         Ok(())
     }
 
@@ -1975,7 +2123,16 @@ impl Runner {
             .ok_or_else(|| err("event needs a target"))?
             .to_string_lossy();
         let index = event.get("index").and_then(Json::as_f64).unwrap_or(0.0) as usize;
-        let init = event.get("init").unwrap_or(&Json::Null);
+        let kind = event
+            .get("kind")
+            .and_then(Json::as_str)
+            .map_or_else(|| "Event".to_owned(), |k| k.to_string_lossy());
+        let raw_init = event.get("init").unwrap_or(&Json::Null);
+        // `new window[kind](type, init)`: a constructor reads only its own dictionary members.
+        let init = InitDict {
+            raw: raw_init,
+            kind: &kind,
+        };
         let iv = |name: &str| init.get(name).and_then(Json::as_f64).unwrap_or(0.0);
         let (x, y) = (iv("clientX"), iv("clientY"));
         let props = event.get("props");
@@ -2038,13 +2195,20 @@ impl Runner {
             (t, "change") if t.contains("input.size-y") => {
                 self.swerve_change(SwerveInput::SizeY, props)?
             }
+            (t, "change") if t.contains(".field-3d-settings .field-select") => {
+                self.field3d_select_change(index, props)?
+            }
+            (t, "click") if t.contains(".field-3d-settings .xr-button") => {
+                self.field3d_xr_click(index)?
+            }
+            (t, "keydown") if t.contains(".field-3d-settings .xr-button") => {
+                if event_key_clicks(&init)? {
+                    self.field3d_xr_click(index)?;
+                }
+            }
             (t, "click") if t.contains("orientation-switcher") => self.swerve_rotate(index)?,
             (t, "keydown") if t.contains("orientation-switcher") => {
-                let key = init
-                    .get("key")
-                    .and_then(Json::as_str)
-                    .ok_or_else(|| err("keydown needs a key"))?;
-                if keyboard_clicks(&js(&key.to_string_lossy())) {
+                if event_key_clicks(&init)? {
                     self.swerve_rotate(index)?;
                 }
             }
@@ -2327,6 +2491,71 @@ impl Runner {
         Ok(())
     }
 
+    /// The tab whose controls hold match `index` of a selector inside `.field-3d-settings`.
+    /// `None` is the match one past the tabs: the hidden `#controller3` template after
+    /// `.controls-content`, which has no listeners.
+    fn field3d_controls_tab(&mut self, index: usize) -> Result<Option<usize>, String> {
+        self.sync_controls_order(false);
+        let ids = self.tab_ids();
+        let tabs: Vec<usize> = self
+            .controls_order
+            .iter()
+            .filter_map(|id| ids.iter().position(|i| i == id))
+            .filter(|&i| self.tabs.tab(i).and_then(|t| t.tab_type()) == Some(TabType::Field3d))
+            .collect();
+        match tabs.get(index) {
+            Some(&i) => Ok(Some(i)),
+            None if index == tabs.len() => Ok(None),
+            None => Err(err(format!("no .field-3d-settings match {index}"))),
+        }
+    }
+
+    fn tab_ids(&self) -> Vec<usize> {
+        self.tabs
+            .tabs()
+            .map(|t| t.controller() as *const dyn TabController<Host> as *const () as usize)
+            .collect()
+    }
+
+    /// Runs after every step, so a closed tab's address cannot be reused unseen, except
+    /// inside `restoreState`, which re-adds every tab in `tabList` order (`rebuilt`).
+    fn sync_controls_order(&mut self, rebuilt: bool) {
+        let ids = self.tab_ids();
+        if rebuilt {
+            self.controls_order = ids;
+            return;
+        }
+        self.controls_order.retain(|id| ids.contains(id));
+        for id in ids {
+            if !self.controls_order.contains(&id) {
+                self.controls_order.push(id);
+            }
+        }
+    }
+
+    fn field3d_select_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let Some(tab) = self.field3d_controls_tab(index)? else {
+            return Ok(());
+        };
+        let controller = field3d_controller(&mut self.tabs, tab)?;
+        if let Some(value) = value {
+            controller.set_field_value(&value);
+        }
+        controller
+            .field_select_change(&mut self.host)
+            .map_err(|e| format!("{}: {}", e.name, e.message))
+    }
+
+    fn field3d_xr_click(&mut self, index: usize) -> Result<(), String> {
+        let Some(tab) = self.field3d_controls_tab(index)? else {
+            return Ok(());
+        };
+        let uuid = self.tabs.tab(tab).map(|t| t.uuid().clone()).unwrap();
+        field3d_controller(&mut self.tabs, tab)?.xr_click(&mut self.host, &uuid);
+        Ok(())
+    }
+
     fn source_item_click(&mut self, index: usize, remove: bool) -> Result<(), String> {
         let i = self
             .tabs
@@ -2336,8 +2565,8 @@ impl Runner {
             .tabs
             .controller_mut(&JsValue::Number(i as f64))
             .map_err(|e| err(e.to_string()))?;
-        let list = c5_source_list(controller)
-            .ok_or_else(|| err("source list item clicks are modeled for C05 tabs only"))?;
+        let list = tab_source_list(controller)
+            .ok_or_else(|| err("the selected tab has no modeled source list"))?;
         if remove {
             list.remove(index);
             Ok(())
@@ -2517,16 +2746,6 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     let records = vectors::load(vector_id)?;
     let mut expected = records.iter().peekable();
     let mut skipped = 0;
-    // The Field3d controller is still a stub, so its coordinate-system warnings have no
-    // port side yet.
-    let stub_warning = |record: &Record| {
-        vector_id.ends_with("/field-3d")
-            && record
-                .field("main")
-                .and_then(Json::as_str)
-                .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
-    };
-    let skippable = |record: &Record| skippable(record) || stub_warning(record);
     for emit in &emitted {
         while let Some(record) = expected.peek() {
             if skippable(record) {
@@ -2539,13 +2758,14 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
         let record = expected
             .next()
             .ok_or_else(|| err("port emitted more records than the vector has"))?;
+        // Documentation, LineGraph, Statistics and Video run `StubController` here.
         let stub_command = emit
             .values
             .iter()
             .find(|(k, _)| *k == "command")
             .and_then(|(_, v)| v.get("type"))
             .and_then(Value::as_f64)
-            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0));
+            .is_some_and(|t| matches!(t, 0.0 | 1.0 | 6.0 | 7.0));
         for (key, value) in &emit.values {
             let expected_value = record.value(key).map_err(|e| {
                 format!(

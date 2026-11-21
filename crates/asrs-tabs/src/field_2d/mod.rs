@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use asrs_js::math;
-use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::create_uuid;
 use asrs_js::value::{JsObject, JsValue, ToJs};
@@ -34,7 +33,7 @@ use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{SourceListCx, js_error, with_env};
+use crate::list_cx::{self, SourceListCx, js_error, with_env};
 
 const TRAIL_LENGTH_SECS: f64 = 3.0;
 const TRAIL_DT: f64 = 0.1;
@@ -152,32 +151,6 @@ impl Field2dController {
         field: &JsString,
     ) -> Option<&'a Config2d> {
         assets?.field2ds.iter().find(|f| f.id == *field)
-    }
-
-    /// `sourceList.setState(value)`: `clear()`, then `value.forEach(addListItem)`. An item
-    /// `SourceListItemState` cannot hold stays in upstream's state after `addListItem`
-    /// pushes it, so the port reports it as unmodeled instead of guessing.
-    fn set_source_state<C: SourceListCx + ?Sized>(
-        &mut self,
-        cx: &mut C,
-        value: &JsValue,
-    ) -> Result<(), JsError> {
-        let JsValue::Array(items) = value else {
-            self.list.clear();
-            if let JsValue::Bytes(_) = value {
-                return Err(JsError::new("Unmodeled", "a typed array of sources"));
-            }
-            ops::get(value, "forEach")?;
-            return Err(JsError::type_error("state.forEach is not a function"));
-        };
-        let items = items
-            .iter()
-            .map(|item| {
-                SourceListItemState::from_js(item)
-                    .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        with_env(cx, |env| self.list.set_state(env, items)).map_err(js_error)
     }
 
     /// `updateFieldOptions`.
@@ -382,7 +355,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         }
         self.update_field_options(cx);
         if let Some(sources) = state.get("sources") {
-            self.set_source_state(cx, sources)?;
+            list_cx::set_source_state(&mut self.list, cx, sources)?;
         }
         if let Some(field) = state.get("field")
             && let Some(field) = field.as_str()
@@ -516,8 +489,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                         time,
                         uuid_str.as_deref(),
                         RotationUnits::Radians,
-                    )
-                    .map_err(geometry_error)?;
+                    )?;
                 }
             } else {
                 pose3ds = grab_heatmap_data(
@@ -527,8 +499,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                     heatmap_time_range(&source),
                     heatmap_range.get(&i).copied().flatten(),
                     uuid_str.as_deref(),
-                )
-                .map_err(geometry_error)?;
+                )?;
             }
             let mut poses: Vec<AnnotatedPose2d> =
                 pose3ds.into_iter().map(annotated_pose_3d_to_2d).collect();
@@ -540,17 +511,17 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                 let start = math::max(&[timestamp_range[0], time - TRAIL_LENGTH_SECS]);
                 let end = math::min(&[timestamp_range[1], time + TRAIL_LENGTH_SECS]);
                 for sample in trail_samples(start, end) {
-                    let mut trail_poses: Vec<AnnotatedPose2d> = match grab_poses_auto(
+                    let mut trail_poses: Vec<AnnotatedPose2d> = grab_poses_auto(
                         &log,
                         &source.log_key,
                         &source.log_type,
                         sample,
                         uuid_str.as_deref(),
                         RotationUnits::Radians,
-                    ) {
-                        Ok(p) => p.into_iter().map(annotated_pose_3d_to_2d).collect(),
-                        Err(e) => return Err(geometry_error(e)),
-                    };
+                    )?
+                    .into_iter()
+                    .map(annotated_pose_3d_to_2d)
+                    .collect();
                     if trail_poses.len() != poses.len() {
                         continue;
                     }
@@ -587,8 +558,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                         time.unwrap_or(0.0),
                         uuid_str.as_deref(),
                         units,
-                    )
-                    .map_err(geometry_error)?;
+                    )?;
                     if let Some(first) = rotations.first() {
                         let rotation = rotation_3d_to_2d(first.pose.rotation);
                         for pose in &mut poses {
@@ -603,8 +573,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                         time.unwrap_or(0.0),
                         uuid_str.as_deref(),
                         RotationUnits::Radians,
-                    )
-                    .map_err(geometry_error)?;
+                    )?;
                     for annotated in &mut vision_pose3ds {
                         annotated.annotation.vision_color = option(child, "color").cloned();
                         annotated.annotation.vision_size = option(child, "size").cloned();
@@ -727,8 +696,4 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
             objects,
         }))
     }
-}
-
-fn geometry_error(error: geometry::GeometryError) -> JsError {
-    JsError::new(error.name(), error.message())
 }

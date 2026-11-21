@@ -176,6 +176,10 @@ impl TabCx for Host {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         self.messages.push(message);
     }
+
+    fn send_open_xr(&mut self, _uuid: JsValue) {
+        unreachable!("the statistics harness has no Field3d tab")
+    }
 }
 
 impl SourceListCx for Host {
