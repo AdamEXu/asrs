@@ -58,6 +58,7 @@
     "dom/source-list/points": {"cases":149,"content":"dac05b42d4adc1b5","generator":"1b700b07ad98630d","spec":"parity/specs/dom/source-list/points.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/source-list/statistics": {"cases":261,"content":"5771743efce4ecfe","generator":"6f1d7e860efd65a4","spec":"parity/specs/dom/source-list/statistics.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/source-list/swerve": {"cases":102,"content":"32a4dd45a3b8ed3a","generator":"c82e78424cf455c1","spec":"parity/specs/dom/source-list/swerve.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "dom/statistics/fields": {"cases":49,"content":"ae69f7cd7eed2af1","generator":"166df64eb7a59b1c","spec":"parity/specs/dom/statistics/fields.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/tabs-model/controls-edges": {"cases":168,"content":"2a864a1f2ad3f104","generator":"be87393a68c32c79","spec":"parity/specs/dom/tabs-model/controls-edges.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/tabs-model/controls-height": {"cases":226,"content":"21279e65dc30db82","generator":"d8132e876801788f","spec":"parity/specs/dom/tabs-model/controls-height.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/tabs-model/controls-height-short": {"cases":40,"content":"26998ebb0406afde","generator":"fd7c732101e23136","spec":"parity/specs/dom/tabs-model/controls-height-short.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

@@ -382,6 +382,13 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.tabs.iter().map(TabRef)
     }
 
+    /// `tabList[index].controller`, mutable: page code calls controller methods straight
+    /// through the list (evals, control events).
+    pub fn controller_mut(&mut self, index: usize) -> Option<&mut (dyn TabController<Cx> + '_)> {
+        let tab = self.tabs.get_mut(index)?;
+        Some(&mut *tab.controller)
+    }
+
     /// `getSelectedTab()`.
     pub fn selected(&self) -> &JsValue {
         &self.selected

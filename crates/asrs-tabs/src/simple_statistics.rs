@@ -100,6 +100,13 @@ pub fn le(a: &JsValue, b: &JsValue) -> bool {
     )
 }
 
+pub fn ge(a: &JsValue, b: &JsValue) -> bool {
+    matches!(
+        rel(a, b),
+        Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+    )
+}
+
 fn add(a: &JsValue, b: &JsValue) -> Result<JsValue> {
     if matches!(primitive(a), Prim::Str(_)) || matches!(primitive(b), Prim::Str(_)) {
         let mut s = ops::to_string(a);

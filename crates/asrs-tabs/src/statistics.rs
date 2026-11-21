@@ -134,6 +134,30 @@ impl StatisticsController {
             .then_some(v);
     }
 
+    pub fn should_update(&self) -> bool {
+        self.should_update
+    }
+
+    /// `select.value = v`, without the `change` listener's `shouldUpdate`.
+    pub fn set_time_range(&mut self, v: JsString) {
+        self.set_select(v);
+    }
+
+    /// `input.value = v` on `.range-min`, without the `change` listeners.
+    pub fn set_range_min(&mut self, v: JsString) {
+        Self::set_number_input(&mut self.range_min, v);
+    }
+
+    /// `input.value = v` on `.range-max`, without the `change` listeners.
+    pub fn set_range_max(&mut self, v: JsString) {
+        Self::set_number_input(&mut self.range_max, v);
+    }
+
+    /// `input.value = v` on `.step-size`, without the `change` listeners.
+    pub fn set_step_size(&mut self, v: JsString) {
+        Self::set_number_input(&mut self.step_size, v);
+    }
+
     /// `change` on `.time-range`.
     pub fn time_range_input(&mut self, v: JsString) {
         self.set_select(v);
@@ -466,7 +490,7 @@ fn eq_str(a: &JsString, b: &str) -> bool {
 }
 
 fn ge(a: &JsValue) -> bool {
-    !stats::lt(a, &num(0.0))
+    stats::ge(a, &num(0.0))
 }
 
 fn subtract(a: &JsValue, b: &JsValue) -> Result<f64, JsError> {
