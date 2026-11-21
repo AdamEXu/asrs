@@ -1,0 +1,863 @@
+//! `hub/controllers/StatisticsController.ts`. The source list and the histogram inputs are
+//! modelled headless: each `input[type=number]` keeps its sanitized `value` and `step`
+//! strings, and the `select` keeps the value of its selected option (none reads as `""`).
+
+use std::rc::Rc;
+
+use asrs_js::json;
+use asrs_js::math;
+use asrs_js::number;
+use asrs_js::ops;
+use asrs_js::sort::{self, Slot};
+use asrs_js::string::{JsError, JsString};
+use asrs_js::time;
+use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_log::log::robot_state::{get_robot_state_ranges, RobotMode, RobotStateRange, AKIT_TIMESTAMP_KEYS};
+use asrs_log::log::Log;
+use asrs_model::selection::Selection;
+use asrs_model::source_list::{configs, Env, SourceList, SourceListError};
+use asrs_model::source_list_config::{SourceListItemState, SourceListTypeConfig};
+use asrs_model::tab_controller::{Command, TabCommand, TabController};
+
+use crate::simple_statistics as stats;
+
+const UPDATE_PERIOD_MS: f64 = 100.0;
+const DEFAULT_DT: f64 = 0.02;
+const MAX_BINS: f64 = 1000.0;
+
+const TIME_RANGE_OPTIONS: &[&str] = &[
+    "visible", "full", "enabled", "auto", "teleop", "live-30", "live-10",
+];
+
+/// What the controller reads from the hub window.
+pub trait StatisticsEnv {
+    /// `window.log`.
+    fn with_log<R>(&self, f: impl FnOnce(&Log) -> R) -> R;
+    /// `window.selection`.
+    fn selection(&mut self) -> &mut dyn Selection;
+    /// `window.log`, `window.typeMemory` and the dark-theme flag, for `SourceList` calls.
+    fn with_source_env<R>(&mut self, f: impl FnOnce(&mut Env<'_>) -> R) -> R;
+    /// `new Date().getTime()`.
+    fn now(&self) -> f64;
+}
+
+/// The `.stats-*` control values a DOM capture reads off the elements.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistogramInputs {
+    pub range_min: JsString,
+    pub range_max: JsString,
+    pub step_size: JsString,
+    pub range_min_step: JsString,
+    pub range_max_step: JsString,
+    pub step_size_step: JsString,
+    pub time_range: Option<JsString>,
+}
+
+pub struct StatisticsController {
+    source_list: SourceList,
+    time_range: Option<JsString>,
+    range_min: JsString,
+    range_max: JsString,
+    step_size: JsString,
+    range_min_step: JsString,
+    range_max_step: JsString,
+    step_size_step: JsString,
+    command: StatisticsCommand,
+    should_update: bool,
+    last_source_str: String,
+    last_timeline_range: [f64; 2],
+    last_update_time: f64,
+}
+
+impl StatisticsController {
+    /// `uuid` is the `SourceList`'s own `createUUID()`.
+    pub fn new(uuid: String) -> Self {
+        let mut controller = StatisticsController {
+            source_list: SourceList::new(configs::statistics(), uuid, false),
+            time_range: Some(JsString::from("visible")),
+            range_min: JsString::from("0"),
+            range_max: JsString::from("10"),
+            step_size: JsString::from("1"),
+            range_min_step: JsString::new(),
+            range_max_step: JsString::new(),
+            step_size_step: JsString::new(),
+            command: StatisticsCommand::default(),
+            should_update: true,
+            last_source_str: String::new(),
+            last_timeline_range: [0.0, 0.0],
+            last_update_time: 0.0,
+        };
+        controller.update_histogram_inputs();
+        controller
+    }
+
+    pub fn source_list(&self) -> &SourceList {
+        &self.source_list
+    }
+
+    pub fn source_list_mut(&mut self) -> &mut SourceList {
+        &mut self.source_list
+    }
+
+    fn time_range_value(&self) -> JsString {
+        self.time_range.clone().unwrap_or_default()
+    }
+
+    /// The `.stats-*` control element values, in the template's order.
+    pub fn histogram_inputs(&self) -> HistogramInputs {
+        HistogramInputs {
+            range_min: self.range_min.clone(),
+            range_max: self.range_max.clone(),
+            step_size: self.step_size.clone(),
+            range_min_step: self.range_min_step.clone(),
+            range_max_step: self.range_max_step.clone(),
+            step_size_step: self.step_size_step.clone(),
+            time_range: self.time_range.clone(),
+        }
+    }
+
+    /// `input[type=number].value = v`: jsdom keeps the string when it parses as a finite
+    /// floating-point number and drops it otherwise.
+    fn set_number_input(value: &mut JsString, v: JsString) {
+        *value = if valid_float(v.units()) && number::parse_float(v.units()).is_finite() {
+            v
+        } else {
+            JsString::new()
+        };
+    }
+
+    /// `select.value = v`: selects the matching option, or nothing (`value` reads `""`).
+    fn set_select(&mut self, v: JsString) {
+        self.time_range = TIME_RANGE_OPTIONS
+            .iter()
+            .any(|o| eq_str(&v, o))
+            .then_some(v);
+    }
+
+    /// `change` on `.time-range`.
+    pub fn time_range_input(&mut self, v: JsString) {
+        self.set_select(v);
+        self.should_update = true;
+    }
+
+    /// `change` on `.range-min`: `shouldUpdate` first, then `updateHistogramInputs`.
+    pub fn range_min_input(&mut self, v: JsString) {
+        Self::set_number_input(&mut self.range_min, v);
+        self.should_update = true;
+        self.update_histogram_inputs();
+    }
+
+    /// `change` on `.range-max`.
+    pub fn range_max_input(&mut self, v: JsString) {
+        Self::set_number_input(&mut self.range_max, v);
+        self.should_update = true;
+        self.update_histogram_inputs();
+    }
+
+    /// `change` on `.step-size`.
+    pub fn step_size_input(&mut self, v: JsString) {
+        Self::set_number_input(&mut self.step_size, v);
+        self.should_update = true;
+        self.update_histogram_inputs();
+    }
+
+    fn update_histogram_inputs(&mut self) {
+        if value_to_number(&self.step_size) <= 0.0 {
+            self.step_size = JsString::from(number::to_string(clean_float(
+                value_to_number(&self.step_size_step) * 0.9,
+            )));
+        }
+        let range = math::abs(value_to_number(&self.range_max) - value_to_number(&self.range_min));
+        if range / value_to_number(&self.step_size) > MAX_BINS {
+            self.step_size = JsString::from(number::to_string(clean_float(range / MAX_BINS)));
+        }
+        let step = math::pow(10.0, math::floor(math::log10(value_to_number(&self.step_size))));
+        self.step_size_step = JsString::from(number::to_string(step));
+        let min_max_step =
+            math::pow(10.0, math::ceil(math::log10(value_to_number(&self.step_size))));
+        self.range_min_step = JsString::from(number::to_string(min_max_step));
+        self.range_max_step = JsString::from(number::to_string(min_max_step));
+    }
+
+    fn is_valid(
+        timestamp: f64,
+        selection: &mut dyn Selection,
+        timestamp_range: [f64; 2],
+        state_ranges: &[RobotStateRange],
+        time_range: &JsString,
+    ) -> bool {
+        let live_time = selection
+            .get_current_live_time()
+            .unwrap_or(timestamp_range[1]);
+        let timeline_range = selection.get_timeline_range();
+        if eq_str(time_range, "full") {
+            return true;
+        }
+        if eq_str(time_range, "visible") {
+            return timestamp >= timeline_range[0] && timestamp <= timeline_range[1];
+        }
+        if eq_str(time_range, "live-30") {
+            return timestamp >= live_time - 30.0;
+        }
+        if eq_str(time_range, "live-10") {
+            return timestamp >= live_time - 10.0;
+        }
+        let current_range = state_ranges
+            .iter()
+            .rfind(|range| range.start <= timestamp)
+            .map(|range| range.mode);
+        if eq_str(time_range, "enabled") {
+            return current_range != Some(RobotMode::Disabled);
+        }
+        if eq_str(time_range, "auto") {
+            return current_range == Some(RobotMode::Auto);
+        }
+        if eq_str(time_range, "teleop") {
+            return current_range == Some(RobotMode::Teleop);
+        }
+        false
+    }
+
+    fn recompute(&mut self, cx: &mut impl StatisticsEnv) -> Result<(), JsError> {
+        let min = value_to_number(&self.range_min);
+        let max = value_to_number(&self.range_max);
+        let mut step = value_to_number(&self.step_size);
+        if step <= 0.0 {
+            step = 1.0;
+        }
+        let mut bins = Vec::new();
+        let mut i = min;
+        while i < max && (bins.len() as f64) < MAX_BINS {
+            bins.push(i);
+            i += step;
+        }
+
+        let (state_ranges, akit_key, akit_timestamps, timestamp_range, sources) =
+            cx.with_log(|log| {
+                let akit_key = log
+                    .get_field_keys()
+                    .iter()
+                    .find(|key| AKIT_TIMESTAMP_KEYS.iter().any(|k| eq_str(key, k)))
+                    .cloned();
+                let akit_timestamps = akit_key.as_ref().and_then(|key| {
+                    log.get_number(key, f64::NEG_INFINITY, f64::INFINITY, None, None)
+                });
+                (
+                    get_robot_state_ranges(log),
+                    akit_key,
+                    akit_timestamps,
+                    log.get_timestamp_range(),
+                    self.source_list.displayed_state(log),
+                )
+            });
+
+        let time_range = self.time_range_value();
+        let selection = cx.selection();
+        let mut sample_times = Vec::new();
+        if akit_key.is_some() {
+            if let Some(akit) = &akit_timestamps {
+                sample_times = akit
+                    .timestamps
+                    .iter()
+                    .copied()
+                    .filter(|&t| {
+                        Self::is_valid(t, selection, timestamp_range, &state_ranges, &time_range)
+                    })
+                    .collect();
+            }
+        } else {
+            let mut sample_time = timestamp_range[0];
+            while sample_time < timestamp_range[1] {
+                if Self::is_valid(
+                    sample_time,
+                    selection,
+                    timestamp_range,
+                    &state_ranges,
+                    &time_range,
+                ) {
+                    sample_times.push(sample_time);
+                }
+                sample_time += DEFAULT_DT;
+            }
+        }
+
+        let config = configs::statistics();
+        let mut fields = Vec::new();
+        let mut index = 0usize;
+        while index < sources.len() {
+            let source = &sources[index];
+            let type_config = config
+                .types
+                .iter()
+                .find(|t| eq_str(&source.item_type, &t.key));
+            if type_config.is_some_and(|t| t.child_of.is_some()) {
+                index += 1;
+                continue;
+            }
+            let mut children: Vec<&SourceListItemState> = Vec::new();
+            while index + 1 < sources.len()
+                && config
+                    .types
+                    .iter()
+                    .find(|t| eq_str(&sources[index + 1].item_type, &t.key))
+                    .is_some_and(|t| t.child_of.is_some())
+            {
+                index += 1;
+                children.push(&sources[index]);
+            }
+
+            if eq_str(&source.item_type, "independent") {
+                field_command(
+                    cx,
+                    &mut fields,
+                    &sample_times,
+                    &bins,
+                    (min, step),
+                    source,
+                    None,
+                )?;
+            } else {
+                for child in children {
+                    field_command(
+                        cx,
+                        &mut fields,
+                        &sample_times,
+                        &bins,
+                        (min, step),
+                        child,
+                        Some(source),
+                    )?;
+                }
+            }
+            index += 1;
+        }
+
+        self.command = StatisticsCommand {
+            change_counter: self.command.change_counter + 1.0,
+            bins,
+            step_size: step,
+            fields,
+        };
+        Ok(())
+    }
+}
+
+fn type_key<'a>(config: &'a [SourceListTypeConfig], t: &JsString) -> Option<&'a SourceListTypeConfig> {
+    config.iter().find(|c| eq_str(t, &c.key))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn field_command(
+    cx: &mut impl StatisticsEnv,
+    fields: &mut Vec<StatisticsField>,
+    sample_times: &[f64],
+    bins: &[f64],
+    (min, step): (f64, f64),
+    source: &SourceListItemState,
+    ref_source: Option<&SourceListItemState>,
+) -> Result<(), JsError> {
+    let (data, ref_data) = cx.with_log(|log| {
+        (
+            log.get_number(&source.log_key, f64::NEG_INFINITY, f64::INFINITY, None, None),
+            ref_source.and_then(|r| {
+                log.get_number(&r.log_key, f64::NEG_INFINITY, f64::INFINITY, None, None)
+            }),
+        )
+    });
+
+    let mut index = 0usize;
+    let mut samples: Vec<JsValue> = Vec::with_capacity(sample_times.len());
+    for &sample_time in sample_times {
+        let data = data.as_ref().ok_or_else(|| {
+            JsError::type_error("Cannot read properties of undefined (reading 'timestamps')")
+        })?;
+        while index + 1 < data.timestamps.len() && data.timestamps[index + 1] < sample_time {
+            index += 1;
+        }
+        samples.push(
+            data.values
+                .get(index)
+                .map(|v| JsValue::Number(*v))
+                .unwrap_or(JsValue::Undefined),
+        );
+    }
+
+    let mut index = 0usize;
+    let ref_samples: Option<Vec<JsValue>> = ref_data.map(|ref_data| {
+        sample_times
+            .iter()
+            .map(|&sample_time| {
+                while index + 1 < ref_data.timestamps.len()
+                    && ref_data.timestamps[index + 1] < sample_time
+                {
+                    index += 1;
+                }
+                ref_data
+                    .values
+                    .get(index)
+                    .map(|v| JsValue::Number(*v))
+                    .unwrap_or(JsValue::Undefined)
+            })
+            .collect()
+    });
+
+    if let Some(ref_samples) = &ref_samples {
+        if eq_str(&source.item_type, "relativeError") {
+            for (sample, reference) in samples.iter_mut().zip(ref_samples) {
+                *sample = JsValue::Number(subtract(sample, reference)?);
+            }
+        } else if eq_str(&source.item_type, "absoluteError") {
+            for (sample, reference) in samples.iter_mut().zip(ref_samples) {
+                *sample = JsValue::Number(math::abs(subtract(sample, reference)?));
+            }
+        }
+    }
+
+    let mut slots: Vec<Slot<JsValue>> = samples
+        .iter()
+        .map(|v| match v {
+            JsValue::Undefined => Slot::Undefined,
+            other => Slot::Value(other.clone()),
+        })
+        .collect();
+    sort::array_sort_slots(&mut slots, |a, b| subtract(a, b).unwrap_or(f64::NAN));
+    let samples: Vec<JsValue> = slots
+        .into_iter()
+        .map(|slot| match slot {
+            Slot::Value(v) => v,
+            Slot::Undefined | Slot::Hole => JsValue::Undefined,
+        })
+        .collect();
+
+    let mut histogram_counts = vec![0.0; bins.len()];
+    for value in &samples {
+        if !matches!(value, JsValue::Null) {
+            let bin_index = math::floor((ops::value_to_number(value)? - min) / step);
+            if bin_index >= 0.0 && bin_index < bins.len() as f64 {
+                histogram_counts[bin_index as usize] += 1.0;
+            }
+        }
+    }
+
+    let non_negative: Vec<JsValue> = samples.iter().filter(|v| ge(v)).cloned().collect();
+    let positive: Vec<JsValue> = samples.iter().filter(|v| stats::gt(v, &num(0.0))).cloned().collect();
+    let stats_obj = field_stats(&samples, &non_negative, &positive)?;
+
+    let color = source
+        .options
+        .get("color")
+        .map(|c| JsValue::String(c.clone()))
+        .unwrap_or(JsValue::Undefined);
+    fields.push(StatisticsField {
+        title: source.log_key.clone(),
+        color,
+        histogram_counts,
+        stats: stats_obj,
+    });
+    Ok(())
+}
+
+fn num(x: f64) -> JsValue {
+    JsValue::Number(x)
+}
+
+fn eq_str(a: &JsString, b: &str) -> bool {
+    a.units().iter().copied().eq(b.encode_utf16())
+}
+
+fn ge(a: &JsValue) -> bool {
+    !stats::lt(a, &num(0.0))
+}
+
+fn subtract(a: &JsValue, b: &JsValue) -> Result<f64, JsError> {
+    Ok(ops::value_to_number(a)? - ops::value_to_number(b)?)
+}
+
+fn value_to_number(s: &JsString) -> f64 {
+    number::to_number(s.units())
+}
+
+fn clean_float(x: f64) -> f64 {
+    let output = math::round(x * 1e6) / 1e6;
+    if output == 0.0 {
+        0.0
+    } else {
+        output
+    }
+}
+
+/// `input[type=number]` sanitization: `^-?(?:\d+|\d*\.\d+)(?:[eE][-+]?\d+)?$`.
+fn valid_float(units: &[u16]) -> bool {
+    if units.iter().any(|&u| u >= 0x80) {
+        return false;
+    }
+    let s: Vec<u8> = units.iter().map(|&u| u as u8).collect();
+    let mut i = 0usize;
+    if s.first() == Some(&b'-') {
+        i += 1;
+    }
+    let digits = |s: &[u8], i: &mut usize| -> usize {
+        let start = *i;
+        while s.get(*i).is_some_and(|u| u.is_ascii_digit()) {
+            *i += 1;
+        }
+        *i - start
+    };
+    if digits(&s, &mut i) == 0 {
+        if s.get(i) == Some(&b'.') {
+            i += 1;
+        }
+        if digits(&s, &mut i) == 0 {
+            return false;
+        }
+    } else if s.get(i) == Some(&b'.') {
+        i += 1;
+        if digits(&s, &mut i) == 0 {
+            return false;
+        }
+    }
+    if matches!(s.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        if matches!(s.get(i), Some(b'-' | b'+')) {
+            i += 1;
+        }
+        if digits(&s, &mut i) == 0 {
+            return false;
+        }
+    }
+    i == s.len()
+}
+
+fn field_stats(
+    samples: &[JsValue],
+    non_negative: &[JsValue],
+    positive: &[JsValue],
+) -> Result<JsObject, JsError> {
+    let nan = || num(f64::NAN);
+    let mut out = JsObject::new();
+    out.insert("count", num(samples.len() as f64));
+    out.insert(
+        "min",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::min_sorted(samples)
+        },
+    );
+    out.insert(
+        "max",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::max_sorted(samples)
+        },
+    );
+    out.insert(
+        "mean",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::mean(samples)?
+        },
+    );
+    out.insert(
+        "median",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::median_sorted(samples)?
+        },
+    );
+    out.insert(
+        "mode",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::mode_sorted(samples)?
+        },
+    );
+    out.insert(
+        "geometricMean",
+        if non_negative.is_empty() {
+            nan()
+        } else {
+            stats::log_average(non_negative)?
+        },
+    );
+    out.insert(
+        "harmonicMean",
+        if positive.is_empty() {
+            nan()
+        } else {
+            stats::harmonic_mean(positive)?
+        },
+    );
+    out.insert(
+        "quadraticMean",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::root_mean_square(samples)?
+        },
+    );
+    out.insert(
+        "standardDeviation",
+        if samples.len() < 2 {
+            nan()
+        } else {
+            stats::sample_standard_deviation(samples)?
+        },
+    );
+    out.insert(
+        "medianAbsoluteDeviation",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::median_absolute_deviation(samples)?
+        },
+    );
+    out.insert(
+        "interquartileRange",
+        if samples.is_empty() {
+            nan()
+        } else {
+            stats::interquartile_range(samples)?
+        },
+    );
+    out.insert(
+        "skewness",
+        if samples.len() < 3 {
+            nan()
+        } else {
+            stats::sample_skewness(samples)?
+        },
+    );
+    for (key, p) in [
+        ("percentile01", 0.01),
+        ("percentile05", 0.05),
+        ("percentile10", 0.1),
+        ("percentile25", 0.25),
+        ("percentile50", 0.5),
+        ("percentile75", 0.75),
+        ("percentile90", 0.9),
+        ("percentile95", 0.95),
+        ("percentile99", 0.99),
+    ] {
+        out.insert(
+            key,
+            if samples.is_empty() {
+                nan()
+            } else {
+                stats::quantile_sorted(samples, &num(p))?
+            },
+        );
+    }
+    Ok(out)
+}
+
+#[derive(Clone, Default)]
+pub struct StatisticsCommand {
+    change_counter: f64,
+    bins: Vec<f64>,
+    step_size: f64,
+    fields: Vec<StatisticsField>,
+}
+
+#[derive(Clone)]
+struct StatisticsField {
+    title: JsString,
+    color: JsValue,
+    histogram_counts: Vec<f64>,
+    stats: JsObject,
+}
+
+impl TabCommand for StatisticsCommand {
+    fn to_js(&self) -> JsValue {
+        let mut command = JsObject::new();
+        command.insert("changeCounter", num(self.change_counter));
+        command.insert(
+            "bins",
+            JsValue::Array(self.bins.iter().map(|b| num(*b)).collect()),
+        );
+        command.insert("stepSize", num(self.step_size));
+        command.insert(
+            "fields",
+            JsValue::Array(
+                self.fields
+                    .iter()
+                    .map(|field| {
+                        let mut f = JsObject::new();
+                        f.insert("title", JsValue::String(field.title.clone()));
+                        f.insert("color", field.color.clone());
+                        f.insert(
+                            "histogramCounts",
+                            JsValue::Array(
+                                field.histogram_counts.iter().map(|c| num(*c)).collect(),
+                            ),
+                        );
+                        f.insert("stats", JsValue::Object(field.stats.clone()));
+                        JsValue::Object(f)
+                    })
+                    .collect(),
+            ),
+        );
+        JsValue::Object(command)
+    }
+}
+
+impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
+    fn save_state(&self, _cx: &Cx) -> JsValue {
+        let mut state = JsObject::new();
+        state.insert(
+            "sources",
+            JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect()),
+        );
+        state.insert("timeRange", JsValue::String(self.time_range_value()));
+        state.insert("rangeMin", num(value_to_number(&self.range_min)));
+        state.insert("rangeMax", num(value_to_number(&self.range_max)));
+        state.insert("stepSize", num(value_to_number(&self.step_size)));
+        JsValue::Object(state)
+    }
+
+    fn restore_state(&mut self, cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
+        if !matches!(
+            state,
+            JsValue::Object(_)
+                | JsValue::Array(_)
+                | JsValue::Bytes(_)
+                | JsValue::Date(_)
+                | JsValue::ExtData(..)
+        ) {
+            return Ok(());
+        }
+        if ops::has(state, "sources")? {
+            let sources = ops::get(state, "sources")?;
+            let JsValue::Array(items) = &sources else {
+                return Err(JsError::type_error(
+                    "state.sources.forEach is not a function",
+                ));
+            };
+            let config = configs::statistics();
+            let mut parsed = Vec::with_capacity(items.len());
+            for item in items {
+                match SourceListItemState::from_js(item) {
+                    Some(item_state) => parsed.push(item_state),
+                    None => {
+                        let type_value = ops::get(item, "type")?;
+                        let matched = matches!(&type_value, JsValue::String(s) if type_key(&config.types, s).is_some());
+                        return Err(source_error(if matched {
+                            // `state.options[typeConfig.color]`: a matching type with no usable
+                            // options fails there first.
+                            SourceListError::Thrown(
+                                "TypeError: Cannot read properties of undefined (reading 'color')"
+                                    .to_owned(),
+                            )
+                        } else {
+                            SourceListError::UnknownType(ops::to_string(&type_value))
+                        }));
+                    }
+                }
+            }
+            cx.with_source_env(|env| self.source_list.set_state(env, parsed))
+                .map_err(source_error)?;
+        }
+        if ops::has(state, "timeRange")? {
+            if let JsValue::String(v) = ops::get(state, "timeRange")? {
+                self.set_select(v);
+            }
+        }
+        if ops::has(state, "rangeMin")? {
+            if let JsValue::Number(v) = ops::get(state, "rangeMin")? {
+                Self::set_number_input(&mut self.range_min, JsString::from(number::to_string(v)));
+            }
+        }
+        if ops::has(state, "rangeMax")? {
+            if let JsValue::Number(v) = ops::get(state, "rangeMax")? {
+                Self::set_number_input(&mut self.range_max, JsString::from(number::to_string(v)));
+            }
+        }
+        if ops::has(state, "stepSize")? {
+            if let JsValue::Number(v) = ops::get(state, "stepSize")? {
+                Self::set_number_input(&mut self.step_size, JsString::from(number::to_string(v)));
+            }
+        }
+        self.update_histogram_inputs();
+        Ok(())
+    }
+
+    fn refresh(&mut self, cx: &mut Cx) -> Result<(), JsError> {
+        cx.with_source_env(|env| self.source_list.refresh(env))
+            .map_err(source_error)?;
+        self.should_update = true;
+        Ok(())
+    }
+
+    fn new_assets(&mut self, _cx: &mut Cx) -> Result<(), JsError> {
+        Ok(())
+    }
+
+    fn active_fields(&self, _cx: &Cx) -> Vec<JsString> {
+        self.source_list.active_fields()
+    }
+
+    fn show_timeline(&self, _cx: &Cx) -> bool {
+        eq_str(&self.time_range_value(), "visible")
+    }
+
+    fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
+        let sources_js = JsValue::Array(
+            self.source_list
+                .state()
+                .iter()
+                .map(ToJs::to_js)
+                .collect(),
+        );
+        let sources_str = json::stringify(&sources_js)
+            .map_err(|e| JsError::new("Error", e.to_string()))?
+            .unwrap_or_default();
+        let current_time = time::time_clip(cx.now());
+        let time_range = self.time_range_value();
+        let is_live_mode = cx.selection().get_current_live_time().is_some()
+            && starts_with(&time_range, "live");
+        let visible_changed = eq_str(&time_range, "visible")
+            && cx.selection().get_timeline_range() != self.last_timeline_range;
+        if (self.should_update
+            || sources_str != self.last_source_str
+            || is_live_mode
+            || visible_changed)
+            && current_time - self.last_update_time > UPDATE_PERIOD_MS
+        {
+            self.should_update = false;
+            self.last_source_str = sources_str;
+            self.last_timeline_range = cx.selection().get_timeline_range();
+            self.last_update_time = current_time;
+            self.recompute(cx)?;
+        }
+        Ok(Rc::new(self.command.clone()))
+    }
+}
+
+fn starts_with(s: &JsString, prefix: &str) -> bool {
+    s.units().starts_with(&prefix.encode_utf16().collect::<Vec<u16>>())
+}
+
+/// `SourceListError` out of a controller call. `UnknownType` is a thrown string upstream,
+/// not an `Error`; an empty `name` marks that so the harness emits the raw value.
+fn source_error(e: SourceListError) -> JsError {
+    match e {
+        SourceListError::UnknownType(t) => {
+            JsError::new("", format!("Unknown type \"{}\"", t.to_string_lossy()))
+        }
+        SourceListError::Thrown(text) => {
+            if let Some((name, message)) = text.split_once(": ") {
+                match name {
+                    "TypeError" => return JsError::type_error(message),
+                    "RangeError" => return JsError::range(message),
+                    "Error" => return JsError::new("Error", message),
+                    _ => {}
+                }
+            }
+            JsError::new("", text)
+        }
+    }
+}

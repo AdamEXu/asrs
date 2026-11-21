@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
 asrs-js = { path = "../asrs-js" }
+asrs-log = { path = "../asrs-log" }
+asrs-model = { path = "../asrs-model" }
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }

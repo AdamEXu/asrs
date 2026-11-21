@@ -422,6 +422,8 @@ version = "0.1.0"
 dependencies = [
  "asrs-canvas",
  "asrs-js",
+ "asrs-log",
+ "asrs-model",
  "asrs-parity",
 ]
 
