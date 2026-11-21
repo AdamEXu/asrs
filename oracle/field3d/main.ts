@@ -45,6 +45,10 @@ app.whenReady().then(async () => {
           );
           const file = path.join(outDir, `${name}@${scale}x-${theme}.png`);
           fs.writeFileSync(file, encodePng(result.width, result.height, Buffer.from(result.rgba, "base64")));
+          result.shadowMaps.forEach((map: { width: number; height: number; rgba: string }, i: number) => {
+            const shadowFile = path.join(outDir, `${name}.shadow${i}.png`);
+            fs.writeFileSync(shadowFile, encodePng(map.width, map.height, Buffer.from(map.rgba, "base64")));
+          });
           info.glRenderer = result.glRenderer;
           info.samples = result.samples;
         }

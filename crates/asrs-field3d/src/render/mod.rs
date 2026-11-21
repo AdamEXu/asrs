@@ -2,8 +2,9 @@
 
 //! The wgpu port of the `WebGLRenderer` path upstream's 3D field uses: three's render lists
 //! and sorts, `MeshPhongMaterial` in WGSL with the sRGB OETF in the shader over a `Bgra8Unorm`
-//! target, instancing, two-pass transparent double-sided draws, readback, and the render thread
-//! that owns the device.
+//! target, instancing, two-pass transparent double-sided draws, `PCFSoftShadowMap` spot-light
+//! shadows, `Line2`/`LineMaterial` fat lines, `Line`, `LineSegments` and `GridHelper`, readback,
+//! and the render thread that owns the device.
 
 mod edges;
 mod frame;
@@ -13,12 +14,14 @@ mod thread;
 
 pub use edges::edge_mask;
 pub use frame::{
-    Draw, Frame, FrameOptions, HemisphereUniform, Lights, PointUniform, SpotUniform, build_frame,
+    Draw, DrawKind, Frame, FrameOptions, HemisphereUniform, Lights, PointUniform, ShadowPass,
+    SpotShadowUniform, SpotUniform, build_frame,
 };
 pub use gpu::{AuxBuffers, COLOR_FORMAT, RenderError, Renderer, Timings};
 pub use scene::{
-    Filter, Geometry, HemisphereLight, Instances, Mesh, MinFilter, NodeKind, PhongMaterial,
-    PointLight, Scene, SceneNode, Side, SpotLight, Texture,
+    FatLine, Filter, Geometry, HemisphereLight, Instances, LightShadow, Line, LineBasicMaterial,
+    LineMaterial, LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, PointLight,
+    Scene, SceneNode, Side, SpotLight, Texture,
 };
 pub use thread::{RenderThread, RenderedFrame};
 
