@@ -3,7 +3,13 @@
 // exposes to the port.
 
 const files = new Map<string, Buffer>();
+const failures = new Map<string, "read" | "write">();
 export const writes: string[] = [];
+
+export function setFailure(name: string, kind: "read" | "write" | null): void {
+  if (kind === null) failures.delete(name);
+  else failures.set(name, kind);
+}
 
 export function putFile(name: string, data: Uint8Array): void {
   files.set(name, Buffer.from(data));
@@ -34,6 +40,15 @@ function enoent(syscall: string, name: unknown): NodeJS.ErrnoException {
   return error;
 }
 
+function eacces(syscall: string, name: unknown): NodeJS.ErrnoException {
+  const error = new Error(`EACCES: permission denied, ${syscall} '${name}'`) as NodeJS.ErrnoException;
+  error.code = "EACCES";
+  error.errno = -13;
+  error.syscall = syscall;
+  error.path = String(name);
+  return error;
+}
+
 const asBuffer = (data: unknown): Buffer => (Buffer.isBuffer(data) ? data : Buffer.from(data as any));
 
 export function existsSync(name: unknown): boolean {
@@ -41,17 +56,20 @@ export function existsSync(name: unknown): boolean {
 }
 
 export function readFileSync(name: unknown): Buffer {
+  if (failures.get(String(name)) === "read") throw eacces("open", name);
   const data = files.get(String(name));
   if (data === undefined) throw enoent("open", name);
   return Buffer.from(data);
 }
 
 export function writeFileSync(name: unknown, data: unknown): void {
+  if (failures.get(String(name)) === "write") throw eacces("open", name);
   files.set(String(name), Buffer.from(asBuffer(data)));
   writes.push(String(name));
 }
 
 export function copyFileSync(from: unknown, to: unknown): void {
+  if (failures.get(String(from)) === "read" || failures.get(String(to)) === "write") throw eacces("copyfile", from);
   const data = files.get(String(from));
   if (data === undefined) throw enoent("copyfile", from);
   files.set(String(to), Buffer.from(data));
@@ -80,27 +98,32 @@ const last = (args: unknown[]): ((...a: any[]) => void) | undefined => {
 export function readFile(name: unknown, ...rest: unknown[]): void {
   const cb = last(rest);
   if (cb === undefined) return;
-  const data = files.get(String(name));
-  if (data === undefined) cb(enoent("open", name), undefined);
-  else cb(null, Buffer.from(data));
+  let data: Buffer;
+  try {
+    data = readFileSync(name);
+  } catch (error) {
+    cb(error, undefined);
+    return;
+  }
+  cb(null, data);
+}
+
+function callback(rest: unknown[], run: () => void): void {
+  let failure: unknown = null;
+  try {
+    run();
+  } catch (error) {
+    failure = error;
+  }
+  last(rest)?.(failure);
 }
 
 export function writeFile(name: unknown, data: unknown, ...rest: unknown[]): void {
-  try {
-    writeFileSync(name, data);
-    last(rest)?.(null);
-  } catch (error) {
-    last(rest)?.(error);
-  }
+  callback(rest, () => writeFileSync(name, data));
 }
 
 export function unlink(name: unknown, ...rest: unknown[]): void {
-  try {
-    unlinkSync(name);
-    last(rest)?.(null);
-  } catch (error) {
-    last(rest)?.(error);
-  }
+  callback(rest, () => unlinkSync(name));
 }
 
 const api = {

@@ -23,7 +23,7 @@ use asrs_parity::vectors::{self, Record};
 use asrs_services::beta::{self, BetaConfig};
 use asrs_services::constants;
 use asrs_services::ds_layout;
-use asrs_services::fs::{Fs, MemFs};
+use asrs_services::fs::{Failure, Fs, MemFs};
 use asrs_services::layout;
 use asrs_services::recent_units;
 use asrs_services::state_tracker::{self, StateTracker};
@@ -580,6 +580,19 @@ fn dispatch(env: &mut Env, op: &str, args: &JsValue) -> Result<JsValue, JsError>
         }
         "removeFile" => {
             env.fs.remove(&js_string(&get("name")?)?);
+            Ok(JsValue::Null)
+        }
+        "setFailure" => {
+            let failure = match get("kind")?
+                .as_str()
+                .map(JsString::to_string_lossy)
+                .as_deref()
+            {
+                Some("read") => Some(Failure::Read),
+                Some("write") => Some(Failure::Write),
+                _ => None,
+            };
+            env.fs.set_failure(&js_string(&get("name")?)?, failure);
             Ok(JsValue::Null)
         }
         "setDisplays" => {

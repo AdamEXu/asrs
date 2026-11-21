@@ -93,6 +93,12 @@ async function opSetWindow(id: number, bounds: any) {
     return null;
   });
 }
+async function opSetFailure(name: string, kind: "read" | "write" | null) {
+  await record("setFailure", { name, kind }, () => {
+    fakeFs.setFailure(name, kind);
+    return null;
+  });
+}
 async function opSetNow(ms: number) {
   await record("setNow", { ms }, () => {
     setNow(ms);
@@ -408,6 +414,34 @@ async function stateMode(count: number) {
   await opSetWindow(7, { x: 5, y: 5, width: 50, height: 50 });
   await opTick(t2);
 
+  // Permission failures: a failed interval write keeps lastState, so the next tick retries;
+  // an unreadable state file or an unwritable corrupted copy escapes the reader's catch.
+  caseIndex++;
+  stepIndex = 0;
+  const corruptedName = STATE_NAME.slice(0, -5) + "-corrupted.json";
+  await opRemoveFile({ name: STATE_NAME });
+  const t3 = trackers.length;
+  await opNewTracker();
+  await opSetWindow(1, { x: 30, y: 30, width: 100, height: 100 });
+  await opSaveRendererState(t3, 1, { v: 3 });
+  await opSetFailure(STATE_NAME, "write");
+  await opTick(t3);
+  await opTick(t3);
+  await opSetFailure(STATE_NAME, null);
+  await opTick(t3);
+  await opTick(t3);
+  await opSetFailure(STATE_NAME, "read");
+  await opNewTracker();
+  await opGetSaved(t3, true);
+  await opGetSaved(t3, false);
+  await opSetFailure(STATE_NAME, null);
+  await opPutFile({ name: STATE_NAME, data: j('{"hubs":') });
+  await opSetFailure(corruptedName, "write");
+  await opGetSaved(t3, true);
+  await opNewTracker();
+  await opSetFailure(corruptedName, null);
+  await opGetSaved(t3, true);
+
   // Randomized churn across trackers sharing the file.
   for (let i = 0; i < count; i++) {
     caseIndex++;
@@ -645,6 +679,24 @@ async function flowsMode(count: number, startup: Uint8Array | null) {
     await opDomReady(currentWindowId);
   }
 
+  // Permission failures: the awaited type-memory write rejects inside the async handler, an
+  // unreadable type-memory file throws out of dom-ready before firstLoad clears, and a
+  // recent-units write throws out of the conversion window's reply.
+  flowsCase();
+  await setFile(TYPE_MEMORY_NAME, j('{"m1":{"/a":1}}'));
+  await opSetFailure(TYPE_MEMORY_NAME, "write");
+  await opEmit(currentWindowId, "save-type-memory", { m1: { "/b": 2 } });
+  await opSetFailure(TYPE_MEMORY_NAME, "read");
+  await opEmit(currentWindowId, "save-type-memory", { m1: { "/b": 2 } });
+  await opDomReady(currentWindowId);
+  await opSetFailure(TYPE_MEMORY_NAME, null);
+  await opDomReady(currentWindowId);
+  await setFile(RECENT_UNITS_NAME, j("[]"));
+  await opSetFailure(RECENT_UNITS_NAME, "write");
+  await askEditAxis(currentWindowId);
+  await clickEditConversion({ type: "length", from: "in", to: "ft", factor: 0.0833 });
+  await opSetFailure(RECENT_UNITS_NAME, null);
+
   // Recent units through the real ask-edit-axis menu, both entry paths.
   for (const file of RECENTS_FILES) {
     for (const preset of UNIT_PRESETS) {
@@ -697,6 +749,12 @@ async function flowsMode(count: number, startup: Uint8Array | null) {
     if (exportIdx !== null) {
       await opDialog("save", { canceled: false, filePath: exportPath });
       await opMenuClick(exportIdx, { op: "exportLayout", args: { path: exportPath } });
+      if (file === null) {
+        await opSetFailure(exportPath, "write");
+        await opDialog("save", { canceled: false, filePath: exportPath });
+        await opMenuClick(exportIdx, { op: "exportLayout", args: { path: exportPath } });
+        await opSetFailure(exportPath, null);
+      }
     }
     const importIdx = fileMenuPath("Import Layout...");
     for (const paths of [

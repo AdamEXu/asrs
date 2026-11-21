@@ -24,6 +24,13 @@ fn node_error(syscall: &str, path: &str, e: &std::io::Error) -> JsError {
     JsError::new("Error", format!("{e} ({syscall} '{path}')"))
 }
 
+fn eacces(syscall: &str, path: &str) -> JsError {
+    JsError::new(
+        "Error",
+        format!("EACCES: permission denied, {syscall} '{path}'"),
+    )
+}
+
 /// `fs` against the real filesystem.
 pub struct RealFs;
 
@@ -47,10 +54,18 @@ impl Fs for RealFs {
     }
 }
 
+/// An injected [`MemFs`] error, like a file without read or write permission.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Failure {
+    Read,
+    Write,
+}
+
 /// An in-memory filesystem recording write calls in order, for the vector harness.
 #[derive(Default)]
 pub struct MemFs {
     files: RefCell<BTreeMap<String, Vec<u8>>>,
+    failures: RefCell<BTreeMap<String, Failure>>,
     writes: RefCell<Vec<String>>,
 }
 
@@ -74,6 +89,18 @@ impl MemFs {
             .insert(path.to_owned(), data.to_vec());
     }
 
+    pub fn set_failure(&self, path: &str, failure: Option<Failure>) {
+        let mut failures = self.failures.borrow_mut();
+        match failure {
+            Some(f) => failures.insert(path.to_owned(), f),
+            None => failures.remove(path),
+        };
+    }
+
+    fn fails(&self, path: &str, failure: Failure) -> bool {
+        self.failures.borrow().get(path) == Some(&failure)
+    }
+
     pub fn remove(&self, path: &str) {
         self.files.borrow_mut().remove(path);
     }
@@ -94,6 +121,9 @@ impl Fs for MemFs {
     }
 
     fn read(&self, path: &str) -> Result<Vec<u8>, JsError> {
+        if self.fails(path, Failure::Read) {
+            return Err(eacces("open", path));
+        }
         self.files.borrow().get(path).cloned().ok_or_else(|| {
             JsError::new(
                 "Error",
@@ -103,6 +133,9 @@ impl Fs for MemFs {
     }
 
     fn write(&self, path: &str, data: &[u8]) -> Result<(), JsError> {
+        if self.fails(path, Failure::Write) {
+            return Err(eacces("open", path));
+        }
         self.files
             .borrow_mut()
             .insert(path.to_owned(), data.to_vec());
@@ -111,6 +144,9 @@ impl Fs for MemFs {
     }
 
     fn copy(&self, from: &str, to: &str) -> Result<(), JsError> {
+        if self.fails(from, Failure::Read) || self.fails(to, Failure::Write) {
+            return Err(eacces("copyfile", from));
+        }
         let data = self.read(from)?;
         self.write(to, &data)
     }
