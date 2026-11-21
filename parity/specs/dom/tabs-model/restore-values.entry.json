@@ -1,0 +1,948 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/tabs.json"
+  ],
+  "fixture": {
+    "seed": 6,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show",
+      "update-xr-command",
+      "confirm-xr-close"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/tabs.json"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": "1",
+                "title": "S",
+                "controller": null,
+                "controllerUUID": "string-type",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "zero-type",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": 5,
+                "controller": null,
+                "controllerUUID": "numtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 2,
+                "title": [
+                  1,
+                  2
+                ],
+                "controller": null,
+                "controllerUUID": "arrtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": [
+                  4
+                ],
+                "title": "",
+                "controller": null,
+                "controllerUUID": "arr-type",
+                "renderer": null,
+                "controlsHeight": "150"
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "null-h",
+                "renderer": null,
+                "controlsHeight": null
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "str-h",
+                "renderer": null,
+                "controlsHeight": "250"
+              },
+              {
+                "type": 1.0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": null,
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 7,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "vid-str",
+                "renderer": null,
+                "controlsHeight": "85"
+              },
+              {
+                "type": 1,
+                "title": 0,
+                "controller": null,
+                "controllerUUID": "zero-title",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 1,
+                "title": false,
+                "controller": null,
+                "controllerUUID": "false-title",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 1,
+                "title": null,
+                "controller": null,
+                "controllerUUID": "null-title",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "nan-h",
+                "renderer": null,
+                "controlsHeight": "x"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "restored"
+      },
+      {
+        "main": "set-active-satellites",
+        "data": [
+          "string-type",
+          "zero-type"
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "satellites"
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-type-selected"
+      },
+      {
+        "main": "move-tab",
+        "data": 5
+      },
+      {
+        "frames": 1
+      },
+      {
+        "main": "toggle-controls",
+        "data": null
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "arr-type"
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "null-height"
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "frames": 1
+      },
+      {
+        "main": "toggle-controls",
+        "data": null
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-height"
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "null-uuid-close"
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": true
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "null-uuid-forced"
+      },
+      {
+        "main": "set-active-satellites",
+        "data": []
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "2",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": "1",
+                "title": "S",
+                "controller": null,
+                "controllerUUID": "string-type",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "zero-type",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": 5,
+                "controller": null,
+                "controllerUUID": "numtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-selected"
+      },
+      {
+        "main": "toggle-controls",
+        "data": null
+      },
+      {
+        "main": "new-satellite",
+        "data": null
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-selected-toggle"
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-selected-move"
+      },
+      {
+        "main": "new-tab",
+        "data": 4
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-selected-new-tab"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1.5,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": "1",
+                "title": "S",
+                "controller": null,
+                "controllerUUID": "string-type",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "zero-type",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": 5,
+                "controller": null,
+                "controllerUUID": "numtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "fraction-selected"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 3,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": "1",
+                "title": "S",
+                "controller": null,
+                "controllerUUID": "string-type",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "zero-type",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": 5,
+                "controller": null,
+                "controllerUUID": "numtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "main": "rename-tab",
+        "data": {
+          "index": 3,
+          "name": null
+        }
+      },
+      {
+        "main": "rename-tab",
+        "data": {
+          "index": 2,
+          "name": ""
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "renamed"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "1",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": "1",
+                "title": "S",
+                "controller": null,
+                "controllerUUID": "string-type",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "zero-type",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": 5,
+                "controller": null,
+                "controllerUUID": "numtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "main": "shift-tab",
+        "data": 1
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "string-shift"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": "1",
+                "title": "S",
+                "controller": null,
+                "controllerUUID": "string-type",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "zero-type",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": 5,
+                "controller": null,
+                "controllerUUID": "numtitle",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands"
+        ],
+        "label": "after-dead-loop"
+      }
+    ]
+  }
+}

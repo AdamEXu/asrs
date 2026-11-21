@@ -1,0 +1,9 @@
+[
+  ["putBoolean", "/DriverStation/Enabled", 0, false],
+  ["putBoolean", "/DriverStation/Enabled", 1, true],
+  ["putBoolean", "/DriverStation/Enabled", 9, false],
+  ["putBoolean", "/DriverStation/Autonomous", 0, true],
+  ["putBoolean", "/DriverStation/Autonomous", 4, false],
+  ["putNumber", "/Drive/LeftVelocity", 0, 0],
+  ["putNumber", "/Drive/LeftVelocity", 2, 1.5]
+]
