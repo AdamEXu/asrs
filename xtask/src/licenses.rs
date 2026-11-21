@@ -27,7 +27,9 @@ pub fn run() -> Result {
         &listing_arg,
         "about.hbs",
     ])
-    .map_err(|e| format!("{e}\n(needs cargo-about: `cargo install cargo-about --locked --features cli`)"))?;
+    .map_err(|e| {
+        format!("{e}\n(needs cargo-about: `cargo install cargo-about --locked --features cli`)")
+    })?;
     for name in BUNDLED {
         fs::copy(root.join(name), dest.join(name)).map_err(|e| format!("{name}: {e}"))?;
     }
