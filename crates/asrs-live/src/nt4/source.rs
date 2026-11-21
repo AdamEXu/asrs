@@ -11,6 +11,7 @@ use std::rc::Rc;
 use asrs_formats::custom_schemas::{self, SchemaError};
 use asrs_js::json;
 use asrs_js::math;
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue};
@@ -27,7 +28,6 @@ use super::client::{
     Nt4Topic,
 };
 use super::transport::NetEvent;
-use crate::js;
 use crate::live_data_source::{
     LiveDataSourceBase, LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback,
     StatusCallback,
@@ -199,7 +199,7 @@ impl Nt4Source {
         if self.inner.no_fields_timeout == Some(id) {
             (window.send_main_message)(
                 "error",
-                js::object([
+                ops::object([
                     ("title", JsValue::string("Problem with NT4 connection")),
                     (
                         "content",
@@ -440,14 +440,14 @@ impl Inner {
             }
         } else {
             let mut key = js(self.log_prefix());
-            key.push_str(&js::to_string(&topic.name));
+            key.push_str(&ops::to_string(&topic.name));
             Ok(key)
         }
     }
 
     /// `Object.keys(topic.properties).length > 0 ? JSON.stringify(topic.properties) : ""`.
     fn metadata(topic: &Nt4Topic) -> Result<JsString, Thrown> {
-        if js::object_keys(&topic.properties)?.is_empty() {
+        if ops::object_keys(&topic.properties)?.is_empty() {
             Ok(JsString::new())
         } else {
             Ok(JsString::from(
@@ -806,7 +806,7 @@ impl Nt4Tuner {
             && let Ok(parsed) = json::parse(&metadata)
             && parsed.type_of() == "object"
             && !parsed.is_null()
-            && let Ok(mutable) = js::get(&parsed, "mutable")
+            && let Ok(mutable) = ops::get(&parsed, "mutable")
             && let Some(mutable) = mutable.as_bool()
         {
             return mutable;

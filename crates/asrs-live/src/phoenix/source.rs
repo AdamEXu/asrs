@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use asrs_js::json;
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::{JsString, encode_uri_component};
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue};
@@ -17,7 +18,6 @@ use asrs_log::log::{Log, LoggableType};
 use super::enums;
 use crate::Thrown;
 use crate::http::{FetchEvent, FetchTransport, RequestId};
-use crate::js;
 use crate::live_data_source::{
     LiveDataSourceBase, LiveDataSourceStatus, LivePreferences, OutputCallback, StatusCallback,
     TimeSupplier,
@@ -55,8 +55,8 @@ pub struct PhoenixWindow {
 /// `this.deviceSignals[deviceName].length === 0`, the check that decides whether getsignals
 /// fires again; the list is whatever `json.Signals` was.
 fn is_empty_list(list: &JsValue) -> Result<bool, Thrown> {
-    Ok(js::strict_equals(
-        &js::get(list, "length")?,
+    Ok(ops::strict_equals(
+        &ops::get(list, "length")?,
         &JsValue::Number(0.0),
     ))
 }
@@ -72,8 +72,8 @@ fn find_named<'a>(
         ));
     };
     for signal in items {
-        let name = js::get(signal, "Name")?;
-        if js::strict_equals(&name, &JsValue::String(signal_name.clone())) {
+        let name = ops::get(signal, "Name")?;
+        if ops::strict_equals(&name, &JsValue::String(signal_name.clone())) {
             return Ok(Some(signal));
         }
     }
@@ -254,7 +254,7 @@ impl PhoenixSource {
     fn devices_reply(&mut self, body: &str, cx: &mut PhoenixContext<'_>) -> Result<(), Thrown> {
         let json = json::parse_str(body).map_err(Thrown::from)?;
         check_error(&json)?;
-        let devices = js::get(&json, "DeviceArray")?;
+        let devices = ops::get(&json, "DeviceArray")?;
         let initial_connection = self.base.status() != LiveDataSourceStatus::Active;
         if initial_connection {
             self.base
@@ -271,7 +271,7 @@ impl PhoenixSource {
         };
         for device in items {
             // Phoenix 5 devices use a different protocol that does not advertise signals.
-            if !truthy(&js::get(device, "IsPROApplication")?) {
+            if !truthy(&ops::get(device, "IsPROApplication")?) {
                 continue;
             }
             let device_name = self.device_name(device)?;
@@ -308,15 +308,15 @@ impl PhoenixSource {
     fn signals_reply(&mut self, body: &str, device_name: &JsString) -> Result<(), Thrown> {
         let json = json::parse_str(body).map_err(Thrown::from)?;
         check_error(&json)?;
-        let signals = js::get(&json, "Signals")?;
+        let signals = ops::get(&json, "Signals")?;
         self.device_signals
             .insert(device_name.clone(), signals.clone());
         let JsValue::Array(items) = &signals else {
             return Err(Thrown::type_error("signals.forEach is not a function"));
         };
         for signal in items {
-            let name = js::get(signal, "Name")?;
-            let name = js::to_string(&name);
+            let name = ops::get(signal, "Name")?;
+            let name = ops::to_string(&name);
             let key = field_key(device_name, &name);
             let is_enum = enums::has(&name);
             if let Some(log) = self.base.log() {
@@ -329,11 +329,11 @@ impl PhoenixSource {
                     },
                 );
             }
-            let units = js::get(signal, "Units")?;
+            let units = ops::get(signal, "Units")?;
             if js_length(&units)? > 0.0 {
-                let metadata = js::object([
+                let metadata = ops::object([
                     ("units", units),
-                    ("description", js::get(signal, "Summary")?),
+                    ("description", ops::get(signal, "Summary")?),
                 ]);
                 if let Some(log) = self.base.log() {
                     log.borrow_mut().set_metadata_string(
@@ -389,11 +389,11 @@ impl PhoenixSource {
             let Some(signal) = find_named(list, &signal_name)?.cloned() else {
                 continue;
             };
-            let id = js::get(&signal, "Id")?;
+            let id = ops::get(&signal, "Id")?;
             if let Some((_, entry)) = active.iter_mut().find(|(key, _)| **key == device_name) {
                 let mut duplicate = false;
                 for previous in entry.iter() {
-                    if js::strict_equals(&js::get(previous, "Id")?, &id) {
+                    if ops::strict_equals(&ops::get(previous, "Id")?, &id) {
                         duplicate = true;
                         break;
                     }
@@ -432,7 +432,7 @@ impl PhoenixSource {
         for signal in signals.iter() {
             // `signals.map(signal => signal.Id)`: a throwing property access escapes the
             // setTimeout callback, so the request never goes out.
-            let Ok(id) = js::get(signal, "Id") else {
+            let Ok(id) = ops::get(signal, "Id") else {
                 return;
             };
             ids.push(id);
@@ -457,14 +457,14 @@ impl PhoenixSource {
     ) -> Result<(), Thrown> {
         let json = json::parse_str(body).map_err(Thrown::from)?;
         check_error(&json)?;
-        let points = js::get(&json, "Points")?;
+        let points = ops::get(&json, "Points")?;
 
         if self.live_start_log_time.is_none()
             && self.live_start_real_time.get().is_some()
             && js_length(&points)? > 0.0
         {
-            let last = js::index(&points, (js_length(&points)? - 1.0) as usize)?;
-            let timestamp = js::value_to_number(&js::get(&last, "Timestamp")?)?;
+            let last = ops::index(&points, (js_length(&points)? - 1.0) as usize)?;
+            let timestamp = ops::value_to_number(&ops::get(&last, "Timestamp")?)?;
             self.live_start_log_time = Some(
                 timestamp - (self.clock.now() / 1000.0 - self.live_start_real_time.get().unwrap()),
             );
@@ -474,12 +474,12 @@ impl PhoenixSource {
             return Err(Thrown::type_error("points.forEach is not a function"));
         };
         for point in items {
-            let point_signals = js::get(point, "Signals")?;
+            let point_signals = ops::get(point, "Signals")?;
             for (id_str, value) in entries(&point_signals)? {
                 let signal_id = number::to_number(id_str.units());
                 let mut found = None;
                 for signal in signals {
-                    if js::strict_equals(&js::get(signal, "Id")?, &JsValue::Number(signal_id)) {
+                    if ops::strict_equals(&ops::get(signal, "Id")?, &JsValue::Number(signal_id)) {
                         found = Some(signal);
                         break;
                     }
@@ -487,12 +487,12 @@ impl PhoenixSource {
                 let Some(signal) = found else {
                     continue;
                 };
-                let name = js::to_string(&js::get(signal, "Name")?);
+                let name = ops::to_string(&ops::get(signal, "Name")?);
                 let key = field_key(device_name, &name);
-                let timestamp = js::value_to_number(&js::get(point, "Timestamp")?)?
+                let timestamp = ops::value_to_number(&ops::get(point, "Timestamp")?)?
                     - self.live_start_log_time.unwrap_or(0.0);
                 if enums::has(&name) {
-                    let value_str = enums::lookup(&name, &js::to_string(&value)).unwrap_or("");
+                    let value_str = enums::lookup(&name, &ops::to_string(&value)).unwrap_or("");
                     if let Some(log) = self.base.log() {
                         log.borrow_mut()
                             .put_string(&key, timestamp, JsString::from(value_str));
@@ -539,7 +539,7 @@ impl PhoenixSource {
 
     /// `getDeviceName(device)`.
     fn device_name(&self, device: &JsValue) -> Result<JsString, Thrown> {
-        let model = js::get(device, "Model")?;
+        let model = ops::get(device, "Model")?;
         let JsValue::String(model) = &model else {
             return Err(Thrown::type_error(
                 "device.Model.replaceAll is not a function",
@@ -561,7 +561,7 @@ impl PhoenixSource {
                 break;
             }
         }
-        let device_name = js::get(device, "Name")?;
+        let device_name = ops::get(device, "Name")?;
         let JsValue::String(device_name) = &device_name else {
             return Err(Thrown::type_error(
                 "device.Name.startsWith is not a function",
@@ -569,14 +569,14 @@ impl PhoenixSource {
         };
         name.push_str(&js("-"));
         if device_name.starts_with(model, None) {
-            name.push_str(&to_string_method(&js::get(device, "ID")?)?);
+            name.push_str(&to_string_method(&ops::get(device, "ID")?)?);
         } else {
             name.push_str(device_name);
         }
-        let canivore = js::get(device, "CANivoreDevName")?;
+        let canivore = ops::get(device, "CANivoreDevName")?;
         if js_length(&canivore)? > 0.0 {
             let mut prefixed = js("CANivore-");
-            prefixed.push_str(&js::to_string(&canivore));
+            prefixed.push_str(&ops::to_string(&canivore));
             prefixed.push_str(&js("/"));
             prefixed.push_str(&name);
             name = prefixed;
@@ -589,9 +589,9 @@ impl PhoenixSource {
         Ok(format!(
             "http://{}:{PORT}/?action=getsignals&model={}&id={}&canbus={}",
             self.address(),
-            encode(&js::get(device, "Model")?)?,
-            to_string_method(&js::get(device, "ID")?)?.to_string_lossy(),
-            encode(&js::get(device, "CANbus")?)?,
+            encode(&ops::get(device, "Model")?)?,
+            to_string_method(&ops::get(device, "ID")?)?.to_string_lossy(),
+            encode(&ops::get(device, "CANbus")?)?,
         ))
     }
 
@@ -606,9 +606,9 @@ impl PhoenixSource {
         Ok(format!(
             "http://{}:{PORT}/?action=plotpro&model={}&id={}&canbus={}&signals={signals}&resolution={PLOT_RESOLUTION_MS}",
             self.address(),
-            encode(&js::get(device, "Model")?)?,
-            to_string_method(&js::get(device, "ID")?)?.to_string_lossy(),
-            encode(&js::get(device, "CANbus")?)?,
+            encode(&ops::get(device, "Model")?)?,
+            to_string_method(&ops::get(device, "ID")?)?.to_string_lossy(),
+            encode(&ops::get(device, "CANbus")?)?,
         ))
     }
 
@@ -629,8 +629,8 @@ fn field_key(device_name: &JsString, signal_name: &JsString) -> JsString {
 
 /// `json.GeneralReturn.Error !== 0` throws.
 fn check_error(json: &JsValue) -> Result<(), Thrown> {
-    let error = js::get(&js::get(json, "GeneralReturn")?, "Error")?;
-    if js::strict_equals(&error, &JsValue::Number(0.0)) {
+    let error = ops::get(&ops::get(json, "GeneralReturn")?, "Error")?;
+    if ops::strict_equals(&error, &JsValue::Number(0.0)) {
         Ok(())
     } else {
         Err(Thrown::new("Non-zero error code"))
@@ -639,15 +639,15 @@ fn check_error(json: &JsValue) -> Result<(), Thrown> {
 
 /// `Object.entries(value)`.
 fn entries(value: &JsValue) -> Result<Vec<(JsString, JsValue)>, Thrown> {
-    js::object_keys(value)?
+    ops::object_keys(value)?
         .into_iter()
-        .map(|key| js::get_key(value, &key).map(|value| (key, value)))
+        .map(|key| Ok((key.clone(), ops::get_key(value, &key)?)))
         .collect()
 }
 
 /// `value.length` in a `> 0` comparison, with `undefined` comparing as `NaN`.
 fn js_length(value: &JsValue) -> Result<f64, Thrown> {
-    js::value_to_number(&js::get(value, "length")?)
+    Ok(ops::value_to_number(&ops::get(value, "length")?)?)
 }
 
 /// `value.toString()`, which null and undefined lack.
@@ -659,13 +659,13 @@ fn to_string_method(value: &JsValue) -> Result<JsString, Thrown> {
         JsValue::Undefined => Err(Thrown::type_error(
             "Cannot read properties of undefined (reading 'toString')",
         )),
-        other => Ok(js::to_string(other)),
+        other => Ok(ops::to_string(other)),
     }
 }
 
 /// `encodeURIComponent(ToString(value))`.
 fn encode(value: &JsValue) -> Result<String, Thrown> {
-    let encoded = encode_uri_component(&js::to_string(value)).map_err(|e| e.into_error())?;
+    let encoded = encode_uri_component(&ops::to_string(value)).map_err(|e| e.into_error())?;
     Ok(encoded.to_string_lossy())
 }
 
