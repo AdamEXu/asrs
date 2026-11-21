@@ -5,7 +5,7 @@ use std::cell::RefCell;
 
 use asrs_js::time::Clock;
 use asrs_live::nt4::{
-    NetEvent, Nt4Publisher, PublisherSelection, PublisherStatusCallback, PublisherWindow,
+    Nt4Publisher, PublisherSelection, PublisherStatusCallback, PublisherWindow,
 };
 use asrs_live::{Thrown, TimerId};
 use asrs_log::log::Log;
@@ -129,7 +129,10 @@ impl Driver for PublisherDriver {
         Ok(())
     }
 
-    fn notify(&mut self, event: NetEvent, env: &mut Env) {
+    fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
+        let support::SessionEvent::Net(event) = event else {
+            return;
+        };
         for p in &mut self.publishers {
             let _ = p.handle_net_event(&event, &mut env.cx());
         }

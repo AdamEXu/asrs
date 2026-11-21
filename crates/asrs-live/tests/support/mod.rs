@@ -15,6 +15,7 @@ use asrs_live::nt4::{
     NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, PublisherPreferences, ReadyState,
     RequestId, SocketId, WsMessage,
 };
+use asrs_live::rlog::{Ipc, RlogNetEvent, RlogTransport, TcpId};
 use asrs_live::{
     LiveDataSourceStatus, LiveLog, LivePreferences, ManualClock, Thrown, TimerId, TimerQueue,
 };
@@ -66,6 +67,25 @@ pub enum Delivery {
     WsDropped(u32),
     WsCloseDone(u32, bool),
     HttpSettled(u32, Option<(f64, String)>),
+    TcpAccepted(u32),
+    TcpRefused(u32),
+    TcpReceived(u32, Vec<u8>),
+    TcpDropped(u32),
+    /// The socket handle's `close` emission, a later task after `error`/`drop`/`destroy`.
+    TcpClose(u32),
+    /// A socket idle timer reaching its deadline; the second field is the arm generation.
+    TcpIdle(u32, u64),
+    /// A `sendMainMessage`/`sendMessage` hop between the renderer and the emulated main
+    /// process (`loop.deliver(0)` upstream).
+    Ipc(Ipc),
+}
+
+/// What `apply` produces for the driver: a browser network event, a raw TCP event for the
+/// emulated main process, or an IPC hop.
+pub enum SessionEvent {
+    Net(NetEvent),
+    Tcp(RlogNetEvent),
+    Ipc(Ipc),
 }
 
 struct FakeSocket {
@@ -78,6 +98,39 @@ struct FakeRequest {
     done: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TcpState {
+    Connecting,
+    Open,
+    Closed,
+}
+
+/// `net.createConnection`'s socket (net.ts `FakeSocket`): writes while connecting are held
+/// and go out on connect; a refused connection emits `error` at once and `close` as a later
+/// task; a server drop emits `close`; `destroy` emits `close` once; the idle `setTimeout`
+/// fires once per listener while connecting, reads and writes count as activity.
+struct FakeTcpSocket {
+    state: TcpState,
+    pending: Vec<Vec<u8>>,
+    idle_ms: f64,
+    /// The armed timer's generation; a stale `TcpIdle` delivery does not match it.
+    idle_gen: u64,
+    /// The `once` listener from `setTimeout`: pending until the next fire consumes it.
+    timeout_pending: bool,
+}
+
+impl FakeTcpSocket {
+    fn new() -> Self {
+        Self {
+            state: TcpState::Connecting,
+            pending: Vec::new(),
+            idle_ms: 0.0,
+            idle_gen: 0,
+            timeout_pending: false,
+        }
+    }
+}
+
 pub struct FakeNet {
     pub host: ServerHost,
     clock: ManualClock,
@@ -85,6 +138,7 @@ pub struct FakeNet {
     trace: Trace,
     next_id: u32,
     sockets: BTreeMap<u32, FakeSocket>,
+    tcp_sockets: BTreeMap<u32, FakeTcpSocket>,
     requests: BTreeMap<u32, FakeRequest>,
     tasks: Vec<(f64, u64, Delivery)>,
     seq: u64,
@@ -152,16 +206,46 @@ impl FakeNet {
                     Delivery::HttpSettled(id, Some((status, body)))
                 }
                 ServerEvent::HttpRefuse { id } => Delivery::HttpSettled(id, None),
-                other => return Err(format!("unexpected server event {other:?}")),
+                ServerEvent::TcpAccept { id } => Delivery::TcpAccepted(id),
+                ServerEvent::TcpRefuse { id } => Delivery::TcpRefused(id),
+                ServerEvent::TcpPush { id, data } => Delivery::TcpReceived(id, data),
+                ServerEvent::TcpDrop { id } => Delivery::TcpDropped(id),
             };
             self.deliver(self.latency_ms, delivery);
         }
         Ok(())
     }
 
+    // `net.Socket` semantics, mirrored from net.ts `FakeSocket`.
+
+    fn tcp_touch(&mut self, id: u32) {
+        let Some(socket) = self.tcp_sockets.get_mut(&id) else {
+            return;
+        };
+        // `touch()`: reads and writes while open re-arm the idle timer, including after it
+        // already fired once.
+        if socket.state != TcpState::Open || socket.idle_ms <= 0.0 {
+            return;
+        }
+        socket.idle_gen += 1;
+        let (generation, idle_ms) = (socket.idle_gen, socket.idle_ms);
+        self.deliver(idle_ms, Delivery::TcpIdle(id, generation));
+    }
+
+    /// `close()`: closed at once, `close` emitted as a later task.
+    fn tcp_close(&mut self, id: u32) {
+        let Some(socket) = self.tcp_sockets.get_mut(&id) else {
+            return;
+        };
+        socket.state = TcpState::Closed;
+        socket.pending.clear();
+        socket.idle_ms = 0.0;
+        self.deliver(0.0, Delivery::TcpClose(id));
+    }
+
     /// Applies a delivery to the browser state and returns the events it dispatches.
-    pub fn apply(&mut self, delivery: Delivery) -> Vec<NetEvent> {
-        match delivery {
+    pub fn apply(&mut self, delivery: Delivery) -> Vec<SessionEvent> {
+        let net_events = match delivery {
             Delivery::WsAccepted(id, protocol) => match self.sockets.get_mut(&id) {
                 Some(s) if s.ready == ReadyState::Connecting => {
                     s.ready = ReadyState::Open;
@@ -225,7 +309,59 @@ impl FakeNet {
                 }
                 _ => Vec::new(),
             },
-        }
+            Delivery::TcpAccepted(id) => match self.tcp_sockets.get_mut(&id) {
+                Some(s) if s.state == TcpState::Connecting => {
+                    s.state = TcpState::Open;
+                    self.tcp_touch(id);
+                    let held = std::mem::take(&mut self.tcp_sockets.get_mut(&id).expect("is some").pending);
+                    for bytes in held {
+                        self.send_to_server(ClientEvent::TcpSend { id, data: bytes });
+                        self.tcp_touch(id);
+                    }
+                    return vec![SessionEvent::Tcp(RlogNetEvent::Connect(TcpId(id)))];
+                }
+                _ => Vec::new(),
+            },
+            Delivery::TcpRefused(id) => match self.tcp_sockets.get_mut(&id) {
+                // `emit("error")` at once, `close` as a later task.
+                Some(s) if s.state != TcpState::Closed => {
+                    self.tcp_close(id);
+                    return vec![SessionEvent::Tcp(RlogNetEvent::Error(TcpId(id)))];
+                }
+                _ => Vec::new(),
+            },
+            Delivery::TcpReceived(id, data) => match self.tcp_sockets.get(&id) {
+                Some(s) if s.state == TcpState::Open => {
+                    self.tcp_touch(id);
+                    return vec![SessionEvent::Tcp(RlogNetEvent::Data(TcpId(id), data))];
+                }
+                _ => Vec::new(),
+            },
+            Delivery::TcpDropped(id) => match self.tcp_sockets.get(&id) {
+                Some(s) if s.state != TcpState::Closed => {
+                    self.tcp_close(id);
+                    Vec::new()
+                }
+                _ => Vec::new(),
+            },
+            Delivery::TcpClose(id) => match self.tcp_sockets.remove(&id) {
+                Some(_) => return vec![SessionEvent::Tcp(RlogNetEvent::Close(TcpId(id)))],
+                None => Vec::new(),
+            },
+            Delivery::TcpIdle(id, generation) => match self.tcp_sockets.get_mut(&id) {
+                Some(s)
+                    if s.state != TcpState::Closed
+                        && s.idle_gen == generation
+                        && s.timeout_pending =>
+                {
+                    s.timeout_pending = false;
+                    return vec![SessionEvent::Tcp(RlogNetEvent::Timeout(TcpId(id)))];
+                }
+                _ => Vec::new(),
+            },
+            Delivery::Ipc(ipc) => return vec![SessionEvent::Ipc(ipc)],
+        };
+        net_events.into_iter().map(SessionEvent::Net).collect()
     }
 }
 
@@ -320,6 +456,63 @@ impl FetchTransport for FakeNet {
         }
         request.done = true;
         self.send_to_server(ClientEvent::HttpAbort { id: id.0 });
+    }
+}
+
+/// `net.createConnection` for the emulated main process, with the Node behaviour `main.ts`
+/// relies on (see `FakeTcpSocket`).
+impl RlogTransport for FakeNet {
+    fn tcp_connect(&mut self, host: &str, port: f64) -> TcpId {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.tcp_sockets.insert(id, FakeTcpSocket::new());
+        self.send_to_server(ClientEvent::TcpOpen {
+            id,
+            host: host.to_owned(),
+            port,
+        });
+        TcpId(id)
+    }
+
+    fn tcp_write(&mut self, id: TcpId, data: &[u8]) {
+        match self.tcp_sockets.get_mut(&id.0) {
+            Some(s) if s.state == TcpState::Connecting => s.pending.push(data.to_vec()),
+            Some(s) if s.state == TcpState::Open => {
+                self.send_to_server(ClientEvent::TcpSend {
+                    id: id.0,
+                    data: data.to_vec(),
+                });
+                self.tcp_touch(id.0);
+            }
+            _ => {}
+        }
+    }
+
+    fn tcp_destroy(&mut self, id: TcpId) {
+        let Some(socket) = self.tcp_sockets.get(&id.0) else {
+            return;
+        };
+        if socket.state == TcpState::Closed {
+            return;
+        }
+        self.send_to_server(ClientEvent::TcpClose { id: id.0 });
+        self.tcp_close(id.0);
+    }
+
+    fn tcp_set_timeout(&mut self, id: TcpId, ms: f64) {
+        let Some(socket) = self.tcp_sockets.get_mut(&id.0) else {
+            return;
+        };
+        // `armIdle` runs on `setTimeout` whenever the socket is not closed; the callback is a
+        // `once` listener rearmed by every touch.
+        if socket.state == TcpState::Closed {
+            return;
+        }
+        socket.idle_ms = ms;
+        socket.timeout_pending = true;
+        socket.idle_gen += 1;
+        let generation = socket.idle_gen;
+        self.deliver(ms, Delivery::TcpIdle(id.0, generation));
     }
 }
 
@@ -452,14 +645,14 @@ pub fn log_id(ids: &Rc<RefCell<Vec<usize>>>, log: Option<&LiveLog>) -> Value {
 
 pub trait Driver {
     fn op(&mut self, op: &[Json], env: &mut Env) -> Result<(), Thrown>;
-    fn notify(&mut self, event: NetEvent, env: &mut Env);
+    fn notify(&mut self, event: SessionEvent, env: &mut Env);
     fn timer(&mut self, id: TimerId, env: &mut Env);
     fn finish(&mut self, _env: &mut Env) {}
 }
 
 fn drain_microtasks(driver: &mut dyn Driver, env: &mut Env) {
     while let Some(event) = env.net.microtasks.pop_front() {
-        driver.notify(event, env);
+        driver.notify(SessionEvent::Net(event), env);
     }
 }
 
@@ -479,6 +672,7 @@ pub fn run(
             trace: trace.clone(),
             next_id: 1,
             sockets: BTreeMap::new(),
+            tcp_sockets: BTreeMap::new(),
             requests: BTreeMap::new(),
             tasks: Vec::new(),
             seq: 0,

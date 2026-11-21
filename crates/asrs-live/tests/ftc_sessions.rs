@@ -13,7 +13,7 @@ use std::rc::Rc;
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_live::ftc::{FtcContext, FtcSource, config};
-use asrs_live::nt4::NetEvent;
+
 use asrs_live::{LiveLog, OutputCallback, Thrown, TimerId, TunedValue};
 use asrs_log::log::Log;
 use asrs_parity::json::Json;
@@ -149,7 +149,10 @@ impl Driver for FtcDriver {
         Ok(())
     }
 
-    fn notify(&mut self, event: NetEvent, env: &mut Env) {
+    fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
+        let support::SessionEvent::Net(event) = event else {
+            return;
+        };
         let mut cx = fcx(env);
         for source in &mut self.sources {
             source.handle_net_event(&event, &mut cx);

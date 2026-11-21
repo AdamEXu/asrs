@@ -18,7 +18,7 @@ use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
 
-use asrs_live::nt4::NetEvent;
+
 use support::{Driver, Env, js_arg, js_value};
 
 struct Recorder<'a> {
@@ -261,7 +261,10 @@ impl Driver for ClientDriver {
         }
     }
 
-    fn notify(&mut self, event: NetEvent, env: &mut Env) {
+    fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
+        let support::SessionEvent::Net(event) = event else {
+            return;
+        };
         let Some(client) = self.client.as_mut() else {
             return;
         };

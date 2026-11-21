@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
-use asrs_live::nt4::{NetEvent, Nt4Mode, Nt4Source, Nt4Tuner, Nt4Window};
+use asrs_live::nt4::{Nt4Mode, Nt4Source, Nt4Tuner, Nt4Window};
 use asrs_live::{LiveLog, OutputCallback, Thrown, TimerId, TunedValue};
 use asrs_log::log::Log;
 use asrs_parity::Value;
@@ -206,7 +206,10 @@ impl Driver for SourceDriver {
         Ok(())
     }
 
-    fn notify(&mut self, event: NetEvent, env: &mut Env) {
+    fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
+        let support::SessionEvent::Net(event) = event else {
+            return;
+        };
         for source in &mut self.sources {
             let _ = source.handle_net_event(&event, &mut env.cx());
         }
