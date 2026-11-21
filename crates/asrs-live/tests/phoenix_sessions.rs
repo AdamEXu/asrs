@@ -15,9 +15,7 @@ use std::rc::Rc;
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_live::phoenix::{HttpEvent, PhoenixSource, PhoenixWindow};
-use asrs_live::{
-    LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId,
-};
+use asrs_live::{LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId};
 use asrs_log::log::Log;
 use asrs_parity::Value;
 use asrs_parity::json::Json;

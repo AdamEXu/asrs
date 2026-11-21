@@ -140,11 +140,13 @@ impl PhoenixSource {
         output_callback: OutputCallback,
         cx: &mut PhoenixContext<'_>,
     ) {
-        self.base.connect(address, status_callback, output_callback, true, cx.timers);
+        self.base
+            .connect(address, status_callback, output_callback, true, cx.timers);
         self.get_devices_periodic(cx);
         self.get_devices_timers
             .push(cx.timers.set_interval(GET_DEVICES_PERIOD_MS));
-        self.plot_timers.push(cx.timers.set_interval(PLOT_PERIOD_MS));
+        self.plot_timers
+            .push(cx.timers.set_interval(PLOT_PERIOD_MS));
     }
 
     pub fn stop(&mut self, cx: &mut PhoenixContext<'_>) {
@@ -264,7 +266,8 @@ impl PhoenixSource {
                 .set_log(Some(Rc::new(RefCell::new(Log::new(true)))));
             self.device_descriptions = JsObject::new();
             self.device_signals = JsObject::new();
-            self.live_start_real_time.set(Some(self.clock.now() / 1000.0));
+            self.live_start_real_time
+                .set(Some(self.clock.now() / 1000.0));
             self.live_start_log_time = None;
         }
         self.base.set_status(LiveDataSourceStatus::Active);
@@ -440,7 +443,12 @@ impl PhoenixSource {
         let Ok(url) = self.plot_url(device, &ids) else {
             return;
         };
-        self.start_fetch(&url, PLOT_TIMEOUT_MS, PendingKind::Plot(device_name, signals), cx);
+        self.start_fetch(
+            &url,
+            PLOT_TIMEOUT_MS,
+            PendingKind::Plot(device_name, signals),
+            cx,
+        );
     }
 
     /// `getPlotData(device, ids).then(points => ...)`; a rejection is unhandled.
