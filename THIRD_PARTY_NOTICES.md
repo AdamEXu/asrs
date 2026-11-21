@@ -199,8 +199,15 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - The Blue Alliance, MIT, Copyright (c) 2020 The Blue Alliance
   ([`licenses/The Blue Alliance.txt`](licenses/The%20Blue%20Alliance.txt))
 
+## simple-statistics
+
+- License: ISC ([`licenses/simple-statistics.txt`](licenses/simple-statistics.txt))
+- Copyright (c) 2014, Tom MacWright
+- Version: 7.8.7
+- Used in: `crates/asrs-tabs/src/simple_statistics.rs`, the subset of functions the
+  Statistics controller calls, translated to Rust
+
 ## Not yet ported
 
-Upstream also depends on mathjs (Apache-2.0), simple-statistics (ISC) and Chart.js
-(MIT). No code from them has been ported yet; add an entry here and a file header when
-one is.
+Upstream also depends on mathjs (Apache-2.0) and Chart.js (MIT). No code from them has
+been ported yet; add an entry here and a file header when one is.
