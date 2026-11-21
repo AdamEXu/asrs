@@ -1,0 +1,41 @@
+{
+  "protocol": "phoenix",
+  "seed": 7,
+  "latencyMs": 2,
+  "endMs": 2600,
+  "client": {
+    "source": "phoenix",
+    "address": "127.0.0.1",
+    "tabs": ["Phoenix6/Pigeon2-4/Yaw", "Phoenix6/TalonFX-1/Position"]
+  },
+  "server": {
+    "startUs": 2000000,
+    "points": 2,
+    "stepUs": 10000,
+    "devices": [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 4, "Model": "Pigeon 2", "Name": "Pigeon 2 (Device ID 4)", "IsPROApplication": true },
+        "signals": [{ "Id": 1, "Name": "Yaw", "Summary": "Yaw", "Units": "deg" }],
+        "values": { "1": [5, 15, 25] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [{ "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" }],
+        "values": { "12": [0.5, 1.5] }
+      }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1, "client": ["stop"] },
+    { "t": 100, "client": ["connect"] },
+    { "t": 300, "client": ["prefs", null] },
+    { "t": 400, "client": ["connect"] },
+    { "t": 500, "client": ["prefs", {}] },
+    { "t": 550, "client": ["connect"] },
+    { "t": 800, "client": ["dump"] },
+    { "t": 1200, "client": ["connect"] },
+    { "t": 1600, "client": ["dump"] },
+    { "t": 2000, "client": ["stop"] }
+  ]
+}

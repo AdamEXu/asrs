@@ -7,7 +7,7 @@ use std::io::Write as _;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use asrs_formats::historical::{HistoricalDataSource, create_worker, select_worker};
+use asrs_formats::historical::{create_worker, select_worker};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, Response};
 use asrs_js::string::JsString;
 use asrs_js::time::{SetClock, V8MathRandom};
@@ -125,23 +125,20 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let source = HistoricalDataSource::open_file(path);
-    let Some(name) = select_worker(source.path()) else {
+    let path = match path.strip_suffix(".dsevents") {
+        Some(stem) => format!("{stem}.dslog"),
+        None => path.clone(),
+    };
+    let Some(name) = select_worker(&JsString::from(path.as_str())) else {
         eprintln!("{path}: no worker for this extension");
         return ExitCode::FAILURE;
     };
-    let mut worker = match create_worker(
+    let mut worker = create_worker(
         name,
         Box::new(V8MathRandom::from_entropy()),
         Box::new(SetClock(WORKER_FROZEN_MS)),
-    ) {
-        Ok(worker) => worker,
-        Err(unported) => {
-            eprintln!("{path}: {:?} worker is not ported yet", unported.0);
-            return ExitCode::FAILURE;
-        }
-    };
-    let files = historical_start::read_files(source.path())
+    );
+    let files = historical_start::read_files(&path)
         .into_iter()
         .map(|file| file.map(Arc::from))
         .collect();

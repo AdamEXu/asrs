@@ -15,6 +15,7 @@ indexmap = "=2.14.2"
 jiff = { version = "=1.0.1", features = ["tzdb-bundle-always"] }
 # Fixes the bundled tzdata release (2026f); Electron 39 ships 2025b.
 jiff-tzdb = "=1.0.0"
+libloading = "=0.8.9"
 ryu-js = "=1.0.3"
 
 [dev-dependencies]
