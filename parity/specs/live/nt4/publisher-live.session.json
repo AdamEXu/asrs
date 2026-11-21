@@ -23,6 +23,7 @@
     { "t": 600, "client": ["log", "putNumber", "NT:/Live/x", 4, 4] },
     { "t": 800, "client": ["select", 4, null] },
     { "t": 1100, "client": ["select", null, 1.5] },
+    { "t": 1250, "client": ["select", 0.5, null] },
     { "t": 1400, "client": ["select", null, null] },
     { "t": 1500, "client": ["log", "putNumber", "NT:/Live/x", 5, 5] },
     { "t": 1700, "server": ["drop"] },
