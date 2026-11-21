@@ -593,7 +593,7 @@ fn put_topic_value(
             "json" => {
                 return Ok(match value {
                     JsValue::String(s) => {
-                        log.put_json(key, timestamp, s.clone());
+                        log.put_json(key, timestamp, s.clone())?;
                         true
                     }
                     _ => false,

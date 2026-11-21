@@ -55,6 +55,9 @@ pub enum LogError {
     Proto(ProtoError),
     /// Upstream continues in a way the port does not model; see the text.
     Unmodeled(&'static str),
+    /// `putUnknownStruct` recursed past V8's stack and threw `RangeError: Maximum call stack
+    /// size exceeded` out of the call, after the writes it had already made.
+    StackOverflow,
 }
 
 #[derive(Debug, Default)]

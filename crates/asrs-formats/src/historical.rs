@@ -513,7 +513,7 @@ impl HistoricalDataSource {
                 self.offset = Log::from_serialized(log.structured_clone(), cx.realm)
                     .and_then(|source| cx.log.merge_with(&source, &self.key_prefix, cx.realm))
                     .map_err(|error| match error {
-                        LogError::Proto(_) => Abort::Threw,
+                        LogError::Proto(_) | LogError::StackOverflow => Abort::Threw,
                         LogError::NeverCompletes => Abort::NeverReturns,
                         LogError::Unmodeled(what) => Abort::Unmodeled(what),
                     })?;

@@ -1,0 +1,402 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 1006,
+    "assets": "../assets/minimal.json",
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/RightVelocity\")"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          2.5
+        ]
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          "state",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.shouldUpdate"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "loaded"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "full"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.shouldUpdate"
+          }
+        ],
+        "label": "full"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            1.5,
+            5.5
+          ],
+          false
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "visible"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "windowed"
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1.5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "7.25"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0.25"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          }
+        ],
+        "label": "custom-range"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "enabled"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "enabled"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "auto"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "auto"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "teleop"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "teleop"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 2,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "Documentation",
+                "controllerUUID": "h7858hopjm5e09vduf7uzvzg0ad9vcb5",
+                "controller": null,
+                "renderer": null,
+                "controlsHeight": null
+              },
+              {
+                "type": 1,
+                "title": "Line Graph",
+                "controllerUUID": "g1bj94870vq76h0rd1sl1a76bwycmdsb",
+                "controller": null,
+                "renderer": null,
+                "controlsHeight": null
+              },
+              {
+                "type": 6,
+                "title": "Statistics",
+                "controllerUUID": "ee09x5lkaoa3zle5gtqittwt4wu23ujx",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "reference",
+                      "logKey": "/Drive/LeftVelocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {}
+                    },
+                    {
+                      "type": "relativeError",
+                      "logKey": "/Drive/RightVelocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b30b"
+                      }
+                    },
+                    {
+                      "type": "absoluteError",
+                      "logKey": "/Drive/RightVelocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#af2437"
+                      }
+                    }
+                  ],
+                  "timeRange": "teleop",
+                  "rangeMin": 0,
+                  "rangeMax": 6,
+                  "stepSize": 0.5
+                },
+                "renderer": null,
+                "controlsHeight": null
+              },
+              {
+                "type": 2,
+                "title": "2D Field",
+                "controllerUUID": "n1jmg4wrvsvuj1na9wqjlwly2e2hz0jk",
+                "controller": null,
+                "renderer": null,
+                "controlsHeight": null
+              },
+              {
+                "type": 3,
+                "title": "3D Field",
+                "controllerUUID": "bwfhdws7kb3c2jl7yoqtmxq1bxfk54y5",
+                "controller": null,
+                "renderer": null,
+                "controlsHeight": null
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          }
+        ],
+        "label": "restored"
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "restored-cmd"
+      }
+    ]
+  }
+}

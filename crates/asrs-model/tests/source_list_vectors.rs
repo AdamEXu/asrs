@@ -52,6 +52,7 @@ mod tabs_console {
 }
 
 use std::collections::VecDeque;
+use std::sync::OnceLock;
 
 use asrs_js::string::JsString;
 use asrs_js::time::Rng;
@@ -103,12 +104,17 @@ struct Harness {
     stats: Stats,
 }
 
+fn undefined() -> &'static JsValue {
+    static UNDEFINED: OnceLock<JsValue> = OnceLock::new();
+    UNDEFINED.get_or_init(JsValue::default)
+}
+
 fn js(record: &Record, key: &str) -> Result<JsValue, String> {
     js_json::to_js(&record.value(key).map_err(|e| e.0)?)
 }
 
 fn at(args: &[JsValue], i: usize) -> &JsValue {
-    args.get(i).unwrap_or(&JsValue::Undefined)
+    args.get(i).unwrap_or_else(|| undefined())
 }
 
 fn num(v: &JsValue) -> Result<f64, String> {
@@ -134,7 +140,7 @@ fn boolean(v: &JsValue) -> Result<bool, String> {
 fn get<'a>(v: &'a JsValue, key: &str) -> &'a JsValue {
     v.as_object()
         .and_then(|o| o.get(key))
-        .unwrap_or(&JsValue::Undefined)
+        .unwrap_or_else(|| undefined())
 }
 
 fn index(v: &JsValue) -> Result<usize, String> {

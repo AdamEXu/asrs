@@ -1,0 +1,2117 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 1103,
+    "assets": "../assets/minimal.json",
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "full"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1."
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0.5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": ".5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-.5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "+1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": " 1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1e"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1e2"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1E-3"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0x10"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "Infinity"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1e400"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": ""
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "abc"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "1e-7"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-2.5e+1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "-1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0.0000001"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1e-7"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "123456789"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0.3"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "3e-5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "7"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1e21"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "abc"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "1000000"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0.001"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "5"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "10"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-1e-9"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "1e-9"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1e-12"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "0.3"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0.1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-3"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "4"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "100"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "10"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.RANGE_MAX.value = \"2\""
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.STEP_SIZE.value = \"-5\""
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "bogus"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[0].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[5].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[6].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "live-30"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[0].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[5].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[6].disabled"
+          }
+        ]
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "liveTime": 8
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[0].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[5].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[6].disabled"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({\"timeRange\":5,\"rangeMin\":\"3\",\"rangeMax\":7,\"stepSize\":-2})"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({\"timeRange\":\"auto\",\"rangeMin\":1e-7,\"rangeMax\":1e21,\"stepSize\":0})"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({\"sources\":\"nope\",\"timeRange\":\"full\"})"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({\"sources\":null})"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({\"sources\":[],\"rangeMin\":-5,\"rangeMax\":5,\"stepSize\":0.001})"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState([1,2])"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState(\"x\")"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState(\"abc\")"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState(null)"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState({})"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          }
+        ]
+      }
+    ]
+  }
+}

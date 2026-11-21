@@ -13,6 +13,9 @@ import { toTree } from "./cve1";
 //     fn records for JSON.stringify(value, null, space) and shared/util:jsonCopy(value) over
 //     values JSON.parse cannot produce: undefined, NaN, infinities, -0, dates, Uint8Arrays,
 //     BigInts, holes.
+//   genJson deep <count> <seed>
+//     {"deep":"parse"|"stringify"|"jsonCopy","shape":"array"|"object","depth":<count>,
+//      "ok":true} or {"throw":<CVE-1 error>}; "gap":"  " marks the bounded stringify.
 
 const [mode, countArg, seedArg] = process.argv.slice(2);
 const count = Number(countArg);
@@ -351,6 +354,64 @@ function randomValue(depth: number): unknown {
 
 const SPACES: unknown[] = [undefined, null, 2, 2, 2, 4, 0, -3, 1, 10, 11, 3.7, Infinity, NaN, "\t", "--", "", "0123456789abc"];
 
+function genDeep() {
+  // V8's parser and its two-undefined-argument stringify are iterative (any depth works);
+  // its general stringify path recurses and throws RangeError. toTree cannot encode a deep
+  // value, so only the outcome kind is recorded and the port rebuilds the input itself.
+  const depth = count || 20000;
+  const cases = [
+    ["array", "[".repeat(depth) + "]".repeat(depth)],
+    ["object", '{"a":'.repeat(depth) + "1" + "}".repeat(depth)]
+  ] as const;
+  const outcome = (r: { ok: unknown } | { throw: unknown }) =>
+    "ok" in r ? { ok: true } : { throw: tree(r.throw) };
+  for (const [shape, doc] of cases) {
+    out({ deep: "parse", shape, depth, ...outcome(attempt(() => JSON.parse(doc))) });
+  }
+  for (const [shape, doc] of cases) {
+    const value = JSON.parse(doc);
+    out({ deep: "stringify", shape, depth, ...outcome(attempt(() => JSON.stringify(value))) });
+    out({
+      deep: "stringify",
+      shape,
+      depth,
+      gap: "  ",
+      ...outcome(attempt(() => JSON.stringify(value, null, 2)))
+    });
+    out({ deep: "jsonCopy", shape, depth, ...outcome(attempt(() => jsonCopy(value))) });
+  }
+  // V8's recursive serializer throws RangeError at a depth that follows from its C++ frame
+  // sizes and from where the stack starts, which moves with the size of the process
+  // environment (about one level per 160 bytes). The port's bound is the value measured with
+  // only the pinned variables set; these records sit about 500 levels either side of it, so
+  // they hold for any ordinary environment, and every value family takes the recursive path.
+  const nest = (d: number, leaf: unknown) => {
+    let v = leaf;
+    for (let i = 0; i < d; i++) v = [v];
+    return v;
+  };
+  const arrays = (d: number) => "[".repeat(d) + "]".repeat(d);
+  const manyKeys = "{" + Array.from({ length: 128 }, (_, i) => `"k${i}":1`).join(",") + "}";
+  const limits: [string, (d: number) => unknown, boolean][] = [
+    ["gap-array", (d) => JSON.parse(arrays(d)), true],
+    ["gap-object", (d) => JSON.parse('{"a":'.repeat(d) + "1" + "}".repeat(d)), true],
+    ["date", (d) => nest(d, new Date(0)), false],
+    ["bytes", (d) => nest(d, new Uint8Array([1, 2])), false],
+    ["empty-bytes", (d) => nest(d, new Uint8Array(0)), false],
+    ["bigint", (d) => nest(d, 1n), false],
+    ["index-key", (d) => JSON.parse('[{"0":1},' + arrays(d) + "]"), false],
+    ["index-key-last", (d) => JSON.parse("[" + arrays(d) + ',{"0":1}]'), false],
+    ["many-keys", (d) => JSON.parse("[" + manyKeys + "," + arrays(d) + "]"), false]
+  ];
+  for (const [name, build, gap] of limits) {
+    for (const depth of [5700, 6700]) {
+      const value = build(depth);
+      const r = attempt(() => (gap ? JSON.stringify(value, null, 2) : JSON.stringify(value)));
+      out({ deep: "limit", case: name, depth, ...outcome(r) });
+    }
+  }
+}
+
 function genValues() {
   for (let i = 0; i < count; i++) {
     const value = randomValue(below(5));
@@ -371,6 +432,9 @@ switch (mode) {
   case "values":
     genValues();
     break;
+  case "deep":
+    genDeep();
+    break;
   default:
-    throw new Error("usage: genJson docs|invalid|values <count> <seed>");
+    throw new Error("usage: genJson docs|invalid|values|deep <count> <seed>");
 }

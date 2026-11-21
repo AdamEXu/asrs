@@ -17,11 +17,11 @@ fn js(text: &str) -> JsString {
     JsString::from(text)
 }
 
-/// A `LogError` leaving a write that is not inside a `try`: `Proto` is a JS throw, which the
+/// A `LogError` leaving a write that is not inside a `try`: `Proto` and `StackOverflow` are JS throws, which the
 /// worker's catch turns into `failed`.
 fn thrown(error: LogError) -> Abort {
     match error {
-        LogError::Proto(_) => Abort::Threw,
+        LogError::Proto(_) | LogError::StackOverflow => Abort::Threw,
         LogError::NeverCompletes => Abort::NeverReturns,
         LogError::Unmodeled(what) => Abort::Unmodeled(what),
     }
@@ -31,7 +31,7 @@ fn thrown(error: LogError) -> Abort {
 fn caught(result: Result<(), LogError>) -> Result<bool, Abort> {
     match result {
         Ok(()) => Ok(true),
-        Err(LogError::Proto(_)) => Ok(false),
+        Err(LogError::Proto(_) | LogError::StackOverflow) => Ok(false),
         Err(error) => Err(thrown(error)),
     }
 }

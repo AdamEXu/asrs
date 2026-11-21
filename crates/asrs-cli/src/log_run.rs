@@ -210,6 +210,16 @@ fn threw(results: &mut Vec<Value>, result: Result<(), LogError>) -> Result<(), S
             )]));
             Ok(())
         }
+        Err(LogError::StackOverflow) => {
+            results.push(Value::object([(
+                "threw",
+                Value::Error(
+                    Utf16String::from("RangeError"),
+                    Utf16String::from("Maximum call stack size exceeded"),
+                ),
+            )]));
+            Ok(())
+        }
         Err(LogError::NeverCompletes) => Err("upstream never completes".to_owned()),
         Err(LogError::Unmodeled(what)) => Err(format!("unmodeled: {what}")),
     }
@@ -379,7 +389,10 @@ pub(crate) fn apply(
         "putStringArray" => {
             log.put_string_array(&key()?, timestamp()?, array(&arg(op, 3), js_string)?)
         }
-        "putJSON" => log.put_json(&key()?, timestamp()?, js_string(&arg(op, 3))?),
+        "putJSON" => {
+            let result = log.put_json(&key()?, timestamp()?, js_string(&arg(op, 3))?);
+            threw(results, result)?;
+        }
         "putUnknownStruct" => {
             let result = log.put_unknown_struct(
                 &key()?,

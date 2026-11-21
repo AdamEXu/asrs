@@ -147,7 +147,8 @@ fn parse_schema(value: &JsValue) -> Result<Schema, String> {
 
 fn parse_value_schema(value: &JsValue) -> Result<ValueSchema, String> {
     let object = as_object(value, "value schema")?;
-    let get = |key: &str| object.get(key).unwrap_or(&JsValue::Undefined);
+    let undefined = JsValue::Undefined;
+    let get = |key: &str| object.get(key).unwrap_or(&undefined);
     let nullable = |key: &str| match get(key) {
         JsValue::Null => Ok(None),
         v => as_number(Some(v), key).map(Some),
@@ -176,7 +177,8 @@ fn map_of<V>(
     value: Option<&JsValue>,
     parse: impl Fn(&JsValue) -> Result<V, String>,
 ) -> Result<JsObject<V>, String> {
-    let object = as_object(value.unwrap_or(&JsValue::Undefined), "map")?;
+    let undefined = JsValue::Undefined;
+    let object = as_object(value.unwrap_or(&undefined), "map")?;
     let mut out = JsObject::new();
     for (key, v) in object.iter() {
         out.insert(key.clone(), parse(v)?);
