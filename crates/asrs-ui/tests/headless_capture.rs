@@ -66,6 +66,9 @@ fn has_text(shot: &Capture, scale: u32) -> bool {
 }
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("headless capture", "a GPU") {
+        return;
+    }
     if cfg!(any(target_os = "macos", target_os = "linux")) {
         run();
     } else {
