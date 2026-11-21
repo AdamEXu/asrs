@@ -1,0 +1,571 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      },
+      {
+        "selector": ".title-bar-menu button",
+        "rect": [
+          10,
+          5,
+          80,
+          30
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 15,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 1,
+          "init": {
+            "clientX": 50,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 52,
+            "clientY": 102
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "below-threshold"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 53,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "drag-started"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 70,
+            "clientY": 110
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "drag-moved"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "drag-ended"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 90,
+            "clientY": 130
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 2,
+          "init": {
+            "clientX": 50,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 50,
+            "clientY": 97
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "touchend",
+          "kind": "Event"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "children-drag"
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 6,
+          "init": {
+            "clientX": 40,
+            "clientY": 60
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 40,
+            "clientY": 64
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 1,
+          "init": {
+            "clientX": 50,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 1,
+          "init": {
+            "clientX": 51,
+            "clientY": 100,
+            "ctrlKey": true
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 3,
+          "init": {
+            "clientX": 50,
+            "clientY": 120
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 3,
+          "init": {
+            "clientX": 52,
+            "clientY": 120,
+            "metaKey": true
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 4,
+          "init": {
+            "clientX": 50,
+            "clientY": 140
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 4,
+          "init": {
+            "clientX": 50,
+            "clientY": 140,
+            "ctrlKey": true
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 6,
+          "init": {
+            "clientX": 50,
+            "clientY": 140
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 6,
+          "init": {
+            "clientX": 50,
+            "clientY": 140,
+            "ctrlKey": true
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 6,
+          "init": {
+            "clientX": 50,
+            "clientY": 140
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 6,
+          "init": {
+            "clientX": 50,
+            "clientY": 140,
+            "ctrlKey": true
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 2,
+          "init": {
+            "clientX": 50,
+            "clientY": 140
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 2,
+          "init": {
+            "clientX": 50,
+            "clientY": 140
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 2,
+          "init": {
+            "clientX": 50,
+            "clientY": 140
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mouseup",
+          "index": 2,
+          "init": {
+            "clientX": 53,
+            "clientY": 140,
+            "ctrlKey": true
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "style"
+            ]
+          }
+        ],
+        "label": "group-selected"
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 3,
+          "init": {
+            "clientX": 50,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 60,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "style"
+            ]
+          }
+        ],
+        "label": "group-drag"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "mousedown",
+          "index": 1,
+          "init": {
+            "clientX": 50,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "init": {
+            "clientX": 60,
+            "clientY": 100
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#dragItem",
+            "attributes": [
+              "style"
+            ]
+          }
+        ],
+        "label": "single-after-group"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "div.field-item-label",
+          "type": "contextmenu",
+          "index": 1,
+          "init": {
+            "clientX": 30,
+            "clientY": 40
+          },
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          }
+        ],
+        "label": "after-context"
+      },
+      {
+        "event": {
+          "target": ".title-bar-menu button",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": ".title-bar-menu button",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": ".title-bar-menu button",
+          "type": "mouseleave",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": ".title-bar-menu button",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      }
+    ]
+  }
+}

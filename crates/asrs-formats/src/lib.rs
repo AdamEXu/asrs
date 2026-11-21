@@ -1,3 +1,4 @@
+pub mod csv;
 pub mod custom_schemas;
 pub mod dslog;
 pub mod historical;

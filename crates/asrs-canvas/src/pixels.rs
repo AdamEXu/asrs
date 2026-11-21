@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 use tiny_skia::{IntSize, Pixmap};
 
 use crate::display::ImageData;

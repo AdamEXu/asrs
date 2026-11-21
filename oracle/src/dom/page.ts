@@ -177,7 +177,11 @@ async function step(s: any, index: number) {
     for (const [method, ...args] of s.log as [string, ...unknown[]][]) {
       w.log[method](...args.map((a) => fromTree(a)));
     }
-    w.sidebar.refresh();
+    try {
+      w.sidebar.refresh();
+    } catch (error) {
+      exception("log", error);
+    }
     if (s.newFields !== false) w.tabs.refresh();
     await settle();
   } else if ("advance" in s) await run(s.advance);
@@ -195,6 +199,7 @@ async function step(s: any, index: number) {
     if (target === undefined) throw new Error(`step ${index}: no element ${e.target}`);
     const Kind = w[e.kind ?? "Event"];
     try {
+      if (e.props !== undefined) Object.assign(target, e.props);
       target.dispatchEvent(new Kind(e.type, { bubbles: true, cancelable: true, ...(e.init ?? {}) }));
     } catch (error) {
       exception("event " + e.type, error);
@@ -215,6 +220,19 @@ async function step(s: any, index: number) {
   } else if ("liveTime" in s) {
     (w as any).__liveTime = fromTree(s.liveTime);
     await settle();
+  } else if ("tuner" in s) {
+    if (s.tuner === null) {
+      w.tuner = null;
+    } else {
+      const keys = new Set((s.tuner as unknown[]).map((k) => String(fromTree(k))));
+      w.tuner = {
+        hasTunableFields: () => keys.size > 0,
+        isTunable: (key: string) => keys.has(key),
+        publish: (key: string, value: unknown) => write({ tuner: ["publish", toTree(key), toTree(value)] }),
+        unpublish: (key: string) => write({ tuner: ["unpublish", toTree(key)] })
+      };
+    }
+    await settle();
   } else if ("capture" in s) {
     write({ capture: toTree(s.label ?? index), time: toTree(clock.now - clock.start) });
     for (const spec of Array.isArray(s.capture) ? s.capture : [s.capture]) capture(spec);
@@ -223,7 +241,14 @@ async function step(s: any, index: number) {
 
 w.__oracleRun = async () => {
   setExceptionHandler(exception);
+  // Source-list fixtures record drags through their own harness; a second recorder would
+  // interleave extra records into their vectors.
   if (fixture.sourceLists) sourceLists.install();
+  else
+    w.addEventListener("drag-update", (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      write({ drag: toTree(detail.data), end: toTree(detail.end), x: toTree(detail.x), y: toTree(detail.y) });
+    });
   for (const listener of windowMessageListeners) listener({ data: "port", ports: [port] });
   const prefs = JSON.parse(JSON.stringify(DEFAULT_PREFS));
   if (fixture.preferences !== undefined) mergePreferences(prefs, fixture.preferences);

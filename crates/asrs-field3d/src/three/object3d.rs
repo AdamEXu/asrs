@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 use super::{Euler, Matrix4, Quaternion, Vector3};
 
 /// The transform state of a three `Object3D`.

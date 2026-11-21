@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 //! The three.js 0.168 subset upstream's 3D field uses: math types, `Object3D` transforms,
 //! `BufferGeometry` with typed-array attributes, the primitive generators and
 //! `BufferGeometryUtils.mergeGeometries`.

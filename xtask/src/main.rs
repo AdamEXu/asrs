@@ -9,6 +9,7 @@ mod gpui;
 mod historical;
 mod host;
 mod layout;
+mod licenses;
 mod oracle;
 mod pack;
 mod parity;
@@ -29,6 +30,7 @@ commands:
   check     layout rules, gpui vendor and features, rustfmt, clippy, tests
   layout    crate dependency and lint opt-out rules only
   assets    copy upstream assets into assets/
+  licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
   host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
@@ -46,6 +48,7 @@ fn main() -> ExitCode {
         Some("check") => check::run(),
         Some("layout") => layout::run(),
         Some("assets") => assets::run(),
+        Some("licenses") => licenses::run(),
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         Some("gpui") => gpui::run(&args[1..]),

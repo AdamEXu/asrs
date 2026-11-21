@@ -1,0 +1,6 @@
+[
+  ["putNumber", "/Speed", 0.0, 12.5],
+  ["putBoolean", "/Enabled", 0.0, false],
+  ["putString", "/Name", 0.0, "arm"],
+  ["putNumber", "/Unmanaged", 0.0, 1.0]
+]

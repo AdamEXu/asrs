@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! The real blitter's side of Skia's scan converters: an ordered list of horizontal coverage
 //! runs, clipped to the canvas. Order matters because Skia blends straight into the pixels, so a
 //! pixel that two blits touch is blended twice rather than having its coverage summed.

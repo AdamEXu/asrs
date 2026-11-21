@@ -1,3 +1,5 @@
+// Ported from ansi_up 6.0.6 (MIT, Copyright (c) 2011 github.com/drudru). See THIRD_PARTY_NOTICES.md.
+
 //! Port of ansi_up 6.0.6 (`ansi_up.ts`) with the options upstream's ConsoleRenderer uses:
 //! `use_classes` false (inline styles), `escape_html` true, the `{http, https}` URL allowlist.
 

@@ -1,0 +1,64 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/huge.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/huge.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "roots"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "group0-active"
+      }
+    ]
+  }
+}

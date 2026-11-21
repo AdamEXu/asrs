@@ -1,0 +1,144 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/stale.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/stale.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/U/x",
+            0.0,
+            3.0
+          ]
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0.0
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "expanded"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "focus",
+          "kind": "Event"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "kind": "InputEvent",
+          "props": {
+            "value": "/T/c"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "results"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowDown"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "Enter"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder"
+            ]
+          }
+        ],
+        "label": "after-stale-search"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "again"
+      }
+    ]
+  }
+}

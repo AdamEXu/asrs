@@ -354,6 +354,7 @@ dependencies = [
  "asrs-log",
  "asrs-model",
  "asrs-parity",
+ "indexmap",
 ]
 
 [[package]]

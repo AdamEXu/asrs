@@ -1,0 +1,66 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/huge.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": ".field-item-container:nth-of-type(n+4) .field-item",
+        "rect": [
+          0,
+          900,
+          300,
+          20
+        ]
+      },
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/huge.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "only-first-three"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "expanded-children-offscreen"
+      }
+    ]
+  }
+}

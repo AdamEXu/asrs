@@ -1,0 +1,149 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/sidebar-akit.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/sidebar-akit.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "roots"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "advantagekit-expanded"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 6,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder"
+            ]
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "realoutputs-expanded"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0.04
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill"
+            ]
+          }
+        ],
+        "label": "values-at-40ms"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          0.0
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill"
+            ]
+          }
+        ],
+        "label": "values-hovered-0"
+      }
+    ]
+  }
+}

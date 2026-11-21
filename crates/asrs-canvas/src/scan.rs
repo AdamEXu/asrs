@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Exact-area coverage for device-space paths under the nonzero rule. Chromium's CPU canvas
 //! fills every antialiased path with Skia's analytic AA, which computes the covered area of each
 //! pixel of the union (after snapping edge end points); tiny-skia only has Skia's retired 4x

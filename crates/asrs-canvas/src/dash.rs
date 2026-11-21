@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Skia's dasher (`SkDashPath::InternalFilter` over `SkContourMeasure`, Chromium m142) for
 //! paths of lines, quads, conics and cubics. Conics are measured and cut as conics, as Skia does.
 

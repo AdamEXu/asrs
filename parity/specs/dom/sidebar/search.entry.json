@@ -1,0 +1,272 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/robot.json",
+    "../logs/sidebar-akit.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "layout": [
+      {
+        "selector": "div.field-item",
+        "rect": [
+          0,
+          100,
+          300,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "log": "../logs/sidebar-akit.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "baseline"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "focus",
+          "kind": "FocusEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "props": {
+            "value": "veloc"
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          },
+          {
+            "kind": "dom",
+            "selector": "input.side-bar-search"
+          }
+        ],
+        "label": "results-veloc"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowDown"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowDown"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "hovered-second"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowUp"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "Enter"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "after-enter"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "props": {
+            "value": "pose"
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "pose-results"
+      },
+      {
+        "event": {
+          "target": ".search-results-item",
+          "type": "mousedown",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "after-item-click"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "props": {
+            "value": "metadata"
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "hidden-key-filtered"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "props": {
+            "value": "zzz"
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "no-results"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "Enter"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "props": {
+            "value": ""
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          },
+          {
+            "kind": "dom",
+            "selector": "input.side-bar-search"
+          }
+        ],
+        "label": "cleared"
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+[
+  ["putNumber", "/Fields/10", 0.0, 10.0],
+  ["putNumber", "/Fields/2", 0.0, 2.0],
+  ["putNumber", "/Fields/1", 0.0, 1.0],
+  ["putNumber", "/Fields/01", 0.0, 0.5],
+  ["putNumber", "/Fields/ 5", 0.0, 5.0],
+  ["putNumber", "/Fields/apple", 0.0, 1.0],
+  ["putNumber", "/Fields/\u00e9clair", 0.0, 2.0],
+  ["putNumber", "/Fields/eggplant", 0.0, 3.0],
+  ["putNumber", "/Fields/\u65e5\u672c\u8a9e", 0.0, 4.0],
+  ["putNumber", "/Fields/\u00c4pfel", 0.0, 5.0],
+  ["putNumber", "/Fields/zoo", 0.0, 6.0],
+  ["putNumber", "/10", 0.0, 1.0],
+  ["putNumber", "/2", 0.0, 2.0],
+  ["putNumber", "/Fields/A20", 0.0, 20.0],
+  ["putNumber", "/Fields/A3", 0.0, 3.0],
+  ["putNumber", "/Fields/a3", 0.0, 3.5]
+]
