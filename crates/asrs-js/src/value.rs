@@ -35,7 +35,7 @@ impl JsValue {
     /// heap worklist instead of one stack frame per level.
     fn move_children(&mut self, out: &mut Vec<JsValue>) {
         match self {
-            JsValue::Array(items) => out.extend(items.drain(..)),
+            JsValue::Array(items) => out.append(items),
             JsValue::Object(object) => {
                 out.extend(std::mem::take(object).into_iter().map(|(_, v)| v));
             }
