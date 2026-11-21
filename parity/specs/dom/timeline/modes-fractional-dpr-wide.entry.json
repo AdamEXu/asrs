@@ -1,0 +1,385 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-modes.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "window": {
+      "width": 1600,
+      "height": 900,
+      "devicePixelRatio": 1.25
+    },
+    "layout": [
+      {
+        "selector": "div.timeline",
+        "rect": [
+          10,
+          50,
+          1531,
+          40
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/timeline-modes.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "loaded"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 576.47,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 91,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-snap-border"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 168.1,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-border-plus-5"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 157.6,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-border-minus-5.5"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 167.85,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-border-plus-4.75"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousedown",
+          "init": {
+            "clientX": 91,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 91,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "click",
+          "init": {
+            "clientX": 91,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "click-select-border"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 1250.1100000000001,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-and-selected"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousedown",
+          "init": {
+            "clientX": 928.6,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 937.6,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "click",
+          "init": {
+            "clientX": 937.6,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "click-moved-no-select"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 10.5,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-left-edge"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 1540.5,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-right-edge"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mouseleave",
+          "init": {
+            "clientX": 1545,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "left"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "contextmenu",
+          "init": {
+            "clientX": 20,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "idle"
+      }
+    ]
+  }
+}

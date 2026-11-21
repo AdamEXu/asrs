@@ -1,0 +1,150 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-modes.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "window": {
+      "theme": "dark",
+      "devicePixelRatio": 2
+    },
+    "steps": [
+      {
+        "log": "../logs/timeline-modes.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "liveTime": 21
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "live-start"
+      },
+      {
+        "liveTime": 27.5
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "live-grow"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 1010,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "live-hover"
+      },
+      {
+        "selection": [
+          "lock"
+        ]
+      },
+      {
+        "liveTime": 31
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "live-locked"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -300, false, 0, 0)"
+      },
+      {
+        "liveTime": 33
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "live-zoomed"
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "live-disconnected"
+      }
+    ]
+  }
+}
