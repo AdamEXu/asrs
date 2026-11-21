@@ -6,4 +6,6 @@ pub mod heatmap;
 pub mod line_graph;
 pub mod list_cx;
 pub mod metadata;
+pub mod simple_statistics;
+pub mod statistics;
 pub mod table;

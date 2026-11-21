@@ -1002,7 +1002,8 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     JsValue::String(s) => s.clone(),
                     _ => return Err(err("putJSON value is a string")),
                 };
-                log.put_json(&key(0)?, ts(1)?, v);
+                log.put_json(&key(0)?, ts(1)?, v)
+                    .map_err(|e| format!("putJSON: {e:?}"))?;
             }
             "putPose" => {
                 let pose = &args[2];
@@ -1886,8 +1887,9 @@ impl Runner {
     fn set_jump_value(&mut self, props: Option<&Json>) {
         let value = props
             .and_then(|p| p.get("value"))
-            .and_then(|v| js_json::to_js(&Value::from_json_lenient(v)).ok());
-        if let (Some(JsValue::String(value)), Some(dom)) = (value, self.selected_table_dom()) {
+            .and_then(|v| js_json::to_js(&Value::from_json_lenient(v)).ok())
+            .and_then(JsValue::into_string);
+        if let (Some(value), Some(dom)) = (value, self.selected_table_dom()) {
             dom.borrow_mut().jump_value = value;
         }
     }

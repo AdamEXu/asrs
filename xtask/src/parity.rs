@@ -1,12 +1,15 @@
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use asrs_parity::json::{self, Json};
 use asrs_parity::random::{Rng, random_value};
 use asrs_parity::{Request, Response, diff, vectors};
 
 use crate::oracle::{self, Paths};
-use crate::{Result, cargo};
+use crate::{Result, cargo, corpus, historical};
 
 const USAGE: &str = "usage: cargo xtask parity <suite> [options]
 
@@ -26,12 +29,22 @@ suites:
         the decode worker's messages, initial log and per-field responses
         (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the
         corpus a and b trees, the public log cache and the fuzz corpora, or just the files
-        listed. An oracle that does not finish in time and an asrs-cli that
+        listed. Each run may take --timeout (default 60) seconds plus 10 s per MiB of
+        input, times the load average per core while it runs (1x to 8x); the largest
+        files start first. An oracle that does not finish in time and an asrs-cli that
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
         output up to that point must be a prefix of the oracle's.
         --plant flips a bit in the first asrs-cli dump, so the run fails on purpose.
+  export [<corpus>...] [--jobs N] [--plant]
+        run `asrs-cli export-run` over the export matrix of parity/corpus/historical.spec.json
+        for every log file of each corpus (default: all) and compare every output with the
+        recorded oracle run in target/parity/oracle/<corpus>/ (written by
+        `cargo xtask oracle historical`): byte-identical files where the oracle produced
+        output, and the same failed or skipped verdicts otherwise. A case the port cannot
+        run yet, such as the wpilog and mcap writers, is listed as unmodeled, not failed.
+        --plant flips a bit in the first asrs-cli output file, so the run fails on purpose.
   historical [<log file>...] [--jobs N] [--shard N] [--plant]
         scripted hub sessions through the real HistoricalDataSource and the port,
         compared trace for trace (`cargo xtask parity historical --help`)
@@ -62,11 +75,12 @@ pub fn run(args: &[String]) -> Result {
             [expected, actual] => diff_files(Path::new(expected), Path::new(actual)),
             _ => Err(USAGE.to_owned()),
         },
-        Some(
-            suite @ ("js" | "log" | "export" | "live" | "model" | "trace" | "files" | "pixel"),
-        ) => Err(format!(
-            "parity suite {suite:?} is not implemented yet; its harness lands with the units that port it"
-        )),
+        Some("export") => export_suite(rest),
+        Some(suite @ ("js" | "log" | "live" | "model" | "trace" | "files" | "pixel")) => {
+            Err(format!(
+                "parity suite {suite:?} is not implemented yet; its harness lands with the units that port it"
+            ))
+        }
         _ => Err(USAGE.to_owned()),
     }
 }
@@ -232,7 +246,7 @@ fn decode_suite(args: &[String]) -> Result {
     }
     let paths = Paths::new()?;
     let files = if positional.is_empty() {
-        crate::corpus::ensure(&paths, &crate::corpus::names(&paths.root)?)?;
+        corpus::ensure(&paths, &corpus::names(&paths.root)?)?;
         decode_cases(&paths)?
     } else {
         positional.iter().map(PathBuf::from).collect()
@@ -249,10 +263,13 @@ fn decode_suite(args: &[String]) -> Result {
         .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
     let mut cases = Vec::new();
     for file in &files {
-        cases.push((file, DecodeMode::Decode));
-        cases.push((file, DecodeMode::Worker));
+        let bytes = std::fs::metadata(file).map_or(0, |m| m.len());
+        cases.push((file, DecodeMode::Decode, bytes));
+        cases.push((file, DecodeMode::Worker, bytes));
     }
-    let timeout = Duration::from_secs(timeout);
+    let mut largest_first: Vec<usize> = (0..cases.len()).collect();
+    largest_first.sort_by_key(|&i| std::cmp::Reverse(cases[i].2));
+    let base = Duration::from_secs(timeout);
     let workers = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
         .unwrap_or(4)
@@ -265,18 +282,20 @@ fn decode_suite(args: &[String]) -> Result {
         for _ in 0..workers {
             scope.spawn(|| {
                 loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    if i >= cases.len() {
+                    let Some(&i) =
+                        largest_first.get(next.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+                    else {
                         return;
-                    }
-                    let (path, mode) = &cases[i];
+                    };
+                    let (path, mode, bytes) = &cases[i];
+                    let budget = decode_budget(base, *bytes);
                     let mut oracle_command = oracle::oracle_command(&paths, mode.oracle_entry())
                         .expect("oracle decode command");
                     oracle_command.arg(path);
-                    let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, timeout));
+                    let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, budget));
                     let mut rust_command = Command::new(&target);
                     rust_command.arg(mode.cli_command()).arg(path);
-                    let rust = DecodeVerdict::port(run_decode(&mut rust_command, timeout));
+                    let rust = DecodeVerdict::port(run_decode(&mut rust_command, budget));
                     *results[i].lock().expect("decode result poisoned") = Some((oracle, rust));
                 }
             });
@@ -286,7 +305,7 @@ fn decode_suite(args: &[String]) -> Result {
     let mut never = 0;
     let mut unmodeled = Vec::new();
     let mut planted = !plant;
-    for (i, (path, mode)) in cases.iter().enumerate() {
+    for (i, (path, mode, _)) in cases.iter().enumerate() {
         let (oracle, mut rust) = results[i]
             .lock()
             .expect("decode result poisoned")
@@ -464,7 +483,37 @@ impl DecodeVerdict {
     }
 }
 
-fn run_decode(command: &mut Command, timeout: Duration) -> DecodeRun {
+/// Idle-machine wall time one decode run may take: `--timeout` plus 10 s per MiB. The 43 MB
+/// RAR1741 log gets 477 s against the 16 s a debug asrs-cli needs, while small looping cases
+/// still reach the never-completes verdict after about `--timeout`.
+fn decode_budget(base: Duration, bytes: u64) -> Duration {
+    base + Duration::from_secs(10).mul_f64(bytes as f64 / f64::from(1u32 << 20))
+}
+
+/// How oversubscribed the machine is: the 1-minute load average per core, at least 1 and capped
+/// at 8 so a stuck run still ends.
+fn load_factor() -> f64 {
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZero::get) as f64;
+    let load = std::fs::read_to_string("/proc/loadavg")
+        .ok()
+        .or_else(|| {
+            let out = Command::new("sysctl")
+                .args(["-n", "vm.loadavg"])
+                .output()
+                .ok()?;
+            String::from_utf8(out.stdout).ok()
+        })
+        .and_then(|text| {
+            text.split_whitespace()
+                .find_map(|word| word.parse::<f64>().ok())
+        })
+        .unwrap_or(0.0);
+    (load / cores).clamp(1.0, 8.0)
+}
+
+/// Runs `command` until it exits or has used `budget` scaled by the highest load factor seen
+/// while it ran, so a run starved by other work is not mistaken for a hang.
+fn run_decode(command: &mut Command, budget: Duration) -> DecodeRun {
     use std::io::Read as _;
     let mut child = match command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
         Ok(child) => child,
@@ -476,12 +525,20 @@ fn run_decode(command: &mut Command, timeout: Duration) -> DecodeRun {
         let _ = pipe.read_to_end(&mut out);
         out
     });
-    let deadline = Instant::now() + timeout;
+    let start = Instant::now();
+    let mut factor = load_factor();
+    let mut sampled = start;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() >= deadline => break None,
-            Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+            Ok(None) if start.elapsed() >= budget.mul_f64(factor) => break None,
+            Ok(None) => {
+                if sampled.elapsed() >= Duration::from_secs(5) {
+                    factor = factor.max(load_factor());
+                    sampled = Instant::now();
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
             Err(_) => break None,
         }
     };
@@ -633,4 +690,313 @@ fn diff_files(expected: &Path, actual: &Path) -> Result {
         }
         Some(report) => Err(report),
     }
+}
+
+/// `(output name, outcome, written file)` as `export-run` reports it for one input.
+type ExportOutputs = Vec<(String, String, Option<String>)>;
+
+/// `cargo xtask parity export`: `asrs-cli export-run` on the spec's matrix for every corpus
+/// input, compared to the recorded `oracle historical` outputs.
+fn export_suite(args: &[String]) -> Result {
+    let mut jobs = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(4)
+        .min(8);
+    let mut plant = false;
+    let mut names = Vec::new();
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--jobs" => {
+                jobs = iter
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .filter(|&n: &usize| n > 0)
+                    .ok_or("--jobs needs a positive number")?;
+            }
+            "--plant" => plant = true,
+            flag if flag.starts_with("--") => {
+                return Err(format!("unknown option {flag}\n\n{USAGE}"));
+            }
+            name => names.push(name.to_owned()),
+        }
+    }
+    let paths = Paths::new()?;
+    let corpora = corpus::names(&paths.root)?;
+    if names.is_empty() {
+        names = corpora.clone();
+    }
+    for name in &names {
+        if !corpora.contains(name) {
+            return Err(format!("parity export: no corpus {name:?}"));
+        }
+    }
+    corpus::ensure(&paths, &names)?;
+    cargo(&["build", "--quiet", "-p", "asrs-cli"])?;
+    let cli = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| crate::workspace_root().join("target"))
+        .join("debug")
+        .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
+    let spec = paths.root.join(historical::SPEC);
+    let mut total = 0usize;
+    let mut unmodeled = 0usize;
+    let mut failures = Vec::new();
+    let mut planted = !plant;
+    for name in &names {
+        let oracle_root = paths.root.join("target/parity/oracle").join(name);
+        let index_path = oracle_root.join("index.jsonl");
+        let index = String::from_utf8(oracle::read(&index_path)?).map_err(|e| {
+            format!(
+                "{}: {e} (run `cargo xtask oracle historical` first)",
+                index_path.display()
+            )
+        })?;
+        let mut oracle_records: Vec<(String, String, String)> = Vec::new();
+        let mut listings: HashMap<String, String> = HashMap::new();
+        for line in index.lines() {
+            let record = json::parse(line).map_err(|e| format!("oracle index: {e}"))?;
+            let (input, output, outcome) = (
+                export_str_field(&record, "input")?,
+                export_str_field(&record, "output")?,
+                export_str_field(&record, "outcome")?,
+            );
+            let listing = listings.entry(input.clone()).or_default();
+            if output != "decode" {
+                let hash = export_str_field(&record, "hash")?;
+                listing.push_str(&format!("{output}\0{outcome}\0{hash}\n"));
+            }
+            oracle_records.push((input, output, outcome));
+        }
+        let inputs = historical::corpus_inputs(&paths, name)?;
+        check_recorded_run(&paths, name, &listings, &inputs)?;
+        let out_root = paths.root.join("target/parity/port-export").join(name);
+        corpus::remove_dir(&out_root)?;
+        std::fs::create_dir_all(&out_root).map_err(|e| e.to_string())?;
+        let records = export_shards(&paths, name, &cli, &inputs, &out_root, &spec, jobs)?;
+        let port: HashMap<String, ExportOutputs> = records.into_iter().collect();
+        for (input, output, outcome) in &oracle_records {
+            if output == "decode" {
+                continue;
+            }
+            let Some(outputs) = port.get(input) else {
+                failures.push(format!("{input}: no asrs-cli export-run record"));
+                continue;
+            };
+            let Some((_, port_outcome, port_file)) =
+                outputs.iter().find(|(name, _, _)| name == output)
+            else {
+                failures.push(format!("{input}/{output}: no asrs-cli output record"));
+                continue;
+            };
+            if port_outcome == "unmodeled" {
+                unmodeled += 1;
+                continue;
+            }
+            total += 1;
+            if port_outcome != outcome {
+                failures.push(format!(
+                    "{input}/{output}: oracle says {outcome:?}, asrs-cli says {port_outcome:?}"
+                ));
+                continue;
+            }
+            if outcome != "ok" {
+                continue;
+            }
+            let Some(port_file) = port_file else {
+                failures.push(format!("{input}/{output}: no file for an 'ok' outcome"));
+                continue;
+            };
+            let port_path = out_root.join(input).join(port_file);
+            let oracle_path = oracle_root.join(input).join(port_file);
+            let mut port_bytes =
+                oracle::read(&port_path).map_err(|e| format!("{}: {e}", port_path.display()))?;
+            if !planted {
+                planted = true;
+                let at = port_bytes.len() - 1;
+                port_bytes[at] ^= 1;
+                eprintln!("planted a one-bit change in {input}/{output}");
+            }
+            let oracle_bytes = oracle::read(&oracle_path)
+                .map_err(|e| format!("{}: {e}", oracle_path.display()))?;
+            if let Some(report) = diff::report_bytes(&oracle_bytes, &port_bytes) {
+                failures.push(format!("{input}/{output}: {report}"));
+            }
+        }
+        let recorded: HashSet<(&str, &str)> = oracle_records
+            .iter()
+            .map(|(input, output, _)| (input.as_str(), output.as_str()))
+            .collect();
+        for (input, outputs) in &port {
+            for (output, _, _) in outputs {
+                if output != "error" && !recorded.contains(&(input.as_str(), output.as_str())) {
+                    failures.push(format!("{input}/{output}: no recorded oracle outcome"));
+                }
+            }
+        }
+    }
+    if unmodeled > 0 {
+        eprintln!("export: {unmodeled} cases listed as unmodeled (later units' writers)");
+    }
+    finish("export", total, failures)
+}
+
+/// The recorded oracle run must be the one the committed `<corpus>.historical.json`
+/// describes, input for input, so a stale or partial `target/parity/oracle/<corpus>` fails
+/// instead of silently comparing fewer cases.
+fn check_recorded_run(
+    paths: &Paths,
+    name: &str,
+    listings: &HashMap<String, String>,
+    inputs: &[String],
+) -> Result {
+    let manifest_path =
+        corpus::synthetic_dir(&paths.root).join(format!("{name}{}", historical::MANIFEST_SUFFIX));
+    let text = String::from_utf8(oracle::read(&manifest_path)?).map_err(|e| e.to_string())?;
+    let manifest = json::parse(&text).map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+    let mut committed = HashMap::new();
+    for entry in manifest
+        .get("list")
+        .and_then(Json::as_array)
+        .unwrap_or_default()
+    {
+        committed.insert(
+            export_str_field(entry, "input")?,
+            export_str_field(entry, "exports")?,
+        );
+    }
+    let stale = |what: String| {
+        Err(format!(
+            "{name}: {what}; the recorded oracle run is stale, rerun `cargo xtask oracle historical {name}`"
+        ))
+    };
+    if committed.len() != inputs.len() || listings.len() != inputs.len() {
+        return stale(format!(
+            "{} corpus inputs, {} in {}, {} recorded",
+            inputs.len(),
+            committed.len(),
+            manifest_path.display(),
+            listings.len()
+        ));
+    }
+    for input in inputs {
+        let recorded = listings
+            .get(input)
+            .map(|listing| oracle::hash_bytes(listing.as_bytes()));
+        if recorded.is_none() || recorded.as_ref() != committed.get(input) {
+            return stale(format!("{input} differs from {}", manifest_path.display()));
+        }
+    }
+    Ok(())
+}
+
+fn export_shards(
+    paths: &Paths,
+    name: &str,
+    cli: &Path,
+    inputs: &[String],
+    out_root: &Path,
+    spec: &Path,
+    jobs: usize,
+) -> Result<Vec<(String, ExportOutputs)>> {
+    let root_buf = corpus::output_dir(&paths.root, name);
+    let root = root_buf.as_path();
+    let jobs = jobs.min(inputs.len()).max(1);
+    let shards: Vec<Vec<String>> = (0..jobs)
+        .map(|j| inputs.iter().skip(j).step_by(jobs).cloned().collect())
+        .collect();
+    let results: Vec<Result<String>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = shards
+            .iter()
+            .map(|shard| scope.spawn(move || export_shard(cli, root, out_root, spec, shard)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err("shard thread panicked".to_owned()))
+            })
+            .collect()
+    });
+    let mut records = Vec::new();
+    for result in results {
+        for line in result?.lines() {
+            let record = json::parse(line).map_err(|e| format!("export-run output: {e}"))?;
+            let input = export_str_field(&record, "input")?;
+            if let Some(error) = record.get("error").and_then(Json::as_str) {
+                records.push((
+                    input,
+                    vec![("error".to_owned(), error.to_string_lossy(), None)],
+                ));
+                continue;
+            }
+            let mut outputs = Vec::new();
+            for output in record
+                .get("outputs")
+                .and_then(Json::as_array)
+                .unwrap_or_default()
+            {
+                outputs.push((
+                    export_str_field(output, "name")?,
+                    export_str_field(output, "outcome")?,
+                    output
+                        .get("file")
+                        .and_then(Json::as_str)
+                        .map(|s| s.to_string_lossy()),
+                ));
+            }
+            records.push((input, outputs));
+        }
+    }
+    if records.len() != inputs.len() {
+        return Err(format!(
+            "export-run reported {} of {} inputs",
+            records.len(),
+            inputs.len()
+        ));
+    }
+    Ok(records)
+}
+
+fn export_str_field(record: &Json, key: &str) -> Result<String> {
+    record
+        .get(key)
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy())
+        .ok_or_else(|| format!("export record needs a string {key:?}"))
+}
+
+fn export_shard(
+    cli: &Path,
+    root: &Path,
+    out_root: &Path,
+    spec: &Path,
+    inputs: &[String],
+) -> Result<String> {
+    let mut command = Command::new(cli);
+    command
+        .arg("export-run")
+        .arg("--root")
+        .arg(root)
+        .arg("--out")
+        .arg(out_root)
+        .arg("--spec")
+        .arg(spec)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
+    let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let input: String = inputs.iter().map(|s| format!("{s}\n")).collect();
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(input.as_bytes())
+        .map_err(|e| e.to_string())?;
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!("export-run exited with {}", output.status));
+    }
+    String::from_utf8(output.stdout).map_err(|e| e.to_string())
 }

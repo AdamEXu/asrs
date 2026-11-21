@@ -1,0 +1,695 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/statistics.json"
+  ],
+  "fixture": {
+    "seed": 1104,
+    "assets": "../assets/minimal.json",
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/statistics.json"
+      },
+      {
+        "main": "restore-state",
+        "cve1": {
+          "o": [
+            [
+              "sidebar",
+              {
+                "o": [
+                  [
+                    "width",
+                    300
+                  ],
+                  [
+                    "expanded",
+                    []
+                  ]
+                ]
+              }
+            ],
+            [
+              "tabs",
+              {
+                "o": [
+                  [
+                    "selected",
+                    1
+                  ],
+                  [
+                    "tabs",
+                    [
+                      {
+                        "o": [
+                          [
+                            "type",
+                            0
+                          ],
+                          [
+                            "title",
+                            "Documentation"
+                          ],
+                          [
+                            "controllerUUID",
+                            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          ],
+                          [
+                            "controller",
+                            null
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            null
+                          ]
+                        ]
+                      },
+                      {
+                        "o": [
+                          [
+                            "type",
+                            6
+                          ],
+                          [
+                            "title",
+                            "Statistics"
+                          ],
+                          [
+                            "controllerUUID",
+                            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "sources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "reference"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Ref"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": []
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "relativeError"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Meas/A"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#2b66a2"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "independent"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Meas/Pos"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#e5b30b"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "timeRange",
+                                  "enabled"
+                                ],
+                                [
+                                  "rangeMin",
+                                  -3
+                                ],
+                                [
+                                  "rangeMax",
+                                  3
+                                ],
+                                [
+                                  "stepSize",
+                                  {
+                                    "n": "3fd0000000000000"
+                                  }
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            null
+                          ]
+                        ]
+                      },
+                      {
+                        "o": [
+                          [
+                            "type",
+                            6
+                          ],
+                          [
+                            "title",
+                            "Statistics"
+                          ],
+                          [
+                            "controllerUUID",
+                            "cccccccccccccccccccccccccccccccc"
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "sources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "independent"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Meas/B"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#2b66a2"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "timeRange",
+                                  "nope"
+                                ],
+                                [
+                                  "rangeMin",
+                                  {
+                                    "n": "7ff8000000000000"
+                                  }
+                                ],
+                                [
+                                  "rangeMax",
+                                  {
+                                    "n": "7ff0000000000000"
+                                  }
+                                ],
+                                [
+                                  "stepSize",
+                                  {
+                                    "n": "8000000000000000"
+                                  }
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            null
+                          ]
+                        ]
+                      },
+                      {
+                        "o": [
+                          [
+                            "type",
+                            6
+                          ],
+                          [
+                            "title",
+                            "Statistics"
+                          ],
+                          [
+                            "controllerUUID",
+                            "dddddddddddddddddddddddddddddddd"
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "timeRange",
+                                  "live-10"
+                                ],
+                                [
+                                  "rangeMin",
+                                  {
+                                    "n": "444b1ae4d6e2ef50"
+                                  }
+                                ],
+                                [
+                                  "rangeMax",
+                                  {
+                                    "n": "be7ad7f29abcaf48"
+                                  }
+                                ],
+                                [
+                                  "stepSize",
+                                  {
+                                    "n": "3e112e0be826d695"
+                                  }
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            null
+                          ]
+                        ]
+                      },
+                      {
+                        "o": [
+                          [
+                            "type",
+                            6
+                          ],
+                          [
+                            "title",
+                            "Statistics"
+                          ],
+                          [
+                            "controllerUUID",
+                            "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                          ],
+                          [
+                            "controller",
+                            null
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            null
+                          ]
+                        ]
+                      },
+                      {
+                        "o": [
+                          [
+                            "type",
+                            6
+                          ],
+                          [
+                            "title",
+                            "Statistics"
+                          ],
+                          [
+                            "controllerUUID",
+                            "ffffffffffffffffffffffffffffffff"
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "sources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "bogus"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Ref"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": []
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "rangeMin",
+                                  2
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            null
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          "state",
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          }
+        ]
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[1].controller.showTimeline()"
+          }
+        ]
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          }
+        ]
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[3].controller.showTimeline()"
+          }
+        ]
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[4].controller.showTimeline()"
+          }
+        ]
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[5].controller.showTimeline()"
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.setSelected(2)"
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 0,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "Documentation",
+                "controllerUUID": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "controller": null,
+                "renderer": null,
+                "controlsHeight": null
+              }
+            ]
+          }
+        }
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          "state"
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 //! JS values and ordinary objects with V8's own-property order: array-index keys (canonical
 //! decimal integers up to 2^32 - 2) ascending, then every other key in insertion order.
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -9,7 +10,7 @@ use indexmap::IndexMap;
 use crate::math::BigInt;
 use crate::string::JsString;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Default)]
 pub enum JsValue {
     #[default]
     Undefined,
@@ -27,6 +28,332 @@ pub enum JsValue {
     /// A msgpack `ExtData` instance (`{type, data}` own properties), produced by the
     /// default extension codec for non-timestamp extension types.
     ExtData(i8, Vec<u8>),
+}
+
+impl JsValue {
+    /// Moves every direct child's array items and object values into `out`, leaving `self`
+    /// an empty container. Used by `Drop` so a nested value frees its whole subtree on a
+    /// heap worklist instead of one stack frame per level.
+    fn move_children(&mut self, out: &mut Vec<JsValue>) {
+        match self {
+            JsValue::Array(items) => out.append(items),
+            JsValue::Object(object) => {
+                out.extend(std::mem::take(object).into_iter().map(|(_, v)| v));
+            }
+            _ => {}
+        }
+    }
+
+    /// Consumes the value into a `JsValue::String`'s string.
+    pub fn into_string(mut self) -> Option<JsString> {
+        match &mut self {
+            JsValue::String(s) => Some(std::mem::take(s)),
+            _ => None,
+        }
+    }
+
+    /// Consumes the value into a `JsValue::Array`'s items.
+    pub fn into_array(mut self) -> Option<Vec<JsValue>> {
+        match &mut self {
+            JsValue::Array(items) => Some(std::mem::take(items)),
+            _ => None,
+        }
+    }
+
+    /// Consumes the value into a `JsValue::Object`'s object.
+    pub fn into_object(mut self) -> Option<JsObject> {
+        match &mut self {
+            JsValue::Object(object) => Some(std::mem::take(object)),
+            _ => None,
+        }
+    }
+
+    /// Consumes the value into a `JsValue::Bytes`'s bytes.
+    pub fn into_bytes(mut self) -> Option<Vec<u8>> {
+        match &mut self {
+            JsValue::Bytes(bytes) => Some(std::mem::take(bytes)),
+            _ => None,
+        }
+    }
+
+    fn clone_leaf(&self) -> Self {
+        match self {
+            JsValue::Undefined => JsValue::Undefined,
+            JsValue::Null => JsValue::Null,
+            JsValue::Bool(b) => JsValue::Bool(*b),
+            JsValue::Number(x) => JsValue::Number(*x),
+            JsValue::String(s) => JsValue::String(s.clone()),
+            JsValue::Bytes(b) => JsValue::Bytes(b.clone()),
+            JsValue::BigInt(b) => JsValue::BigInt(b.clone()),
+            JsValue::Date(t) => JsValue::Date(*t),
+            JsValue::ExtData(kind, data) => JsValue::ExtData(*kind, data.clone()),
+            JsValue::Array(_) | JsValue::Object(_) => {
+                unreachable!("clone descends into containers")
+            }
+        }
+    }
+}
+
+thread_local! {
+    static NESTING: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Containers nested deeper than this are dropped, cloned and compared on a heap worklist;
+/// shallower ones take the plain recursive path, which is faster.
+const MAX_RECURSIVE_NESTING: usize = 256;
+
+/// Runs `f` one container level deeper on this thread, or returns `None` once
+/// [`MAX_RECURSIVE_NESTING`] levels are already on the stack.
+fn nested<R>(f: impl FnOnce() -> R) -> Option<R> {
+    struct Restore<'a>(&'a Cell<usize>, usize);
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.1);
+        }
+    }
+    NESTING.with(|nesting| {
+        let depth = nesting.get();
+        if depth >= MAX_RECURSIVE_NESTING {
+            return None;
+        }
+        nesting.set(depth + 1);
+        let _restore = Restore(nesting, depth);
+        Some(f())
+    })
+}
+
+impl Drop for JsValue {
+    fn drop(&mut self) {
+        let has_children = match self {
+            JsValue::Array(items) => !items.is_empty(),
+            JsValue::Object(object) => !object.is_empty(),
+            _ => false,
+        };
+        if !has_children {
+            return;
+        }
+        let shallow = nested(|| match self {
+            JsValue::Array(items) => drop(std::mem::take(items)),
+            JsValue::Object(object) => drop(std::mem::take(object)),
+            _ => {}
+        });
+        if shallow.is_some() {
+            return;
+        }
+        let mut worklist = Vec::new();
+        self.move_children(&mut worklist);
+        while let Some(mut value) = worklist.pop() {
+            value.move_children(&mut worklist);
+        }
+    }
+}
+
+impl Clone for JsValue {
+    fn clone(&self) -> Self {
+        match self {
+            JsValue::Array(items) => nested(|| JsValue::Array(items.clone())),
+            JsValue::Object(object) => nested(|| JsValue::Object(object.clone())),
+            leaf => return leaf.clone_leaf(),
+        }
+        .unwrap_or_else(|| self.clone_iterative())
+    }
+}
+
+impl JsValue {
+    fn clone_iterative(&self) -> Self {
+        enum Frame<'a> {
+            Array(Vec<JsValue>, std::slice::Iter<'a, JsValue>),
+            Object(JsObject, ObjectIter<'a>, JsString),
+        }
+        fn descend<'a>(frames: &mut Vec<Frame<'a>>, mut source: &'a JsValue) -> JsValue {
+            loop {
+                match source {
+                    JsValue::Array(items) => {
+                        let mut rest = items.iter();
+                        match rest.next() {
+                            Some(first) => {
+                                frames.push(Frame::Array(Vec::with_capacity(items.len()), rest));
+                                source = first;
+                            }
+                            None => return JsValue::Array(Vec::new()),
+                        }
+                    }
+                    JsValue::Object(object) => {
+                        let mut members = object.object_iter();
+                        match members.next() {
+                            Some((key, first)) => {
+                                frames.push(Frame::Object(JsObject::new(), members, key.clone()));
+                                source = first;
+                            }
+                            None => return JsValue::Object(JsObject::new()),
+                        }
+                    }
+                    leaf => return leaf.clone_leaf(),
+                }
+            }
+        }
+        let mut frames = Vec::new();
+        let mut value = descend(&mut frames, self);
+        loop {
+            match frames.pop() {
+                None => return value,
+                Some(Frame::Array(mut out, mut rest)) => {
+                    out.push(value);
+                    match rest.next() {
+                        Some(next) => {
+                            frames.push(Frame::Array(out, rest));
+                            value = descend(&mut frames, next);
+                        }
+                        None => value = JsValue::Array(out),
+                    }
+                }
+                Some(Frame::Object(mut out, mut members, key)) => {
+                    out.insert(key, value);
+                    match members.next() {
+                        Some((key, next)) => {
+                            frames.push(Frame::Object(out, members, key.clone()));
+                            value = descend(&mut frames, next);
+                        }
+                        None => value = JsValue::Object(out),
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PartialEq for JsValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (JsValue::Array(x), JsValue::Array(y)) => nested(|| x == y),
+            (JsValue::Object(x), JsValue::Object(y)) => nested(|| x == y),
+            _ => return leaf_eq(self, other),
+        }
+        .unwrap_or_else(|| eq_iterative(self, other))
+    }
+}
+
+/// Derived `PartialEq` for every pair that is not two arrays or two objects.
+fn leaf_eq(a: &JsValue, b: &JsValue) -> bool {
+    match (a, b) {
+        (JsValue::Undefined, JsValue::Undefined) | (JsValue::Null, JsValue::Null) => true,
+        (JsValue::Bool(x), JsValue::Bool(y)) => x == y,
+        (JsValue::Number(x), JsValue::Number(y)) => x == y,
+        (JsValue::String(x), JsValue::String(y)) => x == y,
+        (JsValue::Bytes(x), JsValue::Bytes(y)) => x == y,
+        (JsValue::BigInt(x), JsValue::BigInt(y)) => x == y,
+        (JsValue::Date(x), JsValue::Date(y)) => x == y,
+        (JsValue::ExtData(k1, d1), JsValue::ExtData(k2, d2)) => k1 == k2 && d1 == d2,
+        _ => false,
+    }
+}
+
+fn eq_iterative<'a>(a: &'a JsValue, b: &'a JsValue) -> bool {
+    let mut worklist = vec![(a, b)];
+    while let Some((a, b)) = worklist.pop() {
+        match (a, b) {
+            (JsValue::Array(x), JsValue::Array(y)) => {
+                if x.len() != y.len() {
+                    return false;
+                }
+                worklist.extend(x.iter().zip(y.iter()));
+            }
+            (JsValue::Object(x), JsValue::Object(y)) => {
+                if x.len() != y.len() {
+                    return false;
+                }
+                for ((ka, va), (kb, vb)) in x.iter().zip(y.iter()) {
+                    if ka != kb {
+                        return false;
+                    }
+                    worklist.push((va, vb));
+                }
+            }
+            _ if leaf_eq(a, b) => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+impl fmt::Debug for JsValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        enum Work<'a> {
+            Value(&'a JsValue),
+            Key(&'a JsString),
+            Str(&'static str),
+        }
+        let mut worklist = vec![Work::Value(self)];
+        while let Some(work) = worklist.pop() {
+            match work {
+                Work::Str(s) => f.write_str(s)?,
+                Work::Key(k) => write!(f, "{k:?}")?,
+                Work::Value(value) => match value {
+                    JsValue::Undefined => f.write_str("Undefined")?,
+                    JsValue::Null => f.write_str("Null")?,
+                    JsValue::Bool(b) => write!(f, "Bool({b})")?,
+                    JsValue::Number(x) => write!(f, "Number({x:?})")?,
+                    JsValue::String(s) => write!(f, "String({s:?})")?,
+                    JsValue::Array(items) => {
+                        f.write_str("Array([")?;
+                        worklist.push(Work::Str("])"));
+                        for (i, item) in items.iter().enumerate().rev() {
+                            worklist.push(Work::Value(item));
+                            if i > 0 {
+                                worklist.push(Work::Str(", "));
+                            }
+                        }
+                    }
+                    JsValue::Object(object) => {
+                        f.write_str("Object({")?;
+                        worklist.push(Work::Str("})"));
+                        let mut first = true;
+                        for (k, v) in object.iter().rev() {
+                            if !first {
+                                worklist.push(Work::Str(", "));
+                            }
+                            first = false;
+                            worklist.push(Work::Value(v));
+                            worklist.push(Work::Str(": "));
+                            worklist.push(Work::Key(k));
+                        }
+                    }
+                    JsValue::Bytes(bytes) => write!(f, "Bytes({bytes:?})")?,
+                    JsValue::BigInt(b) => write!(f, "BigInt({b:?})")?,
+                    JsValue::Date(t) => write!(f, "Date({t:?})")?,
+                    JsValue::ExtData(kind, data) => write!(f, "ExtData({kind:?}, {data:?})")?,
+                },
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `JsObject::iter` as a named type, so `Clone` and the JSON writer can hold one per pending
+/// object frame.
+pub(crate) struct ObjectIter<'a> {
+    indexed: std::collections::btree_map::Values<'a, u32, (JsString, JsValue)>,
+    named: indexmap::map::Iter<'a, JsString, JsValue>,
+}
+
+impl<'a> Iterator for ObjectIter<'a> {
+    type Item = (&'a JsString, &'a JsValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.indexed
+            .next()
+            .map(|(k, v)| (k, v))
+            .or_else(|| self.named.next())
+    }
+}
+
+impl JsObject<JsValue> {
+    pub(crate) fn object_iter(&self) -> ObjectIter<'_> {
+        ObjectIter {
+            indexed: self.indexed.values(),
+            named: self.named.iter(),
+        }
+    }
 }
 
 impl JsValue {
@@ -201,6 +528,10 @@ impl<V> JsObject<V> {
 
     pub fn len(&self) -> usize {
         self.indexed.len() + self.named.len()
+    }
+
+    pub fn has_index_keys(&self) -> bool {
+        !self.indexed.is_empty()
     }
 
     pub fn is_empty(&self) -> bool {
