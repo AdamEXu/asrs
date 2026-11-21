@@ -142,6 +142,8 @@ pub struct Field2dDom {
     pub satellite: bool,
     /// Natural `[width, height]` per `IMAGE.src`; a missing entry is a broken image.
     pub images: HashMap<JsString, [f64; 2]>,
+    /// `new Date().getTime()` at the DOM snapshot, for `scrollSensor.periodic()`.
+    pub now: f64,
 }
 
 impl Field2dDom {
@@ -536,8 +538,14 @@ pub struct Field2dController {
 
 impl Field2dController {
     pub fn new<C: SourceListCx + ?Sized>(cx: &mut C) -> Field2dController {
+        let uuid = create_uuid(cx.tab_rng());
+        Self::with_uuid(cx, uuid)
+    }
+
+    /// `new` with a recorded `SourceList` UUID instead of a `createUUID` draw.
+    pub fn with_uuid<C: SourceListCx + ?Sized>(cx: &mut C, uuid: String) -> Field2dController {
         let mut controller = Field2dController {
-            list: SourceList::new(configs::field_2d(), create_uuid(cx.tab_rng()), false),
+            list: SourceList::new(configs::field_2d(), uuid, false),
             controls: Field2dControls::default(),
             orientation: Orientation::Deg0,
             size: SizeSetting::Large,
@@ -1114,6 +1122,9 @@ pub const CAMERA_UNLOCKED: CameraMode = 0.0;
 pub const CAMERA_ROBOT: CameraMode = 1.0;
 pub const CAMERA_ROBOT_AND_ROTATION: CameraMode = 2.0;
 
+const SCROLL_SIZE_PX: f64 = 1000000.0;
+const SCROLL_RESET_MS: f64 = 1000.0;
+
 /// `Field2dRenderer`'s camera state: everything `saveState`, `set2DCamera`, scroll and
 /// context-menu events mutate, plus the `lastRenderState` gate and the image bookkeeping
 /// that decides whether a render can proceed.
@@ -1136,6 +1147,12 @@ pub struct Field2dRenderer {
     pan_active: bool,
     pan_last_cursor: [f64; 2],
     last_cursor: [f64; 2],
+    /// `scrollSensor.lastScrollUpdate` (`new Date().getTime()` at the last `update()`).
+    last_scroll_update: f64,
+    /// `scrollSensor.resetNext`: the constructor arms it for the first `periodic()`.
+    reset_next: bool,
+    /// `scrollSensor.lastScrollLeft`/`lastScrollTop`.
+    last_scroll: [f64; 2],
     /// The context-menu `startPx`.
     start_px: Option<[f64; 2]>,
     /// Scroll-callback args a `mouse` replay computed, pending the `scroll` record that
@@ -1173,6 +1190,9 @@ impl Field2dRenderer {
             pan_active: false,
             pan_last_cursor: [0.0, 0.0],
             last_cursor: [0.0, 0.0],
+            last_scroll_update: 0.0,
+            reset_next: true,
+            last_scroll: [0.0, 0.0],
             start_px: None,
             pending_scrolls: Vec::new(),
         }
@@ -1182,6 +1202,58 @@ impl Field2dRenderer {
     pub fn flush_image_loads(&mut self) {
         self.image_load_count += self.pending_image_loads;
         self.pending_image_loads = 0;
+    }
+
+    /// `imageLoadCount`, compared against the `loads` snapshot in each render record.
+    pub fn image_load_count(&self) -> u64 {
+        self.image_load_count
+    }
+
+    /// `scrollSensor.reset()`: re-centers the virtual scroll field. Assigning
+    /// `scrollLeft`/`scrollTop` fires no `scroll` event, so `update()` never re-enters.
+    fn scroll_reset(&mut self) {
+        self.last_scroll = [SCROLL_SIZE_PX / 2.0; 2];
+    }
+
+    /// `scrollSensor.periodic()`: `render()` runs it first, reading `new Date().getTime()`
+    /// from the DOM snapshot.
+    fn periodic(&mut self, now: f64) {
+        if self.reset_next || now - self.last_scroll_update > SCROLL_RESET_MS {
+            self.reset_next = false;
+            self.scroll_reset();
+        }
+    }
+
+    /// `scrollSensor`'s `scroll` event handler (`update()`). `scroll_left`/`scroll_top`
+    /// are the container's at dispatch and `now` is `new Date().getTime()`; the scroll
+    /// delta goes onto `pending_scrolls` like a mouse pan does.
+    pub fn scroll_event(&mut self, scroll_left: f64, scroll_top: f64, now: f64) {
+        self.last_scroll_update = now;
+        if self.reset_next {
+            self.reset_next = false;
+            self.scroll_reset();
+        }
+        let (offset_width, offset_height) = {
+            let dom = self.dom.borrow();
+            (
+                dom.scroll_container[2].round(),
+                dom.scroll_container[3].round(),
+            )
+        };
+        if offset_width == 0.0 && offset_height == 0.0 {
+            self.reset_next = true;
+            return;
+        }
+        let dx = scroll_left - self.last_scroll[0];
+        let dy = scroll_top - self.last_scroll[1];
+        self.last_scroll = [scroll_left, scroll_top];
+        self.pending_scrolls.push([
+            dx,
+            dy,
+            0.0,
+            self.last_cursor[0],
+            self.last_cursor[1],
+        ]);
     }
 
     /// `setTrackingMode`.
@@ -1338,6 +1410,8 @@ impl Field2dRenderer {
     /// `render(command)` with assets supplied separately so `set2DCamera` and the scroll
     /// rAF can re-run it.
     pub fn render_command<C: TabCx + ?Sized>(&mut self, cx: &C, command: &Field2dCommand) {
+        let now = self.dom.borrow().now;
+        self.periodic(now);
         let assets = cx.tab_assets();
         let dom = self.dom.borrow();
         let container_width = dom.client_width();
