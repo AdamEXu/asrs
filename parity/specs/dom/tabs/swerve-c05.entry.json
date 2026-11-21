@@ -169,6 +169,9 @@
         }
       },
       {
+        "frames": 1
+      },
+      {
         "capture": [
           "state",
           "commands"
@@ -207,6 +210,9 @@
             "code": "Enter"
           }
         }
+      },
+      {
+        "frames": 1
       },
       {
         "capture": [
@@ -252,6 +258,9 @@
           "type": "click",
           "index": 1
         }
+      },
+      {
+        "frames": 1
       },
       {
         "capture": [

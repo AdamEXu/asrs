@@ -118,6 +118,9 @@
         }
       },
       {
+        "frames": 1
+      },
+      {
         "capture": [
           "state",
           "commands",
