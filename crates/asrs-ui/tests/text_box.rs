@@ -74,6 +74,9 @@ fn records(scale: f32) -> Vec<Record> {
 }
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("text box", "a GPU") {
+        return;
+    }
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("text box: skipped, no headless renderer on this platform");
         return;

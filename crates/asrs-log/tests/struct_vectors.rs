@@ -143,7 +143,7 @@ fn compare(record: &Record, actual: Value) -> Result<(), String> {
     };
     let expected = Value::from_json(expected).map_err(|e| e.to_string())?;
     let expected = Value::object([(key, expected)]);
-    if actual != expected {
+    if !asrs_parity::vectors::values_match(&expected, &actual) {
         return Err(format!("expected {expected:?}\ngot {actual:?}"));
     }
     Ok(())

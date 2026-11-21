@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 use crate::{BackgroundExecutor, Task};
 use std::{
     future::Future,

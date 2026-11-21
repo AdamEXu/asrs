@@ -6,18 +6,23 @@ import { AUTONOMOUS_KEYS, ENABLED_KEYS, UTILITY_KEYS } from "@upstream/shared/lo
 import { toTree } from "./cve1";
 import { Rng } from "./corpus/rng";
 import { generatedFiles } from "./corpus/generated";
+import { PublicLog, publicLogPath, publicLogs } from "./corpus/publicLogs";
 import { HistoricalSession } from "./historical/session";
 import { run } from "./lazyHelpers/mergeCalculatorRun";
 import { runWithLog } from "./logRun";
 
 // Emits `oracle:mergeCalculatorRun` ground truth for asrs_log::log::merge_calculator:
 //   genMergeCalculator <count> <seed>
+//     corpus B's merge/* cases and the scripted and random cases
+//   genMergeCalculator public
+//     the public.toml merge pairs, for a local spec since those logs may not be redistributed
+//   Each line is
 //     {"fn":"oracle:mergeCalculatorRun","args":[<name>,<target>,<source>],"ok":<offset>}
 //   <target> and <source> are the logs' toSerialized() dumps, so the run rebuilds
 //   both through Log.fromSerialized before calling the real getMergeOffset.
 // Pairs come from corpus B's merge/* cases (full serialized logs, decoded by the
-// real historical pipeline), the public.toml merge pair (reduced serialized logs,
-// see below) and scripted Log writes covering the constants' edges.
+// real historical pipeline), scripted Log writes covering the constants' edges and, in
+// public mode, the public.toml merge pairs (reduced serialized logs, see below).
 
 const [countArg, seedArg] = process.argv.slice(2);
 const count = Number(countArg);
@@ -84,58 +89,17 @@ function reduced(serialized: any): any {
   return { ...serialized, fields };
 }
 
-interface PublicLog {
-  name: string;
-  file: string;
-  sha256: string;
-  size: number;
-  merge?: string;
-}
-
-function publicLogs(): PublicLog[] {
-  const text = fs.readFileSync(path.join(root, "parity/corpus/public.toml"), "utf8");
-  const logs: PublicLog[] = [];
-  let current: { [key: string]: string | number } | null = null;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "[[log]]") {
-      current = {};
-      logs.push(current as unknown as PublicLog);
-    } else if (current !== null) {
-      const m = /^([a-z0-9_]+) = ("(?:[^"\\]|\\.)*"|-?[0-9]+)$/.exec(trimmed);
-      if (m !== null) {
-        current[m[1]] = m[2].startsWith('"') ? (JSON.parse(m[2]) as string) : Number(m[2]);
-      }
-    }
-  }
-  return logs;
-}
-
-function publicLogsDir(): string {
-  let cache = process.env.ASRS_CACHE;
-  if (cache === undefined) {
-    const target = path.join(root, "target");
-    try {
-      cache = path.join(path.dirname(fs.realpathSync(target)), "cache");
-    } catch {
-      cache = path.join(target, "cache");
-    }
-  }
-  return path.join(cache, "public-logs");
-}
-
 async function publicPairs() {
-  const dir = publicLogsDir();
   const groups = new Map<string, PublicLog[]>();
-  for (const log of publicLogs()) {
+  for (const log of publicLogs(root)) {
     if (log.merge === undefined) continue;
     const group = groups.get(log.merge) ?? [];
     group.push(log);
     groups.set(log.merge, group);
   }
   for (const [merge, logs] of [...groups.entries()].sort()) {
-    const a = reduced(await decode(path.join(dir, logs[0].file)));
-    const b = reduced(await decode(path.join(dir, logs[1].file)));
+    const a = reduced(await decode(publicLogPath(root, logs[0])));
+    const b = reduced(await decode(publicLogPath(root, logs[1])));
     out(`public/${merge}`, a, b);
     out(`public/${merge}-reversed`, b, a);
   }
@@ -296,8 +260,15 @@ function randomCases() {
 }
 
 async function main() {
+  if (countArg === "public" && seedArg === undefined) {
+    await publicPairs();
+    return;
+  }
+  if (!Number.isInteger(count) || !Number.isFinite(seed)) {
+    console.error("usage: genMergeCalculator <count> <seed> | public");
+    process.exit(2);
+  }
   await corpusPairs();
-  await publicPairs();
   scriptedCases();
   randomCases();
 }

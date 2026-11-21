@@ -268,6 +268,9 @@ fn check_dirty_and_drop(rig: &mut Rig) {
 }
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("canvas view", "a GPU") {
+        return;
+    }
     if !cfg!(target_os = "macos") {
         println!("canvas view: skipped, needs the macOS text backend and headless renderer");
         return;

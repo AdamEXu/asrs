@@ -121,6 +121,9 @@ fn check(appearance: Appearance, scale: f32) -> usize {
 }
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("icon capture", "a GPU") {
+        return;
+    }
     let mut total = 0;
     for appearance in [Appearance::Light, Appearance::Dark] {
         for scale in [1.0, 2.0] {

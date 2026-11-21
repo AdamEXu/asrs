@@ -6,8 +6,8 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::{Response, diff, vectors};
 
 use crate::Result;
-use crate::corpus;
 use crate::oracle::{self, Paths};
+use crate::{corpus, public};
 
 const MANIFEST: &str = "MANIFEST.json";
 const FN_SPEC: &str = ".jsonl";
@@ -18,6 +18,11 @@ const SESSION_SPEC: &str = ".session.json";
 const SESSION_ENTRY: &str = "liveSession";
 /// Names the spec file for an entry run, so an entry can read its fixture from the spec itself.
 const SPEC_VARIABLE: &str = "ASRS_ORACLE_SPEC";
+/// Set to `1` for a local spec's run; the oracle reads logs without a redistribution license
+/// only then.
+const LOCAL_VARIABLE: &str = "ASRS_ORACLE_LOCAL";
+/// Local vectors live in `$ASRS_CACHE/vectors`, next to the public logs they come from.
+const LOCAL_VECTORS: &str = "vectors";
 const REGENERATE: &str = "regenerate with `cargo xtask oracle gen` and commit the result";
 
 pub(crate) fn specs_dir(root: &Path) -> PathBuf {
@@ -41,6 +46,9 @@ struct Spec {
     kind: Kind,
     zones: Option<Vec<String>>,
     platforms: Option<Vec<String>>,
+    /// Derived from public logs without a redistribution license, so generated into
+    /// `$ASRS_CACHE/vectors` and never committed.
+    local: bool,
 }
 
 impl Spec {
@@ -137,17 +145,37 @@ struct Current {
     environment: Json,
 }
 
+/// Where vectors are written: `parity/vectors` for committed ones, `$ASRS_CACHE/vectors` for
+/// local ones (derived from public logs without a redistribution license).
+struct Store {
+    dir: PathBuf,
+    manifest: Json,
+    dirty: bool,
+}
+
+impl Store {
+    fn open(dir: PathBuf) -> Result<Self> {
+        let manifest = read_manifest(&dir)?;
+        Ok(Store {
+            dir,
+            manifest,
+            dirty: false,
+        })
+    }
+}
+
 pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     let check = args.iter().any(|a| a == "--check");
     let stale_only = args.iter().any(|a| a == "--stale");
+    let local_only = args.iter().any(|a| a == "--local");
     if let Some(flag) = args
         .iter()
-        .find(|a| a.starts_with("--") && *a != "--check" && *a != "--stale")
+        .find(|a| a.starts_with("--") && !["--check", "--stale", "--local"].contains(&a.as_str()))
     {
         return Err(format!("oracle gen: unknown option {flag}"));
     }
-    if check && stale_only {
-        return Err("oracle gen: --check and --stale cannot be combined".to_owned());
+    if check && (stale_only || local_only) {
+        return Err("oracle gen: --check cannot be combined with --stale or --local".to_owned());
     }
     let wanted: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
     let specs = discover(&specs_dir(&paths.root))?;
@@ -168,19 +196,44 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
         }
     }
     let every = wanted.is_empty();
-    let full = every && !stale_only;
-    let selected: Vec<&Vector<'_>> = all
+    let full = every && !stale_only && !local_only;
+    let is_wanted = |v: &Vector<'_>| wanted.iter().any(|w| **w == v.id || **w == v.spec.id);
+    let mut selected: Vec<&Vector<'_>> = all
         .iter()
-        .filter(|v| every || wanted.iter().any(|w| **w == v.id || **w == v.spec.id))
+        .filter(|v| (every || is_wanted(v)) && (!local_only || v.spec.local))
         .collect();
+    if check {
+        if let Some(v) = selected.iter().find(|v| v.spec.local && is_wanted(v)) {
+            return Err(format!(
+                "oracle gen --check: {} is a local vector; --check covers committed vectors only",
+                v.id
+            ));
+        }
+        let local = selected.iter().filter(|v| v.spec.local).count();
+        if local > 0 {
+            eprintln!("  {local} local vectors are not committed and not checked");
+        }
+        selected.retain(|v| !v.spec.local);
+    }
+    let missing_logs = public::missing_local_logs(paths)?;
+    let mut local_skipped = false;
+    if !missing_logs.is_empty() && selected.iter().any(|v| v.spec.local) {
+        let fetch = format!(
+            "the public logs {} are not in {}; run `cargo xtask corpus fetch`",
+            missing_logs.join(", "),
+            paths.cache.join("public-logs").display()
+        );
+        if local_only || selected.iter().any(|v| v.spec.local && is_wanted(v)) {
+            return Err(format!("oracle gen: local vectors need {fetch}"));
+        }
+        eprintln!("warning: skipping the local vectors: {fetch}");
+        selected.retain(|v| !v.spec.local);
+        local_skipped = true;
+    }
     if selected.is_empty() {
         return Err("oracle gen: no specs under parity/specs".to_owned());
     }
-    if !check
-        && let Some(v) = selected
-            .iter()
-            .find(|v| v.is_foreign() && wanted.iter().any(|w| **w == v.id))
-    {
+    if !check && let Some(v) = selected.iter().find(|v| v.is_foreign() && is_wanted(v)) {
         return Err(format!(
             "oracle gen: {} can only be generated on {}; run `cargo xtask host <name> gen {}` from the dev machine",
             v.id,
@@ -195,10 +248,13 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
         electron: oracle::ELECTRON_VERSION.to_owned(),
         environment: oracle::environment_policy(),
     };
-    let vectors_dir = paths.root.join("parity/vectors");
-    let mut manifest = read_manifest(&vectors_dir)?;
-    if !check && !full {
-        let mismatched = header_mismatches(&manifest, &current);
+    let mut stores = [
+        Store::open(paths.root.join("parity/vectors"))?,
+        Store::open(paths.cache.join(LOCAL_VECTORS))?,
+    ];
+    let store_of = |v: &Vector<'_>| usize::from(v.spec.local);
+    if !check && !full && selected.iter().any(|v| !v.spec.local) {
+        let mismatched = header_mismatches(&stores[0].manifest, &current);
         if !mismatched.is_empty() {
             return Err(format!(
                 "oracle gen: the manifest was generated under a different {}; regenerate every vector with `cargo xtask oracle gen` (no ids)",
@@ -218,16 +274,23 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     if check || stale_only {
         let mut expected = Vec::new();
         for (vector, generator) in &jobs {
-            expected.push(expected_entry(paths, &vectors_dir, vector, generator)?);
+            let dir = &stores[store_of(vector)].dir;
+            expected.push(expected_entry(paths, dir, vector, generator)?);
         }
         if stale_only {
-            let mut is_stale = expected.iter().map(|want| {
-                !stale_entries(&manifest, &current, std::slice::from_ref(want), false).is_empty()
-            });
-            jobs.retain(|_| is_stale.next().expect("one expectation per vector"));
+            let keep: Vec<bool> = jobs
+                .iter()
+                .zip(&expected)
+                .map(|((vector, _), want)| {
+                    let manifest = &stores[store_of(vector)].manifest;
+                    !stale_entries(manifest, &current, std::slice::from_ref(want), false).is_empty()
+                })
+                .collect();
+            let mut keep = keep.into_iter();
+            jobs.retain(|_| keep.next().expect("one expectation per vector"));
             eprintln!("  {} stale vectors", jobs.len());
         } else {
-            let stale = stale_entries(&manifest, &current, &expected, full);
+            let stale = stale_entries(&stores[0].manifest, &current, &expected, full);
             if !stale.is_empty() {
                 return Err(format!(
                     "oracle gen --check: committed vectors are stale ({} problems, oracle not run):\n  {}\n{REGENERATE}",
@@ -259,7 +322,8 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
             let platform = vector.platform.as_deref().unwrap_or_default();
             if check {
                 eprintln!("==> {}: content is checked on {platform} only", vector.id);
-            } else if manifest
+            } else if stores[0]
+                .manifest
                 .get("vectors")
                 .and_then(|v| v.get(&vector.id))
                 .and_then(|e| string_field(e, "generator"))
@@ -273,11 +337,16 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
             }
             continue;
         }
-        eprintln!("==> {} ({})", vector.id, vector.zone);
+        eprintln!(
+            "==> {} ({}{})",
+            vector.id,
+            vector.zone,
+            if vector.spec.local { ", local" } else { "" }
+        );
         let text = run_vector(paths, vector)?;
         let cases = text.lines().count();
         if check {
-            let committed = vectors::vector_path(&vectors_dir, &vector.id)
+            let committed = vectors::vector_path(&stores[0].dir, &vector.id)
                 .ok_or_else(|| format!("{}: no committed vector", vector.id))
                 .and_then(|p| vectors::read_text(&p))?;
             match diff::report_jsonl(&committed, &text, 3, diff::report_lines) {
@@ -289,16 +358,20 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
             }
             continue;
         }
-        let out = vectors_dir.join(format!("{}.jsonl.zst", vector.id));
+        if vector.spec.local {
+            remove_vector(&mut stores[0], &vector.id)?;
+        }
+        let store = &mut stores[store_of(vector)];
+        let out = store.dir.join(format!("{}.jsonl.zst", vector.id));
         fs::create_dir_all(out.parent().expect("vector path has a parent"))
             .map_err(|e| e.to_string())?;
         fs::write(&out, vectors::compress(&text)).map_err(|e| format!("{}: {e}", out.display()))?;
-        let plain = vectors_dir.join(format!("{}.jsonl", vector.id));
+        let plain = store.dir.join(format!("{}.jsonl", vector.id));
         if plain.exists() {
             fs::remove_file(&plain).map_err(|e| format!("{}: {e}", plain.display()))?;
         }
         set_entry(
-            &mut manifest,
+            &mut store.manifest,
             &vector.id,
             Json::object([
                 ("cases", Json::Number(cases as f64)),
@@ -312,6 +385,7 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
                 ("generatedOn", Json::string(&oracle::host_tag())),
             ]),
         );
+        store.dirty = true;
         eprintln!(
             "  {cases} cases -> {}",
             out.strip_prefix(&paths.root).unwrap_or(&out).display()
@@ -327,9 +401,25 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
         };
     }
     if every {
-        remove_orphans(&mut manifest, &vectors_dir, &all)?;
+        for (i, store) in stores.iter_mut().enumerate() {
+            let local = i == 1;
+            if (local && local_skipped) || (!local && local_only) {
+                continue;
+            }
+            let ids: Vec<&str> = all
+                .iter()
+                .filter(|v| v.spec.local == local)
+                .map(|v| v.id.as_str())
+                .collect();
+            remove_orphans(store, &ids)?;
+        }
     }
-    write_manifest(&vectors_dir, &install, manifest)?;
+    for (i, store) in stores.into_iter().enumerate() {
+        if (i == 0 && !local_only) || store.dirty {
+            fs::create_dir_all(&store.dir).map_err(|e| format!("{}: {e}", store.dir.display()))?;
+            write_manifest(&store.dir, &install, store.manifest)?;
+        }
+    }
     if !foreign_stale.is_empty() {
         eprintln!(
             "warning: these platform vectors are stale and must be regenerated on their host:\n  {}",
@@ -617,23 +707,33 @@ fn stale_entries(
     out
 }
 
-fn remove_orphans(manifest: &mut Json, dir: &Path, all: &[Vector<'_>]) -> Result {
-    let Some(Json::Object(entries)) = manifest.get("vectors").cloned() else {
+fn remove_orphans(store: &mut Store, ids: &[&str]) -> Result {
+    let Some(Json::Object(entries)) = store.manifest.get("vectors").cloned() else {
         return Ok(());
     };
-    let mut kept = Vec::new();
-    for (key, value) in entries {
+    for (key, _) in entries {
         let id = key.to_string_lossy();
-        if all.iter().any(|v| v.id == id) {
-            kept.push((key, value));
-            continue;
-        }
-        eprintln!("  removing {id}: no spec produces it");
-        if let Some(path) = vectors::vector_path(dir, &id) {
-            fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if !ids.contains(&id.as_str()) {
+            eprintln!("  removing {id}: no spec produces it here");
+            remove_vector(store, &id)?;
         }
     }
-    set_field(manifest, "vectors", Json::Object(kept));
+    Ok(())
+}
+
+/// Deletes vector `id`'s file and manifest entry from `store`, if it has them.
+fn remove_vector(store: &mut Store, id: &str) -> Result {
+    if let Some(path) = vectors::vector_path(&store.dir, id) {
+        fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        store.dirty = true;
+    }
+    if let Some(Json::Object(mut entries)) = store.manifest.get("vectors").cloned()
+        && entries.iter().any(|(k, _)| k.eq_str(id))
+    {
+        entries.retain(|(k, _)| !k.eq_str(id));
+        set_field(&mut store.manifest, "vectors", Json::Object(entries));
+        store.dirty = true;
+    }
     Ok(())
 }
 
@@ -666,6 +766,7 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 id: id.to_owned(),
                 zones: None,
                 platforms: None,
+                local: false,
                 kind: Kind::Entry {
                     entry: SESSION_ENTRY.to_owned(),
                     args: vec![path.to_string_lossy().into_owned()],
@@ -695,10 +796,22 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 .map(|input| dir.join(input))
                 .collect();
             let (zones, platforms) = variants(&path, &json)?;
+            let local = match json.get("local") {
+                None => false,
+                Some(Json::Bool(local)) => *local,
+                Some(_) => return Err(format!("{}: \"local\" must be a boolean", path.display())),
+            };
+            if local && platforms.is_some() {
+                return Err(format!(
+                    "{}: \"local\" and \"platforms\" cannot be combined",
+                    path.display()
+                ));
+            }
             found.push(Spec {
                 id: id.to_owned(),
                 zones,
                 platforms,
+                local,
                 kind: Kind::Entry {
                     entry,
                     args,
@@ -724,6 +837,7 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 id: id.to_owned(),
                 zones,
                 platforms,
+                local: false,
                 kind: Kind::Fn {
                     requests: path.parent().expect("spec has a directory").join(requests),
                 },
@@ -734,6 +848,7 @@ fn visit(base: &Path, dir: &Path, found: &mut Vec<Spec>) -> Result {
                 id: id.to_owned(),
                 zones: None,
                 platforms: None,
+                local: false,
                 kind: Kind::Fn {
                     requests: path.clone(),
                 },
@@ -815,6 +930,7 @@ fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
                 oracle::oracle_command_in(paths, entry, zone)?
                     .args(args)
                     .env(SPEC_VARIABLE, &vector.spec.path)
+                    .env(LOCAL_VARIABLE, if vector.spec.local { "1" } else { "0" })
                     .current_dir(&paths.root),
                 Vec::new(),
             )?;
@@ -1069,6 +1185,7 @@ mod tests {
             },
             zones,
             platforms,
+            local: false,
         };
         let ids: Vec<String> = spec.vectors().into_iter().map(|v| v.id).collect();
         assert_eq!(ids, ["js/x/macos-aarch64", "js/x/windows-aarch64"]);

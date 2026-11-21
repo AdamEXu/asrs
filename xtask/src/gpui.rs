@@ -467,9 +467,9 @@ fn release_artifacts(features: &[&str]) -> Result<Vec<PathBuf>> {
     }
     if !files
         .iter()
-        .any(|p| p.file_stem().is_some_and(|s| s == "advantagescope"))
+        .any(|p| p.file_stem().is_some_and(|s| s == "asrs"))
     {
-        return Err("cargo build reported no advantagescope binary".to_owned());
+        return Err("cargo build reported no asrs binary".to_owned());
     }
     Ok(files)
 }

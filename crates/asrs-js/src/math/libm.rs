@@ -9,7 +9,7 @@
 //! 3. next to the running executable, which is where releases ship it.
 //!
 //! The development copy comes first because cargo also puts its own build of the crate next
-//! to `asrs-cli` and `advantagescope` in `target/<profile>`, and that copy goes stale whenever
+//! to `asrs-cli` and `asrs` in `target/<profile>`, and that copy goes stale whenever
 //! the crate changes without a workspace build.
 
 #![allow(unsafe_code)]

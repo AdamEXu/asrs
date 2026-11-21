@@ -123,6 +123,9 @@ fn percentile(sorted: &[Duration], q: f64) -> Duration {
 }
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("text scroll", "a GPU") {
+        return;
+    }
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("text scroll: skipped, no headless renderer on this platform");
         return;

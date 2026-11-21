@@ -6,7 +6,7 @@ use crate::{Result, libm, licenses, workspace_root};
 
 const USAGE: &str = "usage: cargo xtask bundle [--target <triple>]
 
-Builds a release directory in target/bundle/<triple or host>/: the advantagescope binary
+Builds a release directory in target/bundle/<triple or host>/: the asrs binary
 (built with ASRS_LIBM_LGPL_SHIP=1, so it only loads the library next to it or from
 ASRS_LIBM_LGPL), the asrs-libm-lgpl shared library, and the `cargo xtask licenses` bundle
 including the library's LGPL text and source. Needs cargo-about.";
@@ -43,9 +43,9 @@ pub fn run(args: &[String]) -> Result {
     }
     release.push("release");
     let exe = if target.map_or(cfg!(windows), |t| t.contains("windows")) {
-        "advantagescope.exe"
+        "asrs.exe"
     } else {
-        "advantagescope"
+        "asrs"
     };
     let dest = root.join("target/bundle").join(target.unwrap_or("host"));
     if dest.exists() {

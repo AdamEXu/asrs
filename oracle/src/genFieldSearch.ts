@@ -1,72 +1,33 @@
 import "./shims";
 import Fuse from "fuse.js";
-import { createHash } from "node:crypto";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { WPILOGDecoder } from "@upstream/hub/dataSources/wpilog/WPILOGDecoder";
 import Log from "@upstream/shared/log/Log";
 import LoggableType from "@upstream/shared/log/LoggableType";
 import { searchFields } from "@upstream/shared/log/LogUtil";
 import { numberToBits } from "./cve1";
+import { publicLogs, readPublicLog } from "./corpus/publicLogs";
 import { Rng } from "./corpus/rng";
 
 // Emits ground truth for LogUtil.searchFields (Fuse.js 7.0.0), unit L10.
-//   genFieldSearch <queries per set> <seed> <public log name>...
-//     For each key set (the named public WPILOGs, then one synthetic set):
+//   genFieldSearch synthetic <queries per set> <seed>
+//     The synthetic key set, then two small sets, "empty" and "blank" (only whitespace keys).
+//   genFieldSearch public <queries per set> <seed> <public log name>...
+//     One key set per named public WPILOG: the entry names of the log's start records in
+//     file order (first occurrence), read with upstream's WPILOGDecoder from the public-logs
+//     cache. A local spec, since those logs may not be redistributed.
+//   For each key set:
 //       {"case":"keys/<set>","in":[name...],"source":{file,sha256}|null,"keys":[key...]}
 //     where "in" is the createBlankField order and "keys" is log.getFieldKeys(); then one line
 //     per query:
 //       {"case":"query/<set>/<n>","q":<query>,"r":[index into keys...],"s":[score bits...]}
 //     with the scores of the same results from a Fuse built with searchFields's options plus
-//     includeScore. Two small sets, "empty" and "blank" (only whitespace keys), come last.
-//     A public set holds the entry names of the log's start records in file order (first
-//     occurrence), read with upstream's WPILOGDecoder from the public-logs cache.
+//     includeScore. Each set draws its queries from its own Rng(seed, set name).
 
 const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n");
 
 const SEARCH_OPTIONS = { findAllMatches: true, ignoreLocation: true };
 
 const PROTO_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype));
-
-interface PublicLog {
-  name: string;
-  file: string;
-  sha256: string;
-  size: number;
-  format: string;
-}
-
-function publicLogs(root: string): PublicLog[] {
-  const text = fs.readFileSync(path.join(root, "parity/corpus/public.toml"), "utf8");
-  const logs: PublicLog[] = [];
-  let current: { [key: string]: string | number } | null = null;
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "[[log]]") {
-      current = {};
-      logs.push(current as unknown as PublicLog);
-    } else if (current !== null) {
-      const m = /^([a-z0-9_]+) = ("(?:[^"\\]|\\.)*"|-?[0-9]+)$/.exec(trimmed);
-      if (m !== null) {
-        current[m[1]] = m[2].startsWith('"') ? (JSON.parse(m[2]) as string) : Number(m[2]);
-      }
-    }
-  }
-  return logs;
-}
-
-function publicLogsDir(root: string): string {
-  let cache = process.env.ASRS_CACHE;
-  if (cache === undefined) {
-    const target = path.join(root, "target");
-    try {
-      cache = path.join(path.dirname(fs.realpathSync(target)), "cache");
-    } catch {
-      cache = path.join(target, "cache");
-    }
-  }
-  return path.join(cache, "public-logs");
-}
 
 function entryNames(data: Uint8Array): string[] {
   const names: string[] = [];
@@ -272,26 +233,28 @@ function emitSet(
   }
 }
 
-const [countArg, seedArg, ...names] = process.argv.slice(2);
+const USAGE = "usage: genFieldSearch synthetic <queries per set> <seed> | public <queries per set> <seed> <public log name>...";
+const [mode, countArg, seedArg, ...names] = process.argv.slice(2);
 const count = Number(countArg);
 const seed = Number(seedArg);
-if (!Number.isInteger(count) || !Number.isFinite(seed) || names.length === 0) {
-  console.error("usage: genFieldSearch <queries per set> <seed> <public log name>...");
+const valid =
+  Number.isInteger(count) &&
+  Number.isFinite(seed) &&
+  ((mode === "synthetic" && names.length === 0) || (mode === "public" && names.length > 0));
+if (!valid) {
+  console.error(USAGE);
   process.exit(2);
 }
-const root = process.cwd();
-const logs = publicLogs(root);
-for (const name of names) {
-  const log = logs.find((l) => l.name === name && l.format === "wpilog");
-  if (log === undefined) throw new Error(`${name}: no such wpilog in public.toml`);
-  const file = path.join(publicLogsDir(root), log.file);
-  const data = new Uint8Array(fs.readFileSync(file));
-  const sha256 = createHash("sha256").update(data).digest("hex");
-  if (sha256 !== log.sha256 || data.length !== log.size) {
-    throw new Error(`${file}: sha256 or size differs from public.toml`);
+if (mode === "public") {
+  const root = process.cwd();
+  const logs = publicLogs(root);
+  for (const name of names) {
+    const log = logs.find((l) => l.name === name && l.format === "wpilog");
+    if (log === undefined) throw new Error(`${name}: no such wpilog in public.toml`);
+    emitSet(name, entryNames(readPublicLog(root, log)), { file: log.file, sha256: log.sha256 }, count, seed);
   }
-  emitSet(name, entryNames(data), { file: log.file, sha256 }, count, seed);
+} else {
+  emitSet("synthetic", syntheticKeys(new Rng(seed, "synthetic-keys")), null, count, seed);
+  emitSet("empty", [], null, Math.min(count, 40), seed);
+  emitSet("blank", ["", " ", "\t", "\n", "\u00a0", "\u3000", "\ufeff", "\u2028"], null, Math.min(count, 40), seed);
 }
-emitSet("synthetic", syntheticKeys(new Rng(seed, "synthetic-keys")), null, count, seed);
-emitSet("empty", [], null, Math.min(count, 40), seed);
-emitSet("blank", ["", " ", "\t", "\n", "\u00a0", "\u3000", "\ufeff", "\u2028"], null, Math.min(count, 40), seed);

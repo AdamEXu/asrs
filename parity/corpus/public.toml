@@ -3,8 +3,13 @@
 # URLs are pinned to a commit so the bytes cannot change under the hash.
 #
 # Fields: name (unique id), file (path under the cache directory; files of a .dslog/.dsevents pair
-# share a base name), url, sha256, size (bytes), format, source, license.
+# share a base name), url, sha256, size (bytes), format, source, license, redistributable.
 # Optional: merge (logs with the same value record the same match and form a merge pair).
+#
+# redistributable says whether the log's license lets asrs commit data derived from it. Vectors
+# derived from a log with redistributable = false come from local specs ("local": true) and are
+# generated into $ASRS_CACHE/vectors by `cargo xtask oracle gen --local`, never into
+# parity/vectors; the oracle refuses to read such a log for any other spec.
 
 [[log]]
 name = "rar1741-akit-q21"
@@ -14,7 +19,8 @@ sha256 = "bd45830dc93b8e03c0e85c19024d206447b7664f94c3b2063c5fbe0b0582d849"
 size = 11010048
 format = "wpilog"
 source = "FRC 1741 Red Alert, 2025 Kokomo qualification 21, AdvantageKit"
-license = "none stated; fetched at test time only"
+license = "none stated"
+redistributable = false
 merge = "kokomo-q21"
 
 [[log]]
@@ -25,7 +31,8 @@ sha256 = "cd19a6c312c6e7f9ff052a57f0a84ceb838d9385a75f15d44ca94af31242afaf"
 size = 43687633
 format = "wpilog"
 source = "FRC 1741 Red Alert, 2025 Kokomo qualification 21, WPILib DataLogManager with FMS match name"
-license = "none stated; fetched at test time only"
+license = "none stated"
+redistributable = false
 merge = "kokomo-q21"
 
 [[log]]
@@ -36,7 +43,8 @@ sha256 = "7f1a2abb864530538b30de6e2ac2f90c672edfd48387d2b4237101c3e7a0d8a0"
 size = 11337728
 format = "wpilog"
 source = "FRC 1741 Red Alert, 2025 Kokomo qualification 43, AdvantageKit"
-license = "none stated; fetched at test time only"
+license = "none stated"
+redistributable = false
 
 [[log]]
 name = "rar1741-wpilib-practice"
@@ -46,7 +54,8 @@ sha256 = "0e6f2bfd7fe8152c215d6055d50faefee114adc1e650891af286288d76d8ef40"
 size = 1162768
 format = "wpilog"
 source = "FRC 1741 Red Alert, 2025 Kokomo, short WPILib DataLogManager log without a match name"
-license = "none stated; fetched at test time only"
+license = "none stated"
+redistributable = false
 
 [[log]]
 name = "rar1741-wpilib-tbd"
@@ -56,7 +65,8 @@ sha256 = "6d1379cbd3eb18f7e0cd0473883a867d0defd24bcda5f4883346fffbd4a4d424"
 size = 317540
 format = "wpilog"
 source = "FRC 1741 Red Alert, 2025 Kokomo, WPILib log written before the clock was set (FRC_TBD name)"
-license = "none stated; fetched at test time only"
+license = "none stated"
+redistributable = false
 
 [[log]]
 name = "dslog-reader-2022-02-25"
@@ -67,6 +77,7 @@ size = 496802
 format = "dslog"
 source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
 license = "MIT"
+redistributable = true
 
 [[log]]
 name = "dslog-reader-2022-02-25-events"
@@ -77,6 +88,7 @@ size = 282805
 format = "dsevents"
 source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
 license = "MIT"
+redistributable = true
 
 [[log]]
 name = "dslog-reader-2022-02-27"
@@ -87,6 +99,7 @@ size = 234926
 format = "dslog"
 source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
 license = "MIT"
+redistributable = true
 
 [[log]]
 name = "dslog-reader-2022-02-27-events"
@@ -97,6 +110,7 @@ size = 95539
 format = "dsevents"
 source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022"
 license = "MIT"
+redistributable = true
 
 [[log]]
 name = "dslog-reader-2022-02-28"
@@ -107,6 +121,7 @@ size = 3100
 format = "dslog"
 source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022, a short log with no .dsevents"
 license = "MIT"
+redistributable = true
 
 [[log]]
 name = "dslog-reader-2022-03-19"
@@ -117,3 +132,4 @@ size = 604566
 format = "dslog"
 source = "orangelight/DSLOG-Reader test files, FRC Driver Station 2022, no .dsevents"
 license = "MIT"
+redistributable = true
