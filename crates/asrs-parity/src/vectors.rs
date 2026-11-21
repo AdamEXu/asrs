@@ -1,12 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::ci::{skip_in_ci, skip_notice};
 use crate::cve1::{DecodeError, Value};
 use crate::diff;
 use crate::json::{self, Json};
 use crate::protocol::{Request, Response};
 
 pub const VECTORS_ENV: &str = "ASRS_PARITY_VECTORS";
+const X86_64_PLATFORM_VECTORS_ISSUE: &str = "https://github.com/AdamEXu/asrs/issues/258";
 const ZSTD_LEVEL: i32 = 19;
 const SHOWN_FAILURES: usize = 5;
 
@@ -23,6 +25,12 @@ pub fn vectors_dir() -> PathBuf {
     std::env::var_os(VECTORS_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace_root().join("parity/vectors"))
+}
+
+/// Where vectors derived from public logs without a redistribution license live:
+/// `$ASRS_CACHE/vectors`, next to the downloaded logs. They are never committed.
+pub fn local_vectors_dir() -> PathBuf {
+    crate::cache::cache_dir().0.join("vectors")
 }
 
 /// The vector of platform-dependent spec `spec` for the platform this test runs on, named
@@ -105,7 +113,35 @@ pub fn load(id: &str) -> Result<Vec<Record>, String> {
             dir.display()
         )
     })?;
-    parse_records(&read_text(&path)?).map_err(|e| format!("{}: {e}", path.display()))
+    load_file(&path)
+}
+
+fn load_file(path: &Path) -> Result<Vec<Record>, String> {
+    parse_records(&read_text(path)?).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Local vector `id` from [`local_vectors_dir`], or `None` after a skip notice when it has not
+/// been generated on this machine or the run is under `ASRS_CI=1`.
+pub fn load_local(id: &str) -> Option<Vec<Record>> {
+    if skip_in_ci(
+        id,
+        "a local vector generated from the downloaded public logs",
+    ) {
+        return None;
+    }
+    let dir = local_vectors_dir();
+    let Some(path) = vector_path(&dir, id) else {
+        skip_notice(
+            id,
+            &format!(
+                "local vector not generated in {}; run `cargo xtask corpus fetch` and then \
+                 `cargo xtask oracle gen --local`",
+                dir.display()
+            ),
+        );
+        return None;
+    };
+    Some(load_file(&path).unwrap_or_else(|e| panic!("{e}")))
 }
 
 /// One `fn` vector: the recorded request and the record it came from.
@@ -138,10 +174,34 @@ impl FnCase<'_> {
 
 /// Runs `f` on every case of `fn` vector `id` and panics with a structured report when any
 /// response differs from the recorded one.
-pub fn check_fn_vectors(id: &str, mut f: impl FnMut(&FnCase<'_>) -> Response) {
-    let records = load(id).unwrap_or_else(|e| panic!("{e}"));
+pub fn check_fn_vectors(id: &str, f: impl FnMut(&FnCase<'_>) -> Response) {
+    check_fn_records(id, &load(id).unwrap_or_else(|e| panic!("{e}")), f);
+}
+
+/// [`check_fn_vectors`] for a local vector; skips when [`load_local`] finds none.
+pub fn check_local_fn_vectors(id: &str, f: impl FnMut(&FnCase<'_>) -> Response) {
+    if let Some(records) = load_local(id) {
+        check_fn_records(id, &records, f);
+    }
+}
+
+/// [`check_fn_vectors`] for this platform's vector of platform-dependent spec `spec`. x86_64
+/// hosts have no generated platform vectors yet, so there a missing one is skipped.
+pub fn check_platform_fn_vectors(spec: &str, f: impl FnMut(&FnCase<'_>) -> Response) {
+    let id = platform_vector(spec);
+    if std::env::consts::ARCH == "x86_64" && vector_path(&vectors_dir(), &id).is_none() {
+        skip_notice(
+            &id,
+            &format!("no x86_64 platform vectors yet ({X86_64_PLATFORM_VECTORS_ISSUE})"),
+        );
+        return;
+    }
+    check_fn_vectors(&id, f);
+}
+
+fn check_fn_records(id: &str, records: &[Record], mut f: impl FnMut(&FnCase<'_>) -> Response) {
     let mut failures = Vec::new();
-    for record in &records {
+    for record in records {
         let request = Request::from_json(&record.json)
             .unwrap_or_else(|e| panic!("{id} line {}: bad request: {e}", record.line));
         let expected = Response::from_record(&record.json)
@@ -169,8 +229,22 @@ pub fn check_fn_vectors(id: &str, mut f: impl FnMut(&FnCase<'_>) -> Response) {
 }
 
 /// Runs `f` on every record of vector `id`; `Err` marks the record as failed.
-pub fn check_records(id: &str, mut f: impl FnMut(&Record) -> Result<(), String>) {
-    let records = load(id).unwrap_or_else(|e| panic!("{e}"));
+pub fn check_records(id: &str, f: impl FnMut(&Record) -> Result<(), String>) {
+    check_record_list(id, &load(id).unwrap_or_else(|e| panic!("{e}")), f);
+}
+
+/// [`check_records`] for a local vector; skips when [`load_local`] finds none.
+pub fn check_local_records(id: &str, f: impl FnMut(&Record) -> Result<(), String>) {
+    if let Some(records) = load_local(id) {
+        check_record_list(id, &records, f);
+    }
+}
+
+fn check_record_list(
+    id: &str,
+    records: &[Record],
+    mut f: impl FnMut(&Record) -> Result<(), String>,
+) {
     let failures: Vec<String> = records
         .iter()
         .filter_map(|r| {

@@ -2,7 +2,7 @@ use std::fs;
 
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
-use asrs_parity::vectors::Record;
+use asrs_parity::vectors::{Record, check_local_records};
 use asrs_parity::{diff, record_vectors};
 
 #[path = "../../asrs-cli/src/wpilog.rs"]
@@ -93,7 +93,12 @@ fn compare_blocks(actual: &Json, expected: &Json, case: &str) -> Result<(), Stri
     ))
 }
 
-record_vectors!(public, "wpilog/public", |record: &Record| {
+#[test]
+fn public() {
+    check_local_records("wpilog/public", public_record);
+}
+
+fn public_record(record: &Record) -> Result<(), String> {
     let case = record.string("case").unwrap_or_default();
     let info = record
         .field("in")
@@ -119,9 +124,14 @@ record_vectors!(public, "wpilog/public", |record: &Record| {
         compare_blocks(&actual, expected_blocks, &case)?;
     }
     Ok(())
-});
+}
 
-record_vectors!(search_key_sets, "log/search", |record: &Record| {
+#[test]
+fn search_key_sets() {
+    check_local_records("log/search-public", search_key_set);
+}
+
+fn search_key_set(record: &Record) -> Result<(), String> {
     let case = record.string("case").unwrap_or_default();
     let Some(file) = record
         .field("source")
@@ -170,4 +180,4 @@ record_vectors!(search_key_sets, "log/search", |record: &Record| {
         ));
     }
     Ok(())
-});
+}

@@ -77,10 +77,7 @@ fn struct_fn() {
 
 #[test]
 fn util_platform_nan() {
-    check_fn_vectors(
-        &asrs_parity::vectors::platform_vector("log/util-rem"),
-        dispatch,
-    );
+    asrs_parity::vectors::check_platform_fn_vectors("log/util-rem", dispatch);
 }
 
 #[test]

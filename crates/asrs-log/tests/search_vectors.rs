@@ -4,7 +4,7 @@ use asrs_js::string::JsString;
 use asrs_log::log::fuse::Fuse;
 use asrs_log::log::{Log, LoggableType, search_fields};
 use asrs_parity::json::Json;
-use asrs_parity::vectors::{Record, check_records};
+use asrs_parity::vectors::{Record, check_local_records, check_records};
 
 fn js(json: &Json) -> Result<JsString, String> {
     json.as_str()
@@ -60,11 +60,13 @@ fn check_scores(
     Ok(())
 }
 
-#[test]
-fn search_fields_vectors() {
+fn search_queries(
+    check: fn(&str, &mut dyn FnMut(&Record) -> Result<(), String>),
+    id: &str,
+) -> usize {
     let mut sets: HashMap<String, (Log, Vec<JsString>)> = HashMap::new();
     let mut queries = 0usize;
-    check_records("log/search", |record: &Record| {
+    check(id, &mut |record: &Record| {
         let case = record.string("case").unwrap_or_default();
         if let Some(set) = case.strip_prefix("keys/") {
             let mut log = Log::new(false);
@@ -113,5 +115,16 @@ fn search_fields_vectors() {
             expected.get(at).map(|k| show(k)),
         ))
     });
-    assert!(queries >= 8000, "only {queries} queries checked");
+    queries
+}
+
+#[test]
+fn search_fields_vectors() {
+    let queries = search_queries(|id, f| check_records(id, f), "log/search");
+    assert!(queries >= 2000, "only {queries} queries checked");
+}
+
+#[test]
+fn search_fields_public_vectors() {
+    search_queries(|id, f| check_local_records(id, f), "log/search-public");
 }

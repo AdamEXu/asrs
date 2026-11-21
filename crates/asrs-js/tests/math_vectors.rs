@@ -30,11 +30,10 @@ fn dispatch(case: &FnCase<'_>) -> Response {
 
 fn_vectors!(math_functions, "js/math", dispatch);
 fn_vectors!(math_operators, "js/math-ops", dispatch);
-fn_vectors!(
-    math_remainder,
-    &asrs_parity::vectors::platform_vector("js/math-rem"),
-    dispatch
-);
+#[test]
+fn math_remainder() {
+    asrs_parity::vectors::check_platform_fn_vectors("js/math-rem", dispatch);
+}
 
 fn words(hi: u32) -> f64 {
     f64::from_bits(u64::from(hi) << 32)

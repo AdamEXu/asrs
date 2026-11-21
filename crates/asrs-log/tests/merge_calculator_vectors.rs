@@ -60,7 +60,7 @@ mod tabs_console {
     pub const CALLS: &[(&str, crate::functions::Function)] = &[];
 }
 
-use asrs_parity::vectors::check_fn_vectors;
+use asrs_parity::vectors::{check_fn_vectors, check_local_fn_vectors};
 use asrs_parity::{FnCase, Response};
 
 fn dispatch(case: &FnCase<'_>) -> Response {
@@ -83,4 +83,9 @@ fn dispatch(case: &FnCase<'_>) -> Response {
 #[test]
 fn merge_calculator() {
     check_fn_vectors("log/merge-offset", dispatch);
+}
+
+#[test]
+fn merge_calculator_public() {
+    check_local_fn_vectors("log/merge-offset-public", dispatch);
 }
