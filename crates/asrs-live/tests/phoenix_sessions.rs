@@ -230,9 +230,9 @@ impl Driver for PhoenixDriver {
         Ok(())
     }
 
-    fn notify(&mut self, event: NetEvent, env: &mut Env) {
-        let NetEvent::Fetch(event) = event else {
-            return;
+    fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
+        let support::SessionEvent::Net(NetEvent::Fetch(event)) = event else {
+            panic!("unexpected {event:?}");
         };
         for source in &mut self.sources {
             source.on_fetch_event(&event, &mut env.phoenix_cx());
