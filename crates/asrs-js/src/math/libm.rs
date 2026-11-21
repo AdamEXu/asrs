@@ -83,8 +83,9 @@ fn open() -> Result<Libm, String> {
     match paths.iter().find(|p| p.is_file()) {
         Some(path) => open_at(path).map_err(|e| format!("loading {}: {e}", path.display())),
         None => Err(format!(
-            "the asrs-libm-lgpl library ({}) was not found; looked at: {}. Build it with \
-             `cargo xtask libm` or set {PATH_ENV} to its path.",
+            "the asrs-libm-lgpl library ({}) was not found; looked at: {}. Put it next to \
+             the executable (`cargo xtask libm --out <dir>` builds it there) or set \
+             {PATH_ENV} to its path.",
             file_name().to_string_lossy(),
             paths
                 .iter()
