@@ -21,6 +21,14 @@ impl VideoSource {
         VideoSource::TheBlueAlliance,
     ];
 
+    pub fn name(self) -> &'static str {
+        match self {
+            VideoSource::Local => "Local",
+            VideoSource::YouTube => "YouTube",
+            VideoSource::TheBlueAlliance => "TheBlueAlliance",
+        }
+    }
+
     pub fn number(self) -> f64 {
         match self {
             VideoSource::Local => 0.0,
@@ -51,9 +59,10 @@ pub fn tba_match_key(
     let mut key = event_key.clone();
     key.push_str(&JsString::from("_"));
     match match_info.match_type {
-        MatchType::Elimination => {
-            key.push_str(&get_elim_match_string(playoff_type, match_info.match_number)?)
-        }
+        MatchType::Elimination => key.push_str(&get_elim_match_string(
+            playoff_type,
+            match_info.match_number,
+        )?),
         _ => {
             key.push_str(&JsString::from("qm"));
             key.push_str(&JsString::from(number::to_string(match_info.match_number)));

@@ -233,8 +233,9 @@ impl VideoController {
         if self.locked || !self.has_data() || self.playing {
             return;
         }
-        self.slider
-            .set_value(JsString::from(number::to_string(self.slider.number() + delta)));
+        self.slider.set_value(JsString::from(number::to_string(
+            self.slider.number() + delta,
+        )));
     }
 
     /// `skipTime(delta)`: `delta` seconds of frames; re-anchors playback like `input`.
@@ -290,9 +291,7 @@ impl VideoController {
             }
             self.progress_width = JsString::from(format!(
                 "{}%",
-                number::to_string(
-                    num(&self.completed_frames) / num(&self.total_frames) * 100.0
-                )
+                number::to_string(num(&self.completed_frames) / num(&self.total_frames) * 100.0)
             ));
             self.slider.set_max(member_to_string(&self.total_frames)?);
             if !ops::strict_equals(&self.img_folder, &self.last_img_folder) {
@@ -301,14 +300,15 @@ impl VideoController {
                 self.tba_animating = false;
             }
             let auto_end_frame = ops::get(data, "autoEndFrame")?;
-            if num(&self.auto_end_frame) <= 0.0 && num(&auto_end_frame) > 0.0 && !self.locked
+            if num(&self.auto_end_frame) <= 0.0
+                && num(&auto_end_frame) > 0.0
+                && !self.locked
+                && let Some(auto_end_time) = first_disable(cx)
             {
-                if let Some(auto_end_time) = first_disable(cx) {
-                    self.playing = false;
-                    self.locked = true;
-                    self.locked_start_log =
-                        auto_end_time - (num(&auto_end_frame) - 1.0) / num(&self.fps);
-                }
+                self.playing = false;
+                self.locked = true;
+                self.locked_start_log =
+                    auto_end_time - (num(&auto_end_frame) - 1.0) / num(&self.fps);
             }
             self.auto_end_frame = auto_end_frame;
         } else {
@@ -462,9 +462,11 @@ fn member_to_string(value: &JsValue) -> Result<JsString, JsError> {
 /// stringify), else numeric addition.
 fn add(a: &JsValue, b: &JsValue) -> JsValue {
     let prim = |v: &JsValue| match v {
-        JsValue::Object(_) | JsValue::Array(_) | JsValue::Bytes(_) | JsValue::ExtData(..) | JsValue::Date(_) => {
-            JsValue::String(ops::to_string(v))
-        }
+        JsValue::Object(_)
+        | JsValue::Array(_)
+        | JsValue::Bytes(_)
+        | JsValue::ExtData(..)
+        | JsValue::Date(_) => JsValue::String(ops::to_string(v)),
         other => other.clone(),
     };
     let (a, b) = (prim(a), prim(b));

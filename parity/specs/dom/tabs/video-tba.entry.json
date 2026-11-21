@@ -1,0 +1,195 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json",
+    "../logs/match-info.json"
+  ],
+  "fixture": {
+    "seed": 2007,
+    "assets": "../assets/minimal.json",
+    "layout": [
+      {
+        "selector": ".video-source button:nth-of-type(3)",
+        "rect": [
+          10,
+          20,
+          140,
+          36
+        ]
+      }
+    ],
+    "state": {
+      "tabs": {
+        "selected": 0,
+        "tabs": [
+          {
+            "type": 7,
+            "title": "",
+            "controller": null,
+            "controllerUUID": "video-tba",
+            "renderer": null,
+            "controlsHeight": 85
+          }
+        ]
+      },
+      "sidebar": {
+        "width": 300,
+        "expanded": []
+      }
+    },
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "tba-no-key"
+      },
+      {
+        "main": "set-preferences",
+        "data": {
+          "tbaApiKey": "tba-key-1"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "tba-no-match-info"
+      },
+      {
+        "log": "../logs/match-info.json"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "tba-qual"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/DriverStation/MatchType",
+            1,
+            1
+          ]
+        ]
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "tba-practice"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/DriverStation/MatchType",
+            1,
+            3
+          ],
+          [
+            "putNumber",
+            "/DriverStation/MatchNumber",
+            1,
+            12
+          ]
+        ]
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "tba-elim"
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-tba",
+          "imgFolder": "/tba/",
+          "fps": 30,
+          "totalFrames": 300,
+          "completedFrames": 300,
+          "autoEndFrame": 31
+        }
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          9.6
+        ]
+      },
+      {
+        "advance": 32
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "autolock"
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-tba",
+          "imgFolder": "/tba2/",
+          "fps": 60,
+          "totalFrames": 600,
+          "completedFrames": 600,
+          "autoEndFrame": 0
+        }
+      },
+      {
+        "advance": 32
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "fps-change-still-locked"
+      }
+    ]
+  }
+}

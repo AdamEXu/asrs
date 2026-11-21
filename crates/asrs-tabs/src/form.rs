@@ -1,6 +1,7 @@
 //! The form controls upstream controllers keep their settings in, modelled by the strings
 //! their `value` reports.
 
+use asrs_js::math;
 use asrs_js::number;
 use asrs_js::string::JsString;
 
@@ -155,15 +156,14 @@ pub struct RangeInput {
 }
 
 impl RangeInput {
-    /// The `value`, `min` and `max` attributes from markup.
+    /// The `value`, `min` and `max` attributes from markup. jsdom stores the `value`
+    /// attribute as-is; sanitization runs only when the `value` setter is assigned.
     pub fn new(value: &str, min: &str, max: &str) -> RangeInput {
-        let mut input = RangeInput {
-            value: JsString::new(),
+        RangeInput {
+            value: JsString::from(value),
             min: JsString::from(min),
             max: JsString::from(max),
-        };
-        input.set_value(JsString::from(value));
-        input
+        }
     }
 
     pub fn value(&self) -> &JsString {
@@ -176,7 +176,8 @@ impl RangeInput {
         } else {
             self.default_value()
         };
-        self.value = JsString::from(number::to_string(n.clamp(self.minimum(), self.maximum())));
+        let clamped = math::min2(math::max2(n, self.minimum()), self.maximum());
+        self.value = JsString::from(number::to_string(clamped));
     }
 
     /// `input.min = attr` / `input.max = attr`: the attribute stores the raw string and
@@ -216,7 +217,10 @@ impl RangeInput {
 /// is a valid floating-point number, else NaN.
 fn parse_floating_point_number(s: &[u16]) -> f64 {
     let mut i = 0;
-    while s.get(i).is_some_and(|&u| matches!(u, 0x09 | 0x0A | 0x0C | 0x0D | 0x20)) {
+    while s
+        .get(i)
+        .is_some_and(|&u| matches!(u, 0x09 | 0x0A | 0x0C | 0x0D | 0x20))
+    {
         i += 1;
     }
     let start = i;
@@ -247,11 +251,7 @@ fn parse_floating_point_number(s: &[u16]) -> f64 {
             i = j;
         }
     }
-    let text: String = s[start..i]
-        .iter()
-        .map(|&u| char::from_u32(u32::from(u)).unwrap_or('\u{FFFD}'))
-        .collect();
-    text.parse().unwrap_or(f64::NAN)
+    number::parse_float(&s[start..i])
 }
 
 #[cfg(test)]

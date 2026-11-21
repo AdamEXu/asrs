@@ -6,6 +6,8 @@ import jsonfile from "jsonfile";
 import { DEFAULT_PREFS, getLiveModeName, getRobotAddress, mergePreferences } from "@upstream/shared/Preferences";
 import TabType, { getAllTabTypes, getDefaultTabTitle, getTabAccelerator, getTabIcon } from "@upstream/shared/TabType";
 import { SelectionMode } from "@upstream/shared/Selection";
+import VideoSource from "@upstream/shared/VideoSource";
+import { getElimMatchString, MatchType } from "@upstream/shared/MatchInfo";
 import * as buildConstants from "@upstream/shared/buildConstants";
 import { toTree } from "./cve1";
 
@@ -289,9 +291,46 @@ function schemasMode() {
   emit("COPYRIGHT", buildConstants.COPYRIGHT);
 }
 
+// The pure half of getTBAMatchKey once the TBA event is known: `eventKey_qm<n>` for
+// non-elimination matches, `eventKey_<getElimMatchString(playoffType, n)>` otherwise.
+// Sweeps every playoff type and match number, including values that miss the tables.
+function tbaMode() {
+  const emit = (name: string, value: unknown) => out({ name, value: toTree(value) });
+  emit("VideoSource", VideoSource);
+
+  const playoffTypes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, -0, -1, 12, 99, 1.5, NaN, Infinity];
+  const matchNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 36, 37, 42, 43, 47, 48, 49, 60, -0, -1, 1.5, 2 ** 53, 1e21, NaN, Infinity, -Infinity];
+  const record = (eventKey: string, playoffType: number, matchType: number, matchNumber: number) => {
+    const args = toTree([eventKey, playoffType, matchType, matchNumber]);
+    try {
+      const value =
+        matchType === MatchType.Elimination
+          ? eventKey + "_" + getElimMatchString(playoffType, matchNumber)
+          : eventKey + "_qm" + matchNumber.toString();
+      out({ name: "tbaMatchKey", args, value: toTree(value) });
+    } catch (error) {
+      out({ name: "tbaMatchKey", args, throw: (error as Error).name });
+    }
+  };
+
+  for (const eventKey of ["2025mrcmp", "2025txaus", ""]) {
+    for (const playoffType of playoffTypes) {
+      for (const matchNumber of matchNumbers) {
+        record(eventKey, playoffType, MatchType.Elimination, matchNumber);
+      }
+    }
+    for (const matchType of [MatchType.Qualification, MatchType.Practice]) {
+      for (const matchNumber of matchNumbers) {
+        record(eventKey, 0, matchType, matchNumber);
+      }
+    }
+  }
+}
+
 try {
   if (mode === "prefs") prefsMode(Number(countArg));
   else if (mode === "schemas") schemasMode();
+  else if (mode === "tba") tbaMode();
   else throw new Error(`genModel: unknown mode ${mode}`);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });

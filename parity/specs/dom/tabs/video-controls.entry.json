@@ -1,0 +1,348 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 1007,
+    "assets": "../assets/minimal.json",
+    "state": {
+      "tabs": {
+        "selected": 0,
+        "tabs": [
+          {
+            "type": 7,
+            "title": "",
+            "controller": null,
+            "controllerUUID": "video-a",
+            "renderer": null,
+            "controlsHeight": 85
+          }
+        ]
+      },
+      "sidebar": {
+        "width": 300,
+        "expanded": []
+      }
+    },
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "not-video-a",
+          "imgFolder": "/wrong/",
+          "fps": 30,
+          "totalFrames": 10,
+          "completedFrames": 5,
+          "autoEndFrame": 0
+        }
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-a",
+          "imgFolder": "/frames/match/",
+          "fps": 30,
+          "totalFrames": 300,
+          "completedFrames": 120,
+          "autoEndFrame": 0
+        }
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          7.5
+        ]
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-section > button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "locked-start"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          8.0
+        ]
+      },
+      {
+        "advance": 32
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "locked-t8"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          20.0
+        ]
+      },
+      {
+        "advance": 32
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "locked-beyond-completed"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-section > button",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "playing"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.video-timeline-slider",
+          "type": "input",
+          "props": {
+            "value": "45"
+          }
+        }
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "playing-reanchored"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 3,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 4,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 5,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "skip-and-frame"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowUp"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "key-lock"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowDown"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Slash"
+          }
+        }
+      },
+      {
+        "advance": 250
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "key-play"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Slash"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Comma"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Period"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowLeft"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "key-nav"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-section > button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "locked-arrow-steps-cycle"
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-a",
+          "error": true
+        }
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-a"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "reset"
+      }
+    ]
+  }
+}

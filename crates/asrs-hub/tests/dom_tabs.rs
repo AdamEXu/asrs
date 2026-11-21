@@ -2044,9 +2044,7 @@ impl Runner {
             }
             // Video controls: `index` is the querySelectorAll position inside the
             // selected tab's controls (`div.controls-content > :not([hidden])`).
-            (t, "click") if t.contains(".video-source button") => {
-                self.video_source_click(index)?
-            }
+            (t, "click") if t.contains(".video-source button") => self.video_source_click(index)?,
             (t, "click") if t.contains(".video-timeline-section > button") => {
                 self.video_lock_click()?
             }
@@ -2078,17 +2076,17 @@ impl Runner {
             // `getSelectedTabType()` and `isUnlockedVideoSelected()`.
             {
                 let mut ctx = self.host.selection.context().clone();
-                if let Some(i) = self.tabs.selected_index() {
-                    if let Some(tab) = self.tabs.tab(i) {
-                        if let Some(kind) = tab.tab_type() {
-                            ctx.selected_tab_type = kind;
-                        }
-                        ctx.unlocked_video_selected = tab.tab_type() == Some(TabType::Video)
-                            && tab
-                                .controller()
-                                .downcast_ref::<VideoController>()
-                                .is_some_and(|v| !v.is_locked());
+                if let Some(i) = self.tabs.selected_index()
+                    && let Some(tab) = self.tabs.tab(i)
+                {
+                    if let Some(kind) = tab.tab_type() {
+                        ctx.selected_tab_type = kind;
                     }
+                    ctx.unlocked_video_selected = tab.tab_type() == Some(TabType::Video)
+                        && tab
+                            .controller()
+                            .downcast_ref::<VideoController>()
+                            .is_some_and(|v| !v.is_locked());
                 }
                 self.host.selection.set_context(ctx);
             }
@@ -2107,16 +2105,12 @@ impl Runner {
                     .tabs
                     .selected_index()
                     .and_then(|i| self.tabs.tab(i))
-                    .is_some_and(|t| {
-                        t.tab_type() == Some(TabType::Video) && !t.content_hidden()
-                    });
-                if is_visible_video {
-                    if let Some(tab) = self.tabs.selected_tab_mut() {
-                        if let Some(video) = tab.controller.downcast_mut::<VideoController>()
-                        {
-                            video.key_down(&mut self.host, &code);
-                        }
-                    }
+                    .is_some_and(|t| t.tab_type() == Some(TabType::Video) && !t.content_hidden());
+                if is_visible_video
+                    && let Some(tab) = self.tabs.selected_tab_mut()
+                    && let Some(video) = tab.controller.downcast_mut::<VideoController>()
+                {
+                    video.key_down(&mut self.host, &code);
                 }
             }
         }
@@ -2640,7 +2634,7 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             .find(|(k, _)| *k == "command")
             .and_then(|(_, v)| v.get("type"))
             .and_then(Value::as_f64)
-            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0));
+            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 7.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0));
         for (key, value) in &emit.values {
             let expected_value = record.value(key).map_err(|e| {
                 format!(
