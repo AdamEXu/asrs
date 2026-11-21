@@ -1,0 +1,217 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-modes.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/timeline-modes.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setSelectedTime-0"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0.02564102564102564
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setSelectedTime-0.02564102564102564"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          19.974358974358974
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setHoveredTime-19.974358974358974"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0.0257
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setSelectedTime-0.0257"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          20
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setHoveredTime-20"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          19.97
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setHoveredTime-19.97"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          25
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setSelectedTime-25"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          -1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setHoveredTime--1"
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          0.5
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setHoveredTime-0.5"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0.5
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "setSelectedTime-0.5"
+      }
+    ]
+  }
+}

@@ -1,0 +1,339 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-modes.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "window": {
+      "theme": "dark",
+      "devicePixelRatio": 2
+    },
+    "steps": [
+      {
+        "log": "../logs/timeline-modes.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "loaded"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 610,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -120, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "zoom-1"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -120, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "zoom-2-help-shown"
+      },
+      {
+        "advance": 520
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "help-before-fade"
+      },
+      {
+        "advance": 120
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "help-fading"
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "help-fading-more"
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "help-gone"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -2500, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "zoom-deep"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -2500, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "zoom-deeper"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousedown",
+          "init": {
+            "clientX": 610,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 560,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "drag-pan"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 730,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 730,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "drag-pan-back"
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, 6000, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "zoom-out-max"
+      },
+      {
+        "main": "set-preferences",
+        "data": {
+          "theme": "system",
+          "robotAddress": "robot.local",
+          "remotePath": "/U/logs",
+          "liveMode": "nt4",
+          "liveSubscribeMode": "low-bandwidth",
+          "liveDiscard": 1200,
+          "publishFilter": "",
+          "rlogPort": 5800,
+          "coordinateSystem": "automatic",
+          "field3dModeAc": "standard",
+          "field3dModeBattery": "",
+          "field3dAntialiasing": true,
+          "tbaApiKey": "",
+          "userAssetsFolder": null,
+          "skipHootNonProWarning": false,
+          "skipFRCCoordinateSystemWarning": false,
+          "skipFTCCoordinateSystemWarning": false,
+          "ctreLicenseAccepted": false,
+          "systemcoreStaticAddress": "",
+          "hasScrolledLineGraph": false,
+          "hasScrolledTimeline": true,
+          "prefersFTC": false,
+          "timestamps": "start-zero"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "scrolled-pref"
+      },
+      {
+        "main": "set-preferences",
+        "data": {
+          "theme": "system",
+          "robotAddress": "robot.local",
+          "remotePath": "/U/logs",
+          "liveMode": "nt4",
+          "liveSubscribeMode": "low-bandwidth",
+          "liveDiscard": 1200,
+          "publishFilter": "",
+          "rlogPort": 5800,
+          "coordinateSystem": "automatic",
+          "field3dModeAc": "standard",
+          "field3dModeBattery": "",
+          "field3dAntialiasing": true,
+          "tbaApiKey": "",
+          "userAssetsFolder": null,
+          "skipHootNonProWarning": false,
+          "skipFRCCoordinateSystemWarning": false,
+          "skipFTCCoordinateSystemWarning": false,
+          "ctreLicenseAccepted": false,
+          "systemcoreStaticAddress": "",
+          "hasScrolledLineGraph": false,
+          "hasScrolledTimeline": false,
+          "prefersFTC": false,
+          "timestamps": "start-zero"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pref-reset"
+      }
+    ]
+  }
+}
