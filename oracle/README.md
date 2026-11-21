@@ -190,7 +190,9 @@ file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of th
   entry's stdout lines are the vector, so an entry can build values JSON cannot express. The
   entry runs with `ASRS_ORACLE_SPEC` set to the spec's path, so it may read data from the spec
   itself (the `dom` entry does). `inputs` lists other files the entry reads, relative to the
-  spec; they join the generator hash.
+  spec; they join the generator hash. An entry that reads a synthetic corpus names it in an
+  arg (`target/parity/corpus/synthetic/<name>`) or an input
+  (`../../corpus/synthetic/<name>.manifest.json`); see Corpus preconditions.
 - `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
   a sibling file (`*.requests.jsonl` files are never specs themselves).
 - `<id>.session.json`: a live session (see Live sessions), run by the `liveSession` entry
@@ -310,6 +312,25 @@ Corpus B (`src/corpusB.ts`):
 `cargo xtask corpus fuzz [--seed <u32>] [--count <n>] [--check]` runs the same mutator (`src/corpusFuzz.ts`)
 over the generated A and B corpora for `--deep` runs. Output goes to `target/parity/corpus/fuzz/<seed>/` with a
 `list.jsonl` naming each mutant's source, donor and mutation steps; nothing is committed.
+
+### Corpus preconditions
+
+The generated tree under `target/` is not committed, so a fresh build dir has none. Every command
+that reads it first checks each corpus it needs against the committed manifest (every listed file
+present with its hash, nothing unlisted) and, if the tree is missing or differs, logs
+`corpus <name> is not current (...); regenerating it` and rebuilds it as `corpus gen <name>` would,
+without touching the committed manifest. If the generator no longer reproduces that manifest the
+command fails and says to run `cargo xtask corpus gen <name>` and commit the result. The commands:
+
+- `oracle gen`, `gen --stale` and `gen --check`, for the vectors they will run whose spec names a
+  corpus (`log/merge-offset` and `urcl/urcl` read corpus B);
+- `parity decode` with no file arguments (corpora A and B);
+- `oracle historical` and `corpus fuzz` (the corpora they run over).
+
+Generators that read the tree also check it themselves: `src/corpus/generated.ts` lists the
+manifest's files for a generator and exits non-zero naming the first missing one, so
+`oracle run genUrcl ...` on a partial tree fails instead of writing a vector with fewer cases.
+New corpus-reading generators should use it.
 
 ## Public corpus
 
