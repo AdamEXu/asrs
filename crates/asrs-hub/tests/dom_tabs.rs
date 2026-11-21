@@ -524,6 +524,10 @@ impl TabCx for Host {
         self.preferences.as_ref()
     }
 
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
+        self.preferences.as_mut()
+    }
+
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
         None
     }

@@ -48,7 +48,12 @@ pub struct PoseAnnotations {
     /// `grabAprilTag` emits the key at all.
     pub has_april_tag_id: bool,
     pub april_tag_id: Option<f64>,
+    /// The Field3d controller assigns `visionColor`/`visionSize` on every pose a
+    /// `vision` child yields, so the key is present even when the option is
+    /// `undefined`.
+    pub has_vision_color: bool,
     pub vision_color: Option<JsString>,
+    pub has_vision_size: bool,
     pub vision_size: Option<JsString>,
 }
 
