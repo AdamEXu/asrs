@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 //! Cross-platform headless app context for tests that need real text shaping.
 //!
 //! This replaces the macOS-only `HeadlessMetalAppContext` with a platform-neutral
