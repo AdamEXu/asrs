@@ -5,10 +5,11 @@
 use std::cell::Ref;
 
 use asrs_js::string::JsError;
+use asrs_js::value::JsValue;
 use asrs_log::log::Log;
 use asrs_model::selection::Selection;
 use asrs_model::source_list::{Env, SourceListError};
-use asrs_model::source_list_config::SourceListTypeMemory;
+use asrs_model::source_list_config::{SourceListItemState, SourceListTypeMemory};
 
 use crate::cx::TabCx;
 
@@ -61,4 +62,19 @@ pub fn js_error(error: SourceListError) -> JsError {
             }
         }
     }
+}
+
+/// A saved `SourceListState` for `setState`. A value of another shape makes upstream throw
+/// midway through `setState`, which is not modelled.
+pub fn source_state(value: &JsValue) -> Result<Vec<SourceListItemState>, JsError> {
+    let unmodeled = |what: &str| JsError::new("Unmodeled", format!("source list: {what}"));
+    value
+        .as_array()
+        .ok_or_else(|| unmodeled("restored sources that are not an array"))?
+        .iter()
+        .map(|item| {
+            SourceListItemState::from_js(item)
+                .ok_or_else(|| unmodeled("a restored source item of another shape"))
+        })
+        .collect()
 }
