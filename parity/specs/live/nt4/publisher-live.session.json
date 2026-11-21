@@ -1,0 +1,38 @@
+{
+  "protocol": "nt4",
+  "seed": 6623,
+  "latencyMs": 2,
+  "endMs": 3700,
+  "client": {
+    "source": "nt4-publisher",
+    "mode": "sim"
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 4000000
+  },
+  "steps": [
+    { "t": 0, "client": ["log", "putNumber", "NT:/Live/x", 1, 1] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Live/x", 2, 2] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Live/y", 1, 10] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Live/nan", 1, { "n": "7ff8000000000000" }] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Live/zero", 1, { "n": "8000000000000000" }] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Live/zero", 2, 0] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 300, "client": ["select", 2, null] },
+    { "t": 600, "client": ["log", "putNumber", "NT:/Live/x", 4, 4] },
+    { "t": 800, "client": ["select", 4, null] },
+    { "t": 1100, "client": ["select", null, 1.5] },
+    { "t": 1250, "client": ["select", 0.5, null] },
+    { "t": 1400, "client": ["select", null, null] },
+    { "t": 1500, "client": ["log", "putNumber", "NT:/Live/x", 5, 5] },
+    { "t": 1700, "server": ["drop"] },
+    { "t": 2100, "client": ["select", 5, null] },
+    { "t": 2300, "server": ["down", "refuse"] },
+    { "t": 2300, "server": ["drop"] },
+    { "t": 2900, "server": ["up"] },
+    { "t": 3100, "client": ["prefs", { "publishFilter": "/Live/y" }] },
+    { "t": 3300, "client": ["prefs", { "publishFilter": "" }] },
+    { "t": 3500, "client": ["stop"] }
+  ]
+}

@@ -383,6 +383,7 @@ dependencies = [
  "futures-util",
  "tokio",
  "tokio-tungstenite",
+ "url",
 ]
 
 [[package]]
