@@ -52,7 +52,6 @@ async function record(op: string, args: unknown, run: () => unknown | Promise<un
     r.result = toTree(await run());
   } catch (error) {
     r.throw = (error as Error).name;
-    if (r.throw === "TypeError") process.stderr.write(`${op} case ${caseIndex}: ${(error as Error).stack}\n`);
   }
   await flush();
   r.created = electronFake.takeCreated().map((c) => c.id);
@@ -163,7 +162,8 @@ async function opEmit(windowId: number, name: string, data: unknown) {
   await record("emit", { window: windowId, name, data }, () => {
     const channel = channelForWindow(windowId);
     if (channel === null) return null;
-    electronFake.channels[channel].port2.emit("message", { data: { name, data } });
+    const port = electronFake.channels[channel].port2;
+    port.emit("message", { data: { name, data } });
     return null;
   });
 }

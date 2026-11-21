@@ -133,6 +133,7 @@ export class FakeBrowserWindow {
     });
     windows.set(this.id, proxy);
     created.push({ id: this.id, bounds: { ...this.bounds } });
+
     return proxy;
   }
 

@@ -216,10 +216,10 @@ fn load_state(
                     constants::SATELLITE_DEFAULT_HEIGHT,
                 )
             };
-            sloppy_set(window, "x", primary.x + primary.width / 2.0 - default_width / 2.0)?;
-            sloppy_set(window, "y", primary.y + primary.height / 2.0 - default_height / 2.0)?;
-            sloppy_set(window, "width", default_width)?;
-            sloppy_set(window, "height", default_height)?;
+            strict_set(window, "x", primary.x + primary.width / 2.0 - default_width / 2.0)?;
+            strict_set(window, "y", primary.y + primary.height / 2.0 - default_height / 2.0)?;
+            strict_set(window, "width", default_width)?;
+            strict_set(window, "height", default_height)?;
         }
     }
     write_back(&mut state, &windows, hubs_count);
@@ -325,17 +325,10 @@ fn js_add(a: &JsValue, b: &JsValue) -> JsValue {
     JsValue::Number(x + y)
 }
 
-/// `window.x = v` in upstream's sloppy-mode bundle: an assignment to a property of a primitive
-/// is silently dropped rather than throwing.
-fn sloppy_set(target: &mut JsValue, key: &str, value: f64) -> Result<(), JsError> {
-    match target {
-        JsValue::Undefined | JsValue::Null => Err(JsError::type_error(format!(
-            "Cannot set properties of {} (setting '{key}')",
-            describe(target)
-        ))),
-        JsValue::Bool(_) | JsValue::Number(_) | JsValue::String(_) | JsValue::BigInt(_) => Ok(()),
-        _ => ops::set_key(target, &JsString::from(key), JsValue::Number(value)),
-    }
+/// `window.x = v` in upstream's strict-mode bundle: assigning a property on a primitive
+/// throws TypeError.
+fn strict_set(target: &mut JsValue, key: &str, value: f64) -> Result<(), JsError> {
+    ops::set_key(target, &JsString::from(key), JsValue::Number(value))
 }
 
 fn stringify(value: &JsValue) -> Result<Option<String>, JsError> {

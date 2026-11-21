@@ -72,6 +72,17 @@ impl MemFs {
         self.writes.borrow().clone()
     }
 
+    pub fn take_writes(&self) -> Vec<String> {
+        std::mem::take(&mut *self.writes.borrow_mut())
+    }
+
+    /// Seed a file without logging a write, like the oracle's `putFile`.
+    pub fn put(&self, path: &str, data: &[u8]) {
+        self.files
+            .borrow_mut()
+            .insert(path.to_owned(), data.to_vec());
+    }
+
     /// `(name, bytes)` pairs in name order, like the oracle's dump.
     pub fn dump(&self) -> Vec<(String, Vec<u8>)> {
         self.files

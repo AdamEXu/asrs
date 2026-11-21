@@ -46,7 +46,7 @@ pub fn import(
     is_packaged: bool,
     app_version: &str,
 ) -> Result<Import, JsError> {
-    let mut data = json_file::parse(&fs.read(&file_paths[0])?)?;
+    let mut data = json_file::parse(&fs.read(file_paths.first().map_or("undefined", String::as_str))?)?;
     if !valid_layout(&data)? {
         let old = ops::has(&data, "layout")?
             && matches!(ops::get(&data, "layout")?, JsValue::Array(_));
