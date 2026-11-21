@@ -14,64 +14,14 @@ use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_live::ftc::{FtcContext, FtcSource};
 use asrs_live::nt4::NetEvent;
-use asrs_live::{
-    LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId, TunedValue,
-};
+use asrs_live::{LiveLog, OutputCallback, Thrown, TimerId, TunedValue};
 use asrs_log::log::Log;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
 use asrs_parity::vectors;
 
-use support::{Driver, Env, Trace};
-
-/// `window.preferences`, reduced to what the base reads; `None` is `null`.
-#[derive(Clone)]
-struct Prefs {
-    live_discard: f64,
-}
-
-impl Prefs {
-    fn merge(&mut self, json: &Json) {
-        if let Some(discard) = json.get("liveDiscard").and_then(Json::as_f64) {
-            self.live_discard = discard;
-        }
-    }
-
-    fn as_live(&self) -> LivePreferences {
-        LivePreferences {
-            live_discard: Some(self.live_discard),
-            live_subscribe_mode: None,
-        }
-    }
-}
-
-fn prefs_op(prefs: &mut Option<Prefs>, arg: &Json) {
-    match arg {
-        Json::Null => *prefs = None,
-        update => prefs
-            .get_or_insert_with(|| Prefs {
-                live_discard: 1200.0,
-            })
-            .merge(update),
-    }
-}
-
-fn initial_prefs(session: &Session) -> Option<Prefs> {
-    match session.client.get("prefs") {
-        Some(Json::Null) => None,
-        Some(update) => {
-            let mut prefs = Prefs {
-                live_discard: 1200.0,
-            };
-            prefs.merge(update);
-            Some(prefs)
-        }
-        None => Some(Prefs {
-            live_discard: 1200.0,
-        }),
-    }
-}
+use support::{Driver, Env, Prefs, initial_prefs, log_id, prefs_op, status_callback};
 
 fn fcx(env: &mut Env) -> FtcContext<'_> {
     FtcContext {
@@ -79,34 +29,6 @@ fn fcx(env: &mut Env) -> FtcContext<'_> {
         net: &mut env.net,
         clock: &env.wall,
     }
-}
-
-fn status_callback(
-    trace: &Trace,
-    clock: &asrs_live::ManualClock,
-) -> Box<dyn FnMut(LiveDataSourceStatus)> {
-    let trace = trace.clone();
-    let clock = clock.clone();
-    Box::new(move |status| {
-        trace.app(
-            clock.now(),
-            "status",
-            Some(&Value::number(f64::from(status as u8))),
-        );
-    })
-}
-
-/// The oracle's `logId(log)`: the index a `Log` object first reached the trace under.
-fn log_id(ids: &Rc<RefCell<Vec<usize>>>, log: Option<&LiveLog>) -> Value {
-    let Some(log) = log else {
-        return Value::Null;
-    };
-    let ptr = Rc::as_ptr(log) as usize;
-    let mut ids = ids.borrow_mut();
-    if !ids.contains(&ptr) {
-        ids.push(ptr);
-    }
-    Value::number(ids.iter().position(|p| *p == ptr).expect("inserted") as f64)
 }
 
 struct FtcDriver {

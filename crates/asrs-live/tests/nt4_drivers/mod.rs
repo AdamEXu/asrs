@@ -16,9 +16,7 @@ use asrs_live::nt4::{
     NT4_PORTS_DEFAULT, NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Mode, Nt4Source, Nt4Tuner,
     Nt4Window,
 };
-use asrs_live::{
-    LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback, Thrown, TimerId, TunedValue,
-};
+use asrs_live::{LiveLog, OutputCallback, Thrown, TimerId, TunedValue};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
 use asrs_log::log::log_key_utils::filter_field_by_prefixes;
@@ -28,7 +26,9 @@ use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::Session;
 
-use crate::support::{self, Driver, Env, Trace};
+use crate::support::{
+    self, Driver, Env, Prefs, Trace, initial_prefs, log_id, prefs_op, status_callback,
+};
 
 fn js(s: &str) -> JsString {
     JsString::from(s)
@@ -36,62 +36,6 @@ fn js(s: &str) -> JsString {
 
 fn starts(a: &JsString, b: &JsString) -> bool {
     a.starts_with(b, None)
-}
-
-/// `window.preferences`, reduced to what the NT4 classes read; `None` is `null`.
-#[derive(Clone)]
-struct Prefs {
-    live_subscribe_mode: String,
-    live_discard: f64,
-    publish_filter: JsString,
-}
-
-impl Prefs {
-    fn defaults() -> Self {
-        Prefs {
-            live_subscribe_mode: "low-bandwidth".to_owned(),
-            live_discard: 1200.0,
-            publish_filter: JsString::new(),
-        }
-    }
-
-    fn merge(&mut self, json: &Json) {
-        if let Some(mode) = json.get("liveSubscribeMode").and_then(Json::as_str) {
-            self.live_subscribe_mode = mode.to_string_lossy();
-        }
-        if let Some(discard) = json.get("liveDiscard").and_then(Json::as_f64) {
-            self.live_discard = discard;
-        }
-        if let Some(filter) = json.get("publishFilter").and_then(Json::as_str) {
-            self.publish_filter = JsString::from_units(filter.units().to_vec());
-        }
-    }
-
-    fn as_live(&self) -> LivePreferences {
-        LivePreferences {
-            live_discard: Some(self.live_discard),
-            live_subscribe_mode: Some(js(&self.live_subscribe_mode)),
-        }
-    }
-}
-
-fn prefs_op(prefs: &mut Option<Prefs>, arg: &Json) {
-    match arg {
-        Json::Null => *prefs = None,
-        update => prefs.get_or_insert_with(Prefs::defaults).merge(update),
-    }
-}
-
-fn initial_prefs(session: &Session) -> Option<Prefs> {
-    match session.client.get("prefs") {
-        Some(Json::Null) => None,
-        Some(update) => {
-            let mut prefs = Prefs::defaults();
-            prefs.merge(update);
-            Some(prefs)
-        }
-        None => Some(Prefs::defaults()),
-    }
 }
 
 fn string_list(json: Option<&Json>) -> Vec<JsString> {
@@ -103,35 +47,6 @@ fn string_list(json: Option<&Json>) -> Vec<JsString> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn status_callback(
-    trace: &Trace,
-    clock: &asrs_live::ManualClock,
-) -> Box<dyn FnMut(LiveDataSourceStatus)> {
-    let trace = trace.clone();
-    let clock = clock.clone();
-    Box::new(move |status| {
-        use asrs_js::time::Clock;
-        trace.app(
-            clock.now(),
-            "status",
-            Some(&Value::number(f64::from(status as u8))),
-        );
-    })
-}
-
-/// The oracle's `logId(log)`: the index a `Log` object first reached the trace under.
-fn log_id(ids: &Rc<RefCell<Vec<usize>>>, log: Option<&LiveLog>) -> Value {
-    let Some(log) = log else {
-        return Value::Null;
-    };
-    let ptr = Rc::as_ptr(log) as usize;
-    let mut ids = ids.borrow_mut();
-    if !ids.contains(&ptr) {
-        ids.push(ptr);
-    }
-    Value::number(ids.iter().position(|p| *p == ptr).expect("inserted") as f64)
 }
 
 pub struct SourceDriver {
