@@ -1,0 +1,119 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-long.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "log": "../logs/timeline-long.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            100000,
+            100170
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-100000-100170"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            100000,
+            101700
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-100000-101700"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            100000,
+            117000
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-100000-117000"
+      },
+      {
+        "selection": [
+          "setTimelineRange",
+          [
+            0,
+            259200
+          ],
+          false
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "range-0-259200"
+      }
+    ]
+  }
+}
