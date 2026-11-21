@@ -3,7 +3,7 @@
   "spec": "parity/corpus/historical.spec.json",
   "upstreamCommit": "8fc5b89fc93be5dba5a66005ea6111fa16594aa8",
   "electron": "39.2.7",
-  "generator": "efb6e5a13001f518",
+  "generator": "665341ebe3812310",
   "inputs": 222,
   "files": 7226,
   "content": "dcc1c13bb5b2527e",
