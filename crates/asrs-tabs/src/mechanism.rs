@@ -12,7 +12,7 @@ use asrs_model::source_list::configs;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{SourceListCx, js_error, with_env};
+use crate::list_cx::{SourceListCx, js_error, source_state, with_env};
 
 pub struct MechanismController {
     source_list: SourceList,
@@ -77,16 +77,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for MechanismController {
     }
 
     fn restore_state(&mut self, cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
-        let items = match state.as_array() {
-            Some(items) => items
-                .iter()
-                .map(|item| {
-                    asrs_model::source_list_config::SourceListItemState::from_js(item)
-                        .ok_or_else(|| JsError::new("", "a restored source item of another shape"))
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            None => Vec::new(),
-        };
+        let items = source_state(state)?;
         with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)
     }
 
@@ -107,12 +98,9 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for MechanismController {
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
-        let mut time = cx.tab_selection().get_render_time();
+        let time = cx.tab_selection().get_render_time();
         let log = cx.tab_log();
-        if time.is_none() {
-            time = Some(log.get_timestamp_range()[1]);
-        }
-        let time = time.unwrap();
+        let time = time.unwrap_or_else(|| log.get_timestamp_range()[1]);
 
         let mut states = Vec::new();
         for item in self.source_list.displayed_state(&log) {
@@ -121,9 +109,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for MechanismController {
             }
         }
         states.reverse();
-        match merge_mechanism_states(&states) {
-            Some(state) => Ok(Rc::new(state_to_js(&state))),
-            None => Ok(Rc::new(JsValue::Null)),
-        }
+        let command = merge_mechanism_states(&states).map_or(JsValue::Null, |s| state_to_js(&s));
+        Ok(Rc::new(command))
     }
 }

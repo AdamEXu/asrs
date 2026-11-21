@@ -47,7 +47,11 @@
         "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/HeadingRad\")"
       },
       {
+        "frames": 1
+      },
+      {
         "capture": [
+          "commands",
           "state",
           {
             "kind": "eval",
@@ -106,6 +110,21 @@
           }
         ],
         "label": "speed-clamped"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.max-speed",
+          "type": "change",
+          "props": {
+            "value": "abc"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "speed-invalid"
       },
       {
         "event": {
@@ -182,6 +201,51 @@
         "label": "orientation"
       },
       {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "click",
+          "index": 0
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "keydown",
+          "index": 1,
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "keydown",
+          "index": 0,
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": "a",
+            "code": "KeyA"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "click",
+          "index": 1
+        }
+      },
+      {
+        "capture": [
+          "state",
+          "commands"
+        ],
+        "label": "orientation-wrap"
+      },
+      {
         "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/Velocities\",\"logType\":\"SwerveModuleVelocity[]\",\"visible\":true,\"options\":{\"color\":\"#00ffff\",\"arrangement\":\"3,0,2,1\"}},{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/ModuleStates\",\"logType\":\"SwerveModuleState[]\",\"visible\":true,\"options\":{\"color\":\"#ff8c00\",\"arrangement\":\"1,0,3,2\"}},{\"type\":\"robotVelocities\",\"logKey\":\"/Drive/ChassisSpeeds\",\"logType\":\"ChassisSpeeds\",\"visible\":true,\"options\":{\"color\":\"#00ff00\"}},{\"type\":\"rotationLegacy\",\"logKey\":\"/Drive/HeadingRad\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"units\":\"radians\"}}],\"maxSpeed\":3.5,\"sizeX\":0.8,\"sizeY\":0.5,\"orientation\":2})"
       },
       {
@@ -202,6 +266,19 @@
           }
         ],
         "label": "saved"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"maxSpeed\":\"7\",\"sizeX\":0.9,\"sizeY\":1e21,\"orientation\":5})"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "partial-restore"
       },
       {
         "event": {

@@ -90,7 +90,21 @@
         }
       },
       {
-        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Mech/Broken\")"
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "one-left"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.hide",
+          "type": "click",
+          "index": 0
+        }
       },
       {
         "frames": 1
@@ -100,7 +114,7 @@
           "commands",
           "state"
         ],
-        "label": "nan-weight"
+        "label": "all-hidden"
       }
     ]
   }

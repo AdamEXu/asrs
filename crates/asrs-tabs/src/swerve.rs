@@ -16,17 +16,41 @@ use asrs_model::source_list::configs;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{SourceListCx, js_error, with_env};
+use crate::form::NumberInput;
+use crate::list_cx::{SourceListCx, js_error, source_state, with_env};
 
 /// `Orientation` in `Field2dRenderer.ts`: quarter turns, `DEG_90` by default.
 const ORIENTATION_90: f64 = 1.0;
 
+/// The numeric inputs by their saved-state key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwerveInput {
+    MaxSpeed,
+    SizeX,
+    SizeY,
+}
+
+impl SwerveInput {
+    const ALL: [SwerveInput; 3] = [
+        SwerveInput::MaxSpeed,
+        SwerveInput::SizeX,
+        SwerveInput::SizeY,
+    ];
+
+    fn key(self) -> &'static str {
+        match self {
+            SwerveInput::MaxSpeed => "maxSpeed",
+            SwerveInput::SizeX => "sizeX",
+            SwerveInput::SizeY => "sizeY",
+        }
+    }
+}
+
 pub struct SwerveController {
     source_list: SourceList,
-    /// `MAX_SPEED.value`: the `type="number"` input's string, `"5"` in markup.
-    max_speed: JsString,
-    size_x: JsString,
-    size_y: JsString,
+    max_speed: NumberInput,
+    size_x: NumberInput,
+    size_y: NumberInput,
     orientation: f64,
 }
 
@@ -36,9 +60,9 @@ impl SwerveController {
         let uuid = asrs_js::time::create_uuid(cx.tab_rng());
         SwerveController {
             source_list: SourceList::new(configs::swerve(), uuid, false),
-            max_speed: JsString::from("5"),
-            size_x: JsString::from("0.65"),
-            size_y: JsString::from("0.65"),
+            max_speed: NumberInput::new("5"),
+            size_x: NumberInput::new("0.65"),
+            size_y: NumberInput::new("0.65"),
             orientation: ORIENTATION_90,
         }
     }
@@ -51,33 +75,27 @@ impl SwerveController {
         &mut self.source_list
     }
 
-    /// An `input.value`: `"maxSpeed"`, `"sizeX"` or `"sizeY"`.
-    pub fn input_value(&self, input: &str) -> Option<&JsString> {
+    pub fn input(&self, input: SwerveInput) -> &NumberInput {
         match input {
-            "maxSpeed" => Some(&self.max_speed),
-            "sizeX" => Some(&self.size_x),
-            "sizeY" => Some(&self.size_y),
-            _ => None,
+            SwerveInput::MaxSpeed => &self.max_speed,
+            SwerveInput::SizeX => &self.size_x,
+            SwerveInput::SizeY => &self.size_y,
         }
     }
 
-    /// `input.value = value`.
-    pub fn set_input(&mut self, input: &str, value: JsString) {
-        if let Some(slot) = match input {
-            "maxSpeed" => Some(&mut self.max_speed),
-            "sizeX" => Some(&mut self.size_x),
-            "sizeY" => Some(&mut self.size_y),
-            _ => None,
-        } {
-            *slot = value;
+    pub fn input_mut(&mut self, input: SwerveInput) -> &mut NumberInput {
+        match input {
+            SwerveInput::MaxSpeed => &mut self.max_speed,
+            SwerveInput::SizeX => &mut self.size_x,
+            SwerveInput::SizeY => &mut self.size_y,
         }
     }
 
     /// The `change` listener every numeric input shares.
-    pub fn input_changed(&mut self, input: &str) {
-        let value = self.input_value(input).cloned().unwrap_or_default();
-        if to_number(&value) <= 0.0 {
-            self.set_input(input, JsString::from("0.1"));
+    pub fn input_changed(&mut self, input: SwerveInput) {
+        let input = self.input_mut(input);
+        if input.number() <= 0.0 {
+            input.set_value(JsString::from("0.1"));
         }
     }
 
@@ -96,10 +114,6 @@ impl SwerveController {
             self.orientation = 3.0;
         }
     }
-}
-
-fn to_number(value: &JsString) -> f64 {
-    number::to_number(value.units())
 }
 
 fn uuid_arg(uuid: &JsValue) -> Option<String> {
@@ -128,9 +142,9 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
     fn save_state(&self, _cx: &Cx) -> JsValue {
         let mut o = JsObject::new();
         o.insert("sources", self.source_list.state().to_js());
-        o.insert("maxSpeed", to_number(&self.max_speed).to_js());
-        o.insert("sizeX", to_number(&self.size_x).to_js());
-        o.insert("sizeY", to_number(&self.size_y).to_js());
+        for input in SwerveInput::ALL {
+            o.insert(input.key(), self.input(input).number().to_js());
+        }
         o.insert("orientation", self.orientation.to_js());
         JsValue::Object(o)
     }
@@ -140,29 +154,13 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
             return Ok(());
         };
         if let Some(sources) = state.get("sources") {
-            let items: Result<Vec<_>, _> = match sources.as_array() {
-                Some(items) => items
-                    .iter()
-                    .map(|item| {
-                        asrs_model::source_list_config::SourceListItemState::from_js(item)
-                            .ok_or_else(|| {
-                                JsError::new("", "a restored source item of another shape")
-                            })
-                    })
-                    .collect(),
-                None => Err(JsError::new("", "restored sources that are not an array")),
-            };
-            let items = items?;
-            let result = with_env(cx, |env| self.source_list.set_state(env, items));
-            result.map_err(js_error)?;
+            let items = source_state(sources)?;
+            with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)?;
         }
-        for (key, input) in [
-            ("maxSpeed", "maxSpeed"),
-            ("sizeX", "sizeX"),
-            ("sizeY", "sizeY"),
-        ] {
-            if let Some(n) = state.get(key).and_then(JsValue::as_f64) {
-                self.set_input(input, JsString::from(number::to_string(n)));
+        for input in SwerveInput::ALL {
+            if let Some(n) = state.get(input.key()).and_then(JsValue::as_f64) {
+                self.input_mut(input)
+                    .set_value(JsString::from(number::to_string(n)));
             }
         }
         if let Some(o) = state.get("orientation").and_then(JsValue::as_f64)
@@ -190,15 +188,12 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
     }
 
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError> {
-        let mut time = cx.tab_selection().get_render_time();
+        let time = cx.tab_selection().get_render_time();
         let log = cx.tab_log();
-        if time.is_none() {
-            time = Some(log.get_timestamp_range()[1]);
-        }
-        let time = time.unwrap();
+        let time = time.unwrap_or_else(|| log.get_timestamp_range()[1]);
         let uuid = uuid_arg(uuid);
         let uuid = uuid.as_deref();
-        let max_speed = to_number(&self.max_speed);
+        let max_speed = self.max_speed.number();
 
         let mut rotation = 0.0_f64;
         let mut module_entries: Vec<JsValue> = Vec::new();
@@ -278,16 +273,14 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
                     robot_entries.push(JsValue::Object(o));
                 }
                 _ => {
-                    let poses =
-                        grab_poses_auto(&log, &source.log_key, &source.log_type, time, uuid, units)
-                            .map_err(|e| match e {
-                                asrs_log::geometry::GeometryError::RangeError(m) => {
-                                    JsError::range(m)
-                                }
-                                asrs_log::geometry::GeometryError::TypeError(m) => {
-                                    JsError::type_error(m)
-                                }
-                            })?;
+                    let poses = grab_poses_auto(
+                        &log,
+                        &source.log_key,
+                        &source.log_type,
+                        time,
+                        uuid,
+                        units,
+                    )?;
                     if let Some(first) = poses.first() {
                         rotation = rotation_3d_to_2d(first.pose.rotation);
                     }
@@ -302,7 +295,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
         o.insert("rotation", rotation.to_js());
         o.insert(
             "frameAspectRatio",
-            (to_number(&self.size_y) / to_number(&self.size_x)).to_js(),
+            (self.size_y.number() / self.size_x.number()).to_js(),
         );
         o.insert("moduleVelocities", module_entries.to_js());
         o.insert("robotVelocities", robot_entries.to_js());

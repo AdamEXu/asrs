@@ -1,6 +1,7 @@
 pub mod ansi;
 pub mod console;
 pub mod cx;
+pub mod form;
 pub mod heatmap;
 pub mod joysticks;
 pub mod line_graph;
@@ -8,6 +9,5 @@ pub mod list_cx;
 pub mod mechanism;
 pub mod metadata;
 pub mod points;
-pub mod select;
 pub mod swerve;
 pub mod table;

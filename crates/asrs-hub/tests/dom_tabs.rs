@@ -17,7 +17,6 @@
 mod js_json;
 
 use std::cell::{Cell, Ref, RefCell};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -28,16 +27,16 @@ use asrs_js::time::{Clock, Rng, create_uuid};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
-use asrs_model::assets::{AdvantageScopeAssets, ConfigJoystick, Parsed, parse_joystick};
+use asrs_model::assets::{AdvantageScopeAssets, Parsed, parse_joystick};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
-use asrs_model::selection_impl::SelectionImpl;
+use asrs_model::selection_impl::{KeyTarget, SelectionImpl};
 use asrs_model::source_list::{Rect, SourceList};
-use asrs_model::source_list_config::{
-    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
+use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
+use asrs_model::tab_controller::{
+    Command, TabCommand, TabController, TabRenderer, keyboard_clicks,
 };
-use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
@@ -46,11 +45,11 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::joysticks::JoysticksController;
-use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, with_env};
+use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use asrs_tabs::mechanism::MechanismController;
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
-use asrs_tabs::points::PointsController;
-use asrs_tabs::swerve::SwerveController;
+use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
+use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 
 fn err(message: impl Into<String>) -> String {
@@ -326,11 +325,9 @@ enum DomKind {
 }
 
 type Doms = Rc<RefCell<Vec<(String, DomKind)>>>;
-type CommandSlots = Rc<RefCell<HashMap<String, Rc<RefCell<Option<JsValue>>>>>>;
 
 struct Factory {
     doms: Doms,
-    commands: CommandSlots,
 }
 
 struct Recorder<T> {
@@ -366,6 +363,26 @@ where
     fn timestamp_range(&self, cx: &Cx) -> Option<[f64; 2]> {
         self.inner.timestamp_range(cx)
     }
+}
+
+/// The slot of the `Recorder` wrapping a tab's renderer. A restore replaces the tab's UUID,
+/// so the slot is found through the renderer rather than the UUID it was created with.
+fn recorded_command(renderer: &dyn TabRenderer<Host>) -> Option<Rc<RefCell<Option<JsValue>>>> {
+    macro_rules! slot_of {
+        ($($inner:ty),*) => {$(
+            if let Some(recorder) = renderer.downcast_ref::<Recorder<$inner>>() {
+                return Some(recorder.slot.clone());
+            }
+        )*};
+    }
+    slot_of!(
+        TableRenderer,
+        ConsoleRenderer,
+        MetadataRenderer,
+        PendingRenderer,
+        StubRenderer
+    );
+    None
 }
 
 /// The halves of tab kinds other units own. `command` returns `null` and every state is
@@ -424,15 +441,11 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for StubRenderer {
     }
 }
 
-/// `MechanismRenderer.render` up to the first point upstream throws: `lineData.weight`
-/// is `null` after `mergeMechanismStates` jsonCopy's a non-finite weight, and
-/// `lineData.weight.toString()` is the first read that dereferences it.
-struct MechanismRenderer;
+/// Stands in for the R07 and R08 renderers, which are not ported yet: their `saveState()`
+/// returns `null`, and drawing is left to those units.
+struct PendingRenderer;
 
-/// The C05 renderers' `saveState()` returns `null`.
-struct C5Renderer;
-
-impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for C5Renderer {
+impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for PendingRenderer {
     fn save_state(&self, _cx: &Cx) -> JsValue {
         JsValue::Null
     }
@@ -450,51 +463,10 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for C5Renderer {
     }
 }
 
-impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for MechanismRenderer {
-    fn save_state(&self, _cx: &Cx) -> JsValue {
-        JsValue::Null
-    }
-
-    fn restore_state(&mut self, _cx: &mut Cx, _state: &JsValue) -> Result<(), JsError> {
-        Ok(())
-    }
-
-    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
-        None
-    }
-
-    fn render(&mut self, _cx: &mut Cx, command: &dyn TabCommand) -> Result<(), JsError> {
-        if let JsValue::Object(o) = command.to_js()
-            && let Some(JsValue::Array(lines)) = o.get("lines")
-        {
-            for line in lines {
-                let weight = line.get("weight");
-                match weight {
-                    Some(JsValue::Null) => {
-                        return Err(JsError::type_error(
-                            "Cannot read properties of null (reading 'toString')",
-                        ));
-                    }
-                    None | Some(JsValue::Undefined) => {
-                        return Err(JsError::type_error(
-                            "Cannot read properties of undefined (reading 'toString')",
-                        ));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
 impl TabFactory<Host> for Factory {
     fn create(&mut self, cx: &mut Host, tab_type: Option<TabType>) -> TabParts<Host> {
         let uuid = JsString::from(create_uuid(&mut cx.rng));
         let slot: Rc<RefCell<Option<JsValue>>> = Rc::new(RefCell::new(None));
-        self.commands
-            .borrow_mut()
-            .insert(uuid.to_string_lossy(), slot.clone());
         self.doms
             .borrow_mut()
             .push((uuid.to_string_lossy(), DomKind::Other));
@@ -532,38 +504,25 @@ impl TabFactory<Host> for Factory {
                     slot,
                 }),
             },
-            Some(TabType::Joysticks) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(JoysticksController::new(cx)),
-                renderer: Box::new(Recorder {
-                    inner: C5Renderer,
-                    slot,
-                }),
-            },
-            Some(TabType::Swerve) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(SwerveController::new(cx)),
-                renderer: Box::new(Recorder {
-                    inner: C5Renderer,
-                    slot,
-                }),
-            },
-            Some(TabType::Mechanism) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(MechanismController::new(cx)),
-                renderer: Box::new(Recorder {
-                    inner: MechanismRenderer,
-                    slot,
-                }),
-            },
-            Some(TabType::Points) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(PointsController::new(cx)),
-                renderer: Box::new(Recorder {
-                    inner: C5Renderer,
-                    slot,
-                }),
-            },
+            Some(
+                kind
+                @ (TabType::Joysticks | TabType::Swerve | TabType::Mechanism | TabType::Points),
+            ) => {
+                let controller: Box<dyn TabController<Host>> = match kind {
+                    TabType::Joysticks => Box::new(JoysticksController::new(cx)),
+                    TabType::Swerve => Box::new(SwerveController::new(cx)),
+                    TabType::Mechanism => Box::new(MechanismController::new(cx)),
+                    _ => Box::new(PointsController::new(cx)),
+                };
+                TabParts {
+                    uuid: uuid.clone(),
+                    controller,
+                    renderer: Box::new(Recorder {
+                        inner: PendingRenderer,
+                        slot,
+                    }),
+                }
+            }
             other => {
                 let timeline = !matches!(
                     other,
@@ -579,14 +538,7 @@ impl TabFactory<Host> for Factory {
                 // owns, after its own UUID.
                 let source_lists = match other {
                     Some(TabType::LineGraph) => 3,
-                    Some(
-                        TabType::Field2d
-                        | TabType::Field3d
-                        | TabType::Statistics
-                        | TabType::Swerve
-                        | TabType::Mechanism
-                        | TabType::Points,
-                    ) => 1,
+                    Some(TabType::Field2d | TabType::Field3d | TabType::Statistics) => 1,
                     _ => 0,
                 };
                 for _ in 0..source_lists {
@@ -663,75 +615,60 @@ impl SourceListCx for Host {
     }
 }
 
-/// `window.assets = message.data`: the raw object is assigned verbatim; the parsed
-/// view covers the fields C05 controllers read (joystick names). `joysticks` missing
-/// throws where upstream's `joysticks.map` would.
-fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, JsError> {
+/// `window.assets = message.data`, parsed into the typed assets controllers read. Only
+/// joysticks are converted so far: no ported controller reads the other kinds, so one that
+/// starts to sees empty lists and mismatches until this converts them. Load failures, whose
+/// alert belongs to D07's hub lifecycle, fail the run.
+fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String> {
     let JsValue::Object(o) = data else {
-        return Ok(None);
+        return match data {
+            JsValue::Null => Ok(None),
+            _ => Err(format!("set-assets with {data:?} is not modeled")),
+        };
     };
-    let joysticks = match o.get("joysticks") {
-        Some(JsValue::Array(items)) => items
-            .iter()
-            .map(|raw| match parse_joystick(raw) {
-                Ok(Parsed::Config(j)) => j,
-                _ => ConfigJoystick {
-                    name: raw
-                        .get("name")
-                        .and_then(JsValue::as_str)
-                        .cloned()
-                        .unwrap_or_default(),
-                    path: JsString::new(),
-                    components: Vec::new(),
-                },
-            })
-            .collect(),
-        Some(JsValue::Null) => {
-            return Err(JsError::type_error(
-                "Cannot read properties of null (reading 'map')",
-            ));
-        }
-        Some(_) => {
-            return Err(JsError::type_error(
-                "window.assets.joysticks.map is not a function",
-            ));
-        }
-        None => {
-            return Err(JsError::type_error(
-                "Cannot read properties of undefined (reading 'map')",
-            ));
-        }
+    let list = |key: &str| match o.get(key) {
+        Some(JsValue::Array(items)) => Ok(items.clone()),
+        _ => Err(format!("set-assets without a {key} array is not modeled")),
     };
-    let load_failures = match o.get("loadFailures") {
-        Some(JsValue::Array(items)) => items.iter().filter_map(|i| i.as_str().cloned()).collect(),
-        _ => Vec::new(),
-    };
+    for key in ["field2ds", "field3ds", "robots"] {
+        list(key)?;
+    }
+    if !list("loadFailures")?.is_empty() {
+        return Err("set-assets with load failures is not modeled".to_owned());
+    }
+    let joysticks = list("joysticks")?
+        .iter()
+        .map(|raw| match parse_joystick(raw) {
+            Ok(Parsed::Config(j)) => Ok(j),
+            other => Err(format!(
+                "set-assets joystick {raw:?} does not parse: {other:?}"
+            )),
+        })
+        .collect::<Result<_, _>>()?;
     Ok(Some(AdvantageScopeAssets {
-        field2ds: Vec::new(),
-        field3ds: Vec::new(),
-        robots: Vec::new(),
         joysticks,
-        load_failures,
+        ..AdvantageScopeAssets::default()
     }))
 }
 
-fn type_memory_from_js(data: &JsValue) -> SourceListTypeMemory {
-    let mut memory = SourceListTypeMemory::new();
+fn type_memory_from_js(data: &JsValue) -> Result<SourceListTypeMemory, String> {
     let JsValue::Object(ids) = data else {
-        return memory;
+        return Err(format!("type memory {data:?} is not an object"));
     };
+    let mut memory = SourceListTypeMemory::new();
     for (id, entries) in ids.iter() {
+        let JsValue::Object(entries) = entries else {
+            return Err(format!("type memory for {id:?} is not an object"));
+        };
         let mut map = JsObject::new();
-        if let JsValue::Object(entries) = entries {
-            for (key, entry) in entries.iter() {
-                if let Some(entry) = SourceListTypeMemoryEntry::from_js(entry) {
-                    map.insert(key.clone(), entry);
-                }
-            }
+        for (key, entry) in entries.iter() {
+            let entry = SourceListTypeMemoryEntry::from_js(entry)
+                .ok_or_else(|| format!("type memory entry {entry:?} has another shape"))?;
+            map.insert(key.clone(), entry);
         }
         memory.insert(id.clone(), map);
     }
-    memory
+    Ok(memory)
 }
 
 impl TabsHost for Host {
@@ -798,7 +735,6 @@ struct Runner {
     host: Host,
     tabs: Tabs<Host>,
     doms: Doms,
-    commands: CommandSlots,
     emitted: Vec<Emit>,
     clock: Rc<Cell<f64>>,
     now: f64,
@@ -1232,6 +1168,16 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         };
         return eval_tab_suffix(r, suffix, &index);
     }
+    if let Some(index) = expr
+        .strip_prefix("window.tabs.setSelected(")
+        .and_then(|e| e.strip_suffix(')'))
+    {
+        let index = index.parse::<f64>().map_err(|_| err("bad tab index"))?;
+        r.tabs
+            .set_selected(&r.host, &JsValue::Number(index))
+            .map_err(|e| err(e.to_string()))?;
+        return Ok(JsValue::Undefined);
+    }
     match expr {
         "window.tabs.saveState()" => Ok(r.tabs.save_state(&r.host)),
         "[...window.tabs.getActiveFields()]" => {
@@ -1260,47 +1206,25 @@ fn tab_index(r: &Runner, index: &JsValue) -> Option<usize> {
     }
 }
 
+/// A harness-side gap reported as an exception the vector can never contain.
+fn unmodeled(what: String) -> asrs_hub::tabs::TabsError {
+    asrs_hub::tabs::TabsError::Thrown(JsError::new("Unmodeled", what))
+}
+
 fn c5_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut SourceList> {
-    if controller
-        .as_any_mut()
-        .downcast_mut::<SwerveController>()
-        .is_some()
-    {
-        return Some(
-            controller
-                .as_any_mut()
-                .downcast_mut::<SwerveController>()
-                .expect("checked")
-                .source_list_mut(),
-        );
+    let any = controller.as_any_mut();
+    if any.is::<SwerveController>() {
+        return any
+            .downcast_mut::<SwerveController>()
+            .map(SwerveController::source_list_mut);
     }
-    if controller
-        .as_any_mut()
-        .downcast_mut::<MechanismController>()
-        .is_some()
-    {
-        return Some(
-            controller
-                .as_any_mut()
-                .downcast_mut::<MechanismController>()
-                .expect("checked")
-                .source_list_mut(),
-        );
+    if any.is::<MechanismController>() {
+        return any
+            .downcast_mut::<MechanismController>()
+            .map(MechanismController::source_list_mut);
     }
-    if controller
-        .as_any_mut()
-        .downcast_mut::<PointsController>()
-        .is_some()
-    {
-        return Some(
-            controller
-                .as_any_mut()
-                .downcast_mut::<PointsController>()
-                .expect("checked")
-                .source_list_mut(),
-        );
-    }
-    None
+    any.downcast_mut::<PointsController>()
+        .map(PointsController::source_list_mut)
 }
 
 fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsValue, String> {
@@ -1403,16 +1327,7 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .strip_prefix("setState(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            let state = parse_arg(arg)?;
-            let items = state
-                .as_array()
-                .ok_or_else(|| err("setState needs an array"))?
-                .iter()
-                .map(|item| {
-                    SourceListItemState::from_js(item)
-                        .ok_or_else(|| err("a restored source item of another shape"))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let items = source_state(&parse_arg(arg)?).map_err(|e| e.message)?;
             with_env(host, |env| list.set_state(env, items)).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
@@ -1635,10 +1550,11 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             None => js_json::to_js(&Value::from_json_lenient(assets))?,
         };
         host.assets_raw = assets.clone();
-        host.assets = assets_from_js(&assets).map_err(|e| err(e.message))?;
+        host.assets = assets_from_js(&assets).map_err(err)?;
     }
     if let Some(memory) = fixture.get("typeMemory") {
-        host.type_memory = type_memory_from_js(&js_json::to_js(&Value::from_json_lenient(memory))?);
+        host.type_memory = type_memory_from_js(&js_json::to_js(&Value::from_json_lenient(memory))?)
+            .map_err(err)?;
     }
     if let Some(prefs) = fixture.get("preferences") {
         let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;
@@ -1671,11 +1587,11 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 }
                 "set-assets" => {
                     let data = js_json::to_js(&data)?;
-                    host.assets = assets_from_js(&data).map_err(|e| err(e.message))?;
+                    host.assets = assets_from_js(&data).map_err(err)?;
                     host.assets_raw = data;
                 }
                 "restore-type-memory" => {
-                    host.type_memory = type_memory_from_js(&js_json::to_js(&data)?);
+                    host.type_memory = type_memory_from_js(&js_json::to_js(&data)?).map_err(err)?;
                 }
                 "set-version"
                 | "set-fullscreen"
@@ -1701,11 +1617,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     };
 
     let doms: Doms = Rc::new(RefCell::new(Vec::new()));
-    let commands: CommandSlots = Rc::new(RefCell::new(HashMap::new()));
-    let factory = Factory {
-        doms: doms.clone(),
-        commands: commands.clone(),
-    };
+    let factory = Factory { doms: doms.clone() };
     host.rng.next_f64();
     let tabs = Tabs::new(Box::new(factory), &mut host);
     let mut runner = Runner {
@@ -1713,7 +1625,6 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         host,
         tabs,
         doms,
-        commands,
         emitted: Vec::new(),
         clock: clock_cell.clone(),
         now: start,
@@ -1942,49 +1853,15 @@ impl Runner {
                 }
             }
             "set-assets" => {
-                let failures_len = |value: &JsValue| -> Result<f64, JsError> {
-                    if !ops::to_boolean(value) {
-                        return Ok(0.0);
-                    }
-                    match value.get("loadFailures") {
-                        None | Some(JsValue::Undefined) => Err(JsError::type_error(
-                            "Cannot read properties of undefined (reading 'length')",
-                        )),
-                        Some(JsValue::Null) => Err(JsError::type_error(
-                            "Cannot read properties of null (reading 'length')",
-                        )),
-                        Some(JsValue::Array(a)) => Ok(a.len() as f64),
-                        Some(JsValue::String(s)) => Ok(s.units().len() as f64),
-                        Some(_) => Ok(f64::NAN),
-                    }
-                };
-                let same = asrs_js::json::stringify(&self.host.assets_raw)
-                    == asrs_js::json::stringify(data);
-                if !same {
-                    let old_failed =
-                        failures_len(&self.host.assets_raw).map_err(TabsError::Thrown)? > 0.0;
-                    let new_failed = failures_len(data).map_err(TabsError::Thrown)? > 0.0;
-                    self.host.assets = assets_from_js(data).map_err(TabsError::Thrown)?;
+                if asrs_js::json::stringify(&self.host.assets_raw) != asrs_js::json::stringify(data)
+                {
+                    self.host.assets = assets_from_js(data).map_err(unmodeled)?;
                     self.host.assets_raw = data.clone();
                     self.tabs.new_assets(&mut self.host)?;
-                    if new_failed && !old_failed {
-                        self.emit_main(
-                            "error",
-                            Value::object([
-                                ("title", Value::string("Failed to load assets")),
-                                (
-                                    "content",
-                                    Value::string(
-                                        "Some asset files failed to load. Check the developer console for details.",
-                                    ),
-                                ),
-                            ]),
-                        );
-                    }
                 }
             }
             "restore-type-memory" => {
-                self.host.type_memory = type_memory_from_js(data);
+                self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
             }
             "set-version"
             | "set-fullscreen"
@@ -2072,28 +1949,69 @@ impl Runner {
             // DOM-only (row filtering and the console jump scroll belong to the view layer).
             (t, "input") if t.contains("input.filter") => {}
             (t, "keydown" | "click") if t.contains("console-table-jump") => {}
-            (t, "change") if t.contains("input.max-speed") => self.swerve_change("maxSpeed", props),
-            (t, "change") if t.contains("input.size-x") => self.swerve_change("sizeX", props),
-            (t, "change") if t.contains("input.size-y") => self.swerve_change("sizeY", props),
-            (t, "click") if t.contains("orientation-switcher") => self.swerve_rotate(index),
+            (t, "change") if t.contains("input.max-speed") => {
+                self.swerve_change(SwerveInput::MaxSpeed, props)?
+            }
+            (t, "change") if t.contains("input.size-x") => {
+                self.swerve_change(SwerveInput::SizeX, props)?
+            }
+            (t, "change") if t.contains("input.size-y") => {
+                self.swerve_change(SwerveInput::SizeY, props)?
+            }
+            (t, "click") if t.contains("orientation-switcher") => self.swerve_rotate(index)?,
             (t, "keydown") if t.contains("orientation-switcher") => {
-                let key = init.get("key").and_then(Json::as_str);
-                if key.is_some_and(|k| k.eq_str("Enter") || k.eq_str(" ")) {
-                    self.swerve_rotate(index);
+                let key = init
+                    .get("key")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| err("keydown needs a key"))?;
+                if keyboard_clicks(&js(&key.to_string_lossy())) {
+                    self.swerve_rotate(index)?;
                 }
             }
-            (t, "change") if t.contains("dimensions-width") => self.points_change("width", props),
-            (t, "change") if t.contains("dimensions-height") => self.points_change("height", props),
-            (t, "change") if t.contains("select.orientation") => {
-                self.points_select("orientation", props)
+            (t, "change") if t.contains("input.dimensions-width") => {
+                self.points_change(Dimension::Width, props)?
             }
-            (t, "change") if t.contains("select.origin") => self.points_select("origin", props),
-            (t, "change") if t.contains("joystick-selector") => self.joystick_change(index, props),
-            // `button.hide` and `button.remove` on a `.source-list` item, which the four C05
-            // lists share; `index` is the item position among `.item` elements.
-            (t, "click") if t.contains("button.hide") => self.c5_item_click(index, false),
-            (t, "click") if t.contains("button.remove") => self.c5_item_click(index, true),
+            (t, "change") if t.contains("input.dimensions-height") => {
+                self.points_change(Dimension::Height, props)?
+            }
+            (t, "change") if t.contains("select.orientation") => {
+                self.points_select(PointsSelect::Orientation, props)?
+            }
+            (t, "change") if t.contains("select.origin") => {
+                self.points_select(PointsSelect::Origin, props)?
+            }
+            (t, "change") if t.contains("table.joystick-selector select") => {
+                self.joystick_change(index, props)?
+            }
+            // One `button.hide` and one `button.remove` per `.source-list .item`, so `index`
+            // is the item's position in the list.
+            (t, "click") if t.contains(".source-list .list .item button.hide") => {
+                self.source_item_click(index, false)?
+            }
+            (t, "click") if t.contains(".source-list .list .item button.remove") => {
+                self.source_item_click(index, true)?
+            }
             _ => return Err(format!("event {etype} on {target} is not modeled")),
+        }
+        // Every keydown bubbles to `SelectionImpl`'s window listener after the target's own.
+        if etype == "keydown" {
+            let flag = |name: &str| matches!(init.get(name), Some(Json::Bool(true)));
+            let code = init
+                .get("code")
+                .and_then(Json::as_str)
+                .map(|c| c.to_string_lossy())
+                .unwrap_or_default();
+            let element = target.rsplit(' ').next().unwrap_or_default();
+            let key_target = if element.starts_with("input") {
+                KeyTarget::Input
+            } else if element.starts_with("textarea") {
+                KeyTarget::TextArea
+            } else {
+                KeyTarget::Other
+            };
+            self.host
+                .selection
+                .key_down(&code, flag("metaKey"), flag("ctrlKey"), key_target);
         }
         Ok(())
     }
@@ -2247,98 +2165,104 @@ impl Runner {
         }
     }
 
-    fn selected_controller(&mut self) -> Option<&mut dyn TabController<Host>> {
-        let i = self.tabs.selected_index()?;
-        let index = JsValue::Number(i as f64);
-        self.tabs.controller_mut(&index).ok()
+    fn selected_controller<T: 'static>(&mut self) -> Result<&mut T, String> {
+        let i = self
+            .tabs
+            .selected_index()
+            .ok_or_else(|| err("no tab is selected"))?;
+        self.tabs
+            .controller_mut(&JsValue::Number(i as f64))
+            .map_err(|e| err(e.to_string()))?
+            .downcast_mut::<T>()
+            .ok_or_else(|| {
+                err(format!(
+                    "the selected tab is not a {}",
+                    std::any::type_name::<T>()
+                ))
+            })
     }
 
-    fn prop_value(&self, props: Option<&Json>) -> Option<JsString> {
-        props
-            .and_then(|p| p.get("value"))
-            .and_then(Json::as_str)
-            .map(|v| js(&v.to_string_lossy()))
+    /// `props.value`, assigned to the target before the event is dispatched.
+    fn prop_value(props: Option<&Json>) -> Result<Option<JsString>, String> {
+        match props.and_then(|p| p.get("value")) {
+            None => Ok(None),
+            Some(v) => v
+                .as_str()
+                .map(|v| Some(js(&v.to_string_lossy())))
+                .ok_or_else(|| err("props.value must be a string")),
+        }
     }
 
-    fn swerve_change(&mut self, input: &str, props: Option<&Json>) {
-        let value = self.prop_value(props);
-        let Some(c) = self
-            .selected_controller()
-            .and_then(|c| c.as_any_mut().downcast_mut::<SwerveController>())
-        else {
-            return;
-        };
+    fn swerve_change(&mut self, input: SwerveInput, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<SwerveController>()?;
         if let Some(value) = value {
-            c.set_input(input, value);
+            controller.input_mut(input).set_value(value);
         }
-        c.input_changed(input);
+        controller.input_changed(input);
+        Ok(())
     }
 
-    fn swerve_rotate(&mut self, index: usize) {
-        if let Some(c) = self
-            .selected_controller()
-            .and_then(|c| c.as_any_mut().downcast_mut::<SwerveController>())
-        {
-            if index == 0 {
-                c.rotate_left();
-            } else {
-                c.rotate_right();
-            }
+    fn swerve_rotate(&mut self, index: usize) -> Result<(), String> {
+        let controller = self.selected_controller::<SwerveController>()?;
+        match index {
+            0 => controller.rotate_left(),
+            1 => controller.rotate_right(),
+            _ => return Err(err(format!("orientation switcher has no child {index}"))),
         }
+        Ok(())
     }
 
-    fn points_change(&mut self, input: &str, props: Option<&Json>) {
-        let value = self.prop_value(props);
-        let Some(c) = self
-            .selected_controller()
-            .and_then(|c| c.as_any_mut().downcast_mut::<PointsController>())
-        else {
-            return;
-        };
+    fn points_change(&mut self, dimension: Dimension, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<PointsController>()?;
         if let Some(value) = value {
-            c.set_input(input, value);
+            controller.dimension_mut(dimension).set_value(value);
         }
-        c.dimension_changed(input);
+        controller.dimension_changed(dimension);
+        Ok(())
     }
 
-    fn points_select(&mut self, input: &str, props: Option<&Json>) {
-        let value = self.prop_value(props);
-        if let (Some(value), Some(c)) = (
-            value,
-            self.selected_controller()
-                .and_then(|c| c.as_any_mut().downcast_mut::<PointsController>()),
-        ) {
-            c.set_input(input, value);
+    /// The selects have no `change` listener; only the assigned value matters.
+    fn points_select(&mut self, select: PointsSelect, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<PointsController>()?;
+        if let Some(value) = value {
+            controller.select_mut(select).set_value(&value);
         }
+        Ok(())
     }
 
-    fn joystick_change(&mut self, index: usize, props: Option<&Json>) {
-        let value = self.prop_value(props);
-        if let (Some(value), Some(c)) = (
-            value,
-            self.selected_controller()
-                .and_then(|c| c.as_any_mut().downcast_mut::<JoysticksController>()),
-        ) && let Some(select) = c.select_mut(index)
-        {
+    /// The selects have no `change` listener; only the assigned value matters.
+    fn joystick_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?;
+        let controller = self.selected_controller::<JoysticksController>()?;
+        let select = controller
+            .select_mut(index)
+            .ok_or_else(|| err(format!("no joystick select {index}")))?;
+        if let Some(value) = value {
             select.set_value(&value);
         }
+        Ok(())
     }
 
-    fn c5_item_click(&mut self, index: usize, remove: bool) {
-        let Some(tab) = self.tabs.selected_index() else {
-            return;
-        };
-        let tab = JsValue::Number(tab as f64);
-        let Ok(controller) = self.tabs.controller_mut(&tab) else {
-            return;
-        };
-        let Some(list) = c5_source_list(controller) else {
-            return;
-        };
+    fn source_item_click(&mut self, index: usize, remove: bool) -> Result<(), String> {
+        let i = self
+            .tabs
+            .selected_index()
+            .ok_or_else(|| err("no tab is selected"))?;
+        let controller = self
+            .tabs
+            .controller_mut(&JsValue::Number(i as f64))
+            .map_err(|e| err(e.to_string()))?;
+        let list = c5_source_list(controller)
+            .ok_or_else(|| err("source list item clicks are modeled for C05 tabs only"))?;
         if remove {
             list.remove(index);
+            Ok(())
         } else {
-            let _ = with_env(&mut self.host, |env| list.toggle_hidden(env, index));
+            with_env(&mut self.host, |env| list.toggle_hidden(env, index))
+                .map_err(|e| js_error(e).message)
         }
     }
 
@@ -2387,12 +2311,8 @@ impl Runner {
                         let Some(uuid) = tab.uuid().as_str().map(|s| s.to_string_lossy()) else {
                             continue;
                         };
-                        let slot = self
-                            .commands
-                            .borrow()
-                            .get(&uuid)
-                            .cloned()
-                            .unwrap_or_default();
+                        let slot = recorded_command(tab.renderer())
+                            .ok_or_else(|| err(format!("tab {i} has no recording renderer")))?;
                         let Some(command) = slot.borrow_mut().take() else {
                             continue;
                         };
@@ -2536,9 +2456,12 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             .and_then(Value::as_f64)
             .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0));
         for (key, value) in &emit.values {
-            let expected_value = record
-                .value(key)
-                .map_err(|e| format!("line {} missing {key}: {e}", record.line))?;
+            let expected_value = record.value(key).map_err(|e| {
+                format!(
+                    "line {} missing {key}: {e}; the port emitted {value:?}",
+                    record.line
+                )
+            })?;
             if *key == "value" && stub_command {
                 continue;
             }

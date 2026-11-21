@@ -14,36 +14,67 @@ use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{SourceListCx, js_error, with_env};
-use crate::select::Select;
+use crate::form::{NumberInput, Select};
+use crate::list_cx::{SourceListCx, js_error, source_state, with_env};
 
-fn to_number(value: &JsString) -> f64 {
-    number::to_number(value.units())
+/// `WIDTH` and `HEIGHT`, in the order of upstream's `forEach` (`index` 0 and 1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dimension {
+    Width,
+    Height,
+}
+
+/// `ORIENTATION` and `ORIGIN`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointsSelect {
+    Orientation,
+    Origin,
 }
 
 pub struct PointsController {
     source_list: SourceList,
-    /// `WIDTH.value`: the `type="number"` input's string, `"960"` in markup.
-    width: JsString,
-    height: JsString,
+    width: NumberInput,
+    height: NumberInput,
     orientation: Select,
     origin: Select,
+}
+
+struct PointSet {
+    points: Vec<[f64; 2]>,
+    shape: &'static str,
+    size: &'static str,
+    group_size: f64,
+}
+
+impl ToJs for PointSet {
+    fn to_js(&self) -> JsValue {
+        let mut o = JsObject::new();
+        o.insert(
+            "points",
+            self.points
+                .iter()
+                .map(|p| p.to_vec().to_js())
+                .collect::<Vec<_>>()
+                .to_js(),
+        );
+        o.insert("shape", JsValue::from(self.shape));
+        o.insert("size", JsValue::from(self.size));
+        o.insert("groupSize", self.group_size.to_js());
+        JsValue::Object(o)
+    }
 }
 
 impl PointsController {
     /// The source list draws one `createUUID()` after the controller's own.
     pub fn new<Cx: TabCx + ?Sized>(cx: &mut Cx) -> PointsController {
         let uuid = asrs_js::time::create_uuid(cx.tab_rng());
+        let options = |values: &[&str]| values.iter().copied().map(JsString::from).collect();
         PointsController {
             source_list: SourceList::new(configs::points(), uuid, false),
-            width: JsString::from("960"),
-            height: JsString::from("720"),
-            orientation: Select::with_options(
-                ["xr,yd", "xr,yu", "xu,yl"].map(JsString::from).to_vec(),
-            ),
-            origin: Select::with_options(
-                ["ul", "ur", "ll", "lr", "c"].map(JsString::from).to_vec(),
-            ),
+            width: NumberInput::new("960"),
+            height: NumberInput::new("720"),
+            orientation: Select::with_options(options(&["xr,yd", "xr,yu", "xu,yl"])),
+            origin: Select::with_options(options(&["ul", "ur", "ll", "lr", "c"])),
         }
     }
 
@@ -55,77 +86,87 @@ impl PointsController {
         &mut self.source_list
     }
 
-    /// An `input.value`: `"width"`, `"height"`, `"orientation"` or `"origin"`.
-    pub fn input_value(&self, input: &str) -> Option<JsString> {
-        match input {
-            "width" => Some(self.width.clone()),
-            "height" => Some(self.height.clone()),
-            "orientation" => Some(self.orientation.value()),
-            "origin" => Some(self.origin.value()),
-            _ => None,
+    pub fn dimension(&self, dimension: Dimension) -> &NumberInput {
+        match dimension {
+            Dimension::Width => &self.width,
+            Dimension::Height => &self.height,
         }
     }
 
-    /// `input.value = value`.
-    pub fn set_input(&mut self, input: &str, value: JsString) {
-        match input {
-            "width" => self.width = value,
-            "height" => self.height = value,
-            "orientation" => self.orientation.set_value(&value),
-            "origin" => self.origin.set_value(&value),
-            _ => {}
+    pub fn dimension_mut(&mut self, dimension: Dimension) -> &mut NumberInput {
+        match dimension {
+            Dimension::Width => &mut self.width,
+            Dimension::Height => &mut self.height,
         }
     }
 
-    /// The `change` listener `WIDTH` and `HEIGHT` share (`index` is never 2, so the
-    /// `< 0` branch is unreachable upstream).
-    pub fn dimension_changed(&mut self, input: &str) {
-        let value = match self.input_value(input) {
-            Some(v) if input == "width" || input == "height" => v,
-            _ => return,
+    pub fn select(&self, select: PointsSelect) -> &Select {
+        match select {
+            PointsSelect::Orientation => &self.orientation,
+            PointsSelect::Origin => &self.origin,
+        }
+    }
+
+    pub fn select_mut(&mut self, select: PointsSelect) -> &mut Select {
+        match select {
+            PointsSelect::Orientation => &mut self.orientation,
+            PointsSelect::Origin => &mut self.origin,
+        }
+    }
+
+    /// The `change` listener `WIDTH` and `HEIGHT` share. Its `index === 2` branch is
+    /// unreachable upstream (the array has two inputs).
+    pub fn dimension_changed(&mut self, dimension: Dimension) {
+        let input = self.dimension_mut(dimension);
+        if math::rem(input.number(), 1.0) != 0.0 {
+            let rounded = number::to_string(math::round(input.number()));
+            input.set_value(JsString::from(rounded));
+        }
+        if input.number() <= 0.0 {
+            input.set_value(JsString::from("1"));
+        }
+    }
+
+    fn is_child(&self, item: &SourceListItemState) -> bool {
+        self.source_list
+            .config()
+            .types
+            .iter()
+            .find(|t| item.item_type == JsString::from(t.key.as_str()))
+            .is_some_and(|t| t.child_of.is_some())
+    }
+
+    fn transform(&self, [x, y]: [f64; 2], dimensions: [f64; 2]) -> [f64; 2] {
+        let orientation = self.orientation.value();
+        let [x, y] = if orientation == JsString::from("xr,yu") {
+            [x, -y]
+        } else if orientation == JsString::from("xu,yl") {
+            [-y, -x]
+        } else {
+            [x, y]
         };
-        if math::rem(to_number(&value), 1.0) != 0.0 {
-            self.set_input(
-                input,
-                JsString::from(number::to_string(math::round(to_number(&value)))),
-            );
-        }
-        let value = self.input_value(input).unwrap_or_default();
-        if to_number(&value) <= 0.0 {
-            self.set_input(input, JsString::from("1"));
+        match self.origin.value().as_string().as_deref() {
+            Some("ur") => [x + dimensions[0], y],
+            Some("ll") => [x, y + dimensions[1]],
+            Some("lr") => [x + dimensions[0], y + dimensions[1]],
+            Some("c") => [x + dimensions[0] / 2.0, y + dimensions[1] / 2.0],
+            _ => [x, y],
         }
     }
 }
 
-fn source_state(value: &JsValue) -> Result<Vec<SourceListItemState>, JsError> {
-    value
-        .as_array()
-        .ok_or_else(|| JsError::new("", "restored sources that are not an array"))?
-        .iter()
-        .map(|item| {
-            SourceListItemState::from_js(item)
-                .ok_or_else(|| JsError::new("", "a restored source item of another shape"))
-        })
-        .collect()
-}
-
-fn point_to_js(point: [f64; 2]) -> JsValue {
-    vec![point[0].to_js(), point[1].to_js()].to_js()
-}
-
-fn geometry_error(e: asrs_log::geometry::GeometryError) -> JsError {
-    match e {
-        asrs_log::geometry::GeometryError::RangeError(m) => JsError::range(m),
-        asrs_log::geometry::GeometryError::TypeError(m) => JsError::type_error(m),
-    }
+fn option_is(item: &SourceListItemState, key: &str, value: &str) -> bool {
+    item.options
+        .get(key)
+        .is_some_and(|v| v == &JsString::from(value))
 }
 
 impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
     fn save_state(&self, _cx: &Cx) -> JsValue {
         let mut o = JsObject::new();
         o.insert("sources", self.source_list.state().to_js());
-        o.insert("width", to_number(&self.width).to_js());
-        o.insert("height", to_number(&self.height).to_js());
+        o.insert("width", self.width.number().to_js());
+        o.insert("height", self.height.number().to_js());
         o.insert("orientation", self.orientation.value().to_js());
         o.insert("origin", self.origin.value().to_js());
         JsValue::Object(o)
@@ -139,17 +180,19 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
             let items = source_state(sources)?;
             with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)?;
         }
-        if let Some(w) = state.get("width").and_then(JsValue::as_f64) {
-            self.width = JsString::from(number::to_string(w));
+        for (key, dimension) in [("width", Dimension::Width), ("height", Dimension::Height)] {
+            if let Some(n) = state.get(key).and_then(JsValue::as_f64) {
+                self.dimension_mut(dimension)
+                    .set_value(JsString::from(number::to_string(n)));
+            }
         }
-        if let Some(h) = state.get("height").and_then(JsValue::as_f64) {
-            self.height = JsString::from(number::to_string(h));
-        }
-        if let Some(JsValue::String(o)) = state.get("orientation") {
-            self.orientation.set_value(o);
-        }
-        if let Some(JsValue::String(o)) = state.get("origin") {
-            self.origin.set_value(o);
+        for (key, select) in [
+            ("orientation", PointsSelect::Orientation),
+            ("origin", PointsSelect::Origin),
+        ] {
+            if let Some(JsValue::String(value)) = state.get(key) {
+                self.select_mut(select).set_value(value);
+            }
         }
         Ok(())
     }
@@ -171,167 +214,108 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
     }
 
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError> {
-        let mut time = cx.tab_selection().get_render_time();
+        let time = cx.tab_selection().get_render_time();
         let log = cx.tab_log();
-        if time.is_none() {
-            time = Some(log.get_timestamp_range()[1]);
-        }
-        let time = time.unwrap();
+        let time = time.unwrap_or_else(|| log.get_timestamp_range()[1]);
         let uuid = uuid.as_str().and_then(|s| s.as_string());
         let uuid = uuid.as_deref();
-        let config = configs::points();
-        let child_of = |key: &JsString| -> Option<()> {
-            config
-                .types
-                .iter()
-                .find(|t| t.key == key.as_string().unwrap_or_default())
-                .and_then(|t| t.child_of.as_ref())
-                .map(|_| ())
-        };
 
-        let mut sets: Vec<JsValue> = Vec::new();
+        let mut sets: Vec<PointSet> = Vec::new();
         let sources = self.source_list.displayed_state(&log);
         let mut i = 0;
         while i < sources.len() {
             let source = &sources[i];
-            if child_of(&source.item_type).is_some() {
+            if self.is_child(source) {
                 i += 1;
                 continue;
             }
-            let mut children: Vec<&SourceListItemState> = Vec::new();
-            while sources.len() > i + 1 && child_of(&sources[i + 1].item_type).is_some() {
+            let mut children = Vec::new();
+            while sources.len() > i + 1 && self.is_child(&sources[i + 1]) {
                 i += 1;
                 children.push(&sources[i]);
             }
+            i += 1;
 
             let type_key = source.item_type.as_string().unwrap_or_default();
-            let shape = if type_key.starts_with("plus") {
-                "plus"
-            } else if type_key.starts_with("cross") {
-                "cross"
-            } else {
-                "circle"
+            let shape = ["circle", "cross", "plus"]
+                .into_iter()
+                .find(|shape| type_key.starts_with(shape))
+                .unwrap_or("plus");
+            let size = match source.options.get("size") {
+                None => "medium",
+                Some(raw) => ["small", "medium", "large"]
+                    .into_iter()
+                    .find(|s| raw == &JsString::from(*s))
+                    .unwrap_or("medium"),
             };
-            let size = match source
+            let group_size = source
                 .options
-                .get("size")
-                .and_then(|s| s.as_string())
-                .unwrap_or_default()
-                .as_str()
-            {
-                s @ ("small" | "medium" | "large") => JsString::from(s),
-                _ => JsString::from("medium"),
-            };
-            let group_size = source.options.get("groupSize").map_or(0.0, to_number);
+                .get("groupSize")
+                .map_or(0.0, |g| number::to_number(g.units()));
 
-            let mut points: Vec<[f64; 2]> = Vec::new();
-            match type_key.as_str() {
-                "plus" | "cross" | "circle" => {
-                    let poses = grab_poses_auto(
-                        &log,
-                        &source.log_key,
-                        &source.log_type,
-                        time,
-                        uuid,
-                        RotationUnits::Radians,
-                    )
-                    .map_err(geometry_error)?;
-                    points = poses
-                        .iter()
-                        .map(|p| translation_3d_to_2d(p.pose.translation))
-                        .collect();
-                }
+            let points = match type_key.as_str() {
+                "plus" | "cross" | "circle" => grab_poses_auto(
+                    &log,
+                    &source.log_key,
+                    &source.log_type,
+                    time,
+                    uuid,
+                    RotationUnits::Radians,
+                )?
+                .iter()
+                .map(|p| translation_3d_to_2d(p.pose.translation))
+                .collect(),
                 "plusSplit" | "crossSplit" | "circleSplit" => {
                     let values: Vec<f64> =
                         get_or_default(&log, &source.log_key, time, Vec::new(), uuid);
-                    let x_component = source
-                        .options
-                        .get("component")
-                        .is_some_and(|c| c == &JsString::from("x"));
-                    points = values
-                        .iter()
-                        .map(|&v| if x_component { [v, 0.0] } else { [0.0, v] })
-                        .collect();
+                    let x = option_is(source, "component", "x");
+                    values
+                        .into_iter()
+                        .map(|v| if x { [v, 0.0] } else { [0.0, v] })
+                        .collect()
                 }
-                _ => {}
-            }
+                _ => {
+                    return Err(JsError::new(
+                        "Unmodeled",
+                        "points: a parent type outside the switch reuses the previous set",
+                    ));
+                }
+            };
+            sets.push(PointSet {
+                points,
+                shape,
+                size,
+                group_size,
+            });
 
+            let points = &mut sets.last_mut().expect("pushed above").points;
             for child in children {
                 let values: Vec<f64> = get_or_default(&log, &child.log_key, time, Vec::new(), uuid);
-                for (index, value) in values.iter().enumerate() {
-                    if let Some(point) = points.get_mut(index) {
-                        if child
-                            .options
-                            .get("component")
-                            .is_some_and(|c| c == &JsString::from("x"))
-                        {
-                            point[0] = *value;
-                        } else {
-                            point[1] = *value;
-                        }
-                    }
+                let axis = if option_is(child, "component", "x") {
+                    0
+                } else {
+                    1
+                };
+                for (point, value) in points.iter_mut().zip(values) {
+                    point[axis] = value;
                 }
             }
-
-            let mut o = JsObject::new();
-            o.insert(
-                "points",
-                points
-                    .iter()
-                    .map(|p| point_to_js(*p))
-                    .collect::<Vec<_>>()
-                    .to_js(),
-            );
-            o.insert("shape", JsString::from(shape).to_js());
-            o.insert("size", size.to_js());
-            o.insert("groupSize", group_size.to_js());
-            sets.push(JsValue::Object(o));
-            i += 1;
         }
 
-        let dimensions = [to_number(&self.width), to_number(&self.height)];
+        let dimensions = [self.width.number(), self.height.number()];
         for set in &mut sets {
-            let JsValue::Object(o) = set else { continue };
-            let Some(JsValue::Array(points)) = o.get_mut("points") else {
-                continue;
-            };
-            for point in points.iter_mut() {
-                let JsValue::Array(coords) = point else {
-                    continue;
-                };
-                let (x, y) = (
-                    coords.first().and_then(JsValue::as_f64).unwrap_or(f64::NAN),
-                    coords.get(1).and_then(JsValue::as_f64).unwrap_or(f64::NAN),
-                );
-                let (mut x, mut y) = match self.orientation.value().as_string().as_deref() {
-                    Some("xr,yu") => (x, -y),
-                    Some("xu,yl") => (-y, -x),
-                    _ => (x, y),
-                };
-                match self.origin.value().as_string().as_deref() {
-                    Some("ur") => x += dimensions[0],
-                    Some("ll") => y += dimensions[1],
-                    Some("lr") => {
-                        x += dimensions[0];
-                        y += dimensions[1];
-                    }
-                    Some("c") => {
-                        x += dimensions[0] / 2.0;
-                        y += dimensions[1] / 2.0;
-                    }
-                    _ => {}
-                }
-                if coords.len() >= 2 {
-                    coords[0] = x.to_js();
-                    coords[1] = y.to_js();
-                }
+            for point in &mut set.points {
+                *point = self.transform(*point, dimensions);
             }
         }
         sets.reverse();
 
         let mut o = JsObject::new();
         o.insert("dimensions", dimensions.to_vec().to_js());
-        o.insert("sets", sets.to_js());
+        o.insert(
+            "sets",
+            sets.iter().map(ToJs::to_js).collect::<Vec<_>>().to_js(),
+        );
         Ok(Rc::new(JsValue::Object(o)))
     }
 }

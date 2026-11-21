@@ -66,7 +66,11 @@
         }
       },
       {
+        "frames": 1
+      },
+      {
         "capture": [
+          "commands",
           "state",
           {
             "kind": "eval",
@@ -142,6 +146,26 @@
         "label": "restored"
       },
       {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([1, \"Xbox Controller\"])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"\", \"Gone\", \"PS5 Controller\", \"Xbox Controller\", \"None\", \"Generic Joystick\", \"Xbox Controller\"])"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "state",
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "restored-edges"
+      },
+      {
         "main": "set-assets",
         "data": {
           "field2ds": [],
@@ -149,8 +173,13 @@
           "robots": [],
           "joysticks": [
             {
-              "name": "Steering Wheel",
-              "path": "bundledAssets/Joystick_Wheel/",
+              "name": "Steering  Wheel",
+              "path": "bundledAssets/Joystick_0/",
+              "components": []
+            },
+            {
+              "name": "Xbox Controller",
+              "path": "bundledAssets/Joystick_1/",
               "components": []
             }
           ],
@@ -166,6 +195,135 @@
           }
         ],
         "label": "new-assets"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "new-assets-commands"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) table.joystick-selector select",
+          "type": "change",
+          "index": 4,
+          "props": {
+            "value": "Steering Wheel"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()"
+          }
+        ],
+        "label": "collapsed-option"
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [
+            {
+              "name": "Steering  Wheel",
+              "path": "bundledAssets/Joystick_0/",
+              "components": []
+            },
+            {
+              "name": "Xbox Controller",
+              "path": "bundledAssets/Joystick_1/",
+              "components": []
+            }
+          ],
+          "loadFailures": []
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "same-assets"
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [
+            {
+              "name": "Steering  Wheel",
+              "path": "bundledAssets/Joystick_0/",
+              "components": []
+            },
+            {
+              "name": "Xbox Controller",
+              "path": "bundledAssets/Joystick_1/",
+              "components": []
+            },
+            {
+              "name": "Pad\nTwo",
+              "path": "bundledAssets/Joystick_2/",
+              "components": []
+            }
+          ],
+          "loadFailures": []
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "raw-title-lookup"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"Steering  Wheel\", \"PadTwo\", \"Pad\\nTwo\"])"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "restore-raw-titles"
       }
     ]
   }

@@ -123,6 +123,184 @@
       },
       {
         "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-width",
+          "type": "change",
+          "props": {
+            "value": "abc"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-height",
+          "type": "change",
+          "props": {
+            "value": "2.5"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "dimensions-sanitized"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-width",
+          "type": "change",
+          "props": {
+            "value": "-0.4"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-height",
+          "type": "change",
+          "props": {
+            "value": "1e400"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "dimensions-rounded"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-width",
+          "type": "change",
+          "props": {
+            "value": "200"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-height",
+          "type": "change",
+          "props": {
+            "value": "100"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.orientation",
+          "type": "change",
+          "props": {
+            "value": "xr,yu"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.origin",
+          "type": "change",
+          "props": {
+            "value": "ur"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "xr-yu-ur"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.orientation",
+          "type": "change",
+          "props": {
+            "value": "xr,yd"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.origin",
+          "type": "change",
+          "props": {
+            "value": "ll"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "xr-yd-ll"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.orientation",
+          "type": "change",
+          "props": {
+            "value": "xu,yl"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.origin",
+          "type": "change",
+          "props": {
+            "value": "c"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "xu-yl-c"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.orientation",
+          "type": "change",
+          "props": {
+            "value": "bogus"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.origin",
+          "type": "change",
+          "props": {
+            "value": "ul"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "no-orientation"
+      },
+      {
+        "event": {
           "target": "div.controls-content > :not([hidden]) .source-list .list .item button.hide",
           "index": 0,
           "type": "click"
@@ -148,6 +326,23 @@
           }
         ],
         "label": "pruned"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"plusSplit\",\"logKey\":\"/Vision/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\",\"size\":\"huge\",\"groupSize\":\"  3 \"}},{\"type\":\"component\",\"logKey\":\"/Vision/Ys\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"y\"}},{\"type\":\"crossSplit\",\"logKey\":\"/Vision/Ys\",\"logType\":\"NumberArray\",\"visible\":false,\"options\":{\"component\":\"y\",\"size\":\"small\",\"groupSize\":\"0\"}},{\"type\":\"component\",\"logKey\":\"/Vision/Translations\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\"}},{\"type\":\"component\",\"logKey\":\"/Vision/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\"}}],\"width\":\"12\",\"height\":480,\"orientation\":\"nope\",\"origin\":5})"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "hidden-parent"
       }
     ]
   }

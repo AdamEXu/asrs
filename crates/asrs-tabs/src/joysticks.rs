@@ -10,7 +10,7 @@ use asrs_log::util::check_array_type;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::select::Select;
+use crate::form::{Select, option_value_from_inner_text};
 
 /// Six `<select>`s in `table.joystick-selector`.
 const SELECT_COUNT: usize = 6;
@@ -28,15 +28,23 @@ impl JoysticksController {
         controller
     }
 
-    /// `resetLayoutOptions`: `["None", "Generic Joystick", ...asset names]`, keeping
-    /// each select's value when the option still exists.
+    /// `resetLayoutOptions`. The options are created from `innerText`, so their values are
+    /// the titles with whitespace collapsed, while the kept value is looked up among the raw
+    /// titles.
     fn reset_layout_options<Cx: TabCx + ?Sized>(&mut self, cx: &mut Cx) {
-        let mut options = vec![JsString::from("None"), JsString::from("Generic Joystick")];
+        let mut titles = vec![JsString::from("None"), JsString::from("Generic Joystick")];
         if let Some(assets) = cx.tab_assets() {
-            options.extend(assets.joysticks.iter().map(|j| j.name.clone()));
+            titles.extend(assets.joysticks.iter().map(|j| j.name.clone()));
         }
+        let values: Vec<JsString> = titles.iter().map(option_value_from_inner_text).collect();
         for select in &mut self.selects {
-            select.reset_options(&options);
+            let value = select.value();
+            select.replace_options(values.clone());
+            select.set_value(if titles.contains(&value) {
+                &value
+            } else {
+                &titles[0]
+            });
         }
     }
 
@@ -134,14 +142,13 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for JoysticksController {
         let JsValue::Array(values) = state else {
             return Ok(());
         };
-        for (index, value) in values.iter().enumerate() {
-            if let (Some(select), Some(JsValue::String(v))) =
-                (self.selects.get_mut(index), Some(value))
-            {
-                select.set_value(v);
-                if select.value().as_string().unwrap_or_default().is_empty() {
-                    select.set_selected_index(0);
-                }
+        for (select, value) in self.selects.iter_mut().zip(values.iter()) {
+            let JsValue::String(value) = value else {
+                continue;
+            };
+            select.set_value(value);
+            if select.value().is_empty() {
+                select.set_selected_index(0);
             }
         }
         Ok(())
