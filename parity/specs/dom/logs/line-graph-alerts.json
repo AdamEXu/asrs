@@ -1,0 +1,21 @@
+[
+  ["putStringArray","/Alerts/errors",0,[]],
+  ["putStringArray","/Alerts/errors",1,["Motor fault"]],
+  ["putStringArray","/Alerts/errors",2,["Motor fault","Motor fault"]],
+  ["putStringArray","/Alerts/errors",3,["Motor fault","CAN down"]],
+  ["putStringArray","/Alerts/errors",5,["CAN down"]],
+  ["putStringArray","/Alerts/errors",7,[]],
+  ["putStringArray","/Alerts/errors",8,["Late"]],
+  ["putStringArray","/Alerts/warnings",0.5,["Battery low"]],
+  ["putStringArray","/Alerts/warnings",1.5,["Battery low","Hot"]],
+  ["putStringArray","/Alerts/warnings",2.5,["Hot","Battery low","Hot"]],
+  ["putStringArray","/Alerts/warnings",6,["Hot"]],
+  ["putStringArray","/Alerts/warnings",9.5,[]],
+  ["putStringArray","/Alerts/infos",0,["Hello"]],
+  ["putStringArray","/Alerts/infos",4,["Hello","World"]],
+  ["putStringArray","/Alerts/infos",4.5,["World"]],
+  ["putStringArray","/Other/warnings",3,["Other group"]],
+  ["putStringArray","/Other/warnings",4,[]],
+  ["putNumber","/Drive/Speed",0,0],
+  ["putNumber","/Drive/Speed",10,1]
+]
