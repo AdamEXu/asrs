@@ -261,11 +261,22 @@ function toBase64(bytes: Uint8Array): string {
   const flipped = new Uint8Array(pixels.length);
   const row = w * 4;
   for (let y = 0; y < h; y++) flipped.set(pixels.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+  const shadowMaps: { width: number; height: number; rgba: string }[] = [];
+  if (spec.shadows === true && scale === 1 && dark) {
+    scene.traverse((object) => {
+      if (object instanceof THREE.SpotLight && object.castShadow && object.shadow.map !== null) {
+        const map = object.shadow.map;
+        const texels = new Uint8Array(map.width * map.height * 4);
+        renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
+        shadowMaps.push({ width: map.width, height: map.height, rgba: toBase64(texels) });
+      }
+    });
+  }
   const debug = gl.getExtension("WEBGL_debug_renderer_info");
   const glRenderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
   const samples = gl.getParameter(gl.SAMPLES);
   renderer.dispose();
   renderer.forceContextLoss();
   canvas.remove();
-  return { width: w, height: h, rgba: toBase64(flipped), glRenderer, samples };
+  return { width: w, height: h, rgba: toBase64(flipped), glRenderer, samples, shadowMaps };
 };

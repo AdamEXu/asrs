@@ -4,8 +4,8 @@ use std::sync::Arc;
 use asrs_js::math;
 
 use super::scene::{
-    Geometry, LineBasicMaterial, LineMaterial, LineSegmentsGeometry, Mesh, NodeKind,
-    PhongMaterial, Scene, Side, SpotLight, matrix_to_f32, sphere_apply_matrix4,
+    Geometry, LineBasicMaterial, LineMaterial, LineSegmentsGeometry, Mesh, NodeKind, PhongMaterial,
+    Scene, Side, SpotLight, matrix_to_f32, sphere_apply_matrix4,
 };
 use crate::three::math_utils::RAD2DEG;
 use crate::three::{Color, Matrix3, Matrix4, ObjectId, PerspectiveCamera, Sphere, Vector3};
@@ -380,7 +380,11 @@ fn cast_shadow(kind: &NodeKind) -> bool {
 
 /// `SpotLightShadow.updateMatrices`: the shadow camera at the light looking at its target, and
 /// `LightShadow.matrix`, which maps world space to shadow-map texture space.
-fn spot_shadow_camera(scene: &Scene, id: ObjectId, light: &SpotLight) -> (PerspectiveCamera, Matrix4) {
+fn spot_shadow_camera(
+    scene: &Scene,
+    id: ObjectId,
+    light: &SpotLight,
+) -> (PerspectiveCamera, Matrix4) {
     let mut camera = PerspectiveCamera::new(50.0, 1.0, 0.5, 500.0);
     let fov = RAD2DEG * 2.0 * light.angle * light.shadow.focus;
     let aspect = light.shadow.map_size[0] / light.shadow.map_size[1];
@@ -400,7 +404,8 @@ fn spot_shadow_camera(scene: &Scene, id: ObjectId, light: &SpotLight) -> (Perspe
         &scene.graph.object(light.target).matrix_world,
     ));
     camera.update_matrix_world(false);
-    let proj_screen = Matrix4::multiply_matrices(&camera.projection_matrix, &camera.matrix_world_inverse);
+    let proj_screen =
+        Matrix4::multiply_matrices(&camera.projection_matrix, &camera.matrix_world_inverse);
     let bias = Matrix4::from_rows([
         0.5, 0.0, 0.0, 0.5, //
         0.0, 0.5, 0.0, 0.5, //
@@ -489,7 +494,9 @@ fn mesh_draw(
         front_face_cw: world.determinant() < 0.0,
         model: matrix_to_f32(world),
         model_view: matrix_to_f32(&model_view),
-        normal_matrix: Matrix3::normal_matrix(&model_view).elements.map(|v| v as f32),
+        normal_matrix: Matrix3::normal_matrix(&model_view)
+            .elements
+            .map(|v| v as f32),
         receive_shadow,
     }
 }
@@ -542,7 +549,8 @@ pub fn build_frame(
     collected.opaque.sort_by(painter_sort);
     collected.transparent.sort_by(reverse_painter_sort);
 
-    let (lights, shadow_cameras) = light_uniforms(scene, collected.lights, &view, options.shadow_map);
+    let (lights, shadow_cameras) =
+        light_uniforms(scene, collected.lights, &view, options.shadow_map);
     let shadows = shadow_cameras
         .into_iter()
         .map(|(camera, map_size)| {

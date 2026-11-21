@@ -40,7 +40,7 @@ struct SpotShadow {
 
 struct Frame {
     projection: mat4x4<f32>,
-    // hemisphere, point, spot
+    // hemisphere, point, spot, always 0 (see opaque)
     counts: vec4<u32>,
     // ANGLE's runtime clip-space factors: y flip (-1) and depth sign (+1)
     clip_factors: vec4<f32>,
@@ -140,9 +140,8 @@ fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> 
     let shadow_world_normal = fast_normalize((vec4<f32>(transformed_normal, 0.0) * frame.view).xyz);
     var coords = array<vec4<f32>, MAX_SPOT_SHADOWS>();
     for (var i = 0u; i < frame.shadow_counts.x; i++) {
-        var shadow_world_position = world_position;
-        shadow_world_position = vec4<f32>(shadow_world_position.xyz + shadow_world_normal * frame.spot_shadow[i].params.z, shadow_world_position.w);
-        coords[i] = frame.spot_shadow[i].matrix * shadow_world_position;
+        let shadow_world_position = world_position + vec4<f32>(shadow_world_normal * frame.spot_shadow[i].params.z, 0.0);
+        coords[i] = spot_light_coord(frame.spot_shadow[i].matrix, shadow_world_position);
     }
     out.spot_coord0 = coords[0];
     out.spot_coord1 = coords[1];
@@ -166,6 +165,23 @@ fn vs_instanced(v: VertexIn, i: InstanceIn) -> VertexOut {
     var mv_position = vec4<f32>(v.position, 1.0);
     mv_position = instance_matrix * mv_position;
     return finish_vertex(v, object_normal, mv_position);
+}
+
+// An opaque copy of v: frame.counts.w is always 0, and the compiler cannot see that.
+fn opaque(v: vec4<f32>) -> vec4<f32> {
+    return bitcast<vec4<f32>>(bitcast<vec4<u32>>(v) ^ vec4<u32>(frame.counts.w));
+}
+
+// spotLightMatrix[i] * shadowWorldPosition in the operation order Metal's fast-math compiler
+// gives ANGLE's translation of shadowmap_vertex: translation column first, then y, x and z,
+// each fused. The receiver's depth is compared against the shadow map's at full precision, so
+// any other order turns 1-ulp differences into shadow acne on different pixels. The opaque
+// steps stop the compiler from reordering the sum for this shader.
+fn spot_light_coord(m: mat4x4<f32>, v: vec4<f32>) -> vec4<f32> {
+    var acc = opaque(m[3] * v.w);
+    acc = opaque(fma(m[1], vec4<f32>(v.y), acc));
+    acc = opaque(fma(m[0], vec4<f32>(v.x), acc));
+    return fma(m[2], vec4<f32>(v.z), acc);
 }
 
 // metal::fast::normalize, which ANGLE emits for GLSL normalize.

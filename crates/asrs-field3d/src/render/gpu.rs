@@ -294,10 +294,11 @@ impl Renderer {
                 },
             ],
         });
-        let depth_frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[uniform(false)],
-        });
+        let depth_frame_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[uniform(false)],
+            });
         let draw_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &[uniform(true)],
@@ -463,7 +464,11 @@ impl Renderer {
                 })
             };
             let buffers = if key.program == Program::FatLine {
-                vec![vertex(12, &POSITION), vertex(8, &UV), instance(24, &SEGMENT)]
+                vec![
+                    vertex(12, &POSITION),
+                    vertex(8, &UV),
+                    instance(24, &SEGMENT),
+                ]
             } else {
                 let mut buffers = vec![
                     vertex(12, &POSITION),
@@ -685,7 +690,9 @@ impl Renderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: SHADOW_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let depth = self.texture(
@@ -1217,6 +1224,60 @@ impl Renderer {
             gpu_and_map_ms: (t2 - t1).as_secs_f64() * 1e3,
             copy_ms: (t3 - t2).as_secs_f64() * 1e3,
         }
+    }
+
+    /// The RGBA8 texels of the last frame's shadow map for `layer`, row 0 first (GL's bottom
+    /// row, as `readRenderTargetPixels` returns it).
+    pub fn shadow_map(&mut self, layer: u32) -> Option<(u32, u32, Vec<u8>)> {
+        let maps = self.shadow_maps.as_ref()?;
+        if layer >= maps.layers {
+            return None;
+        }
+        let [width, height] = maps.size;
+        let padded = padded_row(width);
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: u64::from(padded * height),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &maps.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: 0,
+                    z: layer,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(height),
+                },
+            },
+            extent(width, height),
+        );
+        self.queue.submit([encoder.finish()]);
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        let mut out = Vec::with_capacity((width * height * 4) as usize);
+        {
+            let data = buffer
+                .slice(..)
+                .get_mapped_range()
+                .expect("mapped shadow map");
+            for row in data.chunks(padded as usize).take(height as usize) {
+                out.extend_from_slice(&row[..(width * 4) as usize]);
+            }
+        }
+        buffer.unmap();
+        Some((width, height, out))
     }
 
     /// The single-sample id and depth pass behind the edge mask. Opaque draws write the first

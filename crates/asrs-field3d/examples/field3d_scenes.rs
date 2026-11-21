@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use asrs_field3d::render::{
     FatLine, Filter, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial,
-    LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, Renderer, Scene, Side,
-    Texture, build_frame, edge_mask, swap_red_blue,
+    LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, Renderer, Scene, Side, Texture,
+    build_frame, edge_mask, swap_red_blue,
 };
 use asrs_field3d::three::{
     ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, Object3D, ObjectId,
@@ -373,6 +373,21 @@ fn main() -> Result<(), String> {
                 let theme = if dark { "dark" } else { "light" };
                 let file = Path::new(out_dir).join(format!("{name}@{scale}x-{theme}.png"));
                 pixel::write_png(&file, &image)?;
+                if dark && scale == 1.0 {
+                    for layer in 0..frame.shadows.len() as u32 {
+                        if let Some((width, height, data)) = renderer.shadow_map(layer) {
+                            let file = Path::new(out_dir).join(format!("{name}.shadow{layer}.png"));
+                            pixel::write_png(
+                                &file,
+                                &Rgba {
+                                    width,
+                                    height,
+                                    data,
+                                },
+                            )?;
+                        }
+                    }
+                }
                 if dark {
                     let edges = edge_mask(&renderer.render_aux(&frame));
                     let mask = Rgba {

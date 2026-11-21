@@ -8,6 +8,8 @@ pub const INTERIOR_MAX_DELTA: u8 = 2;
 pub const INTERIOR_DIFFERING_MAX_PCT: f64 = 0.05;
 pub const DIFFERING_MAX_PCT: f64 = 1.0;
 pub const EDGE_RADIUS: usize = 2;
+pub const CINEMATIC_SSIM_MIN: f64 = 0.98;
+pub const CINEMATIC_MEAN_DELTA_E_MAX: f64 = 1.5;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Gate4 {
@@ -17,7 +19,11 @@ pub struct Gate4 {
     pub interior_differing_pct: f64,
     pub interior_pixels: usize,
     pub max_delta: u8,
+    pub mean_delta_e: f64,
+    /// The standard and low-power rule.
     pub pass: bool,
+    /// The cinematic rule: SSIM and mean CIEDE2000 only.
+    pub cinematic_pass: bool,
 }
 
 fn luma(image: &Rgba) -> Vec<f64> {
@@ -87,6 +93,104 @@ pub fn ssim(a: &Rgba, b: &Rgba) -> f64 {
     total / (w * h) as f64
 }
 
+fn srgb_to_lab(p: &[u8; 4]) -> [f64; 3] {
+    let lin = |c: u8| {
+        let c = f64::from(c) / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let (r, g, b) = (lin(p[0]), lin(p[1]), lin(p[2]));
+    let x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+    let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+    let f = |t: f64| {
+        if t > 216.0 / 24389.0 {
+            t.cbrt()
+        } else {
+            (24389.0 / 27.0 * t + 16.0) / 116.0
+        }
+    };
+    let (fx, fy, fz) = (f(x), f(y), f(z));
+    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+/// CIEDE2000 colour difference (Sharma, Wu and Dalal 2005), kL = kC = kH = 1.
+pub fn ciede2000(lab1: [f64; 3], lab2: [f64; 3]) -> f64 {
+    let [l1, a1, b1] = lab1;
+    let [l2, a2, b2] = lab2;
+    let c_bar = (a1.hypot(b1) + a2.hypot(b2)) / 2.0;
+    let c7 = c_bar.powi(7);
+    let g = 0.5 * (1.0 - (c7 / (c7 + 25f64.powi(7))).sqrt());
+    let (a1p, a2p) = ((1.0 + g) * a1, (1.0 + g) * a2);
+    let (c1p, c2p) = (a1p.hypot(b1), a2p.hypot(b2));
+    let hue = |b: f64, a: f64| {
+        if a == 0.0 && b == 0.0 {
+            0.0
+        } else {
+            b.atan2(a).to_degrees().rem_euclid(360.0)
+        }
+    };
+    let (h1p, h2p) = (hue(b1, a1p), hue(b2, a2p));
+    let dlp = l2 - l1;
+    let dcp = c2p - c1p;
+    let dhp = if c1p * c2p == 0.0 {
+        0.0
+    } else if (h2p - h1p).abs() <= 180.0 {
+        h2p - h1p
+    } else if h2p - h1p > 180.0 {
+        h2p - h1p - 360.0
+    } else {
+        h2p - h1p + 360.0
+    };
+    let d_hp = 2.0 * (c1p * c2p).sqrt() * (dhp / 2.0).to_radians().sin();
+    let lp_bar = (l1 + l2) / 2.0;
+    let cp_bar = (c1p + c2p) / 2.0;
+    let hp_bar = if c1p * c2p == 0.0 {
+        h1p + h2p
+    } else if (h1p - h2p).abs() <= 180.0 {
+        (h1p + h2p) / 2.0
+    } else if h1p + h2p < 360.0 {
+        (h1p + h2p + 360.0) / 2.0
+    } else {
+        (h1p + h2p - 360.0) / 2.0
+    };
+    let t = 1.0 - 0.17 * (hp_bar - 30.0).to_radians().cos()
+        + 0.24 * (2.0 * hp_bar).to_radians().cos()
+        + 0.32 * (3.0 * hp_bar + 6.0).to_radians().cos()
+        - 0.20 * (4.0 * hp_bar - 63.0).to_radians().cos();
+    let d_theta = 30.0 * (-((hp_bar - 275.0) / 25.0).powi(2)).exp();
+    let cp7 = cp_bar.powi(7);
+    let rc = 2.0 * (cp7 / (cp7 + 25f64.powi(7))).sqrt();
+    let l50 = (lp_bar - 50.0).powi(2);
+    let sl = 1.0 + 0.015 * l50 / (20.0 + l50).sqrt();
+    let sc = 1.0 + 0.045 * cp_bar;
+    let sh = 1.0 + 0.015 * cp_bar * t;
+    let rt = -(2.0 * d_theta).to_radians().sin() * rc;
+    ((dlp / sl).powi(2) + (dcp / sc).powi(2) + (d_hp / sh).powi(2) + rt * (dcp / sc) * (d_hp / sh))
+        .sqrt()
+}
+
+/// Mean CIEDE2000 over all pixels of two sRGB images.
+pub fn mean_delta_e(a: &Rgba, b: &Rgba) -> f64 {
+    let pa = a.data.as_chunks::<4>().0;
+    let pb = b.data.as_chunks::<4>().0;
+    let total: f64 = pa
+        .iter()
+        .zip(pb)
+        .map(|(x, y)| {
+            if x[..3] == y[..3] {
+                0.0
+            } else {
+                ciede2000(srgb_to_lab(x), srgb_to_lab(y))
+            }
+        })
+        .sum();
+    total / pa.len().max(1) as f64
+}
+
 /// Pixels within `radius` (Chebyshev distance) of an edge pixel.
 pub fn dilate(mask: &[bool], width: usize, height: usize, radius: usize) -> Vec<bool> {
     let mut rows = vec![false; mask.len()];
@@ -151,8 +255,10 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
         }
     };
     let ssim = ssim(reference, port);
+    let mean_delta_e = mean_delta_e(reference, port);
     let differing_pct = pct(differing, w * h);
     let interior_differing_pct = pct(interior_differing, interior);
+    let cinematic_pass = ssim >= CINEMATIC_SSIM_MIN && mean_delta_e <= CINEMATIC_MEAN_DELTA_E_MAX;
     let pass = ssim >= SSIM_MIN
         && interior_max <= INTERIOR_MAX_DELTA
         && interior_differing_pct <= INTERIOR_DIFFERING_MAX_PCT
@@ -164,7 +270,9 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
         interior_differing_pct,
         interior_pixels: interior,
         max_delta,
+        mean_delta_e,
         pass,
+        cinematic_pass,
     })
 }
 
@@ -211,6 +319,24 @@ mod tests {
         let g = gate4(&a, &b, &edges).unwrap();
         assert_eq!(g.interior_max_delta, 0);
         assert!(g.pass);
+    }
+
+    #[test]
+    fn ciede2000_matches_sharma_reference_pairs() {
+        let cases = [
+            ([50.0, 2.6772, -79.7751], [50.0, 0.0, -82.7485], 2.0425),
+            ([50.0, -1.0, 2.0], [50.0, 0.0, 0.0], 2.3669),
+            ([50.0, 2.5, 0.0], [73.0, 25.0, -18.0], 27.1492),
+            (
+                [60.2574, -34.0099, 36.2677],
+                [60.4626, -34.1751, 39.4387],
+                1.2644,
+            ),
+            ([2.0776, 0.0795, -1.135], [0.9033, -0.0636, -0.5514], 0.9082),
+        ];
+        for (a, b, expected) in cases {
+            assert!((ciede2000(a, b) - expected).abs() < 1e-4, "{a:?} {b:?}");
+        }
     }
 
     #[test]
