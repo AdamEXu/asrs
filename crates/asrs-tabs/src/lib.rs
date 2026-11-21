@@ -1,6 +1,7 @@
 pub mod ansi;
 pub mod console;
 pub mod cx;
+pub mod field_2d;
 pub mod form;
 pub mod heatmap;
 pub mod joysticks;

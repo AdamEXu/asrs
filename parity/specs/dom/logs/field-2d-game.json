@@ -1,0 +1,32 @@
+[
+ [
+  "putRaw",
+  "/.schema/struct:Translation2d",
+  0,
+  {
+   "b": "646f75626c6520783b646f75626c652079"
+  }
+ ],
+ [
+  "putStruct",
+  "/GamePieces",
+  0,
+  {
+   "b": "000000000000d03f000000000000e03f000000000000f43f000000000000f83f00000000000002400000000000000440"
+  },
+  "Translation2d",
+  true
+ ],
+ [
+  "putNumber",
+  "/DriverStation/AllianceStation",
+  0,
+  4
+ ],
+ [
+  "putNumber",
+  "/DriverStation/AllianceStation",
+  1,
+  1
+ ]
+]

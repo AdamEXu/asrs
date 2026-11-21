@@ -161,6 +161,10 @@ impl TabCx for Host {
         None
     }
 
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
+        None
+    }
+
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
         None
     }
