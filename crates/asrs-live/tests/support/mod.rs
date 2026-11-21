@@ -11,10 +11,12 @@ use std::rc::Rc;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, V8MathRandom};
 use asrs_live::nt4::{
-    NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId,
-    WsMessage,
+    NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, PublisherPreferences, ReadyState,
+    RequestId, SocketId, WsMessage,
 };
-use asrs_live::{ManualClock, Thrown, TimerId, TimerQueue};
+use asrs_live::{
+    LiveDataSourceStatus, LiveLog, LivePreferences, ManualClock, Thrown, TimerId, TimerQueue,
+};
 use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
@@ -343,6 +345,97 @@ impl Env {
     pub fn app(&self, ev: &str, v: Option<&Value>) {
         self.trace.app(self.now(), ev, v);
     }
+}
+
+/// `window.preferences`, reduced to what the live sources read; `None` is `null`.
+pub struct Prefs {
+    pub live_subscribe_mode: String,
+    pub live_discard: f64,
+    pub publisher: PublisherPreferences,
+}
+
+impl Prefs {
+    pub fn defaults() -> Self {
+        Prefs {
+            live_subscribe_mode: "low-bandwidth".to_owned(),
+            live_discard: 1200.0,
+            publisher: PublisherPreferences {
+                publish_filter: JsString::new(),
+                robot_address: JsString::from("robot.local"),
+                systemcore_static_address: JsString::new(),
+            },
+        }
+    }
+
+    pub fn merge(&mut self, json: &Json) {
+        if let Some(mode) = json.get("liveSubscribeMode").and_then(Json::as_str) {
+            self.live_subscribe_mode = mode.to_string_lossy();
+        }
+        if let Some(discard) = json.get("liveDiscard").and_then(Json::as_f64) {
+            self.live_discard = discard;
+        }
+        if let Some(filter) = json.get("publishFilter").and_then(Json::as_str) {
+            self.publisher.publish_filter = JsString::from_units(filter.units().to_vec());
+        }
+        if let Some(address) = json.get("robotAddress").and_then(Json::as_str) {
+            self.publisher.robot_address = JsString::from_units(address.units().to_vec());
+        }
+        if let Some(address) = json.get("systemcoreStaticAddress").and_then(Json::as_str) {
+            self.publisher.systemcore_static_address =
+                JsString::from_units(address.units().to_vec());
+        }
+    }
+
+    pub fn as_live(&self) -> LivePreferences {
+        LivePreferences {
+            live_discard: Some(self.live_discard),
+            live_subscribe_mode: Some(JsString::from(&self.live_subscribe_mode)),
+        }
+    }
+}
+
+pub fn prefs_op(prefs: &mut Option<Prefs>, arg: &Json) {
+    match arg {
+        Json::Null => *prefs = None,
+        update => prefs.get_or_insert_with(Prefs::defaults).merge(update),
+    }
+}
+
+pub fn initial_prefs(session: &Session) -> Option<Prefs> {
+    match session.client.get("prefs") {
+        Some(Json::Null) => None,
+        Some(update) => {
+            let mut prefs = Prefs::defaults();
+            prefs.merge(update);
+            Some(prefs)
+        }
+        None => Some(Prefs::defaults()),
+    }
+}
+
+pub fn status_callback(trace: &Trace, clock: &ManualClock) -> Box<dyn FnMut(LiveDataSourceStatus)> {
+    let trace = trace.clone();
+    let clock = clock.clone();
+    Box::new(move |status| {
+        trace.app(
+            clock.now(),
+            "status",
+            Some(&Value::number(f64::from(status as u8))),
+        );
+    })
+}
+
+/// The oracle's `logId(log)`: the index a `Log` object first reached the trace under.
+pub fn log_id(ids: &Rc<RefCell<Vec<usize>>>, log: Option<&LiveLog>) -> Value {
+    let Some(log) = log else {
+        return Value::Null;
+    };
+    let ptr = Rc::as_ptr(log) as usize;
+    let mut ids = ids.borrow_mut();
+    if !ids.contains(&ptr) {
+        ids.push(ptr);
+    }
+    Value::number(ids.iter().position(|p| *p == ptr).expect("inserted") as f64)
 }
 
 pub trait Driver {

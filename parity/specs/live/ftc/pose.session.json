@@ -1,0 +1,41 @@
+{
+  "protocol": "ftc",
+  "seed": 3937,
+  "latencyMs": 1,
+  "endMs": 4000,
+  "client": { "source": "ftc", "address": "192.168.43.1" },
+  "server": { "status": { "activeOpMode": "Tele" } },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1500, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000001501, "data": { "y": "24", "x": "12", "heading": "0.5" } },
+      { "timestamp": 1700000001480, "data": { "x": "12", " x": "13", "heading (deg)": "90", "heading": "0.25" } },
+      { "data": { "robot y": 10, "robot x": 20.5, "robot heading (deg)": 30, "robot heading": 1 } },
+      { "timestamp": 1700000001490 },
+      { "data": { "a b x": "1", "a b y": "2", "a b heading (deg)": "-45", "c  x": "3", "x y": "7", "heading x": "8" } }
+    ] }] },
+    { "t": 1600, "client": ["dump"] },
+    { "t": 1700, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000001690, "data": { "x": "abc", "y": true, "heading": null } },
+      { "timestamp": 1700000001691, "data": { "x": [1, 2], "y": ["3"], "heading (deg)": "1e2" } },
+      { "timestamp": 1700000001692, "data": { "x": { "v": 1 }, "y": "", "heading": " 0x1f " } }
+    ] }] },
+    { "t": 1800, "client": ["dump"] },
+    { "t": 1900, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000001895, "data": {
+        "s1": "", "s2": "  12  ", "s3": "1e3", "s4": "0b101", "s5": "0o17", "s6": "-0", "s7": "1_000", "s8": "12px",
+        "s9": ".5", "s10": "5.", "s11": "+5", "s12": "-Infinity", "s13": "0x", "s14": "\t7\n", "s15": "Infinityx", "s16": "-0x10",
+        "s17": "0X1F", "s18": "1e", "s19": "\u00a09\u2028", "s20": "0.1e-5", "n1": -3.5, "n2": 123456789.25, "n3": 0, "b": false,
+        "o": { "k": 1 }, "a": [1], "z": null, "10": "ten", "2": "two", "1": "one", "mixed": "5"
+      } }
+    ] }] },
+    { "t": 2000, "server": ["send", { "type": "RECEIVE_TELEMETRY", "telemetry": [
+      { "timestamp": 1700000001995, "data": { "mixed": "five" } },
+      { "timestamp": 1700000001996, "data": { "mixed": true } },
+      { "timestamp": 1700000001997, "data": ["7", "x", true] },
+      { "timestamp": 1700000001998, "data": "hi" },
+      { "timestamp": 1700000001999, "data": 5 }
+    ] }] },
+    { "t": 2100, "client": ["dump"] }
+  ]
+}
