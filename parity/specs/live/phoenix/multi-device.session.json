@@ -1,0 +1,88 @@
+{
+  "protocol": "phoenix",
+  "seed": 404,
+  "latencyMs": 2,
+  "endMs": 3200,
+  "client": {
+    "source": "phoenix",
+    "address": "127.0.0.1",
+    "tabs": [
+      "Phoenix6/TalonFX-1/Position",
+      "Phoenix6/Unknown-9/Foo",
+      "Phoenix6/CANivore-canivore 2/CANcoder-Arm/Velocity",
+      "Phoenix6/Pigeon2-4/Yaw",
+      "Phoenix6/TalonFX-1/Velocity"
+    ]
+  },
+  "server": {
+    "startUs": 9000000,
+    "points": 2,
+    "stepUs": 10000,
+    "devices": [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [
+          { "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" },
+          { "Id": 40, "Name": "Velocity", "Summary": "Rotor velocity", "Units": "rps" }
+        ],
+        "values": { "12": [0.25, 0.5, 0.75], "40": [1.5, -2] }
+      },
+      {
+        "device": { "CANbus": "canivore 2", "CANivoreDevName": "canivore 2", "ID": 5, "Model": "CANcoder", "Name": "Arm", "IsPROApplication": true },
+        "signals": [
+          { "Id": 7, "Name": "Velocity", "Summary": "Velocity", "Units": "rps" },
+          { "Id": 2, "Name": "MagnetHealth", "Summary": "Magnet health", "Units": "" }
+        ],
+        "values": { "7": [3, 3.25], "2": [1, 3, 0, 99] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 4, "Model": "Pigeon 2", "Name": "Pigeon 2 (Device ID 4)", "IsPROApplication": true },
+        "signals": [{ "Id": 1, "Name": "Yaw", "Summary": "Yaw", "Units": "deg" }],
+        "values": { "1": [10, 20, 30, 40] }
+      }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 900, "client": ["dump"] },
+    { "t": 1200, "server": ["devices", [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [
+          { "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" },
+          { "Id": 40, "Name": "Velocity", "Summary": "Rotor velocity", "Units": "rps" }
+        ],
+        "values": { "12": [0.25, 0.5, 0.75], "40": [1.5, -2] }
+      },
+      {
+        "device": { "CANbus": "canivore 2", "CANivoreDevName": "canivore 2", "ID": 5, "Model": "CANcoder", "Name": "Arm", "IsPROApplication": true },
+        "signals": [
+          { "Id": 7, "Name": "Velocity", "Summary": "Velocity", "Units": "rps" },
+          { "Id": 2, "Name": "MagnetHealth", "Summary": "Magnet health", "Units": "" }
+        ],
+        "values": { "7": [3, 3.25], "2": [1, 3, 0, 99] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 4, "Model": "Pigeon 2", "Name": "Pigeon 2 (Device ID 4)", "IsPROApplication": true },
+        "signals": [{ "Id": 1, "Name": "Yaw", "Summary": "Yaw", "Units": "deg" }],
+        "values": { "1": [10, 20, 30, 40] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 8, "Model": "TalonFXS", "Name": "TalonFXS (Device ID 8)", "IsPROApplication": true },
+        "signals": [{ "Id": 30, "Name": "MotorVoltage", "Summary": "Voltage", "Units": "V" }],
+        "values": { "30": [11.5, 12.25] }
+      }
+    ]] },
+    { "t": 1500, "client": ["fields", [
+      "Phoenix6/TalonFXS-8/MotorVoltage",
+      "Phoenix6/Pigeon2-4/Yaw",
+      "Phoenix6/CANivore-canivore 2/CANcoder-Arm/MagnetHealth",
+      "Phoenix6/TalonFX-1/Position"
+    ], []] },
+    { "t": 1800, "client": ["dump"] },
+    { "t": 2400, "server": ["error", "plotpro", 2] },
+    { "t": 2500, "client": ["dump"] },
+    { "t": 2600, "server": ["error", "plotpro", 0] },
+    { "t": 3000, "client": ["dump"] }
+  ]
+}

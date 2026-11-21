@@ -34,8 +34,12 @@ The original AdvantageScope license is reproduced in licenses/AdvantageScope.txt
 
 Portions of this project are ported from or derived from third-party software
 under other licenses, listed with their copyright notices in
-THIRD_PARTY_NOTICES.md, with full license texts in licenses/. In particular,
-crates/asrs-js/src/math/glibc.rs and crates/asrs-js/src/math/sincostab.rs are
-derived from the GNU C Library and are licensed under the GNU Lesser General
-Public License, version 2.1 or later (licenses/LGPL-2.1.txt), not under the
-license above.
+THIRD_PARTY_NOTICES.md, with full license texts in licenses/.
+
+The license above does not cover the crate in crates/asrs-libm-lgpl (Math.sin
+and Math.cos, derived from the GNU C Library). That crate is licensed under the
+GNU Lesser General Public License, version 2.1 or later (its LICENSE file, also
+licenses/LGPL-2.1.txt). It is built as a separate shared library
+(asrs_libm_lgpl) that asrs loads at runtime and does not link statically; users
+may replace it with a modified version as described in
+crates/asrs-libm-lgpl/README.md. No other part of asrs is under the LGPL.

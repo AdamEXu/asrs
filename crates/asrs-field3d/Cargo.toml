@@ -8,12 +8,15 @@ publish.workspace = true
 
 [dependencies]
 asrs-js = { path = "../asrs-js" }
+asrs-log = { path = "../asrs-log" }
+asrs-model = { path = "../asrs-model" }
 bytemuck = { version = "=1.25.2", features = ["derive"] }
 pollster = "=0.4.0"
 wgpu = { version = "=30.0.2", default-features = false, features = ["metal", "dx12", "vulkan", "wgsl"] }
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
+sha2 = "=0.10.9"
 
 [lints]
 workspace = true

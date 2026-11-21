@@ -4,7 +4,8 @@ asrs contains code ported or derived from the projects below, plus data and
 assets copied from them. Full license texts are in [`licenses/`](licenses/).
 Rust crates compiled into the app are listed separately: run
 `cargo xtask licenses` to generate `target/licenses/THIRD_PARTY_LICENSES.txt`,
-which release builds bundle together with this file, `LICENSE` and `licenses/`.
+which release builds bundle together with this file, `LICENSE`, `licenses/` and the
+source of the LGPL `asrs-libm-lgpl` library (see below).
 
 Files that are line-by-line ports carry a short header naming their origin.
 
@@ -130,14 +131,22 @@ above is the one REV attached to the utilities shipped alongside them.
 
 ## GNU C Library (IBM Accurate Mathematical Library)
 
-- License: LGPL-2.1-or-later ([`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt))
+- License: LGPL-2.1-or-later ([`crates/asrs-libm-lgpl/LICENSE`](crates/asrs-libm-lgpl/LICENSE),
+  also [`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt))
 - Copyright (C) 2001-2022 Free Software Foundation, Inc.
-- Source: `sysdeps/ieee754/dbl-64/s_sin.c` and `sincostab.c`, as V8 bundles them under
-  `third_party/glibc` for `Math.sin` and `Math.cos`
-- Used in: `crates/asrs-js/src/math/glibc.rs` and `crates/asrs-js/src/math/sincostab.rs`
+- Source: `sysdeps/ieee754/dbl-64/s_sin.c`, `branred.c` and `sincostab.c`, as V8 bundles them
+  under `third_party/glibc` for `Math.sin` and `Math.cos`
+- Used in: `crates/asrs-libm-lgpl/src/glibc.rs` and `crates/asrs-libm-lgpl/src/sincostab.rs`
 
-These two files are licensed under the LGPL, not under the project's BSD license. The
-corresponding source is this repository.
+The `asrs-libm-lgpl` crate is licensed under the LGPL, not under the project's BSD license.
+It is built as its own shared library (`libasrs_libm_lgpl.dylib`, `asrs_libm_lgpl.dll`,
+`libasrs_libm_lgpl.so`), shipped next to the asrs executable and loaded at runtime through a
+three-function C ABI by `crates/asrs-js/src/math/libm.rs`; no LGPL code is linked into the
+asrs executable. Users may replace the library with a modified build, or point the
+`ASRS_LIBM_LGPL` environment variable at one, as described in
+[`crates/asrs-libm-lgpl/README.md`](crates/asrs-libm-lgpl/README.md). Release bundles
+(`cargo xtask bundle`, `cargo xtask licenses`) include the library's complete source with a
+standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 
 ## Skia
 
