@@ -122,13 +122,9 @@ impl RlogTransport for TokioRlogTransport {
         self.next_id += 1;
         let (commands, rx) = unbounded_channel();
         let events = self.events_tx.clone();
-        let task = self.handle.spawn(run_socket(
-            id,
-            host.to_owned(),
-            port as u16,
-            rx,
-            events,
-        ));
+        let task = self
+            .handle
+            .spawn(run_socket(id, host.to_owned(), port as u16, rx, events));
         self.sockets.insert(
             id.0,
             Socket {

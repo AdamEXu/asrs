@@ -18,7 +18,6 @@ use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
 
-
 use support::{Driver, Env, js_arg, js_value};
 
 struct Recorder<'a> {

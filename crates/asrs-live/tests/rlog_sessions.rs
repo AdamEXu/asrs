@@ -18,13 +18,12 @@ use asrs_live::rlog::{
 };
 use asrs_live::{LiveLog, OutputCallback, Thrown, TimerId};
 use asrs_log::log::Log;
+use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
-use asrs_parity::Value;
 
 use support::{
-    Delivery, Driver, Env, Prefs, SessionEvent, initial_prefs, log_id, prefs_op,
-    status_callback,
+    Delivery, Driver, Env, Prefs, SessionEvent, initial_prefs, log_id, prefs_op, status_callback,
 };
 
 fn rcx<'a>(
@@ -106,12 +105,7 @@ impl RlogDriver {
     /// `liveSource?.stop()`.
     fn stop_current(&mut self, env: &mut Env) {
         if let Some(source) = self.sources.last_mut() {
-            let mut cx = rcx(
-                &mut self.send_main,
-                &self.rlog_prefs,
-                &self.window_log,
-                env,
-            );
+            let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
             source.stop(&mut cx);
         }
         self.flush(env);
@@ -144,12 +138,7 @@ impl RlogDriver {
         });
         let status = status_callback(&env.trace, &env.wall.loop_clock);
         let mut source = RlogSource::new(&mut *env.realm.random, Rc::new(env.wall.clone()));
-        let mut cx = rcx(
-            &mut self.send_main,
-            &self.rlog_prefs,
-            &self.window_log,
-            env,
-        );
+        let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
         source.connect(&self.address, status, output, &mut cx);
         self.sources.push(source);
         self.flush(env);
@@ -199,12 +188,7 @@ impl Driver for RlogDriver {
             }
             SessionEvent::Ipc(Ipc::ToSource(data)) => {
                 if let Some(source) = self.sources.last_mut() {
-                    let mut cx = rcx(
-                        &mut self.send_main,
-                        &self.rlog_prefs,
-                        &self.window_log,
-                        env,
-                    );
+                    let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
                     let _ = source.handle_main_message(&data, &mut cx);
                 }
             }
@@ -216,12 +200,7 @@ impl Driver for RlogDriver {
         if !self.main.handle_timer(id, &mut mcx(env))
             && let Some(source) = self.sources.last_mut()
         {
-            let mut cx = rcx(
-                &mut self.send_main,
-                &self.rlog_prefs,
-                &self.window_log,
-                env,
-            );
+            let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
             source.handle_timer(id, &mut cx);
         }
         self.flush(env);
@@ -287,7 +266,12 @@ fn a_mutated_wire_value_is_caught() {
         .expect("session");
     let mut flipped = false;
     for step in &mut session.server_steps {
-        if step.op.first().and_then(Json::as_str).map(|s| s.to_string_lossy()).as_deref()
+        if step
+            .op
+            .first()
+            .and_then(Json::as_str)
+            .map(|s| s.to_string_lossy())
+            .as_deref()
             == Some("send")
             && let Some(Json::String(hex)) = step.op.get_mut(1)
         {

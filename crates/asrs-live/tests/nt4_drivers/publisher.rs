@@ -4,9 +4,7 @@
 use std::cell::RefCell;
 
 use asrs_js::time::Clock;
-use asrs_live::nt4::{
-    Nt4Publisher, PublisherSelection, PublisherStatusCallback, PublisherWindow,
-};
+use asrs_live::nt4::{Nt4Publisher, PublisherSelection, PublisherStatusCallback, PublisherWindow};
 use asrs_live::{Thrown, TimerId};
 use asrs_log::log::Log;
 use asrs_parity::Value;

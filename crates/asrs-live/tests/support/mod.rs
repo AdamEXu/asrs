@@ -314,7 +314,9 @@ impl FakeNet {
                 Some(s) if s.state == TcpState::Connecting => {
                     s.state = TcpState::Open;
                     self.tcp_touch(id);
-                    let held = std::mem::take(&mut self.tcp_sockets.get_mut(&id).expect("is some").pending);
+                    let held = std::mem::take(
+                        &mut self.tcp_sockets.get_mut(&id).expect("is some").pending,
+                    );
                     for bytes in held {
                         self.send_to_server(ClientEvent::TcpSend { id, data: bytes });
                         self.tcp_touch(id);

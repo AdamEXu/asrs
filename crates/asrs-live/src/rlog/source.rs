@@ -108,13 +108,8 @@ impl RlogSource {
         output_callback: OutputCallback,
         cx: &mut RlogContext<'_>,
     ) {
-        self.base.connect(
-            address,
-            status_callback,
-            output_callback,
-            false,
-            cx.timers,
-        );
+        self.base
+            .connect(address, status_callback, output_callback, false, cx.timers);
         match cx.preferences {
             None => self.base.set_status(LiveDataSourceStatus::Error),
             Some(prefs) => {
@@ -146,9 +141,7 @@ impl RlogSource {
         if self.base.log().is_none() || self.decoder.is_none() {
             return Ok(());
         }
-        let uuid = ops::get(data, "uuid")
-            .unwrap_or_default()
-            .into_string();
+        let uuid = ops::get(data, "uuid").unwrap_or_default().into_string();
         if uuid.as_ref() != Some(&JsString::from(self.base.uuid())) {
             return Ok(());
         }
@@ -164,14 +157,17 @@ impl RlogSource {
         }
         let raw = match ops::get(data, "raw").unwrap_or_default() {
             JsValue::Bytes(ref bytes) => bytes.clone(),
-            _ => Vec::new().into(),
+            _ => Vec::new(),
         };
         let decode_ok = {
             let log = self.base.log().expect("checked");
-            self.decoder
-                .as_mut()
-                .expect("checked")
-                .decode(cx.realm, &mut log.borrow_mut(), &raw, cx.clock, None)?
+            self.decoder.as_mut().expect("checked").decode(
+                cx.realm,
+                &mut log.borrow_mut(),
+                &raw,
+                cx.clock,
+                None,
+            )?
         };
         if !decode_ok {
             self.reconnect(cx);
@@ -198,14 +194,13 @@ impl RlogSource {
         let clock = self.clock.clone();
         let zero = self.live_zero_time.clone();
         let shared = self.shared_log.clone();
-        self.base.output(Rc::new(move || {
-            match shared.borrow().as_ref() {
+        self.base
+            .output(Rc::new(move || match shared.borrow().as_ref() {
                 Some(log) => {
                     clock.now() / 1000.0 - zero.get() + log.borrow().get_timestamp_range()[0]
                 }
                 None => 0.0,
-            }
-        }));
+            }));
         Ok(())
     }
 

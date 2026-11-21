@@ -41,7 +41,7 @@ impl MainMessage {
             Self::Data { uuid, raw } => JsValue::Object(JsObject::from_iter([
                 (js("uuid"), JsValue::String(JsString::from(uuid))),
                 (js("success"), JsValue::Bool(true)),
-                (js("raw"), JsValue::Bytes(raw.into())),
+                (js("raw"), JsValue::Bytes(raw)),
             ])),
             Self::Failed { uuid } => JsValue::Object(JsObject::from_iter([
                 (js("uuid"), JsValue::String(JsString::from(uuid))),
@@ -59,7 +59,11 @@ impl MainMessage {
 #[derive(Clone, Debug, PartialEq)]
 pub enum MainCall {
     /// `"live-rlog-start", {uuid, address, port}`.
-    Start { uuid: String, address: String, port: f64 },
+    Start {
+        uuid: String,
+        address: String,
+        port: f64,
+    },
     /// `"live-rlog-stop"`.
     Stop,
 }
@@ -151,9 +155,8 @@ impl RlogMain {
                     if len < 4 {
                         break;
                     }
-                    let expected = i64::from(i32::from_be_bytes(
-                        self.data_array[..4].try_into().unwrap(),
-                    )) + 4;
+                    let expected =
+                        i64::from(i32::from_be_bytes(self.data_array[..4].try_into().unwrap())) + 4;
                     if len < expected {
                         break;
                     }
