@@ -377,8 +377,8 @@ async function corpusCase(root: string, rel: string): Promise<void> {
     const replayed = replay(extracted.ops, extracted.types, extracted.records, requests);
     if (encode(toTree(replayed)) !== encode(toTree(sessionDump))) {
       // wpilogWorker.ts parses an entry during "start" when an eager key equals it or starts
-      // with it plus "/", which every eager key does for the empty key. The replay does not
-      // model that; parity decode and parity historical cover these files through the real
+      // with it plus "/", which the "/"-rooted eager keys do for the empty key. The replay does
+      // not model that; parity decode and parity historical cover these files through the real
       // source.
       const eagerKeys = [...ENABLED_KEYS, ...AUTONOMOUS_KEYS, ...UTILITY_KEYS, ...PROGRAM_START_TIME_KEYS];
       if (Object.keys(extracted.types).some((key) => eagerKeys.some((e) => e === key || e.startsWith(key + "/")))) {
