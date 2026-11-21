@@ -63,12 +63,18 @@ let indexerInit: (() => Promise<IndexerModule>) | null = null;
 
 // Upstream's wpilogIndexer.ts instantiates a fresh module for every run, and negative extra
 // header sizes read the memory below the input buffer, so each file gets its own instance too.
+// The module is compiled once and instantiated synchronously: an async WebAssembly.instantiate
+// per file intermittently deadlocks Electron's node in NodePlatform::DrainTasks.
 async function indexer(): Promise<IndexerModule> {
   if (indexerInit === null) {
     const dir = path.join(UPSTREAM_DIR, "bundles");
     const { default: init } = await import(pathToFileURL(path.join(dir, "wpilogIndexer.js")).href);
-    const wasmBinary = fs.readFileSync(path.join(dir, "wpilogIndexer.wasm"));
-    indexerInit = async () => (await init({ wasmBinary })) as IndexerModule;
+    const wasm = new WebAssembly.Module(fs.readFileSync(path.join(dir, "wpilogIndexer.wasm")));
+    const instantiateWasm = (imports: WebAssembly.Imports, done: (instance: WebAssembly.Instance) => void) => {
+      done(new WebAssembly.Instance(wasm, imports));
+      return {};
+    };
+    indexerInit = async () => (await init({ instantiateWasm })) as IndexerModule;
   }
   return indexerInit();
 }
