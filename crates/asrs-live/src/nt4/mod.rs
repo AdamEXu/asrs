@@ -6,6 +6,7 @@ mod source;
 mod tokio_transport;
 mod transport;
 
+pub use crate::http::RequestId;
 pub use client::{
     NT4_PORTS_DEFAULT, NT4_PORTS_DS, NT4_PORTS_SYSTEMCORE, NoopHandler, Nt4Client, Nt4Context,
     Nt4Handler, Nt4Subscription, Nt4SubscriptionOptions, Nt4Topic, PROTOCOL_RTT, PROTOCOL_V40,
@@ -20,4 +21,4 @@ pub use source::{
     WPILOG_PREFIX,
 };
 pub use tokio_transport::TokioTransport;
-pub use transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+pub use transport::{NetEvent, Nt4Transport, ReadyState, SocketId, WsMessage};
