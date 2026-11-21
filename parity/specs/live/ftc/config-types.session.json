@@ -1,0 +1,67 @@
+{
+  "protocol": "ftc",
+  "seed": 77,
+  "latencyMs": 1,
+  "endMs": 4200,
+  "client": { "source": "ftc", "address": "192.168.43.1" },
+  "server": { "status": { "activeOpMode": "Tele" } },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1100, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "c": { "__type": "custom", "__value": {
+          "d": { "__type": "double", "__value": 0.5 },
+          "f": { "__type": "float", "__value": 0.25 },
+          "i": { "__type": "int", "__value": 3 },
+          "l": { "__type": "long", "__value": -9007199254740991 },
+          "flag": { "__type": "boolean", "__value": false },
+          "s": { "__type": "string", "__value": "text" },
+          "e": { "__type": "enum", "__value": "A", "__enumClass": "E", "__enumValues": ["A", "B"] },
+          "a/b": { "__type": "double", "__value": 1 },
+          "": { "__type": "int", "__value": 2 },
+          "10": { "__type": "int", "__value": 10 },
+          "2": { "__type": "int", "__value": 20 }
+        } }
+      } }
+    }] },
+    { "t": 1200, "client": ["dump"] },
+    { "t": 1300, "client": ["tune", "/_Config/c/d", 0.125] },
+    { "t": 1310, "client": ["tune", "/_Config/c/f", 2.5] },
+    { "t": 1320, "client": ["tune", "/_Config/c/i", 7] },
+    { "t": 1330, "client": ["tune", "/_Config/c/l", 9007199254740991] },
+    { "t": 1340, "client": ["tune", "/_Config/c/flag", true] },
+    { "t": 1350, "client": ["tune", "/_Config/c/flag", 1] },
+    { "t": 1360, "client": ["tune", "/_Config/c/d", false] },
+    { "t": 1370, "client": ["tune", "/_Config/c/s", 3] },
+    { "t": 1380, "client": ["tune", "/_Config/c/s", true] },
+    { "t": 1390, "client": ["tune", "/_Config/c/e", 1] },
+    { "t": 1400, "client": ["tune", "/_Config/c", 1] },
+    { "t": 1410, "client": ["tune", "/_Config/c/a/b", 4] },
+    { "t": 1420, "client": ["tune", "/_Config/c/", 5] },
+    { "t": 1430, "client": ["tune", "/_Config/c/10", -6] },
+    { "t": 1440, "client": ["tune", "/_Config", 1] },
+    { "t": 1450, "client": ["tune", "_Config/c/d", 1] },
+    { "t": 1600, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "c": { "__type": "custom", "__value": {
+          "d": { "__type": "string", "__value": "now text" },
+          "i": { "__type": "double", "__value": 3.75 },
+          "flag": { "__type": "int", "__value": 1 },
+          "s": { "__type": "boolean", "__value": true }
+        } }
+      } }
+    }] },
+    { "t": 1700, "client": ["dump"] },
+    { "t": 1800, "client": ["tune", "/_Config/c/d", 1] },
+    { "t": 1810, "client": ["tune", "/_Config/c/f", 1] },
+    { "t": 2000, "server": ["send", { "type": "UPDATE_CONFIG", "configRoot": { "__type": "double", "__value": 4 } }] },
+    { "t": 2100, "client": ["dump"] },
+    { "t": 2200, "client": ["tune", "/_Config", 5] },
+    { "t": 2210, "client": ["tune", "/_Config/c/d", 6] },
+    { "t": 2400, "server": ["send", { "type": "RECEIVE_CONFIG", "configRoot": { "__type": "double", "__value": 8, "__newValue": 5 } }] },
+    { "t": 2500, "server": ["send", { "type": "RECEIVE_CONFIG", "configRoot": { "__type": "int", "__value": 9 } }] },
+    { "t": 2600, "client": ["dump"] }
+  ]
+}

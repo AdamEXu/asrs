@@ -3,6 +3,7 @@
 //! channel that carry socket traffic to the foreground thread.
 
 pub mod channel;
+pub mod ftc;
 pub mod live_data_source;
 pub mod live_data_tuner;
 pub mod nt4;

@@ -1,0 +1,59 @@
+{
+  "protocol": "ftc",
+  "seed": 99,
+  "latencyMs": 1,
+  "endMs": 10000,
+  "client": { "source": "ftc", "address": "192.168.43.1" },
+  "server": { "status": { "activeOpMode": "Tele", "activeOpModeStatus": "RUNNING" } },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1200, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "kP": { "__type": "double", "__value": 1.5, "__newValue": 0.5 },
+        "hold": { "__type": "boolean", "__value": true },
+        "mode": { "__type": "enum", "__value": "FAST", "__newValue": "SLOW", "__enumClass": "Mode", "__enumValues": ["FAST", "SLOW"] }
+      } }
+    }] },
+    { "t": 1400, "client": ["dump"] },
+    { "t": 1600, "client": ["tune", "/_Config/kP", 2.25] },
+    { "t": 1700, "client": ["tune", "/_Config/mode", 1] },
+    { "t": 1800, "client": ["tune", "/other/kP", 3] },
+    { "t": 1900, "client": ["tune", "/_Config/missing", 1] },
+    { "t": 2100, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "kP": { "__type": "double", "__value": 7 },
+        "speed": { "__type": "float", "__value": 0.4 },
+        "mode": { "__type": "enum", "__value": "SLOW", "__enumClass": "Mode", "__enumValues": ["FAST", "SLOW"] },
+        "zone": { "__type": "enum", "__value": "B", "__enumClass": "Different", "__enumValues": ["A", "B"] }
+      } }
+    }] },
+    { "t": 2300, "client": ["dump"] },
+    { "t": 2500, "server": ["send", {
+      "type": "SAVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": null },
+      "configDiff": { "__type": "custom", "__value": { "speed": { "__type": "float", "__value": 0.9 } } }
+    }] },
+    { "t": 2700, "server": ["send", {
+      "type": "REFRESH_CONFIG",
+      "configRoot": { "__type": "custom", "__value": null }
+    }] },
+    { "t": 2900, "server": ["send", {
+      "type": "RECEIVE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "kP": { "__type": "double", "__value": 9 }
+      } }
+    }] },
+    { "t": 3100, "client": ["dump"] },
+    { "t": 3300, "server": ["send", {
+      "type": "UPDATE_CONFIG",
+      "configRoot": { "__type": "custom", "__value": {
+        "flag": { "__type": "boolean", "__value": false }
+      } }
+    }] },
+    { "t": 3500, "client": ["dump"] },
+    { "t": 3700, "client": ["tune", "/_Config/flag", true] },
+    { "t": 3900, "client": ["dump"] }
+  ]
+}
