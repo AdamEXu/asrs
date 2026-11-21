@@ -385,24 +385,63 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
     let live_time = Rc::new(Cell::new(0.0f64));
     let mut sel = SelectionImpl::new(log.clone(), clock.clone());
     let mut timeline = Timeline::new(clock.clone());
-    // The boot `set-version` message (default darwin).
-    let mut ctx = sel.context().clone();
-    ctx.platform = fixture
+    let mut platform = fixture
         .get("version")
         .and_then(|v| v.get("platform"))
         .and_then(Json::as_str)
         .map(|s| s.to_string_lossy())
         .unwrap_or_else(|| "darwin".to_owned());
-    sel.set_context(ctx);
-
-    // The boot `set-preferences` message: the fixture's preferences merged onto the defaults.
-    let mut preferences = Preferences::default();
+    let mut preferences = Some(Preferences::default());
     if let Some(prefs) = fixture.get("preferences") {
         let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;
-        preferences
-            .merge(&prefs)
-            .map_err(|e| err(format!("fixture preferences: {e:?}")))?;
+        if let Some(p) = preferences.as_mut() {
+            p.merge(&prefs)
+                .map_err(|e| err(format!("fixture preferences: {e:?}")))?;
+        }
     }
+    if let Some(boot) = fixture.get("boot") {
+        platform = String::new();
+        preferences = None;
+        for message in boot.as_array().ok_or_else(|| err("boot is a list"))? {
+            let name = message
+                .as_array()
+                .and_then(|m| m.first())
+                .and_then(Json::as_str)
+                .map(|s| s.to_string_lossy())
+                .ok_or_else(|| err("boot entries are [name, data]"))?;
+            let data = message
+                .as_array()
+                .and_then(|m| m.get(1))
+                .map(Value::from_json_lenient)
+                .unwrap_or(Value::Undefined);
+            match name.as_str() {
+                "set-version" => {
+                    platform = data
+                        .get("platform")
+                        .and_then(Value::as_str)
+                        .map(|s| s.to_string_lossy())
+                        .unwrap_or_default()
+                }
+                "set-preferences" => {
+                    let mut p = Preferences::default();
+                    p.merge(&js_json::to_js(&data)?)
+                        .map_err(|e| err(format!("boot set-preferences: {e:?}")))?;
+                    preferences = Some(p);
+                }
+                "set-assets"
+                | "set-fullscreen"
+                | "set-battery"
+                | "show-update-button"
+                | "show-feedback-button"
+                | "show-when-ready"
+                | "set-active-satellites" => {}
+                other => return Err(err(format!("boot message {other} is not modeled"))),
+            }
+        }
+    }
+    let mut ctx = sel.context().clone();
+    ctx.platform = platform;
+    sel.set_context(ctx);
 
     let ignored: HashSet<String> = match fixture.get("ignoreMain").and_then(Json::as_array) {
         Some(names) => names
@@ -425,11 +464,20 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
     let record_touch_bar = !ignored.contains("update-touch-bar-slider");
 
     struct Hub {
+        tabs: Vec<TabType>,
+        selected_tab: usize,
         timeline_hidden: bool,
         paints: u32,
         painted: Option<asrs_canvas::Canvas2d>,
     }
     let mut hub = Hub {
+        tabs: vec![
+            TabType::Documentation,
+            TabType::LineGraph,
+            TabType::Field2d,
+            TabType::Field3d,
+        ],
+        selected_tab: 1,
         timeline_hidden: true,
         paints: 0,
         painted: None,
@@ -455,20 +503,20 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                        sel: &mut SelectionImpl,
                        timeline: &mut Timeline,
                        hub: &mut Hub,
-                       preferences: &Preferences,
+                       preferences: Option<&Preferences>,
                        emitted: &mut Vec<Emit>| {
         let end = clock_cell.get() + ms;
         loop {
             let frame_at = last_frame + frame_period;
             let help_due = timeline.next_timer();
             let next_timer = match help_due {
-                Some(due) if due < touch_bar_due => due,
+                Some(due) if due <= touch_bar_due => due,
                 _ => touch_bar_due,
             };
             if next_timer <= end && next_timer <= frame_at {
                 clock_cell.set(clock_cell.get().max(next_timer));
                 if help_due == Some(next_timer) {
-                    for message in timeline.run_timers(next_timer) {
+                    for message in timeline.run_timers() {
                         if !ignored.contains(message.name.name()) {
                             emitted.push(Emit {
                                 values: vec![
@@ -508,7 +556,7 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                     height,
                     device_pixel_ratio,
                     light,
-                    preferences: Some(preferences),
+                    preferences,
                 };
                 let log_ref = tick_log.clone();
                 let log_ref = log_ref.borrow();
@@ -532,11 +580,11 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
         .ok_or_else(|| err("fixture has no steps"))?;
     for (i, step) in steps.iter().enumerate() {
         let where_ = || format!("step {i}");
-        let scroll_target = |hub: &Hub, preferences: &Preferences| {
+        let scroll_target = |hub: &Hub, preferences: Option<&Preferences>| {
             if hub.timeline_hidden {
-                ScrollTarget::new(0.0, 0.0, Some(preferences))
+                ScrollTarget::new(0.0, 0.0, preferences)
             } else {
-                ScrollTarget::new(timeline_rect[2], timeline_rect[3], Some(preferences))
+                ScrollTarget::new(timeline_rect[2], timeline_rect[3], preferences)
             }
         };
         if let Some(log_step) = step.get("log") {
@@ -628,6 +676,8 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                     // A new VideoController starts unlocked.
                     ctx.unlocked_video_selected = ctx.selected_tab_type == TabType::Video;
                     hub.timeline_hidden = !shows_timeline(ctx.selected_tab_type)?;
+                    hub.selected_tab += 1;
+                    hub.tabs.insert(hub.selected_tab, ctx.selected_tab_type);
                     sel.set_context(ctx);
                 }
                 "set-version" => {
@@ -649,10 +699,10 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                     sel.set_playback_looping(data.get("looping").map(truthy).unwrap_or(false));
                 }
                 "set-preferences" => {
-                    preferences = Preferences::default();
-                    preferences
-                        .merge(&js_json::to_js(&data)?)
+                    let mut p = Preferences::default();
+                    p.merge(&js_json::to_js(&data)?)
                         .map_err(|e| err(format!("{}: set-preferences: {e:?}", where_())))?;
+                    preferences = Some(p);
                 }
                 _ => {}
             }
@@ -698,7 +748,7 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                         overlay_x,
                         on_overlay,
                         hub.timeline_hidden,
-                        scroll_target(&hub, &preferences),
+                        scroll_target(&hub, preferences.as_ref()),
                         &mut sel,
                     ),
                 ("MouseEvent", "mouseup") if on_overlay || pointer_elsewhere => {
@@ -735,16 +785,39 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                 .as_str()
                 .ok_or_else(|| err("eval is a string"))?
                 .to_string_lossy();
-            let (dx, dy) = scroll_eval(&expr)
-                .ok_or_else(|| format!("{}: unsupported eval {expr}", where_()))?;
-            timeline.scroll(dx, dy, scroll_target(&hub, &preferences), &mut sel);
+            if let Some((dx, dy)) = scroll_eval(&expr) {
+                timeline.scroll(dx, dy, scroll_target(&hub, preferences.as_ref()), &mut sel);
+            } else if let Some(index) = expr
+                .strip_prefix("window.tabs.setSelected(")
+                .and_then(|r| r.strip_suffix(')'))
+                .and_then(|i| i.parse::<usize>().ok())
+            {
+                let tab = *hub
+                    .tabs
+                    .get(index)
+                    .ok_or_else(|| format!("{}: no tab {index}", where_()))?;
+                if tab == TabType::Video {
+                    return Err(format!(
+                        "{}: selecting a video tab is not modeled",
+                        where_()
+                    ));
+                }
+                hub.selected_tab = index;
+                hub.timeline_hidden = !shows_timeline(tab)?;
+                let mut ctx = sel.context().clone();
+                ctx.selected_tab_type = tab;
+                ctx.unlocked_video_selected = false;
+                sel.set_context(ctx);
+            } else {
+                return Err(format!("{}: unsupported eval {expr}", where_()));
+            }
         } else if let Some(ms) = step.get("advance") {
             advance(
                 ms.as_f64().ok_or_else(|| err("advance is a number"))?,
                 &mut sel,
                 &mut timeline,
                 &mut hub,
-                &preferences,
+                preferences.as_ref(),
                 &mut emitted,
             );
         } else if let Some(n) = step.get("frames") {
@@ -753,7 +826,7 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                 &mut sel,
                 &mut timeline,
                 &mut hub,
-                &preferences,
+                preferences.as_ref(),
                 &mut emitted,
             );
         } else if let Some(capture) = step.get("capture") {

@@ -86,6 +86,176 @@
           }
         ],
         "label": "mechanism-shown"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 510,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousedown",
+          "init": {
+            "shiftKey": true,
+            "clientX": 510,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.setSelected(0)"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 400,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 400,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "grab-while-hidden"
+      },
+      {
+        "eval": "window.tabs.setSelected(3)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "shown-after-hidden-grab"
+      },
+      {
+        "event": {
+          "target": "window",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 830,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "grab-released-when-shown"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousedown",
+          "init": {
+            "clientX": 610,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.setSelected(0)"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 510,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -400, false, 0, 0)"
+      },
+      {
+        "eval": "window.tabs.setSelected(3)"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 490,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mouseup",
+          "init": {
+            "clientX": 490,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "pan-while-hidden"
       }
     ]
   }

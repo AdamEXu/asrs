@@ -1,7 +1,8 @@
 //! `src/hub/Timeline.ts`: the timeline canvas painter and its pointer logic, plus the
 //! mouse-drag pan of the `ScrollSensor` it owns. Wheel input reaches [`Timeline::scroll`]
-//! through U08's sensor replacement.
+//! from the host's wheel mapping.
 
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 use asrs_canvas::Canvas2d;
@@ -47,7 +48,7 @@ pub struct Timeline {
     zoom_in_accumulator: f64,
     pan_active: bool,
     pan_last_cursor_x: f64,
-    help_timers: Vec<f64>,
+    help_timers: VecDeque<f64>,
 }
 
 fn timestamp_display(preferences: Option<&Preferences>) -> Option<TimestampDisplay> {
@@ -70,7 +71,7 @@ impl Timeline {
             zoom_in_accumulator: 0.0,
             pan_active: false,
             pan_last_cursor_x: 0.0,
-            help_timers: Vec::new(),
+            help_timers: VecDeque::new(),
         }
     }
 
@@ -167,7 +168,7 @@ impl Timeline {
         selection.go_idle();
     }
 
-    /// The scroll sensor's callback: wheel deltas from U08's sensor, or a drag pan.
+    /// The scroll sensor's callback: wheel deltas, or a drag pan.
     pub fn scroll(
         &mut self,
         dx: f64,
@@ -189,22 +190,24 @@ impl Timeline {
             if self.zoom_in_accumulator <= -200.0 {
                 let now = self.clock.now();
                 self.scroll_time = Some(now);
-                self.help_timers.push(now + HELP_TIMER_MS);
+                self.help_timers.push_back(now + HELP_TIMER_MS);
             }
         }
     }
 
-    /// The earliest pending help-overlay timer, so the event loop can wake for it.
+    /// The clock time the earliest pending help-overlay timer is due, so the event loop can
+    /// wake for it.
     pub fn next_timer(&self) -> Option<f64> {
-        self.help_timers.first().copied()
+        self.help_timers.front().copied()
     }
 
-    /// Runs the help-overlay timers due at or before `now` and returns the
+    /// Runs the help-overlay timers due by the clock's now and returns the
     /// `update-preferences` messages they send.
-    pub fn run_timers(&mut self, now: f64) -> Vec<NamedMessage<HubToMain>> {
+    pub fn run_timers(&mut self) -> Vec<NamedMessage<HubToMain>> {
+        let now = self.clock.now();
         let mut out = Vec::new();
-        while self.help_timers.first().is_some_and(|due| *due <= now) {
-            self.help_timers.remove(0);
+        while self.help_timers.front().is_some_and(|due| *due <= now) {
+            self.help_timers.pop_front();
             let mut data = JsObject::new();
             data.insert("hasScrolledTimeline", JsValue::Bool(true));
             out.push(NamedMessage::new(
