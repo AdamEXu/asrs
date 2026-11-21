@@ -380,6 +380,36 @@ function genDeep() {
     });
     out({ deep: "jsonCopy", shape, depth, ...outcome(attempt(() => jsonCopy(value))) });
   }
+  // V8's recursive serializer throws RangeError at a depth that follows from its C++ frame
+  // sizes and from where the stack starts, which moves with the size of the process
+  // environment (about one level per 160 bytes). The port's bound is the value measured with
+  // only the pinned variables set; these records sit about 500 levels either side of it, so
+  // they hold for any ordinary environment, and every value family takes the recursive path.
+  const nest = (d: number, leaf: unknown) => {
+    let v = leaf;
+    for (let i = 0; i < d; i++) v = [v];
+    return v;
+  };
+  const arrays = (d: number) => "[".repeat(d) + "]".repeat(d);
+  const manyKeys = "{" + Array.from({ length: 128 }, (_, i) => `"k${i}":1`).join(",") + "}";
+  const limits: [string, (d: number) => unknown, boolean][] = [
+    ["gap-array", (d) => JSON.parse(arrays(d)), true],
+    ["gap-object", (d) => JSON.parse('{"a":'.repeat(d) + "1" + "}".repeat(d)), true],
+    ["date", (d) => nest(d, new Date(0)), false],
+    ["bytes", (d) => nest(d, new Uint8Array([1, 2])), false],
+    ["empty-bytes", (d) => nest(d, new Uint8Array(0)), false],
+    ["bigint", (d) => nest(d, 1n), false],
+    ["index-key", (d) => JSON.parse('[{"0":1},' + arrays(d) + "]"), false],
+    ["index-key-last", (d) => JSON.parse("[" + arrays(d) + ',{"0":1}]'), false],
+    ["many-keys", (d) => JSON.parse("[" + manyKeys + "," + arrays(d) + "]"), false]
+  ];
+  for (const [name, build, gap] of limits) {
+    for (const depth of [5700, 6700]) {
+      const value = build(depth);
+      const r = attempt(() => (gap ? JSON.stringify(value, null, 2) : JSON.stringify(value)));
+      out({ deep: "limit", case: name, depth, ...outcome(r) });
+    }
+  }
 }
 
 function genValues() {

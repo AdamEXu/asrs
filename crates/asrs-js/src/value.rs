@@ -453,6 +453,10 @@ impl<V> JsObject<V> {
         self.indexed.len() + self.named.len()
     }
 
+    pub fn has_index_keys(&self) -> bool {
+        !self.indexed.is_empty()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.indexed.is_empty() && self.named.is_empty()
     }

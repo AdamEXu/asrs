@@ -40,10 +40,14 @@ impl std::error::Error for JsonError {}
 
 /// `JSON.stringify(value)`. `Ok(None)` is the `undefined` result for a top-level `undefined`.
 /// The output is always well-formed: lone surrogates are written as `\uXXXX` escapes.
-/// With no `replacer` or `space` argument V8 takes an iterative serializer, so any depth
-/// succeeds.
+/// With no `replacer` or `space` argument V8 tries an iterative serializer that has no
+/// depth limit, and restarts on its recursive one for the whole value when it meets
+/// anything the iterative one does not handle (see [`Writer::serialize`]).
 pub fn stringify(value: &JsValue) -> Result<Option<String>, JsonError> {
-    serialize(value, "", usize::MAX)
+    match serialize(value, "", Path::Fast) {
+        Err(Stop::SlowPath) => stringify_gap(value, ""),
+        result => thrown(result),
+    }
 }
 
 /// `JSON.stringify(value, null, 2)`. A defined argument puts V8 on its recursive
@@ -56,23 +60,59 @@ pub fn stringify_pretty(value: &JsValue) -> Result<Option<String>, JsonError> {
 /// reduced to nothing; V8 still takes its recursive serializer whenever `replacer` or
 /// `space` was a defined value, so this entry stays depth-limited either way.
 pub fn stringify_gap(value: &JsValue, gap: &str) -> Result<Option<String>, JsonError> {
-    serialize(value, gap, MAX_SERIALIZE_DEPTH)
+    thrown(serialize(value, gap, Path::Slow))
 }
 
-fn serialize(value: &JsValue, gap: &str, max_depth: usize) -> Result<Option<String>, JsonError> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Path {
+    Fast,
+    Slow,
+}
+
+enum Stop {
+    SlowPath,
+    Throw(JsonError),
+}
+
+impl From<JsonError> for Stop {
+    fn from(e: JsonError) -> Self {
+        Stop::Throw(e)
+    }
+}
+
+fn thrown(result: Result<Option<String>, Stop>) -> Result<Option<String>, JsonError> {
+    match result {
+        Ok(text) => Ok(text),
+        Err(Stop::Throw(e)) => Err(e),
+        Err(Stop::SlowPath) => unreachable!("only the fast path bails"),
+    }
+}
+
+fn serialize(value: &JsValue, gap: &str, path: Path) -> Result<Option<String>, Stop> {
     let mut writer = Writer {
         out: String::new(),
         gap,
         indent: String::new(),
+        path,
     };
-    Ok(writer.serialize(value, max_depth)?.then_some(writer.out))
+    Ok(writer.serialize(value)?.then_some(writer.out))
 }
 
-/// V8's general `JSON.stringify` path recurses per level and throws `RangeError` at a
-/// stack-size-dependent depth (~6183 on the oracle). The port serializes iteratively but
-/// reproduces the throw; the bound sits under the oracle's so vector input deep enough to
-/// fail upstream fails here too.
-const MAX_SERIALIZE_DEPTH: usize = 6000;
+/// How many containers V8's recursive serializer can have open (its `StackPush` per
+/// non-empty array, non-empty plain object, and any typed array or object with elements)
+/// before it throws `RangeError`. Upstream this is not a constant: it follows from the
+/// 984 KiB V8 stack, the C++ frame sizes of the build, the stack the caller already uses,
+/// and where the main thread's stack starts, which moves by about one level per 160 bytes
+/// of process environment. 6203 is the oracle's value with only the pinned variables set
+/// (`env -i`, macOS arm64); `json/deep` checks 500 levels either side of it.
+const MAX_STACK_PUSHES: usize = 6203;
+
+/// Stack a `Date` uses, in `StackPush` units, for the `toJSON` call V8 makes into JS.
+const DATE_TO_JSON_PUSHES: usize = 13;
+
+/// V8 builds `JSON.parse` objects with more named properties than this in dictionary mode,
+/// which its iterative serializer rejects.
+const MAX_FAST_PARSED_PROPERTIES: usize = 127;
 
 fn range_error() -> JsonError {
     JsonError {
@@ -180,13 +220,16 @@ enum Target<'v> {
 struct Writer<'a> {
     out: String,
     gap: &'a str,
+    path: Path,
     indent: String,
 }
 
 impl Writer<'_> {
     /// SerializeJSONProperty on a worklist. Returns false (writing nothing) when the value
-    /// serializes to `undefined`.
-    fn serialize(&mut self, root: &JsValue, max_depth: usize) -> Result<bool, JsonError> {
+    /// serializes to `undefined`. On the fast path, a `Date`, typed array (`Bytes`), class
+    /// instance (`ExtData`), BigInt, object with array-index keys or dictionary-mode object
+    /// stops with [`Stop::SlowPath`], as V8's `FastJsonStringifier` does.
+    fn serialize(&mut self, root: &JsValue) -> Result<bool, Stop> {
         let mut frames: Vec<Frame<'_>> = Vec::new();
         let mut target = Target::Value(root);
         'descend: loop {
@@ -215,9 +258,7 @@ impl Writer<'_> {
                             self.out.push_str("[]");
                             break true;
                         }
-                        if frames.len() >= max_depth {
-                            return Err(range_error());
-                        }
+                        self.stack_push(frames.len() + 1)?;
                         self.out.push('[');
                         self.indent.push_str(self.gap);
                         frames.push(Frame::Array(items.iter().enumerate(), false));
@@ -225,8 +266,11 @@ impl Writer<'_> {
                         break true;
                     }
                     Target::Value(JsValue::Object(object)) => {
-                        if frames.len() >= max_depth {
-                            return Err(range_error());
+                        self.bail_if(
+                            object.has_index_keys() || object.len() > MAX_FAST_PARSED_PROPERTIES,
+                        )?;
+                        if !object.is_empty() {
+                            self.stack_push(frames.len() + 1)?;
                         }
                         let start = self.out.len();
                         self.out.push('{');
@@ -245,15 +289,14 @@ impl Writer<'_> {
                         break true;
                     }
                     Target::Value(JsValue::Bytes(bytes)) => {
+                        self.bail_if(true)?;
                         target = Target::Bytes(bytes);
                     }
                     Target::Bytes(bytes) => {
+                        self.stack_push(frames.len() + 1)?;
                         if bytes.is_empty() {
                             self.out.push_str("{}");
                             break true;
-                        }
-                        if frames.len() >= max_depth {
-                            return Err(range_error());
                         }
                         let start = self.out.len();
                         self.out.push('{');
@@ -276,12 +319,15 @@ impl Writer<'_> {
                         break true;
                     }
                     Target::Value(JsValue::BigInt(_)) => {
-                        return Err(JsonError {
+                        self.bail_if(true)?;
+                        return Err(Stop::Throw(JsonError {
                             name: "TypeError",
                             message: JsString::from("Do not know how to serialize a BigInt"),
-                        });
+                        }));
                     }
                     Target::Value(JsValue::Date(t)) => {
+                        self.bail_if(true)?;
+                        self.stack_push(frames.len() + DATE_TO_JSON_PUSHES)?;
                         let t = *t;
                         if t.is_finite() {
                             Self::quote_into(
@@ -294,9 +340,8 @@ impl Writer<'_> {
                         break true;
                     }
                     Target::Value(JsValue::ExtData(kind, data)) => {
-                        if frames.len() >= max_depth {
-                            return Err(range_error());
-                        }
+                        self.bail_if(true)?;
+                        self.stack_push(frames.len() + 1)?;
                         let start = self.out.len();
                         self.out.push('{');
                         self.indent.push_str(self.gap);
@@ -423,6 +468,21 @@ impl Writer<'_> {
                 }
             }
         }
+    }
+
+    fn bail_if(&self, unsupported: bool) -> Result<(), Stop> {
+        if unsupported && self.path == Path::Fast {
+            return Err(Stop::SlowPath);
+        }
+        Ok(())
+    }
+
+    /// The recursive serializer's stack check for a step that needs `pushes` open containers.
+    fn stack_push(&self, pushes: usize) -> Result<(), Stop> {
+        if self.path == Path::Slow && pushes > MAX_STACK_PUSHES {
+            return Err(Stop::Throw(range_error()));
+        }
+        Ok(())
     }
 
     fn newline_indent(&mut self) {
