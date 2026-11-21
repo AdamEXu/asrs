@@ -366,7 +366,12 @@ fn decode_cases(paths: &Paths) -> Result<Vec<PathBuf>> {
     let mut cases = Vec::new();
     let is_ported = |p: &Path| {
         p.extension().is_some_and(|e| {
-            e == "dslog" || e == "dsevents" || e == "wpilog" || e == "rlog" || e == "log" || e == "csv"
+            e == "dslog"
+                || e == "dsevents"
+                || e == "wpilog"
+                || e == "rlog"
+                || e == "log"
+                || e == "csv"
         })
     };
     let root = crate::workspace_root();
