@@ -1,0 +1,82 @@
+{
+  "protocol": "phoenix",
+  "seed": 99,
+  "latencyMs": 1,
+  "endMs": 6500,
+  "client": {
+    "source": "phoenix",
+    "address": "127.0.0.1",
+    "prefs": null,
+    "tabs": [
+      "Phoenix6/TalonFX-1/Position",
+      "Phoenix6/CANdi-ab/S1State",
+      "Phoenix6/CANdi-ab/StringId",
+      "Phoenix6/CANdi-ab/Partial",
+      "Phoenix6/NoSignals-7/Foo"
+    ]
+  },
+  "server": {
+    "devices": []
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 100, "client": ["prefs", {}] },
+    { "t": 150, "client": ["connect"] },
+    { "t": 800, "client": ["dump"] },
+    { "t": 1100, "server": ["devices", [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [{ "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" }],
+        "values": { "12": [0.5, 1.5] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 3, "Model": "CANdi", "Name": "ab", "IsPROApplication": true },
+        "signals": [
+          { "Id": 5, "Name": "S1State", "Summary": "State", "Units": "" },
+          { "Id": "77", "Name": "StringId", "Summary": "String id", "Units": "raw" },
+          { "Id": 11, "Name": "Partial", "Units": "V" },
+          { "Id": 10 }
+        ],
+        "values": { "5": [0, 1], "77": [7.5], "11": [4, 6], "10": [0] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 7, "Model": "NoSignals", "Name": "NoSignals 7", "IsPROApplication": true }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 9, "Model": "Talon SRX", "Name": "Talon SRX 9", "IsPROApplication": false },
+        "signals": [{ "Id": 1, "Name": "Output", "Summary": "", "Units": "%" }]
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 10, "Model": "Talon FX", "Name": "Ghost" }
+      }
+    ]] },
+    { "t": 2000, "client": ["dump"] },
+    { "t": 3000, "server": ["devices", [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [{ "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" }],
+        "values": { "12": [0.5, 1.5] }
+      }
+    ]] },
+    { "t": 4000, "client": ["dump"] },
+    { "t": 4160, "server": ["devices", [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [{ "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" }],
+        "values": { "12": [0.5, 1.5] }
+      },
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 5, "Name": "Broken", "IsPROApplication": true }
+      }
+    ]] },
+    { "t": 5300, "client": ["dump"] },
+    { "t": 5400, "server": ["devices", [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [{ "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" }],
+        "values": { "12": [0.5, 1.5] }
+      }
+    ]] },
+    { "t": 6300, "client": ["dump"] }
+  ]
+}

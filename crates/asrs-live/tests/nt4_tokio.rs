@@ -169,6 +169,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
             && client.server_time_us(&clock, None).is_some())
     {
         while let Some(event) = net.next_event() {
+            timers.begin_task();
             let mut cx = Nt4Context {
                 timers: &mut timers,
                 net: &mut net,

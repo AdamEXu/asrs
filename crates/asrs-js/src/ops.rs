@@ -390,6 +390,22 @@ pub fn to_string(value: &JsValue) -> JsString {
     }
 }
 
+/// `ToBoolean`.
+pub fn to_boolean(value: &JsValue) -> bool {
+    match value {
+        JsValue::Undefined | JsValue::Null => false,
+        JsValue::Bool(b) => *b,
+        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
+        JsValue::String(s) => !s.is_empty(),
+        JsValue::BigInt(b) => !b.is_zero(),
+        JsValue::Array(_)
+        | JsValue::Object(_)
+        | JsValue::Bytes(_)
+        | JsValue::Date(_)
+        | JsValue::ExtData(..) => true,
+    }
+}
+
 /// `ToNumber`, as a binary `-` applies it.
 pub fn value_to_number(value: &JsValue) -> Result<f64, JsError> {
     Ok(match value {

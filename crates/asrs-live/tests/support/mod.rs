@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, V8MathRandom};
+use asrs_live::http::{FetchEvent, FetchTransport, Response};
 use asrs_live::nt4::{
     NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, PublisherPreferences, ReadyState,
     RequestId, SocketId, WsMessage,
@@ -64,7 +65,7 @@ pub enum Delivery {
     WsReceived(u32, WsMessage),
     WsDropped(u32),
     WsCloseDone(u32, bool),
-    HttpSettled(u32, Option<f64>),
+    HttpSettled(u32, Option<(f64, String)>),
 }
 
 struct FakeSocket {
@@ -147,8 +148,8 @@ impl FakeNet {
                     },
                 ),
                 ServerEvent::WsDrop { id } => Delivery::WsDropped(id),
-                ServerEvent::HttpReply { id, status, .. } => {
-                    Delivery::HttpSettled(id, Some(status))
+                ServerEvent::HttpReply { id, status, body } => {
+                    Delivery::HttpSettled(id, Some((status, body)))
                 }
                 ServerEvent::HttpRefuse { id } => Delivery::HttpSettled(id, None),
                 other => return Err(format!("unexpected server event {other:?}")),
@@ -206,19 +207,21 @@ impl FakeNet {
                 }
                 _ => Vec::new(),
             },
-            Delivery::HttpSettled(id, status) => match self.requests.get_mut(&id) {
+            Delivery::HttpSettled(id, settled) => match self.requests.get_mut(&id) {
                 Some(r) if !r.done => {
                     r.done = true;
-                    match status {
-                        Some(status) => {
-                            vec![NetEvent::FetchResponse(
-                                RequestId(id),
-                                status as u16,
-                                href(&r.url),
-                            )]
-                        }
-                        None => vec![NetEvent::FetchFailed(RequestId(id))],
-                    }
+                    let event = match settled {
+                        Some((status, body)) => FetchEvent::Response(
+                            RequestId(id),
+                            Response {
+                                status: status as u16,
+                                url: href(&r.url),
+                                body,
+                            },
+                        ),
+                        None => FetchEvent::Failed(RequestId(id)),
+                    };
+                    vec![NetEvent::Fetch(event)]
                 }
                 _ => Vec::new(),
             },
@@ -283,13 +286,15 @@ impl Nt4Transport for FakeNet {
             Delivery::WsCloseDone(id.0, was_connecting),
         );
     }
+}
 
+impl FetchTransport for FakeNet {
     fn fetch(&mut self, url: &str) -> RequestId {
         let id = self.next_id;
         self.next_id += 1;
         if url::Url::parse(url).is_err() {
             self.microtasks
-                .push_back(NetEvent::FetchFailed(RequestId(id)));
+                .push_back(NetEvent::Fetch(FetchEvent::Failed(RequestId(id))));
             return RequestId(id);
         }
         self.requests.insert(
@@ -339,6 +344,13 @@ impl Env {
             net: &mut self.net,
             clock: &self.wall,
             realm: &mut self.realm,
+        }
+    }
+
+    pub fn phoenix_cx(&mut self) -> asrs_live::phoenix::PhoenixContext<'_> {
+        asrs_live::phoenix::PhoenixContext {
+            timers: &mut self.timers,
+            net: &mut self.net,
         }
     }
 
@@ -504,6 +516,7 @@ pub fn run(
         }
         while let Some(step) = steps.get(next_step).filter(|s| s.t <= now) {
             next_step += 1;
+            env.timers.begin_task();
             if let Err(e) = driver.op(&step.op, &mut env) {
                 env.app(
                     "throw",
@@ -516,6 +529,7 @@ pub fn run(
         }
         loop {
             if let Some(delivery) = env.net.take_task(now) {
+                env.timers.begin_task();
                 for event in env.net.apply(delivery) {
                     driver.notify(event, &mut env);
                 }

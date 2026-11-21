@@ -302,6 +302,8 @@ fn decode_references(u: &[u16]) -> Vec<u16> {
     out
 }
 
+pub mod controller;
+
 #[cfg(test)]
 mod tests {
     use super::*;

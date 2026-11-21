@@ -420,6 +420,39 @@ The port's `asrs-cli decode <file>` must print the same dump and `asrs-cli expor
 <json>` the same bytes, with the same skip rules, so `cargo xtask parity decode` and `export` can
 compare the two with `cmp`.
 
+`historicalSession <sessions.jsonl>` (`src/historicalSession.ts`) runs scripted hub sessions on
+one `Log`: each `open` step is a new `HistoricalDataSource` as `startHistorical` makes it, and
+main replies go to every source still in the hub's list. Timeouts and worker messages follow the
+`Scheduler` rules above; intervals and animation frames run only from `tick` and `frame` steps.
+The page `Date` starts at 1700000000000 and moves only with `frame`; each worker realm's `Date` is
+pinned to 1000000000000 as in `decodeWorker`. A throw out of a page task prints
+`{"event": "threw"}` and the session goes on, as a browser does. A worker that sends nothing for
+`--stall-ms` (default 30000) while busy is killed and never heard from again, which is what a
+worker that loops forever or dies looks like to the page. The trace, CVE-1 JSONL:
+
+```text
+{"session": name}
+{"step", "op"}                                               before each step
+{"event": "status", "source", "status"}                      plus "customError" on Error
+{"event": "progress", "source", "value"}
+{"event": "refresh", "source", "hasNewFields"}
+{"event": "loaded", "source"}                                a loadAllFields() promise resolved
+{"event": "main", "name", "path"}                            historical-start
+{"event": "main", "name", "extension", "bytes"}              historical-start-raw
+{"event": "worker", "worker", "script"}                      worker index in creation order
+{"event": "post", "worker", "type": "start", "files"}        file lengths, null for a missing file
+{"event": "post", "worker", "type": "parseField", "key"}
+{"event": "terminate", "worker"}
+{"event": "active", "fields"}                                after a pick step
+{"event": "threw"}
+dump lines as above                                          phase from the step, status is every
+                                                             source's status joined by ","
+{"end": name}
+```
+
+`asrs-cli historical-session` prints the same trace, and `cargo xtask parity historical` compares
+the two over every decode-suite log (`cargo xtask parity historical --help` lists the scripts).
+
 `cargo xtask oracle historical` runs every log file of a synthetic corpus (extensions with a
 worker; a `.dsevents` only when it has no `.dslog` sibling) through `decode` and the export matrix
 of `parity/corpus/historical.spec.json` (formats x sampling modes x generated on/off x prefix
@@ -570,8 +603,13 @@ due, where a delivery (server message, IPC message, socket event) due now goes b
 timer, oldest first, and timers follow Blink's rules (see `src/live/clock.ts` and
 `asrs_live::timers`). The emulated main process shares that one timer queue and those rules, so its heartbeat
 interval and socket timers order against the renderer's by creation. Every task is followed by a
-full microtask drain. `requestIdleCallback`
-fires at its `timeout`, `requestAnimationFrame` 16 ms later, both as ordinary timers. IPC
+full microtask drain. Timers carry the HTML nesting level: one created in a timer task (or its
+microtasks) at level n gets n + 1, an interval rises a level per repeat, and a delay under 4 ms
+is raised to 4 ms when the creating level is above 5, so a `setTimeout(0)` in a fresh
+`setInterval` callback waits 4 ms from the sixth repeat on (measured in Electron 39).
+`requestIdleCallback` fires at its `timeout`, `requestAnimationFrame` 16 ms later and
+`AbortSignal.timeout` at its delay, all as level-0 delayed tasks in the timers' due-time order;
+Chromium's ordering of those against short DOM timers at an equal due time differs (#204). IPC
 between the renderer and the emulated main process is a delivery with no delay.
 
 Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
@@ -579,13 +617,12 @@ client `latencyMs` later. Connection and request ids count up from 1 across webs
 requests and TCP sockets. Websockets behave like the browser's: `send` while connecting
 throws, a refused handshake fires `error` then `close`, a server drop fires `close` (1006),
 `close()` fires `close` a round trip later, and messages arriving when not open are dropped.
-`fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
-`http-abort`. A URL that `new URL` rejects (a robot address of `""`) makes `fetch` reject at
-once, as Chromium's does, without reaching the server; it still takes an id. TCP sockets
-follow the Node behaviour main.ts relies on: writes while connecting go out on connect,
-`setTimeout` is an idle timer refreshed by connecting, reads and writes, a refusal emits
-`error` then `close`; `error` is emitted at once and `close` as a later delivery, as Node
-emits it from the handle's close callback.
+`fetch` is GET only, and an abort reaches the server as `http-abort`. A URL that `new URL`
+rejects (a robot address of `""`) makes `fetch` reject at once, as Chromium's does, without
+reaching the server; it still takes an id. TCP sockets follow the Node behaviour main.ts
+relies on: writes while connecting go out on connect, `setTimeout` is an idle timer refreshed
+by connecting, reads and writes, a refusal emits `error` then `close`; `error` is emitted at
+once and `close` as a later delivery, as Node emits it from the handle's close callback.
 
 ### Trace
 
@@ -806,6 +843,24 @@ recorded: `{"slTypeMemory": ...}` whenever `window.typeMemory` is replaced, `{"s
 fixture's `window.__oracleTheme` overrides `window.theme` for `matchMedia`, so a step can switch
 the colour scheme. jsdom's `:nth-child` goes stale after DOM moves, so source-list fixtures tag
 items with a `data-i` attribute before each event and lay them out by it.
+
+### LineGraph controller
+
+`dom/line-graph/<case>` (`crates/asrs-tabs/tests/line_graph_dom.rs`) replays every LineGraph
+controller call. `node oracle/tools/lineGraphSpecs.mjs` writes the specs and their logs
+(`parity/specs/dom/logs/line-graph-*.json`); edit the script, not the specs. Each fixture sets
+`"sourceLists": true` and starts with a `/*lg:recorder*/` eval, which hooks every LineGraph
+controller (the hub's default tab and any `addTab` creates) and writes inline records:
+
+| Record | Written |
+|---|---|
+| `{"lg": "create", "id", "uuids"}` | when a controller is hooked; `uuids` are its left, right and discrete list UUIDs |
+| `{"lg": "command" \| "preview" \| "save" \| "activeFields", "id", "dark", "ts", "args"?, "value" \| "threw", "reads"}` | after `getCommand`, `getPreview` (key and time only), `saveState` and `getActiveFields` return; `reads` lists each outermost `window.selection` getter called during it with its result, and `ts` is `preferences.timestamps` |
+| `{"lg": <method>, "id", "phase": "begin", "args", "dark"}` and `{"lg": <method>, "id", "phase": "end", "threw"?}` | around `restoreState`, `editAxis`, `clearAxis`, `setRobotModeVisible` and `refresh`; the list ops and nested `getCommand` between them belong to the call |
+| `{"lg": "edit", "id", "list", "rect"}` | before an axis's edit button handler runs, with the button's rect |
+
+The harness answers the port's selection reads from `reads`, so a read upstream did not make,
+or one it skipped, fails the case.
 
 Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
 workers and historical or live sources (logs are built with `log` steps), drag sessions other

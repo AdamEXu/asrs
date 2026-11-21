@@ -836,6 +836,21 @@ impl Log {
         self.put_value(key, timestamp, value);
     }
 
+    /// A typed writer given `null` (`putNumber(key, timestamp, null)`): `putData` drops the
+    /// value, but the field is still registered, a mismatched type still warns and the
+    /// timestamp still counts.
+    pub fn put_null(&mut self, key: &JsString, timestamp: f64, ty: LoggableType) {
+        self.create_blank_field(key, ty);
+        let field = self.field_mut_existing(key);
+        if field.get_type() != ty {
+            field.type_warning = true;
+        }
+        self.changed_fields.insert(key.clone());
+        if self.get_type(key) == Some(ty) {
+            self.process_timestamp(key, timestamp);
+        }
+    }
+
     /// Writes a String value; a `.../.type` key also types its parent as an Empty field.
     pub fn put_string(&mut self, key: &JsString, timestamp: f64, value: JsString) {
         self.put_value(key, timestamp, value.clone());

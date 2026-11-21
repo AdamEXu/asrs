@@ -3,6 +3,8 @@
 //!
 //! Transcendentals are ports of V8's `src/base/ieee754.cc` (fdlibm) and, for `sin` and `cos`,
 //! of the glibc routines V8 bundles under `third_party/glibc` (`v8_use_libm_trig_functions`).
+//! Those two are LGPL-2.1-or-later and live in the `asrs-libm-lgpl` shared library, which
+//! [`libm`] loads at runtime so users can replace it.
 //! `pow` is the exception: V8 defaults to `--use-std-math-pow`, so it calls the platform C
 //! library's `pow`, and so does [`pow`] here.
 //!
@@ -13,9 +15,8 @@
 pub mod bigint;
 mod bits;
 mod fdlibm;
-mod glibc;
 pub mod int;
-mod sincostab;
+pub mod libm;
 
 pub use bigint::{BigInt, BigIntRangeError, BigIntSyntaxError};
 pub use int::{
@@ -40,11 +41,11 @@ pub const SQRT1_2: f64 = std::f64::consts::FRAC_1_SQRT_2;
 pub const SQRT2: f64 = std::f64::consts::SQRT_2;
 
 pub fn sin(x: f64) -> f64 {
-    glibc::sin(x)
+    libm::sin(x)
 }
 
 pub fn cos(x: f64) -> f64 {
-    glibc::cos(x)
+    libm::cos(x)
 }
 
 /// `Math.pow` and `**`. The result for finite non-special operands comes from the platform
