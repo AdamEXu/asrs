@@ -25,9 +25,10 @@ per input for the decode dump and for the export set.
 
 The corpus must already be generated (`cargo xtask corpus gen`).";
 
-const SPEC: &str = "parity/corpus/historical.spec.json";
+pub(crate) const SPEC: &str = "parity/corpus/historical.spec.json";
 const MANIFEST_SUFFIX: &str = ".historical.json";
-const LOG_EXTENSIONS: &[&str] = &[".wpilog", ".rlog", ".csv", ".dslog", ".log", ".dsevents"];
+pub(crate) const LOG_EXTENSIONS: &[&str] =
+    &[".wpilog", ".rlog", ".csv", ".dslog", ".log", ".dsevents"];
 
 struct Options {
     check: bool,
@@ -132,7 +133,7 @@ pub(crate) fn run(paths: &Paths, args: &[String]) -> Result {
 
 /// Log files of a generated corpus (the extensions HistoricalDataSource has a worker for), checked against its committed manifest so the oracle never
 /// runs on stale inputs.
-fn corpus_inputs(paths: &Paths, name: &str) -> Result<Vec<String>> {
+pub(crate) fn corpus_inputs(paths: &Paths, name: &str) -> Result<Vec<String>> {
     let manifest_path = corpus::synthetic_dir(&paths.root).join(format!("{name}.manifest.json"));
     let text = String::from_utf8(oracle::read(&manifest_path)?).map_err(|e| e.to_string())?;
     let manifest = json::parse(&text).map_err(|e| format!("{}: {e}", manifest_path.display()))?;
