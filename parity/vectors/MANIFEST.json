@@ -112,6 +112,9 @@
     "dom/timeline/zoom-help-dark-2x": {"cases":43,"content":"853b06a6e135103f","generator":"faca94efa75dbcac","spec":"parity/specs/dom/timeline/zoom-help-dark-2x.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/camera-controls-mac": {"cases":125,"content":"c7d8fe04bfba0a08","generator":"4f5980bef205b049","spec":"parity/specs/field3d/camera-controls-mac.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/camera-controls-other": {"cases":45,"content":"21e8591091fed7ce","generator":"fe30eb20cbe4cc69","spec":"parity/specs/field3d/camera-controls-other.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/glb-bundled": {"cases":24,"content":"e5e79194bf430f80","generator":"391754dba889bf2f","spec":"parity/specs/field3d/glb-bundled.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/glb-procedural": {"cases":114,"content":"53a360a8bc967de3","generator":"85b77f8818b0df02","spec":"parity/specs/field3d/glb-procedural.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/glb-synthetic": {"cases":177,"content":"ade15095ccf20c08","generator":"eae3c083c6f44ec9","spec":"parity/specs/field3d/glb-synthetic.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/three": {"cases":9460,"content":"df05db1732c3129d","generator":"b7b48c4e7a7f8268","spec":"parity/specs/field3d/three.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/collation": {"cases":5002,"content":"87628654f82c6a0f","generator":"7858c466b27d35dc","spec":"parity/specs/js/collation.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/collation-unsafe": {"cases":2,"content":"d83814ebe2b5110b","generator":"4da9491da6f96470","spec":"parity/specs/js/collation-unsafe.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
@@ -184,7 +187,7 @@
     "log/joystick": {"cases":86,"content":"fe7095d3b3794267","generator":"9e3b1958be6bb378","spec":"parity/specs/log/joystick.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/key-utils": {"cases":3443,"content":"26ecf4d09573491e","generator":"0ae9fdd6d4a95180","spec":"parity/specs/log/key-utils.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/mechanism": {"cases":9,"content":"e73b71794c20b87a","generator":"8ed8524e10344e4a","spec":"parity/specs/log/mechanism.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "log/merge-offset": {"cases":164,"content":"3974bda7d621e474","generator":"4c4b70552e780333","spec":"parity/specs/log/merge-offset.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/merge-offset": {"cases":164,"content":"3974bda7d621e474","generator":"2376d2505daf19d8","spec":"parity/specs/log/merge-offset.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/photon": {"cases":81,"content":"13c35c892c2c7d87","generator":"d4e25a94071d61e4","spec":"parity/specs/log/photon.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-fuzz": {"cases":2448,"content":"be2458a704e43686","generator":"6a985883e46b17c5","spec":"parity/specs/log/proto-fuzz.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-matrix": {"cases":776,"content":"4a7c6f536aa595f6","generator":"243359307864283b","spec":"parity/specs/log/proto-matrix.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
@@ -228,7 +231,7 @@
     "tabs/console-filter": {"cases":3022,"content":"d9772c459e0a5ef6","generator":"821933e38ce82e97","spec":"parity/specs/tabs/console-filter.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-format": {"cases":3041,"content":"76e5265a66c5b13f","generator":"70a1eb36aa392aa5","spec":"parity/specs/tabs/console-format.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/heatmap": {"cases":36,"content":"a0c28ccb88ad4846","generator":"5ed6a4a143dfdbf8","spec":"parity/specs/tabs/heatmap.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "urcl/urcl": {"cases":63,"content":"0234af7989d75049","generator":"b97c600a55ea7ce1","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "urcl/urcl": {"cases":63,"content":"0234af7989d75049","generator":"35dc1594724a7df4","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/corpus": {"cases":222,"content":"1893bd0e04348bcb","generator":"ea371e485e20304c","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/public": {"cases":5,"content":"3a0c9961a122df71","generator":"6447471c733d14a2","spec":"parity/specs/wpilog/public.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }
