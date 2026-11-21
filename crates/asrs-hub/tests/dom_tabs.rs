@@ -1746,7 +1746,7 @@ impl Runner {
                     .selected_renderer_as::<Recorder<Field2dRenderer>>(TabType::Field2d)?
                 {
                     r.inner
-                        .set_2d_camera(&mut self.host, data.as_f64().unwrap_or(f64::NAN));
+                        .set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN));
                 }
             }
             "set-version"
