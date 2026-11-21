@@ -293,6 +293,7 @@ name = "asrs-app"
 version = "0.1.0"
 dependencies = [
  "asrs-field3d",
+ "asrs-js",
  "asrs-ui",
  "async-channel",
  "image",
@@ -374,8 +375,13 @@ dependencies = [
  "indexmap",
  "jiff",
  "jiff-tzdb",
+ "libloading",
  "ryu-js",
 ]
+
+[[package]]
+name = "asrs-libm-lgpl"
+version = "0.1.0"
 
 [[package]]
 name = "asrs-live"

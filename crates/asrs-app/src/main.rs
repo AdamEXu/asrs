@@ -14,6 +14,10 @@ impl Render for EmptyHub {
 }
 
 fn main() {
+    if let Err(e) = asrs_js::math::libm::load() {
+        eprintln!("advantagescope: {e}");
+        std::process::exit(1);
+    }
     application().run(|cx: &mut App| {
         asrs_ui::init(cx);
         let bounds = Bounds::centered(None, size(px(1100.0), px(650.0)), cx);
