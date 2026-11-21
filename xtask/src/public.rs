@@ -245,6 +245,7 @@ mod tests {
             url: "https://example.invalid/t.bin".into(),
             sha256: sha256.into(),
             size,
+            merge: None,
         }
     }
 

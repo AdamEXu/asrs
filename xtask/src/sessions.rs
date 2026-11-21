@@ -327,7 +327,7 @@ pub(crate) fn run(args: &[String]) -> Result {
                     *results[i].lock().expect("shard result poisoned") =
                         Some((oracle_out, rust_out));
                     let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                    if n % 20 == 0 || n == shards.len() {
+                    if n.is_multiple_of(20) || n == shards.len() {
                         eprintln!("  {n}/{} shards", shards.len());
                     }
                 }

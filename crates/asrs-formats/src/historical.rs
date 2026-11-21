@@ -437,7 +437,7 @@ impl HistoricalDataSource {
         next: usize,
         cx: &mut PageContext<'_>,
     ) {
-        if let Some(i) = (next..chunks.len()).find(|i| i % CHILD_CONCAT_YIELD == 0) {
+        if let Some(i) = (next..chunks.len()).find(|i| i.is_multiple_of(CHILD_CONCAT_YIELD)) {
             cx.host.set_timeout(Timeout {
                 source: self.uuid.clone(),
                 task: Task::ChildLog {
@@ -965,10 +965,8 @@ mod tests {
             log: Box::new(worker_log.to_serialized()),
             is_partial: true,
         };
-        source
-            .worker_message(&source.uuid().to_owned(), initial, &mut cx)
-            .unwrap();
         let uuid = source.uuid().to_owned();
+        source.worker_message(&uuid, initial, &mut cx).unwrap();
         source.fire_interval(&uuid, &mut cx);
         assert_eq!(source.status(), Status::Idle);
         assert!(!source.load_all_fields(&mut cx));
