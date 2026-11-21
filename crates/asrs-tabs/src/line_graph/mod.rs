@@ -34,7 +34,7 @@ pub use command::{
 };
 
 use crate::cx::{TabCx, display_offset};
-use crate::list_cx::{ListParts, SourceListCx, js_error, with_env};
+use crate::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use axis::unmodeled;
 
 const RANGE_MARGIN: f64 = 0.05;
@@ -1138,18 +1138,6 @@ fn add_alerts(log: &Log, source: &[SourceListItemState], time_range: [f64; 2]) -
                 .collect::<Vec<_>>()
         })
         .filter(|row| !row.is_empty())
-        .collect()
-}
-
-fn source_state(value: &JsValue) -> Result<Vec<SourceListItemState>, JsError> {
-    value
-        .as_array()
-        .ok_or_else(|| unmodeled("restored sources that are not an array"))?
-        .iter()
-        .map(|item| {
-            SourceListItemState::from_js(item)
-                .ok_or_else(|| unmodeled("a restored source item of another shape"))
-        })
         .collect()
 }
 
