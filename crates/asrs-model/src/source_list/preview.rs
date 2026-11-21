@@ -13,7 +13,8 @@ use asrs_log::units;
 use super::{SourceListError, eq_str};
 use crate::source_list_config::{PreviewSetting, PreviewType, SourceListItemState};
 
-pub type NumberPreview<'a> = &'a mut dyn FnMut(&JsString, f64) -> Option<String>;
+pub type NumberPreview<'a> =
+    &'a mut dyn FnMut(&JsString, f64) -> Result<Option<String>, SourceListError>;
 
 fn fixed(x: f64, digits: f64) -> String {
     number::to_fixed(x, digits).expect("fraction digits are in range")
@@ -202,7 +203,7 @@ pub(super) fn preview_text(
     if log_type == LoggableType::Number
         && let Some(number_preview) = number_preview
     {
-        return Ok(number_preview(&state.log_key, time));
+        return number_preview(&state.log_key, time);
     } else if log_type != LoggableType::Empty {
         value = value_at(log, &state.log_key, log_type, time);
     }
