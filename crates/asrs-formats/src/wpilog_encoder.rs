@@ -302,12 +302,18 @@ impl Record {
 
     /// `makeRaw`: the sample becomes the payload verbatim when it is a
     /// `Uint8Array`. Other array-likes land in `set` as `ToUint8` of each
-    /// element (a string's code units all become 0); scalars have no `length`
-    /// and throw later, inside `getEncoded`.
+    /// element (a string's elements are its one-unit strings, so `"1a5"`
+    /// becomes `1,0,5`); scalars have no `length` and throw later, inside
+    /// `getEncoded`.
     pub fn raw(entry: f64, timestamp: f64, value: &Sample<'_>) -> Record {
         let data = match value {
             Sample::Raw(bytes) => RecordData::Bytes(bytes.to_vec()),
-            Sample::String(s) => RecordData::Bytes(vec![0; s.len()]),
+            Sample::String(s) => RecordData::Bytes(
+                s.units()
+                    .iter()
+                    .map(|unit| to_uint8(number::to_number(std::slice::from_ref(unit))))
+                    .collect(),
+            ),
             Sample::BooleanArray(items) => RecordData::Bytes(
                 items
                     .iter()
@@ -417,5 +423,21 @@ impl WpilogEncoder {
             out.extend_from_slice(&record.encode()?);
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Recorded from `new Uint8Array(6).set("1a5 9\u0663")` under the oracle's Electron.
+    #[test]
+    fn raw_string_sample_converts_each_unit() {
+        let text = JsString::from("1a5 9\u{663}");
+        let record = Record::raw(1.0, 0.0, &Sample::String(&text));
+        let RecordData::Bytes(bytes) = record.data else {
+            panic!("string samples have a length");
+        };
+        assert_eq!(bytes, [1, 0, 5, 0, 9, 0]);
     }
 }

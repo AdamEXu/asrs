@@ -532,4 +532,44 @@ mod tests {
                 .to_vec())
         );
     }
+
+    // Recorded from upstream's parse, `exporter` assignment and stringify under the oracle's
+    // Electron, in a strict-mode realm as the bundled worker is.
+    #[test]
+    fn wpilog_metadata_matches_upstream() {
+        let cases = [
+            (
+                r#"{"b":1,"2":0,"1":0,"exporter":"x","z":2}"#,
+                r#"{"1":0,"2":0,"b":1,"exporter":"AdvantageScope","z":2}"#,
+            ),
+            ("[1,2]", "[1,2]"),
+            ("[]", "[]"),
+            ("5", "5"),
+            ("1e1", "1e1"),
+            (r#""s""#, r#""s""#),
+            ("true", "true"),
+            ("null", "null"),
+            (
+                r#"{"__proto__":1}"#,
+                r#"{"__proto__":1,"exporter":"AdvantageScope"}"#,
+            ),
+            (r#" {"a" : 1 } "#, r#"{"a":1,"exporter":"AdvantageScope"}"#),
+            (r#"{"a":1,"a":2}"#, r#"{"a":2,"exporter":"AdvantageScope"}"#),
+            (r#""\ud800""#, r#""\ud800""#),
+            ("-0", "-0"),
+            (
+                r#"{"a":-0,"b":1e21,"c":1.5e-7}"#,
+                r#"{"a":0,"b":1e+21,"c":1.5e-7,"exporter":"AdvantageScope"}"#,
+            ),
+            ("not json", "not json"),
+            ("", r#"{"exporter":"AdvantageScope"}"#),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                wpilog_metadata(&JsString::from(input)).to_string_lossy(),
+                expected,
+                "{input}"
+            );
+        }
+    }
 }
