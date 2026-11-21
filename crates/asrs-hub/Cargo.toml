@@ -14,6 +14,7 @@ asrs-model = { path = "../asrs-model" }
 indexmap = "=2.14.2"
 
 [dev-dependencies]
+asrs-tabs = { path = "../asrs-tabs" }
 asrs-parity = { path = "../asrs-parity" }
 
 [lints]

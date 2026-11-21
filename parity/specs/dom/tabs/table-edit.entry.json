@@ -1,0 +1,597 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "assets": "../assets/minimal.json",
+    "images": {
+      "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
+        3900,
+        1800
+      ]
+    },
+    "seed": 1101,
+    "layout": [
+      {
+        "selector": "div.data-table-container",
+        "rect": [
+          300,
+          92,
+          800,
+          358
+        ]
+      },
+      {
+        "selector": "table.data-table th[data-i=\"0\"]",
+        "rect": [
+          300,
+          92,
+          120,
+          25
+        ]
+      },
+      {
+        "selector": "table.data-table th[data-i=\"1\"]",
+        "rect": [
+          420,
+          92,
+          200,
+          25
+        ]
+      },
+      {
+        "selector": "table.data-table th[data-i=\"2\"]",
+        "rect": [
+          620,
+          92,
+          200,
+          25
+        ]
+      },
+      {
+        "selector": "table.data-table th[data-i=\"3\"]",
+        "rect": [
+          820,
+          92,
+          200,
+          25
+        ]
+      },
+      {
+        "selector": "table.data-table th[data-i=\"4\"]",
+        "rect": [
+          1020,
+          92,
+          200,
+          25
+        ]
+      },
+      {
+        "selector": "table.data-table tr:nth-of-type(1)",
+        "rect": [
+          300,
+          92,
+          800,
+          25
+        ]
+      },
+      {
+        "selector": "table.data-table tr",
+        "rect": [
+          300,
+          117,
+          800,
+          20
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 4
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Drive/LeftVelocity"
+                ]
+              },
+              "x": 500,
+              "y": 200,
+              "end": false
+            }
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "dom",
+            "selector": "div.data-table-drag-highlight"
+          }
+        ],
+        "label": "drag-over"
+      },
+      {
+        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Drive/LeftVelocity"
+                ]
+              },
+              "x": 500,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "first-field"
+      },
+      {
+        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Drive/RightVelocity",
+                  "/DriverStation/Enabled"
+                ]
+              },
+              "x": 400,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "inserted-before"
+      },
+      {
+        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Drive/ModuleStates"
+                ]
+              },
+              "x": 900,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Drive/ModuleStates",
+                  "/Vision/Corners"
+                ]
+              },
+              "x": 900,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Odometry/Robot"
+                ]
+              },
+              "x": 900,
+              "y": 50,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "empty-filtered"
+      },
+      {
+        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 700,
+            "clientY": 100
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 702,
+            "clientY": 101
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 720,
+            "clientY": 100
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 450,
+            "clientY": 120
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "mouseup",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 450,
+            "clientY": 120
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "column-moved"
+      },
+      {
+        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mousedown",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 450,
+            "clientY": 100
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 470,
+            "clientY": 100
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 1000,
+            "clientY": 130
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.renderer-content > :not([hidden])",
+          "type": "mouseup",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 1000,
+            "clientY": 130
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "column-moved-right"
+      },
+      {
+        "event": {
+          "target": "button.data-table-key-delete",
+          "type": "click",
+          "index": 2
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "closed"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"/Missing/Field\", \"/Drive/LeftVelocity\", \"/DriverStation/Enabled\"])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"/Drive/LeftVelocity\", 5])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "unavailable"
+      },
+      {
+        "event": {
+          "target": "input.data-table-jump-input",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Enter"
+          },
+          "props": {
+            "value": "3.25"
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "jumped"
+      },
+      {
+        "selection": [
+          "goIdle"
+        ]
+      },
+      {
+        "event": {
+          "target": "input.data-table-jump-input",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "button.data-table-jump-button",
+          "type": "click"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "jump-empty-idle-frame"
+      },
+      {
+        "selection": [
+          "goIdle"
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "event": {
+          "target": "button.data-table-jump-button",
+          "type": "click"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "jump-empty-idle"
+      },
+      {
+        "event": {
+          "target": "table.data-table tr",
+          "type": "click",
+          "index": 4,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "row-click"
+      },
+      {
+        "event": {
+          "target": "table.data-table tr",
+          "type": "contextmenu",
+          "index": 4,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "row-contextmenu"
+      },
+      {
+        "event": {
+          "target": "table.data-table tbody",
+          "type": "mousemove",
+          "kind": "MouseEvent",
+          "init": {
+            "clientX": 500,
+            "clientY": 120
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "hover"
+      },
+      {
+        "event": {
+          "target": "table.data-table tbody",
+          "type": "mouseleave",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "hover-left"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()]"
+          }
+        ],
+        "label": "active"
+      }
+    ]
+  }
+}
