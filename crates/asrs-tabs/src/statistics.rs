@@ -16,11 +16,12 @@ use asrs_log::log::robot_state::{
     AKIT_TIMESTAMP_KEYS, RobotMode, RobotStateRange, get_robot_state_ranges,
 };
 use asrs_model::selection::Selection;
-use asrs_model::source_list::{Env, SourceList, SourceListError, configs};
+use asrs_model::source_list::{SourceList, configs};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
 use crate::cx::TabCx;
+use crate::list_cx::{SourceListCx, js_error, with_env};
 use crate::simple_statistics as stats;
 
 const UPDATE_PERIOD_MS: f64 = 100.0;
@@ -31,10 +32,8 @@ const TIME_RANGE_OPTIONS: &[&str] = &[
     "visible", "full", "enabled", "auto", "teleop", "live-30", "live-10",
 ];
 
-/// What the controller reads besides [`TabCx`].
-pub trait StatisticsEnv: TabCx {
-    /// `window.log`, `window.typeMemory` and the dark-theme flag, for `SourceList` calls.
-    fn with_source_env<R>(&mut self, f: impl FnOnce(&mut Env<'_>) -> R) -> R;
+/// What the controller reads besides [`SourceListCx`].
+pub trait StatisticsCx: SourceListCx {
     /// `new Date().getTime()`.
     fn now(&self) -> f64;
 }
@@ -148,14 +147,16 @@ impl StatisticsController {
     /// One run of the source list's own `requestAnimationFrame` loop, which the hub schedules
     /// after its tab loop. Statistics types have no previews, so only the first run (and a
     /// theme change) does anything: it re-renders every item, and a throw there ends the loop.
-    pub fn source_list_frame(&mut self, cx: &mut impl StatisticsEnv) -> Result<(), JsError> {
+    pub fn source_list_frame(
+        &mut self,
+        cx: &mut (impl StatisticsCx + ?Sized),
+    ) -> Result<(), JsError> {
         let time = if self.source_list.state().is_empty() {
             None
         } else {
             cx.tab_selection().get_render_time()
         };
-        cx.with_source_env(|env| self.source_list.frame(env, time, None))
-            .map_err(source_error)
+        with_env(cx, |env| self.source_list.frame(env, time, None)).map_err(js_error)
     }
 
     /// `sourceList.setState(value)`: `clear()`, then `value.forEach(addListItem)`. An item
@@ -163,7 +164,7 @@ impl StatisticsController {
     /// so the port reports it as unmodeled instead of guessing.
     pub fn set_source_state(
         &mut self,
-        cx: &mut impl StatisticsEnv,
+        cx: &mut (impl StatisticsCx + ?Sized),
         value: &JsValue,
     ) -> Result<(), JsError> {
         let JsValue::Array(items) = value else {
@@ -181,8 +182,7 @@ impl StatisticsController {
                     .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        cx.with_source_env(|env| self.source_list.set_state(env, items))
-            .map_err(source_error)
+        with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)
     }
 
     /// `select.value = v`, without the `change` listener's `shouldUpdate`.
@@ -294,7 +294,7 @@ impl StatisticsController {
         false
     }
 
-    fn recompute(&mut self, cx: &mut impl StatisticsEnv) -> Result<(), JsError> {
+    fn recompute(&mut self, cx: &mut (impl StatisticsCx + ?Sized)) -> Result<(), JsError> {
         let min = value_to_number(&self.range_min);
         let max = value_to_number(&self.range_max);
         let mut step = value_to_number(&self.step_size);
@@ -421,7 +421,7 @@ impl StatisticsController {
 
 #[allow(clippy::too_many_arguments)]
 fn field_command(
-    cx: &mut impl StatisticsEnv,
+    cx: &mut (impl StatisticsCx + ?Sized),
     fields: &mut Vec<StatisticsField>,
     sample_times: &[f64],
     bins: &[f64],
@@ -785,7 +785,7 @@ impl TabCommand for StatisticsCommand {
     }
 }
 
-impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
+impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
     fn save_state(&self, _cx: &Cx) -> JsValue {
         let mut state = JsObject::new();
         state.insert(
@@ -839,8 +839,7 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
     }
 
     fn refresh(&mut self, cx: &mut Cx) -> Result<(), JsError> {
-        cx.with_source_env(|env| self.source_list.refresh(env))
-            .map_err(source_error)?;
+        with_env(cx, |env| self.source_list.refresh(env)).map_err(js_error)?;
         self.should_update = true;
         Ok(())
     }
@@ -891,25 +890,4 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
 fn starts_with(s: &JsString, prefix: &str) -> bool {
     s.units()
         .starts_with(&prefix.encode_utf16().collect::<Vec<u16>>())
-}
-
-/// `SourceListError` out of a controller call. `UnknownType` is a thrown string upstream,
-/// not an `Error`; an empty `name` marks that so the harness emits the raw value.
-fn source_error(e: SourceListError) -> JsError {
-    match e {
-        SourceListError::UnknownType(t) => {
-            JsError::new("", format!("Unknown type \"{}\"", t.to_string_lossy()))
-        }
-        SourceListError::Thrown(text) => {
-            if let Some((name, message)) = text.split_once(": ") {
-                match name {
-                    "TypeError" => return JsError::type_error(message),
-                    "RangeError" => return JsError::range(message),
-                    "Error" => return JsError::new("Error", message),
-                    _ => {}
-                }
-            }
-            JsError::new("", text)
-        }
-    }
 }

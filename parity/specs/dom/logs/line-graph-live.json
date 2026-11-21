@@ -1,0 +1,5 @@
+[
+  ["putNumber","/Live/Value",0,1],
+  ["putBoolean","/Live/Flag",0,true],
+  ["putNumber","/Timestamp",0,0]
+]

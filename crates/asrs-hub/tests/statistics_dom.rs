@@ -27,7 +27,6 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{SelectionImpl, SharedLog};
-use asrs_model::source_list::{Env, SourceListError};
 use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
@@ -36,7 +35,8 @@ use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::cx::TabCx;
-use asrs_tabs::statistics::{StatisticsController, StatisticsEnv};
+use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, with_env};
+use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 
 const DEFAULT_IGNORED: [&str; 3] = ["save-state", "save-type-memory", "update-touch-bar-slider"];
 type InputSetter = fn(&mut StatisticsController, JsString);
@@ -174,17 +174,22 @@ impl TabCx for Host {
     }
 }
 
-impl StatisticsEnv for Host {
-    fn with_source_env<R>(&mut self, f: impl FnOnce(&mut Env<'_>) -> R) -> R {
-        let log = self.log.borrow();
-        let mut env = Env {
-            log: &log,
-            type_memory: &mut self.type_memory,
-            dark: self.dark,
-        };
-        f(&mut env)
+impl SourceListCx for Host {
+    fn tab_dark(&self) -> bool {
+        self.dark
     }
 
+    fn list_parts(&mut self) -> ListParts<'_> {
+        ListParts {
+            log: self.log.borrow(),
+            type_memory: &mut self.type_memory,
+            selection: &mut self.selection,
+            dark: self.dark,
+        }
+    }
+}
+
+impl StatisticsCx for Host {
     fn now(&self) -> f64 {
         self.clock.get()
     }
@@ -458,33 +463,13 @@ fn type_memory_of(value: &JsValue) -> SourceListTypeMemory {
     out
 }
 
-/// `e instanceof Error ? `${name}: ${message}` : String(e)`; `source_error` marks thrown
-/// non-Error values with an empty name.
+/// `e instanceof Error ? `${name}: ${message}` : String(e)`; `js_error` marks thrown non-Error
+/// values with an empty name.
 fn thrown_text(e: &JsError) -> String {
     if e.name.is_empty() {
         e.message.clone()
     } else {
         format!("{}: {}", e.name, e.message)
-    }
-}
-
-/// `SourceListError` out of a page call, as `thrown_text` formats it.
-fn source_error(e: SourceListError) -> JsError {
-    match e {
-        SourceListError::UnknownType(t) => {
-            JsError::new("", format!("Unknown type \"{}\"", t.to_string_lossy()))
-        }
-        SourceListError::Thrown(text) => {
-            if let Some((name, message)) = text.split_once(": ") {
-                match name {
-                    "TypeError" => return JsError::type_error(message),
-                    "RangeError" => return JsError::range(message),
-                    "Error" => return JsError::new("Error", message),
-                    _ => {}
-                }
-            }
-            JsError::new("", text)
-        }
     }
 }
 
@@ -835,10 +820,10 @@ impl Runner {
                         return Err(err(format!("addField arg in {expr}")));
                     };
                     self.stats(tab_i, |c, host| {
-                        host.with_source_env(|env| {
+                        with_env(host, |env| {
                             c.source_list_mut()
                                 .add_field(env, &[], &key, None)
-                                .map_err(source_error)
+                                .map_err(js_error)
                         })
                     })?
                 }
