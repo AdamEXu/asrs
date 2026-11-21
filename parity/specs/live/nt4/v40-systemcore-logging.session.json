@@ -1,0 +1,29 @@
+{
+  "protocol": "nt4",
+  "seed": 777,
+  "latencyMs": 1,
+  "endMs": 2800,
+  "client": {
+    "source": "nt4",
+    "mode": "systemcore",
+    "address": "172.22.11.2",
+    "prefs": { "liveSubscribeMode": "logging" }
+  },
+  "server": {
+    "version": "4.0",
+    "ports": [6810],
+    "offsetUs": 3000000,
+    "topics": [
+      { "name": "/SmartDashboard/x", "type": "double", "value": 0.25 },
+      { "name": "/SmartDashboard/list", "type": "double[]", "value": [1, 2, 3] },
+      { "name": "/SmartDashboard/flag", "type": "boolean", "value": false },
+      { "name": "/raw", "type": "raw", "value": "deadbeef" }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 700, "server": ["batch", [["/SmartDashboard/x", 1.0], ["/raw", "cafe"]] ] },
+    { "t": 1400, "server": ["set", "/SmartDashboard/flag", true] },
+    { "t": 2200, "client": ["dump"] }
+  ]
+}

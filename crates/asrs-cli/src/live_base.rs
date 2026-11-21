@@ -141,6 +141,7 @@ fn run(args: &[Value]) -> Result<Value, String> {
                     1 => Some(LivePreferences::default()),
                     _ => Some(LivePreferences {
                         live_discard: Some(number(&arg(op, 2))?),
+                        live_subscribe_mode: None,
                     }),
                 };
             }

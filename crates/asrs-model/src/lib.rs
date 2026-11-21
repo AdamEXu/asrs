@@ -6,5 +6,6 @@ pub mod messages;
 pub mod preferences;
 pub mod selection;
 pub mod selection_impl;
+pub mod source_list;
 pub mod source_list_config;
 pub mod tab_type;

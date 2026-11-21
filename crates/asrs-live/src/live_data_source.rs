@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use asrs_js::math;
+use asrs_js::string::JsString;
 use asrs_js::time::{Rng, create_uuid};
 use asrs_js::value::JsValue;
 use asrs_log::log::Log;
@@ -58,6 +59,7 @@ impl LiveDataSourceStatus {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LivePreferences {
     pub live_discard: Option<f64>,
+    pub live_subscribe_mode: Option<JsString>,
 }
 
 /// What a source may touch besides itself: the hub's timers and `window.preferences`, which is

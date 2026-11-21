@@ -1,0 +1,42 @@
+{
+  "protocol": "nt4",
+  "seed": 817,
+  "latencyMs": 2,
+  "endMs": 3400,
+  "client": {
+    "source": "nt4",
+    "mode": "default",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "low-bandwidth" },
+    "tabs": ["/SmartDashboard", "/Pair", "/.schema"],
+    "sidebar": ["/Robot/Arm"]
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 777000000,
+    "topics": [
+      { "name": "/SmartDashboard/speed", "type": "double", "value": 1.5 },
+      { "name": "/SmartDashboard/enabled", "type": "boolean", "value": true },
+      { "name": "/SmartDashboard/name", "type": "string", "properties": { "unit": "name" }, "value": "robot" },
+      { "name": "/Pair", "type": "struct:Pair", "value": "000000000000f03f00000000000004c0" },
+      { "name": "/.schema/struct:Pair", "type": "structschema", "value": "646f75626c6520613b646f75626c652062" },
+      { "name": "/mp", "type": "msgpack", "value": "83a161cb3ff8000000000000a26f6bc3a46c697374930102" },
+      { "name": "/Robot/Arm/angle", "type": "double", "value": 0.4 },
+      { "name": "/DriverStation/ControlWord/enabled", "type": "boolean", "value": false },
+      { "name": "/Other/hidden", "type": "double", "value": 9 }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 400, "server": ["batch", [["/SmartDashboard/speed", 2.5], ["/Pair", "00000000000000400000000000000a40"], ["/Other/hidden", 10]]] },
+    { "t": 900, "client": ["fields", ["/SmartDashboard", "/Pair", "/.schema"], []] },
+    { "t": 1300, "server": ["set", "/Robot/Arm/angle", 1.1] },
+    { "t": 1400, "server": ["announce", "/NewThing/x", "double", { "src": "late" }] },
+    { "t": 1500, "server": ["set", "/NewThing/x", 7.5] },
+    { "t": 1700, "client": ["fields", ["/SmartDashboard", "/Pair", "/.schema", "/NewThing"], []] },
+    { "t": 2000, "server": ["setraw", "/mp", "83a161cb4000000000000000a26f6bc2a46c697374930102"] },
+    { "t": 2200, "client": ["dump"] },
+    { "t": 2600, "server": ["batch", [["/SmartDashboard/speed", 4.5], ["/mp", "81a16105"]]] },
+    { "t": 3000, "client": ["dump"] }
+  ]
+}

@@ -97,6 +97,75 @@ pub struct SerializedLog {
     pub queued_protos: Vec<QueuedStructure>,
 }
 
+/// A `Map`-producing decoder's message value, for `put_unknown_map`. `Map` entries keep
+/// insertion order where `JsValue::Object` would reorder array-index keys first.
+#[derive(Clone, Debug)]
+pub enum MapValue {
+    /// `undefined`: `putUnknownStruct` writes nothing for it.
+    Undefined,
+    Bool(bool),
+    Number(f64),
+    BigInt(i64),
+    Text(JsString),
+    Map(Vec<(JsString, MapValue)>),
+    Array(Vec<MapValue>),
+}
+
+/// An element of an array `putUnknownStruct` flattens, as `checkArrayType` and the typed
+/// array writers see it.
+trait UnknownItem {
+    fn type_of(&self) -> &'static str;
+    fn as_bool(&self) -> Option<bool>;
+    fn as_f64(&self) -> Option<f64>;
+    fn as_text(&self) -> Option<&JsString>;
+}
+
+impl UnknownItem for JsValue {
+    fn type_of(&self) -> &'static str {
+        JsValue::type_of(self)
+    }
+    fn as_bool(&self) -> Option<bool> {
+        JsValue::as_bool(self)
+    }
+    fn as_f64(&self) -> Option<f64> {
+        JsValue::as_f64(self)
+    }
+    fn as_text(&self) -> Option<&JsString> {
+        self.as_str()
+    }
+}
+
+impl UnknownItem for MapValue {
+    fn type_of(&self) -> &'static str {
+        match self {
+            MapValue::Undefined => "undefined",
+            MapValue::Bool(_) => "boolean",
+            MapValue::Number(_) => "number",
+            MapValue::BigInt(_) => "bigint",
+            MapValue::Text(_) => "string",
+            MapValue::Map(_) | MapValue::Array(_) => "object",
+        }
+    }
+    fn as_bool(&self) -> Option<bool> {
+        match self {
+            MapValue::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+    fn as_f64(&self) -> Option<f64> {
+        match self {
+            MapValue::Number(x) => Some(*x),
+            _ => None,
+        }
+    }
+    fn as_text(&self) -> Option<&JsString> {
+        match self {
+            MapValue::Text(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 impl Default for Log {
     fn default() -> Self {
         Log::new(true)
@@ -792,9 +861,13 @@ impl Log {
                     self.put_raw(key, timestamp, Arc::<[u8]>::from(bytes.as_slice()))?;
                 }
             }
-            JsValue::Array(items) => {
-                self.put_unknown_array(key, timestamp, items, allow_root_write)?
-            }
+            JsValue::Array(items) => self.put_unknown_items(
+                key,
+                timestamp,
+                items,
+                allow_root_write,
+                Log::put_unknown_struct,
+            )?,
             JsValue::Object(object) => {
                 for (name, item) in object.iter() {
                     self.put_unknown_struct(&child_key_js(key, name), timestamp, item, true)?;
@@ -813,12 +886,15 @@ impl Log {
         Ok(())
     }
 
-    fn put_unknown_array(
+    /// The array branch of `putUnknownStruct`: a uniform array is one typed array field,
+    /// anything else a `length` field plus one `put_item` call per element.
+    fn put_unknown_items<V: UnknownItem>(
         &mut self,
         key: &JsString,
         timestamp: f64,
-        items: &[JsValue],
+        items: &[V],
         allow_root_write: bool,
+        put_item: fn(&mut Log, &JsString, f64, &V, bool) -> Result<(), LogError>,
     ) -> Result<(), LogError> {
         let existing_type = self.get_type(key);
         let uniform = |type_name: &str, array_type: LoggableType| {
@@ -829,15 +905,15 @@ impl Log {
             }
         };
         if allow_root_write && uniform("boolean", LoggableType::BooleanArray) {
-            let values = items.iter().filter_map(JsValue::as_bool).collect();
+            let values = items.iter().filter_map(V::as_bool).collect();
             self.put_boolean_array(key, timestamp, values);
         } else if allow_root_write && uniform("number", LoggableType::NumberArray) {
-            let values = items.iter().filter_map(JsValue::as_f64).collect();
+            let values = items.iter().filter_map(V::as_f64).collect();
             self.put_number_array(key, timestamp, values);
         } else if allow_root_write && uniform("string", LoggableType::StringArray) {
             let values = items
                 .iter()
-                .filter_map(|item| item.as_str().cloned())
+                .filter_map(|item| item.as_text().cloned())
                 .collect();
             self.put_string_array(key, timestamp, values);
         } else {
@@ -847,8 +923,56 @@ impl Log {
             self.field_mut_existing(&length_key)
                 .put_number(timestamp, items.len() as f64);
             for (i, item) in items.iter().enumerate() {
-                self.put_unknown_struct(&child_key(key, &format!("{i}")), timestamp, item, true)?;
+                put_item(
+                    self,
+                    &child_key(key, &format!("{i}")),
+                    timestamp,
+                    item,
+                    true,
+                )?;
             }
+        }
+        Ok(())
+    }
+
+    /// `putUnknownStruct` for a `Map`-shaped input: `Map.entries()` iterates in insertion
+    /// order, where `JsValue::Object` would reorder array-index keys first.
+    pub fn put_unknown_map(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: &MapValue,
+        allow_root_write: bool,
+    ) -> Result<(), LogError> {
+        match value {
+            MapValue::Bool(b) => {
+                if allow_root_write {
+                    self.put_boolean(key, timestamp, *b);
+                }
+            }
+            MapValue::Number(x) => {
+                if allow_root_write {
+                    self.put_number(key, timestamp, *x);
+                }
+            }
+            MapValue::Text(s) => {
+                if allow_root_write {
+                    self.put_string(key, timestamp, s.clone());
+                }
+            }
+            MapValue::Map(entries) => {
+                for (name, item) in entries {
+                    self.put_unknown_map(&child_key_js(key, name), timestamp, item, true)?;
+                }
+            }
+            MapValue::Array(items) => self.put_unknown_items(
+                key,
+                timestamp,
+                items,
+                allow_root_write,
+                Log::put_unknown_map,
+            )?,
+            MapValue::Undefined | MapValue::BigInt(_) => {}
         }
         Ok(())
     }

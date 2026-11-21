@@ -1,0 +1,32 @@
+{
+  "protocol": "nt4",
+  "seed": 2024,
+  "latencyMs": 3,
+  "endMs": 3200,
+  "client": {
+    "source": "nt4",
+    "mode": "ds",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "low-bandwidth" },
+    "tabs": ["/Other"],
+    "sidebar": []
+  },
+  "server": {
+    "version": "4.1",
+    "ports": [6767],
+    "topics": [
+      { "name": "/Dscomm/Control/Robot/ControlData/ControlWord/enabled", "type": "boolean", "value": true },
+      { "name": "/Dscomm/Control/Robot/ControlData/ControlWord/robotMode", "type": "int", "value": 0 },
+      { "name": "/Other/x", "type": "double", "value": 3.5 },
+      { "name": "/.schema/struct:Pair", "type": "structschema", "value": "646f75626c6520613b646f75626c652062" }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 600, "server": ["set", "/Other/x", 4.5] },
+    { "t": 1200, "client": ["fields", ["/Other", "/.schema"], ["/Dscomm"]] },
+    { "t": 1800, "server": ["set", "/Dscomm/Control/Robot/ControlData/ControlWord/robotMode", 1] },
+    { "t": 2200, "client": ["tune", "DS:/Other/x", 8.5] },
+    { "t": 2600, "client": ["dump"] }
+  ]
+}
