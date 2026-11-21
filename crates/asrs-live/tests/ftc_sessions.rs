@@ -81,7 +81,10 @@ fn fcx(env: &mut Env) -> FtcContext<'_> {
     }
 }
 
-fn status_callback(trace: &Trace, clock: &asrs_live::ManualClock) -> Box<dyn FnMut(LiveDataSourceStatus)> {
+fn status_callback(
+    trace: &Trace,
+    clock: &asrs_live::ManualClock,
+) -> Box<dyn FnMut(LiveDataSourceStatus)> {
     let trace = trace.clone();
     let clock = clock.clone();
     Box::new(move |status| {
@@ -340,7 +343,8 @@ fn a_mutated_wire_value_is_caught() {
             let Json::Object(fields) = packet else {
                 continue;
             };
-            if let Some((_, Json::Number(n))) = fields.iter_mut().find(|(k, _)| k.eq_str("timestamp"))
+            if let Some((_, Json::Number(n))) =
+                fields.iter_mut().find(|(k, _)| k.eq_str("timestamp"))
             {
                 *n += 1.0;
                 bumped = true;

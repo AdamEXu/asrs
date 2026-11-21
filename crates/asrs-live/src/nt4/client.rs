@@ -16,8 +16,8 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_log::msgpack::{self, MultiDecoder};
 use asrs_log::realm::JsRealm;
 
-use crate::js;
 use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
+use crate::js;
 use crate::thrown::Thrown;
 use crate::timers::{TimerId, TimerQueue};
 

@@ -52,31 +52,38 @@ fn merge_modified(base: &JsValue, latest: &JsValue) -> Result<JsValue, Thrown> {
         let mut out = JsObject::new();
         for key in js::object_keys(&latest_value)? {
             let child = if !base_value.is_null() && js::has_key_in(&base_value, &key)? {
-                merge_modified(&js::get_key(&base_value, &key)?, &js::get_key(&latest_value, &key)?)?
+                merge_modified(
+                    &js::get_key(&base_value, &key)?,
+                    &js::get_key(&latest_value, &key)?,
+                )?
             } else {
                 inflate(&js::get_key(&latest_value, &key)?)?
             };
             out.insert(key, child);
         }
         Ok(custom(JsValue::Object(out)))
-    } else if str_eq(&base_type, "enum")
-        && str_eq(&latest_type, "enum")
-        && js::strict_equals(&js::get(base, "__enumClass")?, &js::get(latest, "__enumClass")?)
-        && !js::strict_equals(&js::get(base, "__value")?, &js::get(base, "__newValue")?)
-    {
-        let mut var = js::spread(base);
-        var.insert(JsString::from("__value"), js::get(latest, "__value")?);
-        Ok(JsValue::Object(var))
-    } else if js::strict_equals(&base_type, &latest_type)
-        && !str_eq(&base_type, "custom")
-        && !str_eq(&latest_type, "custom")
-        && !js::strict_equals(&js::get(base, "__value")?, &js::get(base, "__newValue")?)
-    {
-        let mut var = js::spread(base);
-        var.insert(JsString::from("__value"), js::get(latest, "__value")?);
-        Ok(JsValue::Object(var))
     } else {
-        inflate(latest)
+        // The enum and basic preserve cases build the same object upstream; they differ only in
+        // when they apply.
+        let modified =
+            !js::strict_equals(&js::get(base, "__value")?, &js::get(base, "__newValue")?);
+        let preserve = modified
+            && ((str_eq(&base_type, "enum")
+                && str_eq(&latest_type, "enum")
+                && js::strict_equals(
+                    &js::get(base, "__enumClass")?,
+                    &js::get(latest, "__enumClass")?,
+                ))
+                || (js::strict_equals(&base_type, &latest_type)
+                    && !str_eq(&base_type, "custom")
+                    && !str_eq(&latest_type, "custom")));
+        if preserve {
+            let mut var = js::spread(base);
+            var.insert(JsString::from("__value"), js::get(latest, "__value")?);
+            Ok(JsValue::Object(var))
+        } else {
+            inflate(latest)
+        }
     }
 }
 
@@ -126,7 +133,10 @@ pub fn config_reducer(state: &JsValue, action: &JsValue) -> Result<(JsValue, boo
     } else if str_eq(&action_type, "UPDATE_CONFIG") {
         Ok((with_root(js::get(action, "configRoot")?), true))
     } else if str_eq(&action_type, "REFRESH_CONFIG") {
-        Ok((with_root(revert_modified(&js::get(state, "configRoot")?)?), true))
+        Ok((
+            with_root(revert_modified(&js::get(state, "configRoot")?)?),
+            true,
+        ))
     } else {
         Ok((state.clone(), false))
     }

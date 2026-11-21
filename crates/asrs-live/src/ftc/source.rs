@@ -119,7 +119,8 @@ impl FtcSource {
                 cx.net.ws_close(socket);
             }
             self.url = format!("ws://{address}:{FTC_DASHBOARD_PORT}");
-            self.ping_timers.push(cx.timers.set_interval(FTC_DASHBOARD_PING_MS));
+            self.ping_timers
+                .push(cx.timers.set_interval(FTC_DASHBOARD_PING_MS));
         }
     }
 
@@ -132,7 +133,8 @@ impl FtcSource {
         };
         if closed {
             self.base.set_status(LiveDataSourceStatus::Connecting);
-            self.base.set_log(Some(Rc::new(RefCell::new(Log::new(true)))));
+            self.base
+                .set_log(Some(Rc::new(RefCell::new(Log::new(true)))));
             self.has_log.set(true);
             self.live_zero_time.set(0.0);
             self.robot_clock_skew = 0.0;
@@ -147,7 +149,9 @@ impl FtcSource {
         } else if let Some(id) = self.socket
             && cx.net.ws_ready_state(id) == ReadyState::Open
         {
-            let _ = cx.net.ws_send(id, "{\"type\":\"GET_ROBOT_STATUS\"}".to_owned());
+            let _ = cx
+                .net
+                .ws_send(id, "{\"type\":\"GET_ROBOT_STATUS\"}".to_owned());
         }
     }
 
@@ -230,7 +234,12 @@ impl FtcSource {
                                 .borrow_mut()
                                 .put_boolean(&js("RUNNING"), timestamp, true);
                         }
-                        self.log_object(&js::get(&packet, "data")?, timestamp, &JsString::new(), &log_rc)?;
+                        self.log_object(
+                            &js::get(&packet, "data")?,
+                            timestamp,
+                            &JsString::new(),
+                            &log_rc,
+                        )?;
                     }
                 }
             }
@@ -278,9 +287,11 @@ impl FtcSource {
         match type_name.to_string_lossy().as_str() {
             "boolean" => {
                 let value = js::get(state, "__value")?;
-                log_rc
-                    .borrow_mut()
-                    .put_boolean(path, timestamp, matches!(value, JsValue::Bool(true)));
+                log_rc.borrow_mut().put_boolean(
+                    path,
+                    timestamp,
+                    matches!(value, JsValue::Bool(true)),
+                );
                 self.tunable_keys_types.insert(path.clone(), js("boolean"));
             }
             "double" | "float" | "int" | "long" => {
@@ -288,7 +299,8 @@ impl FtcSource {
                 log_rc
                     .borrow_mut()
                     .put_number(path, timestamp, to_number(&value));
-                self.tunable_keys_types.insert(path.clone(), type_name.clone());
+                self.tunable_keys_types
+                    .insert(path.clone(), type_name.clone());
             }
             "string" => {
                 let value = js::get(state, "__value")?;
@@ -360,8 +372,8 @@ impl FtcSource {
                 continue;
             }
             if name.ends_with(&js(" y"), None) || name == js("y") {
-                let meters = units::convert(to_number(&data), "inches", "meters")
-                    .unwrap_or(f64::NAN);
+                let meters =
+                    units::convert(to_number(&data), "inches", "meters").unwrap_or(f64::NAN);
                 set_pose(&mut |cur, rotation| match cur {
                     Some(translation) => ([translation[0], meters], rotation),
                     None => ([0.0, meters], 0.0),
@@ -374,8 +386,8 @@ impl FtcSource {
                 continue;
             }
             if name.ends_with(&js(" heading (deg)"), None) || name == js("heading (deg)") {
-                let radians = units::convert(to_number(&data), "degrees", "radians")
-                    .unwrap_or(f64::NAN);
+                let radians =
+                    units::convert(to_number(&data), "degrees", "radians").unwrap_or(f64::NAN);
                 set_pose(&mut |cur, _| (cur.unwrap_or([0.0, 0.0]), radians));
                 continue;
             }
@@ -430,7 +442,7 @@ impl FtcSource {
             (JsString::from("configDiff"), diff),
         ]));
         let message = json::stringify(&action)
-            .map_err(|e| Thrown::error("SyntaxError", e.to_string()))?
+            .map_err(|e| Thrown::error("SyntaxError", e))?
             .unwrap_or_default();
         match self.socket {
             Some(socket) => cx.net.ws_send(socket, message),
@@ -453,7 +465,10 @@ fn config_diff(path: &[JsString], value: &TunedValue, tunable_type: &JsString) -
         ]))
     } else {
         JsValue::Object(JsObject::from_iter([
-            (JsString::from("__type"), JsValue::String(tunable_type.clone())),
+            (
+                JsString::from("__type"),
+                JsValue::String(tunable_type.clone()),
+            ),
             (
                 JsString::from("__value"),
                 match value {
@@ -490,7 +505,10 @@ fn for_of(value: &JsValue) -> Result<Vec<JsValue>, Thrown> {
             .map(JsString::from_units)
             .map(JsValue::String)
             .collect()),
-        JsValue::Bytes(bytes) => Ok(bytes.iter().map(|b| JsValue::Number(f64::from(*b))).collect()),
+        JsValue::Bytes(bytes) => Ok(bytes
+            .iter()
+            .map(|b| JsValue::Number(f64::from(*b)))
+            .collect()),
         other => Err(Thrown::type_error(format!(
             "{} is not iterable",
             js::to_string(other).to_string_lossy()

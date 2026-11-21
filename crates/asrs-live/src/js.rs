@@ -118,9 +118,15 @@ pub fn get_key(value: &JsValue, key: &JsString) -> Result<JsValue, Thrown> {
 pub fn own_property_names(value: &JsValue) -> Vec<JsString> {
     let mut names: Vec<JsString> = match value {
         JsValue::Object(o) => return o.keys().cloned().collect(),
-        JsValue::Array(items) => (0..items.len()).map(|i| JsString::from(format!("{i}"))).collect(),
-        JsValue::Bytes(bytes) => (0..bytes.len()).map(|i| JsString::from(format!("{i}"))).collect(),
-        JsValue::String(s) => (0..s.len()).map(|i| JsString::from(format!("{i}"))).collect(),
+        JsValue::Array(items) => (0..items.len())
+            .map(|i| JsString::from(format!("{i}")))
+            .collect(),
+        JsValue::Bytes(bytes) => (0..bytes.len())
+            .map(|i| JsString::from(format!("{i}")))
+            .collect(),
+        JsValue::String(s) => (0..s.len())
+            .map(|i| JsString::from(format!("{i}")))
+            .collect(),
         _ => return Vec::new(),
     };
     names.push(JsString::from("length"));
@@ -133,9 +139,15 @@ pub fn has_own(value: &JsValue, key: &JsString) -> bool {
     let index = array_index(key.units()).map(|i| i as usize);
     match value {
         JsValue::Object(o) => o.get_key(key).is_some(),
-        JsValue::Array(items) => index.is_some_and(|i| i < items.len()) || key == &JsString::from("length"),
-        JsValue::Bytes(bytes) => index.is_some_and(|i| i < bytes.len()) || key == &JsString::from("length"),
-        JsValue::String(s) => index.is_some_and(|i| i < s.len()) || key == &JsString::from("length"),
+        JsValue::Array(items) => {
+            index.is_some_and(|i| i < items.len()) || key == &JsString::from("length")
+        }
+        JsValue::Bytes(bytes) => {
+            index.is_some_and(|i| i < bytes.len()) || key == &JsString::from("length")
+        }
+        JsValue::String(s) => {
+            index.is_some_and(|i| i < s.len()) || key == &JsString::from("length")
+        }
         _ => false,
     }
 }
@@ -172,7 +184,10 @@ pub fn spread(value: &JsValue) -> JsObject<JsValue> {
         }
         JsValue::Bytes(bytes) => {
             for (i, b) in bytes.iter().enumerate() {
-                object.insert(JsString::from(format!("{i}")), JsValue::Number(f64::from(*b)));
+                object.insert(
+                    JsString::from(format!("{i}")),
+                    JsValue::Number(f64::from(*b)),
+                );
             }
         }
         JsValue::String(s) => {
