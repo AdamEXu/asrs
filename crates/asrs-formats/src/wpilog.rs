@@ -318,10 +318,13 @@ impl<'a> WpilogDecoder<'a> {
     }
 }
 
-/// The C indexer's WASM trap: a read at a negative offset, from a negative extra-header size.
-/// Upstream's `run` rejects with a `RuntimeError`, which `start` catches and answers
-/// with `failed`. Offsets in `[-bufferIn, 0)` read the module's own heap and do not trap
-/// upstream; the port reports those as traps too.
+/// The C indexer's WASM trap: a read below linear-memory address 0, from an offset under
+/// `-bufferIn`. Upstream's `run` rejects with a `RuntimeError`, which `start` catches and answers
+/// with `failed`. Offsets in `[-bufferIn, 0)` read the module's own memory (see
+/// [`memory_below_buffer`]) and do not trap.
+///
+/// Not modelled: once the wasm memory has grown past 2 GiB (inputs near the `int` limit), such an
+/// offset wraps to an address that can be in bounds and upstream reads the output heap there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexError;
 
@@ -334,23 +337,100 @@ pub struct WpilogIndex {
     pub records: Vec<(u32, u32)>,
 }
 
-fn byte_at(data: &[u8], offset: i32) -> Result<u8, IndexError> {
-    if offset < 0 || offset as usize >= data.len() {
-        Err(IndexError)
-    } else {
-        Ok(data[offset as usize])
-    }
+/// `bufferIn` in the fresh module instance `wpilogIndexer.ts` creates for every `run`: the first
+/// `malloc` chunk starts at `__heap_base`.
+const BUFFER_IN: usize = 67_080;
+const HEAP_BASE: u64 = 67_072;
+const OUTPUT_HEADER_SIZE: u64 = 20;
+
+/// dlmalloc's chunk for a request: 4 bytes of overhead, 8-byte alignment, 16 bytes minimum.
+fn chunk_size(request: u64) -> u64 {
+    ((request + 11) & !7).max(16)
 }
 
-/// `readVarInt`: `length` little-endian bytes accumulated into `i64`; the eighth
-/// byte shifts into the sign bit (the C code has no explicit sign handling).
-fn varint_at(data: &[u8], offset: i32, length: usize) -> Result<i64, IndexError> {
-    let mut value: i64 = 0;
-    for i in 0..length {
-        let byte = byte_at(data, offset + i as i32)?;
-        value = value.wrapping_add((byte as i64) << (8 * i));
+/// Linear memory `[0, bufferIn)` of the emscripten 4.0.12 `-O3` build while `run` walks a
+/// `buffer_size`-byte input. The only data segment holds the sbrk pointer at 1024; dlmalloc's
+/// `_gm_` sits at 1032 and its `mparams` at 1504; the stack below `__heap_base` stays zero
+/// because `run` and `malloc` keep their frames in wasm locals. The heap holds the input chunk,
+/// then the output chunk `run` allocates before its first read. Only the first record can start
+/// below the buffer: a record that does not break ends at `offset + headerLength + dataSize`,
+/// which the unsigned bounds check keeps in `[0, bufferSize]`, so later `realloc`s never matter.
+fn memory_below_buffer(buffer_size: usize) -> Vec<u8> {
+    const PAGE: u64 = 4096;
+    const TOP_FOOT_SIZE: u64 = 40;
+    const SYS_ALLOC_PADDING: u64 = 48;
+    const MAGIC: u64 = 0x5554_50a8;
+    let granularity_align = |size: u64| size.div_ceil(PAGE) * PAGE;
+
+    let input = chunk_size(buffer_size as u64);
+    let output = chunk_size(OUTPUT_HEADER_SIZE + 8 * INITIAL_RECORD_CAPACITY as u64);
+    let mut footprint = granularity_align(input + SYS_ALLOC_PADDING)
+        + (HEAP_BASE.next_multiple_of(PAGE) - HEAP_BASE);
+    let mut top_size = footprint - TOP_FOOT_SIZE - input;
+    if output >= top_size {
+        let grow = granularity_align(output - top_size + SYS_ALLOC_PADDING);
+        footprint += grow;
+        top_size += grow;
     }
-    Ok(value)
+    top_size -= output;
+
+    let mut memory = vec![0u8; BUFFER_IN];
+    let mut put = |address: usize, value: u64| {
+        memory[address..address + 4].copy_from_slice(&(value as u32).to_le_bytes());
+    };
+    put(1024, HEAP_BASE + footprint);
+    put(1044, top_size);
+    put(1048, HEAP_BASE);
+    put(1056, HEAP_BASE + input + output);
+    put(1060, u64::from(u32::MAX));
+    put(1064, u64::from(u32::MAX));
+    put(1068, MAGIC);
+    for bin in 0..32 {
+        put(1080 + 8 * bin, 1072 + 8 * bin as u64);
+        put(1084 + 8 * bin, 1072 + 8 * bin as u64);
+    }
+    put(1464, footprint);
+    put(1468, footprint);
+    put(1480, HEAP_BASE);
+    put(1484, footprint);
+    put(1504, MAGIC);
+    put(1508, PAGE);
+    put(1512, PAGE);
+    put(1516, u64::from(u32::MAX));
+    put(1520, u64::from(u32::MAX));
+    put(BUFFER_IN - 4, input | 3);
+    memory
+}
+
+/// What `buffer + offset` reads: the input, or the module memory below it for negative offsets.
+struct LinearMemory<'a> {
+    data: &'a [u8],
+    below: Option<Vec<u8>>,
+}
+
+impl LinearMemory<'_> {
+    fn byte(&mut self, offset: i32) -> Result<u8, IndexError> {
+        if offset >= 0 {
+            return self.data.get(offset as usize).copied().ok_or(IndexError);
+        }
+        let address =
+            usize::try_from(BUFFER_IN as i64 + i64::from(offset)).map_err(|_| IndexError)?;
+        let data = self.data;
+        Ok(self
+            .below
+            .get_or_insert_with(|| memory_below_buffer(data.len()))[address])
+    }
+
+    /// `readVarInt`: `length` little-endian bytes accumulated into `i64`; the eighth
+    /// byte shifts into the sign bit (the C code has no explicit sign handling).
+    fn varint(&mut self, offset: i32, length: usize) -> Result<i64, IndexError> {
+        let mut value: i64 = 0;
+        for i in 0..length {
+            let byte = self.byte(offset + i as i32)?;
+            value = value.wrapping_add((byte as i64) << (8 * i));
+        }
+        Ok(value)
+    }
 }
 
 /// The extra-header read at bytes 8..12 runs before any bounds check; for files
@@ -377,6 +457,7 @@ pub fn index(data: &[u8]) -> Result<WpilogIndex, IndexError> {
 
 fn index_with_limit(data: &[u8], record_limit: usize) -> Result<WpilogIndex, IndexError> {
     let buffer_size = data.len() as i32;
+    let mut memory = LinearMemory { data, below: None };
     let mut offset: i32 = 12i32.wrapping_add(extra_header_size(data));
     let mut has_initial_timestamp = false;
     let mut min_timestamp: i64 = 0;
@@ -385,7 +466,7 @@ fn index_with_limit(data: &[u8], record_limit: usize) -> Result<WpilogIndex, Ind
     let mut records: Vec<(u32, u32)> = Vec::with_capacity(capacity);
 
     while offset.wrapping_add(4) <= buffer_size {
-        let length_bitfield = byte_at(data, offset)?;
+        let length_bitfield = memory.byte(offset)?;
         let entry_length = usize::from(length_bitfield & 0x3) + 1;
         let data_size_length = usize::from((length_bitfield >> 2) & 0x3) + 1;
         let timestamp_length = usize::from((length_bitfield >> 4) & 0x7) + 1;
@@ -394,10 +475,9 @@ fn index_with_limit(data: &[u8], record_limit: usize) -> Result<WpilogIndex, Ind
             break;
         }
 
-        let entry = varint_at(data, offset + 1, entry_length)? as u32;
-        let data_size = varint_at(data, offset + 1 + entry_length as i32, data_size_length)? as u32;
-        let timestamp = varint_at(
-            data,
+        let entry = memory.varint(offset + 1, entry_length)? as u32;
+        let data_size = memory.varint(offset + 1 + entry_length as i32, data_size_length)? as u32;
+        let timestamp = memory.varint(
             offset + 1 + entry_length as i32 + data_size_length as i32,
             timestamp_length,
         )?;
@@ -667,5 +747,50 @@ mod tests {
         assert_eq!(index(&data).unwrap().records.len(), 0);
         data[8..12].copy_from_slice(&0x8000_0000u32.to_le_bytes());
         assert!(index(&data).is_err());
+    }
+
+    fn landing(size: usize, extra_header_size: i32, at: usize) -> Vec<u8> {
+        let mut data = vec![0x7f; size];
+        data[..12].copy_from_slice(&header(b""));
+        data[8..12].copy_from_slice(&extra_header_size.to_le_bytes());
+        data[at..at + 4].copy_from_slice(&record(1, 9, &[]));
+        data
+    }
+
+    #[test]
+    fn index_negative_extra_header_reads_the_memory_below_the_buffer() {
+        let mut data = header(b"");
+        data.extend_from_slice(&record(1, 3, &[0]));
+        for extra in [-65_536, -67_092] {
+            data[8..12].copy_from_slice(&i32::to_le_bytes(extra));
+            assert!(index(&data).unwrap().records.is_empty());
+        }
+        data[8..12].copy_from_slice(&i32::to_le_bytes(-67_093));
+        assert!(index(&data).is_err());
+
+        let index_of = |data: &[u8]| {
+            let index = index(data).unwrap();
+            (index.records, index.min_timestamp, index.max_timestamp)
+        };
+        assert_eq!(
+            index_of(&landing(149, -16, 85)),
+            (
+                vec![(0x5700_0000, -4i32 as u32), (1, 85)],
+                9e-6,
+                f64::from(0x004f_4c49) * 1e-6
+            )
+        );
+        assert_eq!(
+            index_of(&landing(5000, -66_047, 1045)),
+            (vec![(0, (1045 - 67_080) as u32), (1, 1045)], 9e-6, 9e-6)
+        );
+        assert_eq!(
+            index_of(&landing(460_000, -65_796, 458_510)),
+            (
+                vec![(5, (1296 - 67_080) as u32), (1, 458_510)],
+                5.0 * 1e-6,
+                9e-6
+            )
+        );
     }
 }
