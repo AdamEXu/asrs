@@ -27,6 +27,7 @@ pub fn run(args: &[String]) -> Result {
     let status = Command::new(cargo)
         .args(&cargo_args)
         .env("ASRS_LIBM_LGPL_SHIP", "1")
+        .env_remove("ASRS_LIBM_LGPL_DEV")
         .current_dir(&root)
         .status()
         .map_err(|e| format!("failed to run cargo: {e}"))?;
@@ -36,7 +37,7 @@ pub fn run(args: &[String]) -> Result {
     let library = libm::build_library(true, target)?;
     licenses::run()?;
 
-    let mut release = root.join("target");
+    let mut release = libm::target_dir();
     if let Some(target) = target {
         release.push(target);
     }

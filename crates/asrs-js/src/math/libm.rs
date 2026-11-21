@@ -4,9 +4,13 @@
 //!
 //! The library is looked up, first match wins:
 //! 1. at the path in `ASRS_LIBM_LGPL`, if set (and nowhere else),
-//! 2. next to the running executable, which is where releases ship it,
-//! 3. in development builds, the copy `asrs-js`'s build script compiled from
-//!    `crates/asrs-libm-lgpl` (left out when built with `ASRS_LIBM_LGPL_SHIP` set).
+//! 2. in development builds, the copy `asrs-js`'s build script compiled from
+//!    `crates/asrs-libm-lgpl` (left out when built with `ASRS_LIBM_LGPL_SHIP` set),
+//! 3. next to the running executable, which is where releases ship it.
+//!
+//! The development copy comes first because cargo also puts its own build of the crate next
+//! to `asrs-cli` and `advantagescope` in `target/<profile>`, and that copy goes stale whenever
+//! the crate changes without a workspace build.
 
 #![allow(unsafe_code)]
 
@@ -60,14 +64,16 @@ pub(super) fn cos(x: f64) -> f64 {
 
 fn candidates() -> Vec<PathBuf> {
     if let Some(path) = env::var_os(PATH_ENV) {
-        return vec![PathBuf::from(path)];
+        // A bare file name would make dlopen and LoadLibrary search the system paths.
+        let path = PathBuf::from(path);
+        return vec![std::path::absolute(&path).unwrap_or(path)];
     }
     let mut paths = Vec::new();
-    if let Some(dir) = env::current_exe().ok().as_deref().and_then(Path::parent) {
-        paths.push(dir.join(file_name()));
-    }
     if let Some(dev) = option_env!("ASRS_LIBM_LGPL_DEV") {
         paths.push(PathBuf::from(dev));
+    }
+    if let Some(dir) = env::current_exe().ok().as_deref().and_then(Path::parent) {
+        paths.push(dir.join(file_name()));
     }
     paths
 }

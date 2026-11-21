@@ -16,8 +16,8 @@ The crate builds a shared library (`libasrs_libm_lgpl.dylib` on macOS,
 and never links statically. asrs looks for it, first match wins:
 
 1. at the path in the `ASRS_LIBM_LGPL` environment variable, if set (and nowhere else);
-2. in the directory of the running executable, where releases ship it;
-3. in development builds only, the copy the `asrs-js` build script compiles from this crate.
+2. in development builds only, the copy the `asrs-js` build script compiles from this crate;
+3. in the directory of the running executable, where releases ship it.
 
 asrs stops with an error naming the paths it tried when the library is missing.
 
@@ -37,11 +37,12 @@ exports.
 
 ## Replacing or relinking it
 
-From a source checkout of asrs:
+From a source checkout of asrs, edit `crates/asrs-libm-lgpl/src`. Development builds
+(`cargo build`, `cargo test`) recompile the library from it automatically. For a release
+directory made by `cargo xtask bundle`, rebuild just the library into it:
 
 ```sh
-# edit crates/asrs-libm-lgpl/src, then:
-cargo xtask libm --release --out <directory containing the advantagescope executable>
+cargo xtask libm --release --out target/bundle/host   # or the directory holding advantagescope
 ```
 
 From a release, the bundle contains this crate's source in `asrs-libm-lgpl/` with a
@@ -50,7 +51,8 @@ standalone `Cargo.toml`:
 ```sh
 cd asrs-libm-lgpl
 cargo build --release
-cp target/release/libasrs_libm_lgpl.dylib <directory containing advantagescope>   # .dll / .so elsewhere
+cp target/release/libasrs_libm_lgpl.dylib <directory containing advantagescope>
+# Linux: libasrs_libm_lgpl.so; Windows: asrs_libm_lgpl.dll next to advantagescope.exe
 ```
 
 Instead of copying, `ASRS_LIBM_LGPL=/path/to/library advantagescope` runs asrs with the
