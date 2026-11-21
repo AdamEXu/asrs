@@ -1,31 +1,17 @@
 //! `src/hub/exportWorker.ts` (F10): field selection, timestamp sampling and the CSV
-//! writers, plus the oracle session's pre-export skip checks. The `wpilog` and `mcap`
-//! branches dispatch to [`ExportError::Unported`] until F11's `WPILOGEncoder` and F12's
-//! `McapWriter` land.
-
-use std::cmp::Ordering;
+//! writers. The `wpilog` and `mcap` branches dispatch to [`ExportError::Unported`] until
+//! F11's `WPILOGEncoder` and F12's `McapWriter` land.
 
 use asrs_js::collation::locale_compare_numeric;
 use asrs_js::number;
 use asrs_js::sort::array_sort;
 use asrs_js::string::JsString;
-use asrs_js::{json, value::JsObject, value::JsValue};
+use asrs_js::value::JsObject;
 use asrs_log::log::log_key_utils::{filter_field_by_prefixes, split_log_key};
 use asrs_log::log::log_util::get_log_value_text_at;
-use asrs_log::log::log_value_sets::LogValueSetAny;
 use asrs_log::log::robot_state::AKIT_TIMESTAMP_KEYS;
 use asrs_log::log::{Log, LogFieldTree, LoggableType};
 use asrs_log::util::{clean_float, upper_bound};
-
-pub const MCAP_CHUNK_SIZE: f64 = 1024.0 * 1024.0;
-const MCAP_SCHEMA_OVERHEAD: f64 = 2048.0;
-const MCAP_TYPES: &[LoggableType] = &[
-    LoggableType::Boolean,
-    LoggableType::Number,
-    LoggableType::String,
-    LoggableType::BooleanArray,
-    LoggableType::NumberArray,
-];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -60,10 +46,10 @@ pub enum Output {
 }
 
 impl Output {
-    pub fn bytes(&self) -> Vec<u8> {
+    pub fn into_bytes(self) -> Vec<u8> {
         match self {
-            Output::Text(text) => asrs_js::string::text_encode(text),
-            Output::Bytes(bytes) => bytes.clone(),
+            Output::Text(text) => asrs_js::string::text_encode(&text),
+            Output::Bytes(bytes) => bytes,
         }
     }
 }
@@ -86,39 +72,6 @@ pub fn export(log: &Log, options: &ExportOptions) -> Result<Output, ExportError>
         Format::Wpilog => Err(ExportError::Unported("wpilog export is unit F11")),
         Format::Mcap => Err(ExportError::Unported("mcap export is unit F12")),
     }
-}
-
-/// The oracle session's `export` pre-checks for the two option sets upstream never
-/// finishes: fixed sampling over a range that needs more than `fixed_limit` samples or a
-/// step that vanishes in float precision, and MCAP with fixed or AdvantageKit sampling
-/// once the unawaited writes outgrow one 1 MiB chunk.
-pub fn skip_reason(log: &Log, options: &ExportOptions, fixed_limit: f64) -> Option<&'static str> {
-    if options.sampling == Sampling::Fixed {
-        let [start, end] = log.get_timestamp_range();
-        let step = options.sampling_period / 1000.0;
-        let samples = (end - start) / step;
-        if neg_le(samples, fixed_limit) || neg_gt(start + step, start) || neg_gt(end + step, end) {
-            return Some("fixed sampling range too large");
-        }
-    }
-    if options.format == Format::Mcap
-        && options.sampling != Sampling::Changes
-        && let Some(timestamps) = sample_timestamps_unchecked(log, options)
-        && mcap_chunk_bound(log, &timestamps) > MCAP_CHUNK_SIZE
-    {
-        return Some("unawaited MCAP writes past one chunk");
-    }
-    None
-}
-
-/// JS `a <= b` negated: true for `a > b` and when either side is NaN.
-fn neg_le(a: f64, b: f64) -> bool {
-    !matches!(a.partial_cmp(&b), Some(Ordering::Less | Ordering::Equal))
-}
-
-/// JS `a > b` negated.
-fn neg_gt(a: f64, b: f64) -> bool {
-    !matches!(a.partial_cmp(&b), Some(Ordering::Greater))
 }
 
 /// The worker's field list: the tree flattened parent-first with numeric `localeCompare`
@@ -267,17 +220,10 @@ fn flatten_tree(tree: &JsObject<LogFieldTree>, fields: &mut Vec<JsString>) {
 /// The worker's timestamp list for fixed or AdvantageKit sampling, or `None` for the
 /// per-field sampling of `changes`. `akit` rejects when no key matches or it is not a
 /// number field.
-fn sample_timestamps(log: &Log, options: &ExportOptions) -> Result<Option<Vec<f64>>, ExportError> {
-    match sample_timestamps_unchecked(log, options) {
-        Some(timestamps) => Ok(Some(timestamps)),
-        None if options.sampling == Sampling::Changes => Ok(None),
-        None => Err(ExportError::Rejected),
-    }
-}
-
-/// The session's `sampleTimestamps`: `None` for `changes` and for an AdvantageKit list
-/// that does not exist, where the worker would reject.
-fn sample_timestamps_unchecked(log: &Log, options: &ExportOptions) -> Option<Vec<f64>> {
+pub fn sample_timestamps(
+    log: &Log,
+    options: &ExportOptions,
+) -> Result<Option<Vec<f64>>, ExportError> {
     match options.sampling {
         Sampling::Fixed => {
             let step = options.sampling_period / 1000.0;
@@ -288,17 +234,19 @@ fn sample_timestamps_unchecked(log: &Log, options: &ExportOptions) -> Option<Vec
                 timestamps.push(clean_float(timestamp));
                 timestamp += step;
             }
-            Some(timestamps)
+            Ok(Some(timestamps))
         }
         Sampling::Akit => {
             let key = log
                 .get_field_keys()
                 .into_iter()
-                .find(is_akit_timestamp_key)?;
+                .find(is_akit_timestamp_key)
+                .ok_or(ExportError::Rejected)?;
             log.get_number(&key, f64::NEG_INFINITY, f64::INFINITY, None, None)
-                .map(|set| set.timestamps)
+                .map(|set| Some(set.timestamps))
+                .ok_or(ExportError::Rejected)
         }
-        Sampling::Changes => None,
+        Sampling::Changes => Ok(None),
     }
 }
 
@@ -406,59 +354,57 @@ fn join_rows(rows: &[Vec<JsString>]) -> JsString {
     out
 }
 
-/// `mcapChunkBound`: a byte bound on the first chunk under sampled MCAP export, over
-/// every log field of an MCAP schema type, regardless of the export's field selection.
-fn mcap_chunk_bound(log: &Log, timestamps: &[f64]) -> f64 {
-    let mut bound = MCAP_SCHEMA_OVERHEAD;
-    for key in log.get_field_keys() {
-        let Some(field_type) = log.get_type(&key) else {
-            continue;
-        };
-        if !MCAP_TYPES.contains(&field_type) {
-            continue;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fields_of(keys: &[&str]) -> Result<Vec<String>, ExportError> {
+        let mut log = Log::new(true);
+        for key in keys {
+            log.put_number(&JsString::from(*key), 0.0, 1.0);
         }
-        bound += 64.0 + asrs_js::string::text_encode(&key).len() as f64;
-        let Some(set) = log.get_range(&key, f64::NEG_INFINITY, f64::INFINITY, None) else {
-            continue;
+        let options = ExportOptions {
+            format: Format::CsvTable,
+            sampling: Sampling::Changes,
+            sampling_period: 20.0,
+            prefixes: JsString::new(),
+            include_generated: true,
         };
-        let mut next = 0usize;
-        for &timestamp in timestamps {
-            next = upper_bound(set.timestamps(), timestamp, next);
-            if next != 0 {
-                bound += 31.0 + mcap_value_json_len(&set, next - 1);
-            }
-        }
+        select_fields(&log, &options)
+            .map(|fields| fields.iter().map(JsString::to_string_lossy).collect())
     }
-    bound
-}
 
-/// `encoder.encode(JSON.stringify({ value })).length` for the sample at `index`.
-fn mcap_value_json_len(set: &LogValueSetAny, index: usize) -> f64 {
-    let value = sample_value(set, index);
-    let object: JsObject<JsValue> = [(JsString::from("value"), value)].into_iter().collect();
-    json::stringify(&JsValue::Object(object))
-        .map(|json| json.map_or(0.0, |json| json.len() as f64))
-        .unwrap_or(0.0)
-}
+    // Expectations recorded from upstream's getFieldTree and processTree, one fresh realm per case.
+    #[test]
+    fn field_tree_inherits_object_prototype() {
+        let rejected = Err(ExportError::Rejected);
+        assert_eq!(fields_of(&["/A/__proto__", "/B/fullKey"]), rejected);
+        assert_eq!(fields_of(&["/A/__proto__/x"]), rejected);
+        assert_eq!(fields_of(&["/A/toString/x"]), rejected);
+        assert_eq!(fields_of(&["/A/__proto__", "/B/fullKey/c"]), rejected);
+        assert_eq!(
+            fields_of(&["/A/constructor", "/A/b"]),
+            Ok(vec!["/A/b".into()])
+        );
+        assert_eq!(
+            fields_of(&["/A/__proto__/", "/B/fullKey"]),
+            Ok(vec!["/B/fullKey".into()])
+        );
+        assert_eq!(
+            fields_of(&["/fullKey", "/A/__proto__", "/fullKey/x"]),
+            Ok(vec!["/fullKey".into(), "/fullKey/x".into()])
+        );
+        assert_eq!(fields_of(&["/A/__proto__", "/B/fullKey/"]), Ok(vec![]));
+        assert_eq!(fields_of(&["/A/__proto__", "/B/constructor"]), Ok(vec![]));
+    }
 
-/// The JS value upstream sees at `fieldData.values[index]` for an MCAP-typed field.
-fn sample_value(set: &LogValueSetAny, index: usize) -> JsValue {
-    match set {
-        LogValueSetAny::Boolean(set) => JsValue::Bool(set.values[index]),
-        LogValueSetAny::Number(set) => JsValue::Number(set.values[index]),
-        LogValueSetAny::String(set) => JsValue::String(set.values[index].clone()),
-        LogValueSetAny::BooleanArray(set) => JsValue::Array(
-            set.values[index]
-                .iter()
-                .map(|&v| JsValue::Bool(v))
-                .collect(),
-        ),
-        LogValueSetAny::NumberArray(set) => JsValue::Array(
-            set.values[index]
-                .iter()
-                .map(|&v| JsValue::Number(v))
-                .collect(),
-        ),
-        _ => JsValue::Undefined,
+    #[test]
+    fn field_tree_sorts_numerically() {
+        assert_eq!(
+            fields_of(&["/A/10", "/A/9", "/A/b", "/A/B", "/A/a", "/A/", "/A"]),
+            Ok(["/A", "/A/9", "/A/10", "/A/a", "/A/b", "/A/B"]
+                .map(String::from)
+                .to_vec())
+        );
     }
 }

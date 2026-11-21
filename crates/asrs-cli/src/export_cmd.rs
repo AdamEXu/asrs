@@ -3,7 +3,8 @@
 //! session's pre-export skip checks and runs the export port on the resulting `Log`.
 //! Bytes go to `--out` or stdout. Exit 0 when the worker produced output, 3 when it
 //! rejected (or the decode worker never returns), 4 when the run was skipped or the
-//! branch is a later unit's (`wpilog`, `mcap`).
+//! branch is a later unit's (`wpilog`, `mcap`). The skip checks are the oracle session's
+//! (oracle/src/historical/session.ts), for the two option sets upstream never finishes.
 //!
 //! `asrs-cli export-run --root <dir> --out <dir> --spec <spec.json>` mirrors oracle
 //! `historicalRun`: input paths relative to `--root` on stdin, one per line; each input
@@ -18,15 +19,19 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use std::cmp::Ordering;
+
 use asrs_formats::export::{self, ExportOptions, Format, Sampling};
-use asrs_formats::historical::{UnportedWorker, WorkerName, create_worker};
+use asrs_formats::historical::{HistoricalDataSource, UnportedWorker, WorkerName, create_worker};
 use asrs_formats::session::Session;
 use asrs_formats::worker::{Abort, DecodeWorker};
 use asrs_js::json;
 use asrs_js::string::JsString;
 use asrs_js::time::{SetClock, V8MathRandom};
-use asrs_js::value::JsValue;
-use asrs_log::log::Log;
+use asrs_js::value::{JsObject, JsValue};
+use asrs_log::log::log_value_sets::LogValueSetAny;
+use asrs_log::log::{Log, LoggableType};
+use asrs_log::util::upper_bound;
 use asrs_parity::json::Json;
 use asrs_services::historical_start;
 
@@ -35,6 +40,19 @@ use crate::decode::{NEVER_COMPLETES, UNMODELED, WORKER_FROZEN_MS};
 const USAGE: &str = "usage:
   asrs-cli export <log file> --options <ExportOptions JSON> [--out <file>] [--fixed-limit <n>]
   asrs-cli export-run --root <dir> --out <dir> --spec <spec.json>";
+
+/// Exit status when the export worker rejects, as oracle `export` reports it.
+const EXPORT_FAILED: u8 = 3;
+
+const MCAP_CHUNK_SIZE: f64 = 1024.0 * 1024.0;
+const MCAP_SCHEMA_OVERHEAD: f64 = 2048.0;
+const MCAP_TYPES: &[LoggableType] = &[
+    LoggableType::Boolean,
+    LoggableType::Number,
+    LoggableType::String,
+    LoggableType::BooleanArray,
+    LoggableType::NumberArray,
+];
 
 const EXTENSIONS: [(Format, &str); 4] = [
     (Format::CsvTable, "csv"),
@@ -58,13 +76,14 @@ fn make_worker(name: WorkerName) -> Result<Box<dyn DecodeWorker>, UnportedWorker
 }
 
 fn open_session(path: &Path) -> Result<Session, Abort> {
-    let display = path.to_string_lossy();
-    let files: Vec<Option<Arc<[u8]>>> = historical_start::read_files(&display)
+    let source = HistoricalDataSource::open_file(&path.to_string_lossy());
+    let display = source.path();
+    let files: Vec<Option<Arc<[u8]>>> = historical_start::read_files(display)
         .into_iter()
         .map(|file| file.map(Arc::from))
         .collect();
     let mut session = Session::open(
-        &display,
+        display,
         files,
         Box::new(V8MathRandom::from_entropy()),
         &mut make_worker,
@@ -135,14 +154,13 @@ fn parse_options(text: &str) -> Result<ExportOptions, String> {
 
 fn run_case(log: &Log, case: &Case, fixed_limit: f64, dir: &Path) -> Json {
     let mut record = vec![("name", Json::string(&case.name))];
-    if export::skip_reason(log, &case.options, fixed_limit).is_some() {
+    if skip_reason(log, &case.options, fixed_limit).is_some() {
         record.push(("outcome", Json::string("skipped")));
     } else {
         match export::export(log, &case.options) {
             Ok(output) => {
                 let file = format!("export/{}.{}", case.name, case.extension);
-                let bytes = output.bytes();
-                match fs::write(dir.join(&file), bytes) {
+                match fs::write(dir.join(&file), output.into_bytes()) {
                     Ok(()) => {
                         record.push(("outcome", Json::string("ok")));
                         record.push(("file", Json::string(&file)));
@@ -200,13 +218,13 @@ fn export_single(args: &[String]) -> ExitCode {
         Ok(session) => session,
         Err(abort) => return abort_exit(&path, &abort),
     };
-    if let Some(reason) = export::skip_reason(&session.log, &options, limit) {
+    if let Some(reason) = skip_reason(&session.log, &options, limit) {
         eprintln!("export skipped: {reason}");
         return ExitCode::from(UNMODELED);
     }
     match export::export(&session.log, &options) {
         Ok(output) => {
-            let bytes = output.bytes();
+            let bytes = output.into_bytes();
             let result = match option_value(args, "--out") {
                 Some(out) => fs::write(&out, &bytes).map_err(|e| e.to_string()),
                 None => std::io::stdout()
@@ -223,13 +241,93 @@ fn export_single(args: &[String]) -> ExitCode {
         }
         Err(export::ExportError::Rejected) => {
             eprintln!("export failed");
-            ExitCode::from(NEVER_COMPLETES)
+            ExitCode::from(EXPORT_FAILED)
         }
         Err(export::ExportError::Unported(what)) => {
             eprintln!("export unmodeled: {what}");
             ExitCode::from(UNMODELED)
         }
     }
+}
+
+/// The oracle session's `export` pre-checks: fixed sampling over a range that needs more
+/// than `fixed_limit` samples or a step that vanishes in float precision, and MCAP with
+/// fixed or AdvantageKit sampling once the unawaited writes outgrow one 1 MiB chunk.
+fn skip_reason(log: &Log, options: &ExportOptions, fixed_limit: f64) -> Option<&'static str> {
+    if options.sampling == Sampling::Fixed {
+        let [start, end] = log.get_timestamp_range();
+        let step = options.sampling_period / 1000.0;
+        let samples = (end - start) / step;
+        if !js_le(samples, fixed_limit) || !js_gt(start + step, start) || !js_gt(end + step, end) {
+            return Some("fixed sampling range too large");
+        }
+    }
+    if options.format == Format::Mcap
+        && options.sampling != Sampling::Changes
+        && let Ok(Some(timestamps)) = export::sample_timestamps(log, options)
+        && mcap_chunk_bound(log, &timestamps) > MCAP_CHUNK_SIZE
+    {
+        return Some("unawaited MCAP writes past one chunk");
+    }
+    None
+}
+
+fn js_le(a: f64, b: f64) -> bool {
+    matches!(a.partial_cmp(&b), Some(Ordering::Less | Ordering::Equal))
+}
+
+fn js_gt(a: f64, b: f64) -> bool {
+    matches!(a.partial_cmp(&b), Some(Ordering::Greater))
+}
+
+/// `mcapChunkBound`: a byte bound on the first chunk under sampled MCAP export, over
+/// every log field of an MCAP schema type, regardless of the export's field selection.
+fn mcap_chunk_bound(log: &Log, timestamps: &[f64]) -> f64 {
+    let mut bound = MCAP_SCHEMA_OVERHEAD;
+    for key in log.get_field_keys() {
+        if !log.get_type(&key).is_some_and(|t| MCAP_TYPES.contains(&t)) {
+            continue;
+        }
+        bound += 64.0 + asrs_js::string::text_encode(&key).len() as f64;
+        let Some(set) = log.get_range(&key, f64::NEG_INFINITY, f64::INFINITY, None) else {
+            continue;
+        };
+        let mut next = 0usize;
+        for &timestamp in timestamps {
+            next = upper_bound(set.timestamps(), timestamp, next);
+            if next != 0 {
+                bound += 31.0 + mcap_value_json_len(&set, next - 1);
+            }
+        }
+    }
+    bound
+}
+
+/// `encoder.encode(JSON.stringify({ value })).length` for the sample at `index`.
+fn mcap_value_json_len(set: &LogValueSetAny, index: usize) -> f64 {
+    let value = match set {
+        LogValueSetAny::Boolean(set) => JsValue::Bool(set.values[index]),
+        LogValueSetAny::Number(set) => JsValue::Number(set.values[index]),
+        LogValueSetAny::String(set) => JsValue::String(set.values[index].clone()),
+        LogValueSetAny::BooleanArray(set) => JsValue::Array(
+            set.values[index]
+                .iter()
+                .map(|&v| JsValue::Bool(v))
+                .collect(),
+        ),
+        LogValueSetAny::NumberArray(set) => JsValue::Array(
+            set.values[index]
+                .iter()
+                .map(|&v| JsValue::Number(v))
+                .collect(),
+        ),
+        _ => JsValue::Undefined,
+    };
+    let object: JsObject<JsValue> = [(JsString::from("value"), value)].into_iter().collect();
+    json::stringify(&JsValue::Object(object))
+        .ok()
+        .flatten()
+        .map_or(0.0, |json| json.len() as f64)
 }
 
 fn matrix_cases(spec: &JsValue) -> Result<Vec<(Case, f64)>, String> {
