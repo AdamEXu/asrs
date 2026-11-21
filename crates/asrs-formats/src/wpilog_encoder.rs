@@ -6,6 +6,7 @@
 //! passes (`value: any`), so a value kind that does not match the entry's type
 //! string follows JS coercion or throws the way upstream's would.
 
+use asrs_js::math::bigint::BigInt;
 use asrs_js::math::floor;
 use asrs_js::math::int::{to_uint8, to_uint32};
 use asrs_js::number;
@@ -48,7 +49,9 @@ fn truthy(v: &Sample<'_>) -> bool {
         Sample::Boolean(b) => *b,
         Sample::Number(n) => *n != 0.0 && !n.is_nan(),
         Sample::String(s) => !s.is_empty(),
-        Sample::Raw(_) | Sample::BooleanArray(_) | Sample::NumberArray(_)
+        Sample::Raw(_)
+        | Sample::BooleanArray(_)
+        | Sample::NumberArray(_)
         | Sample::StringArray(_) => true,
     }
 }
@@ -59,17 +62,19 @@ fn js_string(v: &Sample<'_>) -> JsString {
         Sample::Boolean(b) => JsString::from(if *b { "true" } else { "false" }),
         Sample::Number(n) => JsString::from(number::to_string(*n)),
         Sample::String(s) => (*s).clone(),
-        Sample::Raw(bytes) => join(bytes.iter().map(|b| JsString::from(b.to_string()))),
+        Sample::Raw(bytes) => join(
+            bytes
+                .iter()
+                .map(|b| JsString::from(number::to_string(f64::from(*b)))),
+        ),
         Sample::BooleanArray(items) => join(
             items
                 .iter()
                 .map(|b| JsString::from(if *b { "true" } else { "false" })),
         ),
-        Sample::NumberArray(items) => join(
-            items
-                .iter()
-                .map(|n| JsString::from(number::to_string(*n))),
-        ),
+        Sample::NumberArray(items) => {
+            join(items.iter().map(|n| JsString::from(number::to_string(*n))))
+        }
         Sample::StringArray(items) => join(items.iter().map(|s| (*s).clone())),
     }
 }
@@ -107,35 +112,23 @@ fn elements<'a>(v: &'a Sample<'a>) -> Option<Vec<Sample<'a>>> {
         ),
         Sample::BooleanArray(items) => Some(items.iter().map(|b| Sample::Boolean(*b)).collect()),
         Sample::NumberArray(items) => Some(items.iter().map(|n| Sample::Number(*n)).collect()),
-        Sample::StringArray(items) => Some(items.iter().map(|s| Sample::String(s)).collect()),
+        Sample::StringArray(items) => Some(items.iter().map(Sample::String).collect()),
         _ => None,
     }
 }
 
 /// `BigInt(value)` followed by `setBigInt64`'s truncation to 64 bits, as LE
-/// bytes. `RangeError` on a non-integer or non-finite input.
+/// bytes. `RangeError` on a non-integer number, `SyntaxError` on unparseable
+/// text; array-likes convert through `ToPrimitive`, so their joined `toString`
+/// is what gets parsed.
 fn bigint_bytes(v: &Sample<'_>) -> Result<[u8; 8], ExportError> {
-    let n = match v {
-        Sample::Number(n) => *n,
-        Sample::Boolean(b) => f64::from(u8::from(*b)),
-        _ => return Err(ExportError::Rejected),
+    let bigint = match v {
+        Sample::Number(n) => BigInt::from_f64(*n).map_err(|_| ExportError::Rejected)?,
+        Sample::Boolean(b) => BigInt::from_u64(u64::from(*b)),
+        other => BigInt::parse(&js_string(other).to_string_lossy())
+            .map_err(|_| ExportError::Rejected)?,
     };
-    if n.fract() != 0.0 || !n.is_finite() {
-        return Err(ExportError::Rejected);
-    }
-    Ok(bigint_mod(n).to_le_bytes())
-}
-
-/// `BigInt` to `setBigInt64`: the exact integer of the `f64`, modulo 2^64. The
-/// cast through `i128` keeps every bit; at or beyond 2^127 the value is a
-/// multiple of 2^64, so the residue is 0.
-fn bigint_mod(n: f64) -> u64 {
-    const TWO_POW_127: f64 = 170141183460469231731687303715884105728.0;
-    if n.abs() < TWO_POW_127 {
-        n as i128 as u64
-    } else {
-        0
-    }
+    Ok(bigint.as_int64().to_le_bytes())
 }
 
 /// What `array.set(this.data, ...)` copies out of a record.
@@ -378,11 +371,8 @@ impl Record {
 /// 2^64, little-endian), trimmed to the fewest nonzero high bytes. `BigInt`
 /// throws on non-finite input.
 fn encode_integer(int: f64) -> Result<Vec<u8>, ExportError> {
-    let floored = floor(int);
-    if !floored.is_finite() {
-        return Err(ExportError::Rejected);
-    }
-    let bytes = bigint_mod(floored).to_le_bytes();
+    let bigint = BigInt::from_f64(floor(int)).map_err(|_| ExportError::Rejected)?;
+    let bytes = bigint.as_int64().to_le_bytes();
     let mut len = 1;
     for i in (1..bytes.len()).rev() {
         if bytes[i] != 0 {
@@ -417,8 +407,7 @@ impl WpilogEncoder {
         if sort_by_timestamp {
             array_sort(&mut self.records, |a, b| a.timestamp - b.timestamp);
         }
-        let mut out =
-            Vec::with_capacity(HEADER_STRING.len() + 2 + 4 + self.extra_header.len());
+        let mut out = Vec::with_capacity(HEADER_STRING.len() + 2 + 4 + self.extra_header.len());
         out.extend_from_slice(HEADER_STRING);
         out.extend_from_slice(&HEADER_VERSION.to_le_bytes());
         out.extend_from_slice(&(self.extra_header.len() as u32).to_le_bytes());
