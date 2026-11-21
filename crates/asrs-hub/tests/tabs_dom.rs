@@ -261,10 +261,9 @@ fn seeds(infos: &[Value]) -> Result<Vec<Seed>, String> {
         let rows = info.as_array().ok_or("info is not an array")?;
         for row in rows.iter().skip(seeds.len()) {
             let row = row.as_array().ok_or("info row is not an array")?;
-            let uuid = match js_json::to_js(&row[0])? {
-                JsValue::String(s) => s,
-                other => return Err(format!("creation uuid {other:?}")),
-            };
+            let uuid = js_json::to_js(&row[0])?
+                .into_string()
+                .ok_or_else(|| "creation uuid is not a string".to_owned())?;
             seeds.push(Seed {
                 uuid,
                 show_timeline: row[3].as_bool().ok_or("showTimeline is not a boolean")?,
@@ -280,16 +279,15 @@ fn current_from(info: &Value) -> Result<Vec<Current>, String> {
         .iter()
         .map(|row| {
             let row = row.as_array().ok_or("info row is not an array")?;
-            let fields = match js_json::to_js(&row[4])? {
-                JsValue::Array(items) => items
-                    .into_iter()
-                    .map(|v| match v {
-                        JsValue::String(s) => Ok(s),
-                        other => Err(format!("active field {other:?}")),
-                    })
-                    .collect::<Result<_, String>>()?,
-                other => return Err(format!("active fields {other:?}")),
-            };
+            let fields = js_json::to_js(&row[4])?
+                .into_array()
+                .ok_or_else(|| "active fields is not an array".to_owned())?
+                .into_iter()
+                .map(|v| match v.into_string() {
+                    Some(s) => Ok(s),
+                    None => Err("active field is not a string".to_owned()),
+                })
+                .collect::<Result<_, String>>()?;
             Ok(Current {
                 controller: js_json::to_js(&row[1])?,
                 renderer: js_json::to_js(&row[2])?,
@@ -503,7 +501,7 @@ impl Runner {
             "toggle-controls" => tabs.toggle_controls_visible(cx),
             "new-satellite" => tabs.new_satellite(),
             "set-active-satellites" => {
-                let JsValue::Array(uuids) = data else {
+                let Some(uuids) = data.into_array() else {
                     return Err("set-active-satellites needs an array".to_owned());
                 };
                 tabs.set_active_satellites(uuids);

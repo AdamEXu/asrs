@@ -26,7 +26,7 @@ struct Failed;
 /// everything else ends the request.
 fn caught(result: Result<(), LogError>) -> Result<(), Abort> {
     match result {
-        Ok(()) | Err(LogError::Proto(_)) => Ok(()),
+        Ok(()) | Err(LogError::Proto(_) | LogError::StackOverflow) => Ok(()),
         Err(LogError::NeverCompletes) => Err(Abort::NeverReturns),
         Err(LogError::Unmodeled(what)) => Err(Abort::Unmodeled(what)),
     }
@@ -254,7 +254,7 @@ impl WpilogWorker {
                     log.put_string_array(key, timestamp, value);
                 }
             }
-            Some("json") => log.put_json(key, timestamp, record.string()),
+            Some("json") => caught(log.put_json(key, timestamp, record.string()))?,
             Some("msgpack") => {
                 return caught(log.put_msgpack(
                     &mut self.realm,

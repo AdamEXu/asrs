@@ -19,12 +19,20 @@ enum Prim {
 
 fn join(items: &[JsValue]) -> JsString {
     let mut out = JsString::new();
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
+    let mut stack = vec![(items, 0usize)];
+    while let Some((items, i)) = stack.last_mut() {
+        let Some(item) = items.get(*i) else {
+            stack.pop();
+            continue;
+        };
+        if *i > 0 {
             out.push_unit(u16::from(b','));
         }
-        if !matches!(item, JsValue::Undefined | JsValue::Null) {
-            out.push_str(&to_string(item));
+        *i += 1;
+        match item {
+            JsValue::Array(items) => stack.push((items, 0)),
+            JsValue::Undefined | JsValue::Null => {}
+            other => out.push_str(&to_string(other)),
         }
     }
     out
