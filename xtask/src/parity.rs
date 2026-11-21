@@ -26,7 +26,9 @@ suites:
         the decode worker's messages, initial log and per-field responses
         (`decodeWorker`): every .dslog/.dsevents/.wpilog/.rlog/.log/.csv file under the
         corpus a and b trees, the public log cache and the fuzz corpora, or just the files
-        listed. An oracle that does not finish in time and an asrs-cli that
+        listed. Each run may take --timeout (default 60) seconds plus 10 s per MiB of
+        input, times the load average per core while it runs (1x to 8x); the largest
+        files start first. An oracle that does not finish in time and an asrs-cli that
         exits with code 3 mean 'never completes'; that verdict and the output up to it
         must agree, completed dumps must be byte-identical, and anything else fails.
         Exit code 4 from asrs-cli (a path the port does not model yet) is listed; its
@@ -249,10 +251,13 @@ fn decode_suite(args: &[String]) -> Result {
         .join(format!("asrs-cli{}", std::env::consts::EXE_SUFFIX));
     let mut cases = Vec::new();
     for file in &files {
-        cases.push((file, DecodeMode::Decode));
-        cases.push((file, DecodeMode::Worker));
+        let bytes = std::fs::metadata(file).map_or(0, |m| m.len());
+        cases.push((file, DecodeMode::Decode, bytes));
+        cases.push((file, DecodeMode::Worker, bytes));
     }
-    let timeout = Duration::from_secs(timeout);
+    let mut largest_first: Vec<usize> = (0..cases.len()).collect();
+    largest_first.sort_by_key(|&i| std::cmp::Reverse(cases[i].2));
+    let base = Duration::from_secs(timeout);
     let workers = std::thread::available_parallelism()
         .map(std::num::NonZero::get)
         .unwrap_or(4)
@@ -265,18 +270,20 @@ fn decode_suite(args: &[String]) -> Result {
         for _ in 0..workers {
             scope.spawn(|| {
                 loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    if i >= cases.len() {
+                    let Some(&i) =
+                        largest_first.get(next.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+                    else {
                         return;
-                    }
-                    let (path, mode) = &cases[i];
+                    };
+                    let (path, mode, bytes) = &cases[i];
+                    let budget = decode_budget(base, *bytes);
                     let mut oracle_command = oracle::oracle_command(&paths, mode.oracle_entry())
                         .expect("oracle decode command");
                     oracle_command.arg(path);
-                    let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, timeout));
+                    let oracle = DecodeVerdict::oracle(run_decode(&mut oracle_command, budget));
                     let mut rust_command = Command::new(&target);
                     rust_command.arg(mode.cli_command()).arg(path);
-                    let rust = DecodeVerdict::port(run_decode(&mut rust_command, timeout));
+                    let rust = DecodeVerdict::port(run_decode(&mut rust_command, budget));
                     *results[i].lock().expect("decode result poisoned") = Some((oracle, rust));
                 }
             });
@@ -286,7 +293,7 @@ fn decode_suite(args: &[String]) -> Result {
     let mut never = 0;
     let mut unmodeled = Vec::new();
     let mut planted = !plant;
-    for (i, (path, mode)) in cases.iter().enumerate() {
+    for (i, (path, mode, _)) in cases.iter().enumerate() {
         let (oracle, mut rust) = results[i]
             .lock()
             .expect("decode result poisoned")
@@ -464,7 +471,37 @@ impl DecodeVerdict {
     }
 }
 
-fn run_decode(command: &mut Command, timeout: Duration) -> DecodeRun {
+/// Idle-machine wall time one decode run may take: `--timeout` plus 10 s per MiB. The 43 MB
+/// RAR1741 log gets 477 s against the 16 s a debug asrs-cli needs, while small looping cases
+/// still reach the never-completes verdict after about `--timeout`.
+fn decode_budget(base: Duration, bytes: u64) -> Duration {
+    base + Duration::from_secs(10).mul_f64(bytes as f64 / f64::from(1u32 << 20))
+}
+
+/// How oversubscribed the machine is: the 1-minute load average per core, at least 1 and capped
+/// at 8 so a stuck run still ends.
+fn load_factor() -> f64 {
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZero::get) as f64;
+    let load = std::fs::read_to_string("/proc/loadavg")
+        .ok()
+        .or_else(|| {
+            let out = Command::new("sysctl")
+                .args(["-n", "vm.loadavg"])
+                .output()
+                .ok()?;
+            String::from_utf8(out.stdout).ok()
+        })
+        .and_then(|text| {
+            text.split_whitespace()
+                .find_map(|word| word.parse::<f64>().ok())
+        })
+        .unwrap_or(0.0);
+    (load / cores).clamp(1.0, 8.0)
+}
+
+/// Runs `command` until it exits or has used `budget` scaled by the highest load factor seen
+/// while it ran, so a run starved by other work is not mistaken for a hang.
+fn run_decode(command: &mut Command, budget: Duration) -> DecodeRun {
     use std::io::Read as _;
     let mut child = match command.stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
         Ok(child) => child,
@@ -476,12 +513,20 @@ fn run_decode(command: &mut Command, timeout: Duration) -> DecodeRun {
         let _ = pipe.read_to_end(&mut out);
         out
     });
-    let deadline = Instant::now() + timeout;
+    let start = Instant::now();
+    let mut factor = load_factor();
+    let mut sampled = start;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() >= deadline => break None,
-            Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+            Ok(None) if start.elapsed() >= budget.mul_f64(factor) => break None,
+            Ok(None) => {
+                if sampled.elapsed() >= Duration::from_secs(5) {
+                    factor = factor.max(load_factor());
+                    sampled = Instant::now();
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
             Err(_) => break None,
         }
     };
