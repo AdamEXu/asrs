@@ -151,7 +151,7 @@ impl Driver for FtcDriver {
 
     fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
         let support::SessionEvent::Net(event) = event else {
-            return;
+            panic!("unexpected {event:?}");
         };
         let mut cx = fcx(env);
         for source in &mut self.sources {

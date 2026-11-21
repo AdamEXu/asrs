@@ -46,16 +46,6 @@ pub struct RlogContext<'a> {
     pub clock: &'a dyn Clock,
 }
 
-fn truthy(value: &JsValue) -> bool {
-    match value {
-        JsValue::Undefined | JsValue::Null => false,
-        JsValue::Bool(b) => *b,
-        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
-        JsValue::String(s) => !s.is_empty(),
-        _ => true,
-    }
-}
-
 /// `RLOGServerSource`.
 pub struct RlogSource {
     base: LiveDataSourceBase,
@@ -151,7 +141,7 @@ impl RlogSource {
         if let Some(id) = self.timeout.take() {
             cx.timers.clear(id);
         }
-        if !truthy(&ops::get(data, "success").unwrap_or_default()) {
+        if !ops::to_boolean(&ops::get(data, "success").unwrap_or_default()) {
             self.reconnect(cx);
             return Ok(());
         }

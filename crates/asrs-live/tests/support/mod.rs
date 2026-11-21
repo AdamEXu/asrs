@@ -81,7 +81,8 @@ pub enum Delivery {
 }
 
 /// What `apply` produces for the driver: a browser network event, a raw TCP event for the
-/// emulated main process, or an IPC hop.
+/// emulated main process, or an IPC hop. A driver panics on a kind its protocol never produces.
+#[derive(Debug)]
 pub enum SessionEvent {
     Net(NetEvent),
     Tcp(RlogNetEvent),

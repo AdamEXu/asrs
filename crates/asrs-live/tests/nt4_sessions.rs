@@ -262,7 +262,7 @@ impl Driver for ClientDriver {
 
     fn notify(&mut self, event: support::SessionEvent, env: &mut Env) {
         let support::SessionEvent::Net(event) = event else {
-            return;
+            panic!("unexpected {event:?}");
         };
         let Some(client) = self.client.as_mut() else {
             return;

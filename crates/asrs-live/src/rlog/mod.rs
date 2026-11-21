@@ -8,6 +8,7 @@ pub mod transport;
 
 pub use main::{MainCall, MainContext, MainMessage, RlogMain};
 pub use source::{RlogContext, RlogPreferences, RlogSource};
+pub use tokio_transport::TokioRlogTransport;
 pub use transport::{RlogNetEvent, RlogTransport, TcpId};
 
 /// A `sendMainMessage`/`sendMessage` hop between the renderer and the emulated main process,

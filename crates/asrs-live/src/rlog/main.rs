@@ -161,8 +161,9 @@ impl RlogMain {
                         break;
                     }
                     // `Uint8Array.prototype.slice`: negative indexes count from the end, an
-                    // inverted range is empty. expected <= 0 makes this spin, as upstream's
-                    // loop does.
+                    // inverted range is empty. When expected is 0, or negative with a magnitude
+                    // of at least the buffer length, the buffer never shrinks and this spins
+                    // forever, as upstream's loop does (#182).
                     let clamp = |x: i64| -> usize {
                         if x < 0 {
                             (len + x).max(0) as usize
@@ -220,6 +221,76 @@ impl RlogMain {
             true
         } else {
             false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::timers::ManualClock;
+
+    struct NoNet;
+
+    impl RlogTransport for NoNet {
+        fn tcp_connect(&mut self, _host: &str, _port: f64) -> TcpId {
+            TcpId(1)
+        }
+        fn tcp_write(&mut self, _id: TcpId, _data: &[u8]) {}
+        fn tcp_destroy(&mut self, _id: TcpId) {}
+        fn tcp_set_timeout(&mut self, _id: TcpId, _ms: f64) {}
+    }
+
+    fn payloads(chunks: &[&[u8]]) -> Vec<Vec<u8>> {
+        let mut timers = TimerQueue::new(Rc::new(ManualClock::new(0.0)));
+        let mut net = NoNet;
+        let mut main = RlogMain::new(&mut timers);
+        let mut cx = MainContext {
+            timers: &mut timers,
+            net: &mut net,
+        };
+        let start = MainCall::Start {
+            uuid: "u".to_owned(),
+            address: "a".to_owned(),
+            port: 5800.0,
+        };
+        main.handle(&start, &mut cx);
+        for chunk in chunks {
+            main.handle_net_event(&RlogNetEvent::Data(TcpId(1), chunk.to_vec()), &mut cx);
+        }
+        main.outbox
+            .drain(..)
+            .map(|m| match m {
+                MainMessage::Data { raw, .. } => raw,
+                _ => panic!("not a payload"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn framing_is_independent_of_chunk_boundaries() {
+        let mut stream = Vec::new();
+        for payload in [&b"\x01"[..], b"", b"abcdef", b"\x00\x00\x00\x04"] {
+            stream.extend_from_slice(&(payload.len() as i32).to_be_bytes());
+            stream.extend_from_slice(payload);
+        }
+        stream.extend_from_slice(&[0, 0, 0, 9, 1, 2]);
+        let whole = payloads(&[&stream]);
+        assert_eq!(
+            whole,
+            vec![
+                b"\x01".to_vec(),
+                b"abcdef".to_vec(),
+                b"\x00\x00\x00\x04".to_vec()
+            ]
+        );
+        for a in 0..=stream.len() {
+            for b in a..=stream.len() {
+                let split = payloads(&[&stream[..a], &stream[a..b], &stream[b..]]);
+                assert_eq!(split, whole, "cut at {a} and {b}");
+            }
         }
     }
 }

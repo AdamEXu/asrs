@@ -91,8 +91,14 @@ impl RlogDriver {
         }
     }
 
-    /// IPC is a task with no delay on either hop, in send order on each side.
+    /// IPC is a task with no delay on either hop, in send order on each side. A task runs
+    /// either renderer or main-process code, so at most one side has anything queued and the
+    /// two loops keep upstream's call order.
     fn flush(&mut self, env: &mut Env) {
+        assert!(
+            self.send_main.is_empty() || self.main.outbox.is_empty(),
+            "IPC queued on both sides in one task"
+        );
         while let Some(call) = self.send_main.pop_front() {
             env.net.deliver(0.0, Delivery::Ipc(Ipc::ToMain(call)));
         }
@@ -179,7 +185,7 @@ impl Driver for RlogDriver {
 
     fn notify(&mut self, event: SessionEvent, env: &mut Env) {
         match event {
-            SessionEvent::Net(_) => {}
+            SessionEvent::Net(event) => panic!("unexpected {event:?}"),
             SessionEvent::Tcp(event) => {
                 self.main.handle_net_event(&event, &mut mcx(env));
             }
@@ -189,7 +195,9 @@ impl Driver for RlogDriver {
             SessionEvent::Ipc(Ipc::ToSource(data)) => {
                 if let Some(source) = self.sources.last_mut() {
                     let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
-                    let _ = source.handle_main_message(&data, &mut cx);
+                    if let Err(abort) = source.handle_main_message(&data, &mut cx) {
+                        panic!("the RLOG decoder aborted: {abort:?}");
+                    }
                 }
             }
         }
@@ -197,12 +205,12 @@ impl Driver for RlogDriver {
     }
 
     fn timer(&mut self, id: TimerId, env: &mut Env) {
-        if !self.main.handle_timer(id, &mut mcx(env))
-            && let Some(source) = self.sources.last_mut()
-        {
-            let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
-            source.handle_timer(id, &mut cx);
-        }
+        let handled = self.main.handle_timer(id, &mut mcx(env))
+            || self.sources.last_mut().is_some_and(|source| {
+                let mut cx = rcx(&mut self.send_main, &self.rlog_prefs, &self.window_log, env);
+                source.handle_timer(id, &mut cx)
+            });
+        assert!(handled, "timer {id:?} has no owner");
         self.flush(env);
     }
 

@@ -1,7 +1,8 @@
 //! [`RlogTransport`] over real TCP sockets on the live tokio runtime. Each socket is a task
 //! that applies Node's rules itself (held writes while connecting, `Error` then `Close` on a
-//! refused connection, one `Close`, the idle `setTimeout`) and posts events to the foreground
-//! side, which drains them in send order.
+//! refused connection or a socket error, one `Close`, the idle `setTimeout`) and posts events to
+//! the foreground side, which drains them in send order. `destroy` takes effect at once, as
+//! `socket.destroyed` does: nothing but the `Close` is dispatched for that socket afterwards.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
@@ -88,11 +89,11 @@ impl TokioRlogTransport {
                 .get(&id.0)
                 .is_some_and(|s| !matches!(s.state, State::Closed)),
             RlogNetEvent::Error(id) => match self.sockets.get_mut(&id.0) {
-                Some(s) => {
+                Some(s) if !matches!(s.state, State::Closed) => {
                     s.state = State::Closed;
                     true
                 }
-                None => false,
+                _ => false,
             },
             RlogNetEvent::Close(id) => self.sockets.remove(&id.0).is_some(),
         }
@@ -122,6 +123,8 @@ impl RlogTransport for TokioRlogTransport {
         self.next_id += 1;
         let (commands, rx) = unbounded_channel();
         let events = self.events_tx.clone();
+        // Node connects to `localhost` when `host` is empty.
+        let host = if host.is_empty() { "localhost" } else { host };
         let task = self
             .handle
             .spawn(run_socket(id, host.to_owned(), port as u16, rx, events));
@@ -145,9 +148,10 @@ impl RlogTransport for TokioRlogTransport {
     }
 
     fn tcp_destroy(&mut self, id: TcpId) {
-        if let Some(s) = self.sockets.get(&id.0)
+        if let Some(s) = self.sockets.get_mut(&id.0)
             && !matches!(s.state, State::Closed)
         {
+            s.state = State::Closed;
             let _ = s.commands.send(Command::Destroy);
         }
     }
@@ -197,6 +201,10 @@ async fn run_socket(
     let close = |events: &EventSender<RlogNetEvent>| {
         let _ = events.send(RlogNetEvent::Close(id));
     };
+    let fail = |events: &EventSender<RlogNetEvent>| {
+        let _ = events.send(RlogNetEvent::Error(id));
+        close(events);
+    };
     let mut idle = Idle {
         ms: None,
         deadline: None,
@@ -209,11 +217,7 @@ async fn run_socket(
         tokio::select! {
             connected = &mut connect => match connected {
                 Ok(stream) => break stream,
-                Err(_) => {
-                    let _ = events.send(RlogNetEvent::Error(id));
-                    close(&events);
-                    return;
-                }
+                Err(_) => return fail(&events),
             },
             command = commands.recv() => match command {
                 Some(Command::Write(data)) => held.push(data),
@@ -237,7 +241,7 @@ async fn run_socket(
     idle.arm();
     for data in held {
         if stream.write_all(&data).await.is_err() {
-            return close(&events);
+            return fail(&events);
         }
         idle.arm();
     }
@@ -245,7 +249,8 @@ async fn run_socket(
     loop {
         tokio::select! {
             read = stream.read(&mut buf) => match read {
-                Ok(0) | Err(_) => return close(&events),
+                Ok(0) => return close(&events),
+                Err(_) => return fail(&events),
                 Ok(n) => {
                     idle.arm();
                     let _ = events.send(RlogNetEvent::Data(id, buf[..n].to_vec()));
@@ -254,7 +259,7 @@ async fn run_socket(
             command = commands.recv() => match command {
                 Some(Command::Write(data)) => {
                     if stream.write_all(&data).await.is_err() {
-                        return close(&events);
+                        return fail(&events);
                     }
                     idle.arm();
                 }
