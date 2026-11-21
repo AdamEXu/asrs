@@ -47,7 +47,6 @@ impl<T: ToJs + Any> TabCommand for T {
 /// Shared so one frame's command can go to the local renderer and every satellite.
 pub type Command = Rc<dyn TabCommand>;
 
-/// `TabController`.
 pub trait TabController<Cx: ?Sized>: AsAny {
     /// `saveState()`: the `controller` member of the tab's saved state.
     fn save_state(&self, cx: &Cx) -> JsValue;
@@ -58,13 +57,11 @@ pub trait TabController<Cx: ?Sized>: AsAny {
     /// `refresh()`, after log fields change.
     fn refresh(&mut self, cx: &mut Cx) -> Result<(), JsError>;
 
-    /// `newAssets()`.
     fn new_assets(&mut self, cx: &mut Cx) -> Result<(), JsError>;
 
     /// `getActiveFields()`: keys, and key prefixes, live sources should provide.
     fn active_fields(&self, cx: &Cx) -> Vec<JsString>;
 
-    /// `showTimeline()`.
     fn show_timeline(&self, cx: &Cx) -> bool;
 
     /// `getCommand()`, once per frame while the tab is shown anywhere. `uuid` is the tab's
@@ -82,7 +79,6 @@ pub trait TabController<Cx: ?Sized>: AsAny {
     }
 }
 
-/// `TabRenderer`.
 pub trait TabRenderer<Cx: ?Sized>: AsAny {
     /// `saveState()`: the `renderer` member of the tab's saved state.
     fn save_state(&self, cx: &Cx) -> JsValue;
@@ -164,7 +160,6 @@ impl<Cx: ?Sized> TabController<Cx> for NoopController {
     }
 }
 
-/// `NoopRenderer`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoopRenderer;
 

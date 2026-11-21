@@ -13,7 +13,7 @@
     ],
     "steps": [
       {
-        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
       },
       {
         "log": "../logs/tabs.json"
@@ -108,6 +108,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -210,6 +214,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -306,6 +314,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -408,6 +420,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -504,6 +520,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -606,6 +626,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -702,6 +726,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -804,6 +832,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -900,6 +932,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -1029,6 +1065,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -1152,6 +1192,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -1281,6 +1325,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -1404,6 +1452,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -1533,6 +1585,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -1656,6 +1712,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -1785,6 +1845,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -1908,6 +1972,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -2037,6 +2105,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -2160,6 +2232,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",
@@ -2289,6 +2365,10 @@
           },
           {
             "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
             "expr": "[...window.tabs.getActiveFields()]"
           },
           "commands"
@@ -2412,6 +2492,10 @@
           {
             "kind": "eval",
             "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
           },
           {
             "kind": "eval",

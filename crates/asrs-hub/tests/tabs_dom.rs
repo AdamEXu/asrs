@@ -8,14 +8,18 @@
 //! creation-time UUID, and every capture starts with `/*tabs:info*/`, which reports what each
 //! created controller and renderer would save, its `showTimeline()` and its active fields. The
 //! stubs answer from those records, keyed by creation order, and log every `restoreState` call
-//! so `/*tabs:restores*/` checks that restores reach the right tab. Everything `Tabs` owns
-//! (order, selection, titles, UUIDs, heights, the DOM it drives, messages, exceptions) is the
-//! port's own output.
+//! so `/*tabs:restores*/` checks that restores reach the right tab. Table renderers answer
+//! `getTimestampRange()` with the values upstream's returned, in call order, and every
+//! `getTimestampRange` and `addRendererRange` call is logged for `/*tabs:ranges*/`. Everything
+//! `Tabs` owns (order, selection, titles, UUIDs, heights, the DOM it drives, messages, Table
+//! range routing, exceptions) is the port's own output.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
 
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -70,8 +74,28 @@ struct Host {
     seeds: Vec<Seed>,
     current: Vec<Current>,
     restores: Vec<(usize, &'static str, JsValue)>,
+    renderer_uuids: Vec<Option<JsString>>,
+    timestamp_ranges: RefCell<Vec<VecDeque<Option<[f64; 2]>>>>,
+    range_calls: RefCell<Vec<JsValue>>,
     rendered: Vec<bool>,
     created: usize,
+}
+
+fn range_js(range: Option<[f64; 2]>) -> JsValue {
+    range.map_or(JsValue::Null, |[a, b]| {
+        JsValue::Array(vec![JsValue::Number(a), JsValue::Number(b)])
+    })
+}
+
+fn range_of(value: &JsValue) -> Result<Option<[f64; 2]>, String> {
+    match value {
+        JsValue::Null => Ok(None),
+        JsValue::Array(r) => match r.as_slice() {
+            [JsValue::Number(a), JsValue::Number(b)] => Ok(Some([*a, *b])),
+            _ => Err(format!("range {value:?}")),
+        },
+        other => Err(format!("range {other:?}")),
+    }
 }
 
 impl TabsHost for Host {
@@ -85,7 +109,7 @@ impl TabsHost for Host {
 }
 
 struct StubController(usize);
-struct StubRenderer(usize);
+struct StubRenderer(usize, Option<JsString>);
 
 impl TabController<Host> for StubController {
     fn save_state(&self, cx: &Host) -> JsValue {
@@ -120,6 +144,21 @@ impl TabController<Host> for StubController {
     fn command(&mut self, _cx: &mut Host, _uuid: &JsValue) -> Result<Command, JsError> {
         Ok(Rc::new(JsValue::Null))
     }
+
+    fn add_renderer_range(
+        &mut self,
+        cx: &mut Host,
+        renderer_uuid: &JsString,
+        range: Option<[f64; 2]>,
+    ) -> Result<(), JsError> {
+        cx.range_calls.borrow_mut().push(JsValue::Array(vec![
+            JsValue::Number(self.0 as f64),
+            JsValue::string("add"),
+            JsValue::String(renderer_uuid.clone()),
+            range_js(range),
+        ]));
+        Ok(())
+    }
 }
 
 impl TabRenderer<Host> for StubRenderer {
@@ -145,6 +184,25 @@ impl TabRenderer<Host> for StubRenderer {
         cx.rendered[self.0] = true;
         Ok(())
     }
+
+    fn renderer_uuid(&self) -> Option<&JsString> {
+        self.1.as_ref()
+    }
+
+    fn timestamp_range(&self, cx: &Host) -> Option<[f64; 2]> {
+        let range = cx
+            .timestamp_ranges
+            .borrow_mut()
+            .get_mut(self.0)
+            .and_then(VecDeque::pop_front)
+            .flatten();
+        cx.range_calls.borrow_mut().push(JsValue::Array(vec![
+            JsValue::Number(self.0 as f64),
+            JsValue::string("get"),
+            range_js(range),
+        ]));
+        range
+    }
 }
 
 struct StubFactory;
@@ -159,7 +217,7 @@ impl TabFactory<Host> for StubFactory {
                 .get(k)
                 .map_or_else(|| js(&format!("unseeded-{k}")), |s| s.uuid.clone()),
             controller: Box::new(StubController(k)),
-            renderer: Box::new(StubRenderer(k)),
+            renderer: Box::new(StubRenderer(k, cx.renderer_uuids.get(k).cloned().flatten())),
         }
     }
 }
@@ -239,6 +297,47 @@ fn current_from(info: &Value) -> Result<Vec<Current>, String> {
             })
         })
         .collect()
+}
+
+/// The renderer UUIDs and, per created tab, what its `getTimestampRange()` returned in order,
+/// from the `/*tabs:ranges*/` captures.
+type RangeSeeds = (Vec<Option<JsString>>, Vec<VecDeque<Option<[f64; 2]>>>);
+
+fn range_seeds(records: &[Record]) -> Result<RangeSeeds, String> {
+    let mut uuids = Vec::new();
+    let mut returns: Vec<VecDeque<Option<[f64; 2]>>> = Vec::new();
+    for record in records.iter().filter(|r| {
+        r.string("eval")
+            .is_some_and(|e| e.starts_with("/*tabs:ranges*/"))
+    }) {
+        let value = js_json::to_js(&record.value("value").map_err(|e| e.0)?)?;
+        let [JsValue::Array(ids), JsValue::Array(calls)] =
+            value.as_array().ok_or("ranges is not an array")?
+        else {
+            return Err("ranges is not [uuids, calls]".to_owned());
+        };
+        uuids = ids
+            .iter()
+            .map(|id| match id {
+                JsValue::String(s) => Ok(Some(s.clone())),
+                JsValue::Null => Ok(None),
+                other => Err(format!("renderer uuid {other:?}")),
+            })
+            .collect::<Result<_, String>>()?;
+        for call in calls {
+            let call = call.as_array().ok_or("range call is not an array")?;
+            if let [JsValue::Number(k), JsValue::String(kind), range] = call
+                && kind.to_string_lossy() == "get"
+            {
+                let k = *k as usize;
+                if returns.len() <= k {
+                    returns.resize_with(k + 1, VecDeque::new);
+                }
+                returns[k].push_back(range_of(range)?);
+            }
+        }
+    }
+    Ok((uuids, returns))
 }
 
 struct LayoutRule {
@@ -631,6 +730,22 @@ fn capture(runner: &mut Runner, spec: &Json) -> Result<(), String> {
                         })
                         .collect(),
                 )
+            } else if expr.starts_with("/*tabs:ranges*/") {
+                let host = &runner.host;
+                let uuids = (0..host.created)
+                    .map(|k| {
+                        host.renderer_uuids
+                            .get(k)
+                            .cloned()
+                            .flatten()
+                            .map_or(JsValue::Null, JsValue::String)
+                    })
+                    .collect();
+                let calls = host.range_calls.borrow_mut().drain(..).collect();
+                js_json::from_js(&JsValue::Array(vec![
+                    JsValue::Array(uuids),
+                    JsValue::Array(calls),
+                ]))
             } else if expr == "[...window.tabs.getActiveFields()]" {
                 Value::Array(
                     runner
@@ -704,6 +819,7 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         None => DEFAULT_IGNORED.iter().map(|s| (*s).to_owned()).collect(),
     };
     let infos = info_records(records)?;
+    let (renderer_uuids, timestamp_ranges) = range_seeds(records)?;
     let mut host = Host {
         inner_height: height,
         renderer_top: layout
@@ -713,6 +829,9 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         seeds: seeds(&infos)?,
         current: Vec::new(),
         restores: Vec::new(),
+        renderer_uuids,
+        timestamp_ranges: RefCell::new(timestamp_ranges),
+        range_calls: RefCell::new(Vec::new()),
         rendered: Vec::new(),
         created: 0,
     };

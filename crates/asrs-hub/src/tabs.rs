@@ -567,7 +567,6 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.update_controls_height(cx)
     }
 
-    /// `refresh()`.
     pub fn refresh(&mut self, cx: &mut Cx) -> Result {
         for tab in &mut self.tabs {
             tab.controller.refresh(cx)?;
@@ -575,7 +574,6 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         Ok(())
     }
 
-    /// `newAssets()`.
     pub fn new_assets(&mut self, cx: &mut Cx) -> Result {
         for tab in &mut self.tabs {
             tab.controller.new_assets(cx)?;
@@ -595,7 +593,6 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         fields.into_iter().collect()
     }
 
-    /// `toggleControlsVisible()`.
     pub fn toggle_controls_visible(&mut self, cx: &Cx) -> Result {
         let i = self.lookup_selected("type")?;
         let tab = &mut self.tabs[i];
@@ -681,8 +678,15 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         if js::lt(index, &num(1.0)) || js::gt(index, &self.last_index()) {
             return Ok(());
         }
-        let i = js::index(index, self.tabs.len()).ok_or_else(|| missing("controller"))?;
-        if !js::truthy(force) && self.tabs[i].uuid.is_null() {
+        let force = js::truthy(force);
+        let i = js::index(index, self.tabs.len()).ok_or_else(|| {
+            missing(if force {
+                "rendererElement"
+            } else {
+                "controller"
+            })
+        })?;
+        if !force && self.tabs[i].uuid.is_null() {
             return Ok(());
         }
         self.tabs.remove(i);
@@ -695,7 +699,6 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.update_elements(cx)
     }
 
-    /// `setSelected(index)`.
     pub fn set_selected(&mut self, cx: &Cx, index: &JsValue) -> Result {
         if js::lt(index, &num(0.0)) || js::gt(index, &self.last_index()) {
             return Ok(());
@@ -710,7 +713,6 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.set_selected(cx, &index)
     }
 
-    /// `shift(index, shift)`.
     pub fn shift(&mut self, cx: &Cx, index: &JsValue, shift: &JsValue) -> Result {
         let min_index = num(1.0);
         if js::lt(index, &min_index) {
@@ -749,12 +751,10 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.shift(cx, &index, delta)
     }
 
-    /// `setActiveSatellites(uuids)`.
     pub fn set_active_satellites(&mut self, uuids: Vec<JsValue>) {
         self.active_satellites = uuids;
     }
 
-    /// `isValidUUID(uuid)`.
     pub fn is_valid_uuid(&self, uuid: &JsValue) -> bool {
         self.tabs.iter().any(|t| js::strict_eq(uuid, &t.uuid))
     }
