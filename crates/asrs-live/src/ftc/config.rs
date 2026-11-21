@@ -37,7 +37,10 @@ fn inflate(var: &JsValue, depth: usize) -> Result<JsValue, Thrown> {
         } else {
             let mut children = JsObject::new();
             for key in ops::object_keys(&value)? {
-                children.insert(key.clone(), inflate(&ops::get_key(&value, &key)?, depth + 1)?);
+                children.insert(
+                    key.clone(),
+                    inflate(&ops::get_key(&value, &key)?, depth + 1)?,
+                );
             }
             Ok(custom(JsValue::Object(children)))
         }

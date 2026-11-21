@@ -119,10 +119,7 @@ impl Clone for JsValue {
                         let mut rest = items.iter();
                         match rest.next() {
                             Some(first) => {
-                                frames.push(Frame::Array(
-                                    Vec::with_capacity(items.len()),
-                                    rest,
-                                ));
+                                frames.push(Frame::Array(Vec::with_capacity(items.len()), rest));
                                 source = first;
                             }
                             None => return JsValue::Array(Vec::new()),
@@ -132,11 +129,7 @@ impl Clone for JsValue {
                         let mut members = object.object_iter();
                         match members.next() {
                             Some((key, first)) => {
-                                frames.push(Frame::Object(
-                                    JsObject::new(),
-                                    members,
-                                    key.clone(),
-                                ));
+                                frames.push(Frame::Object(JsObject::new(), members, key.clone()));
                                 source = first;
                             }
                             None => return JsValue::Object(JsObject::new()),

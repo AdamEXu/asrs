@@ -968,11 +968,7 @@ impl Log {
                 }
                 UnknownPut::Ext(kind, data) => {
                     self.put_number(&child_key(&key, "type"), timestamp, f64::from(kind));
-                    self.put_raw(
-                        &child_key(&key, "data"),
-                        timestamp,
-                        Arc::<[u8]>::from(data),
-                    )?;
+                    self.put_raw(&child_key(&key, "data"), timestamp, Arc::<[u8]>::from(data))?;
                 }
             }
         }

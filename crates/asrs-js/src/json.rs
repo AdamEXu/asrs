@@ -198,8 +198,7 @@ impl Writer<'_> {
                         break true;
                     }
                     Target::Value(JsValue::Bool(b)) => {
-                        self.out
-                            .push_str(if *b { "true" } else { "false" });
+                        self.out.push_str(if *b { "true" } else { "false" });
                         break true;
                     }
                     Target::Value(JsValue::Number(x)) => {
@@ -259,12 +258,15 @@ impl Writer<'_> {
                         let start = self.out.len();
                         self.out.push('{');
                         self.indent.push_str(self.gap);
-                        let members: Members<'_> = Box::new(bytes.iter().enumerate().map(|(i, b)| {
-                            (
-                                MemberKey::Owned(number::to_string(i as f64).encode_utf16().collect()),
-                                MemberValue::Number(f64::from(*b)),
-                            )
-                        }));
+                        let members: Members<'_> =
+                            Box::new(bytes.iter().enumerate().map(|(i, b)| {
+                                (
+                                    MemberKey::Owned(
+                                        number::to_string(i as f64).encode_utf16().collect(),
+                                    ),
+                                    MemberValue::Number(f64::from(*b)),
+                                )
+                            }));
                         frames.push(Frame::Object {
                             members,
                             any: false,
@@ -342,8 +344,7 @@ impl Writer<'_> {
                             }
                             None => {
                                 frames.pop();
-                                self.indent
-                                    .truncate(self.indent.len() - self.gap.len());
+                                self.indent.truncate(self.indent.len() - self.gap.len());
                                 if !self.gap.is_empty() {
                                     self.newline_indent();
                                 }
@@ -375,9 +376,7 @@ impl Writer<'_> {
                                     self.newline_indent();
                                 }
                                 match key {
-                                    MemberKey::Ref(units) => {
-                                        Self::quote_into(units, &mut self.out)
-                                    }
+                                    MemberKey::Ref(units) => Self::quote_into(units, &mut self.out),
                                     MemberKey::Owned(units) => {
                                         Self::quote_into(&units, &mut self.out)
                                     }
@@ -407,8 +406,7 @@ impl Writer<'_> {
                             None => {
                                 let (start, any) = (*start, *any);
                                 frames.pop();
-                                self.indent
-                                    .truncate(self.indent.len() - self.gap.len());
+                                self.indent.truncate(self.indent.len() - self.gap.len());
                                 if !any {
                                     self.out.truncate(start);
                                     self.out.push_str("{}");
