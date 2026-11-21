@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
+asrs-field3d = { path = "../asrs-field3d" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-js = { path = "../asrs-js" }
 asrs-live = { path = "../asrs-live" }
@@ -20,6 +21,7 @@ asrs-model = { path = "../asrs-model" }
 asrs-parity = { path = "../asrs-parity" }
 asrs-services = { path = "../asrs-services" }
 asrs-tabs = { path = "../asrs-tabs" }
+sha2 = "=0.10.9"
 
 [lints]
 workspace = true
