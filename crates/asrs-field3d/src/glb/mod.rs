@@ -25,7 +25,7 @@ pub use optimize::{
 };
 pub use workers::{
     Fetch, LoadError, LoadJob, LoadOptions, LoadedField, load_field, load_robot, read_file_url,
-    spawn_load_field, spawn_load_robot,
+    spawn_load_field, spawn_load_robot, with_load_stack,
 };
 
 /// What `optimizeGeometries` reads from a mesh's material: `transparent`, `opacity` and, when

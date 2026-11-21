@@ -1,6 +1,8 @@
 // Ported from AdvantageScope (BSD-3-Clause, Copyright 2021-2026 Littleton Robotics). See
 // THIRD_PARTY_NOTICES.md.
 
+use std::any::Any;
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -49,6 +51,8 @@ pub enum LoadError {
     Fetch(JsString),
     Gltf(GltfError),
     Optimize(OptimizeError),
+    /// The port itself failed; the load thread survives it.
+    Panic(String),
 }
 
 impl std::fmt::Display for LoadError {
@@ -57,6 +61,7 @@ impl std::fmt::Display for LoadError {
             LoadError::Fetch(url) => write!(f, "failed to fetch {}", url.to_string_lossy()),
             LoadError::Gltf(e) => e.fmt(f),
             LoadError::Optimize(e) => e.fmt(f),
+            LoadError::Panic(m) => write!(f, "the model load panicked: {m}"),
         }
     }
 }
@@ -244,9 +249,34 @@ pub fn load_field(
     Ok(result)
 }
 
+/// The loader and the scene graph recurse once per hierarchy level (up to the loader's 4096),
+/// and decoded JSON drops recursively.
+const LOAD_STACK_SIZE: usize = 256 << 20;
+
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| (*s).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_default()
+}
+
+/// Runs `f` on a thread with the stack `LoadJob` gives a load, for callers that load in place.
+pub fn with_load_stack<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    thread::scope(|scope| {
+        thread::Builder::new()
+            .name("asrs-model-load".to_owned())
+            .stack_size(LOAD_STACK_SIZE)
+            .spawn_scoped(scope, f)
+            .expect("spawning a model load thread")
+            .join()
+            .unwrap_or_else(|payload| panic::resume_unwind(payload))
+    })
+}
+
 /// A load running on its own thread, as upstream runs each request in a fresh worker. The
-/// waker fires once the result is ready; a load that fails yields its `LoadError`, which the
-/// caller treats as a worker that never answers.
+/// waker fires once the result is ready; a load that fails (or panics) yields its `LoadError`,
+/// which the caller treats as a worker that never answers.
 pub struct LoadJob<T> {
     rx: Receiver<Result<T, LoadError>>,
 }
@@ -259,8 +289,11 @@ impl<T: Send + 'static> LoadJob<T> {
         let (tx, rx) = mpsc::channel();
         thread::Builder::new()
             .name("asrs-model-load".to_owned())
+            .stack_size(LOAD_STACK_SIZE)
             .spawn(move || {
-                let _ = tx.send(work());
+                let result = panic::catch_unwind(AssertUnwindSafe(work))
+                    .unwrap_or_else(|payload| Err(LoadError::Panic(panic_message(&*payload))));
+                let _ = tx.send(result);
                 waker();
             })
             .expect("spawning a model load thread");

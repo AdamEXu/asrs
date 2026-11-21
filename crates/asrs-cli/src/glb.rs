@@ -209,7 +209,8 @@ pub fn run_asset(
             Parsed::Config(mut c) => {
                 c.path = path;
                 let is_ftc = c.is_ftc;
-                glb::load_robot(&c, is_ftc, &options, fetch).map(|r| robot_value(&r))
+                glb::with_load_stack(|| glb::load_robot(&c, is_ftc, &options, fetch))
+                    .map(|r| robot_value(&r))
             }
             Parsed::Invalid => return Ok(Outcome::Config("invalid".to_owned())),
             Parsed::Skip => return Ok(Outcome::Config("skip".to_owned())),
@@ -217,7 +218,8 @@ pub fn run_asset(
         "field" => match assets::parse_field_3d(&raw).map_err(|e| e.message.to_string_lossy())? {
             Parsed::Config(mut c) => {
                 c.path = path;
-                glb::load_field(&c, &options, fetch).map(|r| field_value(&r))
+                glb::with_load_stack(|| glb::load_field(&c, &options, fetch))
+                    .map(|r| field_value(&r))
             }
             Parsed::Invalid => return Ok(Outcome::Config("invalid".to_owned())),
             Parsed::Skip => return Ok(Outcome::Config("skip".to_owned())),

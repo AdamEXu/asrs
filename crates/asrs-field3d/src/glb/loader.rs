@@ -198,6 +198,51 @@ fn number_elem(value: Option<&JsValue>, i: usize) -> f64 {
     }
 }
 
+/// `meshDef.primitives` as `loadMesh` and `loadGeometries` walk it: `for (i < primitives.length)`.
+fn primitives_of(mesh: &JsValue) -> Result<Vec<JsValue>> {
+    match prop(mesh, "primitives") {
+        Some(JsValue::Array(p)) => Ok(p.clone()),
+        None | Some(JsValue::Undefined | JsValue::Null) => {
+            reject("TypeError: Cannot read properties of undefined (reading 'length')")
+        }
+        Some(JsValue::String(s)) if !s.is_empty() => {
+            reject("TypeError: Cannot convert undefined or null to object")
+        }
+        Some(object @ JsValue::Object(_)) if object.get("length").is_some() => {
+            unmodeled("mesh primitives as an array-like object")
+        }
+        Some(_) => Ok(Vec::new()),
+    }
+}
+
+/// The texture references the material extension plugins hand to `assignTexture`.
+const MATERIAL_EXTENSION_TEXTURES: &[(&str, &[&str])] = &[
+    (
+        "KHR_materials_clearcoat",
+        &[
+            "clearcoatTexture",
+            "clearcoatRoughnessTexture",
+            "clearcoatNormalTexture",
+        ],
+    ),
+    (
+        "KHR_materials_iridescence",
+        &["iridescenceTexture", "iridescenceThicknessTexture"],
+    ),
+    (
+        "KHR_materials_sheen",
+        &["sheenColorTexture", "sheenRoughnessTexture"],
+    ),
+    ("KHR_materials_transmission", &["transmissionTexture"]),
+    ("KHR_materials_volume", &["thicknessTexture"]),
+    (
+        "KHR_materials_specular",
+        &["specularTexture", "specularColorTexture"],
+    ),
+    ("EXT_materials_bump", &["bumpTexture"]),
+    ("KHR_materials_anisotropy", &["anisotropyTexture"]),
+];
+
 /// `ToIndex`: `NaN` and `undefined` give 0; negatives and huge values throw.
 fn to_index(value: f64) -> Result<usize> {
     let n = if value.is_nan() { 0.0 } else { value.trunc() };
@@ -509,11 +554,14 @@ struct Parser<'a> {
     json: &'a JsValue,
     body: Option<Vec<u8>>,
     path: JsString,
+    binary: bool,
     fetch: &'a dyn Fn(&JsString) -> Option<Vec<u8>>,
     unlit: bool,
     meshopt_required: bool,
+    basisu_required: bool,
     names: NodeNames,
     buffers: HashMap<usize, Arc<Vec<u8>>>,
+    buffer_views: HashMap<usize, Arc<Vec<u8>>>,
     accessors: HashMap<usize, BufferAttribute>,
     materials: HashMap<usize, Arc<SourceMaterial>>,
     default_material: Arc<SourceMaterial>,
@@ -562,12 +610,15 @@ pub fn load_gltf(
     let mut parser = Parser {
         json: &json,
         body: if binary { body } else { None },
+        binary,
         path: extract_url_base(url),
         fetch,
         unlit: named(used, "KHR_materials_unlit"),
         meshopt_required: named(required, "EXT_meshopt_compression"),
+        basisu_required: named(required, "KHR_texture_basisu"),
         names: NodeNames::default(),
         buffers: HashMap::new(),
+        buffer_views: HashMap::new(),
         accessors: HashMap::new(),
         materials: HashMap::new(),
         default_material: Arc::new(SourceMaterial::white()),
@@ -649,20 +700,14 @@ impl Parser<'_> {
             };
             scene_names.push(name);
             for id in items(prop(scene, "nodes")) {
-                self.visit(id)?;
+                self.visit(id, 1)?;
             }
         }
         for animation in self.defs("animations").to_vec() {
-            for channel in items(prop(&animation, "channels")) {
-                if let Some(target) = prop(channel, "target")
-                    && let Some(node) = defined(prop(target, "node"))
-                {
-                    self.visit(node)?;
-                }
-            }
+            self.load_animation(&animation)?;
         }
         for i in 0..self.defs("cameras").len() {
-            self.load_camera(i)?;
+            self.load_camera(i, false)?;
         }
         for mesh in self.mesh_order.clone() {
             let template = self.load_mesh(mesh)?;
@@ -697,6 +742,7 @@ impl Parser<'_> {
             Some(0)
         };
         match index.and_then(|i| roots.get(i)) {
+            Some(&scene) if hierarchy_depth(&graph, scene) > MAX_DEPTH + 1 => too_deep(),
             Some(&scene) => Ok(GltfScene { graph, scene }),
             None => reject("TypeError: gltf.scene is undefined"),
         }
@@ -706,7 +752,10 @@ impl Parser<'_> {
         require(self.defs("nodes").get(index), "nodeDef")
     }
 
-    fn visit(&mut self, id: &JsValue) -> Result<()> {
+    fn visit(&mut self, id: &JsValue, depth: usize) -> Result<()> {
+        if depth > MAX_DEPTH {
+            return too_deep();
+        }
         let Some(index) = index_of(id) else {
             return reject("TypeError: nodeDef is undefined");
         };
@@ -744,13 +793,13 @@ impl Parser<'_> {
             let Some(camera) = index_of(camera) else {
                 return reject("TypeError: cameraDef is undefined");
             };
-            self.load_camera(camera)?;
+            self.load_camera(camera, true)?;
         }
         if defined(prop(&def, "skin")).is_some() {
             return unmodeled("skins");
         }
         for child in items(prop(&def, "children")).to_vec() {
-            self.visit(&child)?;
+            self.visit(&child, depth + 1)?;
         }
         Ok(())
     }
@@ -763,11 +812,7 @@ impl Parser<'_> {
         }
         self.mesh_order.push(index);
         let def = require(self.defs("meshes").get(index), "meshDef")?.clone();
-        let primitives = match prop(&def, "primitives") {
-            Some(JsValue::Array(p)) => p.clone(),
-            _ => return reject("TypeError: primitives is not iterable"),
-        };
-        for primitive in &primitives {
+        for primitive in &primitives_of(&def)? {
             if let Some(material) = defined(prop(primitive, "material")) {
                 self.load_material(material)?;
             }
@@ -775,25 +820,43 @@ impl Parser<'_> {
         Ok(())
     }
 
-    fn load_camera(&mut self, index: usize) -> Result<()> {
+    /// `loadCamera`. Without parameters it returns `undefined`, and with an unknown type it
+    /// makes no camera; only a node's `.then` on that, or naming it, then throws.
+    fn load_camera(&mut self, index: usize, from_node: bool) -> Result<()> {
         if self.cameras.contains_key(&index) {
             return Ok(());
         }
-        let def = require(self.defs("cameras").get(index), "cameraDef")?.clone();
+        let def = match self.defs("cameras").get(index) {
+            None | Some(JsValue::Null) => return reject("TypeError: cameraDef is undefined"),
+            Some(def) => def.clone(),
+        };
         let kind = prop(&def, "type");
         let params = match kind {
             Some(JsValue::String(s)) => prop(&def, &s.to_string_lossy()),
             _ => None,
         };
         if !truthy(params) {
-            return reject("TypeError: camera dependency is not a promise");
+            return if from_node {
+                reject("TypeError: Cannot read properties of undefined (reading 'then')")
+            } else {
+                Ok(())
+            };
         }
         let type_name = match kind {
             Some(JsValue::String(s)) if *s == JsString::from("perspective") => "PerspectiveCamera",
             Some(JsValue::String(s)) if *s == JsString::from("orthographic") => {
                 "OrthographicCamera"
             }
-            _ => return reject("TypeError: camera is undefined"),
+            _ if from_node
+                || truthy(prop(&def, "name"))
+                || matches!(
+                    prop(&def, "extras"),
+                    Some(JsValue::Object(_) | JsValue::Array(_) | JsValue::Null)
+                ) =>
+            {
+                return reject("TypeError: camera is undefined");
+            }
+            _ => return Ok(()),
         };
         let name = if truthy(prop(&def, "name")) {
             self.names.unique(&name_arg(prop(&def, "name"))?)
@@ -854,15 +917,36 @@ impl Parser<'_> {
             for key in ["normalTexture", "occlusionTexture", "emissiveTexture"] {
                 self.check_texture(prop(&def, key))?;
             }
+            if matches!(prop(&def, "emissiveFactor"), Some(JsValue::Null)) {
+                return reject("TypeError: Cannot read properties of null (reading '0')");
+            }
+            for (name, textures) in MATERIAL_EXTENSION_TEXTURES {
+                let Some(extension) = extensions
+                    .and_then(|e| prop(e, name))
+                    .filter(|v| truthy(Some(v)))
+                else {
+                    continue;
+                };
+                for key in *textures {
+                    self.check_texture(prop(extension, key))?;
+                }
+                if *name == "KHR_materials_sheen"
+                    && matches!(prop(extension, "sheenColorFactor"), Some(JsValue::Null))
+                {
+                    return reject("TypeError: Cannot read properties of null (reading '0')");
+                }
+            }
         }
         let material = Arc::new(material);
         self.materials.insert(index, material.clone());
         Ok(material)
     }
 
-    /// `assignTexture` reaches `json.textures[i].source` and `json.images[source]` before any
-    /// promise; a texture that then fails to decode only becomes `null`, and the port never
-    /// decodes texture images since `optimizeGeometries` drops UVs.
+    /// The synchronous part of `assignTexture`, whose throws reject the load. A texture that
+    /// then fails to load only becomes `null`, so the port never decodes texture images:
+    /// `optimizeGeometries` replaces every material and drops UVs. The texture plugins run first:
+    /// KTX2 needs a loader nobody sets, and the WebP and AVIF probes construct an `Image`, which
+    /// a worker does not have, so their rejection reaches the load.
     fn check_texture(&self, map: Option<&JsValue>) -> Result<()> {
         let Some(map) = defined(map) else {
             return Ok(());
@@ -874,14 +958,68 @@ impl Parser<'_> {
         let Some(texture @ JsValue::Object(_)) = texture else {
             return reject("TypeError: textureDef is undefined");
         };
+        let extensions = prop(texture, "extensions").filter(|v| truthy(Some(v)));
+        let has = |name: &str| extensions.is_some_and(|e| truthy(prop(e, name)));
+        if has("KHR_texture_basisu") && self.basisu_required {
+            return reject(
+                "THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures",
+            );
+        }
+        if has("EXT_texture_webp") || has("EXT_texture_avif") {
+            return reject("ReferenceError: Image is not defined");
+        }
         let image = match (prop(texture, "source"), prop(self.json, "images")) {
             (Some(source), images @ Some(_)) => element(images, source),
             _ => None,
         };
-        match image {
-            Some(JsValue::Object(_)) => Ok(()),
-            _ => reject("TypeError: sourceDef is undefined"),
+        let Some(image @ JsValue::Object(_)) = image else {
+            return reject("TypeError: sourceDef is undefined");
+        };
+        match (
+            defined(prop(image, "bufferView")),
+            defined(prop(image, "uri")),
+        ) {
+            (Some(view), _) => self.check_buffer_view(view),
+            (None, Some(_)) => Ok(()),
+            (None, None) => reject("THREE.GLTFLoader: Image is missing URI and bufferView"),
         }
+    }
+
+    /// The synchronous part of `loadBuffer`.
+    fn check_buffer(&self, index: Option<&JsValue>) -> Result<()> {
+        let index = index.and_then(index_of);
+        let def = require(index.and_then(|i| self.defs("buffers").get(i)), "bufferDef")?;
+        if let Some(t) = prop(def, "type")
+            && truthy(Some(t))
+            && *t != JsValue::string("arraybuffer")
+        {
+            return reject("THREE.GLTFLoader: buffer type is not supported.");
+        }
+        if prop(def, "uri").is_none_or(JsValue::is_undefined) && index == Some(0) && !self.binary {
+            return reject("TypeError: Cannot read properties of undefined (reading 'body')");
+        }
+        Ok(())
+    }
+
+    /// The synchronous part of `getDependency('bufferView')`: the meshopt plugin, then
+    /// `loadBufferView`.
+    fn check_buffer_view(&self, index: &JsValue) -> Result<()> {
+        let def = require(
+            index_of(index).and_then(|i| self.defs("bufferViews").get(i)),
+            "bufferViewDef",
+        )?;
+        if let Some(extensions) = prop(def, "extensions")
+            && let Some(meshopt) = prop(extensions, "EXT_meshopt_compression")
+            && truthy(Some(meshopt))
+        {
+            self.check_buffer(prop(meshopt, "buffer"))?;
+            if self.meshopt_required {
+                return reject(
+                    "THREE.GLTFLoader: setMeshoptDecoder must be called before loading compressed files",
+                );
+            }
+        }
+        self.check_buffer(defined(prop(def, "buffer")))
     }
 
     fn load_buffer(&mut self, index: usize) -> Result<Arc<Vec<u8>>> {
@@ -897,8 +1035,11 @@ impl Parser<'_> {
         }
         let uri = prop(&def, "uri").cloned().unwrap_or_default();
         let bytes = if uri.is_undefined() && index == 0 {
-            match &self.body {
-                Some(body) => body.clone(),
+            if !self.binary {
+                return reject("TypeError: Cannot read properties of undefined (reading 'body')");
+            }
+            match self.body.take() {
+                Some(body) => body,
                 None => {
                     return reject("TypeError: Cannot read properties of null (reading 'slice')");
                 }
@@ -930,19 +1071,15 @@ impl Parser<'_> {
         Ok(bytes)
     }
 
-    fn load_buffer_view(&mut self, index: &JsValue) -> Result<Vec<u8>> {
+    fn load_buffer_view(&mut self, index: &JsValue) -> Result<Arc<Vec<u8>>> {
         let Some(index) = index_of(index) else {
             return reject("TypeError: bufferViewDef is undefined");
         };
-        let def = require(self.defs("bufferViews").get(index), "bufferViewDef")?.clone();
-        if let Some(extensions) = prop(&def, "extensions")
-            && truthy(prop(extensions, "EXT_meshopt_compression"))
-            && self.meshopt_required
-        {
-            return reject(
-                "THREE.GLTFLoader: setMeshoptDecoder must be called before loading compressed files",
-            );
+        if let Some(view) = self.buffer_views.get(&index) {
+            return Ok(view.clone());
         }
+        self.check_buffer_view(&JsValue::Number(index as f64))?;
+        let def = require(self.defs("bufferViews").get(index), "bufferViewDef")?.clone();
         let Some(buffer) = defined(prop(&def, "buffer")).and_then(index_of) else {
             return reject("TypeError: bufferDef is undefined");
         };
@@ -950,11 +1087,13 @@ impl Parser<'_> {
         let or_zero = |v: Option<&JsValue>| if truthy(v) { to_number(v) } else { 0.0 };
         let byte_length = or_zero(prop(&def, "byteLength"));
         let byte_offset = or_zero(prop(&def, "byteOffset"));
-        Ok(slice_buffer(
+        let view = Arc::new(slice_buffer(
             &buffer,
             byte_offset,
             byte_offset + byte_length,
-        ))
+        ));
+        self.buffer_views.insert(index, view.clone());
+        Ok(view)
     }
 
     fn load_accessor(&mut self, index_value: &JsValue) -> Result<BufferAttribute> {
@@ -1105,21 +1244,123 @@ impl Parser<'_> {
                 let attribute = self.load_accessor(accessor)?;
                 geometry.set_attribute(&name, attribute);
             }
-        } else if !matches!(
+        } else if matches!(
             prop(primitive, "attributes"),
             None | Some(JsValue::Undefined | JsValue::Null)
         ) {
+            return reject("TypeError: Cannot convert undefined or null to object");
+        } else {
             return unmodeled("primitive attributes that are not an object");
         }
+        self.check_bounds(primitive)?;
         if let Some(indices) = defined(prop(primitive, "indices")) {
             geometry.index = Some(self.load_accessor(indices)?);
         }
         Ok(geometry)
     }
 
+    /// `computeBounds`, which reads the POSITION accessor's `min` and `max` and throws on a null
+    /// one or on a normalized component type `getNormalizedComponentScale` does not know.
+    fn check_bounds(&self, primitive: &JsValue) -> Result<()> {
+        let Some(position) = prop(primitive, "attributes")
+            .and_then(|a| defined(prop(a, "POSITION")))
+            .and_then(index_of)
+        else {
+            return Ok(());
+        };
+        let Some(accessor) = self.defs("accessors").get(position) else {
+            return Ok(());
+        };
+        let (Some(min), Some(max)) = (
+            defined(prop(accessor, "min")),
+            defined(prop(accessor, "max")),
+        ) else {
+            return Ok(());
+        };
+        if matches!(min, JsValue::Null) || matches!(max, JsValue::Null) {
+            return reject("TypeError: Cannot read properties of null (reading '0')");
+        }
+        if truthy(prop(accessor, "normalized"))
+            && !matches!(
+                component_kind(prop(accessor, "componentType")),
+                Ok(ArrayKind::Int8 | ArrayKind::Uint8 | ArrayKind::Int16 | ArrayKind::Uint16)
+            )
+        {
+            return reject("THREE.GLTFLoader: Unsupported normalized accessor component type.");
+        }
+        Ok(())
+    }
+
+    /// `loadAnimation`: its target nodes load (and take their names) in channel order, and the
+    /// tracks it builds afterwards throw on an empty time accessor or a normalized output that
+    /// `_getArrayFromAccessor` cannot scale.
+    fn load_animation(&mut self, def: &JsValue) -> Result<()> {
+        let channels = match prop(def, "channels") {
+            _ if matches!(def, JsValue::Null) => {
+                return reject("TypeError: Cannot read properties of null (reading 'name')");
+            }
+            Some(JsValue::Array(c)) => c.clone(),
+            None | Some(JsValue::Undefined | JsValue::Null) => {
+                return reject("TypeError: Cannot read properties of undefined (reading 'length')");
+            }
+            Some(_) => return unmodeled("animation channels that are not an array"),
+        };
+        let samplers = prop(def, "samplers");
+        let parameters = defined(prop(def, "parameters"));
+        let mut tracks = Vec::new();
+        for channel in &channels {
+            let sampler = match (channel, samplers) {
+                (JsValue::Null, _) | (_, None | Some(JsValue::Undefined | JsValue::Null)) => None,
+                (channel, samplers) => element(
+                    samplers,
+                    prop(channel, "sampler").unwrap_or(&JsValue::Undefined),
+                ),
+            };
+            let target = prop(channel, "target");
+            if matches!(target, None | Some(JsValue::Undefined | JsValue::Null))
+                || matches!(sampler, None | Some(JsValue::Undefined | JsValue::Null))
+                || matches!(parameters, Some(JsValue::Null))
+            {
+                return reject("TypeError: Cannot read properties of undefined");
+            }
+            let sampler = sampler.expect("checked above");
+            let accessor = |key: &str| {
+                let reference = prop(sampler, key).unwrap_or(&JsValue::Undefined);
+                match parameters {
+                    Some(parameters) => element(Some(parameters), reference)
+                        .cloned()
+                        .unwrap_or_default(),
+                    None => reference.clone(),
+                }
+            };
+            let (input, output) = (accessor("input"), accessor("output"));
+            let Some(node) = target.and_then(|t| defined(prop(t, "node"))) else {
+                continue;
+            };
+            self.visit(node, 1)?;
+            tracks.push((input, output));
+        }
+        for (input, output) in tracks {
+            let times = self.load_accessor(&input)?;
+            let values = self.load_accessor(&output)?;
+            if times.array.is_empty() {
+                return reject("THREE.KeyframeTrack: no keyframes in track");
+            }
+            if values.normalized
+                && !matches!(
+                    values.array.kind(),
+                    ArrayKind::Int8 | ArrayKind::Uint8 | ArrayKind::Int16 | ArrayKind::Uint16
+                )
+            {
+                return reject("THREE.GLTFLoader: Unsupported normalized accessor component type.");
+            }
+        }
+        Ok(())
+    }
+
     fn load_mesh(&mut self, index: usize) -> Result<MeshTemplate> {
         let def = require(self.defs("meshes").get(index), "meshDef")?.clone();
-        let primitives = items(prop(&def, "primitives")).to_vec();
+        let primitives = primitives_of(&def)?;
         let mut materials = Vec::new();
         for primitive in &primitives {
             materials.push(match defined(prop(primitive, "material")) {
@@ -1273,6 +1514,25 @@ impl Parser<'_> {
         *n += 1;
         Some(suffix)
     }
+}
+
+/// Upstream recurses through the node tree (`loadNode`, `traverse`, `updateWorldMatrix`), and
+/// its worker hits V8's stack limit somewhere past 4000 levels, which no asset comes near. The
+/// port refuses deeper trees instead of modeling that limit, and so bounds its own recursion.
+const MAX_DEPTH: usize = 4096;
+
+fn too_deep<T>() -> Result<T> {
+    unmodeled(format!("a node hierarchy deeper than {MAX_DEPTH} levels"))
+}
+
+fn hierarchy_depth(graph: &SceneGraph, root: ObjectId) -> usize {
+    let mut deepest = 0;
+    let mut stack = vec![(root, 1)];
+    while let Some((id, depth)) = stack.pop() {
+        deepest = deepest.max(depth);
+        stack.extend(graph.node(id).children().iter().map(|&c| (c, depth + 1)));
+    }
+    deepest
 }
 
 fn add_checked(graph: &mut SceneGraph, parent: ObjectId, child: ObjectId) -> Result<()> {

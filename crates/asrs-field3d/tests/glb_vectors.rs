@@ -404,3 +404,39 @@ fn load_job_matches_direct_load_and_converts_for_the_renderer() {
         glb::spawn_load_robot(config, false, options, Arc::new(glb::read_file_url), || {}).wait();
     assert!(matches!(failed, Err(glb::LoadError::Fetch(_))));
 }
+
+#[test]
+fn load_job_refuses_deep_trees_and_survives_panics() {
+    let chain = |depth: usize| -> Vec<u8> {
+        let nodes: Vec<String> = (0..depth)
+            .map(|i| match i + 1 < depth {
+                true => format!(r#"{{"name":"n{i}","children":[{}]}}"#, i + 1),
+                false => format!(r#"{{"name":"n{i}","mesh":0}}"#),
+            })
+            .collect();
+        format!(
+            r#"{{"asset":{{"version":"2.0"}},"scenes":[{{"nodes":[0]}}],"nodes":[{}],"meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"NORMAL":0}}}}]}}],"accessors":[{{"componentType":5126,"count":3,"type":"VEC3"}}]}}"#,
+            nodes.join(",")
+        )
+        .into_bytes()
+    };
+    let load = |depth: usize| {
+        let data = chain(depth);
+        glb::LoadJob::spawn(
+            move || {
+                let scene = glb::load_gltf(&data, &JsString::from("/a/model.glb"), &|_| None)?;
+                Ok(scene.graph.descendants(scene.scene).len())
+            },
+            || {},
+        )
+        .wait()
+    };
+    assert_eq!(load(4096), Ok(4097));
+    assert!(matches!(
+        load(4097),
+        Err(glb::LoadError::Gltf(glb::GltfError::Unmodeled(_)))
+    ));
+
+    let panicked = glb::LoadJob::<()>::spawn(|| panic!("boom"), || {}).wait();
+    assert_eq!(panicked, Err(glb::LoadError::Panic("boom".to_owned())));
+}

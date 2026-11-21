@@ -591,5 +591,67 @@ export function syntheticCases(): AssetCase[] {
   }
   cases.push(robot("error/missing-component", [["model.glb", hexOf(valid)]]));
   cases[cases.length - 1].config = JSON.stringify({ ...ROBOT, components: [{ zeroedRotations: [], zeroedPosition: [0, 0, 0] }] });
+  const variant = (name: string, edit: (b: Builder) => void) => {
+    const b = simpleBuilder();
+    edit(b);
+    cases.push(robot(name, [["model.glb", hexOf(b.glb())]]));
+  };
+  const textured = (b: Builder, texture: object, image: object = { bufferView: b.view(Buffer.from("not an image")), mimeType: "image/png" }) => {
+    b.json.meshes[0].primitives[0].material = b.material({ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } });
+    b.json.textures = [{ source: 0, ...texture }];
+    b.json.images = [image];
+  };
+  variant("error/no-attributes", (b) => b.json.meshes[0].primitives.push({}));
+  variant("primitives-object", (b) => {
+    b.json.meshes.push({ name: "odd", primitives: { 0: b.json.meshes[0].primitives[0] } });
+    b.json.scenes[0].nodes.push(b.node({ name: "odd", mesh: 1 }));
+  });
+  for (const ext of ["EXT_texture_webp", "EXT_texture_avif"]) {
+    variant(`error/texture-${ext}`, (b) => {
+      textured(b, { extensions: { [ext]: { source: 0 } } });
+      b.json.extensionsUsed = [ext];
+    });
+  }
+  variant("texture-basisu-optional", (b) => {
+    textured(b, { extensions: { KHR_texture_basisu: { source: 0 } } });
+    b.json.extensionsUsed = ["KHR_texture_basisu"];
+  });
+  variant("error/texture-basisu-required", (b) => {
+    textured(b, { extensions: { KHR_texture_basisu: { source: 0 } } });
+    b.json.extensionsUsed = ["KHR_texture_basisu"];
+    b.json.extensionsRequired = ["KHR_texture_basisu"];
+  });
+  variant("error/image-no-source", (b) => textured(b, {}, { mimeType: "image/png" }));
+  variant("error/image-bad-view", (b) => textured(b, {}, { bufferView: 99, mimeType: "image/png" }));
+  variant("image-bad-uri", (b) => textured(b, {}, { uri: "missing.png" }));
+  variant("camera-unused-no-params", (b) => (b.json.cameras = [{ type: "perspective" }]));
+  variant("camera-unused-unknown-type", (b) => (b.json.cameras = [{ type: "fisheye", fisheye: { yfov: 1 } }]));
+  variant("error/camera-node-unknown-type", (b) => {
+    b.json.cameras = [{ type: "fisheye", fisheye: { yfov: 1 } }];
+    b.json.scenes[0].nodes.push(b.node({ name: "eye", camera: 0 }));
+  });
+  variant("error/emissive-null", (b) => (b.json.meshes[0].primitives[0].material = b.material({ emissiveFactor: null })));
+  variant("error/sheen-null", (b) => {
+    b.json.meshes[0].primitives[0].material = b.material({ extensions: { KHR_materials_sheen: { sheenColorFactor: null } } });
+    b.json.extensionsUsed = ["KHR_materials_sheen"];
+  });
+  variant("error/clearcoat-texture", (b) => {
+    b.json.meshes[0].primitives[0].material = b.material({ extensions: { KHR_materials_clearcoat: { clearcoatTexture: { index: 5 } } } });
+    b.json.extensionsUsed = ["KHR_materials_clearcoat"];
+  });
+  const animated = (b: Builder, sampler: object, extra: object = {}) => {
+    const times = b.accessor(FLOAT, "SCALAR", [0, 1]);
+    const values = b.accessor(FLOAT, "VEC3", [0, 0, 0, 1, 2, 3]);
+    b.json.animations = [{ channels: [{ sampler: 0, target: { node: 0, path: "translation" } }], samplers: [{ input: times, output: values, ...sampler }], ...extra }];
+  };
+  variant("error/deep-hierarchy", (b) => {
+    let node = b.json.scenes[0].nodes[0];
+    for (let i = 0; i < 8000; i++) node = b.node({ name: `level ${i}`, children: [node] });
+    b.json.scenes[0].nodes = [node];
+  });
+  variant("animation", (b) => animated(b, {}));
+  variant("error/animation-no-sampler", (b) => animated(b, {}, { samplers: [] }));
+  variant("error/animation-bad-accessor", (b) => animated(b, { input: 99 }));
+  variant("error/animation-empty-times", (b) => animated(b, { input: b.raw({ componentType: FLOAT, count: 0, type: "SCALAR" }) }));
   return cases;
 }
