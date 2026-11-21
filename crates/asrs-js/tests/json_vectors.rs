@@ -28,6 +28,50 @@ fn json_invalid() {
     check_records("json/invalid", check_doc);
 }
 
+#[test]
+fn json_deep() {
+    check_records("json/deep", check_deep);
+}
+
+/// Deep records carry `shape` and `depth` rather than a doc (which would be huge); the port
+/// rebuilds the input and checks the recorded outcome kind: `ok: true` or a `throw` value.
+fn check_deep(record: &Record) -> Result<(), String> {
+    let str_field = |key: &str| {
+        record
+            .field(key)
+            .and_then(Json::as_str)
+            .ok_or_else(|| format!("record has no {key}"))
+    };
+    let depth = record
+        .field("depth")
+        .and_then(Json::as_f64)
+        .ok_or("record has no depth")? as usize;
+    let doc = match str_field("shape")?.to_string_lossy().as_str() {
+        "array" => "[".repeat(depth) + &"]".repeat(depth),
+        "object" => "{\"a\":".repeat(depth) + "1" + &"}".repeat(depth),
+        other => return Err(format!("unknown shape {other}")),
+    };
+    let outcome = |result: Result<(), json::JsonError>| match result {
+        Ok(()) if record.field("ok").is_some() => Ok(()),
+        Ok(()) => Err("expected a throw, got ok".to_owned()),
+        Err(e) => expect_value(record, "throw", &error_value(&e)),
+    };
+    let parsed = json::parse_str(&doc);
+    match str_field("deep")?.to_string_lossy().as_str() {
+        "parse" => outcome(parsed.map(|_| ())),
+        "stringify" => {
+            let parsed = parsed.map_err(|e| e.to_string())?;
+            if record.field("gap").is_some() {
+                outcome(json::stringify_gap(&parsed, "  ").map(|_| ()))
+            } else {
+                outcome(json::stringify(&parsed).map(|_| ()))
+            }
+        }
+        "jsonCopy" => outcome(parsed.and_then(|v| json::json_copy(&v)).map(|_| ())),
+        other => Err(format!("unknown deep op {other}")),
+    }
+}
+
 fn expect_value(record: &Record, key: &str, actual: &Value) -> Result<(), String> {
     let json = record
         .field(key)

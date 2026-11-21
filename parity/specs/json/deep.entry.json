@@ -1,0 +1,4 @@
+{
+  "entry": "genJson",
+  "args": ["deep", "20000", "0"]
+}

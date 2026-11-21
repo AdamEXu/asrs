@@ -13,6 +13,9 @@ import { toTree } from "./cve1";
 //     fn records for JSON.stringify(value, null, space) and shared/util:jsonCopy(value) over
 //     values JSON.parse cannot produce: undefined, NaN, infinities, -0, dates, Uint8Arrays,
 //     BigInts, holes.
+//   genJson deep <count> <seed>
+//     {"deep":"parse"|"stringify"|"jsonCopy","shape":"array"|"object","depth":<count>,
+//      "ok":true} or {"throw":<CVE-1 error>}; "gap":"  " marks the bounded stringify.
 
 const [mode, countArg, seedArg] = process.argv.slice(2);
 const count = Number(countArg);
@@ -351,6 +354,34 @@ function randomValue(depth: number): unknown {
 
 const SPACES: unknown[] = [undefined, null, 2, 2, 2, 4, 0, -3, 1, 10, 11, 3.7, Infinity, NaN, "\t", "--", "", "0123456789abc"];
 
+function genDeep() {
+  // V8's parser and its two-undefined-argument stringify are iterative (any depth works);
+  // its general stringify path recurses and throws RangeError. toTree cannot encode a deep
+  // value, so only the outcome kind is recorded and the port rebuilds the input itself.
+  const depth = count || 20000;
+  const cases = [
+    ["array", "[".repeat(depth) + "]".repeat(depth)],
+    ["object", '{"a":'.repeat(depth) + "1" + "}".repeat(depth)]
+  ] as const;
+  const outcome = (r: { ok: unknown } | { throw: unknown }) =>
+    "ok" in r ? { ok: true } : { throw: tree(r.throw) };
+  for (const [shape, doc] of cases) {
+    out({ deep: "parse", shape, depth, ...outcome(attempt(() => JSON.parse(doc))) });
+  }
+  for (const [shape, doc] of cases) {
+    const value = JSON.parse(doc);
+    out({ deep: "stringify", shape, depth, ...outcome(attempt(() => JSON.stringify(value))) });
+    out({
+      deep: "stringify",
+      shape,
+      depth,
+      gap: "  ",
+      ...outcome(attempt(() => JSON.stringify(value, null, 2)))
+    });
+    out({ deep: "jsonCopy", shape, depth, ...outcome(attempt(() => jsonCopy(value))) });
+  }
+}
+
 function genValues() {
   for (let i = 0; i < count; i++) {
     const value = randomValue(below(5));
@@ -371,6 +402,9 @@ switch (mode) {
   case "values":
     genValues();
     break;
+  case "deep":
+    genDeep();
+    break;
   default:
-    throw new Error("usage: genJson docs|invalid|values <count> <seed>");
+    throw new Error("usage: genJson docs|invalid|values|deep <count> <seed>");
 }
