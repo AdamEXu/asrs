@@ -104,12 +104,12 @@ fn shift(offset: &mut i64, by: i64) -> i64 {
     at
 }
 
-/// A `LogError` is a JS throw (`Proto`), an upstream hang (`NeverCompletes`) or an unmodeled
+/// A `LogError` is a JS throw (`Proto`, `StackOverflow`), an upstream hang (`NeverCompletes`) or an unmodeled
 /// continuation; inside `decode` only the first is caught.
 fn caught(result: Result<(), LogError>) -> Result<(), Fail> {
     match result {
         Ok(()) => Ok(()),
-        Err(LogError::Proto(_)) => Err(Fail::Js),
+        Err(LogError::Proto(_) | LogError::StackOverflow) => Err(Fail::Js),
         Err(LogError::NeverCompletes) => Err(Fail::Abort(Abort::NeverReturns)),
         Err(LogError::Unmodeled(what)) => Err(Fail::Abort(Abort::Unmodeled(what))),
     }
@@ -427,7 +427,7 @@ impl RlogDecoder {
                     .decode(value)
                     .expect("nonfatal UTF-8 never errors");
                 let key = Self::effective_key(log, key, LoggableType::String)?;
-                log.put_json(&key, timestamp, string);
+                caught(log.put_json(&key, timestamp, string))?;
             }
             Some("msgpack") => {
                 let key = Self::effective_key(log, key, LoggableType::Raw)?;
@@ -478,7 +478,8 @@ impl RlogDecoder {
                         match parser(log, &key, timestamp, value) {
                             Ok(())
                             | Err(SchemaError::Threw)
-                            | Err(SchemaError::Log(LogError::Proto(_))) => {}
+                            | Err(SchemaError::Log(LogError::Proto(_) | LogError::StackOverflow)) =>
+                                {}
                             Err(SchemaError::Log(LogError::NeverCompletes)) => {
                                 return Err(Fail::Abort(Abort::NeverReturns));
                             }

@@ -364,7 +364,7 @@ impl<'a> RawDecoder<'a> {
                     } => {
                         if *want_key {
                             *key = Some(match object {
-                                JsValue::String(s) => s,
+                                v @ JsValue::String(_) => v.into_string().unwrap(),
                                 JsValue::Number(x) => JsString::from(number::to_string(x)),
                                 other => {
                                     return Err(decode_error(format!(
@@ -458,9 +458,10 @@ impl<'a> RawDecoder<'a> {
 
     fn decode_extension(&mut self, size: usize, head_offset: usize) -> Result<JsValue, JsError> {
         let ext_type = self.read_i8_at(self.pos + head_offset)?;
-        let JsValue::Bytes(data) = self.decode_binary(size, head_offset + 1)? else {
-            unreachable!()
-        };
+        let data = self
+            .decode_binary(size, head_offset + 1)?
+            .into_bytes()
+            .unwrap();
         if ext_type != -1 {
             return Ok(JsValue::ExtData(ext_type, data));
         }

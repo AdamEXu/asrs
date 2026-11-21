@@ -20,7 +20,11 @@ pub fn parse(bytes: &[u8]) -> Result<JsValue, JsError> {
 
 /// `jsonfile.writeFileSync(file, value)`: compact `JSON.stringify` plus `"\n"`.
 pub fn stringify(value: &JsValue) -> Result<Vec<u8>, JsError> {
-    stringify_gap(value, "")
+    let text = json::stringify(value).map_err(|e| JsError {
+        name: e.name,
+        message: e.message.to_string_lossy(),
+    })?;
+    append_newline(text)
 }
 
 /// `jsonfile.writeFile(file, value, { spaces: 2 })`.
@@ -33,6 +37,10 @@ fn stringify_gap(value: &JsValue, gap: &str) -> Result<Vec<u8>, JsError> {
         name: e.name,
         message: e.message.to_string_lossy(),
     })?;
+    append_newline(text)
+}
+
+fn append_newline(text: Option<String>) -> Result<Vec<u8>, JsError> {
     match text {
         Some(mut text) => {
             text.push('\n');

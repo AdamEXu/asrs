@@ -600,7 +600,7 @@ pub fn log_op(
         "putNumber" => log.put_number(&key, num(0), num(1)),
         "putBoolean" => log.put_boolean(&key, num(0), args[1].as_bool().expect("bool")),
         "putString" => log.put_string(&key, num(0), args[1].as_str().expect("string").clone()),
-        "putJSON" => log.put_json(&key, num(0), args[1].as_str().expect("string").clone()),
+        "putJSON" => log.put_json(&key, num(0), args[1].as_str().expect("string").clone())?,
         "putRaw" => match &args[1] {
             asrs_js::value::JsValue::Bytes(b) => log.put_raw(&key, num(0), b.clone())?,
             other => panic!("putRaw {other:?}"),
