@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use asrs_js::json;
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue};
@@ -13,7 +14,6 @@ use asrs_log::log::Log;
 use asrs_log::units;
 
 use super::config;
-use crate::js;
 use crate::live_data_source::{
     LiveDataSourceBase, LiveDataSourceStatus, LiveLog, LivePreferences, OutputCallback,
     StatusCallback,
@@ -30,8 +30,40 @@ fn js(text: &str) -> JsString {
     JsString::from(text)
 }
 
-fn str_eq(value: &JsValue, text: &str) -> bool {
-    matches!(value, JsValue::String(s) if s == &js(text))
+/// `BasicVarType`: the config var types `parseConfigState` registers as tunable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BasicVarType {
+    String,
+    Boolean,
+    Int,
+    Long,
+    Float,
+    Double,
+}
+
+impl BasicVarType {
+    fn parse(name: &str) -> Option<Self> {
+        Some(match name {
+            "string" => BasicVarType::String,
+            "boolean" => BasicVarType::Boolean,
+            "int" => BasicVarType::Int,
+            "long" => BasicVarType::Long,
+            "float" => BasicVarType::Float,
+            "double" => BasicVarType::Double,
+            _ => return None,
+        })
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            BasicVarType::String => "string",
+            BasicVarType::Boolean => "boolean",
+            BasicVarType::Int => "int",
+            BasicVarType::Long => "long",
+            BasicVarType::Float => "float",
+            BasicVarType::Double => "double",
+        }
+    }
 }
 
 /// The `WebSocket` calls the source makes; every [`Nt4Transport`] satisfies them.
@@ -77,7 +109,7 @@ pub struct FtcSource {
     running: bool,
     config_state: JsValue,
     is_initial_state: bool,
-    tunable_keys_types: HashMap<JsString, JsString>,
+    tunable_keys_types: HashMap<JsString, BasicVarType>,
 }
 
 impl FtcSource {
@@ -207,19 +239,19 @@ impl FtcSource {
 
         if let Some(decoded) = decoded {
             let mut timestamp = cx.clock.now() / 1000.0 - self.live_zero_time.get();
-            if js::has_own(&decoded, &js("configRoot")) {
+            if ops::has_own(&decoded, &js("configRoot"))? {
                 let (state, changed) = config::config_reducer(&self.config_state, &decoded)?;
                 self.config_state = state;
                 self.is_initial_state &= !changed;
-                let root = js::get(&self.config_state, "configRoot")?;
+                let root = ops::get(&self.config_state, "configRoot")?;
                 self.parse_config_state(&root, timestamp, &js("/_Config"), &log_rc)?;
             }
-            if js::has_own(&decoded, &js("telemetry")) {
-                let packets = js::get(&decoded, "telemetry")?;
+            if ops::has_own(&decoded, &js("telemetry"))? {
+                let packets = ops::get(&decoded, "telemetry")?;
                 for packet in for_of(&packets)? {
-                    if js::has_own(&packet, &js("timestamp")) {
+                    if ops::has_own(&packet, &js("timestamp"))? {
                         let mut packet_timestamp =
-                            js::value_to_number(&js::get(&packet, "timestamp")?)? / 1000.0
+                            ops::value_to_number(&ops::get(&packet, "timestamp")?)? / 1000.0
                                 - self.live_zero_time.get();
                         if self.robot_clock_skew == 0.0 {
                             self.robot_clock_skew = timestamp - packet_timestamp;
@@ -227,7 +259,7 @@ impl FtcSource {
                         packet_timestamp += self.robot_clock_skew;
                         timestamp = packet_timestamp;
                     }
-                    if js::has_own(&packet, &js("data")) {
+                    if ops::has_own(&packet, &js("data"))? {
                         if !self.running {
                             self.running = true;
                             log_rc
@@ -235,7 +267,7 @@ impl FtcSource {
                                 .put_boolean(&js("RUNNING"), timestamp, true);
                         }
                         self.log_object(
-                            &js::get(&packet, "data")?,
+                            &ops::get(&packet, "data")?,
                             timestamp,
                             &JsString::new(),
                             &log_rc,
@@ -243,16 +275,16 @@ impl FtcSource {
                     }
                 }
             }
-            if js::has_own(&decoded, &js("status")) {
-                let status = js::get(&decoded, "status")?;
+            if ops::has_own(&decoded, &js("status"))? {
+                let status = ops::get(&decoded, "status")?;
                 self.log_object(&status, timestamp, &js("/_Status/"), &log_rc)?;
-                if js::has_own(&status, &js("activeOpMode"))
-                    && js::has_own(&status, &js("activeOpModeStatus"))
+                if ops::has_own(&status, &js("activeOpMode"))?
+                    && ops::has_own(&status, &js("activeOpModeStatus"))?
                 {
-                    let op_mode = js::get(&status, "activeOpMode")?;
-                    let op_mode_status = js::get(&status, "activeOpModeStatus")?;
-                    self.running =
-                        !str_eq(&op_mode, "$Stop$Robot$") && str_eq(&op_mode_status, "RUNNING");
+                    let op_mode = ops::get(&status, "activeOpMode")?;
+                    let op_mode_status = ops::get(&status, "activeOpModeStatus")?;
+                    self.running = !ops::loose_equals(&op_mode, &JsValue::string("$Stop$Robot$"))
+                        && ops::loose_equals(&op_mode_status, &JsValue::string("RUNNING"));
                     log_rc
                         .borrow_mut()
                         .put_boolean(&js("RUNNING"), timestamp, self.running);
@@ -280,55 +312,45 @@ impl FtcSource {
         path: &JsString,
         log_rc: &LiveLog,
     ) -> Result<(), Thrown> {
-        let state_type = js::get(state, "__type")?;
-        let JsValue::String(type_name) = &state_type else {
+        let JsValue::String(type_name) = ops::get(state, "__type")? else {
             return Ok(());
         };
-        match type_name.to_string_lossy().as_str() {
-            "boolean" => {
-                let value = js::get(state, "__value")?;
-                log_rc.borrow_mut().put_boolean(
-                    path,
-                    timestamp,
-                    matches!(value, JsValue::Bool(true)),
-                );
-                self.tunable_keys_types.insert(path.clone(), js("boolean"));
-            }
-            "double" | "float" | "int" | "long" => {
-                let value = js::get(state, "__value")?;
-                log_rc
-                    .borrow_mut()
-                    .put_number(path, timestamp, to_number(&value));
-                self.tunable_keys_types
-                    .insert(path.clone(), type_name.clone());
-            }
-            "string" => {
-                let value = js::get(state, "__value")?;
-                let text = match &value {
-                    JsValue::String(s) => s.clone(),
-                    _ => JsString::new(),
-                };
-                log_rc.borrow_mut().put_string(path, timestamp, text);
-                self.tunable_keys_types.insert(path.clone(), js("string"));
-            }
-            "custom" => {
-                let value = js::get(state, "__value")?;
-                if !value.is_null() {
-                    for key in js::object_keys(&value)? {
-                        let mut child = path.clone();
-                        child.push_str(&js("/"));
-                        child.push_str(&key);
-                        self.parse_config_state(
-                            &js::get_key(&value, &key)?,
-                            timestamp,
-                            &child,
-                            log_rc,
-                        )?;
-                    }
+        let type_name = type_name.to_string_lossy();
+        if type_name == "custom" {
+            let value = ops::get(state, "__value")?;
+            if !value.is_null() {
+                for key in ops::object_keys(&value)? {
+                    let mut child = path.clone();
+                    child.push_str(&js("/"));
+                    child.push_str(&key);
+                    self.parse_config_state(
+                        &ops::get_key(&value, &key)?,
+                        timestamp,
+                        &child,
+                        log_rc,
+                    )?;
                 }
             }
-            _ => {}
+            return Ok(());
         }
+        let Some(var_type) = BasicVarType::parse(&type_name) else {
+            return Ok(());
+        };
+        let value = ops::get(state, "__value")?;
+        {
+            let mut log = log_rc.borrow_mut();
+            match (var_type, value) {
+                (BasicVarType::Boolean, value) => {
+                    log.put_boolean(path, timestamp, matches!(value, JsValue::Bool(true)));
+                }
+                (BasicVarType::String, JsValue::String(text)) => {
+                    log.put_string(path, timestamp, text);
+                }
+                (BasicVarType::String, _) => log.put_string(path, timestamp, JsString::new()),
+                (_, value) => log.put_number(path, timestamp, to_number(&value)),
+            }
+        }
+        self.tunable_keys_types.insert(path.clone(), var_type);
         Ok(())
     }
 
@@ -341,8 +363,8 @@ impl FtcSource {
     ) -> Result<(), Thrown> {
         let mut log = log_rc.borrow_mut();
         let mut found_poses: Vec<(JsString, ([f64; 2], f64))> = Vec::new();
-        for name in js::own_property_names(object) {
-            let data = js::get_key(object, &name)?;
+        for name in ops::own_property_names(object)? {
+            let data = ops::get_key(object, &name)?;
             let mut key = path.clone();
             key.push_str(&name);
 
@@ -427,7 +449,7 @@ impl FtcSource {
         value: TunedValue,
         cx: &mut FtcContext<'_>,
     ) -> Result<(), Thrown> {
-        let Some(tunable_type) = self.tunable_keys_types.get(key).cloned() else {
+        let Some(&tunable_type) = self.tunable_keys_types.get(key) else {
             return Ok(());
         };
         let parts = key.split(Some(&js("/")), None);
@@ -436,7 +458,7 @@ impl FtcSource {
         if !in_config {
             return Ok(());
         }
-        let diff = config_diff(&parts[2..], &value, &tunable_type);
+        let diff = config_diff(&parts[2..], value, tunable_type);
         let action = JsValue::Object(JsObject::from_iter([
             (JsString::from("type"), JsValue::string("SAVE_CONFIG")),
             (JsString::from("configDiff"), diff),
@@ -455,7 +477,7 @@ impl FtcSource {
     pub fn unpublish(&mut self, _key: &JsString) {}
 }
 
-fn config_diff(path: &[JsString], value: &TunedValue, tunable_type: &JsString) -> JsValue {
+fn config_diff(path: &[JsString], value: TunedValue, tunable_type: BasicVarType) -> JsValue {
     if let Some((first, rest)) = path.split_first() {
         let mut inner = JsObject::new();
         inner.insert(first.clone(), config_diff(rest, value, tunable_type));
@@ -467,13 +489,13 @@ fn config_diff(path: &[JsString], value: &TunedValue, tunable_type: &JsString) -
         JsValue::Object(JsObject::from_iter([
             (
                 JsString::from("__type"),
-                JsValue::String(tunable_type.clone()),
+                JsValue::string(tunable_type.name()),
             ),
             (
                 JsString::from("__value"),
                 match value {
-                    TunedValue::Number(n) => JsValue::Number(*n),
-                    TunedValue::Boolean(b) => JsValue::Bool(*b),
+                    TunedValue::Number(n) => JsValue::Number(n),
+                    TunedValue::Boolean(b) => JsValue::Bool(b),
                 },
             ),
         ]))
@@ -511,7 +533,7 @@ fn for_of(value: &JsValue) -> Result<Vec<JsValue>, Thrown> {
             .collect()),
         other => Err(Thrown::type_error(format!(
             "{} is not iterable",
-            js::to_string(other).to_string_lossy()
+            ops::to_string(other).to_string_lossy()
         ))),
     }
 }
@@ -521,7 +543,7 @@ fn for_of(value: &JsValue) -> Result<Vec<JsValue>, Thrown> {
 fn to_number(value: &JsValue) -> f64 {
     match value {
         JsValue::BigInt(b) => b.to_f64(),
-        other => js::value_to_number(other).unwrap_or(f64::NAN),
+        other => ops::value_to_number(other).unwrap_or(f64::NAN),
     }
 }
 

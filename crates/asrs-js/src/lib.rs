@@ -4,6 +4,7 @@ pub mod color;
 pub mod json;
 pub mod math;
 pub mod number;
+pub mod ops;
 pub mod regex;
 pub mod sort;
 pub mod string;

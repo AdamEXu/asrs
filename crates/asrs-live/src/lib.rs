@@ -4,7 +4,6 @@
 
 pub mod channel;
 pub mod ftc;
-mod js;
 pub mod live_data_source;
 pub mod live_data_tuner;
 pub mod nt4;

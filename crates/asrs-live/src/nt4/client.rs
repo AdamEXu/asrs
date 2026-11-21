@@ -10,6 +10,7 @@
 use asrs_js::json;
 use asrs_js::math;
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
@@ -17,7 +18,6 @@ use asrs_log::msgpack::{self, MultiDecoder};
 use asrs_log::realm::JsRealm;
 
 use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
-use crate::js;
 use crate::thrown::Thrown;
 use crate::timers::{TimerId, TimerQueue};
 
@@ -154,7 +154,7 @@ impl Nt4Subscription {
     }
 
     fn to_subscribe_obj(&self) -> JsValue {
-        js::object([
+        ops::object([
             (
                 "topics",
                 JsValue::Array(self.topics.iter().cloned().map(JsValue::String).collect()),
@@ -162,7 +162,7 @@ impl Nt4Subscription {
             ("subuid", JsValue::Number(self.uid)),
             (
                 "options",
-                js::object([
+                ops::object([
                     ("periodic", JsValue::Number(self.options.periodic)),
                     ("all", JsValue::Bool(self.options.all)),
                     ("topicsonly", JsValue::Bool(self.options.topics_only)),
@@ -535,7 +535,7 @@ impl Nt4Client {
         if self.server_connection_active {
             self.ws_send_json(
                 "unsubscribe",
-                js::object([("subuid", JsValue::Number(sub.uid))]),
+                ops::object([("subuid", JsValue::Number(sub.uid))]),
                 cx,
             )?;
         }
@@ -560,9 +560,9 @@ impl Nt4Client {
         let update = |target: &mut JsValue| -> Result<(), Thrown> {
             for (key, value) in properties.iter() {
                 if value.is_null() {
-                    js::delete_key(target, key)?;
+                    ops::delete_key(target, key)?;
                 } else {
-                    js::set_key(target, key, value.clone())?;
+                    ops::set_key(target, key, value.clone())?;
                 }
             }
             Ok(())
@@ -578,14 +578,14 @@ impl Nt4Client {
         if let Some((_, server)) = self
             .server_topics
             .iter_mut()
-            .find(|(k, _)| js::same_value_zero(k, &key))
+            .find(|(k, _)| ops::same_value_zero(k, &key))
         {
             update(&mut server.properties)?;
         }
         if self.server_connection_active {
             self.ws_send_json(
                 "setproperties",
-                js::object([
+                ops::object([
                     ("name", JsValue::String(topic.clone())),
                     ("update", JsValue::Object(properties.clone())),
                 ]),
@@ -656,7 +656,7 @@ impl Nt4Client {
         };
         let removed = self.published_topics.remove(i);
         if self.server_connection_active {
-            self.ws_send_json("unpublish", js::object([("pubuid", removed.uid)]), cx)?;
+            self.ws_send_json("unpublish", ops::object([("pubuid", removed.uid)]), cx)?;
         }
         Ok(())
     }
@@ -727,7 +727,7 @@ impl Nt4Client {
         cx: &mut Nt4Context<'_>,
     ) -> Result<(), Thrown> {
         let rx_time = Self::client_time_us(cx.clock);
-        let rtt = rx_time - js::value_to_number(client_timestamp)?;
+        let rtt = rx_time - ops::value_to_number(client_timestamp)?;
         self.network_latency_us = rtt / 2.0;
         let server_time_at_rx = server_timestamp + self.network_latency_us;
         self.server_time_offset_us = Some(server_time_at_rx - rx_time);
@@ -743,7 +743,7 @@ impl Nt4Client {
         if let Some(ws) = self.ws
             && cx.net.ws_ready_state(ws) == ReadyState::Open
         {
-            let message = JsValue::Array(vec![js::object([
+            let message = JsValue::Array(vec![ops::object([
                 ("method", JsValue::string(method)),
                 ("params", params),
             ])]);
@@ -841,11 +841,11 @@ impl Nt4Client {
         if msg.type_of() != "object" {
             return Ok(());
         }
-        if !js::has(&msg, "method")? || !js::has(&msg, "params")? {
+        if !ops::has(&msg, "method")? || !ops::has(&msg, "params")? {
             return Ok(());
         }
-        let method = js::get(&msg, "method")?;
-        let params = js::get(&msg, "params")?;
+        let method = ops::get(&msg, "method")?;
+        let params = ops::get(&msg, "params")?;
         let Some(method) = method.as_str() else {
             return Ok(());
         };
@@ -854,10 +854,10 @@ impl Nt4Client {
         }
         match method.to_string_lossy().as_str() {
             "announce" => {
-                let uid = js::get(&params, "id")?;
-                let name = js::get(&params, "name")?;
-                let ty = js::get(&params, "type")?;
-                let properties = js::get(&params, "properties")?;
+                let uid = ops::get(&params, "id")?;
+                let name = ops::get(&params, "name")?;
+                let ty = ops::get(&params, "type")?;
+                let properties = ops::get(&params, "properties")?;
                 let topic = Nt4Topic {
                     uid,
                     name: name.clone(),
@@ -867,7 +867,7 @@ impl Nt4Client {
                 let i = match self
                     .server_topics
                     .iter()
-                    .position(|(k, _)| js::same_value_zero(k, &name))
+                    .position(|(k, _)| ops::same_value_zero(k, &name))
                 {
                     Some(i) => {
                         self.server_topics[i].1 = topic;
@@ -881,11 +881,11 @@ impl Nt4Client {
                 handler.on_topic_announce(&self.server_topics[i].1, cx)
             }
             "unannounce" => {
-                let name = js::get(&params, "name")?;
+                let name = ops::get(&params, "name")?;
                 let Some(i) = self
                     .server_topics
                     .iter()
-                    .position(|(k, _)| js::same_value_zero(k, &name))
+                    .position(|(k, _)| ops::same_value_zero(k, &name))
                 else {
                     return Ok(());
                 };
@@ -893,22 +893,22 @@ impl Nt4Client {
                 handler.on_topic_unannounce(&removed, cx)
             }
             "properties" => {
-                let name = js::get(&params, "name")?;
+                let name = ops::get(&params, "name")?;
                 let Some(i) = self
                     .server_topics
                     .iter()
-                    .position(|(k, _)| js::same_value_zero(k, &name))
+                    .position(|(k, _)| ops::same_value_zero(k, &name))
                 else {
                     return Ok(());
                 };
-                let update = js::get(&params, "update")?;
-                for key in js::object_keys(&update)? {
-                    let value = js::get_key(&update, &key)?;
+                let update = ops::get(&params, "update")?;
+                for key in ops::object_keys(&update)? {
+                    let value = ops::get_key(&update, &key)?;
                     let properties = &mut self.server_topics[i].1.properties;
                     if value.is_null() {
-                        js::delete_key(properties, &key)?;
+                        ops::delete_key(properties, &key)?;
                     } else {
-                        js::set_key(properties, &key, value)?;
+                        ops::set_key(properties, &key, value)?;
                     }
                 }
                 handler.on_topic_properties_update(&self.server_topics[i].1, cx)
@@ -926,10 +926,10 @@ impl Nt4Client {
         let mut multi = MultiDecoder::new(bytes);
         while let Some(unpacked) = multi.next(&mut cx.realm.msgpack_keys, &mut *cx.realm.random) {
             let unpacked = unpacked?;
-            let topic_id = js::index(&unpacked, 0)?;
-            let timestamp_us = js::index(&unpacked, 1)?;
-            let type_idx = js::index(&unpacked, 2)?;
-            let value = js::index(&unpacked, 3)?;
+            let topic_id = ops::index(&unpacked, 0)?;
+            let timestamp_us = ops::index(&unpacked, 1)?;
+            let type_idx = ops::index(&unpacked, 2)?;
+            let value = ops::index(&unpacked, 3)?;
             let (Some(topic_id), Some(timestamp_us), Some(_)) =
                 (topic_id.as_f64(), timestamp_us.as_f64(), type_idx.as_f64())
             else {
@@ -940,7 +940,7 @@ impl Nt4Client {
                 let Some((_, topic)) = self
                     .server_topics
                     .iter()
-                    .find(|(_, t)| js::strict_equals(&t.uid, &id))
+                    .find(|(_, t)| ops::strict_equals(&t.uid, &id))
                 else {
                     return Ok(());
                 };
@@ -1119,7 +1119,7 @@ impl Nt4Client {
 }
 
 fn publish_obj(topic: &Nt4Topic) -> JsValue {
-    js::object([
+    ops::object([
         ("name", topic.name.clone()),
         ("type", topic.ty.clone()),
         ("pubuid", topic.uid.clone()),
