@@ -1,0 +1,413 @@
+//! `asrs-cli export <log file> --options <ExportOptions JSON>`: decodes the file like
+//! `decode`, loads every field the way export's `loadAllFields` does, applies the oracle
+//! session's pre-export skip checks and runs the export port on the resulting `Log`.
+//! Bytes go to `--out` or stdout. Exit 0 when the worker produced output, 3 when it
+//! rejected (or the decode worker never returns), 4 when the run was skipped or the
+//! branch is a later unit's (`wpilog`, `mcap`).
+//!
+//! `asrs-cli export-run --root <dir> --out <dir> --spec <spec.json>` mirrors oracle
+//! `historicalRun`: input paths relative to `--root` on stdin, one per line; each input
+//! is decoded once, then the spec's export matrix runs on it. Outputs land in
+//! `<out>/<input>/export/<name>.<ext>` and one JSON line per input goes to stdout:
+//! `{"input": ..., "outputs": [{"name", "outcome", "file"?}]}` where outcome is "ok",
+//! "failed", "skipped" or "unmodeled" (a branch the port does not have yet).
+
+use std::fs;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+use std::sync::Arc;
+
+use asrs_formats::export::{self, ExportOptions, Format, Sampling};
+use asrs_formats::historical::{UnportedWorker, WorkerName, create_worker};
+use asrs_formats::session::Session;
+use asrs_formats::worker::{Abort, DecodeWorker};
+use asrs_js::json;
+use asrs_js::string::JsString;
+use asrs_js::time::{SetClock, V8MathRandom};
+use asrs_js::value::JsValue;
+use asrs_log::log::Log;
+use asrs_parity::json::Json;
+use asrs_services::historical_start;
+
+use crate::decode::{NEVER_COMPLETES, UNMODELED, WORKER_FROZEN_MS};
+
+const USAGE: &str = "usage:
+  asrs-cli export <log file> --options <ExportOptions JSON> [--out <file>] [--fixed-limit <n>]
+  asrs-cli export-run --root <dir> --out <dir> --spec <spec.json>";
+
+const EXTENSIONS: [(Format, &str); 4] = [
+    (Format::CsvTable, "csv"),
+    (Format::CsvList, "csv"),
+    (Format::Wpilog, "wpilog"),
+    (Format::Mcap, "mcap"),
+];
+
+struct Case {
+    name: String,
+    extension: &'static str,
+    options: ExportOptions,
+}
+
+fn make_worker(name: WorkerName) -> Result<Box<dyn DecodeWorker>, UnportedWorker> {
+    create_worker(
+        name,
+        Box::new(V8MathRandom::from_entropy()),
+        Box::new(SetClock(WORKER_FROZEN_MS)),
+    )
+}
+
+fn open_session(path: &Path) -> Result<Session, Abort> {
+    let display = path.to_string_lossy();
+    let files: Vec<Option<Arc<[u8]>>> = historical_start::read_files(&display)
+        .into_iter()
+        .map(|file| file.map(Arc::from))
+        .collect();
+    let mut session = Session::open(
+        &display,
+        files,
+        Box::new(V8MathRandom::from_entropy()),
+        &mut make_worker,
+    )?;
+    session.load_everything(&mut make_worker)?;
+    Ok(session)
+}
+
+fn abort_exit(path: &Path, abort: &Abort) -> ExitCode {
+    match abort {
+        Abort::NeverReturns | Abort::Threw => {
+            eprintln!("{}: upstream's worker never returns", path.display());
+            ExitCode::from(NEVER_COMPLETES)
+        }
+        Abort::Unmodeled(what) => {
+            eprintln!("{}: not modeled: {what}", path.display());
+            ExitCode::from(UNMODELED)
+        }
+    }
+}
+
+fn parse_options(text: &str) -> Result<ExportOptions, String> {
+    let options = json::parse_str(text).map_err(|e| format!("options JSON: {e}"))?;
+    let get = |key: &str| {
+        options
+            .as_object()
+            .and_then(|object| object.get_key(&JsString::from(key)))
+    };
+    let format = match get("format")
+        .and_then(JsValue::as_str)
+        .and_then(|s| s.as_string())
+        .as_deref()
+    {
+        Some("csv-table") => Format::CsvTable,
+        Some("csv-list") => Format::CsvList,
+        Some("wpilog") => Format::Wpilog,
+        Some("mcap") => Format::Mcap,
+        other => return Err(format!("options.format: {other:?} is not an export format")),
+    };
+    let sampling = match get("samplingMode")
+        .and_then(JsValue::as_str)
+        .and_then(|s| s.as_string())
+        .as_deref()
+    {
+        Some("changes") => Sampling::Changes,
+        Some("fixed") => Sampling::Fixed,
+        Some("akit") => Sampling::Akit,
+        other => return Err(format!("options.samplingMode: {other:?}")),
+    };
+    let sampling_period = get("samplingPeriod")
+        .and_then(JsValue::as_f64)
+        .unwrap_or(0.0);
+    let prefixes = get("prefixes")
+        .and_then(JsValue::as_str)
+        .cloned()
+        .unwrap_or_default();
+    let include_generated = get("includeGenerated")
+        .and_then(JsValue::as_bool)
+        .unwrap_or(false);
+    Ok(ExportOptions {
+        format,
+        sampling,
+        sampling_period,
+        prefixes,
+        include_generated,
+    })
+}
+
+fn run_case(log: &Log, case: &Case, fixed_limit: f64, dir: &Path) -> Json {
+    let mut record = vec![("name", Json::string(&case.name))];
+    if export::skip_reason(log, &case.options, fixed_limit).is_some() {
+        record.push(("outcome", Json::string("skipped")));
+    } else {
+        match export::export(log, &case.options) {
+            Ok(output) => {
+                let file = format!("export/{}.{}", case.name, case.extension);
+                let bytes = output.bytes();
+                match fs::write(dir.join(&file), bytes) {
+                    Ok(()) => {
+                        record.push(("outcome", Json::string("ok")));
+                        record.push(("file", Json::string(&file)));
+                    }
+                    Err(e) => {
+                        record.push(("outcome", Json::string("failed")));
+                        eprintln!("{}: {e}", dir.join(&file).display());
+                    }
+                }
+            }
+            Err(export::ExportError::Rejected) => {
+                record.push(("outcome", Json::string("failed")));
+            }
+            Err(export::ExportError::Unported(_)) => {
+                record.push(("outcome", Json::string("unmodeled")));
+            }
+        }
+    }
+    Json::object(record)
+}
+
+fn option_value(args: &[String], name: &str) -> Option<String> {
+    args.iter()
+        .position(|arg| arg == name)
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+}
+
+fn export_single(args: &[String]) -> ExitCode {
+    let file = args.first().filter(|arg| !arg.starts_with('-'));
+    let options_text = option_value(args, "--options");
+    let (Some(file), Some(options_text)) = (file, options_text) else {
+        eprintln!("{USAGE}");
+        return ExitCode::from(2);
+    };
+    let options = match parse_options(&options_text) {
+        Ok(options) => options,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(2);
+        }
+    };
+    let limit: f64 = option_value(args, "--fixed-limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100000.0);
+    let path = PathBuf::from(file);
+    if [".hoot", ".revlog", ".wpilogxz"]
+        .iter()
+        .any(|ext| file.ends_with(ext))
+    {
+        eprintln!("{file}: not modeled: converted input format");
+        return ExitCode::from(UNMODELED);
+    }
+    let session = match open_session(&path) {
+        Ok(session) => session,
+        Err(abort) => return abort_exit(&path, &abort),
+    };
+    if let Some(reason) = export::skip_reason(&session.log, &options, limit) {
+        eprintln!("export skipped: {reason}");
+        return ExitCode::from(UNMODELED);
+    }
+    match export::export(&session.log, &options) {
+        Ok(output) => {
+            let bytes = output.bytes();
+            let result = match option_value(args, "--out") {
+                Some(out) => fs::write(&out, &bytes).map_err(|e| e.to_string()),
+                None => std::io::stdout()
+                    .write_all(&bytes)
+                    .map_err(|e| e.to_string()),
+            };
+            match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Err(export::ExportError::Rejected) => {
+            eprintln!("export failed");
+            ExitCode::from(NEVER_COMPLETES)
+        }
+        Err(export::ExportError::Unported(what)) => {
+            eprintln!("export unmodeled: {what}");
+            ExitCode::from(UNMODELED)
+        }
+    }
+}
+
+fn matrix_cases(spec: &JsValue) -> Result<Vec<(Case, f64)>, String> {
+    let matrix = spec
+        .as_object()
+        .and_then(|object| object.get_key(&JsString::from("export")))
+        .ok_or("spec has no export matrix")?;
+    let get = |key: &str| {
+        matrix
+            .as_object()
+            .and_then(|o| o.get_key(&JsString::from(key)))
+    };
+    let strings = |key: &str| -> Result<Vec<String>, String> {
+        get(key)
+            .and_then(JsValue::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_str()
+                            .map(|s| s.to_string_lossy())
+                            .ok_or_else(|| format!("spec.{key} has a non-string entry"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .ok_or_else(|| format!("spec.{key} missing"))?
+    };
+    let booleans = |key: &str| -> Result<Vec<bool>, String> {
+        get(key)
+            .and_then(JsValue::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_bool()
+                            .ok_or_else(|| format!("spec.{key} has a non-bool entry"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .ok_or_else(|| format!("spec.{key} missing"))?
+    };
+    let formats = strings("formats")?;
+    let sampling_modes = strings("samplingModes")?;
+    let generated = booleans("includeGenerated")?;
+    let prefixes = strings("prefixes")?;
+    let period = get("samplingPeriod")
+        .and_then(JsValue::as_f64)
+        .ok_or("spec.samplingPeriod missing")?;
+    let fixed_limit = get("fixedSampleLimit")
+        .and_then(JsValue::as_f64)
+        .unwrap_or(100000.0);
+    let mut cases = Vec::new();
+    for format in &formats {
+        for sampling in &sampling_modes {
+            for &include_generated in &generated {
+                for (index, prefix) in prefixes.iter().enumerate() {
+                    let options_text = format!(
+                        r#"{{"format":{},"samplingMode":{},"samplingPeriod":{period},"prefixes":{},"includeGenerated":{include_generated}}}"#,
+                        json::stringify(&JsValue::String(JsString::from(format.as_str())))
+                            .map_err(|e| e.to_string())?
+                            .unwrap_or_default(),
+                        json::stringify(&JsValue::String(JsString::from(sampling.as_str())))
+                            .map_err(|e| e.to_string())?
+                            .unwrap_or_default(),
+                        json::stringify(&JsValue::String(JsString::from(prefix.as_str())))
+                            .map_err(|e| e.to_string())?
+                            .unwrap_or_default(),
+                    );
+                    let options = parse_options(&options_text)?;
+                    let extension = EXTENSIONS
+                        .iter()
+                        .find(|(format_option, _)| format_option == &options.format)
+                        .map(|(_, extension)| *extension)
+                        .ok_or("format without an extension")?;
+                    cases.push((
+                        Case {
+                            name: format!(
+                                "{}.{}.{}.p{index}",
+                                format,
+                                sampling,
+                                if include_generated {
+                                    "generated"
+                                } else {
+                                    "original"
+                                }
+                            ),
+                            extension,
+                            options,
+                        },
+                        fixed_limit,
+                    ));
+                }
+            }
+        }
+    }
+    Ok(cases)
+}
+
+fn export_run(args: &[String]) -> ExitCode {
+    let (Some(root), Some(out), Some(spec)) = (
+        option_value(args, "--root"),
+        option_value(args, "--out"),
+        option_value(args, "--spec"),
+    ) else {
+        eprintln!("{USAGE}");
+        return ExitCode::from(2);
+    };
+    let spec_text = match fs::read_to_string(&spec) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("{spec}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let spec_json = match json::parse_str(&spec_text) {
+        Ok(spec) => spec,
+        Err(e) => {
+            eprintln!("{spec}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let cases = match matrix_cases(&spec_json) {
+        Ok(cases) => cases,
+        Err(e) => {
+            eprintln!("{spec}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut stdin = String::new();
+    if std::io::stdin().read_to_string(&mut stdin).is_err() {
+        eprintln!("export-run: could not read stdin");
+        return ExitCode::FAILURE;
+    }
+    let stdout = std::io::stdout();
+    let mut out_lines = stdout.lock();
+    for input in stdin.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let path = Path::new(&root).join(input);
+        let dir = Path::new(&out).join(input);
+        let export_dir = dir.join("export");
+        if let Err(e) = fs::create_dir_all(&export_dir) {
+            eprintln!("{}: {e}", export_dir.display());
+            return ExitCode::FAILURE;
+        }
+        let line = match open_session(&path) {
+            Ok(session) => {
+                let mut outputs = Vec::with_capacity(cases.len());
+                for (case, fixed_limit) in &cases {
+                    outputs.push(run_case(&session.log, case, *fixed_limit, &dir));
+                }
+                Json::object([
+                    ("input", Json::string(input)),
+                    ("outputs", Json::Array(outputs)),
+                ])
+            }
+            Err(abort) => Json::object([
+                ("input", Json::string(input)),
+                (
+                    "error",
+                    Json::string(match abort {
+                        Abort::Threw => "decode worker threw",
+                        Abort::NeverReturns => "decode worker never returns",
+                        Abort::Unmodeled(what) => what,
+                    }),
+                ),
+            ]),
+        };
+        let _ = writeln!(out_lines, "{}", line.to_compact());
+        let _ = out_lines.flush();
+    }
+    ExitCode::SUCCESS
+}
+
+pub fn run(args: &[String]) -> ExitCode {
+    if args.iter().any(|arg| arg == "--spec") {
+        export_run(args)
+    } else {
+        export_single(args)
+    }
+}
