@@ -115,8 +115,9 @@ struct FakeTcpSocket {
     idle_ms: f64,
     /// The armed timer's generation; a stale `TcpIdle` delivery does not match it.
     idle_gen: u64,
-    /// The `once` listener from `setTimeout`: pending until the next fire consumes it.
-    timeout_pending: bool,
+    /// `setTimeout` registers a `once` listener per call: pending until the next `timeout`
+    /// emit consumes them all, so the count is how many callbacks a fire would run.
+    timeout_listeners: u32,
 }
 
 impl FakeTcpSocket {
@@ -126,7 +127,7 @@ impl FakeTcpSocket {
             pending: Vec::new(),
             idle_ms: 0.0,
             idle_gen: 0,
-            timeout_pending: false,
+            timeout_listeners: 0,
         }
     }
 }
@@ -324,7 +325,7 @@ impl FakeNet {
             },
             Delivery::TcpRefused(id) => match self.tcp_sockets.get_mut(&id) {
                 // `emit("error")` at once, `close` as a later task.
-                Some(s) if s.state != TcpState::Closed => {
+                Some(s) if s.state == TcpState::Connecting => {
                     self.tcp_close(id);
                     return vec![SessionEvent::Tcp(RlogNetEvent::Error(TcpId(id)))];
                 }
@@ -352,10 +353,13 @@ impl FakeNet {
                 Some(s)
                     if s.state != TcpState::Closed
                         && s.idle_gen == generation
-                        && s.timeout_pending =>
+                        && s.timeout_listeners > 0 =>
                 {
-                    s.timeout_pending = false;
-                    return vec![SessionEvent::Tcp(RlogNetEvent::Timeout(TcpId(id)))];
+                    let listeners = s.timeout_listeners;
+                    s.timeout_listeners = 0;
+                    return (0..listeners)
+                        .map(|_| SessionEvent::Tcp(RlogNetEvent::Timeout(TcpId(id))))
+                        .collect();
                 }
                 _ => Vec::new(),
             },
@@ -503,13 +507,13 @@ impl RlogTransport for FakeNet {
         let Some(socket) = self.tcp_sockets.get_mut(&id.0) else {
             return;
         };
-        // `armIdle` runs on `setTimeout` whenever the socket is not closed; the callback is a
-        // `once` listener rearmed by every touch.
+        // `setTimeout`: the `once` listener registers even on a closed socket, while `armIdle`
+        // only schedules the timer when it is not closed.
+        socket.timeout_listeners += 1;
+        socket.idle_ms = ms;
         if socket.state == TcpState::Closed {
             return;
         }
-        socket.idle_ms = ms;
-        socket.timeout_pending = true;
         socket.idle_gen += 1;
         let generation = socket.idle_gen;
         self.deliver(ms, Delivery::TcpIdle(id.0, generation));
@@ -556,6 +560,7 @@ impl Env {
 pub struct Prefs {
     pub live_subscribe_mode: String,
     pub live_discard: f64,
+    pub rlog_port: f64,
     pub publisher: PublisherPreferences,
 }
 
@@ -564,6 +569,7 @@ impl Prefs {
         Prefs {
             live_subscribe_mode: "low-bandwidth".to_owned(),
             live_discard: 1200.0,
+            rlog_port: 5800.0,
             publisher: PublisherPreferences {
                 publish_filter: JsString::new(),
                 robot_address: JsString::from("robot.local"),
@@ -578,6 +584,9 @@ impl Prefs {
         }
         if let Some(discard) = json.get("liveDiscard").and_then(Json::as_f64) {
             self.live_discard = discard;
+        }
+        if let Some(port) = json.get("rlogPort").and_then(Json::as_f64) {
+            self.rlog_port = port;
         }
         if let Some(filter) = json.get("publishFilter").and_then(Json::as_str) {
             self.publisher.publish_filter = JsString::from_units(filter.units().to_vec());

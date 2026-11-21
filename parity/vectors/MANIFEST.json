@@ -221,6 +221,7 @@
     "live/phoenix/quirks": {"cases":85,"content":"34b9e2cbba10c404","generator":"42d62d955aae7a00","spec":"parity/specs/live/phoenix/quirks.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/phoenix/reconnect": {"cases":239,"content":"5f11fef30063f6a1","generator":"71c72a7fbcb1a1cb","spec":"parity/specs/live/phoenix/reconnect.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/rlog/failures": {"cases":30,"content":"a055d9a054ec27f1","generator":"8053eea62102564d","spec":"parity/specs/live/rlog/failures.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "live/rlog/framing": {"cases":54,"content":"d11fb9a8c07a903d","generator":"c015cde5a510af48","spec":"parity/specs/live/rlog/framing.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/rlog/r1-reconnect": {"cases":24,"content":"55592db744d8ef92","generator":"5485007b467649fb","spec":"parity/specs/live/rlog/r1-reconnect.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/rlog/r2-stream": {"cases":34,"content":"fe9d15f3de3c35e8","generator":"96e43e6d7fb39295","spec":"parity/specs/live/rlog/r2-stream.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/core": {"cases":2509,"content":"778ae44fe606577c","generator":"044e733cb39eca20","spec":"parity/specs/log/core.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
