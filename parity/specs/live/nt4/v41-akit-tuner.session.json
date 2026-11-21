@@ -1,0 +1,43 @@
+{
+  "protocol": "nt4",
+  "seed": 4331,
+  "latencyMs": 1,
+  "endMs": 4200,
+  "client": {
+    "source": "nt4",
+    "mode": "akit",
+    "address": "10.0.0.2",
+    "prefs": { "liveSubscribeMode": "logging" }
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 1000000,
+    "topics": [
+      { "name": "/AdvantageKit/Timestamp", "type": "int", "value": 0 },
+      { "name": "/AdvantageKit/Drive/x", "type": "double", "value": 1.0 },
+      { "name": "/Tuning/kP", "type": "double", "value": 0.1 },
+      { "name": "/Tuning/enable", "type": "boolean", "value": false },
+      { "name": "/Tuning/count", "type": "int", "value": 3 },
+      { "name": "/Tuning/locked", "type": "double", "properties": { "mutable": false }, "value": 2.0 },
+      { "name": "/Tuning/open", "type": "double", "properties": { "mutable": true }, "value": 4.0 },
+      { "name": "/Other/ignored", "type": "double", "value": 8 }
+    ]
+  },
+  "steps": [
+    { "t": 10, "client": ["tune", "/Tuning/kP", 5.0] },
+    { "t": 50, "client": ["untune", "/Tuning/kP"] },
+    { "t": 100, "client": ["connect"] },
+    { "t": 1200, "client": ["tune", "/Tuning/kP", 3.25] },
+    { "t": 1400, "client": ["tune", "/Tuning/count", 9.7] },
+    { "t": 1600, "client": ["tune", "/Tuning/enable", true] },
+    { "t": 1800, "client": ["tune", "/Tuning/locked", 7.0] },
+    { "t": 2000, "client": ["tune", "/Tuning/open", 6.5] },
+    { "t": 2200, "client": ["tune", "/Drive/x", 2.0] },
+    { "t": 2400, "client": ["tune", "/Tuning/missing", 1.0] },
+    { "t": 2600, "client": ["untune", "/Tuning/kP"] },
+    { "t": 2800, "client": ["untune", "/Tuning/kP"] },
+    { "t": 3000, "server": ["set", "/Tuning/kP", 0.9] },
+    { "t": 3400, "client": ["dump"] },
+    { "t": 3800, "client": ["stop"] }
+  ]
+}

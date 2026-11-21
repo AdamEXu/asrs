@@ -1,0 +1,225 @@
+{
+  "title": "Numeric Axis",
+  "autoAdvance": "color",
+  "allowChildrenFromDrag": true,
+  "types": [
+    {
+      "key": "stepped",
+      "display": "Stepped",
+      "symbol": "floor",
+      "showInTypeName": false,
+      "color": "color",
+      "sourceTypes": [
+        "Number"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "color",
+          "display": "Color",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "#2b66a2",
+              "display": "Blue"
+            },
+            {
+              "key": "#e5b31b",
+              "display": "Gold"
+            },
+            {
+              "key": "#af2437",
+              "display": "Red"
+            },
+            {
+              "key": "#80588e",
+              "display": "Purple"
+            },
+            {
+              "key": "#e48b32",
+              "display": "Orange"
+            },
+            {
+              "key": "#c0b487",
+              "display": "Tan"
+            },
+            {
+              "key": "#858584",
+              "display": "Gray"
+            },
+            {
+              "key": "#3b875a",
+              "display": "Green"
+            },
+            {
+              "key": "#d993aa",
+              "display": "Pink"
+            },
+            {
+              "key": "#5f4528",
+              "display": "Brown"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "display": "Thickness",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "normal",
+              "display": "Normal"
+            },
+            {
+              "key": "bold",
+              "display": "Bold"
+            },
+            {
+              "key": "verybold",
+              "display": "Very Bold"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "smooth",
+      "display": "Smooth",
+      "symbol": "gesture",
+      "showInTypeName": false,
+      "color": "color",
+      "sourceTypes": [
+        "Number"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "color",
+          "display": "Color",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "#2b66a2",
+              "display": "Blue"
+            },
+            {
+              "key": "#e5b31b",
+              "display": "Gold"
+            },
+            {
+              "key": "#af2437",
+              "display": "Red"
+            },
+            {
+              "key": "#80588e",
+              "display": "Purple"
+            },
+            {
+              "key": "#e48b32",
+              "display": "Orange"
+            },
+            {
+              "key": "#c0b487",
+              "display": "Tan"
+            },
+            {
+              "key": "#858584",
+              "display": "Gray"
+            },
+            {
+              "key": "#3b875a",
+              "display": "Green"
+            },
+            {
+              "key": "#d993aa",
+              "display": "Pink"
+            },
+            {
+              "key": "#5f4528",
+              "display": "Brown"
+            }
+          ]
+        },
+        {
+          "key": "size",
+          "display": "Thickness",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "normal",
+              "display": "Normal"
+            },
+            {
+              "key": "bold",
+              "display": "Bold"
+            },
+            {
+              "key": "verybold",
+              "display": "Very Bold"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "points",
+      "display": "Points",
+      "symbol": "scatterplot",
+      "showInTypeName": false,
+      "color": "color",
+      "sourceTypes": [
+        "Number"
+      ],
+      "showDocs": true,
+      "options": [
+        {
+          "key": "color",
+          "display": "Color",
+          "showInTypeName": false,
+          "values": [
+            {
+              "key": "#2b66a2",
+              "display": "Blue"
+            },
+            {
+              "key": "#e5b31b",
+              "display": "Gold"
+            },
+            {
+              "key": "#af2437",
+              "display": "Red"
+            },
+            {
+              "key": "#80588e",
+              "display": "Purple"
+            },
+            {
+              "key": "#e48b32",
+              "display": "Orange"
+            },
+            {
+              "key": "#c0b487",
+              "display": "Tan"
+            },
+            {
+              "key": "#858584",
+              "display": "Gray"
+            },
+            {
+              "key": "#3b875a",
+              "display": "Green"
+            },
+            {
+              "key": "#d993aa",
+              "display": "Pink"
+            },
+            {
+              "key": "#5f4528",
+              "display": "Brown"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

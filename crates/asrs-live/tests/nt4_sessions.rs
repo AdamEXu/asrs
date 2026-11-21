@@ -1,8 +1,7 @@
 //! Replays every NT4 live session against the port and compares the trace with the oracle's,
 //! line for line. `nt4-client` sessions drive `NT4_Client` directly; `nt4` and
 //! `nt4-publisher` sessions drive it the way `NT4Source`/`NT4Tuner` and `NT4Publisher` do,
-//! through the thin drivers in `nt4_drivers`, which leave out the `Log` (so `dump` lines are not
-//! compared; they belong to N02 and N03).
+//! through the drivers in `nt4_drivers` over the real ports.
 
 #![allow(clippy::disallowed_methods)]
 
@@ -14,6 +13,7 @@ use asrs_js::value::JsValue;
 use asrs_live::Thrown;
 use asrs_live::TimerId;
 use asrs_live::nt4::{NT4_PORTS_DEFAULT, Nt4Client, Nt4Context, Nt4Handler, Nt4Topic};
+use asrs_log::log::Log;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
@@ -119,6 +119,7 @@ struct ClientDriver {
     app_name: String,
     client: Option<Nt4Client>,
     uids: Vec<f64>,
+    log: Log,
 }
 
 fn str_arg(v: &JsValue) -> Result<JsString, Thrown> {
@@ -246,7 +247,17 @@ impl Driver for ClientDriver {
                 None => Ok(()),
             },
             "nt4" => self.nt4_op(&op[1..], env),
-            "dump" => Ok(()),
+            "log" => support::log_op(&mut self.log, &mut env.realm, op),
+            "dump" => {
+                env.app(
+                    "dump",
+                    Some(&Value::Array(vec![
+                        Value::number(0.0),
+                        support::dump(&self.log),
+                    ])),
+                );
+                Ok(())
+            }
             other => panic!("nt4-client sessions do not use {other}"),
         }
     }
@@ -262,6 +273,16 @@ impl Driver for ClientDriver {
         if let Some(client) = self.client.as_mut() {
             let _ = with_handler(env, |h, cx| client.handle_timer(id, h, cx));
         }
+    }
+
+    fn finish(&mut self, env: &mut Env) {
+        env.app(
+            "dump",
+            Some(&Value::Array(vec![
+                Value::number(0.0),
+                support::dump(&self.log),
+            ])),
+        );
     }
 }
 
@@ -285,11 +306,8 @@ fn client_driver(session: &Session) -> ClientDriver {
         app_name: text("appName", "AdvantageScope"),
         client: None,
         uids: Vec::new(),
+        log: Log::new(true),
     }
-}
-
-fn is_dump(line: &str) -> bool {
-    line.contains("\"ev\":\"dump\"")
 }
 
 pub fn replay(id: &str, session: &Session) -> Result<usize, String> {
@@ -311,9 +329,8 @@ pub fn replay(id: &str, session: &Session) -> Result<usize, String> {
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|r| r.text)
-        .filter(|l| !is_dump(l))
         .collect();
-    let produced: Vec<String> = trace.into_iter().filter(|l| !is_dump(l)).collect();
+    let produced: Vec<String> = trace;
     if let Some(i) =
         (0..expected.len().max(produced.len())).find(|&i| expected.get(i) != produced.get(i))
     {

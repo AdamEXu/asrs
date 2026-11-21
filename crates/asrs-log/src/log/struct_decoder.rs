@@ -24,7 +24,7 @@ const BITFIELD_VALID_TYPES: &[&str] = &[
 /// `push` of small integers, doubles, booleans and one-character strings): the
 /// push past it throws `RangeError: Invalid array length`. Upstream takes minutes
 /// to get there, so no oracle vector covers it.
-const MAX_ARRAY_LENGTH: f64 = 134_217_728.0;
+pub const MAX_ARRAY_LENGTH: f64 = 134_217_728.0;
 
 /// `VALUE_TYPE_MAX_BITS`.
 fn type_max_bits(ty: &JsString) -> f64 {

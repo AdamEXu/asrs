@@ -1,0 +1,63 @@
+{
+  "protocol": "nt4",
+  "seed": 3141,
+  "latencyMs": 2,
+  "endMs": 5200,
+  "client": {
+    "source": "nt4",
+    "mode": "default",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "logging" }
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": -750000,
+    "topics": [
+      { "name": "/T/double", "type": "double", "value": 1.5 },
+      { "name": "/T/int", "type": "int", "value": 4 },
+      { "name": "/T/float", "type": "float", "value": 0.5 },
+      { "name": "/T/bool", "type": "boolean", "value": false },
+      { "name": "/T/string", "type": "string", "value": "s" },
+      { "name": "/T/array", "type": "double[]", "value": [1, 2] },
+      { "name": "/T/yes", "type": "double", "properties": { "mutable": "yes" }, "value": 3 },
+      { "name": "/T/meta", "type": "double", "value": 6 }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 400, "client": ["tune", "NT:/T/double", 2.75] },
+    { "t": 410, "client": ["tune", "NT:/T/int", -2.5] },
+    { "t": 420, "client": ["tune", "NT:/T/float", 2.7] },
+    { "t": 430, "client": ["tune", "NT:/T/bool", true] },
+    { "t": 440, "client": ["tune", "NT:/T/bool", 1] },
+    { "t": 450, "client": ["tune", "NT:/T/double", false] },
+    { "t": 460, "client": ["tune", "NT:/T/string", 5] },
+    { "t": 470, "client": ["tune", "NT:/T/array", 5] },
+    { "t": 480, "client": ["tune", "NT:/T/yes", 8] },
+    { "t": 490, "client": ["log", "setMetadataString", "NT:/T/meta", "[1]"] },
+    { "t": 500, "client": ["tune", "NT:/T/meta", 7] },
+    { "t": 510, "client": ["log", "setMetadataString", "NT:/T/meta", "{\"mutable\":false"] },
+    { "t": 520, "client": ["tune", "NT:/T/meta", 8] },
+    { "t": 530, "client": ["log", "setMetadataString", "NT:/T/meta", "null"] },
+    { "t": 540, "client": ["tune", "NT:/T/meta", 9] },
+    { "t": 600, "client": ["dump"] },
+    { "t": 1000, "server": ["down", "refuse"] },
+    { "t": 1001, "server": ["drop"] },
+    { "t": 1100, "client": ["tune", "NT:/T/double", 3.25] },
+    { "t": 1200, "client": ["untune", "NT:/T/float"] },
+    { "t": 1300, "client": ["tune", "NT:/T/int", 11] },
+    { "t": 1400, "client": ["dump"] },
+    { "t": 2000, "server": ["up"] },
+    { "t": 2600, "client": ["tune", "NT:/T/double", 4.5] },
+    { "t": 2700, "client": ["tune", "NT:/T/float", 1.25] },
+    { "t": 2800, "client": ["untune", "NT:/T/int"] },
+    { "t": 2900, "server": ["drop"] },
+    { "t": 2950, "client": ["tune", "NT:/T/bool", false] },
+    { "t": 3500, "client": ["dump"] },
+    { "t": 4000, "client": ["prefs", { "liveSubscribeMode": "low-bandwidth" }] },
+    { "t": 4100, "client": ["fields", ["NT:/T/double"], []] },
+    { "t": 4300, "client": ["tune", "NT:/T/double", 6] },
+    { "t": 4600, "client": ["dump"] },
+    { "t": 5000, "client": ["stop"] }
+  ]
+}

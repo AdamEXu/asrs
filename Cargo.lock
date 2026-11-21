@@ -375,6 +375,7 @@ dependencies = [
 name = "asrs-live"
 version = "0.1.0"
 dependencies = [
+ "asrs-formats",
  "asrs-js",
  "asrs-log",
  "asrs-parity",

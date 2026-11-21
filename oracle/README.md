@@ -703,6 +703,7 @@ Fixture keys, all optional:
 | `images` | natural sizes by `src` |
 | `layout` | layout rules tried before the defaults |
 | `ignoreMain` | hub-to-main message names not to record (default `save-state`, `save-type-memory`, `update-touch-bar-slider`, which repeat on timers; capture `state` instead) |
+| `sourceLists` | `true` records every call into the hub's `SourceList` instances (see "Source lists" below) |
 | `steps` | run in order after start-up |
 
 `assets`, `preferences`, `state`, `typeMemory` and a `log` step may be a path to a JSON file,
@@ -735,6 +736,7 @@ Captures (a string or `{"kind": ..., ...}`):
 | `selection` | `{"selection": {mode, hoveredTime, selectedTime, renderTime, currentLiveTime, grabZoomRange, timelineRange, timelineIsMaxZoom, buttons}}` where `buttons` records each control button's `hidden` flag and the inline `--show-lock-buttons` value |
 | `eval` | `{"eval": expr, "value": <result>}` or `"throw"` |
 | `measure` | `{"measure": {font, align, baseline, text}, "metrics": {...}}` per string of `texts`, from the recording canvas (`null` when the font is invalid) |
+| `sourceLists` | `{"sl": id, "dump": {...}}` per recorded source list (title, state, `getState(true)`, config, hand icon, drag highlight style, buttons, and per item the icon data, `type-color`, type name, key, its decoration and title, hide icon and title, `hidden`/`child`/`parent-highlight` classes, preview visibility, text and item height), then `{"slMemory": window.typeMemory}` |
 
 Also written as they happen: `{"main": name, "data": ...}` for every hub-to-main message not
 ignored, `{"drag": <data>, "end", "x", "y"}` for every `drag-update` event the hub dispatches during a field
@@ -750,6 +752,22 @@ assets and a few fields: commands, state, canvas traces, selection and DOM text 
 renderer and controls at a selected time and again while hovering), `dom/hub/selection-sidebar`
 (timeline hover and click, playback, step, zoom, sidebar expand, collapse and search) and
 `dom/canvas/fixed-advance`.
+
+### Source lists
+
+With `"sourceLists": true` (`src/dom/sourceLists.ts`) the run records what the port's
+`asrs_model::source_list::SourceList` needs to replay every list: `{"sl": id, "create": {uuid,
+title, config, editButton, numberPreview, supplemental}}` when a list is first seen (the lists
+the hub builds at load are registered before start-up), then one `{"sl": id, "op": [...], "dark"}`
+line per outermost call: the public methods, `handleItemDrag` and `handleFieldDrag` (with the
+list's client rects and the supplemental states), each animation frame (`["frame", isDark,
+renderTime]` with the `getNumberPreview` calls it made), the item and list mouse and click events,
+and the type and clear prompt callbacks. A hooked call that throws carries `threw`. Also
+recorded: `{"slTypeMemory": ...}` whenever `window.typeMemory` is replaced, `{"sl": id,
+"dragStart": {...}}` for `startDrag` from a list, and `{"slLog": ops}` for each `log` step. The
+fixture's `window.__oracleTheme` overrides `window.theme` for `matchMedia`, so a step can switch
+the colour scheme. jsdom's `:nth-child` goes stale after DOM moves, so source-list fixtures tag
+items with a `data-i` attribute before each event and lay them out by it.
 
 Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
 workers and historical or live sources (logs are built with `log` steps), drag sessions other

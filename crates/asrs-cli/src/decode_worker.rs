@@ -10,7 +10,7 @@ use std::sync::Arc;
 use asrs_formats::historical::{HistoricalDataSource, create_worker, select_worker};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, Response};
 use asrs_js::string::JsString;
-use asrs_js::time::V8MathRandom;
+use asrs_js::time::{SetClock, V8MathRandom};
 use asrs_log::log::robot_state::{
     AKIT_TIMESTAMP_KEYS, ALLIANCE_KEYS, AUTONOMOUS_KEYS, DRIVER_STATION_KEYS, ENABLED_KEYS,
     EVENT_KEYS, MATCH_NUMBER_KEYS, MATCH_TYPE_KEYS, SYSTEM_TIME_KEYS, UTILITY_KEYS,
@@ -18,7 +18,7 @@ use asrs_log::log::robot_state::{
 use asrs_parity::Value;
 use asrs_services::historical_start;
 
-use crate::decode::{NEVER_COMPLETES, UNMODELED, dump_log};
+use crate::decode::{NEVER_COMPLETES, UNMODELED, WORKER_FROZEN_MS, dump_log};
 use crate::log_field::{serialized_value, string_value};
 
 const USAGE: &str = "usage: asrs-cli decode-worker <log file>";
@@ -130,7 +130,11 @@ pub fn run(args: &[String]) -> ExitCode {
         eprintln!("{path}: no worker for this extension");
         return ExitCode::FAILURE;
     };
-    let mut worker = match create_worker(name, Box::new(V8MathRandom::from_entropy())) {
+    let mut worker = match create_worker(
+        name,
+        Box::new(V8MathRandom::from_entropy()),
+        Box::new(SetClock(WORKER_FROZEN_MS)),
+    ) {
         Ok(worker) => worker,
         Err(unported) => {
             eprintln!("{path}: {:?} worker is not ported yet", unported.0);

@@ -11,9 +11,10 @@ use asrs_js::json;
 use asrs_js::math;
 use asrs_js::number;
 use asrs_js::string::JsString;
-use asrs_js::time::{Clock, Rng};
+use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
-use asrs_log::msgpack::{self, KeyCache, MultiDecoder};
+use asrs_log::msgpack::{self, MultiDecoder};
+use asrs_log::realm::JsRealm;
 
 use super::js;
 use super::transport::{NetEvent, Nt4Transport, ReadyState, RequestId, SocketId, WsMessage};
@@ -172,15 +173,14 @@ impl Nt4Subscription {
     }
 }
 
-/// What the client may touch besides itself. `clock` is `Date`; `rng` and `keys` are the
-/// realm's `Math.random` and msgpack key cache, which the client shares with everything else
-/// in the hub renderer.
+/// What the client may touch besides itself. `clock` is `Date`; `realm` is the renderer's
+/// shared JS state: `Math.random`, the msgpack key cache and the proto realm, which every
+/// `Log` operation that decodes also reaches.
 pub struct Nt4Context<'a> {
     pub timers: &'a mut TimerQueue,
     pub net: &'a mut dyn Nt4Transport,
     pub clock: &'a dyn Clock,
-    pub rng: &'a mut dyn Rng,
-    pub keys: &'a mut KeyCache,
+    pub realm: &'a mut JsRealm,
 }
 
 /// The constructor's callbacks. An error is an exception escaping the callback, which
@@ -464,7 +464,7 @@ impl Nt4Client {
     }
 
     fn new_uid(cx: &mut Nt4Context<'_>) -> f64 {
-        math::floor(cx.rng.next_f64() * 99999999.0)
+        math::floor(cx.realm.random.next_f64() * 99999999.0)
     }
 
     fn insert_subscription(&mut self, sub: Nt4Subscription) {
@@ -924,7 +924,7 @@ impl Nt4Client {
         cx: &mut Nt4Context<'_>,
     ) -> Result<(), Thrown> {
         let mut multi = MultiDecoder::new(bytes);
-        while let Some(unpacked) = multi.next(cx.keys, cx.rng) {
+        while let Some(unpacked) = multi.next(&mut cx.realm.msgpack_keys, &mut *cx.realm.random) {
             let unpacked = unpacked?;
             let topic_id = js::index(&unpacked, 0)?;
             let timestamp_us = js::index(&unpacked, 1)?;

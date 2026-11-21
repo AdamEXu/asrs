@@ -1,0 +1,25 @@
+{
+  "protocol": "nt4",
+  "seed": 717,
+  "latencyMs": 1,
+  "endMs": 14000,
+  "client": {
+    "source": "nt4",
+    "mode": "akit",
+    "address": "127.0.0.1",
+    "prefs": { "liveSubscribeMode": "low-bandwidth" }
+  },
+  "server": {
+    "version": "4.1",
+    "topics": [{ "name": "/Other/value", "type": "double", "value": 1 }]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 6000, "server": ["drop"] },
+    { "t": 7000, "server": ["drop"] },
+    { "t": 8000, "server": ["announce", "/AdvantageKit/Timestamp", "int"] },
+    { "t": 8500, "server": ["set", "/AdvantageKit/Timestamp", 8500000] },
+    { "t": 9000, "client": ["dump"] },
+    { "t": 13500, "client": ["stop"] }
+  ]
+}

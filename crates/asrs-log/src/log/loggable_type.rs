@@ -13,3 +13,19 @@ pub enum LoggableType {
     /// Placeholder for child fields of structured data; holds no samples.
     Empty = 7,
 }
+
+impl LoggableType {
+    /// `LoggableType[type]`: the enum member's name.
+    pub fn name(self) -> &'static str {
+        match self {
+            LoggableType::Raw => "Raw",
+            LoggableType::Boolean => "Boolean",
+            LoggableType::Number => "Number",
+            LoggableType::String => "String",
+            LoggableType::BooleanArray => "BooleanArray",
+            LoggableType::NumberArray => "NumberArray",
+            LoggableType::StringArray => "StringArray",
+            LoggableType::Empty => "Empty",
+        }
+    }
+}
