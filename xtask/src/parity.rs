@@ -646,6 +646,9 @@ fn diff_files(expected: &Path, actual: &Path) -> Result {
     }
 }
 
+/// `(output name, outcome, written file)` as `export-run` reports it for one input.
+type ExportOutputs = Vec<(String, String, Option<String>)>;
+
 /// `cargo xtask parity export`: `asrs-cli export-run` on the spec's matrix for every corpus
 /// input, compared to the recorded `oracle historical` outputs.
 fn export_suite(args: &[String]) -> Result {
@@ -716,11 +719,7 @@ fn export_suite(args: &[String]) -> Result {
         corpus::remove_dir(&out_root)?;
         std::fs::create_dir_all(&out_root).map_err(|e| e.to_string())?;
         let records = export_shards(&paths, name, &cli, &inputs, &out_root, &spec, jobs)?;
-        let port: std::collections::HashMap<String, Vec<(String, String, Option<String>)>> =
-            records
-                .into_iter()
-                .map(|(input, outputs)| (input, outputs))
-                .collect();
+        let port: std::collections::HashMap<String, ExportOutputs> = records.into_iter().collect();
         for (input, output, outcome) in &oracle_records {
             if output == "decode" {
                 continue;
@@ -784,7 +783,7 @@ fn export_shards(
     out_root: &Path,
     spec: &Path,
     jobs: usize,
-) -> Result<Vec<(String, Vec<(String, String, Option<String>)>)>> {
+) -> Result<Vec<(String, ExportOutputs)>> {
     let root_buf = corpus::output_dir(&paths.root, name);
     let root = root_buf.as_path();
     let jobs = jobs.min(inputs.len()).max(1);

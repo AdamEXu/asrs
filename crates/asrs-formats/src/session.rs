@@ -170,6 +170,7 @@ impl Session {
 
     /// One `updateFieldRequest` call. Returns whether it posted a worker request or a child
     /// source was created anywhere in the recursion.
+    #[allow(clippy::only_used_in_recursion)]
     fn update_field_request<F>(
         &mut self,
         index: usize,

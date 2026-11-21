@@ -3,6 +3,8 @@
 //! branches dispatch to [`ExportError::Unported`] until F11's `WPILOGEncoder` and F12's
 //! `McapWriter` land.
 
+use std::cmp::Ordering;
+
 use asrs_js::collation::locale_compare_numeric;
 use asrs_js::number;
 use asrs_js::sort::array_sort;
@@ -95,18 +97,28 @@ pub fn skip_reason(log: &Log, options: &ExportOptions, fixed_limit: f64) -> Opti
         let [start, end] = log.get_timestamp_range();
         let step = options.sampling_period / 1000.0;
         let samples = (end - start) / step;
-        if !(samples <= fixed_limit) || !(start + step > start) || !(end + step > end) {
+        if neg_le(samples, fixed_limit) || neg_gt(start + step, start) || neg_gt(end + step, end) {
             return Some("fixed sampling range too large");
         }
     }
-    if options.format == Format::Mcap && options.sampling != Sampling::Changes {
-        if let Some(timestamps) = sample_timestamps_unchecked(log, options)
-            && mcap_chunk_bound(log, &timestamps) > MCAP_CHUNK_SIZE
-        {
-            return Some("unawaited MCAP writes past one chunk");
-        }
+    if options.format == Format::Mcap
+        && options.sampling != Sampling::Changes
+        && let Some(timestamps) = sample_timestamps_unchecked(log, options)
+        && mcap_chunk_bound(log, &timestamps) > MCAP_CHUNK_SIZE
+    {
+        return Some("unawaited MCAP writes past one chunk");
     }
     None
+}
+
+/// JS `a <= b` negated: true for `a > b` and when either side is NaN.
+fn neg_le(a: f64, b: f64) -> bool {
+    !matches!(a.partial_cmp(&b), Some(Ordering::Less | Ordering::Equal))
+}
+
+/// JS `a > b` negated.
+fn neg_gt(a: f64, b: f64) -> bool {
+    !matches!(a.partial_cmp(&b), Some(Ordering::Greater))
 }
 
 /// The worker's field list: the tree flattened parent-first with numeric `localeCompare`
@@ -240,7 +252,7 @@ fn node_at<'a>(root: &'a mut JsObject<LogFieldTree>, path: &[JsString]) -> &'a m
 
 fn flatten_tree(tree: &JsObject<LogFieldTree>, fields: &mut Vec<JsString>) {
     let mut keys: Vec<JsString> = tree.keys().cloned().collect();
-    array_sort(&mut keys, |a, b| locale_compare_numeric(a, b));
+    array_sort(&mut keys, locale_compare_numeric);
     for key in keys {
         let node = tree.get_key(&key).expect("key from keys()");
         if let Some(full_key) = &node.full_key {
@@ -282,7 +294,7 @@ fn sample_timestamps_unchecked(log: &Log, options: &ExportOptions) -> Option<Vec
             let key = log
                 .get_field_keys()
                 .into_iter()
-                .find(|key| is_akit_timestamp_key(key))?;
+                .find(is_akit_timestamp_key)?;
             log.get_number(&key, f64::NEG_INFINITY, f64::INFINITY, None, None)
                 .map(|set| set.timestamps)
         }
