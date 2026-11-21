@@ -1,0 +1,172 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/c05.json",
+    "../logs/c05.json"
+  ],
+  "fixture": {
+    "seed": 1062,
+    "assets": "../assets/c05.json",
+    "steps": [
+      {
+        "log": "../logs/c05.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 8
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])"
+          }
+        ],
+        "label": "created"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) table.joystick-selector select",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "Generic Joystick"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) table.joystick-selector select",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "Xbox Controller"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) table.joystick-selector select",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "Generic Joystick"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) table.joystick-selector select",
+          "index": 3,
+          "type": "change",
+          "props": {
+            "value": "PS5 Controller"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()"
+          }
+        ],
+        "label": "four-layouts"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(0.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection"
+        ],
+        "label": "selected"
+      },
+      {
+        "eval": "window.selection.setHoveredTime(6)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "canvas"
+        ],
+        "label": "hovered"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) table.joystick-selector select",
+          "index": 5,
+          "type": "change",
+          "props": {
+            "value": "NotAnOption"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state",
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()"
+          }
+        ],
+        "label": "unknown-option"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"Generic Joystick\", \"None\", \"Xbox Controller\", \"None\", \"None\", \"Generic Joystick\"])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "state",
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "restored"
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [
+            {
+              "name": "Steering Wheel",
+              "path": "bundledAssets/Joystick_Wheel/",
+              "components": []
+            }
+          ],
+          "loadFailures": []
+        }
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])"
+          }
+        ],
+        "label": "new-assets"
+      }
+    ]
+  }
+}

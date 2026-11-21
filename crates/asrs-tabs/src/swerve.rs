@@ -226,7 +226,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
                             }
                             ModuleVelocitySample::Undefined => {
                                 return Err(JsError::type_error(
-                                    "Cannot set properties of undefined (setting 'velocity')",
+                                    "Cannot read properties of undefined (reading 'velocity')",
                                 ));
                             }
                         }

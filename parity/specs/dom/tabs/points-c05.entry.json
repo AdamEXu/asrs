@@ -1,0 +1,154 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/c05.json",
+    "../logs/c05.json"
+  ],
+  "fixture": {
+    "seed": 1061,
+    "assets": "../assets/c05.json",
+    "steps": [
+      {
+        "log": "../logs/c05.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 11
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Translations\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Corner\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Targets\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Xs\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Ys\", 3)"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()"
+          }
+        ],
+        "label": "sources"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"plus\",\"logKey\":\"/Vision/Corner\",\"logType\":\"Translation2d\",\"visible\":true,\"options\":{\"size\":\"small\",\"groupSize\":\"2\"}},{\"type\":\"cross\",\"logKey\":\"/Vision/Targets\",\"logType\":\"TargetCorner:16f6ac0dedc8eaccb951f4895d9e18b6[]\",\"visible\":true,\"options\":{\"size\":\"large\",\"groupSize\":\"0\"}},{\"type\":\"circle\",\"logKey\":\"/Vision/Translations\",\"logType\":\"Translation2d[]\",\"visible\":true,\"options\":{\"size\":\"medium\",\"groupSize\":\"1\"}},{\"type\":\"plusSplit\",\"logKey\":\"/Vision/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\",\"size\":\"large\",\"groupSize\":\"0\"}},{\"type\":\"component\",\"logKey\":\"/Vision/Ys\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"y\"}},{\"type\":\"crossSplit\",\"logKey\":\"/Vision/Ys\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"y\",\"size\":\"small\",\"groupSize\":\"0\"}},{\"type\":\"component\",\"logKey\":\"/Vision/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\"}},{\"type\":\"circleSplit\",\"logKey\":\"/Vision/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\",\"size\":\"medium\",\"groupSize\":\"3\"}}],\"width\":800,\"height\":600,\"orientation\":\"xr,yu\",\"origin\":\"c\"})"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection"
+        ],
+        "label": "centered"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-width",
+          "type": "change",
+          "props": {
+            "value": "640.7"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.dimensions-height",
+          "type": "change",
+          "props": {
+            "value": "-3"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.orientation",
+          "type": "change",
+          "props": {
+            "value": "xu,yl"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) select.origin",
+          "type": "change",
+          "props": {
+            "value": "lr"
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])"
+          }
+        ],
+        "label": "transformed"
+      },
+      {
+        "eval": "window.selection.setHoveredTime(6)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "canvas"
+        ],
+        "label": "hovered"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.hide",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.remove",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "pruned"
+      }
+    ]
+  }
+}

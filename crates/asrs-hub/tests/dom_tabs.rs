@@ -2109,6 +2109,10 @@ impl Runner {
             (t, "change") if t.contains("joystick-selector") => {
                 self.joystick_change(index, props)
             }
+            // `button.hide` and `button.remove` on a `.source-list` item, which the four C05
+            // lists share; `index` is the item position among `.item` elements.
+            (t, "click") if t.contains("button.hide") => self.c5_item_click(index, false),
+            (t, "click") if t.contains("button.remove") => self.c5_item_click(index, true),
             _ => return Err(format!("event {etype} on {target} is not modeled")),
         }
         Ok(())
@@ -2340,6 +2344,24 @@ impl Runner {
         }
     }
 
+    fn c5_item_click(&mut self, index: usize, remove: bool) {
+        let Some(tab) = self.tabs.selected_index() else {
+            return;
+        };
+        let tab = JsValue::Number(tab as f64);
+        let Ok(controller) = self.tabs.controller_mut(&tab) else {
+            return;
+        };
+        let Some(list) = c5_source_list(controller) else {
+            return;
+        };
+        if remove {
+            list.remove(index);
+        } else {
+            let _ = with_env(&mut self.host, |env| list.toggle_hidden(env, index));
+        }
+    }
+
     fn console_highlight_click(&mut self) {
         let Some(i) = self.tabs.selected_index() else {
             return;
@@ -2532,7 +2554,7 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             .find(|(k, _)| *k == "command")
             .and_then(|(_, v)| v.get("type"))
             .and_then(Value::as_f64)
-            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 12.0));
+            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0));
         for (key, value) in &emit.values {
             let expected_value = record
                 .value(key)
