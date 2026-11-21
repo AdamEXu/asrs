@@ -9,11 +9,13 @@ use std::path::Path;
 use asrs_js::json;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_log::match_info::{MatchInfo, MatchType};
 use asrs_model::build_constants::{self, Distribution};
 use asrs_model::json_file;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, merge_preferences};
 use asrs_model::selection::SelectionMode;
 use asrs_model::tab_type::TabType;
+use asrs_model::video::{VideoSource, tba_match_key};
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Record, Value};
 
@@ -147,6 +149,7 @@ fn schema_value(name: &str) -> Option<JsValue> {
         "getTabIcon" => JsValue::string(tab(1).icon()),
         "getTabAccelerator" => JsValue::string(tab(1).accelerator()),
         "SelectionMode" => enum_object(SelectionMode::ALL.iter().map(|m| (m.name(), m.number()))),
+        "VideoSource" => enum_object(VideoSource::ALL.iter().map(|s| (s.name(), s.number()))),
         "Distribution" => enum_object(Distribution::ALL.iter().map(|d| (d.name(), d.number()))),
         "DISTRIBUTION" => build_constants::DISTRIBUTION.to_js(),
         "IS_LITE" => build_constants::IS_LITE.to_js(),
@@ -181,6 +184,73 @@ fn schemas_match_upstream() {
                 expected.encode(),
                 actual.encode()
             ))
+        }
+    });
+}
+
+fn f64_at(args: &[JsValue], i: usize) -> Result<f64, String> {
+    args.get(i)
+        .and_then(JsValue::as_f64)
+        .ok_or_else(|| format!("arg {i} is not a number"))
+}
+
+#[test]
+fn tba_match_keys_match_upstream() {
+    check_records("model/tba", |record| {
+        let name = record.string("name").ok_or("no name")?;
+        if name == "VideoSource" {
+            let expected = record.value("value").map_err(|e| e.to_string())?;
+            let actual = js_json::from_js(&schema_value("VideoSource").ok_or("not ported")?);
+            return if actual == expected {
+                Ok(())
+            } else {
+                Err(format!(
+                    "VideoSource\n  expected {}\n  actual   {}",
+                    expected.encode(),
+                    actual.encode()
+                ))
+            };
+        }
+        if name != "tbaMatchKey" {
+            return Err(format!("unknown record name {name}"));
+        }
+        let args = js_json::to_js(&record.value("args").map_err(|e| e.to_string())?)?;
+        let args = args.as_array().ok_or("args is not an array")?;
+        let event_key = args
+            .first()
+            .and_then(JsValue::as_str)
+            .cloned()
+            .ok_or("event key is not a string")?;
+        let match_type = MatchType::from_number(f64_at(args, 2)?).ok_or("bad match type")?;
+        let info = MatchInfo {
+            year: 0.0,
+            event: JsString::new(),
+            match_type,
+            match_number: f64_at(args, 3)?,
+        };
+        let actual = tba_match_key(&event_key, f64_at(args, 1)?, &info);
+        match record.string("throw") {
+            Some(expected_throw) => match actual {
+                None => Ok(()),
+                Some(key) => Err(format!(
+                    "{args:?}\n  upstream threw {expected_throw}, port gave {key:?}"
+                )),
+            },
+            None => {
+                let expected = record.value("value").map_err(|e| e.to_string())?;
+                let actual = actual
+                    .map(|k| js_json::from_js(&JsValue::String(k)))
+                    .unwrap_or(Value::Null);
+                if actual == expected {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "{args:?}\n  expected {}\n  actual   {}",
+                        expected.encode(),
+                        actual.encode()
+                    ))
+                }
+            }
         }
     });
 }

@@ -862,6 +862,25 @@ controller (the hub's default tab and any `addTab` creates) and writes inline re
 The harness answers the port's selection reads from `reads`, so a read upstream did not make,
 or one it skipped, fails the case.
 
+### Field2d controller
+
+`dom/field-2d/<case>` (`crates/asrs-tabs/tests/field_2d_dom.rs`) replays every Field2d
+controller and renderer call. `node oracle/tools/field2dSpecs.mjs` writes the specs and their
+logs (`parity/specs/dom/logs/field-2d-*.json`); edit the script, not the specs. Fixtures get the
+three test fields as `assets` unless they say otherwise, so the renderer's camera math runs.
+The recorder eval hooks every Field2d tab:
+
+| Record | Written |
+|---|---|
+| `{"f2d": "create" \| "command" \| "save" \| "activeFields", "id", "dark", "prefs", "assets", "value" \| "threw", "reads"?}` | on construction and after `getCommand`, `saveState`, `getActiveFields`; `prefs` is `{cs, ftc, ts}` of `window.preferences` |
+| `{"f2d": <method>, "phase": "begin" \| "end", ...}` | around `restoreState`, `refresh`, `newAssets` |
+| `{"f2d": "select" \| "source" \| "orientation" \| "size", ...}` then `{"f2d": "controls", "controls"}` | before the control's handler runs, and the control DOM on the next timer turn |
+| `{"f2dr": "render", "command", "dom", "camera"}` | after `render`: the DOM it read and the private camera fields after it |
+| `{"f2dr": "camera", "id", "camera"}` | when a fixture calls `window.__f2dCamera(renderer)`, after dispatching mouse events: the drag pan calls a callback the recorder cannot wrap |
+| `{"f2dr": "scrollEvent"}` then `{"f2dr": "scroll", "args"}` | a `scroll` event on the sensor and the callback it dispatched, if any; the port takes the deltas through its wheel input and must produce the same cursor |
+| `{"f2dr": "mouse", "type", "button", "shiftKey", "x", "y"}` | before the sensor's and the camera menu's listeners |
+| `{"f2dr": "save" \| "aspectRatio" \| "restoreState" \| "set2DCamera", ...}` | renderer state calls |
+
 Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
 workers and historical or live sources (logs are built with `log` steps), drag sessions other
 than through dispatched events, the documentation iframe's content, and 3D rendering.

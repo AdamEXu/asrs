@@ -1,6 +1,8 @@
 pub mod ansi;
 pub mod console;
 pub mod cx;
+pub mod field3d;
+pub mod field_2d;
 pub mod form;
 pub mod heatmap;
 pub mod joysticks;
@@ -13,3 +15,4 @@ pub mod simple_statistics;
 pub mod statistics;
 pub mod swerve;
 pub mod table;
+pub mod video;
