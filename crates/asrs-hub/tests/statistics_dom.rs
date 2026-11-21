@@ -1536,6 +1536,9 @@ fn specs() -> Vec<(PathBuf, String)> {
 
 #[test]
 fn statistics_dom_matches_upstream() {
+    if vectors::skip_on_x86_64("dom/statistics") {
+        return;
+    }
     let specs = specs();
     assert!(!specs.is_empty(), "no statistics specs");
     let mut failures = Vec::new();

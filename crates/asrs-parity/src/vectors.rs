@@ -237,11 +237,23 @@ pub fn check_local_fn_vectors(id: &str, f: impl FnMut(&FnCase<'_>) -> Response) 
 /// hosts have no generated platform vectors yet, so there a missing one is skipped.
 pub fn check_platform_fn_vectors(spec: &str, f: impl FnMut(&FnCase<'_>) -> Response) {
     let id = platform_vector(spec);
-    if std::env::consts::ARCH == "x86_64" && vector_path(&vectors_dir(), &id).is_none() {
-        skip_notice(&id, "x86_64 platform vectors have not been generated yet");
+    if vector_path(&vectors_dir(), &id).is_none() && skip_on_x86_64(&id) {
         return;
     }
     check_fn_vectors(&id, f);
+}
+
+/// Returns true, after a notice, on x86_64, so a test whose vectors hold platform-dependent
+/// results (from the C library's `pow`, as in V8) returns early until x86_64 vectors exist.
+pub fn skip_on_x86_64(what: &str) -> bool {
+    let skip = std::env::consts::ARCH == "x86_64";
+    if skip {
+        skip_notice(
+            what,
+            "platform-dependent results, and x86_64 vectors have not been generated yet",
+        );
+    }
+    skip
 }
 
 fn check_fn_records(id: &str, records: &[Record], mut f: impl FnMut(&FnCase<'_>) -> Response) {
