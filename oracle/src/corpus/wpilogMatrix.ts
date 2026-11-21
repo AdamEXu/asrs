@@ -760,6 +760,13 @@ function entryCases(corpus: Corpus) {
 function headerCases(corpus: Corpus) {
   const body = (b: WpilogBuilder) =>
     b.start(0, 1, "/Value", "double").record(1, 1000, payload.double(1)).record(1, 2000, payload.double(2));
+  const landing = (size: number, extraLen: number, at: number) => {
+    const records = body(new WpilogBuilder(null)).bytes();
+    return new WpilogBuilder({ extraLen: extraLen >>> 0 })
+      .raw(new Uint8Array(at - 12).fill(0x7f))
+      .raw(records)
+      .raw(new Uint8Array(size - at - records.length).fill(0x7f));
+  };
   const variants: [string, string, WpilogBuilder][] = [
     ["empty", "zero-byte file", new WpilogBuilder(null)],
     ["short", "11 bytes, one short of a header", new WpilogBuilder(null).raw(hex("57 50 49 4c 4f 47 00 01 00 00 00"))],
@@ -790,7 +797,52 @@ function headerCases(corpus: Corpus) {
       "extra-len-negative",
       "extra header length 2^31, a negative int32 in the indexer",
       body(new WpilogBuilder({ extraLen: 0x80000000 }))
-    ]
+    ],
+    [
+      "extra-len-into-stack",
+      "extra header length -65536: the indexer's first read is in the zeroed wasm stack below the input",
+      body(new WpilogBuilder({ extraLen: 0xffff0000 }))
+    ],
+    ...(
+      [
+        [13, 143, 83],
+        [14, 149, 89],
+        [15, 245, 89],
+        [16, 149, 85],
+        [18, 269, 25]
+      ] as const
+    ).map(([n, size, at]): [string, string, WpilogBuilder] => [
+      `extra-len-into-chunk-header-${n}`,
+      `${size} bytes, extra header length -${n}: a record read from the input's malloc chunk header and the file's first bytes jumps to offset ${at}`,
+      landing(size, -n, at)
+    ]),
+    [
+      "extra-len-memory-start",
+      "extra header length -67092: the first read is at wasm address 0",
+      body(new WpilogBuilder({ extraLen: -67092 >>> 0 }))
+    ],
+    [
+      "extra-len-below-memory",
+      "extra header length -67093: the first read is below wasm address 0 and traps",
+      body(new WpilogBuilder({ extraLen: -67093 >>> 0 }))
+    ],
+    [
+      "extra-len-into-dlmalloc-top",
+      "5000 bytes, extra header length -66047: a record read from dlmalloc's top size and least_addr jumps to offset 1045",
+      landing(5000, -66047, 1045)
+    ],
+    [
+      "extra-len-into-smallbins",
+      "460000 bytes, extra header length -65796: a record read from dlmalloc's smallbins sets the timestamp range and jumps to offset 458510",
+      landing(460000, -65796, 458510)
+    ],
+    ["extra-len-int-max", "extra header length 2^31-1", body(new WpilogBuilder({ extraLen: 0x7fffffff }))],
+    [
+      "extra-len-offset-int-max",
+      "extra header length 2^31-13, so the indexer's offset is INT_MAX and offset + 4 overflows",
+      body(new WpilogBuilder({ extraLen: 0x7ffffff3 }))
+    ],
+    ["extra-len-2-30", "extra header length 2^30", body(new WpilogBuilder({ extraLen: 0x40000000 }))]
   ];
   variants.forEach(([name, about, b]) => corpus.wpilog(`wpilog/header/${name}`, about, b.bytes()));
 }

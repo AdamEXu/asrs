@@ -1,0 +1,121 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/c05.json",
+    "../logs/c05.json"
+  ],
+  "fixture": {
+    "seed": 1060,
+    "assets": "../assets/c05.json",
+    "steps": [
+      {
+        "log": "../logs/c05.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Mech/Elevator\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Mech/Claw\")"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()"
+          }
+        ],
+        "label": "merged"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.hide",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "single"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([{\"type\":\"mechanism\",\"logKey\":\"/Mech/Claw\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{}},{\"type\":\"mechanism\",\"logKey\":\"/Mech/Elevator\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{}}])"
+      },
+      {
+        "eval": "window.selection.setHoveredTime(6)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "canvas"
+        ],
+        "label": "reversed-order"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "saved"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.remove",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "one-left"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.hide",
+          "type": "click",
+          "index": 0
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "all-hidden"
+      }
+    ]
+  }
+}

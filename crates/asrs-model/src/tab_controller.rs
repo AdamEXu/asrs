@@ -125,6 +125,11 @@ impl<'a> dyn TabCommand + 'a {
     }
 }
 
+/// `setupKeyboardControls`: whether a `keydown` with this `key` clicks the element.
+pub fn keyboard_clicks(key: &JsString) -> bool {
+    *key == JsString::from("Enter") || *key == JsString::from(" ")
+}
+
 /// `NoopController`: Documentation tabs, and tabs restored with a type the switch in
 /// `Tabs.addTab` does not know.
 #[derive(Clone, Copy, Debug, Default)]
