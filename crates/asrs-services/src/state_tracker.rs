@@ -22,7 +22,11 @@ pub struct StateTracker {
 impl StateTracker {
     /// `new StateTracker()`: reads the last saved state (without reset) and starts the save
     /// interval; [`tick`](Self::tick) is that interval's callback.
-    pub fn new(fs: &dyn Fs, ws: &dyn WindowSystem, state_file: &str) -> Result<StateTracker, JsError> {
+    pub fn new(
+        fs: &dyn Fs,
+        ws: &dyn WindowSystem,
+        state_file: &str,
+    ) -> Result<StateTracker, JsError> {
         Ok(StateTracker {
             state_file: state_file.to_owned(),
             last_state: saved_application_state(fs, ws, state_file, false)?,
@@ -62,7 +66,9 @@ impl StateTracker {
         let mut satellites = Vec::new();
         for key in self.renderer_states.keys() {
             let id = number::to_number(key.units());
-            let Some(bounds) = ws.window_bounds(id) else { continue };
+            let Some(bounds) = ws.window_bounds(id) else {
+                continue;
+            };
             let window_state = self
                 .renderer_states
                 .get_key(&JsString::from(number::to_string(id)))
@@ -118,10 +124,8 @@ impl StateTracker {
                 JsValue::Array(list) => {
                     for window in list {
                         let id = ops::get(window, "id")?;
-                        self.satellite_uuids.insert(
-                            ops::to_string(&id),
-                            JsValue::String(uuid.clone()),
-                        );
+                        self.satellite_uuids
+                            .insert(ops::to_string(&id), JsValue::String(uuid.clone()));
                     }
                 }
                 JsValue::Bytes(bytes) => {
@@ -216,8 +220,16 @@ fn load_state(
                     constants::SATELLITE_DEFAULT_HEIGHT,
                 )
             };
-            strict_set(window, "x", primary.x + primary.width / 2.0 - default_width / 2.0)?;
-            strict_set(window, "y", primary.y + primary.height / 2.0 - default_height / 2.0)?;
+            strict_set(
+                window,
+                "x",
+                primary.x + primary.width / 2.0 - default_width / 2.0,
+            )?;
+            strict_set(
+                window,
+                "y",
+                primary.y + primary.height / 2.0 - default_height / 2.0,
+            )?;
             strict_set(window, "width", default_width)?;
             strict_set(window, "height", default_height)?;
         }
@@ -229,7 +241,9 @@ fn load_state(
 /// The reset mutates elements of the spread copy; the originals live in `state`'s arrays when
 /// `hubs`/`satellites` were arrays.
 fn write_back(state: &mut JsValue, windows: &[JsValue], hubs_count: usize) {
-    let Some(object) = state.as_object_mut() else { return };
+    let Some(object) = state.as_object_mut() else {
+        return;
+    };
     if let Some(JsValue::Array(items)) = object.get_mut("hubs") {
         for (i, w) in windows[..hubs_count.min(items.len())].iter().enumerate() {
             items[i] = w.clone();
@@ -251,7 +265,10 @@ fn spread_iter(value: &JsValue) -> Result<Vec<JsValue>, JsError> {
             .iter()
             .map(|&u| JsValue::String(JsString::from_units(vec![u])))
             .collect()),
-        JsValue::Bytes(bytes) => Ok(bytes.iter().map(|&b| JsValue::Number(f64::from(b))).collect()),
+        JsValue::Bytes(bytes) => Ok(bytes
+            .iter()
+            .map(|&b| JsValue::Number(f64::from(b)))
+            .collect()),
         other => Err(JsError::type_error(format!(
             "{} is not iterable (cannot read property Symbol(Symbol.iterator))",
             describe(other)
@@ -273,7 +290,10 @@ fn describe(value: &JsValue) -> String {
 /// ToPrimitive with a Number hint: JSON-reachable objects coerce through `toString`.
 fn to_primitive(value: &JsValue) -> JsValue {
     match value {
-        JsValue::Object(_) | JsValue::Array(_) | JsValue::Bytes(_) | JsValue::Date(_)
+        JsValue::Object(_)
+        | JsValue::Array(_)
+        | JsValue::Bytes(_)
+        | JsValue::Date(_)
         | JsValue::ExtData(..) => JsValue::String(ops::to_string(value)),
         other => other.clone(),
     }

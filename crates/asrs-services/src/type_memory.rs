@@ -6,7 +6,7 @@
 use asrs_js::json::{self};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::value::{array_index, JsObject, JsValue};
+use asrs_js::value::{JsObject, JsValue, array_index};
 use asrs_model::json_file;
 
 use crate::fs::Fs;
@@ -175,10 +175,7 @@ impl TypeMemory {
         match &self.proto {
             Proto::Default | Proto::Null => JsObject::new(),
             Proto::Value(value) => match value.as_ref() {
-                JsValue::Object(proto) => proto
-                    .get_key(key)
-                    .map(ops::spread)
-                    .unwrap_or_default(),
+                JsValue::Object(proto) => proto.get_key(key).map(ops::spread).unwrap_or_default(),
                 _ => JsObject::new(),
             },
         }
@@ -240,7 +237,10 @@ pub fn save(fs: &dyn Fs, type_memory_file: &str, data: &JsValue) -> Result<(), J
         type_memory.set(&memory_id, merged)?;
     }
     if stringify(&type_memory.to_js())? != before {
-        fs.write(type_memory_file, &json_file::stringify(&type_memory.to_js())?)?;
+        fs.write(
+            type_memory_file,
+            &json_file::stringify(&type_memory.to_js())?,
+        )?;
     }
     Ok(())
 }

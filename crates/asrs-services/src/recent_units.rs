@@ -5,7 +5,7 @@ use asrs_js::string::JsError;
 use asrs_js::value::JsValue;
 use asrs_model::json_file;
 
-use crate::constants::{noop_unit_conversion, MAX_RECENT_UNITS};
+use crate::constants::{MAX_RECENT_UNITS, noop_unit_conversion};
 use crate::fs::Fs;
 
 fn stringify(value: &JsValue) -> Result<Option<String>, JsError> {

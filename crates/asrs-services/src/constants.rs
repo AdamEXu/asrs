@@ -23,7 +23,10 @@ pub fn prefs_filename(user_data: &str) -> String {
 
 /// `path.join(app.getPath("userData"), \`state-${APP_VERSION.replaceAll(".", "_")}.json\`)`.
 pub fn state_filename(user_data: &str, app_version: &str) -> String {
-    join(user_data, &format!("state-{}.json", app_version.replace('.', "_")))
+    join(
+        user_data,
+        &format!("state-{}.json", app_version.replace('.', "_")),
+    )
 }
 
 /// `path.join(app.getPath("userData"), "type-memory.json")`.

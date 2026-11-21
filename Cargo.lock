@@ -429,7 +429,6 @@ dependencies = [
 name = "asrs-services"
 version = "0.1.0"
 dependencies = [
- "asrs-cli",
  "asrs-js",
  "asrs-model",
  "asrs-parity",

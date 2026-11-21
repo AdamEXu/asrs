@@ -4,7 +4,7 @@
 use asrs_js::math;
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::{local_date, Clock, LocalZone};
+use asrs_js::time::{Clock, LocalZone, local_date};
 use asrs_js::value::JsValue;
 use asrs_model::json_file;
 
@@ -70,7 +70,11 @@ pub fn save_beta_welcome_complete(fs: &dyn Fs, beta_file: Option<&str>) -> Resul
     if state.is_null() {
         return Ok(());
     }
-    ops::set_key(&mut state, &JsString::from("welcomeComplete"), JsValue::Bool(true))?;
+    ops::set_key(
+        &mut state,
+        &JsString::from("welcomeComplete"),
+        JsValue::Bool(true),
+    )?;
     fs.write(path, &json_file::stringify(&state)?)
 }
 
@@ -161,6 +165,10 @@ pub fn open_beta_survey(
         return Ok(());
     };
     open(url);
-    ops::set_key(&mut state, &JsString::from("surveyStatus"), JsValue::Bool(true))?;
+    ops::set_key(
+        &mut state,
+        &JsString::from("surveyStatus"),
+        JsValue::Bool(true),
+    )?;
     fs.write(path, &json_file::stringify(&state)?)
 }

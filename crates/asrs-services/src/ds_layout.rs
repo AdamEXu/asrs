@@ -31,11 +31,7 @@ pub fn default_ds_layout(include_docs: bool) -> HubState {
     tabs.push(line_graph(
         "Communication",
         "2",
-        vec![stepped(
-            "DS:/Dscomm/Status/Timing/Rtt",
-            "#3b875a",
-            "normal",
-        )],
+        vec![stepped("DS:/Dscomm/Status/Timing/Rtt", "#3b875a", "normal")],
         vec![stepped(
             "DS:/Dscomm/Status/Timing/LostPackets",
             "#e5b31b",
@@ -76,17 +72,10 @@ pub fn default_ds_layout(include_docs: bool) -> HubState {
         tab_type: TabType::Joysticks,
         title: JsString::from(""),
         controller: JsValue::Array(
-            [
-                "Generic Joystick",
-                "None",
-                "None",
-                "None",
-                "None",
-                "None",
-            ]
-            .into_iter()
-            .map(JsValue::string)
-            .collect(),
+            ["Generic Joystick", "None", "None", "None", "None", "None"]
+                .into_iter()
+                .map(JsValue::string)
+                .collect(),
         ),
         controller_uuid: JsString::from("5"),
         renderer: JsValue::Null,
@@ -112,7 +101,13 @@ fn stripes(log_key: &str, color: &str) -> JsValue {
     source("stripes", log_key, "Boolean", color, None)
 }
 
-fn source(source_type: &str, log_key: &str, log_type: &str, color: &str, size: Option<&str>) -> JsValue {
+fn source(
+    source_type: &str,
+    log_key: &str,
+    log_type: &str,
+    color: &str,
+    size: Option<&str>,
+) -> JsValue {
     let mut options = JsObject::new();
     options.insert(JsString::from("color"), JsValue::string(color));
     if let Some(size) = size {

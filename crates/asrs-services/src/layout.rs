@@ -24,7 +24,10 @@ pub fn export_bytes(state: &mut JsValue, app_version: &str) -> Result<Vec<u8>, J
 pub enum Import {
     /// Windows are (re)created from this state; `bool` is the version-mismatch warning the
     /// packaged build shows, whose Cancel aborts before windows are closed.
-    Windows { state: JsValue, version_mismatch: bool },
+    Windows {
+        state: JsValue,
+        version_mismatch: bool,
+    },
     /// `layout` array present: "uses an older format" error.
     OldFormat,
     /// "was not a recognized format" error.
@@ -46,10 +49,11 @@ pub fn import(
     is_packaged: bool,
     app_version: &str,
 ) -> Result<Import, JsError> {
-    let mut data = json_file::parse(&fs.read(file_paths.first().map_or("undefined", String::as_str))?)?;
+    let mut data =
+        json_file::parse(&fs.read(file_paths.first().map_or("undefined", String::as_str))?)?;
     if !valid_layout(&data)? {
-        let old = ops::has(&data, "layout")?
-            && matches!(ops::get(&data, "layout")?, JsValue::Array(_));
+        let old =
+            ops::has(&data, "layout")? && matches!(ops::get(&data, "layout")?, JsValue::Array(_));
         return Ok(if old {
             Import::OldFormat
         } else {
@@ -69,10 +73,7 @@ pub fn import(
         }
     }
     let version_mismatch = is_packaged
-        && !ops::strict_equals(
-            &ops::get(&data, "version")?,
-            &JsValue::string(app_version),
-        );
+        && !ops::strict_equals(&ops::get(&data, "version")?, &JsValue::string(app_version));
     Ok(Import::Windows {
         state: data,
         version_mismatch,
