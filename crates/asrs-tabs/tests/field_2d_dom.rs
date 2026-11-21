@@ -562,11 +562,11 @@ impl Harness {
                     let p = js(record, "prefs")?;
                     let o = p.as_object().ok_or("prefs")?;
                     let mut preferences = Preferences::default();
-                    if let Some(cs) = o.get("cs") {
-                        if let Some(s) = cs.as_str() {
-                            preferences.coordinate_system =
-                                CoordinateSystemPreference::from_js_str(s).ok_or("prefs.cs")?;
-                        }
+                    if let Some(cs) = o.get("cs")
+                        && let Some(s) = cs.as_str()
+                    {
+                        preferences.coordinate_system =
+                            CoordinateSystemPreference::from_js_str(s).ok_or("prefs.cs")?;
                     }
                     if let Some(ftc) = o.get("ftc").and_then(JsValue::as_bool) {
                         preferences.prefers_ftc = ftc;
@@ -854,7 +854,7 @@ impl Harness {
             for (src, size) in images.iter() {
                 let size = size.as_array().ok_or("image size")?;
                 d.images
-                    .insert(src.clone(), [num(at(&size, 0))?, num(at(&size, 1))?]);
+                    .insert(src.clone(), [num(at(size, 0))?, num(at(size, 1))?]);
             }
         }
         Ok(())

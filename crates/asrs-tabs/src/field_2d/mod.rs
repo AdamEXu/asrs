@@ -149,12 +149,12 @@ pub struct Field2dDom {
 impl Field2dDom {
     /// `CONTAINER.clientWidth` (`Math.round` of the rect).
     pub fn client_width(&self) -> f64 {
-        self.container[2].round()
+        math::round(self.container[2])
     }
 
     /// `CONTAINER.clientHeight`.
     pub fn client_height(&self) -> f64 {
-        self.container[3].round()
+        math::round(self.container[3])
     }
 
     /// `[IMAGE.width, IMAGE.height]` for `src`; `[0, 0]` while unloaded or missing.
@@ -432,24 +432,22 @@ fn annotated_poses_of(value: Option<&JsValue>) -> Option<Vec<AnnotatedPose2d>> {
 }
 
 fn swerve_modules_of(value: Option<&JsValue>) -> Option<Vec<SwerveModules>> {
-    Some(
-        value?
-            .as_array()?
-            .iter()
-            .map(|m| {
-                let values = m
-                    .get("values")?
-                    .as_array()?
-                    .iter()
-                    .map(module_velocity_of)
-                    .collect::<Option<_>>()?;
-                Some(SwerveModules {
-                    values,
-                    color: m.get("color").and_then(|v| v.as_str()).cloned(),
-                })
+    value?
+        .as_array()?
+        .iter()
+        .map(|m| {
+            let values = m
+                .get("values")?
+                .as_array()?
+                .iter()
+                .map(module_velocity_of)
+                .collect::<Option<_>>()?;
+            Some(SwerveModules {
+                values,
+                color: m.get("color").and_then(|v| v.as_str()).cloned(),
             })
-            .collect::<Option<_>>()?,
-    )
+        })
+        .collect::<Option<_>>()
 }
 
 fn module_velocity_of(value: &JsValue) -> Option<ModuleVelocitySample> {
@@ -597,7 +595,7 @@ impl Field2dController {
                 group.push((field.id.clone(), field.name.clone()));
             }
         }
-        if options.iter().any(|o| *o == value) {
+        if options.contains(&value) {
             self.controls.field = value;
         } else {
             self.select_default_field(cx);
@@ -706,8 +704,9 @@ impl Field2dController {
             None => None,
         }
         .unwrap_or(FieldSystem::CenterRed);
-        if field_data.is_some() && cx.tab_preferences().is_some() {
-            let field = field_data.expect("field_data is some");
+        if let Some(field) = field_data
+            && cx.tab_preferences().is_some()
+        {
             let current = if !field.is_ftc && field.coordinate_system != FieldSystem::CenterRed {
                 CoordAlert::Frc
             } else if field.is_ftc && field.coordinate_system == FieldSystem::CenterRed {
@@ -783,13 +782,13 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         if let Some(sources) = state.get("sources") {
             with_env(cx, |env| self.list.set_state_value(env, sources)).map_err(js_error)?;
         }
-        if let Some(field) = state.get("field") {
-            if let Some(field) = field.as_str() {
-                let field = field.clone();
-                self.controls.set_field(field);
-                if self.controls.field.units().is_empty() {
-                    self.select_default_field(cx);
-                }
+        if let Some(field) = state.get("field")
+            && let Some(field) = field.as_str()
+        {
+            let field = field.clone();
+            self.controls.set_field(field);
+            if self.controls.field.units().is_empty() {
+                self.select_default_field(cx);
             }
         }
         if let Some(orientation) = state.get("orientation").and_then(JsValue::as_f64)
@@ -933,8 +932,9 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                 pose3ds.into_iter().map(annotated_pose_3d_to_2d).collect();
 
             let mut shared_trail: Vec<[f64; 2]> = Vec::new();
-            if time.is_some() && js_eq(&source.item_type, "robot") {
-                let time = time.expect("checked");
+            if let Some(time) = time
+                && js_eq(&source.item_type, "robot")
+            {
                 let start = math::max(&[timestamp_range[0], time - TRAIL_LENGTH_SECS]);
                 let end = math::min(&[timestamp_range[1], time + TRAIL_LENGTH_SECS]);
                 for sample in trail_samples(start, end) {
@@ -1252,8 +1252,8 @@ impl Field2dRenderer {
         let (offset_width, offset_height) = {
             let dom = self.dom.borrow();
             (
-                dom.scroll_container[2].round(),
-                dom.scroll_container[3].round(),
+                math::round(dom.scroll_container[2]),
+                math::round(dom.scroll_container[3]),
             )
         };
         if offset_width == 0.0 && offset_height == 0.0 {
@@ -1277,7 +1277,7 @@ impl Field2dRenderer {
 
     /// `set2DCamera`.
     pub fn set_2d_camera<C: TabCx + ?Sized>(&mut self, cx: &mut C, index: f64) {
-        if index >= 0.0 && index <= 2.0 {
+        if (0.0..=2.0).contains(&index) {
             self.set_tracking_mode(index);
             if let Some(command) = self.last_command.clone() {
                 self.render_command(cx, &command);
@@ -1673,10 +1673,10 @@ impl<C: TabCx + ?Sized> TabRenderer<C> for Field2dRenderer {
         if let Some(zoom) = state.get("zoom").and_then(JsValue::as_f64) {
             self.zoom = zoom;
         }
-        if let Some(pan) = state.get("pan").and_then(JsValue::as_array) {
-            if pan.len() == 2 {
-                self.pan = [pan[0].clone(), pan[1].clone()];
-            }
+        if let Some(pan) = state.get("pan").and_then(JsValue::as_array)
+            && pan.len() == 2
+        {
+            self.pan = [pan[0].clone(), pan[1].clone()];
         }
         if let Some(mode) = state.get("trackingMode").and_then(JsValue::as_f64) {
             self.set_tracking_mode(mode);
