@@ -12,7 +12,7 @@
 #[allow(dead_code)]
 mod js_json;
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -22,7 +22,9 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{self, Clock, Rng as _};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
-use asrs_model::messages::NamedMessage;
+use asrs_model::assets::AdvantageScopeAssets;
+use asrs_model::messages::{HubToMain, NamedMessage};
+use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{SelectionImpl, SharedLog};
 use asrs_model::source_list::{Env, SourceListError};
@@ -33,6 +35,7 @@ use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
+use asrs_tabs::cx::TabCx;
 use asrs_tabs::statistics::{StatisticsController, StatisticsEnv};
 
 const DEFAULT_IGNORED: [&str; 3] = ["save-state", "save-type-memory", "update-touch-bar-slider"];
@@ -132,6 +135,7 @@ struct Host {
     restores: Vec<(usize, &'static str, JsValue)>,
     rendered: Vec<Option<JsValue>>,
     created: usize,
+    messages: Vec<NamedMessage<HubToMain>>,
 }
 
 impl TabsHost for Host {
@@ -144,15 +148,33 @@ impl TabsHost for Host {
     }
 }
 
-impl StatisticsEnv for Host {
-    fn with_log<R>(&self, f: impl FnOnce(&Log) -> R) -> R {
-        f(&self.log.borrow())
+impl TabCx for Host {
+    fn tab_log(&self) -> Ref<'_, Log> {
+        self.log.borrow()
     }
 
-    fn selection(&mut self) -> &mut dyn Selection {
+    fn tab_selection(&mut self) -> &mut dyn Selection {
         &mut self.selection
     }
 
+    fn tab_preferences(&self) -> Option<&Preferences> {
+        None
+    }
+
+    fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
+        None
+    }
+
+    fn tab_rng(&mut self) -> &mut dyn time::Rng {
+        &mut self.rng
+    }
+
+    fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
+        self.messages.push(message);
+    }
+}
+
+impl StatisticsEnv for Host {
     fn with_source_env<R>(&mut self, f: impl FnOnce(&mut Env<'_>) -> R) -> R {
         let log = self.log.borrow();
         let mut env = Env {
@@ -280,7 +302,7 @@ impl TabFactory<Host> for StatFactory {
             TabParts {
                 uuid: JsString::from(time::create_uuid(&mut cx.rng)),
                 controller: Box::new(StatsHalf {
-                    inner: StatisticsController::new(time::create_uuid(&mut cx.rng)),
+                    inner: StatisticsController::new(cx),
                     k,
                 }),
                 renderer: Box::new(StubRenderer(k)),
@@ -518,7 +540,11 @@ impl Runner {
                 ("data", js_json::from_js(&data)),
             ]));
         }
-        for NamedMessage { name, data } in self.host.selection.take_messages() {
+        let controller_messages = std::mem::take(&mut self.host.messages);
+        for NamedMessage { name, data } in controller_messages
+            .into_iter()
+            .chain(self.host.selection.take_messages())
+        {
             if self.ignored.contains(name.name()) {
                 continue;
             }
@@ -1296,6 +1322,7 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         restores: Vec::new(),
         rendered: Vec::new(),
         created: 0,
+        messages: Vec::new(),
     };
     let tabs = Tabs::new(Box::new(StatFactory), &mut host);
     let mut runner = Runner {

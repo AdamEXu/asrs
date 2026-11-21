@@ -19,6 +19,7 @@ struct PublicLog {
     url: String,
     sha256: String,
     size: u64,
+    merge: Option<String>,
 }
 
 fn cache_dir(paths: &Paths) -> PathBuf {
@@ -72,6 +73,14 @@ fn load(root: &Path) -> Result<Vec<PublicLog>> {
                 .and_then(toml::Value::as_integer)
                 .and_then(|n| u64::try_from(n).ok())
                 .ok_or_else(|| format!("{at}: \"size\" must be a non-negative integer"))?,
+            merge: entry
+                .get("merge")
+                .map(|v| {
+                    v.as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| format!("{at}: \"merge\" must be a string"))
+                })
+                .transpose()?,
         };
         if log.sha256.len() != 64
             || !log
@@ -107,6 +116,14 @@ fn load(root: &Path) -> Result<Vec<PublicLog>> {
         logs.push(log);
     }
     Ok(logs)
+}
+
+/// Each cached public log that names a merge pair, with its pair's id.
+pub(crate) fn merge_groups(paths: &Paths) -> Result<Vec<(PathBuf, String)>> {
+    Ok(load(&paths.root)?
+        .into_iter()
+        .filter_map(|log| Some((cache_dir(paths).join(&log.file), log.merge?)))
+        .collect())
 }
 
 pub(crate) fn fetch(paths: &Paths, args: &[String]) -> Result {
@@ -228,6 +245,7 @@ mod tests {
             url: "https://example.invalid/t.bin".into(),
             sha256: sha256.into(),
             size,
+            merge: None,
         }
     }
 

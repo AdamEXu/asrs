@@ -12,7 +12,6 @@ use asrs_js::sort::{self, Slot};
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time;
 use asrs_js::value::{JsObject, JsValue, ToJs};
-use asrs_log::log::Log;
 use asrs_log::log::robot_state::{
     AKIT_TIMESTAMP_KEYS, RobotMode, RobotStateRange, get_robot_state_ranges,
 };
@@ -21,6 +20,7 @@ use asrs_model::source_list::{Env, SourceList, SourceListError, configs};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
+use crate::cx::TabCx;
 use crate::simple_statistics as stats;
 
 const UPDATE_PERIOD_MS: f64 = 100.0;
@@ -31,12 +31,8 @@ const TIME_RANGE_OPTIONS: &[&str] = &[
     "visible", "full", "enabled", "auto", "teleop", "live-30", "live-10",
 ];
 
-/// What the controller reads from the hub window.
-pub trait StatisticsEnv {
-    /// `window.log`.
-    fn with_log<R>(&self, f: impl FnOnce(&Log) -> R) -> R;
-    /// `window.selection`.
-    fn selection(&mut self) -> &mut dyn Selection;
+/// What the controller reads besides [`TabCx`].
+pub trait StatisticsEnv: TabCx {
     /// `window.log`, `window.typeMemory` and the dark-theme flag, for `SourceList` calls.
     fn with_source_env<R>(&mut self, f: impl FnOnce(&mut Env<'_>) -> R) -> R;
     /// `new Date().getTime()`.
@@ -73,8 +69,10 @@ pub struct StatisticsController {
 }
 
 impl StatisticsController {
-    /// `uuid` is the `SourceList`'s own `createUUID()`.
-    pub fn new(uuid: String) -> Self {
+    /// `new StatisticsController(root)` after the controller's own `UUID`: the `SourceList`
+    /// draws its UUID from `Math.random`.
+    pub fn new(cx: &mut (impl TabCx + ?Sized)) -> Self {
+        let uuid = time::create_uuid(cx.tab_rng());
         let mut controller = StatisticsController {
             source_list: SourceList::new(configs::statistics(), uuid, false),
             time_range: Some(JsString::from("visible")),
@@ -154,7 +152,7 @@ impl StatisticsController {
         let time = if self.source_list.state().is_empty() {
             None
         } else {
-            cx.selection().get_render_time()
+            cx.tab_selection().get_render_time()
         };
         cx.with_source_env(|env| self.source_list.frame(env, time, None))
             .map_err(source_error)
@@ -310,27 +308,28 @@ impl StatisticsController {
             i += step;
         }
 
-        let (state_ranges, akit_key, akit_timestamps, timestamp_range, sources) =
-            cx.with_log(|log| {
-                let akit_key = log
-                    .get_field_keys()
-                    .iter()
-                    .find(|key| AKIT_TIMESTAMP_KEYS.iter().any(|k| eq_str(key, k)))
-                    .cloned();
-                let akit_timestamps = akit_key.as_ref().and_then(|key| {
-                    log.get_number(key, f64::NEG_INFINITY, f64::INFINITY, None, None)
-                });
-                (
-                    get_robot_state_ranges(log),
-                    akit_key,
-                    akit_timestamps,
-                    log.get_timestamp_range(),
-                    self.source_list.displayed_state(log),
-                )
-            });
+        let (state_ranges, akit_key, akit_timestamps, timestamp_range, sources) = {
+            let log = cx.tab_log();
+            let log = &*log;
+            let akit_key = log
+                .get_field_keys()
+                .iter()
+                .find(|key| AKIT_TIMESTAMP_KEYS.iter().any(|k| eq_str(key, k)))
+                .cloned();
+            let akit_timestamps = akit_key
+                .as_ref()
+                .and_then(|key| log.get_number(key, f64::NEG_INFINITY, f64::INFINITY, None, None));
+            (
+                get_robot_state_ranges(log),
+                akit_key,
+                akit_timestamps,
+                log.get_timestamp_range(),
+                self.source_list.displayed_state(log),
+            )
+        };
 
         let time_range = self.time_range_value();
-        let selection = cx.selection();
+        let selection = cx.tab_selection();
         let mut sample_times = Vec::new();
         if akit_key.is_some() {
             if let Some(akit) = &akit_timestamps {
@@ -430,7 +429,8 @@ fn field_command(
     source: &SourceListItemState,
     ref_source: Option<&SourceListItemState>,
 ) -> Result<(), JsError> {
-    let (data, ref_data) = cx.with_log(|log| {
+    let (data, ref_data) = {
+        let log = cx.tab_log();
         (
             log.get_number(
                 &source.log_key,
@@ -443,7 +443,7 @@ fn field_command(
                 log.get_number(&r.log_key, f64::NEG_INFINITY, f64::INFINITY, None, None)
             }),
         )
-    });
+    };
 
     let mut index = 0usize;
     let mut samples: Vec<JsValue> = Vec::with_capacity(sample_times.len());
@@ -858,7 +858,7 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
-        self.live_options_disabled = cx.selection().get_current_live_time().is_none();
+        self.live_options_disabled = cx.tab_selection().get_current_live_time().is_none();
         let sources_js = JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect());
         let sources_str = json::stringify(&sources_js)
             .map_err(|e| JsError {
@@ -868,10 +868,10 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
             .unwrap_or_default();
         let current_time = time::time_clip(cx.now());
         let time_range = self.time_range_value();
-        let is_live_mode =
-            cx.selection().get_current_live_time().is_some() && starts_with(&time_range, "live");
+        let is_live_mode = cx.tab_selection().get_current_live_time().is_some()
+            && starts_with(&time_range, "live");
         let visible_changed = eq_str(&time_range, "visible")
-            && cx.selection().get_timeline_range() != self.last_timeline_range;
+            && cx.tab_selection().get_timeline_range() != self.last_timeline_range;
         if (self.should_update
             || sources_str != self.last_source_str
             || is_live_mode
@@ -880,7 +880,7 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
         {
             self.should_update = false;
             self.last_source_str = sources_str;
-            self.last_timeline_range = cx.selection().get_timeline_range();
+            self.last_timeline_range = cx.tab_selection().get_timeline_range();
             self.last_update_time = current_time;
             self.recompute(cx)?;
         }

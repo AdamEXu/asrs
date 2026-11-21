@@ -1,0 +1,662 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "assets": "../assets/minimal.json",
+    "images": {
+      "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
+        3900,
+        1800
+      ]
+    },
+    "seed": 1103,
+    "layout": [
+      {
+        "selector": "div.console-table-container",
+        "rect": [
+          300,
+          92,
+          800,
+          358
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "log": [
+          [
+            "putRaw",
+            "/Console",
+            1.0,
+            {
+              "b": "01"
+            }
+          ],
+          [
+            "setStructuredType",
+            "/Console",
+            "Console"
+          ],
+          [
+            "putRaw",
+            "/Console/ConsoleLine",
+            0.25,
+            {
+              "b": "02"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ConsoleLine",
+            1.0,
+            {
+              "b": "03"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ConsoleLine",
+            2.0,
+            {
+              "b": "04"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ConsoleLine",
+            3.5,
+            {
+              "b": "05"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ConsoleLine",
+            5.0,
+            {
+              "b": "06"
+            }
+          ],
+          [
+            "setStructuredType",
+            "/Console/ConsoleLine",
+            "ConsoleLineTimestamp"
+          ],
+          [
+            "putString",
+            "/Console/ConsoleLine/ConsoleLine",
+            0.5,
+            "Robot program starting"
+          ],
+          [
+            "putString",
+            "/Console/ConsoleLine/ConsoleLine",
+            2.0,
+            "\u001b[31mERROR\u001b[0m in loop"
+          ],
+          [
+            "putString",
+            "/Console/ConsoleLine/ConsoleLine",
+            3.4,
+            "Warning: Loop time of 0.02s overrun"
+          ],
+          [
+            "putRaw",
+            "/Console/ErrorInfo",
+            2.0,
+            {
+              "b": "07"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ErrorInfo",
+            4.0,
+            {
+              "b": "08"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ErrorInfo",
+            6.0,
+            {
+              "b": "09"
+            }
+          ],
+          [
+            "setStructuredType",
+            "/Console/ErrorInfo",
+            "ErrorInfoTimestamp"
+          ],
+          [
+            "putString",
+            "/Console/ErrorInfo/ErrorInfo/Details",
+            2.0,
+            "CAN timeout"
+          ],
+          [
+            "putString",
+            "/Console/ErrorInfo/ErrorInfo/Location",
+            2.0,
+            ""
+          ],
+          [
+            "putString",
+            "/Console/ErrorInfo/ErrorInfo/CallStack",
+            2.0,
+            ""
+          ],
+          [
+            "putBoolean",
+            "/Console/ErrorInfo/ErrorInfo/IsError",
+            2.0,
+            true
+          ],
+          [
+            "putString",
+            "/Console/ErrorInfo/ErrorInfo/Details",
+            4.0,
+            "Joystick unplugged"
+          ],
+          [
+            "putString",
+            "/Console/ErrorInfo/ErrorInfo/Location",
+            4.0,
+            "frc.robot.Robot"
+          ],
+          [
+            "putBoolean",
+            "/Console/ErrorInfo/ErrorInfo/IsError",
+            4.0,
+            false
+          ],
+          [
+            "putString",
+            "/Console/ErrorInfo/ErrorInfo/CallStack",
+            6.0,
+            "at Robot.java:12\nat Main.java:3"
+          ],
+          [
+            "putRaw",
+            "/Console/ProgramCrashInfo",
+            2.0,
+            {
+              "b": "0a"
+            }
+          ],
+          [
+            "putRaw",
+            "/Console/ProgramCrashInfo",
+            7.0,
+            {
+              "b": "0b"
+            }
+          ],
+          [
+            "setStructuredType",
+            "/Console/ProgramCrashInfo",
+            "ProgramCrashInfoTimestamp"
+          ],
+          [
+            "putString",
+            "/Console/ProgramCrashInfo/ProgramCrashInfo/Details",
+            7.0,
+            "NullPointerException"
+          ],
+          [
+            "putString",
+            "/Console/ProgramCrashInfo/ProgramCrashInfo/CallStack",
+            7.0,
+            "at Drive.periodic"
+          ],
+          [
+            "putRaw",
+            "/Standalone/Err",
+            1.5,
+            {
+              "b": "0c"
+            }
+          ],
+          [
+            "putRaw",
+            "/Standalone/Err",
+            2.5,
+            {
+              "b": "0d"
+            }
+          ],
+          [
+            "setStructuredType",
+            "/Standalone/Err",
+            "ErrorInfoTimestamp"
+          ],
+          [
+            "putString",
+            "/Standalone/Err/ErrorInfo/Details",
+            1.5,
+            "Brownout"
+          ],
+          [
+            "putString",
+            "/Str/Log",
+            0.5,
+            "All good"
+          ],
+          [
+            "putString",
+            "/Str/Log",
+            1.5,
+            "ERROR: arm stalled"
+          ],
+          [
+            "putString",
+            "/Str/Log",
+            2.5,
+            "warning, ErRoR and Warning"
+          ],
+          [
+            "putString",
+            "/Str/Log",
+            3.5,
+            "\u00e9t\u00e9 WARNING \u0130"
+          ],
+          [
+            "putString",
+            "/Str/Log",
+            4.5,
+            "plain"
+          ],
+          [
+            "putNumber",
+            "/Num",
+            1.0,
+            3
+          ]
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "empty"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Console"
+                ]
+              },
+              "x": 600,
+              "y": 200,
+              "end": false
+            }
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "div.console-table-drag-highlight"
+          }
+        ],
+        "label": "drag-over"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Console"
+                ]
+              },
+              "x": 600,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()]"
+          }
+        ],
+        "label": "console-struct"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Num"
+                ]
+              },
+              "x": 600,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Str/Log"
+                ]
+              },
+              "x": 200,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Str/Log"
+                ]
+              },
+              "x": 600,
+              "y": 460,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": []
+              },
+              "x": 600,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "ignored-drags"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "drag-update",
+          "kind": "CustomEvent",
+          "init": {
+            "detail": {
+              "data": {
+                "fields": [
+                  "/Standalone/Err",
+                  "/Str/Log"
+                ]
+              },
+              "x": 600,
+              "y": 200,
+              "end": true
+            }
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()]"
+          }
+        ],
+        "label": "standalone"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Str/Log\")"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "string-field"
+      },
+      {
+        "event": {
+          "target": "button.highlight-button",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!warn"
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "highlight-filter"
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "Error"
+          }
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "filter"
+      },
+      {
+        "event": {
+          "target": "button.console-table-key-delete",
+          "type": "click",
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "closed"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(5)"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "restore-number-ignored"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Missing\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.restoreState({\"highlight\": \"yes\"})"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "missing"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.restoreState({\"highlight\": false})"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/RealOutputs/Console\")"
+      },
+      {
+        "liveTime": 9
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "selection": [
+          "lock"
+        ]
+      },
+      {
+        "frames": 3
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "document.querySelector('div.renderer-content > :not([hidden]) div.console-table-container').scrollTop"
+          }
+        ],
+        "label": "locked"
+      },
+      {
+        "event": {
+          "target": "div.console-table-container",
+          "type": "scroll",
+          "props": {
+            "scrollTop": -1
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "selection"
+        ],
+        "label": "unlocked"
+      }
+    ]
+  }
+}
