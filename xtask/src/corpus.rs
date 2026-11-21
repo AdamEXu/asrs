@@ -240,7 +240,8 @@ fn drift(root: &Path, name: &str) -> Result<Option<String>> {
     let manifest = json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     let dir = output_dir(root, name);
     if !dir.is_dir() {
-        return Ok(Some(format!("{} is missing", rel_display(root, &dir))));
+        let rel = dir.strip_prefix(root).unwrap_or(&dir);
+        return Ok(Some(format!("{} is missing", rel.display())));
     }
     let mut listed = Vec::new();
     for case in manifest
@@ -271,10 +272,6 @@ fn drift(root: &Path, name: &str) -> Result<Option<String>> {
         .into_iter()
         .find(|rel| listed.binary_search(rel).is_err())
         .map(|rel| format!("{rel} is not in the manifest")))
-}
-
-fn rel_display(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root).unwrap_or(path).display().to_string()
 }
 
 /// The manifest keeps one case per line so diffs stay readable.
