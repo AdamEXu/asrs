@@ -815,9 +815,9 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
             self.set_source_state(cx, &sources)?;
         }
         if ops::has(state, "timeRange")?
-            && let JsValue::String(v) = ops::get(state, "timeRange")?
+            && let JsValue::String(v) = &ops::get(state, "timeRange")?
         {
-            self.set_select(v);
+            self.set_select(v.clone());
         }
         if ops::has(state, "rangeMin")?
             && let JsValue::Number(v) = ops::get(state, "rangeMin")?

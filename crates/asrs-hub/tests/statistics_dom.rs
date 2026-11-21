@@ -359,8 +359,8 @@ fn seeds(infos: &[Value]) -> Result<Vec<Seed>, String> {
         let rows = info.as_array().ok_or("info is not an array")?;
         for row in rows.iter().skip(seeds.len()) {
             let row = row.as_array().ok_or("info row is not an array")?;
-            let uuid = match js_json::to_js(&row[0])? {
-                JsValue::String(s) => s,
+            let uuid = match &js_json::to_js(&row[0])? {
+                JsValue::String(s) => s.clone(),
                 other => return Err(format!("creation uuid {other:?}")),
             };
             seeds.push(Seed {
@@ -378,11 +378,11 @@ fn current_from(info: &Value) -> Result<Vec<Current>, String> {
         .iter()
         .map(|row| {
             let row = row.as_array().ok_or("info row is not an array")?;
-            let fields = match js_json::to_js(&row[4])? {
+            let fields = match &js_json::to_js(&row[4])? {
                 JsValue::Array(items) => items
-                    .into_iter()
+                    .iter()
                     .map(|v| match v {
-                        JsValue::String(s) => Ok(s),
+                        JsValue::String(s) => Ok(s.clone()),
                         other => Err(format!("active field {other:?}")),
                     })
                     .collect::<Result<_, String>>()?,
@@ -637,7 +637,7 @@ impl Runner {
             "toggle-controls" => tabs.toggle_controls_visible(cx),
             "new-satellite" => tabs.new_satellite(),
             "set-active-satellites" => {
-                let JsValue::Array(uuids) = data else {
+                let Some(uuids) = data.into_array() else {
                     return Err(err("set-active-satellites needs an array"));
                 };
                 tabs.set_active_satellites(uuids);
@@ -701,7 +701,7 @@ impl Runner {
                 _ => {}
             },
             "setTimelineRange" => {
-                let range = match arg(0) {
+                let range = match &arg(0) {
                     JsValue::Array(r) => match r.as_slice() {
                         [JsValue::Number(a), JsValue::Number(b)] => [*a, *b],
                         _ => [0.0, 0.0],
@@ -712,7 +712,7 @@ impl Runner {
                 sel.set_timeline_range(range, lock);
             }
             "setGrabZoomRange" => {
-                let range = match arg(0) {
+                let range = match &arg(0) {
                     JsValue::Array(r) => match r.as_slice() {
                         [JsValue::Number(a), JsValue::Number(b)] => Some([*a, *b]),
                         _ => None,
@@ -816,7 +816,7 @@ impl Runner {
             let arg = to_js(&json)?;
             return Ok(match member {
                 "sourceList.addField" => {
-                    let JsValue::String(key) = arg else {
+                    let Some(key) = arg.into_string() else {
                         return Err(err(format!("addField arg in {expr}")));
                     };
                     self.stats(tab_i, |c, host| {
@@ -1111,7 +1111,7 @@ fn run_log_step(log: &SharedLog, calls: &[Value]) -> Result<(), JsError> {
             }
             "putPose" => {
                 let pose = js(2)?;
-                let translation = match asrs_js::ops::get(&pose, "translation")? {
+                let translation = match &asrs_js::ops::get(&pose, "translation")? {
                     JsValue::Array(t) => match t.as_slice() {
                         [JsValue::Number(x), JsValue::Number(y)] => [*x, *y],
                         _ => [0.0, 0.0],
