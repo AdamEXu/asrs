@@ -924,7 +924,7 @@ pub fn compare(spec: &Path, vector_id: &str, options: &Options) -> Result<usize,
             let expected = record
                 .value(key)
                 .map_err(|e| format!("record {} missing {key}: {e}", record.line))?;
-            if *value != expected {
+            if !vectors::values_match(&expected, value) {
                 return Err(format!(
                     "line {} ({key}): {}",
                     record.line,

@@ -37,6 +37,9 @@ fn pixel(bgra: &[u8], x: u32, y: u32) -> [u8; 4] {
 }
 
 fn renderer() -> Option<Renderer> {
+    if asrs_parity::ci::skip_in_ci("render_gpu", "a GPU") {
+        return None;
+    }
     match Renderer::new() {
         Ok(r) => Some(r),
         Err(e) => {

@@ -9,8 +9,16 @@ use crate::Result;
 use crate::oracle::Paths;
 
 const MANIFEST: &str = "parity/corpus/public.toml";
-const REQUIRED: [&str; 8] = [
-    "name", "file", "url", "sha256", "size", "format", "source", "license",
+const REQUIRED: [&str; 9] = [
+    "name",
+    "file",
+    "url",
+    "sha256",
+    "size",
+    "format",
+    "source",
+    "license",
+    "redistributable",
 ];
 
 struct PublicLog {
@@ -19,6 +27,7 @@ struct PublicLog {
     url: String,
     sha256: String,
     size: u64,
+    redistributable: bool,
     merge: Option<String>,
 }
 
@@ -73,6 +82,10 @@ fn load(root: &Path) -> Result<Vec<PublicLog>> {
                 .and_then(toml::Value::as_integer)
                 .and_then(|n| u64::try_from(n).ok())
                 .ok_or_else(|| format!("{at}: \"size\" must be a non-negative integer"))?,
+            redistributable: entry
+                .get("redistributable")
+                .and_then(toml::Value::as_bool)
+                .ok_or_else(|| format!("{at}: \"redistributable\" must be true or false"))?,
             merge: entry
                 .get("merge")
                 .map(|v| {
@@ -123,6 +136,16 @@ pub(crate) fn merge_groups(paths: &Paths) -> Result<Vec<(PathBuf, String)>> {
     Ok(load(&paths.root)?
         .into_iter()
         .filter_map(|log| Some((cache_dir(paths).join(&log.file), log.merge?)))
+        .collect())
+}
+
+/// The logs without a redistribution license that are not in the cache; local vectors are
+/// derived from them.
+pub(crate) fn missing_local_logs(paths: &Paths) -> Result<Vec<String>> {
+    Ok(load(&paths.root)?
+        .into_iter()
+        .filter(|log| !log.redistributable && !cache_dir(paths).join(&log.file).is_file())
+        .map(|log| log.name)
         .collect())
 }
 
@@ -245,6 +268,7 @@ mod tests {
             url: "https://example.invalid/t.bin".into(),
             sha256: sha256.into(),
             size,
+            redistributable: true,
             merge: None,
         }
     }

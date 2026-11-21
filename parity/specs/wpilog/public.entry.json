@@ -1,1 +1,1 @@
-{"entry":"genWpilog","args":["public"]}
+{"entry":"genWpilog","args":["public"],"inputs":["../../corpus/public.toml"],"local":true}

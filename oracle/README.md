@@ -338,6 +338,19 @@ New corpus-reading generators should use it.
 them into `$ASRS_CACHE/public-logs/`, rejects any file whose size or hash differs, and keeps verified files;
 `--offline` only verifies. The logs are never committed.
 
+Each log also records `license` and `redistributable`. Only data derived from a log with
+`redistributable = true` (the MIT-licensed DSLOG-Reader files) may be committed. Specs whose vectors
+come from the others (the RAR1741 logs, which state no license) carry `"local": true`: `oracle gen`
+writes them to `$ASRS_CACHE/vectors/` with their own `MANIFEST.json`, never to `parity/vectors`, and
+`--check` skips them. `cargo xtask corpus fetch` followed by `cargo xtask oracle gen --local`
+regenerates them; without the logs a full `oracle gen` skips them with a warning. The oracle enforces
+the split: `src/corpus/publicLogs.ts` refuses to read a non-redistributable log unless xtask set
+`ASRS_ORACLE_LOCAL=1`, which it does only for local specs. Rust tests load local vectors with
+`asrs_parity::vectors::check_local_records` and `check_local_fn_vectors`, which skip with a notice
+when the vector has not been generated on this machine. The local specs are `wpilog/public`,
+`log/search-public` and `log/merge-offset-public`; `log/search` and `log/merge-offset` keep their
+synthetic cases committed.
+
 ## Historical decode and export
 
 `decode`, `export` and `historicalRun` (`src/historical/`) open a log the way the hub does: a real

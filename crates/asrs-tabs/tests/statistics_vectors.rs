@@ -14,7 +14,7 @@ use asrs_js::value::JsValue;
 use asrs_parity::cve1::Value;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::Record;
-use asrs_parity::{FnCase, Response, fn_vectors, record_vectors};
+use asrs_parity::{FnCase, Response, record_vectors};
 use asrs_tabs::simple_statistics::{self as ss, StatsError};
 
 /// `ss[name](...args)`, or `None` when the port has no such function.
@@ -82,11 +82,10 @@ fn dispatch(case: &FnCase<'_>) -> Response {
     }
 }
 
-fn_vectors!(
-    simple_statistics,
-    &asrs_parity::vectors::platform_vector("tabs/simple-statistics"),
-    dispatch
-);
+#[test]
+fn simple_statistics() {
+    asrs_parity::vectors::check_platform_fn_vectors("tabs/simple-statistics", dispatch);
+}
 
 fn random_case(arrays: &mut HashMap<String, JsValue>, record: &Record) -> Result<(), String> {
     let id = record.value("a").map_err(|e| e.0)?.encode();
@@ -117,7 +116,7 @@ fn random_case(arrays: &mut HashMap<String, JsValue>, record: &Record) -> Result
         Err(StatsError::Thrown(e)) if e.name == "Unmodeled" => format!("unmodeled {}", e.message),
         Err(StatsError::Thrown(e)) => format!("throw {}", thrown(&e).encode()),
     };
-    if actual == expected {
+    if asrs_parity::vectors::encoded_match(&expected, &actual) {
         Ok(())
     } else {
         Err(format!(

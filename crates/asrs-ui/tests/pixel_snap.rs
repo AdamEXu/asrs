@@ -45,6 +45,9 @@ fn assert_span(shot: &Capture, scale: u32, lo: u32, hi: u32) {
 }
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("pixel snap", "a GPU") {
+        return;
+    }
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("pixel snap: skipped, no headless renderer on this platform");
         return;

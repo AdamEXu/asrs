@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 #[cfg(feature = "profiler")]
 use crate::DebugFrameOverlayMode;
 #[cfg(any(feature = "inspector", debug_assertions))]

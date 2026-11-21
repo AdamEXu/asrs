@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ASRS_CI: "1"
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  UPSTREAM_REPOSITORY: Mechanical-Advantage/AdvantageScope
+  # Keep equal to UPSTREAM_COMMIT in xtask/src/oracle.rs.
+  UPSTREAM_COMMIT: 8fc5b89fc93be5dba5a66005ea6111fa16594aa8
+
+jobs:
+  # Job-level `if` cannot read the matrix, so the matrix itself is chosen here: while the
+  # repository is private only ubuntu-latest runs, since macOS and Windows minutes are billed
+  # at a multiple.
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        env:
+          PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          all='[
+            {"os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu"},
+            {"os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu"},
+            {"os":"macos-latest","target":"aarch64-apple-darwin"},
+            {"os":"windows-latest","target":"x86_64-pc-windows-msvc"},
+            {"os":"windows-11-arm","target":"aarch64-pc-windows-msvc"}
+          ]'
+          if [ "$PRIVATE" = "false" ]; then
+            filter='.'
+          else
+            filter='map(select(.os == "ubuntu-latest"))'
+          fi
+          echo "include=$(jq -c "$filter" <<<"$all")" >> "$GITHUB_OUTPUT"
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install
+      - run: cargo fmt --all --check
+
+  build:
+    needs: matrix
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out upstream AdvantageScope
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPOSITORY }}
+          ref: ${{ env.UPSTREAM_COMMIT }}
+          path: reference/AdvantageScope
+          persist-credentials: false
+      - name: Install GPUI system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev \
+            libvulkan-dev mesa-vulkan-drivers
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
+      - name: Build
+        run: cargo build --workspace --all-targets --locked
+      - name: Layout, vendored gpui-pre and generated tables
+        run: |
+          cargo xtask layout
+          cargo xtask gpui verify
+          cargo xtask gpui features
+          cargo xtask tables units --check
+          cargo xtask tables spark --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Clippy (parity features)
+        run: >-
+          cargo clippy -p asrs-ui -p asrs-app --all-targets --locked
+          --features asrs-ui/parity,asrs-app/parity -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked --no-fail-fast
+      - name: Test (asrs-ui parity feature)
+        run: cargo test -p asrs-ui --locked --features parity --no-fail-fast
+      - name: Bundle
+        run: cargo xtask bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asrs-${{ matrix.target }}
+          path: target/bundle/host
+          if-no-files-found: error

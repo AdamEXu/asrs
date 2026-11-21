@@ -36,16 +36,21 @@ commands:
   pack [--out <file>] write the built upstream copy (without node_modules) to
                       target/oracle/pack.tar.zst for `setup --from-pack` on another host
   build               rebuild only the harness bundles (step 7)
-  gen [<id>...] [--check | --stale]
+  gen [<id>...] [--check | --stale] [--local]
                       regenerate committed vectors from parity/specs into parity/vectors and
-                      update parity/vectors/MANIFEST.json. A vector's generator hash covers
+                      update parity/vectors/MANIFEST.json. Local specs (`local: true`, derived
+                      from public logs without a redistribution license) write to
+                      $ASRS_CACHE/vectors and its own MANIFEST.json instead, and are skipped
+                      with a warning when those logs are not fetched; --local regenerates only
+                      them (after `cargo xtask corpus fetch`). A vector's generator hash covers
                       the harness files its entry bundles (target/oracle/dist/inputs.json),
                       build.mjs, package-lock.json, its spec files and zone. --stale
                       regenerates only vectors whose manifest entry is stale. --check first
                       fails, without running the oracle, if the manifest's upstream commit,
                       Electron version or environment policy, or any vector's generator hash,
                       zone or content hash, differs from the current one; then it regenerates
-                      in memory and fails if any committed vector differs
+                      in memory and fails if any committed vector differs (local vectors are
+                      not checked)
   fn [--zone <zone>] [args]
                       run the fn oracle: JSONL requests on stdin, CVE-1 results on stdout
                       (`cargo xtask oracle fn --help` explains the protocol)

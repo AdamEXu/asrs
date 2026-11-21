@@ -2,6 +2,9 @@ use asrs_ui::platform::probe::{native_menu_roundtrip, read_wheel_sample, wheel_g
 use asrs_ui::platform::{PopupEntry, PopupItem, PopupMenu, WheelDelta, native_menu_label};
 
 fn main() {
+    if asrs_parity::ci::skip_in_ci("platform mac", "a display") {
+        return;
+    }
     if cfg!(target_os = "macos") {
         labels();
         menu_tree();
