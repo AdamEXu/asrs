@@ -158,11 +158,16 @@ export class Net implements Outbox {
     });
   }
 
-  /** `fetch` for GET requests. An abort reaches the server as `http-abort`. */
+  /**
+   * `fetch` for GET requests. An abort reaches the server as `http-abort`. A URL that does not
+   * parse rejects before any network activity, as Chromium's `Request` constructor throws, but
+   * still takes an id.
+   */
   fetch(url: string, init?: { signal?: AbortSignal }): Promise<unknown> {
     const signal = init?.signal;
     if (signal?.aborted) return Promise.reject(signal.reason);
     const id = this.nextId++;
+    if (!URL.canParse(url)) return Promise.reject(new TypeError("Failed to fetch"));
     return new Promise((resolve, reject) => {
       const request = { resolve, reject, url, done: false };
       this.requests.set(id, request);
@@ -185,7 +190,7 @@ export class Net implements Outbox {
     g.fetch = (url: string, init?: { signal?: AbortSignal }) => this.fetch(String(url), init);
     (AbortSignal as any).timeout = (ms: number) => {
       const controller = new AbortController();
-      setTimeout(() => controller.abort(new DOMException("signal timed out", "TimeoutError")), ms);
+      this.loop.postDelayedTask(() => controller.abort(new DOMException("signal timed out", "TimeoutError")), ms);
       return controller.signal;
     };
     return () => {

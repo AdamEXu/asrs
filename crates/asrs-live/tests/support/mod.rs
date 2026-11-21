@@ -5,20 +5,24 @@
 #![allow(dead_code)]
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, V8MathRandom};
+use asrs_live::http::{FetchEvent, FetchTransport, Response};
 use asrs_live::nt4::{
-    NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, ReadyState, RequestId, SocketId,
-    WsMessage,
+    NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, PublisherPreferences, ReadyState,
+    RequestId, SocketId, WsMessage,
 };
-use asrs_live::{ManualClock, Thrown, TimerId, TimerQueue};
+use asrs_live::{
+    LiveDataSourceStatus, LiveLog, LivePreferences, ManualClock, Thrown, TimerId, TimerQueue,
+};
 use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{ClientEvent, Payload, ServerEvent, ServerHost, Session, trace_line};
+use asrs_parity::vectors;
 
 #[path = "../../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code, clippy::all)]
@@ -61,7 +65,7 @@ pub enum Delivery {
     WsReceived(u32, WsMessage),
     WsDropped(u32),
     WsCloseDone(u32, bool),
-    HttpSettled(u32, Option<f64>),
+    HttpSettled(u32, Option<(f64, String)>),
 }
 
 struct FakeSocket {
@@ -84,6 +88,7 @@ pub struct FakeNet {
     requests: BTreeMap<u32, FakeRequest>,
     tasks: Vec<(f64, u64, Delivery)>,
     seq: u64,
+    microtasks: VecDeque<NetEvent>,
 }
 
 fn payload(data: &WsMessage) -> Payload {
@@ -93,14 +98,9 @@ fn payload(data: &WsMessage) -> Payload {
     }
 }
 
-/// `new URL(url).href` for the URLs the sources build.
+/// `new URL(url).href`; only URLs that parse reach the server.
 fn href(url: &str) -> String {
-    let after_scheme = url.find("://").map_or(0, |i| i + 3);
-    if url[after_scheme..].contains('/') {
-        url.to_owned()
-    } else {
-        format!("{url}/")
-    }
+    url::Url::parse(url).expect("fetched URLs parse").into()
 }
 
 impl FakeNet {
@@ -148,8 +148,8 @@ impl FakeNet {
                     },
                 ),
                 ServerEvent::WsDrop { id } => Delivery::WsDropped(id),
-                ServerEvent::HttpReply { id, status, .. } => {
-                    Delivery::HttpSettled(id, Some(status))
+                ServerEvent::HttpReply { id, status, body } => {
+                    Delivery::HttpSettled(id, Some((status, body)))
                 }
                 ServerEvent::HttpRefuse { id } => Delivery::HttpSettled(id, None),
                 other => return Err(format!("unexpected server event {other:?}")),
@@ -207,19 +207,21 @@ impl FakeNet {
                 }
                 _ => Vec::new(),
             },
-            Delivery::HttpSettled(id, status) => match self.requests.get_mut(&id) {
+            Delivery::HttpSettled(id, settled) => match self.requests.get_mut(&id) {
                 Some(r) if !r.done => {
                     r.done = true;
-                    match status {
-                        Some(status) => {
-                            vec![NetEvent::FetchResponse(
-                                RequestId(id),
-                                status as u16,
-                                href(&r.url),
-                            )]
-                        }
-                        None => vec![NetEvent::FetchFailed(RequestId(id))],
-                    }
+                    let event = match settled {
+                        Some((status, body)) => FetchEvent::Response(
+                            RequestId(id),
+                            Response {
+                                status: status as u16,
+                                url: href(&r.url),
+                                body,
+                            },
+                        ),
+                        None => FetchEvent::Failed(RequestId(id)),
+                    };
+                    vec![NetEvent::Fetch(event)]
                 }
                 _ => Vec::new(),
             },
@@ -284,10 +286,17 @@ impl Nt4Transport for FakeNet {
             Delivery::WsCloseDone(id.0, was_connecting),
         );
     }
+}
 
+impl FetchTransport for FakeNet {
     fn fetch(&mut self, url: &str) -> RequestId {
         let id = self.next_id;
         self.next_id += 1;
+        if url::Url::parse(url).is_err() {
+            self.microtasks
+                .push_back(NetEvent::Fetch(FetchEvent::Failed(RequestId(id))));
+            return RequestId(id);
+        }
         self.requests.insert(
             id,
             FakeRequest {
@@ -338,9 +347,107 @@ impl Env {
         }
     }
 
+    pub fn phoenix_cx(&mut self) -> asrs_live::phoenix::PhoenixContext<'_> {
+        asrs_live::phoenix::PhoenixContext {
+            timers: &mut self.timers,
+            net: &mut self.net,
+        }
+    }
+
     pub fn app(&self, ev: &str, v: Option<&Value>) {
         self.trace.app(self.now(), ev, v);
     }
+}
+
+/// `window.preferences`, reduced to what the live sources read; `None` is `null`.
+pub struct Prefs {
+    pub live_subscribe_mode: String,
+    pub live_discard: f64,
+    pub publisher: PublisherPreferences,
+}
+
+impl Prefs {
+    pub fn defaults() -> Self {
+        Prefs {
+            live_subscribe_mode: "low-bandwidth".to_owned(),
+            live_discard: 1200.0,
+            publisher: PublisherPreferences {
+                publish_filter: JsString::new(),
+                robot_address: JsString::from("robot.local"),
+                systemcore_static_address: JsString::new(),
+            },
+        }
+    }
+
+    pub fn merge(&mut self, json: &Json) {
+        if let Some(mode) = json.get("liveSubscribeMode").and_then(Json::as_str) {
+            self.live_subscribe_mode = mode.to_string_lossy();
+        }
+        if let Some(discard) = json.get("liveDiscard").and_then(Json::as_f64) {
+            self.live_discard = discard;
+        }
+        if let Some(filter) = json.get("publishFilter").and_then(Json::as_str) {
+            self.publisher.publish_filter = JsString::from_units(filter.units().to_vec());
+        }
+        if let Some(address) = json.get("robotAddress").and_then(Json::as_str) {
+            self.publisher.robot_address = JsString::from_units(address.units().to_vec());
+        }
+        if let Some(address) = json.get("systemcoreStaticAddress").and_then(Json::as_str) {
+            self.publisher.systemcore_static_address =
+                JsString::from_units(address.units().to_vec());
+        }
+    }
+
+    pub fn as_live(&self) -> LivePreferences {
+        LivePreferences {
+            live_discard: Some(self.live_discard),
+            live_subscribe_mode: Some(JsString::from(&self.live_subscribe_mode)),
+        }
+    }
+}
+
+pub fn prefs_op(prefs: &mut Option<Prefs>, arg: &Json) {
+    match arg {
+        Json::Null => *prefs = None,
+        update => prefs.get_or_insert_with(Prefs::defaults).merge(update),
+    }
+}
+
+pub fn initial_prefs(session: &Session) -> Option<Prefs> {
+    match session.client.get("prefs") {
+        Some(Json::Null) => None,
+        Some(update) => {
+            let mut prefs = Prefs::defaults();
+            prefs.merge(update);
+            Some(prefs)
+        }
+        None => Some(Prefs::defaults()),
+    }
+}
+
+pub fn status_callback(trace: &Trace, clock: &ManualClock) -> Box<dyn FnMut(LiveDataSourceStatus)> {
+    let trace = trace.clone();
+    let clock = clock.clone();
+    Box::new(move |status| {
+        trace.app(
+            clock.now(),
+            "status",
+            Some(&Value::number(f64::from(status as u8))),
+        );
+    })
+}
+
+/// The oracle's `logId(log)`: the index a `Log` object first reached the trace under.
+pub fn log_id(ids: &Rc<RefCell<Vec<usize>>>, log: Option<&LiveLog>) -> Value {
+    let Some(log) = log else {
+        return Value::Null;
+    };
+    let ptr = Rc::as_ptr(log) as usize;
+    let mut ids = ids.borrow_mut();
+    if !ids.contains(&ptr) {
+        ids.push(ptr);
+    }
+    Value::number(ids.iter().position(|p| *p == ptr).expect("inserted") as f64)
 }
 
 pub trait Driver {
@@ -348,6 +455,12 @@ pub trait Driver {
     fn notify(&mut self, event: NetEvent, env: &mut Env);
     fn timer(&mut self, id: TimerId, env: &mut Env);
     fn finish(&mut self, _env: &mut Env) {}
+}
+
+fn drain_microtasks(driver: &mut dyn Driver, env: &mut Env) {
+    while let Some(event) = env.net.microtasks.pop_front() {
+        driver.notify(event, env);
+    }
 }
 
 /// Runs a session the way `LiveLoop.run` does and returns the trace.
@@ -369,6 +482,7 @@ pub fn run(
             requests: BTreeMap::new(),
             tasks: Vec::new(),
             seq: 0,
+            microtasks: VecDeque::new(),
         },
         wall: WallClock {
             loop_clock: clock.clone(),
@@ -402,6 +516,7 @@ pub fn run(
         }
         while let Some(step) = steps.get(next_step).filter(|s| s.t <= now) {
             next_step += 1;
+            env.timers.begin_task();
             if let Err(e) = driver.op(&step.op, &mut env) {
                 env.app(
                     "throw",
@@ -410,19 +525,20 @@ pub fn run(
                     ))),
                 );
             }
+            drain_microtasks(driver.as_mut(), &mut env);
         }
         loop {
             if let Some(delivery) = env.net.take_task(now) {
+                env.timers.begin_task();
                 for event in env.net.apply(delivery) {
                     driver.notify(event, &mut env);
                 }
-                continue;
-            }
-            if let Some(id) = env.timers.fire_next() {
+            } else if let Some(id) = env.timers.fire_next() {
                 driver.timer(id, &mut env);
-                continue;
+            } else {
+                break;
             }
-            break;
+            drain_microtasks(driver.as_mut(), &mut env);
         }
     }
     if session.end_ms > clock.now() {
@@ -430,6 +546,32 @@ pub fn run(
     }
     driver.finish(&mut env);
     Ok(trace.lines())
+}
+
+/// Loads the session's committed vector and checks `produced` against it, line for line.
+pub fn check_trace(id: &str, produced: Vec<String>) -> Result<usize, String> {
+    let expected: Vec<String> = vectors::load(id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|r| r.text)
+        .collect();
+    if let Some(i) =
+        (0..expected.len().max(produced.len())).find(|&i| expected.get(i) != produced.get(i))
+    {
+        let context = |lines: &[String]| {
+            lines[i.saturating_sub(3)..(i + 1).min(lines.len())]
+                .iter()
+                .map(|l| format!("    {}", &l[..l.len().min(400)]))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        return Err(format!(
+            "{id}: line {i} differs\n  oracle:\n{}\n  port:\n{}",
+            context(&expected),
+            context(&produced)
+        ));
+    }
+    Ok(produced.len())
 }
 
 pub fn js_arg(json: &Json) -> Result<asrs_js::value::JsValue, Thrown> {

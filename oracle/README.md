@@ -190,7 +190,9 @@ file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of th
   entry's stdout lines are the vector, so an entry can build values JSON cannot express. The
   entry runs with `ASRS_ORACLE_SPEC` set to the spec's path, so it may read data from the spec
   itself (the `dom` entry does). `inputs` lists other files the entry reads, relative to the
-  spec; they join the generator hash.
+  spec; they join the generator hash. An entry that reads a synthetic corpus names it in an
+  arg (`target/parity/corpus/synthetic/<name>`) or an input
+  (`../../corpus/synthetic/<name>.manifest.json`); see Corpus preconditions.
 - `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
   a sibling file (`*.requests.jsonl` files are never specs themselves).
 - `<id>.session.json`: a live session (see Live sessions), run by the `liveSession` entry
@@ -311,6 +313,25 @@ Corpus B (`src/corpusB.ts`):
 over the generated A and B corpora for `--deep` runs. Output goes to `target/parity/corpus/fuzz/<seed>/` with a
 `list.jsonl` naming each mutant's source, donor and mutation steps; nothing is committed.
 
+### Corpus preconditions
+
+The generated tree under `target/` is not committed, so a fresh build dir has none. Every command
+that reads it first checks each corpus it needs against the committed manifest (every listed file
+present with its hash, nothing unlisted) and, if the tree is missing or differs, logs
+`corpus <name> is not current (...); regenerating it` and rebuilds it as `corpus gen <name>` would,
+without touching the committed manifest. If the generator no longer reproduces that manifest the
+command fails and says to run `cargo xtask corpus gen <name>` and commit the result. The commands:
+
+- `oracle gen`, `gen --stale` and `gen --check`, for the vectors they will run whose spec names a
+  corpus (`log/merge-offset` and `urcl/urcl` read corpus B);
+- `parity decode` with no file arguments (corpora A and B);
+- `oracle historical` and `corpus fuzz` (the corpora they run over).
+
+Generators that read the tree also check it themselves: `src/corpus/generated.ts` lists the
+manifest's files for a generator and exits non-zero naming the first missing one, so
+`oracle run genUrcl ...` on a partial tree fails instead of writing a vector with fewer cases.
+New corpus-reading generators should use it.
+
 ## Public corpus
 
 `parity/corpus/public.toml` lists real logs by pinned URL, sha256 and size. `cargo xtask corpus fetch` downloads
@@ -398,6 +419,39 @@ skipped. Two option sets are skipped because upstream would never finish:
 The port's `asrs-cli decode <file>` must print the same dump and `asrs-cli export <file> --options
 <json>` the same bytes, with the same skip rules, so `cargo xtask parity decode` and `export` can
 compare the two with `cmp`.
+
+`historicalSession <sessions.jsonl>` (`src/historicalSession.ts`) runs scripted hub sessions on
+one `Log`: each `open` step is a new `HistoricalDataSource` as `startHistorical` makes it, and
+main replies go to every source still in the hub's list. Timeouts and worker messages follow the
+`Scheduler` rules above; intervals and animation frames run only from `tick` and `frame` steps.
+The page `Date` starts at 1700000000000 and moves only with `frame`; each worker realm's `Date` is
+pinned to 1000000000000 as in `decodeWorker`. A throw out of a page task prints
+`{"event": "threw"}` and the session goes on, as a browser does. A worker that sends nothing for
+`--stall-ms` (default 30000) while busy is killed and never heard from again, which is what a
+worker that loops forever or dies looks like to the page. The trace, CVE-1 JSONL:
+
+```text
+{"session": name}
+{"step", "op"}                                               before each step
+{"event": "status", "source", "status"}                      plus "customError" on Error
+{"event": "progress", "source", "value"}
+{"event": "refresh", "source", "hasNewFields"}
+{"event": "loaded", "source"}                                a loadAllFields() promise resolved
+{"event": "main", "name", "path"}                            historical-start
+{"event": "main", "name", "extension", "bytes"}              historical-start-raw
+{"event": "worker", "worker", "script"}                      worker index in creation order
+{"event": "post", "worker", "type": "start", "files"}        file lengths, null for a missing file
+{"event": "post", "worker", "type": "parseField", "key"}
+{"event": "terminate", "worker"}
+{"event": "active", "fields"}                                after a pick step
+{"event": "threw"}
+dump lines as above                                          phase from the step, status is every
+                                                             source's status joined by ","
+{"end": name}
+```
+
+`asrs-cli historical-session` prints the same trace, and `cargo xtask parity historical` compares
+the two over every decode-suite log (`cargo xtask parity historical --help` lists the scripts).
 
 `cargo xtask oracle historical` runs every log file of a synthetic corpus (extensions with a
 worker; a `.dsevents` only when it has no `.dslog` sibling) through `decode` and the export matrix
@@ -549,8 +603,13 @@ due, where a delivery (server message, IPC message, socket event) due now goes b
 timer, oldest first, and timers follow Blink's rules (see `src/live/clock.ts` and
 `asrs_live::timers`). The emulated main process shares that one timer queue and those rules, so its heartbeat
 interval and socket timers order against the renderer's by creation. Every task is followed by a
-full microtask drain. `requestIdleCallback`
-fires at its `timeout`, `requestAnimationFrame` 16 ms later, both as ordinary timers. IPC
+full microtask drain. Timers carry the HTML nesting level: one created in a timer task (or its
+microtasks) at level n gets n + 1, an interval rises a level per repeat, and a delay under 4 ms
+is raised to 4 ms when the creating level is above 5, so a `setTimeout(0)` in a fresh
+`setInterval` callback waits 4 ms from the sixth repeat on (measured in Electron 39).
+`requestIdleCallback` fires at its `timeout`, `requestAnimationFrame` 16 ms later and
+`AbortSignal.timeout` at its delay, all as level-0 delayed tasks in the timers' due-time order;
+Chromium's ordering of those against short DOM timers at an equal due time differs (#204). IPC
 between the renderer and the emulated main process is a delivery with no delay.
 
 Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
@@ -558,11 +617,12 @@ client `latencyMs` later. Connection and request ids count up from 1 across webs
 requests and TCP sockets. Websockets behave like the browser's: `send` while connecting
 throws, a refused handshake fires `error` then `close`, a server drop fires `close` (1006),
 `close()` fires `close` a round trip later, and messages arriving when not open are dropped.
-`fetch` is GET only; `AbortSignal.timeout` is a timer, and an abort reaches the server as
-`http-abort`. TCP sockets follow the Node behaviour main.ts relies on: writes while connecting
-go out on connect, `setTimeout` is an idle timer refreshed by connecting, reads and writes, a
-refusal emits `error` then `close`; `error` is emitted at once and `close` as a later
-delivery, as Node emits it from the handle's close callback.
+`fetch` is GET only, and an abort reaches the server as `http-abort`. A URL that `new URL`
+rejects (a robot address of `""`) makes `fetch` reject at once, as Chromium's does, without
+reaching the server; it still takes an id. TCP sockets follow the Node behaviour main.ts
+relies on: writes while connecting go out on connect, `setTimeout` is an idle timer refreshed
+by connecting, reads and writes, a refusal emits `error` then `close`; `error` is emitted at
+once and `close` as a later delivery, as Node emits it from the handle's close callback.
 
 ### Trace
 
@@ -752,6 +812,21 @@ assets and a few fields: commands, state, canvas traces, selection and DOM text 
 renderer and controls at a selected time and again while hovering), `dom/hub/selection-sidebar`
 (timeline hover and click, playback, step, zoom, sidebar expand, collapse and search) and
 `dom/canvas/fixed-advance`.
+
+### Tabs model
+
+`dom/tabs-model/<case>` (`crates/asrs-hub/tests/tabs_dom.rs`) drives `Tabs` through main messages,
+tab-bar and controls-handle events and restores of well-formed and malformed states. Until the
+controllers and renderers are ported the port runs with stub halves, so each fixture's first
+step is a `/*tabs:recorder*/` eval that wraps `window.tabs.addTab` to list every created tab
+(with its creation-time UUID) and log its `restoreState` calls, plus each Table renderer's
+`getTimestampRange` results and Table controller's `addRendererRange` calls, which
+`/*tabs:ranges*/` drains along with the renderer UUIDs. Every capture then starts with
+`/*tabs:info*/`, which reports per created tab what its controller and renderer save, its
+`showTimeline()` and active fields; the stubs answer from it. The other evals compare what
+`Tabs` owns: `window.tabs.saveState()`, `/*tabs:view*/` (tab bar classes and text, hidden flags,
+CSS variables, drag highlight and item), `/*tabs:restores*/` and `[...window.tabs.getActiveFields()]`.
+`/*tabs:tag*/` sets `data-i` on the title elements so layout rules can place them.
 
 ### Source lists
 

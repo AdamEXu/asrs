@@ -251,6 +251,24 @@ function legacyCases(corpus: Corpus) {
       { path: "urcl/r1/single-field.wpilog", bytes: log.bytes() }
     ]);
   }
+  {
+    const rng = corpus.rng("urcl/r1/empty-key");
+    const log = new UrclLog();
+    const entries = [log.entry("", "URCL"), log.entry("/URCL", "URCL"), log.entry("Arm", "URCL")];
+    for (let cycle = 0; cycle < 3; cycle++) {
+      const persistent = legacyPersistent();
+      const periodic = devices.flatMap((dev) => legacyPeriodicFrames(rng, cycle, dev));
+      const value = new Bytes().le(persistent.length, 4).le(periodic.length, 4);
+      persistent.forEach((p) => value.raw(p));
+      periodic.forEach((p) => value.raw(p));
+      for (const entry of entries) log.put(entry, SECOND + cycle * 20000, value.finish());
+    }
+    corpus.add(
+      "urcl/r1/empty-key",
+      "URCL r1 under the empty key, whose generated children start with \"/\" and so make every \"/\" key generated, beside \"/URCL\" and \"Arm\"",
+      [{ path: "urcl/r1/empty-key.wpilog", bytes: log.bytes() }]
+    );
+  }
 }
 
 export function urclMatrix(corpus: Corpus): void {

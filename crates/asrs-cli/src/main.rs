@@ -8,7 +8,9 @@ mod export_cmd;
 mod fn_cmd;
 mod functions;
 mod geometry;
+mod glb;
 mod heatmap;
+mod historical_session;
 mod js_color;
 mod js_json;
 mod js_math;
@@ -44,9 +46,15 @@ commands:
                 decode fully, then run the export port (same outcomes as oracle export)
   export-run --root <dir> --out <dir> --spec <spec>
                 run the spec's export matrix over stdin inputs (same as oracle historicalRun)
+  historical-session <sessions.jsonl>
+                run scripted HistoricalDataSource sessions and print their traces (same as
+                oracle historicalSession)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
   canvas render rasterize the oracle's canvas scenes with asrs-canvas
-  heatmap       replay the oracle's heatmap fixtures with asrs-tabs";
+  heatmap       replay the oracle's heatmap fixtures with asrs-tabs
+  glb release <dir> [--jobs N]
+                load every Field3d_/Robot_ asset under <dir> in all three render modes
+                (same lines as oracle genGlb release)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -55,9 +63,11 @@ fn main() -> ExitCode {
         Some("decode") => return decode::run(&args[1..]),
         Some("decode-worker") => return decode_worker::run(&args[1..]),
         Some("export") | Some("export-run") => return export_cmd::run(&args[1..]),
+        Some("historical-session") => return historical_session::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
         Some("heatmap") => heatmap::run(&args[1..]),
         Some("wpilog") => wpilog::run(&args[1..]),
+        Some("glb") => glb::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {

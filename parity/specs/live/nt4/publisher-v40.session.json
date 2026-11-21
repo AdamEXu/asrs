@@ -1,0 +1,26 @@
+{
+  "protocol": "nt4",
+  "seed": 5507,
+  "latencyMs": 3,
+  "endMs": 6200,
+  "client": {
+    "source": "nt4-publisher",
+    "mode": "sim"
+  },
+  "server": {
+    "version": "4.0",
+    "offsetUs": 9000000
+  },
+  "steps": [
+    { "t": 0, "client": ["log", "putNumber", "NT:/Data/x", 1, 5] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Data/x", 2, 6] },
+    { "t": 0, "client": ["log", "putString", "NT:/Data/s", 1, "hi"] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 600, "client": ["select", 2, null] },
+    { "t": 1200, "server": ["drop"] },
+    { "t": 2200, "server": ["down", "refuse"] },
+    { "t": 2200, "server": ["drop"] },
+    { "t": 4200, "server": ["up"] },
+    { "t": 5600, "client": ["stop"] }
+  ]
+}

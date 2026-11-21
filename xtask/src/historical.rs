@@ -23,7 +23,8 @@ per input for the decode dump and for the export set.
             byte-identical to the committed manifest
   --jobs N  oracle processes to run in parallel (default: available cores, at most 8)
 
-The corpus must already be generated (`cargo xtask corpus gen`).";
+A corpus whose generated tree is missing or differs from its committed manifest is regenerated
+first (`cargo xtask corpus gen <corpus>`).";
 
 pub(crate) const SPEC: &str = "parity/corpus/historical.spec.json";
 pub(crate) const MANIFEST_SUFFIX: &str = ".historical.json";
@@ -70,6 +71,12 @@ pub(crate) fn run(paths: &Paths, args: &[String]) -> Result {
             return Err(format!("oracle historical: no corpus {name:?}"));
         }
     }
+    let selected: Vec<String> = corpora
+        .iter()
+        .filter(|n| opts.names.is_empty() || opts.names.contains(n))
+        .cloned()
+        .collect();
+    corpus::ensure(paths, &selected)?;
     oracle::build_harness(paths)?;
     let spec_path = paths.root.join(SPEC);
     let generator = oracle::hash_bytes(
@@ -84,10 +91,7 @@ pub(crate) fn run(paths: &Paths, args: &[String]) -> Result {
         .as_bytes(),
     );
     let mut failures = Vec::new();
-    for name in corpora
-        .iter()
-        .filter(|n| opts.names.is_empty() || opts.names.contains(n))
-    {
+    for name in &selected {
         eprintln!("==> historical {name}");
         let inputs = corpus_inputs(paths, name)?;
         let out_root = paths.root.join("target/parity/oracle");

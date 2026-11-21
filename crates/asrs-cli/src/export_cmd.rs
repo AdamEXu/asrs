@@ -17,25 +17,20 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::Arc;
 
 use std::cmp::Ordering;
 
 use asrs_formats::export::{self, ExportOptions, Format, Sampling};
-use asrs_formats::historical::{HistoricalDataSource, UnportedWorker, WorkerName, create_worker};
-use asrs_formats::session::Session;
-use asrs_formats::worker::{Abort, DecodeWorker};
 use asrs_js::json;
 use asrs_js::string::JsString;
-use asrs_js::time::{SetClock, V8MathRandom};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_value_sets::LogValueSetAny;
 use asrs_log::log::{Log, LoggableType};
 use asrs_log::util::upper_bound;
 use asrs_parity::json::Json;
-use asrs_services::historical_start;
 
-use crate::decode::{NEVER_COMPLETES, UNMODELED, WORKER_FROZEN_MS};
+use crate::decode::{NEVER_COMPLETES, UNMODELED};
+use crate::historical_session::{End, Session};
 
 const USAGE: &str = "usage:
   asrs-cli export <log file> --options <ExportOptions JSON> [--out <file>] [--fixed-limit <n>]
@@ -67,38 +62,24 @@ struct Case {
     options: ExportOptions,
 }
 
-fn make_worker(name: WorkerName) -> Result<Box<dyn DecodeWorker>, UnportedWorker> {
-    create_worker(
-        name,
-        Box::new(V8MathRandom::from_entropy()),
-        Box::new(SetClock(WORKER_FROZEN_MS)),
-    )
-}
-
-fn open_session(path: &Path) -> Result<Session, Abort> {
-    let source = HistoricalDataSource::open_file(&path.to_string_lossy());
-    let display = source.path();
-    let files: Vec<Option<Arc<[u8]>>> = historical_start::read_files(display)
-        .into_iter()
-        .map(|file| file.map(Arc::from))
-        .collect();
-    let mut session = Session::open(
-        display,
-        files,
-        Box::new(V8MathRandom::from_entropy()),
-        &mut make_worker,
-    )?;
-    session.load_everything(&mut make_worker)?;
+fn open_session(path: &Path) -> Result<Session, End> {
+    let mut session = Session::new(false, true);
+    session.open(
+        &JsString::from(path.to_string_lossy().as_ref()),
+        &JsString::new(),
+    );
+    session.settle()?;
+    session.load_everything()?;
     Ok(session)
 }
 
-fn abort_exit(path: &Path, abort: &Abort) -> ExitCode {
-    match abort {
-        Abort::NeverReturns | Abort::Threw => {
+fn end_exit(path: &Path, end: &End) -> ExitCode {
+    match end {
+        End::NeverReturns => {
             eprintln!("{}: upstream's worker never returns", path.display());
             ExitCode::from(NEVER_COMPLETES)
         }
-        Abort::Unmodeled(what) => {
+        End::Unmodeled(what) => {
             eprintln!("{}: not modeled: {what}", path.display());
             ExitCode::from(UNMODELED)
         }
@@ -216,13 +197,13 @@ fn export_single(args: &[String]) -> ExitCode {
     }
     let session = match open_session(&path) {
         Ok(session) => session,
-        Err(abort) => return abort_exit(&path, &abort),
+        Err(end) => return end_exit(&path, &end),
     };
-    if let Some(reason) = skip_reason(&session.log, &options, limit) {
+    if let Some(reason) = skip_reason(session.log(), &options, limit) {
         eprintln!("export skipped: {reason}");
         return ExitCode::from(UNMODELED);
     }
-    match export::export(&session.log, &options) {
+    match export::export(session.log(), &options) {
         Ok(output) => {
             let bytes = output.into_bytes();
             let result = match option_value(args, "--out") {
@@ -477,21 +458,20 @@ fn export_run(args: &[String]) -> ExitCode {
             Ok(session) => {
                 let mut outputs = Vec::with_capacity(cases.len());
                 for (case, fixed_limit) in &cases {
-                    outputs.push(run_case(&session.log, case, *fixed_limit, &dir));
+                    outputs.push(run_case(session.log(), case, *fixed_limit, &dir));
                 }
                 Json::object([
                     ("input", Json::string(input)),
                     ("outputs", Json::Array(outputs)),
                 ])
             }
-            Err(abort) => Json::object([
+            Err(end) => Json::object([
                 ("input", Json::string(input)),
                 (
                     "error",
-                    Json::string(match abort {
-                        Abort::Threw => "decode worker threw",
-                        Abort::NeverReturns => "decode worker never returns",
-                        Abort::Unmodeled(what) => what,
+                    Json::string(match end {
+                        End::NeverReturns => "decode worker never returns",
+                        End::Unmodeled(what) => what,
                     }),
                 ),
             ]),

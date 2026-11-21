@@ -10,6 +10,8 @@ const UNSAFE_ROOTS: &[&str] = &[
     "asrs-canvas/src/text/mac",
     "asrs-canvas/src/text/win",
     "asrs-canvas/src/text/linux",
+    "asrs-js/src/math/libm.rs",
+    "asrs-libm-lgpl/src/lib.rs",
 ];
 
 struct Rule {
@@ -20,6 +22,7 @@ struct Rule {
 
 const RULES: &[Rule] = &[
     rule("asrs-js", false, &[]),
+    rule("asrs-libm-lgpl", false, &[]),
     rule("asrs-log", true, &["asrs-js"]),
     rule("asrs-formats", true, &["asrs-js", "asrs-log"]),
     rule("asrs-live", true, &["asrs-js", "asrs-log", "asrs-formats"]),
@@ -221,7 +224,7 @@ fn check_crate(rule: &Rule, dir: &Path, problems: &mut Vec<String>) -> Result {
     }
     for path in &sources {
         let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        if lifts_unsafe_lint(&text) && !unsafe_allowed(rule.name, dir, path) {
+        if lifts_unsafe_lint(&text, "") && !unsafe_allowed(rule.name, dir, path) {
             problems.push(format!(
                 "{}: unsafe_code may only be allowed under {} ({})",
                 rule.name,
@@ -229,14 +232,23 @@ fn check_crate(rule: &Rule, dir: &Path, problems: &mut Vec<String>) -> Result {
                 path.display()
             ));
         }
+        let crate_root = *path == dir.join("src/lib.rs") || *path == dir.join("src/main.rs");
+        if crate_root && lifts_unsafe_lint(&text, "#![") {
+            problems.push(format!(
+                "{}: a crate root may allow unsafe_code only on items, not crate-wide ({})",
+                rule.name,
+                path.display()
+            ));
+        }
     }
     Ok(())
 }
 
-fn lifts_unsafe_lint(text: &str) -> bool {
+fn lifts_unsafe_lint(text: &str, prefix: &str) -> bool {
     let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
     ["allow(", "expect(", "warn("].iter().any(|level| {
-        compact.match_indices(level).any(|(i, _)| {
+        let level = format!("{prefix}{level}");
+        compact.match_indices(&level).any(|(i, _)| {
             compact[i + level.len()..]
                 .split(')')
                 .next()

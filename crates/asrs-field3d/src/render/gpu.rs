@@ -1002,6 +1002,7 @@ fn upload_geometry(device: &wgpu::Device, geometry: &Geometry) -> GpuGeometry {
             array: ArrayData::Uint8(values),
             item_size,
             normalized: true,
+            ..
         }) => {
             let mut bytes = vec![255u8; count * 4];
             for i in 0..count {

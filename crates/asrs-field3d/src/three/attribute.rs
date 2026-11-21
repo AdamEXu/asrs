@@ -174,12 +174,15 @@ fn normalize(value: f64, kind: ArrayKind) -> f64 {
     }
 }
 
-/// A non-interleaved `BufferAttribute`.
+/// A `BufferAttribute`, holding its own tuples. An `InterleavedBufferAttribute` is stored
+/// de-interleaved with `interleaved` set: it reads and writes the same values, and it lacks the
+/// `gpuType` property, which makes `mergeAttributes` refuse to mix it with plain attributes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BufferAttribute {
     pub array: ArrayData,
     pub item_size: usize,
     pub normalized: bool,
+    pub interleaved: bool,
 }
 
 impl BufferAttribute {
@@ -188,6 +191,7 @@ impl BufferAttribute {
             array,
             item_size,
             normalized,
+            interleaved: false,
         }
     }
 

@@ -12,6 +12,7 @@ import LoggableType from "@upstream/shared/log/LoggableType";
 import { sparkFramesSpec as spec2025 } from "@upstream/hub/dataSources/schema/spark/spark-frames-2025";
 import { sparkFramesSpec as spec2026 } from "@upstream/hub/dataSources/schema/spark/spark-frames-2026";
 import { getStructuredTypeFromRaw } from "@upstream/shared/log/LogKeyUtils";
+import { AUTONOMOUS_KEYS, ENABLED_KEYS, PROGRAM_START_TIME_KEYS, UTILITY_KEYS } from "@upstream/shared/log/RobotState";
 import { Cve1, bitsToNumber, encode, fromTree, numberToBits, toTree } from "./cve1";
 import { HistoricalSession } from "./historical/session";
 import { dump } from "./logRun";
@@ -29,6 +30,7 @@ import {
   statusFrame
 } from "./corpus/urcl";
 import { WpilogBuilder } from "./corpus/wpilog";
+import { generatedFiles } from "./corpus/generated";
 
 // Emits replay vectors for the URCL custom schemas (URCLSchema.ts, URCLSchemaLegacy.ts).
 //
@@ -375,6 +377,15 @@ async function corpusCase(root: string, rel: string): Promise<void> {
     const sessionDump = dump(session.log);
     const replayed = replay(extracted.ops, extracted.types, extracted.records, requests);
     if (encode(toTree(replayed)) !== encode(toTree(sessionDump))) {
+      // wpilogWorker.ts parses an entry during "start" when an eager key equals it or starts
+      // with it plus "/", which the "/"-rooted eager keys do for the empty key. The replay does
+      // not model that; parity decode and parity historical cover these files through the real
+      // source.
+      const eagerKeys = [...ENABLED_KEYS, ...AUTONOMOUS_KEYS, ...UTILITY_KEYS, ...PROGRAM_START_TIME_KEYS];
+      if (Object.keys(extracted.types).some((key) => eagerKeys.some((e) => e === key || e.startsWith(key + "/")))) {
+        console.error(`${id}: skipped, an entry is parsed eagerly`);
+        return;
+      }
       const a = replayed as { keys: string[]; fields: unknown[] };
       const b = sessionDump as { keys: string[]; fields: unknown[] };
       for (const key of new Set([...a.keys, ...b.keys])) {
@@ -732,11 +743,17 @@ if (dir === undefined) {
   console.error(USAGE);
   process.exit(2);
 }
-out({ t: "meta", generator: "urcl" });
-for (const rel of listFiles(path.join(dir, "urcl"), "urcl")) {
-  await corpusCase(dir, rel);
+const expected = new Set(
+  generatedFiles(dir, (rel) => (rel.startsWith("urcl/") || rel.startsWith("fuzz/urcl/")) && rel.endsWith(".wpilog"))
+);
+const listed = [...listFiles(path.join(dir, "urcl"), "urcl"), ...listFiles(path.join(dir, "fuzz/urcl"), "fuzz/urcl")];
+const unlisted = listed.filter((rel) => !expected.has(rel));
+if (unlisted.length > 0) {
+  console.error(`${dir}: ${unlisted.join(", ")} not in the committed manifest; run \`cargo xtask corpus gen\``);
+  process.exit(1);
 }
-for (const rel of listFiles(path.join(dir, "fuzz/urcl"), "fuzz/urcl")) {
+out({ t: "meta", generator: "urcl" });
+for (const rel of listed) {
   await corpusCase(dir, rel);
 }
 const generatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "genUrcl-"));

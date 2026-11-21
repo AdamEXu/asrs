@@ -5,6 +5,7 @@ import { removeMergePrefix } from "@upstream/shared/log/LogKeyUtils";
 import { AUTONOMOUS_KEYS, ENABLED_KEYS, UTILITY_KEYS } from "@upstream/shared/log/RobotState";
 import { toTree } from "./cve1";
 import { Rng } from "./corpus/rng";
+import { generatedFiles } from "./corpus/generated";
 import { HistoricalSession } from "./historical/session";
 import { run } from "./lazyHelpers/mergeCalculatorRun";
 import { runWithLog } from "./logRun";
@@ -50,6 +51,7 @@ async function corpusPairs() {
     fs.readFileSync(path.join(root, "parity/corpus/synthetic/b.manifest.json"), "utf8")
   );
   const dir = path.join(root, "target/parity/corpus/synthetic/b");
+  generatedFiles(dir, (rel) => rel.startsWith("merge/"));
   for (const c of manifest.list) {
     if (!c.id.startsWith("merge/")) continue;
     const files = c.files.map((f: { path: string }) => f.path).sort();

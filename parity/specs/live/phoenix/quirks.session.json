@@ -1,0 +1,35 @@
+{
+  "protocol": "phoenix",
+  "seed": 1250,
+  "latencyMs": 1,
+  "endMs": 1700,
+  "client": {
+    "source": "phoenix",
+    "address": "127.0.0.1",
+    "tabs": ["Phoenix6/TalonFX-1/Position", "Phoenix6/TalonFX-1/ControlMode"]
+  },
+  "server": {
+    "startUs": 4000000,
+    "points": 3,
+    "stepUs": 10000,
+    "devices": [
+      {
+        "device": { "CANbus": "rio", "CANivoreDevName": "", "ID": 1, "Model": "Talon FX", "Name": "Talon FX (Device ID 1)", "IsPROApplication": true },
+        "signals": [
+          { "Id": 12, "Name": "Position", "Summary": "Rotor position", "Units": "rotations" },
+          { "Id": 3, "Name": "ControlMode", "Summary": "Control mode", "Units": "" }
+        ],
+        "values": { "12": [0.5, null, 0.75, null], "3": [1, null, 2.5] }
+      }
+    ]
+  },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 420, "client": ["dump"] },
+    { "t": 425, "client": ["fields", ["Phoenix6/TalonFX-1/Position", "Phoenix6/constructor/Foo", "Phoenix6/TalonFX-1/ControlMode"], []] },
+    { "t": 640, "client": ["fields", ["Phoenix6/__proto__/x", "Phoenix6/TalonFX-1/Position"], []] },
+    { "t": 860, "client": ["fields", ["Phoenix6/hasOwnProperty/y/z", "Phoenix6/TalonFX-1/Position"], []] },
+    { "t": 1080, "client": ["fields", ["Phoenix6/TalonFX-1/Position", "Phoenix6/toString-1/Position"], []] },
+    { "t": 1300, "client": ["dump"] }
+  ]
+}

@@ -1,0 +1,14 @@
+[package]
+name = "asrs-libm-lgpl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "LGPL-2.1-or-later"
+publish.workspace = true
+
+[lib]
+name = "asrs_libm_lgpl"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true

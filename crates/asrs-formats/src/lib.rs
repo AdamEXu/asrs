@@ -5,7 +5,6 @@ pub mod export;
 pub mod historical;
 pub mod rlog;
 pub mod roadrunner;
-pub mod session;
 pub mod spark;
 pub mod urcl;
 pub mod worker;
