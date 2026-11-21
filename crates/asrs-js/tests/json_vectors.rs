@@ -200,3 +200,29 @@ fn check_doc(record: &Record) -> Result<(), String> {
     };
     expect_value(record, key, &js_json::from_js(&copied))
 }
+
+/// `from_js_parsed` turns the deepest tree it accepts into a `Value` that encodes and drops
+/// on an 8 MiB thread (`asrs-cli`'s main thread), and throws `RangeError` one level deeper.
+#[test]
+fn tree_depth_bound_is_stack_safe() {
+    std::thread::Builder::new()
+        .stack_size(8 << 20)
+        .spawn(|| {
+            for (depth, ok) in [(2801, true), (2802, false)] {
+                let parsed = json::parse_str(&("[".repeat(depth) + &"]".repeat(depth))).unwrap();
+                match js_json::from_js_parsed(&parsed) {
+                    Ok(value) => {
+                        assert!(ok, "depth {depth} should throw");
+                        assert_eq!(value.encode().len(), 2 * depth);
+                    }
+                    Err(e) => {
+                        assert!(!ok, "depth {depth} should succeed");
+                        assert_eq!(e.name, "RangeError");
+                    }
+                }
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}

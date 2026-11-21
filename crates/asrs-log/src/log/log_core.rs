@@ -126,8 +126,28 @@ enum UnknownPut<'a, V> {
     Text(&'a JsString),
     Raw(&'a [u8]),
     Items(&'a [V]),
-    Entries(Box<dyn DoubleEndedIterator<Item = (&'a JsString, &'a V)> + 'a>),
+    Entries(Box<dyn Iterator<Item = (&'a JsString, &'a V)> + 'a>),
     Ext(i8, &'a [u8]),
+}
+
+/// The children of an open array or object in `put_unknown_tree`, with each child's key built
+/// only when it is visited.
+enum Children<'a, V> {
+    Items(std::iter::Enumerate<std::slice::Iter<'a, V>>),
+    Entries(Box<dyn Iterator<Item = (&'a JsString, &'a V)> + 'a>),
+}
+
+impl<'a, V> Children<'a, V> {
+    fn next(&mut self, parent: &JsString) -> Option<(JsString, &'a V)> {
+        match self {
+            Children::Items(items) => items
+                .next()
+                .map(|(i, item)| (child_key(parent, &format!("{i}")), item)),
+            Children::Entries(entries) => entries
+                .next()
+                .map(|(name, item)| (child_key_js(parent, name), item)),
+        }
+    }
 }
 
 fn js_value_put(value: &JsValue) -> UnknownPut<'_, JsValue> {
@@ -900,9 +920,9 @@ impl Log {
         self.put_unknown_tree(key, timestamp, value, allow_root_write, map_value_put)
     }
 
-    /// `putUnknownStruct` on a worklist: each pending `(key, value)` writes a leaf, a typed
-    /// array, or queues its children. The DFS order matches upstream's recursion, so field
-    /// creation order and `length` writes land the same.
+    /// `putUnknownStruct` on an explicit stack of open arrays and objects: each visited node
+    /// writes a leaf or a typed array, or opens its children. The pre-order DFS matches
+    /// upstream's recursion, so field creation order and `length` writes land the same.
     fn put_unknown_tree<'a, V: UnknownItem>(
         &mut self,
         key: &JsString,
@@ -911,8 +931,24 @@ impl Log {
         allow_root_write: bool,
         classify: impl Fn(&'a V) -> UnknownPut<'a, V>,
     ) -> Result<(), LogError> {
-        let mut pending = vec![(key.clone(), value, allow_root_write, 0)];
-        while let Some((key, value, allow_write, depth)) = pending.pop() {
+        let mut open: Vec<(JsString, Children<'a, V>, usize)> = Vec::new();
+        let mut next = Some((key.clone(), value, allow_root_write, 0));
+        loop {
+            let (key, value, allow_write, depth) = match next.take() {
+                Some(node) => node,
+                None => {
+                    let Some((parent, children, depth)) = open.last_mut() else {
+                        break;
+                    };
+                    match children.next(parent) {
+                        Some((key, value)) => (key, value, true, *depth),
+                        None => {
+                            open.pop();
+                            continue;
+                        }
+                    }
+                }
+            };
             if depth > MAX_UNKNOWN_DEPTH {
                 return Err(LogError::StackOverflow);
             }
@@ -965,15 +1001,11 @@ impl Log {
                         self.process_timestamp(&length_key, timestamp);
                         self.field_mut_existing(&length_key)
                             .put_number(timestamp, items.len() as f64);
-                        for (i, item) in items.iter().enumerate().rev() {
-                            pending.push((child_key(&key, &format!("{i}")), item, true, depth + 1));
-                        }
+                        open.push((key, Children::Items(items.iter().enumerate()), depth + 1));
                     }
                 }
                 UnknownPut::Entries(entries) => {
-                    for (name, item) in entries.rev() {
-                        pending.push((child_key_js(&key, name), item, true, depth + 1));
-                    }
+                    open.push((key, Children::Entries(entries), depth + 1))
                 }
                 UnknownPut::Ext(kind, data) => {
                     self.put_number(&child_key(&key, "type"), timestamp, f64::from(kind));

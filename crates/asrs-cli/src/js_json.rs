@@ -74,18 +74,20 @@ fn from_js_at(value: &JsValue, depth: usize) -> Result<Value, JsonError> {
         JsValue::Bool(b) => Value::Bool(*b),
         JsValue::Number(x) => Value::number(*x),
         JsValue::String(s) => Value::String(utf16(s)),
-        JsValue::Array(items) => Value::Array(
-            items
-                .iter()
-                .map(|item| from_js_at(item, depth + 1))
-                .collect::<Result<_, _>>()?,
-        ),
-        JsValue::Object(object) => Value::Object(
-            object
-                .iter()
-                .map(|(k, v)| Ok((utf16(k), from_js_at(v, depth + 1)?)))
-                .collect::<Result<_, _>>()?,
-        ),
+        JsValue::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(from_js_at(item, depth + 1)?);
+            }
+            Value::Array(out)
+        }
+        JsValue::Object(object) => {
+            let mut out = Vec::with_capacity(object.len());
+            for (k, v) in object.iter() {
+                out.push((utf16(k), from_js_at(v, depth + 1)?));
+            }
+            Value::Object(out)
+        }
         JsValue::Bytes(bytes) => Value::Bytes(bytes.clone()),
         JsValue::BigInt(b) => Value::BigInt(format!("{b}")),
         JsValue::Date(t) => Value::Date(t.to_bits()),
