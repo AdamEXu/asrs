@@ -1,0 +1,49 @@
+{
+  "protocol": "nt4",
+  "seed": 9104,
+  "latencyMs": 2,
+  "endMs": 2800,
+  "client": {
+    "source": "nt4-publisher",
+    "mode": "sim"
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 3000000
+  },
+  "steps": [
+    { "t": 0, "client": ["log", "putStruct", "NT:/Pose/single", 1, { "b": "000000000000f03f00000000000000400000000000000000" }, "Pose2d", false] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Pose/single", "struct:Pose2d"] },
+    { "t": 0, "client": ["log", "putStruct", "NT:/Pose/array", 1, { "b": "000000000000f03f000000000000f83f9a9999999999b93f000000000000004000000000000004409a9999999999c9bf" }, "Pose2d", true] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Pose/array", "struct:Pose2d[]"] },
+    { "t": 0, "client": ["log", "putPhotonStruct", "NT:/Photon/pose", 1, { "b": "0102" }, "Pose3d"] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Photon/pose", "photonstruct:Pose3d"] },
+    { "t": 0, "client": ["log", "putProto", "NT:/Proto/pose", 1, { "b": "08" }, "wpi.proto.ProtobufPose2d"] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Proto/pose", "proto:wpi.proto.ProtobufPose2d"] },
+    { "t": 0, "client": ["log", "putMsgpack", "NT:/Msg/map", 1, { "b": "81a17801" }] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Msg/map", "msgpack"] },
+    { "t": 0, "client": ["log", "putJSON", "NT:/Text/json", 1, "{\"a\":1}"] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Text/json", "json"] },
+    { "t": 0, "client": ["log", "putRaw", "NT:/Data/raw", 1, { "b": "deadbeef" }] },
+    { "t": 0, "client": ["log", "putRaw", "NT:/Data/raw", 2, { "b": "cafe" }] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Data/int", 1, 42] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Data/int", "int64"] },
+    { "t": 0, "client": ["log", "putNumberArray", "NT:/Data/ints", 1, [1, 2]] },
+    { "t": 0, "client": ["log", "setWpilibType", "NT:/Data/ints", "int64[]"] },
+    { "t": 0, "client": ["log", "putNumberArray", "NT:/Data/ints", 2, [3]] },
+    { "t": 0, "client": ["log", "createBlankField", "NT:/Data/empty", 7] },
+    { "t": 0, "client": ["log", "putString", "NT:/Schema/.type", 1, "Pose2d"] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Gen/child", 1, 5] },
+    { "t": 0, "client": ["log", "setGeneratedParent", "NT:/Gen"] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 500, "client": ["select", 2, null] },
+    { "t": 800, "client": ["select", null, 1.5] },
+    { "t": 1100, "client": ["select", null, null] },
+    { "t": 1400, "client": ["log", "putNumber", "NT:/Data/int", 3, 43] },
+    { "t": 1600, "client": ["select", 3, null] },
+    { "t": 1900, "client": ["log", "putNumber", "NT:/Data/late", 1, 9] },
+    { "t": 2200, "client": ["log", "setWpilibType", "NT:/Data/int", "double"] },
+    { "t": 2400, "client": ["prefs", { "publishFilter": "/Data" }] },
+    { "t": 2700, "client": ["stop"] }
+  ]
+}

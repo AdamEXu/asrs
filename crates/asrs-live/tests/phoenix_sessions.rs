@@ -21,7 +21,6 @@ use asrs_log::log::Log;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
-use asrs_parity::vectors;
 
 use support::{Driver, Env, Trace};
 
@@ -259,29 +258,7 @@ fn replay(id: &str, session: &Session) -> Result<usize, String> {
     let trace = support::run(session, |env| -> Box<dyn Driver> {
         Box::new(PhoenixDriver::new(session, env))
     })?;
-    let expected: Vec<String> = vectors::load(id)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|r| r.text)
-        .collect();
-    let produced: Vec<String> = trace;
-    if let Some(i) =
-        (0..expected.len().max(produced.len())).find(|&i| expected.get(i) != produced.get(i))
-    {
-        let context = |lines: &[String]| {
-            lines[i.saturating_sub(3)..(i + 1).min(lines.len())]
-                .iter()
-                .map(|l| format!("    {}", &l[..l.len().min(400)]))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-        return Err(format!(
-            "{id}: line {i} differs\n  oracle:\n{}\n  port:\n{}",
-            context(&expected),
-            context(&produced)
-        ));
-    }
-    Ok(produced.len())
+    support::check_trace(id, trace)
 }
 
 fn phoenix_sessions() -> Vec<(String, Session)> {
