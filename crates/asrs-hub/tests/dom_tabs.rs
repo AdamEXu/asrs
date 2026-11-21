@@ -51,6 +51,7 @@ use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
+use asrs_tabs::video::{VideoController, VideoCx};
 
 fn err(message: impl Into<String>) -> String {
     message.into()
@@ -317,6 +318,24 @@ fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
     )
 }
 
+/// `div.controls-content > #controller7 > .video-source > button`: the three source
+/// buttons of the selected (visible) Video tab. `button_pos` is 1-based among the
+/// same-tag siblings, matching `sourceSection.children[n]`.
+fn video_source_button_el(button_pos: usize) -> ElDesc {
+    let controls = ElDesc {
+        tag: "div",
+        classes: &["controls-content"],
+        hidden: false,
+        pos: 1,
+        child_pos: None,
+        data_i: None,
+        parent: None,
+    };
+    let controller_root = el("div", &[], false, 1, controls);
+    let source = el("div", &["video-source"], false, 1, controller_root);
+    el("button", &[], false, button_pos, source)
+}
+
 #[derive(Clone)]
 enum DomKind {
     Table(Rc<RefCell<TableDom>>),
@@ -504,6 +523,14 @@ impl TabFactory<Host> for Factory {
                     slot,
                 }),
             },
+            Some(TabType::Video) => TabParts {
+                uuid: uuid.clone(),
+                controller: Box::new(VideoController::new()),
+                renderer: Box::new(Recorder {
+                    inner: PendingRenderer,
+                    slot,
+                }),
+            },
             Some(
                 kind
                 @ (TabType::Joysticks | TabType::Swerve | TabType::Mechanism | TabType::Points),
@@ -572,6 +599,14 @@ struct Host {
     /// `window.typeMemory`.
     type_memory: SourceListTypeMemory,
     dark: bool,
+    /// `new Date().getTime()` — the same scripted clock the selection reads.
+    clock: Rc<Cell<f64>>,
+}
+
+impl VideoCx for Host {
+    fn now(&self) -> f64 {
+        self.clock.get()
+    }
 }
 
 impl TabCx for Host {
@@ -1539,6 +1574,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         assets: None,
         type_memory: SourceListTypeMemory::new(),
         dark: false,
+        clock: clock_cell.clone(),
     };
     // Boot `set-assets`: `window.assets` is assigned before any controller exists, so
     // `tabs.newAssets()` at boot only reaches the stub tab.
@@ -1864,8 +1900,22 @@ impl Runner {
             "restore-type-memory" => {
                 self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
             }
-            "set-version"
-            | "set-fullscreen"
+            "video-data" => {
+                for (uuid, controller) in self
+                    .tabs
+                    .controllers_with_uuid::<VideoController>(TabType::Video)
+                {
+                    controller.process_video_data(&mut self.host, data, uuid)?;
+                }
+            }
+            "set-version" => {
+                if let Some(platform) = data.get("platform").and_then(JsValue::as_str) {
+                    let mut ctx = self.host.selection.context().clone();
+                    ctx.platform = platform.to_string_lossy();
+                    self.host.selection.set_context(ctx);
+                }
+            }
+            "set-fullscreen"
             | "set-battery"
             | "show-update-button"
             | "show-feedback-button"
@@ -1992,6 +2042,20 @@ impl Runner {
             (t, "click") if t.contains(".source-list .list .item button.remove") => {
                 self.source_item_click(index, true)?
             }
+            // Video controls: `index` is the querySelectorAll position inside the
+            // selected tab's controls (`div.controls-content > :not([hidden])`).
+            (t, "click") if t.contains(".video-source button") => {
+                self.video_source_click(index)?
+            }
+            (t, "click") if t.contains(".video-timeline-section > button") => {
+                self.video_lock_click()?
+            }
+            (t, "click") if t.contains(".video-timeline-controls button") => {
+                self.video_transport_click(index)?
+            }
+            (t, "input") if t.contains("input.video-timeline-slider") => {
+                self.video_slider_input(props)?
+            }
             _ => return Err(format!("event {etype} on {target} is not modeled")),
         }
         // Every keydown bubbles to `SelectionImpl`'s window listener after the target's own.
@@ -2010,9 +2074,51 @@ impl Runner {
             } else {
                 KeyTarget::Other
             };
+            // `window.tabs` reads that SelectionImpl resolves per keydown upstream:
+            // `getSelectedTabType()` and `isUnlockedVideoSelected()`.
+            {
+                let mut ctx = self.host.selection.context().clone();
+                if let Some(i) = self.tabs.selected_index() {
+                    if let Some(tab) = self.tabs.tab(i) {
+                        if let Some(kind) = tab.tab_type() {
+                            ctx.selected_tab_type = kind;
+                        }
+                        ctx.unlocked_video_selected = tab.tab_type() == Some(TabType::Video)
+                            && tab
+                                .controller()
+                                .downcast_ref::<VideoController>()
+                                .is_some_and(|v| !v.is_locked());
+                    }
+                }
+                self.host.selection.set_context(ctx);
+            }
+            let command_held = if self.host.selection.context().platform == "darwin" {
+                flag("metaKey")
+            } else {
+                flag("ctrlKey")
+            };
             self.host
                 .selection
                 .key_down(&code, flag("metaKey"), flag("ctrlKey"), key_target);
+            // VideoController's window listener was registered when the tab was
+            // created, after SelectionImpl's, so it runs second.
+            if key_target == KeyTarget::Other && !command_held {
+                let is_visible_video = self
+                    .tabs
+                    .selected_index()
+                    .and_then(|i| self.tabs.tab(i))
+                    .is_some_and(|t| {
+                        t.tab_type() == Some(TabType::Video) && !t.content_hidden()
+                    });
+                if is_visible_video {
+                    if let Some(tab) = self.tabs.selected_tab_mut() {
+                        if let Some(video) = tab.controller.downcast_mut::<VideoController>()
+                        {
+                            video.key_down(&mut self.host, &code);
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -2281,6 +2387,84 @@ impl Runner {
         {
             r.inner.highlight_click();
         }
+    }
+
+    /// `.video-source button` clicks on the selected Video tab. `index` is the
+    /// `children[]` position: 0 local, 1 YouTube, 2 TBA (which also reads the
+    /// button's `getBoundingClientRect`).
+    fn video_source_click(&mut self, index: usize) -> Result<(), String> {
+        if index == 2 {
+            let rect = self.layout.rect_of(&video_source_button_el(3));
+            let Some(tab) = self.tabs.selected_tab_mut() else {
+                return Err("video source click with no selected tab".to_owned());
+            };
+            let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+                return Err("video source click on a non-Video selected tab".to_owned());
+            };
+            video
+                .select_tba(&mut self.host, tab.uuid, [rect.right(), rect.top()])
+                .map_err(|e| err(format!("{}: {}", e.name, e.message)))
+        } else {
+            let Some(tab) = self.tabs.selected_tab_mut() else {
+                return Err("video source click with no selected tab".to_owned());
+            };
+            let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+                return Err("video source click on a non-Video selected tab".to_owned());
+            };
+            match index {
+                0 => video.select_local(&mut self.host, tab.uuid),
+                _ => video.select_youtube(&mut self.host, tab.uuid),
+            }
+            Ok(())
+        }
+    }
+
+    /// `.video-timeline-section > button` clicks: LOCK_BUTTON / UNLOCK_BUTTON both
+    /// call `toggleLock`.
+    fn video_lock_click(&mut self) -> Result<(), String> {
+        let Some(tab) = self.tabs.selected_tab_mut() else {
+            return Err("video lock click with no selected tab".to_owned());
+        };
+        let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+            return Err("video lock click on a non-Video selected tab".to_owned());
+        };
+        video.toggle_lock(&mut self.host);
+        Ok(())
+    }
+
+    /// `.video-timeline-controls button` clicks. `index` is the `children[]` position:
+    /// skip-back, frame-back, play, pause, frame-forward, skip-forward.
+    fn video_transport_click(&mut self, index: usize) -> Result<(), String> {
+        let Some(tab) = self.tabs.selected_tab_mut() else {
+            return Err("video transport click with no selected tab".to_owned());
+        };
+        let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+            return Err("video transport click on a non-Video selected tab".to_owned());
+        };
+        match index {
+            0 => video.skip_time(&mut self.host, -5.0),
+            1 => video.change_frame(-1.0),
+            2 | 3 => video.toggle_play_pause(&mut self.host),
+            4 => video.change_frame(1.0),
+            _ => video.skip_time(&mut self.host, 5.0),
+        }
+        Ok(())
+    }
+
+    /// `input` on `input.video-timeline-slider`: the browser has already assigned the
+    /// value (sanitized), then the listener re-anchors playback when playing.
+    fn video_slider_input(&mut self, props: Option<&Json>) -> Result<(), String> {
+        let Some(tab) = self.tabs.selected_tab_mut() else {
+            return Err("video slider input with no selected tab".to_owned());
+        };
+        let Some(video) = tab.controller.downcast_mut::<VideoController>() else {
+            return Err("video slider input on a non-Video selected tab".to_owned());
+        };
+        if let Some(value) = Self::prop_value(props)? {
+            video.set_slider(value);
+        }
+        video.slider_input(&mut self.host);
+        Ok(())
     }
 
     fn capture(&mut self, spec: &Json, label: Option<String>) -> Result<(), String> {

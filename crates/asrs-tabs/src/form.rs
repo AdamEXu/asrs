@@ -143,6 +143,117 @@ fn is_valid_floating_point_number(s: &[u16]) -> bool {
     i == s.len()
 }
 
+/// An `<input type="range">`. Assigning `value` validates against the floating-point
+/// grammar, falls back to the default (mid-range, or `min` when `max` is below it) and
+/// clamps into `[min, max]`. jsdom does not round to `step` on assignment, so neither
+/// does this.
+#[derive(Clone, Debug)]
+pub struct RangeInput {
+    value: JsString,
+    min: JsString,
+    max: JsString,
+}
+
+impl RangeInput {
+    /// The `value`, `min` and `max` attributes from markup.
+    pub fn new(value: &str, min: &str, max: &str) -> RangeInput {
+        let mut input = RangeInput {
+            value: JsString::new(),
+            min: JsString::from(min),
+            max: JsString::from(max),
+        };
+        input.set_value(JsString::from(value));
+        input
+    }
+
+    pub fn value(&self) -> &JsString {
+        &self.value
+    }
+
+    pub fn set_value(&mut self, value: JsString) {
+        let n = if is_valid_floating_point_number(value.units()) {
+            number::to_number(value.units())
+        } else {
+            self.default_value()
+        };
+        self.value = JsString::from(number::to_string(n.clamp(self.minimum(), self.maximum())));
+    }
+
+    /// `input.min = attr` / `input.max = attr`: the attribute stores the raw string and
+    /// re-parses on each read; sanitization does not re-run.
+    pub fn set_min(&mut self, attr: JsString) {
+        self.min = attr;
+    }
+
+    pub fn set_max(&mut self, attr: JsString) {
+        self.max = attr;
+    }
+
+    /// `Number(input.value)`.
+    pub fn number(&self) -> f64 {
+        number::to_number(self.value.units())
+    }
+
+    fn minimum(&self) -> f64 {
+        let n = parse_floating_point_number(self.min.units());
+        if n.is_nan() { 0.0 } else { n }
+    }
+
+    fn maximum(&self) -> f64 {
+        let n = parse_floating_point_number(self.max.units());
+        let max = if n.is_nan() { 100.0 } else { n };
+        let min = self.minimum();
+        if max < min { min } else { max }
+    }
+
+    fn default_value(&self) -> f64 {
+        (self.minimum() + self.maximum()) / 2.0
+    }
+}
+
+/// The HTML spec's "rules for parsing floating-point number values", used for the `min`
+/// and `max` attributes: leading ASCII whitespace skipped, then the longest prefix that
+/// is a valid floating-point number, else NaN.
+fn parse_floating_point_number(s: &[u16]) -> f64 {
+    let mut i = 0;
+    while s.get(i).is_some_and(|&u| matches!(u, 0x09 | 0x0A | 0x0C | 0x0D | 0x20)) {
+        i += 1;
+    }
+    let start = i;
+    if matches!(s.get(i), Some(&u) if u == u16::from(b'-') || u == u16::from(b'+')) {
+        i += 1;
+    }
+    let digits = |i: &mut usize| {
+        while s.get(*i).is_some_and(|&u| (0x30..=0x39).contains(&u)) {
+            *i += 1;
+        }
+    };
+    digits(&mut i);
+    if s.get(i) == Some(&u16::from(b'.')) {
+        i += 1;
+        digits(&mut i);
+    }
+    if i == start || s[start..i].iter().all(|&u| !(0x30..=0x39).contains(&u)) {
+        return f64::NAN;
+    }
+    if matches!(s.get(i), Some(&u) if u == u16::from(b'e') || u == u16::from(b'E')) {
+        let mut j = i + 1;
+        if matches!(s.get(j), Some(&u) if u == u16::from(b'-') || u == u16::from(b'+')) {
+            j += 1;
+        }
+        let exp_start = j;
+        digits(&mut j);
+        if j > exp_start {
+            i = j;
+        }
+    }
+    let text: String = s[start..i]
+        .iter()
+        .map(|&u| char::from_u32(u32::from(u)).unwrap_or('\u{FFFD}'))
+        .collect();
+    text.parse().unwrap_or(f64::NAN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
