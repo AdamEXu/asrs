@@ -9,8 +9,8 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time;
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::geometry::{
-    self, AnnotatedPose3d, GeometryError, HeatmapTimeRange, ModuleVelocitySample, Pose3d,
-    PoseAnnotations, RotationUnits,
+    self, AnnotatedPose3d, HeatmapTimeRange, ModuleVelocitySample, Pose3d, PoseAnnotations,
+    RotationUnits,
 };
 use asrs_log::log::log_util::get_or_default;
 use asrs_log::log::mechanism_state::{MechanismState, get_mechanism_state, merge_mechanism_states};
@@ -19,9 +19,7 @@ use asrs_model::assets::{Config3dField, CoordinateSystem as FieldCoordinates, bu
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::CoordinateSystemPreference;
 use asrs_model::source_list::{SourceList, configs};
-use asrs_model::source_list_config::{
-    SourceListConfig, SourceListItemState, SourceListOptionValueConfig,
-};
+use asrs_model::source_list_config::{SourceListItemState, SourceListOptionValueConfig};
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
 use crate::cx::TabCx;
@@ -120,7 +118,9 @@ fn pose_js(pose: &Pose3d) -> JsValue {
     JsValue::Object(o)
 }
 
-fn annotation_js(a: &PoseAnnotations) -> JsValue {
+/// `vision`: a `vision` child's target, whose `visionColor`/`visionSize` keys exist even when
+/// the option is `undefined`.
+fn annotation_js(a: &PoseAnnotations, vision: bool) -> JsValue {
     let mut o = JsObject::new();
     // A `grab`-created `aprilTagId` sits before `is2DSource`; one assigned later
     // (aprilTagIDs pass, built-in tags) lands at the end.
@@ -131,15 +131,13 @@ fn annotation_js(a: &PoseAnnotations) -> JsValue {
         );
     }
     o.insert("is2DSource", JsValue::Bool(a.is_2d_source));
-    if a.has_vision_color {
+    if vision {
         o.insert(
             "visionColor",
             a.vision_color
                 .as_ref()
                 .map_or(JsValue::Undefined, |v| JsValue::String(v.clone())),
         );
-    }
-    if a.has_vision_size {
         o.insert(
             "visionSize",
             a.vision_size
@@ -153,15 +151,19 @@ fn annotation_js(a: &PoseAnnotations) -> JsValue {
     JsValue::Object(o)
 }
 
-fn annotated_pose_js(pose: &AnnotatedPose3d) -> JsValue {
+fn annotated_pose_js(pose: &AnnotatedPose3d, vision: bool) -> JsValue {
     let mut o = JsObject::new();
     o.insert("pose", pose_js(&pose.pose));
-    o.insert("annotation", annotation_js(&pose.annotation));
+    o.insert("annotation", annotation_js(&pose.annotation, vision));
     JsValue::Object(o)
 }
 
 fn poses_js(poses: &[AnnotatedPose3d]) -> JsValue {
-    JsValue::Array(poses.iter().map(annotated_pose_js).collect())
+    JsValue::Array(poses.iter().map(|p| annotated_pose_js(p, false)).collect())
+}
+
+fn vision_targets_js(poses: &[AnnotatedPose3d]) -> JsValue {
+    JsValue::Array(poses.iter().map(|p| annotated_pose_js(p, true)).collect())
 }
 
 fn mechanism_js(state: &MechanismState) -> JsValue {
@@ -287,15 +289,8 @@ fn selected_field(controller: &Field3dController, cx: &impl TabCx) -> Option<Con
     all_fields(cx).into_iter().find(|f| f.id == value).cloned()
 }
 
-fn geometry_error(error: GeometryError) -> JsError {
-    JsError::new(error.name(), error.message())
-}
-
-/// `Field3dController`.
+/// `Field3dController`. Its `UUID` is the tab's, drawn by the factory before `new`.
 pub struct Field3dController {
-    /// `UUID = createUUID()`; `Tabs` may overwrite it with a restored value.
-    uuid: JsString,
-    config: SourceListConfig,
     source_list: SourceList,
     /// `option.value` order inside each optgroup.
     frc_field_options: Vec<JsString>,
@@ -307,37 +302,29 @@ pub struct Field3dController {
 }
 
 impl Field3dController {
-    /// The constructor cannot throw: the only fallible calls here are
-    /// `setOptionValues`, which never reaches its error paths on an empty state.
+    /// The constructor cannot throw: the list is empty, so the `setOptionValues` calls inside
+    /// never reach their error paths.
     pub fn new(cx: &mut impl SourceListCx) -> Self {
-        let controller_uuid = JsString::from(time::create_uuid(cx.tab_rng()));
-        let list_uuid = time::create_uuid(cx.tab_rng());
-        let config = configs::field_3d();
         let mut controller = Field3dController {
-            uuid: controller_uuid,
-            config: config.clone(),
-            source_list: SourceList::new(config, list_uuid, false),
+            source_list: SourceList::new(
+                configs::field_3d(),
+                time::create_uuid(cx.tab_rng()),
+                false,
+            ),
             frc_field_options: Vec::new(),
             ftc_field_options: Vec::new(),
             field_value: None,
             xr_active: false,
             last_coordinate_alert: CoordinateAlert::None,
         };
-        // The state is empty here, so the `setOptionValues` calls inside cannot
-        // reach their error paths.
         let _ = controller.update_field_options(cx);
         let _ = controller.update_robot_options(cx);
         controller
     }
 
-    /// `controller.UUID` as drawn in the constructor.
-    pub fn uuid(&self) -> &JsString {
-        &self.uuid
-    }
-
     /// `XR_BUTTON` click; `uuid` is the tab's `controller.UUID` (`Tabs` restores it).
-    pub fn xr_click(&mut self, cx: &mut impl TabCx, uuid: &JsValue) {
-        cx.send_main_adhoc("open-xr", uuid.clone());
+    pub fn xr_click(&self, cx: &mut impl TabCx, uuid: &JsValue) {
+        cx.send_open_xr(uuid.clone());
     }
 
     /// `setXRActive`.
@@ -353,40 +340,8 @@ impl Field3dController {
         &self.source_list
     }
 
-    /// `sourceList.addField(logKey)`; no supplemental suppliers.
-    pub fn add_field(
-        &mut self,
-        cx: &mut impl SourceListCx,
-        log_key: &JsString,
-    ) -> Result<(), JsError> {
-        with_env(cx, |env| {
-            self.source_list.add_field(env, &[], log_key, None)
-        })
-        .map_err(list_cx::js_error)
-    }
-
-    /// `sourceList.setState`.
-    pub fn set_source_state(
-        &mut self,
-        cx: &mut impl SourceListCx,
-        value: &JsValue,
-    ) -> Result<(), JsError> {
-        let JsValue::Array(items) = value else {
-            self.source_list.clear();
-            if let JsValue::Bytes(_) = value {
-                return Err(JsError::new("Unmodeled", "a typed array of sources"));
-            }
-            ops::get(value, "forEach")?;
-            return Err(JsError::type_error("state.forEach is not a function"));
-        };
-        let items = items
-            .iter()
-            .map(|item| {
-                SourceListItemState::from_js(item)
-                    .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        with_env(cx, |env| self.source_list.set_state(env, items)).map_err(list_cx::js_error)
+    pub fn source_list_mut(&mut self) -> &mut SourceList {
+        &mut self.source_list
     }
 
     /// `FIELD_SELECT.value = ...`; the assignment sticks only when an option matches.
@@ -540,14 +495,14 @@ impl Field3dController {
     }
 
     fn is_child(&self, item_type: &JsString) -> bool {
-        let key = item_type.to_string_lossy();
-        self.config
+        self.source_list
+            .config()
             .types
             .iter()
-            .any(|t| t.key == key && t.child_of.is_some())
+            .find(|t| *item_type == JsString::from(t.key.as_str()))
+            .is_some_and(|t| t.child_of.is_some())
     }
 
-    #[allow(clippy::type_complexity)]
     fn command_objects(
         &self,
         cx: &mut impl SourceListCx,
@@ -563,7 +518,6 @@ impl Field3dController {
         let mut camera_override = JsValue::Null;
         let sources = self.source_list.displayed_state(log);
         let mut i = 0;
-        let mut seen_camera_override = false;
         while i < sources.len() {
             let source = &sources[i];
             if self.is_child(&source.item_type) {
@@ -608,8 +562,7 @@ impl Field3dController {
                     time_range,
                     timeline_range,
                     uuid,
-                )
-                .map_err(geometry_error)?;
+                )?;
             } else if let Some(t) = time {
                 poses = geometry::grab_poses_auto(
                     log,
@@ -618,8 +571,7 @@ impl Field3dController {
                     t,
                     uuid,
                     RotationUnits::Radians,
-                )
-                .map_err(geometry_error)?;
+                )?;
             }
 
             let mut components: Vec<AnnotatedPose3d> = Vec::new();
@@ -631,17 +583,14 @@ impl Field3dController {
                 for child in &children {
                     match child.item_type.as_string().as_deref() {
                         Some("component") => {
-                            components.extend(
-                                geometry::grab_poses_auto(
-                                    log,
-                                    &child.log_key,
-                                    &child.log_type,
-                                    t,
-                                    uuid,
-                                    RotationUnits::Radians,
-                                )
-                                .map_err(geometry_error)?,
-                            );
+                            components.extend(geometry::grab_poses_auto(
+                                log,
+                                &child.log_key,
+                                &child.log_type,
+                                t,
+                                uuid,
+                                RotationUnits::Radians,
+                            )?);
                         }
                         Some("mechanism") => {
                             if let Some(state) = get_mechanism_state(log, &child.log_key, t) {
@@ -673,8 +622,7 @@ impl Field3dController {
                                 t,
                                 uuid,
                                 units,
-                            )
-                            .map_err(geometry_error)?;
+                            )?;
                             if let Some(first) = rotations.first() {
                                 let rotation = first.pose.rotation;
                                 for pose in poses.iter_mut() {
@@ -690,12 +638,9 @@ impl Field3dController {
                                 t,
                                 uuid,
                                 RotationUnits::Radians,
-                            )
-                            .map_err(geometry_error)?;
+                            )?;
                             for pose in &mut new_targets {
-                                pose.annotation.has_vision_color = true;
                                 pose.annotation.vision_color = child.options.get("color").cloned();
-                                pose.annotation.has_vision_size = true;
                                 pose.annotation.vision_size = child.options.get("size").cloned();
                             }
                             vision_targets.extend(new_targets);
@@ -755,7 +700,7 @@ impl Field3dController {
                     o.insert("poses", poses_js(&poses));
                     o.insert("components", poses_js(&components));
                     o.insert("mechanisms", mechanisms_js(&mechanisms));
-                    o.insert("visionTargets", poses_js(&vision_targets));
+                    o.insert("visionTargets", vision_targets_js(&vision_targets));
                     o.insert("swerveModuleVelocities", swerve_js(&swerve_velocities));
                 }
                 Some("ghost") => {
@@ -765,7 +710,7 @@ impl Field3dController {
                     o.insert("poses", poses_js(&poses));
                     o.insert("components", poses_js(&components));
                     o.insert("mechanisms", mechanisms_js(&mechanisms));
-                    o.insert("visionTargets", poses_js(&vision_targets));
+                    o.insert("visionTargets", vision_targets_js(&vision_targets));
                     o.insert("swerveModuleVelocities", swerve_js(&swerve_velocities));
                 }
                 Some("gamePiece") => {
@@ -806,10 +751,10 @@ impl Field3dController {
                     o.insert("poses", poses_js(&poses));
                 }
                 Some("cameraOverride") => {
-                    if !seen_camera_override {
-                        seen_camera_override = true;
-                        camera_override =
-                            poses.first().map_or(JsValue::Undefined, annotated_pose_js);
+                    if camera_override.is_null() {
+                        camera_override = poses
+                            .first()
+                            .map_or(JsValue::Undefined, |p| annotated_pose_js(p, false));
                     }
                     continue;
                 }
@@ -856,22 +801,25 @@ impl Field3dController {
                                     .collect();
                                 let quaternion =
                                     geometry::rotation_sequence_to_quaternion(&rotations);
-                                annotated_pose_js(&AnnotatedPose3d {
-                                    pose: Pose3d {
-                                        translation: tag.position,
-                                        rotation: [
-                                            quaternion.w,
-                                            quaternion.x,
-                                            quaternion.y,
-                                            quaternion.z,
-                                        ],
+                                annotated_pose_js(
+                                    &AnnotatedPose3d {
+                                        pose: Pose3d {
+                                            translation: tag.position,
+                                            rotation: [
+                                                quaternion.w,
+                                                quaternion.x,
+                                                quaternion.y,
+                                                quaternion.z,
+                                            ],
+                                        },
+                                        annotation: PoseAnnotations {
+                                            is_2d_source: false,
+                                            april_tag_id: Some(tag.id),
+                                            ..PoseAnnotations::default()
+                                        },
                                     },
-                                    annotation: PoseAnnotations {
-                                        is_2d_source: false,
-                                        april_tag_id: Some(tag.id),
-                                        ..PoseAnnotations::default()
-                                    },
-                                })
+                                    false,
+                                )
                             })
                             .collect(),
                     ),
@@ -902,11 +850,11 @@ impl<Cx: SourceListCx> TabController<Cx> for Field3dController {
         };
         self.update_field_options(cx)?;
         if let Some(sources) = o.get("sources") {
-            self.set_source_state(cx, sources)?;
+            list_cx::set_source_state(&mut self.source_list, cx, sources)?;
         }
         if let Some(JsValue::String(game)) = o.get("game") {
             self.set_field_value(game);
-            if self.field_value.is_none() {
+            if self.field_value().is_empty() {
                 self.select_default_field(cx);
             }
         }
@@ -995,9 +943,11 @@ impl<Cx: SourceListCx> TabController<Cx> for Field3dController {
             coordinate_system,
             objects,
             camera_override,
+            // `getDriverStation(log, time!)` with a null time: every comparison and the
+            // `start === end` check treat `null` as `+0`, not as NaN.
             auto_driver_station: robot_state::get_driver_station(
                 &cx.tab_log(),
-                render_time.unwrap_or(f64::NAN),
+                render_time.unwrap_or(0.0),
             ),
             all_robot_models,
         }))

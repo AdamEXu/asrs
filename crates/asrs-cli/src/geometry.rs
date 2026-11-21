@@ -178,20 +178,11 @@ fn annotation_value(a: &PoseAnnotations) -> Value {
         ));
     }
     pairs.push(("is2DSource".into(), Value::Bool(a.is_2d_source)));
-    if a.has_vision_color {
-        pairs.push((
-            "visionColor".into(),
-            a.vision_color.as_ref().map_or(Value::Undefined, string),
-        ));
+    if let Some(c) = &a.vision_color {
+        pairs.push(("visionColor".into(), string(c)));
     }
-    if a.has_vision_size {
-        pairs.push((
-            "visionSize".into(),
-            a.vision_size.as_ref().map_or(Value::Undefined, string),
-        ));
-    }
-    if let Some(id) = a.april_tag_id.filter(|_| !a.has_april_tag_id) {
-        pairs.push(("aprilTagId".into(), n(id)));
+    if let Some(s) = &a.vision_size {
+        pairs.push(("visionSize".into(), string(s)));
     }
     Value::Object(pairs)
 }
@@ -211,15 +202,14 @@ fn annotation_of(v: &Value) -> Result<PoseAnnotations, Response> {
             other => Some(num(other)?),
         };
     }
-    for (name, has, slot) in [
-        ("visionColor", &mut a.has_vision_color, &mut a.vision_color),
-        ("visionSize", &mut a.has_vision_size, &mut a.vision_size),
+    for (name, slot) in [
+        ("visionColor", &mut a.vision_color),
+        ("visionSize", &mut a.vision_size),
     ] {
-        if let Some(x) = v.get(name) {
-            *has = true;
-            if !matches!(x, Value::Undefined) {
-                *slot = Some(JsString::from_units(to_units(x)?));
-            }
+        if let Some(x) = v.get(name)
+            && !matches!(x, Value::Undefined)
+        {
+            *slot = Some(JsString::from_units(to_units(x)?));
         }
     }
     Ok(a)

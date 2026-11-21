@@ -265,6 +265,7 @@ impl TabCx for Host {
     fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
         Some(&mut self.preferences)
     }
+
     fn tab_rng(&mut self) -> &mut dyn Rng {
         &mut self.rng
     }
@@ -275,8 +276,8 @@ impl TabCx for Host {
         self.sent.push(message);
     }
 
-    fn send_main_adhoc(&mut self, name: &str, _data: JsValue) {
-        panic!("the line graph layer never sends {name}");
+    fn send_open_xr(&mut self, _uuid: JsValue) {
+        unreachable!("the line graph harness has no Field3d tab")
     }
 }
 

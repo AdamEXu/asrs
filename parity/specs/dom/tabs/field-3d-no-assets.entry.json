@@ -40,9 +40,7 @@
      "field3ds": [],
      "robots": [],
      "joysticks": [],
-     "loadFailures": [
-      "bad.glb"
-     ]
+     "loadFailures": []
     }
    },
    {

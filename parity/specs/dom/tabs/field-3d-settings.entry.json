@@ -25,7 +25,7 @@
      "props": {
       "value": "FTC:2026"
      },
-     "index": 0
+     "index": 1
     }
    },
    {
@@ -54,7 +54,7 @@
      "props": {
       "value": "FRC:Axes"
      },
-     "index": 0
+     "index": 1
     }
    },
    {
@@ -73,14 +73,14 @@
      "props": {
       "value": "FRC:2026"
      },
-     "index": 0
+     "index": 1
     }
    },
    {
     "event": {
      "target": ".field-3d-settings .xr-button",
      "type": "click",
-     "index": 0
+     "index": 1
     }
    },
    {
