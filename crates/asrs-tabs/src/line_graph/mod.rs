@@ -19,8 +19,9 @@ use asrs_log::log::robot_state::{AKIT_TIMESTAMP_KEYS, RobotMode, get_robot_state
 use asrs_log::log::{Log, LogValueSet, LogValueSetAny};
 use asrs_log::units::{self, UnitConfig};
 use asrs_log::util::{clamp_value, lower_bound, scale_value_clamped, upper_bound};
+use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::selection::{Selection, SelectionMode};
-use asrs_model::source_list::{Env, Rect, SourceList, configs};
+use asrs_model::source_list::{Env, Rect, SourceList, SourceListError, configs};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
@@ -271,24 +272,30 @@ fn number_preview(
     selection: &mut dyn Selection,
     key: &JsString,
     time: f64,
-) -> Option<String> {
-    let field = cache.fields.get_key(key)?;
+) -> Result<Option<String>, SourceListError> {
+    let Some(field) = cache.fields.get_key(key) else {
+        return Ok(None);
+    };
     if time < selection.get_timeline_range()[0]
         || (time > selection.get_timeline_range()[1]
             && selection.get_mode() != SelectionMode::Locked)
     {
-        return None;
+        return Ok(None);
     }
     let index = upper_bound(&field.timestamps, time, 0);
     if index == 0 {
-        return None;
+        return Ok(None);
     }
     let value = field.values.get(index - 1).copied().unwrap_or(f64::NAN);
     let mut output = number::intl_format(value, preview_options());
     if field.has_unit {
         match cache.units {
             AxisUnits::None => {}
-            AxisUnits::Unknown => return None,
+            AxisUnits::Unknown => {
+                return Err(SourceListError::Thrown(
+                    "TypeError: Cannot read properties of undefined (reading 'suffix')".to_owned(),
+                ));
+            }
             AxisUnits::Unit(unit) => {
                 let suffix = units::get_suffix_for_filter(&js(unit.suffix), filter.kind());
                 if suffix.len() > 1 {
@@ -301,7 +308,7 @@ fn number_preview(
             }
         }
     }
-    Some(output)
+    Ok(Some(output))
 }
 
 pub struct LineGraphController {
@@ -402,7 +409,7 @@ impl LineGraphController {
         cx: &mut C,
         list: ListId,
         render_time: Option<f64>,
-        mut observe: impl FnMut(&JsString, f64, Option<&str>),
+        mut observe: impl FnMut(&JsString, f64, &Result<Option<String>, SourceListError>),
     ) -> Result<(), JsError> {
         let ListParts {
             log,
@@ -430,7 +437,7 @@ impl LineGraphController {
             Some((cache, filter)) => {
                 let mut preview = |key: &JsString, time: f64| {
                     let text = number_preview(cache, filter, selection, key, time);
-                    observe(key, time, text.as_deref());
+                    observe(key, time, &text);
                     text
                 };
                 source_list.frame(&mut env, render_time, Some(&mut preview))
@@ -514,14 +521,13 @@ impl LineGraphController {
         self.show_robot_mode = show_robot_mode;
     }
 
-    /// The data of the `ask-edit-axis` message the list's edit button sends, given the button's
-    /// rectangle.
+    /// The list's edit button callback, given the button's rectangle: sends `ask-edit-axis`.
     pub fn ask_edit_axis<C: TabCx + ?Sized>(
         &self,
-        cx: &C,
+        cx: &mut C,
         list: ListId,
         rect: Rect,
-    ) -> Result<JsValue, JsError> {
+    ) -> Result<(), JsError> {
         let mut rect_object = JsObject::new();
         rect_object.insert("x", JsValue::Number(rect.x));
         rect_object.insert("y", JsValue::Number(rect.y));
@@ -534,35 +540,42 @@ impl LineGraphController {
             ListId::Discrete => {
                 o.insert("showRobotMode", self.show_robot_mode.clone());
                 o.insert("config", configs::line_graph_discrete().to_js());
-                return Ok(JsValue::Object(o));
+                cx.send_main_message(NamedMessage::new(
+                    HubToMain::AskEditAxis,
+                    JsValue::Object(o),
+                ));
+                return Ok(());
             }
             ListId::Left => (&self.left, &self.left_list),
             ListId::Right => (&self.right, &self.right_list),
         };
-        let log = cx.tab_log();
-        let options = settings.unit_conversion.options()?;
-        let (group, selected) = match auto_target(&log, source.state(), options, true) {
-            AutoTarget::Success(unit) => (
-                units::group_by_unit(unit).to_js(),
-                if options.preset == PresetValue::Null {
-                    unit.to_js()
-                } else {
-                    JsValue::Null
-                },
-            ),
-            AutoTarget::Inconsistent => ("inconsistent".to_js(), JsValue::Null),
-            AutoTarget::None | AutoTarget::Manual => ("none".to_js(), JsValue::Null),
-        };
-        let visible: Vec<&SourceListItemState> = source
-            .state()
-            .iter()
-            .filter(|item| is_available(&log, item))
-            .collect();
-        let default = match visible.as_slice() {
-            [item] => log
-                .get_unit(&item.log_key)
-                .map_or(JsValue::Null, |unit| unit.to_js()),
-            _ => JsValue::Null,
+        let (group, selected, default) = {
+            let log = cx.tab_log();
+            let options = settings.unit_conversion.options()?;
+            let (group, selected) = match auto_target(&log, source.state(), options, true) {
+                AutoTarget::Success(unit) => (
+                    units::group_by_unit(unit).to_js(),
+                    if options.preset == PresetValue::Null {
+                        unit.to_js()
+                    } else {
+                        JsValue::Null
+                    },
+                ),
+                AutoTarget::Inconsistent => ("inconsistent".to_js(), JsValue::Null),
+                AutoTarget::None | AutoTarget::Manual => ("none".to_js(), JsValue::Null),
+            };
+            let visible: Vec<&SourceListItemState> = source
+                .state()
+                .iter()
+                .filter(|item| is_available(&log, item))
+                .collect();
+            let default = match visible.as_slice() {
+                [item] => log
+                    .get_unit(&item.log_key)
+                    .map_or(JsValue::Null, |unit| unit.to_js()),
+                _ => JsValue::Null,
+            };
+            (group, selected, default)
         };
         let locked = settings.locked_range.to_js();
         let unit_conversion = settings.unit_conversion.raw.clone();
@@ -581,7 +594,11 @@ impl LineGraphController {
         }
         o.insert("filter", settings.filter.0.clone());
         o.insert("config", configs::line_graph_numeric().to_js());
-        Ok(JsValue::Object(o))
+        cx.send_main_message(NamedMessage::new(
+            HubToMain::AskEditAxis,
+            JsValue::Object(o),
+        ));
+        Ok(())
     }
 
     /// `getCommand()`.

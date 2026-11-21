@@ -66,6 +66,8 @@ use asrs_js::time::Rng;
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::realm::JsRealm;
+use asrs_model::assets::AdvantageScopeAssets;
+use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Preferences, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::{Env, ItemView, Length, Rect, SourceList};
@@ -246,6 +248,7 @@ struct Host {
     preferences: Preferences,
     dark: bool,
     rng: NoRandom,
+    sent: Vec<NamedMessage<HubToMain>>,
 }
 
 impl TabCx for Host {
@@ -261,8 +264,11 @@ impl TabCx for Host {
     fn tab_rng(&mut self) -> &mut dyn Rng {
         &mut self.rng
     }
-    fn tab_renderer_top(&self) -> f64 {
-        0.0
+    fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
+        None
+    }
+    fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
+        self.sent.push(message);
     }
 }
 
@@ -422,7 +428,7 @@ struct Preview {
     key: JsString,
     time: f64,
     reads: VecDeque<(String, JsValue)>,
-    value: JsValue,
+    result: Result<JsValue, String>,
 }
 
 #[derive(Default)]
@@ -474,6 +480,7 @@ impl Harness {
                 preferences: Preferences::default(),
                 dark: false,
                 rng: NoRandom,
+                sent: Vec::new(),
             },
             realm: JsRealm::new(Box::new(NoRandom)),
             controllers: Vec::new(),
@@ -572,6 +579,9 @@ impl Harness {
             }
             "editAxis" => {
                 if let Some(command) = nested.pop_front() {
+                    // getCommand is idempotent on the controller's state, so running it here
+                    // first lets its result be compared before edit_axis repeats it.
+                    self.command(command)?;
                     self.set_context(command)?;
                     self.host.selection.load(reads(command)?);
                 }
@@ -615,7 +625,7 @@ impl Harness {
             JsValue::Null => None,
             v => Some(num(v)?),
         };
-        let mut expected: VecDeque<(JsString, f64, JsValue)> = VecDeque::new();
+        let mut expected: VecDeque<(JsString, f64, Result<JsValue, String>)> = VecDeque::new();
         if record.field("numberPreviews").is_some() {
             for call in js(record, "numberPreviews")?
                 .as_array()
@@ -625,11 +635,17 @@ impl Harness {
                 expected.push_back((
                     at(call, 0).as_str().cloned().ok_or("preview key")?,
                     num(at(call, 1))?,
-                    at(call, 2).clone(),
+                    Ok(at(call, 2).clone()),
                 ));
             }
         }
         let previews: Vec<Preview> = self.previews[ctrl].drain(..).collect();
+        if let Some(last) = previews.last()
+            && previews.len() == expected.len() + 1
+            && last.result.is_err()
+        {
+            expected.push_back((last.key.clone(), last.time, last.result.clone()));
+        }
         if previews.len() != expected.len() {
             return Err(format!(
                 "{} getPreview records for {} number previews",
@@ -641,7 +657,7 @@ impl Harness {
         for (preview, (key, time, value)) in previews.iter().zip(&expected) {
             if &preview.key != key
                 || preview.time.to_bits() != time.to_bits()
-                || &preview.value != value
+                || &preview.result != value
             {
                 return Err("getPreview records disagree with the list's preview calls".to_owned());
             }
@@ -653,8 +669,11 @@ impl Harness {
             &mut self.host,
             list,
             time,
-            |key, t, text| {
-                let port = text.map_or(JsValue::Null, |s| s.to_js());
+            |key, t, result| {
+                let port = match result {
+                    Ok(text) => Ok(text.as_ref().map_or(JsValue::Null, |s| s.to_js())),
+                    Err(e) => Err(e.to_string()),
+                };
                 match expected.pop_front() {
                     Some((k, et, value))
                         if &k == key && et.to_bits() == t.to_bits() && value == port => {}
@@ -871,7 +890,10 @@ impl Harness {
                     key: at(args, 0).as_str().cloned().ok_or("preview key")?,
                     time: num(at(args, 1))?,
                     reads: reads(record)?,
-                    value: js(record, "value")?,
+                    result: match threw(record) {
+                        Some(error) => Err(error),
+                        None => Ok(js(record, "value")?),
+                    },
                 });
                 Ok(())
             }
@@ -920,11 +942,21 @@ impl Harness {
                     width: num(at(r, 2))?,
                     height: num(at(r, 3))?,
                 };
-                let message = self.controllers[id]
-                    .ask_edit_axis(&self.host, list, rect)
+                self.controllers[id]
+                    .ask_edit_axis(&mut self.host, list, rect)
                     .map_err(|e| format!("ask_edit_axis threw {}", error_text(&e)))?;
-                self.pending_prompt = Some(message);
-                Ok(())
+                match std::mem::take(&mut self.host.sent).as_slice() {
+                    [
+                        NamedMessage {
+                            name: HubToMain::AskEditAxis,
+                            data,
+                        },
+                    ] => {
+                        self.pending_prompt = Some(data.clone());
+                        Ok(())
+                    }
+                    other => Err(format!("the edit button sent {other:?}")),
+                }
             }
             name => {
                 if record.string("phase").as_deref() != Some("begin") {
@@ -989,14 +1021,12 @@ impl Harness {
         }
         if record.string("exception").as_deref() == Some("event") {
             let error = record.string("error").unwrap_or_default();
-            if let Some(port) = self.pending_errors.pop_front()
-                && port != error
-            {
-                return Err(format!(
+            return match self.pending_errors.pop_front() {
+                Some(port) if port == error => Ok(()),
+                port => Err(format!(
                     "event exception: upstream {error:?}, port {port:?}"
-                ));
-            }
-            return Ok(());
+                )),
+            };
         }
         if record.field("capture").is_some() {
             if self.pending_prompt.is_some() {

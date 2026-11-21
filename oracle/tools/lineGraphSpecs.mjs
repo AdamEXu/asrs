@@ -633,6 +633,30 @@ fixtures["units-manual"] = {
   ]
 };
 
+fixtures["unknown-unit"] = {
+  seed: 32,
+  logs: ["numeric"],
+  steps: [
+    { log: "numeric" },
+    restore(
+      controller({
+        leftSources: [num0("stepped", "/Drive/LeftPositionMeters", 0), num0("smooth", "/Misc/Plain", 1)],
+        rightSources: [num0("stepped", "/Arm/AngleRadians", 2)]
+      })
+    ),
+    frames(),
+    edit("left", null, units(null, { type: null, factor: 2, to: "bogus" }), 0),
+    edit("right", null, units(null, presetOf(null, 2.5)), 0),
+    frames(),
+    ...hoverSweep([3, 6]),
+    capture("left-stopped"),
+    edit("left", null, units(null, null), 0),
+    frames(),
+    ...hoverSweep([4]),
+    capture("left-stays-stopped")
+  ]
+};
+
 fixtures.locked = {
   seed: 20,
   logs: ["numeric"],

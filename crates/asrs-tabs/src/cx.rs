@@ -1,11 +1,13 @@
-//! What the hub-side tab controllers and renderers read in place of upstream's `window.*`
-//! globals. `Tabs` calls every tab with the same `Cx`; the controllers reach the log, the
-//! selection, the preferences and the seeded `Math.random` stream through it.
+//! What tab controllers and renderers read in place of upstream's `window.*` globals. Every
+//! `asrs-tabs` half implements `TabController<Cx>` or `TabRenderer<Cx>` for any
+//! `Cx: TabCx`; the hub's context type implements `TabCx` alongside `asrs_hub::tabs::TabsHost`.
 
 use std::cell::Ref;
 
 use asrs_js::time::Rng;
 use asrs_log::log::{Log, TimestampDisplay};
+use asrs_model::assets::AdvantageScopeAssets;
+use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Preferences, Timestamps};
 use asrs_model::selection::Selection;
 
@@ -20,17 +22,14 @@ pub trait TabCx {
     /// `window.preferences`; `None` before `set-preferences` arrives.
     fn tab_preferences(&self) -> Option<&Preferences>;
 
+    /// `window.assets`; `None` before `set-assets` arrives.
+    fn tab_assets(&self) -> Option<&AdvantageScopeAssets>;
+
     /// `Math.random`, for `createUUID` in controller and renderer constructors.
     fn tab_rng(&mut self) -> &mut dyn Rng;
 
-    /// `window.tabs.tabListElement.getBoundingClientRect().top + controlledHeight` for the
-    /// selected tab, used by the renderers' timestamp/scroll math.
-    fn tab_renderer_top(&self) -> f64;
-}
-
-/// `window.preferences?.timestamps !== "original"`.
-pub fn is_start_at_zero(preferences: Option<&Preferences>) -> bool {
-    !matches!(preferences, Some(p) if p.timestamps == Timestamps::Original)
+    /// `window.sendMainMessage(name, data)`.
+    fn send_main_message(&mut self, message: NamedMessage<HubToMain>);
 }
 
 /// `window.log.getTimestampDisplayOffset()`.

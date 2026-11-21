@@ -53,12 +53,11 @@ pub fn js_error(error: SourceListError) -> JsError {
                 "Error",
                 "Unmodeled",
             ];
-            match text.split_once(": ") {
-                Some((name, message)) if NAMES.contains(&name) => {
-                    let name = NAMES.iter().find(|n| **n == name).copied().unwrap_or("");
-                    JsError::new(name, message)
-                }
-                _ => JsError::new("", text),
+            match text.split_once(": ").and_then(|(name, message)| {
+                NAMES.iter().find(|n| **n == name).map(|n| (*n, message))
+            }) {
+                Some((name, message)) => JsError::new(name, message),
+                None => JsError::new("", text),
             }
         }
     }
