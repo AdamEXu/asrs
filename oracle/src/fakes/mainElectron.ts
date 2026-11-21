@@ -271,9 +271,14 @@ export function setWindowBounds(id: number, bounds: Rect | null): void {
 }
 
 let displaysList: Rect[] = [{ x: 0, y: 0, width: 1920, height: 1080 }];
+let primaryIndex = 0;
 
-export function setDisplays(rects: Rect[]): void {
+// Chromium never reports zero displays (ScreenMac falls back to the primary screen), so
+// getPrimaryDisplay() always has bounds.
+export function setDisplays(rects: Rect[], primary = 0): void {
+  if (rects[primary] === undefined) throw new Error("setDisplays: primary display out of range");
   displaysList = rects.map((r) => ({ ...r }));
+  primaryIndex = primary;
 }
 
 export const screen = {
@@ -281,7 +286,7 @@ export const screen = {
     return displaysList.map((bounds) => ({ bounds: { ...bounds } }));
   },
   getPrimaryDisplay(): { bounds: Rect } {
-    return displaysList.length === 0 ? (undefined as any) : { bounds: { ...displaysList[0] } };
+    return { bounds: { ...displaysList[primaryIndex] } };
   },
   on: noop,
   once: noop,
@@ -442,6 +447,10 @@ const dialogQueue: { save: any[]; open: any[]; box: any[]; boxSync: any[] } = {
 
 export function queueDialog(kind: keyof typeof dialogQueue, value: any): void {
   dialogQueue[kind].push(value);
+}
+
+export function clearDialogs(): void {
+  Object.values(dialogQueue).forEach((queue) => queue.splice(0, queue.length));
 }
 
 export const dialog = {

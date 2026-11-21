@@ -4,7 +4,7 @@
 use asrs_js::math;
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::{Clock, LocalZone, local_date};
+use asrs_js::time::{Clock, LocalZone, local_date, time_clip};
 use asrs_js::value::JsValue;
 use asrs_model::json_file;
 
@@ -20,7 +20,7 @@ pub struct BetaConfig {
     pub survey_url: Option<&'static str>,
 }
 
-/// `getBetaConfig()` — upstream's config is a compile-time constant per distribution.
+/// `BETA_CONFIG` from `betaConfig.ts`; `None` stands for a release build's `null`.
 pub fn beta_config(is_beta: bool, zone: &impl LocalZone) -> Option<BetaConfig> {
     is_beta.then(|| BetaConfig {
         year: "2027",
@@ -30,7 +30,7 @@ pub fn beta_config(is_beta: bool, zone: &impl LocalZone) -> Option<BetaConfig> {
     })
 }
 
-/// `DEFAULT_STATE` / `DEFAULT_ALPHA_STATE` both reduce to this.
+/// `structuredClone(DefaultBetaState)`.
 fn default_state() -> JsValue {
     ops::object([
         ("welcomeComplete", JsValue::Bool(false)),
@@ -105,10 +105,9 @@ pub fn should_prompt_beta_survey(
         return Ok(false);
     }
     if survey_status == JsValue::Bool(false) {
-        let Some(survey_url) = config.and_then(|c| c.survey_url) else {
+        if config.and_then(|c| c.survey_url).is_none() {
             return Ok(false);
-        };
-        let _ = survey_url;
+        }
         let survey_time = math::round(clock.now() + TWO_WEEKS_MS);
         let expiration = config.map_or(f64::NAN, |c| c.expiration_ms);
         if survey_time < expiration {
@@ -122,7 +121,7 @@ pub fn should_prompt_beta_survey(
         return Ok(false);
     }
     if let JsValue::Number(scheduled) = survey_status {
-        return Ok(clock.now() > scheduled);
+        return Ok(clock.now() > time_clip(scheduled));
     }
     Ok(false)
 }

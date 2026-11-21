@@ -18,8 +18,8 @@ import { toTree } from "./cve1";
 //   genFiles beta <count> <seed>
 //     betaUtil's getState / welcome / expiry / survey-schedule calls over a fake clock.
 //
-// `main.ts` is bundled as strict ESM here but sloppy CJS in the real app, so records never
-// put a primitive window element where a bounds reset would assign to it.
+// `main.ts` is bundled as strict ESM here and sloppy CJS in the real app, but the window
+// bounds reset assigns inside the StateTracker class body, which is strict in both.
 
 const [mode, countArg, seedArg, variant] = process.argv.slice(2);
 installGlobals();
@@ -81,9 +81,9 @@ async function opRemoveFile(args: any) {
     return null;
   });
 }
-async function opSetDisplays(displays: any[]) {
-  await record("setDisplays", { displays }, () => {
-    electronFake.setDisplays(displays);
+async function opSetDisplays(displays: any[], primary = 0) {
+  await record("setDisplays", { displays, primary }, () => {
+    electronFake.setDisplays(displays, primary);
     return null;
   });
 }
@@ -268,21 +268,46 @@ const STATE_FILES: (Uint8Array | null)[] = [
   new Uint8Array([0x7b, 0x22, 0x68, 0x75, 0x62, 0x73, 0x22, 0x3a, 0x5b, 0x7b, 0x22, 0x78, 0x22, 0x3a, 0x30, 0xff, 0x7d, 0x5d, 0x7d]),
   j('{"hubs":[{"x":0,"y":0,"width":1100,"height":650,"state":"héllo 😀"}],"satellites":[]}'),
   j('{"hubs":[{"x":-0,"y":0,"width":1100,"height":650,"state":null}],"satellites":[]}'),
-  j('{"hubs":[{"x":0,"y":0,"width":1100,"height":650,"state":{"nested":[1,{"a":[2]}]}}],"satellites":[]}')
+  j('{"hubs":[{"x":0,"y":0,"width":1100,"height":650,"state":{"nested":[1,{"a":[2]}]}}],"satellites":[]}'),
+  j('{"hubs":[5],"satellites":[]}'),
+  j('{"hubs":[{"x":0,"y":0,"width":1100,"height":650,"state":null}],"satellites":["s"]}'),
+  j('{"hubs":[true],"satellites":[]}'),
+  j('{"hubs":[{"x":820,"y":430,"width":1100,"height":650,"state":null}],"satellites":[{"x":1020,"y":580,"width":901,"height":500,"state":null,"uuid":"e"}]}'),
+  j('{"hubs":[{"x":10,"y":-1000,"width":1100,"height":650,"state":null}],"satellites":[{"x":-10,"y":-1440,"width":900,"height":500,"state":null,"uuid":"v"}]}'),
+  j('{"hubs":[{"x":1920,"y":0,"width":1920,"height":1080,"state":null},{"x":0,"y":0,"width":1920,"height":1081,"state":null}],"satellites":[]}')
 ];
 
-const DISPLAYS_SETS: any[][] = [
-  [{ x: 0, y: 0, width: 1920, height: 1080 }],
-  [
-    { x: 0, y: 0, width: 1920, height: 1080 },
-    { x: 1920, y: 0, width: 1920, height: 1080 }
-  ],
-  [
-    { x: -2560, y: 0, width: 2560, height: 1440 },
-    { x: 0, y: 0, width: 1920, height: 1080 }
-  ],
-  [{ x: 100, y: 50, width: 1921, height: 1081 }],
-  []
+const DISPLAYS_SETS: { displays: any[]; primary: number }[] = [
+  { displays: [{ x: 0, y: 0, width: 1920, height: 1080 }], primary: 0 },
+  {
+    displays: [
+      { x: 0, y: 0, width: 1920, height: 1080 },
+      { x: 1920, y: 0, width: 1920, height: 1080 }
+    ],
+    primary: 0
+  },
+  {
+    displays: [
+      { x: -2560, y: 0, width: 2560, height: 1440 },
+      { x: 0, y: 0, width: 1920, height: 1080 }
+    ],
+    primary: 1
+  },
+  { displays: [{ x: 100, y: 50, width: 1921, height: 1081 }], primary: 0 },
+  {
+    displays: [
+      { x: 0, y: -1440, width: 2560, height: 1440 },
+      { x: 0, y: 0, width: 1920, height: 1080 }
+    ],
+    primary: 1
+  },
+  {
+    displays: [
+      { x: 1920, y: 0, width: 1280, height: 720 },
+      { x: 0, y: 0, width: 1920, height: 1080 }
+    ],
+    primary: 1
+  }
 ];
 
 const WINDOW_IDS = [1, 2, 3, 5, 10, 42, 4294967294, 4294967295, 0, -1, 1e21, NaN];
@@ -303,10 +328,10 @@ const STATE_VALUES: unknown[] = [
   { nested: { deep: { deeper: true } } }
 ];
 
-async function stateCase(file: Uint8Array | null, displays: any[], scripted: boolean) {
+async function stateCase(file: Uint8Array | null, set: (typeof DISPLAYS_SETS)[number], scripted: boolean) {
   caseIndex++;
   stepIndex = 0;
-  await opSetDisplays(displays);
+  await opSetDisplays(set.displays, set.primary);
   if (file !== null) await opPutFile({ name: STATE_NAME, data: file });
   const trackerId = trackers.length;
   await opNewTracker();
@@ -319,8 +344,8 @@ async function stateCase(file: Uint8Array | null, displays: any[], scripted: boo
 async function stateMode(count: number) {
   // File read cases: each file through fresh trackers, reset and non-reset reads.
   for (const file of STATE_FILES) {
-    for (const displays of DISPLAYS_SETS) {
-      await stateCase(file, displays, true);
+    for (const set of DISPLAYS_SETS) {
+      await stateCase(file, set, true);
     }
   }
 
@@ -387,7 +412,8 @@ async function stateMode(count: number) {
   for (let i = 0; i < count; i++) {
     caseIndex++;
     stepIndex = 0;
-    await opSetDisplays(pick(DISPLAYS_SETS));
+    const set = pick(DISPLAYS_SETS);
+    await opSetDisplays(set.displays, set.primary);
     const file = pick(STATE_FILES);
     if (file !== null) await opPutFile({ name: STATE_NAME, data: file });
     const id = trackers.length;
@@ -680,16 +706,20 @@ async function flowsMode(count: number, startup: Uint8Array | null) {
       []
     ]) {
       if (importIdx === null) break;
-      await opDialog("open", { canceled: false, filePaths: paths });
-      await opDialog("boxSync", 0);
-      const r = await opMenuClick(importIdx, { op: "importLayout", args: { paths, answer: 0 } });
-      if (r.created.length > 0) currentWindowId = r.created[0];
-      else if (electronFake.FakeBrowserWindow.fromId(currentWindowId) === null) currentWindowId = firstWindowId();
+      for (const answer of variant === "packaged" ? [1, 0] : [0]) {
+        await opDialog("open", { canceled: false, filePaths: paths });
+        await opDialog("boxSync", answer);
+        const r = await opMenuClick(importIdx, { op: "importLayout", args: { paths, answer } });
+        electronFake.clearDialogs();
+        if (r.created.length > 0) currentWindowId = r.created[0];
+        else if (electronFake.FakeBrowserWindow.fromId(currentWindowId) === null) currentWindowId = firstWindowId();
+      }
     }
     const dsIdx = fileMenuPath("Reset to DS Layout");
-    if (dsIdx !== null) {
-      await opDialog("boxSync", 0);
-      await opMenuClick(dsIdx, { op: "dsLayout", args: { window: currentWindowId } });
+    for (const answer of dsIdx === null ? [] : [1, 0]) {
+      await opDialog("boxSync", answer);
+      await opMenuClick(dsIdx!, { op: "dsLayout", args: { window: currentWindowId, answer } });
+      electronFake.clearDialogs();
     }
   }
 
@@ -747,7 +777,25 @@ const BETA_FILES: (Uint8Array | null)[] = [
   j("5"),
   j('"ab"'),
   j("[1,2]"),
-  j("{")
+  j("{"),
+  j('{"welcomeComplete":true,"surveyStatus":-1e16}'),
+  j('{"welcomeComplete":true,"surveyStatus":-1e400}'),
+  j('{"welcomeComplete":true,"surveyStatus":8640000000000001}'),
+  j('{"welcomeComplete":true,"surveyStatus":1795000000000.75}'),
+  j('{"__proto__":{"welcomeComplete":true},"surveyStatus":1}')
+];
+
+// Local midnight of 2027-01-09 (BETA_CONFIG.expiration) falls at a different UTC instant in
+// each vector zone; these straddle all four.
+const EXPIRY_INSTANTS = [
+  Date.UTC(2027, 0, 8, 10, 59, 59, 999),
+  Date.UTC(2027, 0, 8, 11),
+  Date.UTC(2027, 0, 8, 18, 30),
+  Date.UTC(2027, 0, 8, 23, 59, 59, 999),
+  Date.UTC(2027, 0, 9),
+  Date.UTC(2027, 0, 9, 7, 59, 59, 999),
+  Date.UTC(2027, 0, 9, 8),
+  Date.UTC(2027, 0, 9, 8, 0, 0, 1)
 ];
 
 async function betaOp(name: string, args: unknown, run: () => unknown) {
@@ -761,8 +809,9 @@ async function betaMode(count: number) {
     caseIndex++;
     stepIndex = 0;
     if (file !== null) await opPutFile({ name: BETA_NAME, data: file });
-    for (const offset of [0, 1000, 30 * 24 * 3600 * 1000, 45 * 24 * 3600 * 1000, 400 * 24 * 3600 * 1000]) {
-      await opSetNow(epoch0 + offset);
+    const offsets = [0, 1000, 30 * 24 * 3600 * 1000, 45 * 24 * 3600 * 1000, 400 * 24 * 3600 * 1000];
+    for (const now of [...offsets.map((offset) => epoch0 + offset), ...EXPIRY_INSTANTS]) {
+      await opSetNow(now);
       await betaOp("isBetaWelcomeComplete", undefined, () => betaUtil.isBetaWelcomeComplete());
       await betaOp("isBetaExpired", undefined, () => betaUtil.isBetaExpired());
       await betaOp("shouldPromptBetaSurvey", undefined, () => betaUtil.shouldPromptBetaSurvey());
@@ -782,7 +831,10 @@ async function betaMode(count: number) {
       });
     }
   }
-  await betaOp("exportName", { ms: epoch0 }, () => "AdvantageScope " + formatDate() + ".json");
+  for (const now of [epoch0, ...EXPIRY_INSTANTS]) {
+    await opSetNow(now);
+    await betaOp("exportName", undefined, () => "AdvantageScope " + formatDate() + ".json");
+  }
   await betaOp("defaultDsLayout", undefined, () => DEFAULT_DS_LAYOUT);
 }
 

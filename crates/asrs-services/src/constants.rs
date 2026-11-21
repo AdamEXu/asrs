@@ -1,8 +1,8 @@
 //! Persisted file locations and window defaults from `main/electron/ElectronConstants.ts` and
-//! `main.ts`. `Fs` paths are `path.join` results; on the POSIX filesystems the app targets that
-//! is `dir/name`, which is what the oracle's fake fs sees too.
+//! `main.ts`. `Fs` paths are `path.join` results: `dir`, the platform separator, `name`.
 
 use asrs_js::string::JsString;
+use asrs_js::time::{LocalZone, format_date};
 use asrs_js::value::{JsObject, JsValue};
 
 pub const HUB_DEFAULT_WIDTH: f64 = 1100.0;
@@ -13,7 +13,7 @@ pub const SAVE_PERIOD_MS: f64 = 250.0;
 pub const MAX_RECENT_UNITS: usize = 5;
 
 fn join(dir: &str, name: &str) -> String {
-    format!("{dir}/{name}")
+    format!("{dir}{}{name}", std::path::MAIN_SEPARATOR)
 }
 
 /// `path.join(app.getPath("userData"), "prefs.json")`.
@@ -44,9 +44,9 @@ pub fn beta_filename(user_data: &str, year: &str) -> String {
     join(user_data, &format!("beta-{year}.json"))
 }
 
-/// `path.join(app.getPath("temp"), \`AdvantageScope ${formatDate(now)}.json\`)`.
-pub fn layout_filename(temp: &str, formatted: &str) -> String {
-    join(temp, &format!("AdvantageScope {formatted}.json"))
+/// The export dialog's `defaultPath`: `"AdvantageScope " + formatDate() + ".json"`.
+pub fn layout_default_path(now_ms: f64, zone: &impl LocalZone) -> String {
+    format!("AdvantageScope {}.json", format_date(now_ms, zone))
 }
 
 /// `NoopUnitConversion` from `shared/units.ts`.

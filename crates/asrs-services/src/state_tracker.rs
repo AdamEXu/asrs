@@ -129,11 +129,9 @@ impl StateTracker {
                     }
                 }
                 JsValue::Bytes(bytes) => {
-                    for &b in bytes {
-                        self.satellite_uuids.insert(
-                            JsString::from(number::to_string(f64::from(b))),
-                            JsValue::String(uuid.clone()),
-                        );
+                    if !bytes.is_empty() {
+                        self.satellite_uuids
+                            .insert(JsString::from("undefined"), JsValue::String(uuid.clone()));
                     }
                 }
                 JsValue::Null | JsValue::Undefined => {
@@ -207,9 +205,7 @@ fn load_state(
                 && le(&js_add(&y, &height), d.y + d.height)
         });
         if !contained {
-            let primary = ws.primary_display().ok_or_else(|| {
-                JsError::type_error("Cannot read properties of undefined (reading 'bounds')")
-            })?;
+            let primary = ws.primary_display();
             let hubs_length = ops::get(&hubs, "length")?;
             let is_hub = less_than(&JsValue::Number(index as f64), &hubs_length).unwrap_or(false);
             let (default_width, default_height) = if is_hub {
@@ -345,8 +341,8 @@ fn js_add(a: &JsValue, b: &JsValue) -> JsValue {
     JsValue::Number(x + y)
 }
 
-/// `window.x = v` in upstream's strict-mode bundle: assigning a property on a primitive
-/// throws TypeError.
+/// `window.x = v`: class bodies are strict code even in the app's sloppy CJS bundle, so
+/// assigning a property on a primitive throws TypeError.
 fn strict_set(target: &mut JsValue, key: &str, value: f64) -> Result<(), JsError> {
     ops::set_key(target, &JsString::from(key), JsValue::Number(value))
 }

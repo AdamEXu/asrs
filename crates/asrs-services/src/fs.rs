@@ -18,11 +18,6 @@ pub trait Fs {
 
     /// `fs.copyFileSync`.
     fn copy(&self, from: &str, to: &str) -> Result<(), JsError>;
-
-    /// `fs.rmSync(path)`, used by test environments only.
-    fn remove(&self, _path: &str) -> Result<(), JsError> {
-        unimplemented!("remove is only used by test filesystems")
-    }
 }
 
 fn node_error(syscall: &str, path: &str, e: &std::io::Error) -> JsError {
@@ -49,10 +44,6 @@ impl Fs for RealFs {
         std::fs::copy(from, to)
             .map(|_| ())
             .map_err(|e| node_error("copyfile", from, &e))
-    }
-
-    fn remove(&self, path: &str) -> Result<(), JsError> {
-        std::fs::remove_file(path).map_err(|e| node_error("rm", path, &e))
     }
 }
 
@@ -81,6 +72,10 @@ impl MemFs {
         self.files
             .borrow_mut()
             .insert(path.to_owned(), data.to_vec());
+    }
+
+    pub fn remove(&self, path: &str) {
+        self.files.borrow_mut().remove(path);
     }
 
     /// `(name, bytes)` pairs in name order, like the oracle's dump.
@@ -118,10 +113,5 @@ impl Fs for MemFs {
     fn copy(&self, from: &str, to: &str) -> Result<(), JsError> {
         let data = self.read(from)?;
         self.write(to, &data)
-    }
-
-    fn remove(&self, path: &str) -> Result<(), JsError> {
-        self.files.borrow_mut().remove(path);
-        Ok(())
     }
 }
