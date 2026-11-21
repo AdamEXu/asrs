@@ -428,6 +428,11 @@ dependencies = [
 [[package]]
 name = "asrs-services"
 version = "0.1.0"
+dependencies = [
+ "asrs-js",
+ "asrs-model",
+ "asrs-parity",
+]
 
 [[package]]
 name = "asrs-tabs"

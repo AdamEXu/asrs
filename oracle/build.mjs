@@ -76,6 +76,52 @@ const buildReplacements = {
 const realSrcDir = fs.realpathSync(srcDir);
 const buildReplacementPattern = new RegExp(`\\b(${Object.keys(buildReplacements).join("|")})\\b(?!\\.)(?!\\s*=[^=])`, "g");
 
+// The `files` harness runs main-process modules against a fake fs and fake electron: fs,
+// graceful-fs and electron resolve to fakes when the importer is under src/main/ (or is
+// jsonfile), and main.ts's out-of-scope neighbours are stubbed entirely.
+const FAKES_DIR = path.join(here, "src", "fakes");
+const MAIN_STUBS = {
+  "main/electron/UpdateChecker": 'export default class UpdateChecker { getShouldPrompt() { return false; } showPrompt() {} checkForUpdate() {} }',
+  "main/electron/VideoProcessor": "export class VideoProcessor { static cleanup() {} }",
+  "main/electron/XRControls": "export const XRControls = { addSourceUUIDCallback() {} };",
+  "main/electron/XRServer": "export class XRServer {}",
+  "main/electron/assetDownloader": "export function getAssetDownloadStatus() { return null; } export function startAssetDownloadLoop() {}",
+  "main/electron/assetLoader": "export function createAssetFolders() {} export function getUserAssetsPath() { return '/fake/userData/userAssets'; } export function loadAssets() { return Promise.resolve({}); }",
+  "main/electron/owletDownloadLoop": "export function getOwletDownloadStatus() { return null; } export function startOwletDownloadLoop() {}",
+  "main/electron/owletInterface": "export function checkHootIsPro() { return Promise.resolve(true); } export function convertHoot() { return Promise.resolve(''); } export const CTRE_LICENSE_URL = '';",
+  "main/github": "export const GITHUB_REPOSITORY = 'Mechanical-Advantage/AdvantageScope';",
+  "lzma-native": "module.exports = {};",
+  "ssh2": "export class Client {}",
+  "@rev-robotics/revlog-converter": "export function parseREVLOG() { return null; }"
+};
+const isMainImporter = (importer) => importer.includes("/src/main/") || importer.includes("/fakes/") || importer.includes("node_modules/jsonfile");
+
+const filesPlugin = {
+  name: "files-fakes",
+  setup(build) {
+    build.onResolve({ filter: /^(electron|graceful-fs|fs|node:fs)$/ }, (resolveArgs) => {
+      if (!isMainImporter(resolveArgs.importer)) return undefined;
+      if (resolveArgs.path === "electron") return { path: path.join(FAKES_DIR, "mainElectron.ts") };
+      return { path: path.join(FAKES_DIR, "mainFs.ts") };
+    });
+    build.onResolve({ filter: /^(lzma-native|ssh2|@rev-robotics\/revlog-converter)$/ }, (resolveArgs) => ({
+      path: resolveArgs.path,
+      namespace: "files-stub"
+    }));
+    build.onResolve({ filter: /.*/ }, (resolveArgs) => {
+      if (!resolveArgs.importer.includes("/src/main/electron/") && resolveArgs.importer !== path.join(srcDir, "main/electron/main.ts")) return undefined;
+      const base = path.resolve(path.dirname(resolveArgs.importer), resolveArgs.path);
+      const rel = path.relative(srcDir, base).split(path.sep).join("/");
+      if (MAIN_STUBS[rel] !== undefined) return { path: rel, namespace: "files-stub" };
+      return undefined;
+    });
+    build.onLoad({ filter: /.*/, namespace: "files-stub" }, (loadArgs) => ({
+      contents: MAIN_STUBS[loadArgs.path] ?? "export {};",
+      loader: "ts"
+    }));
+  }
+};
+
 const virtualModules = {
   "oracle:upstream-modules":
     "export const UPSTREAM_MODULES = {\n" +
@@ -149,23 +195,40 @@ function recordInputs(metafile) {
 }
 
 const common = { absWorkingDir: here, metafile: true, bundle: true, target: "esnext", logLevel: "warning" };
+const nodeCommon = {
+  ...common,
+  outExtension: { ".js": ".mjs" },
+  format: "esm",
+  platform: "node",
+  sourcemap: "linked",
+  nodePaths: [path.join(args.upstream, "node_modules")],
+  define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream), __HARNESS_DIR__: JSON.stringify(args.harness) },
+  banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; import { fileURLToPath as __oracleFileURLToPath } from "node:url"; import { dirname as __oracleDirname } from "node:path"; const require = __oracleCreateRequire(import.meta.url); const __filename = __oracleFileURLToPath(import.meta.url); const __dirname = __oracleDirname(__filename);' },
+  external: ["electron"],
+  logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
+};
 
+// genFiles builds apart from the shared entry graph: its fakes rewire jsonfile's fs for every
+// importer, and entries sharing the graph (genModel) must keep real fs.
 recordInputs(
   (
     await esbuild.build({
-      ...common,
-      entryPoints: Object.fromEntries(entries.map((name) => [name, path.join(here, "src", name + ".ts")])),
+      ...nodeCommon,
+      entryPoints: Object.fromEntries(
+        entries.filter((name) => name !== "genFiles").map((name) => [name, path.join(here, "src", name + ".ts")])
+      ),
       outdir: args.out,
-      outExtension: { ".js": ".mjs" },
-      format: "esm",
-      platform: "node",
-      sourcemap: "linked",
-      nodePaths: [path.join(args.upstream, "node_modules")],
-      define: { __UPSTREAM_DIR__: JSON.stringify(args.upstream), __HARNESS_DIR__: JSON.stringify(args.harness) },
-      banner: { js: 'import { createRequire as __oracleCreateRequire } from "node:module"; const require = __oracleCreateRequire(import.meta.url);' },
-      external: ["electron"],
-      plugins: [oraclePlugin],
-      logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
+      plugins: [oraclePlugin]
+    })
+  ).metafile
+);
+recordInputs(
+  (
+    await esbuild.build({
+      ...nodeCommon,
+      entryPoints: { genFiles: path.join(here, "src", "genFiles.ts") },
+      outdir: args.out,
+      plugins: [filesPlugin, oraclePlugin]
     })
   ).metafile
 );
