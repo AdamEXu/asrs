@@ -166,8 +166,15 @@ impl TypeMemory {
     /// `{...typeMemory[key]}` where the property was found by [`has`](Self::has). Reads
     /// through the prototype yield non-enumerable members, which spread to nothing.
     fn spread_at(&self, key: &JsString) -> JsObject<JsValue> {
-        let JsValue::Object(o) = &self.root else {
-            return JsObject::new();
+        let o = match &self.root {
+            JsValue::Object(o) => o,
+            JsValue::Array(items) => {
+                return array_index(key.units())
+                    .and_then(|i| items.get(i as usize))
+                    .map(ops::spread)
+                    .unwrap_or_default();
+            }
+            _ => return JsObject::new(),
         };
         if let Some(v) = o.get_key(key) {
             return ops::spread(v);

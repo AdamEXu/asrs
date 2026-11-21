@@ -524,7 +524,8 @@ const TYPE_MEMORY_FILES: (Uint8Array | null)[] = [
   j('"s"'),
   j("{"),
   j('{"__proto__":{"p":1},"m1":{"/a":2}}'),
-  j('{"a":1,"m1":{"/a":9},"z":2}')
+  j('{"a":1,"m1":{"/a":9},"z":2}'),
+  j('[{"/old":{"type":"number"}},"s",{"/k":1}]')
 ];
 
 const RECENTS_FILES: (Uint8Array | null)[] = [
