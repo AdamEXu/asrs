@@ -54,12 +54,16 @@ enum SignalList {
 
 impl SignalList {
     /// `.length === 0`, the check that decides whether getsignals fires again.
-    fn is_empty(&self) -> bool {
+    /// A null value throws reading `length`, as upstream's does.
+    fn is_empty(&self) -> Result<bool, Thrown> {
         match self {
-            Self::Array(items) => items.is_empty(),
-            Self::Other(JsValue::String(s)) => s.is_empty(),
-            Self::Other(JsValue::Bytes(b)) => b.is_empty(),
-            Self::Other(_) => false,
+            Self::Array(items) => Ok(items.is_empty()),
+            Self::Other(JsValue::String(s)) => Ok(s.is_empty()),
+            Self::Other(JsValue::Bytes(b)) => Ok(b.is_empty()),
+            Self::Other(JsValue::Null | JsValue::Undefined) => Err(Thrown::type_error(
+                "Cannot read properties of null (reading 'length')",
+            )),
+            Self::Other(_) => Ok(false),
         }
     }
 
@@ -257,9 +261,6 @@ impl PhoenixSource {
         let json = json::parse_str(body).map_err(Thrown::from)?;
         check_error(&json)?;
         let devices = js::get(&json, "DeviceArray")?;
-        let JsValue::Array(items) = &devices else {
-            return Err(Thrown::type_error("devices.forEach is not a function"));
-        };
         let initial_connection = self.base.status() != LiveDataSourceStatus::Active;
         if initial_connection {
             self.base
@@ -271,6 +272,9 @@ impl PhoenixSource {
             self.live_start_log_time = None;
         }
         self.base.set_status(LiveDataSourceStatus::Active);
+        let JsValue::Array(items) = &devices else {
+            return Err(Thrown::type_error("devices.forEach is not a function"));
+        };
         for device in items {
             // Phoenix 5 devices use a different protocol that does not advertise signals.
             if !truthy(&js::get(device, "IsPROApplication")?) {
@@ -288,7 +292,9 @@ impl PhoenixSource {
             if self
                 .device_signals
                 .get_key(&device_name)
-                .is_some_and(SignalList::is_empty)
+                .map(SignalList::is_empty)
+                .transpose()?
+                .unwrap_or(false)
             {
                 // A rejected getSignals is an unhandled rejection: nothing happens.
                 if let Ok(url) = self.signals_url(device) {
