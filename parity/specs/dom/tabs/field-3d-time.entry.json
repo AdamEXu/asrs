@@ -1,0 +1,412 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../assets/field3d.json",
+  "../logs/field3d-time.json"
+ ],
+ "fixture": {
+  "seed": 1010,
+  "assets": "../assets/field3d.json",
+  "steps": [
+   {
+    "log": "../logs/field3d-time.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"component\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{}},{\"type\":\"robot\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}},{\"type\":\"component\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{}},{\"type\":\"component\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{}},{\"type\":\"mechanism\",\"logKey\":\"/Mech\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{\"plane\":\"xz\"}},{\"type\":\"mechanism\",\"logKey\":\"/Mech3\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{\"plane\":\"xz\"}},{\"type\":\"mechanism\",\"logKey\":\"/Mech2\",\"logType\":\"Mechanism2d\",\"visible\":true,\"options\":{\"plane\":\"yz\"}},{\"type\":\"vision\",\"logKey\":\"/Vision3\",\"logType\":\"Translation3d[]\",\"visible\":true,\"options\":{\"color\":\"#00ff00\",\"size\":\"bold\"}},{\"type\":\"vision\",\"logKey\":\"/Vision2\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"color\":\"#ff0000\"}},{\"type\":\"vision\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":false,\"options\":{\"color\":\"#0000ff\",\"size\":\"normal\"}},{\"type\":\"swerveModuleVelocities\",\"logKey\":\"/SwerveVel\",\"logType\":\"SwerveModuleVelocity[]\",\"visible\":true,\"options\":{\"color\":\"#ff0000\",\"arrangement\":\"3,2,1,0\"}},{\"type\":\"swerveModuleVelocities\",\"logKey\":\"/SwerveState\",\"logType\":\"SwerveModuleState[]\",\"visible\":true,\"options\":{\"color\":\"#00ffff\",\"arrangement\":\"0,1,2,3\"}},{\"type\":\"rotationOverride\",\"logKey\":\"/Rot3\",\"logType\":\"Rotation3d\",\"visible\":true,\"options\":{}},{\"type\":\"aprilTagIDs\",\"logKey\":\"/TagIDs2\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{}},{\"type\":\"ghost\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"model\":\"GhostBot\",\"color\":\"#0000ff\"}},{\"type\":\"rotationOverrideLegacy\",\"logKey\":\"/RotNum\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"units\":\"radians\"}},{\"type\":\"component\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{}},{\"type\":\"vision\",\"logKey\":\"/Vision3\",\"logType\":\"Translation3d[]\",\"visible\":true,\"options\":{\"color\":\"#123456\",\"size\":\"normal\"}},{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"36h11-6.5in\"}},{\"type\":\"aprilTagIDs\",\"logKey\":\"/TagIDs2\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{}},{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"16h5-6in\"}},{\"type\":\"aprilTagIDs\",\"logKey\":\"/TagIDs2\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{}},{\"type\":\"aprilTagIDs\",\"logKey\":\"/TagIDs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{}},{\"type\":\"aprilTag\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"16h5-6in\"}},{\"type\":\"aprilTagIDs\",\"logKey\":\"/TagIDs\",\"logType\":\"NumberArray\",\"visible\":false,\"options\":{}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"enabled\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"auto\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"teleop\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"teleop-no-endgame\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"full\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"visible\"}},{\"type\":\"heatmap\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"timeRange\":\"bogus\"}},{\"type\":\"heatmap\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"timeRange\":\"full\"}},{\"type\":\"trajectory\",\"logKey\":\"/Traj\",\"logType\":\"Trajectory\",\"visible\":true,\"options\":{\"color\":\"#ff8800\",\"size\":\"normal\"}},{\"type\":\"trajectory\",\"logKey\":\"/Choreo\",\"logType\":\"SwerveSample[]\",\"visible\":true,\"options\":{\"color\":\"#ff0088\",\"size\":\"bold\"}},{\"type\":\"trajectory\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"color\":\"#00ff88\",\"size\":\"normal\"}},{\"type\":\"gamePiece\",\"logKey\":\"/Translations\",\"logType\":\"Translation3d[]\",\"visible\":true,\"options\":{\"variant\":\"Note\"}},{\"type\":\"gamePiece\",\"logKey\":\"/Raw3ds\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"Fuel\"}},{\"type\":\"axes\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{}},{\"type\":\"cone\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"color\":\"#ffff00\",\"position\":\"front\"}},{\"type\":\"cone\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"color\":\"#ff00ff\",\"position\":\"back\"}},{\"type\":\"cone\",\"logKey\":\"/Pose2d\",\"logType\":\"Pose2d\",\"visible\":true,\"options\":{\"color\":\"#00ffff\",\"position\":\"center\"}},{\"type\":\"cameraOverride\",\"logKey\":\"/Missing\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{}},{\"type\":\"cameraOverride\",\"logKey\":\"/Poses3dEmpty\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{}},{\"type\":\"cameraOverride\",\"logKey\":\"/Cam2\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{}},{\"type\":\"cameraOverride\",\"logKey\":\"/Cam\",\"logType\":\"Transform3d\",\"visible\":true,\"options\":{}}])"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "idle"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     0
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t0"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     0.5
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t0.5"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     2
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t2"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.remove",
+     "type": "click",
+     "index": 42
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "missing-camera-removed"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.remove",
+     "type": "click",
+     "index": 42
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "empty-camera-removed"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     3.5
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t3.5"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     4
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t4"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     5
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t5"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     6.5
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t6.5"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     8
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t8"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     9.5
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "t9.5"
+   },
+   {
+    "selection": [
+     "setTimelineRange",
+     [
+      1,
+      5
+     ],
+     false
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "visible-range"
+   },
+   {
+    "selection": [
+     "setHoveredTime",
+     1.5
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "hover"
+   },
+   {
+    "selection": [
+     "setHoveredTime",
+     null
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "unhover"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     0
+    ]
+   },
+   {
+    "selection": [
+     "play"
+    ]
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "play0"
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "play1"
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "play2"
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "play3"
+   },
+   {
+    "selection": [
+     "pause"
+    ]
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     7
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "paused"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.remove",
+     "type": "click",
+     "index": 42
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "first-camera-removed"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.remove",
+     "type": "click",
+     "index": 42
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "no-camera"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.hide",
+     "type": "click",
+     "index": 1
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "robot-hidden"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.hide",
+     "type": "click",
+     "index": 1
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "robot-shown"
+   },
+   {
+    "event": {
+     "target": ".source-list .list .item button.remove",
+     "type": "click",
+     "index": 0
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "orphan-removed"
+   },
+   {
+    "selection": [
+     "goIdle"
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "idle-again"
+   }
+  ]
+ }
+}
