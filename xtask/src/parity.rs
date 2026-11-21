@@ -37,7 +37,7 @@ suites:
         load every Field3d_/Robot_ asset from the release zips (default <cache>/asset-zips)
         in all three render modes with upstream's real loadField/loadRobot workers and with
         asrs-field3d, and compare the merged buffers. Zips are extracted once, one per asset
-        folder, into target/parity/glb-release.
+        folder, into target/parity/glb-release/<name of the zips directory>.
         --plant flips a bit in the first asrs-cli line, so the run fails on purpose.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,

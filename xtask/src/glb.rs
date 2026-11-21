@@ -37,7 +37,10 @@ pub fn run(args: &[String]) -> Result {
     }
     let paths = Paths::new()?;
     let zips = zips.unwrap_or_else(|| paths.cache.join("asset-zips"));
-    let assets = workspace_root().join("target/parity/glb-release");
+    let set = zips
+        .file_name()
+        .map_or_else(|| "zips".into(), |n| n.to_string_lossy().into_owned());
+    let assets = workspace_root().join("target/parity/glb-release").join(set);
     let count = extract(&zips, &assets)?;
     eprintln!("{count} asset folders in {}", assets.display());
 
