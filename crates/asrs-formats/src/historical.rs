@@ -87,7 +87,6 @@ pub fn create_worker(
         WorkerName::Rlog => Ok(Box::new(RlogWorker::new(JsRealm::new(random), clock))),
         WorkerName::DsLog => Ok(Box::new(DsLogWorker)),
         WorkerName::RoadRunner => Ok(Box::new(RoadRunnerWorker::new(clock))),
-        other => Err(UnportedWorker(other)),
     }
 }
 
