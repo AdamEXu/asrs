@@ -134,6 +134,7 @@ struct PipeKey {
     float_color: bool,
     aux: bool,
     samples: u32,
+    strip_index_format: Option<wgpu::IndexFormat>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -585,6 +586,7 @@ impl Renderer {
                         wgpu::FrontFace::Cw
                     },
                     cull_mode: key.cull.then_some(wgpu::Face::Back),
+                    strip_index_format: key.strip_index_format,
                     ..Default::default()
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
@@ -824,6 +826,7 @@ impl Renderer {
             lights.hemisphere.len().min(MAX_HEMI) as u32,
             lights.point.len().min(MAX_POINT) as u32,
             lights.spot.len().min(MAX_SPOT) as u32,
+            // opaque() in phong.wgsl XORs with this word, so it has to stay 0.
             0,
         ];
         let shadows = lights
@@ -961,6 +964,14 @@ impl Renderer {
         };
         let is_line = matches!(program, Program::Lines | Program::LineStrip);
         let shadow = pass == Pass::Shadow;
+        let strip_index_format = match kind {
+            DrawKind::Line { geometry, .. } if program == Program::LineStrip => self.geometries
+                [&geometry.key()]
+                .index
+                .as_ref()
+                .map(|(_, format, _)| *format),
+            _ => None,
+        };
         PipeKey {
             program,
             cull: !is_line && draw.side != Side::Double,
@@ -972,6 +983,7 @@ impl Renderer {
             float_color,
             aux: pass == Pass::Aux,
             samples: if pass == Pass::Color { samples } else { 1 },
+            strip_index_format,
         }
     }
 

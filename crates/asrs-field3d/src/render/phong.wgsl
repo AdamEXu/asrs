@@ -176,7 +176,9 @@ fn opaque(v: vec4<f32>) -> vec4<f32> {
 // gives ANGLE's translation of shadowmap_vertex: translation column first, then y, x and z,
 // each fused. The receiver's depth is compared against the shadow map's at full precision, so
 // any other order turns 1-ulp differences into shadow acne on different pixels. The opaque
-// steps stop the compiler from reordering the sum for this shader.
+// steps stop the compiler from reordering the sum for this shader. The order was measured
+// against ANGLE's Metal backend on Apple GPUs only: D3D11 and SwiftShader compile upstream's
+// GLSL their own way, so T10 has to measure it again per backend.
 fn spot_light_coord(m: mat4x4<f32>, v: vec4<f32>) -> vec4<f32> {
     var acc = opaque(m[3] * v.w);
     acc = opaque(fma(m[1], vec4<f32>(v.y), acc));

@@ -3,10 +3,12 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use asrs_field3d::render::{
-    FatLine, FrameOptions, Geometry, Line, LineMaterial, LineSegmentsGeometry, Mesh, NodeKind,
-    PhongMaterial, RenderThread, Renderer, Scene, build_frame,
+    FatLine, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial, LineSegmentsGeometry,
+    Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame,
 };
-use asrs_field3d::three::{Color, PerspectiveCamera, Vector3, primitives};
+use asrs_field3d::three::{
+    ArrayData, BufferAttribute, BufferGeometry, Color, PerspectiveCamera, Vector3, primitives,
+};
 
 const W: u32 = 64;
 const H: u32 = 48;
@@ -173,4 +175,41 @@ fn a_shadowed_frame_with_lines_renders_and_dumps_its_shadow_map() {
     assert!(renderer.shadow_map(1).is_none());
     let aux = renderer.render_aux(&frame);
     assert_eq!(aux.opaque_ids.len(), (W * H) as usize);
+}
+
+#[test]
+fn an_indexed_line_strip_draws() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let (mut scene, mut camera) = scene_with_box_at(10.0);
+    let mut geometry = BufferGeometry::default();
+    geometry.set_attribute(
+        "position",
+        BufferAttribute::new(
+            ArrayData::Float32(vec![-3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0]),
+            3,
+            false,
+        ),
+    );
+    geometry.index = Some(BufferAttribute::new(
+        ArrayData::Uint16(vec![0, 1, 2]),
+        1,
+        false,
+    ));
+    let root = scene.root;
+    scene.add(
+        root,
+        NodeKind::Line(Line {
+            geometry: Geometry::new(geometry),
+            material: Arc::new(LineBasicMaterial::new(Color::hex(16777215.0))),
+            segments: false,
+        }),
+    );
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, false);
+    let frame = build_frame(&mut scene, &mut camera, options);
+    let mut bgra = Vec::new();
+    renderer.render(&frame, &mut bgra);
+    let lit = (0..H).filter(|&y| pixel(&bgra, W / 2, y)[0] == 255).count();
+    assert_eq!(lit, 1);
 }
