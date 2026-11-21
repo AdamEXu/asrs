@@ -98,8 +98,8 @@ async fn serve(listener: TcpListener) {
                     Message::Binary(bytes) => {
                         let mut keys = KeyCache::new();
                         let mut rng = V8MathRandom::from_seed(1);
-                        let Ok(JsValue::Array(items)) =
-                            msgpack::decode(&bytes, &mut keys, &mut rng)
+                        let Ok(Some(items)) =
+                            msgpack::decode(&bytes, &mut keys, &mut rng).map(JsValue::into_array)
                         else {
                             continue;
                         };

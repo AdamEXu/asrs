@@ -342,6 +342,27 @@ pub fn loose_equals(a: &JsValue, b: &JsValue) -> bool {
     }
 }
 
+/// `ToString` of a nested array without a stack frame per level: the comma-separated
+/// `Array.prototype.join` text, walking in order.
+fn join_into(items: &[JsValue], out: &mut JsString) {
+    let mut stack = vec![(items, 0usize)];
+    while let Some((items, i)) = stack.last_mut() {
+        let Some(item) = items.get(*i) else {
+            stack.pop();
+            continue;
+        };
+        if *i > 0 {
+            out.push_unit(u16::from(b','));
+        }
+        *i += 1;
+        match item {
+            JsValue::Array(items) => stack.push((items, 0)),
+            JsValue::Undefined | JsValue::Null => {}
+            leaf => out.push_str(&to_string(leaf)),
+        }
+    }
+}
+
 /// `ToString` for the values a decoder produces. Dates and objects never reach a numeric
 /// context upstream as anything but `NaN`, so their exact text is not modelled.
 pub fn to_string(value: &JsValue) -> JsString {
@@ -354,14 +375,7 @@ pub fn to_string(value: &JsValue) -> JsString {
         JsValue::BigInt(b) => JsString::from(format!("{b}")),
         JsValue::Array(items) => {
             let mut out = JsString::new();
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push_unit(u16::from(b','));
-                }
-                if !matches!(item, JsValue::Undefined | JsValue::Null) {
-                    out.push_str(&to_string(item));
-                }
-            }
+            join_into(items, &mut out);
             out
         }
         JsValue::Bytes(bytes) => JsString::from(
@@ -373,6 +387,22 @@ pub fn to_string(value: &JsValue) -> JsString {
         ),
         JsValue::Date(_) => JsString::from("Invalid Date"),
         JsValue::Object(_) | JsValue::ExtData(..) => JsString::from("[object Object]"),
+    }
+}
+
+/// `ToBoolean`.
+pub fn to_boolean(value: &JsValue) -> bool {
+    match value {
+        JsValue::Undefined | JsValue::Null => false,
+        JsValue::Bool(b) => *b,
+        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
+        JsValue::String(s) => !s.is_empty(),
+        JsValue::BigInt(b) => !b.is_zero(),
+        JsValue::Array(_)
+        | JsValue::Object(_)
+        | JsValue::Bytes(_)
+        | JsValue::Date(_)
+        | JsValue::ExtData(..) => true,
     }
 }
 

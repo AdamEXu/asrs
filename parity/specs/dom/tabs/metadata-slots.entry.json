@@ -1,0 +1,215 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json"
+  ],
+  "fixture": {
+    "assets": "../assets/minimal.json",
+    "images": {
+      "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
+        3900,
+        1800
+      ]
+    },
+    "seed": 1104,
+    "steps": [
+      {
+        "main": "new-tab",
+        "data": 12
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "empty-log"
+      },
+      {
+        "log": [
+          [
+            "putString",
+            "/Metadata/RobotName",
+            0,
+            "Kitbot"
+          ],
+          [
+            "putString",
+            "/RealMetadata/GitSHA",
+            0,
+            "abc123"
+          ],
+          [
+            "putString",
+            "/ReplayMetadata/GitSHA",
+            0,
+            "def456"
+          ],
+          [
+            "putString",
+            "/RealMetadata/BuildDate",
+            0,
+            "2026-01-01"
+          ],
+          [
+            "putString",
+            "/RealMetadata/BuildDate",
+            3,
+            "2026-01-02"
+          ],
+          [
+            "putString",
+            "/ReplayMetadata/Only",
+            0,
+            "replay-only"
+          ],
+          [
+            "putNumber",
+            "/RealMetadata/NotAString",
+            0,
+            5
+          ],
+          [
+            "putString",
+            "/Metadata",
+            0,
+            "bare"
+          ],
+          [
+            "putString",
+            "/Metadata7",
+            0,
+            "integer-like"
+          ],
+          [
+            "putString",
+            "/Metadata/0",
+            0,
+            "slash zero"
+          ],
+          [
+            "putString",
+            "NT:/Metadata/TeamNumber",
+            0,
+            "6328"
+          ],
+          [
+            "putString",
+            "NT:/AdvantageKit/RealMetadata/GitSHA",
+            0,
+            "nt-real"
+          ],
+          [
+            "putString",
+            "NT:/AdvantageKit/ReplayMetadata/GitSHA",
+            0,
+            "nt-replay"
+          ],
+          [
+            "putString",
+            "/Log0/RealMetadata/GitSHA",
+            0,
+            "merged-real"
+          ],
+          [
+            "putString",
+            "Log1/ReplayMetadata/GitSHA",
+            0,
+            "merged-replay"
+          ],
+          [
+            "putString",
+            "/Log2/Metadata/RobotName",
+            0,
+            "merged-generic"
+          ],
+          [
+            "putString",
+            "/Log3Extra/Metadata/X",
+            0,
+            "prefix-not-at-boundary"
+          ],
+          [
+            "putString",
+            "/RealOutputs/Metadata/NotMeta",
+            0,
+            "ignored"
+          ]
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()]"
+          }
+        ],
+        "label": "slots"
+      },
+      {
+        "log": [
+          [
+            "putString",
+            "/RealMetadata/Late",
+            5,
+            "late"
+          ],
+          [
+            "putString",
+            "/Metadata/RobotName",
+            6,
+            "Renamed"
+          ]
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          }
+        ],
+        "label": "refreshed"
+      },
+      {
+        "log": [
+          [
+            "putString",
+            "/ReplayMetadata/Quiet",
+            7,
+            "no-refresh"
+          ]
+        ],
+        "newFields": false
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "no-refresh"
+      }
+    ]
+  }
+}

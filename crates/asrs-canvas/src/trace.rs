@@ -262,11 +262,22 @@ fn unhex(s: &str) -> Result<Vec<u8>, String> {
         .collect()
 }
 
-/// Turns CVE-1 tagged JSON back into the plain JS value it encodes.
+/// Turns CVE-1 tagged JSON back into the plain JS value it encodes. Trace input is parsed
+/// without a depth bound, so the conversion caps itself like upstream's recursive decode.
 fn from_cve1(v: &JsValue) -> Result<JsValue, String> {
+    from_cve1_at(v, 0)
+}
+
+fn from_cve1_at(v: &JsValue, depth: usize) -> Result<JsValue, String> {
+    if depth > 2000 {
+        return Err("Maximum call stack size exceeded".to_owned());
+    }
     match v {
         JsValue::Array(items) => Ok(JsValue::Array(
-            items.iter().map(from_cve1).collect::<Result<_, _>>()?,
+            items
+                .iter()
+                .map(|item| from_cve1_at(item, depth + 1))
+                .collect::<Result<_, _>>()?,
         )),
         JsValue::Object(object) => {
             let mut entries = object.iter();
@@ -295,7 +306,7 @@ fn from_cve1(v: &JsValue) -> Result<JsValue, String> {
                             return Err("CVE-1 o pair is not [key, value]".to_owned());
                         };
                         let key = key.as_str().ok_or("CVE-1 o key is not a string")?;
-                        object.insert(key.clone(), from_cve1(value)?);
+                        object.insert(key.clone(), from_cve1_at(value, depth + 1)?);
                     }
                     Ok(JsValue::Object(object))
                 }

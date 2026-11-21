@@ -839,7 +839,9 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .collect::<Result<Vec<JsString>, String>>()?;
                 log.put_string_array(&key(0)?, number(&args[1])?, values)
             }
-            "putJSON" => log.put_json(&key(0)?, number(&args[1])?, js_string(&args[2])?),
+            "putJSON" => log
+                .put_json(&key(0)?, number(&args[1])?, js_string(&args[2])?)
+                .map_err(|e| format!("putJSON: {e:?}"))?,
             "putRaw" => {
                 let bytes: Vec<u8> = match &args[2] {
                     Value::Bytes(b) => b.to_vec(),

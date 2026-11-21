@@ -1,0 +1,1722 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/line-graph-numeric.json"
+  ],
+  "fixture": {
+    "sourceLists": true,
+    "seed": 18,
+    "steps": [
+      {
+        "eval": "/*lg:recorder*/ (() => { const w = window; const write = (record) => w.__oracleWrite(JSON.stringify(record)); const view = new DataView(new ArrayBuffer(8)); const tree = (v) => { if (v === undefined) return { u: null }; if (v === null || typeof v === \"boolean\" || typeof v === \"string\") return v; if (typeof v === \"number\") { view.setFloat64(0, v); return { n: view.getUint32(0).toString(16).padStart(8, \"0\") + view.getUint32(4).toString(16).padStart(8, \"0\") }; } if (typeof v === \"function\") return { fn: v.name }; if (Array.isArray(v)) return v.map(tree); return { o: Object.keys(v).map((k) => [k, tree(v[k])]) }; }; const errorText = (e) => (e instanceof Error ? e.name + \": \" + e.message : String(e)); const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches; const frames = []; let selectionDepth = 0; const selection = w.selection; for (const name of [\"getTimelineRange\", \"getMode\", \"getSelectedTime\", \"getHoveredTime\", \"getGrabZoomRange\"]) { const original = selection[name]; selection[name] = function (...args) { if (frames.length === 0 || selectionDepth > 0) return original.apply(this, args); selectionDepth++; try { const value = original.apply(this, args); frames[frames.length - 1].push([name, tree(value)]); return value; } finally { selectionDepth--; } }; } const controllers = []; const lists = (c) => [[\"left\", c.leftSourceList], [\"right\", c.rightSourceList], [\"discrete\", c.discreteSourceList]]; const hook = (c) => { if (controllers.includes(c)) return; const id = controllers.length; controllers.push(c); write({ lg: \"create\", id: tree(id), uuids: lists(c).map(([, sl]) => sl.UUID) }); const observe = (name, kind, argCount) => { const original = c[name]; c[name] = function (...args) { frames.push([]); const record = { lg: kind, id: tree(id), dark: dark(), ts: tree(w.preferences?.timestamps) }; if (argCount > 0) record.args = tree(args.slice(0, argCount)); try { const value = original.apply(this, args); record.value = tree(value); return value; } catch (e) { record.threw = errorText(e); throw e; } finally { record.reads = frames.pop(); write(record); } }; }; observe(\"getCommand\", \"command\", 0); observe(\"getPreview\", \"preview\", 2); observe(\"saveState\", \"save\", 0); observe(\"getActiveFields\", \"activeFields\", 0); for (const name of [\"restoreState\", \"editAxis\", \"clearAxis\", \"setRobotModeVisible\", \"refresh\"]) { const original = c[name]; c[name] = function (...args) { write({ lg: name, id: tree(id), phase: \"begin\", args: tree(args), dark: dark() }); const end = { lg: name, id: tree(id), phase: \"end\" }; try { return original.apply(this, args); } catch (e) { end.threw = errorText(e); throw e; } finally { write(end); } }; } }; w.addEventListener(\"click\", (event) => { const button = event.target instanceof w.Element ? event.target.closest(\"button.edit\") : null; if (button === null) return; controllers.forEach((c, id) => { for (const [list, sl] of lists(c)) { if (!sl.ROOT.contains(button)) continue; const r = button.getBoundingClientRect(); write({ lg: \"edit\", id: tree(id), list, rect: tree([r.x, r.y, r.width, r.height]) }); } }); }, true); w.tabs.tabList.forEach((t) => t.type === 1 && hook(t.controller)); const addTab = w.tabs.addTab; w.tabs.addTab = function (...args) { const result = addTab.apply(this, args); this.tabList.forEach((t) => t.type === 1 && hook(t.controller)); return result; }; })()"
+      },
+      {
+        "log": "../logs/line-graph-numeric.json"
+      },
+      {
+        "main": "restore-state",
+        "cve1": {
+          "o": [
+            [
+              "sidebar",
+              {
+                "o": [
+                  [
+                    "width",
+                    {
+                      "n": "4072c00000000000"
+                    }
+                  ],
+                  [
+                    "expanded",
+                    []
+                  ]
+                ]
+              }
+            ],
+            [
+              "tabs",
+              {
+                "o": [
+                  [
+                    "selected",
+                    {
+                      "n": "0000000000000000"
+                    }
+                  ],
+                  [
+                    "tabs",
+                    [
+                      {
+                        "o": [
+                          [
+                            "type",
+                            {
+                              "n": "3ff0000000000000"
+                            }
+                          ],
+                          [
+                            "title",
+                            ""
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "leftSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/LeftPositionMeters"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#2b66a2"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/RightPositionInches"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#e5b31b"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "rightSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Arm/AngleRadians"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#af2437"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Arm/AngleDegrees"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#80588e"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "discreteSources",
+                                  []
+                                ],
+                                [
+                                  "leftLockedRange",
+                                  null
+                                ],
+                                [
+                                  "rightLockedRange",
+                                  null
+                                ],
+                                [
+                                  "leftUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        null
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "rightUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        null
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "leftFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "rightFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "showRobotMode",
+                                  false
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "controllerUUID",
+                            "linegraph00000000000000000000000"
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            {
+                              "n": "4069000000000000"
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          4.4
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "consistent"
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "left"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "inches"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "0000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "right"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "rotations"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "0000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          4.4
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          9.5
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "targets"
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "left"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "feet"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "3ff0000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "right"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "degrees"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "4000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          3.5
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          8.1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "filtered-targets"
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "left"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "radians"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "0000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "right"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "bogus"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "0000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "mismatched-targets"
+      },
+      {
+        "main": "restore-state",
+        "cve1": {
+          "o": [
+            [
+              "sidebar",
+              {
+                "o": [
+                  [
+                    "width",
+                    {
+                      "n": "4072c00000000000"
+                    }
+                  ],
+                  [
+                    "expanded",
+                    []
+                  ]
+                ]
+              }
+            ],
+            [
+              "tabs",
+              {
+                "o": [
+                  [
+                    "selected",
+                    {
+                      "n": "0000000000000000"
+                    }
+                  ],
+                  [
+                    "tabs",
+                    [
+                      {
+                        "o": [
+                          [
+                            "type",
+                            {
+                              "n": "3ff0000000000000"
+                            }
+                          ],
+                          [
+                            "title",
+                            ""
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "leftSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/LeftPositionMeters"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#2b66a2"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Arm/AngleRadians"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#e5b31b"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "rightSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Misc/Plain"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#af2437"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/LeftPositionMeters"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#80588e"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "discreteSources",
+                                  []
+                                ],
+                                [
+                                  "leftLockedRange",
+                                  null
+                                ],
+                                [
+                                  "rightLockedRange",
+                                  null
+                                ],
+                                [
+                                  "leftUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        "meters"
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "rightUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        null
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "leftFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "rightFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "showRobotMode",
+                                  false
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "controllerUUID",
+                            "linegraph00000000000000000000000"
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            {
+                              "n": "4069000000000000"
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          2
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "inconsistent"
+      },
+      {
+        "main": "restore-state",
+        "cve1": {
+          "o": [
+            [
+              "sidebar",
+              {
+                "o": [
+                  [
+                    "width",
+                    {
+                      "n": "4072c00000000000"
+                    }
+                  ],
+                  [
+                    "expanded",
+                    []
+                  ]
+                ]
+              }
+            ],
+            [
+              "tabs",
+              {
+                "o": [
+                  [
+                    "selected",
+                    {
+                      "n": "0000000000000000"
+                    }
+                  ],
+                  [
+                    "tabs",
+                    [
+                      {
+                        "o": [
+                          [
+                            "type",
+                            {
+                              "n": "3ff0000000000000"
+                            }
+                          ],
+                          [
+                            "title",
+                            ""
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "leftSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Motor/Temp"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#2b66a2"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Motor/TempF"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#e5b31b"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "rightSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/Accel"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#af2437"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/VelocityMetersPerSec"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#80588e"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "discreteSources",
+                                  []
+                                ],
+                                [
+                                  "leftLockedRange",
+                                  null
+                                ],
+                                [
+                                  "rightLockedRange",
+                                  null
+                                ],
+                                [
+                                  "leftUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        "kelvin"
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "rightUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        null
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "leftFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "rightFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "showRobotMode",
+                                  false
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "controllerUUID",
+                            "linegraph00000000000000000000000"
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            {
+                              "n": "4069000000000000"
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          6.5
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "temperature"
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "right"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    null
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "3ff0000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "left"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    "fahrenheit"
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "4000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          2
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          5
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "accel-filters"
+      },
+      {
+        "main": "restore-state",
+        "cve1": {
+          "o": [
+            [
+              "sidebar",
+              {
+                "o": [
+                  [
+                    "width",
+                    {
+                      "n": "4072c00000000000"
+                    }
+                  ],
+                  [
+                    "expanded",
+                    []
+                  ]
+                ]
+              }
+            ],
+            [
+              "tabs",
+              {
+                "o": [
+                  [
+                    "selected",
+                    {
+                      "n": "0000000000000000"
+                    }
+                  ],
+                  [
+                    "tabs",
+                    [
+                      {
+                        "o": [
+                          [
+                            "type",
+                            {
+                              "n": "3ff0000000000000"
+                            }
+                          ],
+                          [
+                            "title",
+                            ""
+                          ],
+                          [
+                            "controller",
+                            {
+                              "o": [
+                                [
+                                  "leftSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "stepped"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Drive/Duty"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#2b66a2"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "rightSources",
+                                  [
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Arm/AngleRadians"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#af2437"
+                                              ],
+                                              [
+                                                "size",
+                                                "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "smooth"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Arm/AngleDegrees"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          false
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#80588e"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                ],
+                                [
+                                  "discreteSources",
+                                  []
+                                ],
+                                [
+                                  "leftLockedRange",
+                                  null
+                                ],
+                                [
+                                  "rightLockedRange",
+                                  null
+                                ],
+                                [
+                                  "leftUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        null
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "rightUnitConversion",
+                                  {
+                                    "o": [
+                                      [
+                                        "autoTarget",
+                                        null
+                                      ],
+                                      [
+                                        "preset",
+                                        null
+                                      ]
+                                    ]
+                                  }
+                                ],
+                                [
+                                  "leftFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "rightFilter",
+                                  {
+                                    "n": "0000000000000000"
+                                  }
+                                ],
+                                [
+                                  "showRobotMode",
+                                  false
+                                ]
+                              ]
+                            }
+                          ],
+                          [
+                            "controllerUUID",
+                            "linegraph00000000000000000000000"
+                          ],
+                          [
+                            "renderer",
+                            null
+                          ],
+                          [
+                            "controlsHeight",
+                            {
+                              "n": "4069000000000000"
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          0.9
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          1
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          2.7
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "percent-and-hidden"
+      },
+      {
+        "main": "edit-axis",
+        "cve1": {
+          "o": [
+            [
+              "legend",
+              "left"
+            ],
+            [
+              "lockedRange",
+              null
+            ],
+            [
+              "unitConversion",
+              {
+                "o": [
+                  [
+                    "autoTarget",
+                    null
+                  ],
+                  [
+                    "preset",
+                    null
+                  ]
+                ]
+              }
+            ],
+            [
+              "filter",
+              {
+                "n": "4000000000000000"
+              }
+            ]
+          ]
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setHoveredTime",
+          4
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          }
+        ],
+        "label": "percent-integrated"
+      }
+    ]
+  }
+}

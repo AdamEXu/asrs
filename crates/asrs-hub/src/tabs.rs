@@ -378,6 +378,18 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.tabs.get(index).map(TabRef)
     }
 
+    /// `tabList[i].controller`, for `eval` steps that reach a tab by index.
+    pub fn controller_mut(&mut self, index: &JsValue) -> Result<&mut dyn TabController<Cx>> {
+        let i = js::index(index, self.tabs.len()).ok_or_else(|| missing("controller"))?;
+        Ok(&mut *self.tabs[i].controller)
+    }
+
+    /// `tabList[i].renderer`.
+    pub fn renderer_mut(&mut self, index: &JsValue) -> Result<&mut dyn TabRenderer<Cx>> {
+        let i = js::index(index, self.tabs.len()).ok_or_else(|| missing("renderer"))?;
+        Ok(&mut *self.tabs[i].renderer)
+    }
+
     pub fn tabs(&self) -> impl ExactSizeIterator<Item = TabRef<'_, Cx>> + '_ {
         self.tabs.iter().map(TabRef)
     }
@@ -529,7 +541,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.tabs.clear();
         self.selected = num(0.0);
         let list = match read(state, "tabs")? {
-            JsValue::Array(items) => items,
+            v @ JsValue::Array(_) => v.into_array().unwrap(),
             v @ (JsValue::Undefined | JsValue::Null) => {
                 return Err(type_error(read_error(&v, "forEach")));
             }

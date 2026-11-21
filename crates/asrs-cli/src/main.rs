@@ -4,6 +4,7 @@ mod assets;
 mod canvas_cmd;
 mod decode;
 mod decode_worker;
+mod export_cmd;
 mod fn_cmd;
 mod functions;
 mod geometry;
@@ -41,6 +42,10 @@ commands:
                 decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
   decode-worker <file>
                 run the file's decode worker alone and print its messages (same as oracle decodeWorker)
+  export <file> --options <json> [--out <file>] [--fixed-limit <n>]
+                decode fully, then run the export port (same outcomes as oracle export)
+  export-run --root <dir> --out <dir> --spec <spec>
+                run the spec's export matrix over stdin inputs (same as oracle historicalRun)
   historical-session <sessions.jsonl>
                 run scripted HistoricalDataSource sessions and print their traces (same as
                 oracle historicalSession)
@@ -57,6 +62,7 @@ fn main() -> ExitCode {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
         Some("decode-worker") => return decode_worker::run(&args[1..]),
+        Some("export") | Some("export-run") => return export_cmd::run(&args[1..]),
         Some("historical-session") => return historical_session::run(&args[1..]),
         Some("canvas") => canvas_cmd::run(&args[1..]),
         Some("heatmap") => heatmap::run(&args[1..]),
