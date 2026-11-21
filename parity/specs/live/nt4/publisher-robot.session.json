@@ -1,0 +1,33 @@
+{
+  "protocol": "nt4",
+  "seed": 4231,
+  "latencyMs": 2,
+  "endMs": 3300,
+  "client": {
+    "source": "nt4-publisher",
+    "mode": "robot"
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 5000000
+  },
+  "steps": [
+    { "t": 0, "client": ["log", "putNumber", "NT:/Data/x", 1, 2.5] },
+    { "t": 0, "client": ["log", "putNumber", "NT:/Data/x", 3, 9.5] },
+    { "t": 0, "client": ["log", "putBoolean", "NT:/Data/ok", 1, true] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 400, "client": ["select", 3, null] },
+    { "t": 600, "client": ["prefs", { "systemcoreStaticAddress": "usb" }] },
+    { "t": 600, "client": ["connect"] },
+    { "t": 1100, "client": ["prefs", { "systemcoreStaticAddress": "wifi" }] },
+    { "t": 1100, "client": ["connect"] },
+    { "t": 1600, "client": ["prefs", { "systemcoreStaticAddress": "", "robotAddress": "10.20.30.40" }] },
+    { "t": 1600, "client": ["connect"] },
+    { "t": 2100, "client": ["prefs", null] },
+    { "t": 2100, "client": ["connect"] },
+    { "t": 2400, "client": ["log", "putNumber", "NT:/Data/x", 4, 4.25] },
+    { "t": 2700, "client": ["prefs", {}] },
+    { "t": 2700, "client": ["connect"] },
+    { "t": 3200, "client": ["stop"] }
+  ]
+}

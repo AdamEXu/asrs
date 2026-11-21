@@ -1,3 +1,5 @@
+import timelineTraces from "./timelineTraces.json";
+
 export type Cmd = unknown[];
 
 export type Gate = "pixel" | "text" | "calibration";
@@ -1265,6 +1267,14 @@ function multiFrame(dpr: number, mode: "" | "-single" | "-resized"): Scene {
   return scene(`multiframe${mode}-${dpr}x`, "coverage", "pixel", [300, 100], dpr, LIGHT, r.cmds);
 }
 
+// Frames recorded from upstream's Timeline in dom/timeline vectors (asrs-hub's timeline
+// traces equal them call for call), extracted to plain JSON numbers.
+function timelineScenes(): Scene[] {
+  return timelineTraces.map((t) =>
+    scene(t.name, "timeline", "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, t.cmds as Cmd[])
+  );
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -1276,7 +1286,8 @@ export function allScenes(): Scene[] {
     textGrid("text-light-1x", 1, false),
     textGrid("text-dark-1x", 1, true),
     shapes("shapes-2x", 2),
-    shapes("shapes-1x", 1)
+    shapes("shapes-1x", 1),
+    ...timelineScenes()
   ];
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));

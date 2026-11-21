@@ -1,0 +1,169 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-long.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "boot": [
+      [
+        "set-assets",
+        null
+      ],
+      [
+        "set-fullscreen",
+        false
+      ],
+      [
+        "set-battery",
+        false
+      ],
+      [
+        "set-version",
+        {
+          "platform": "darwin",
+          "platformRelease": "25.0.0",
+          "platformArch": "arm64",
+          "appVersion": "4.0.0"
+        }
+      ],
+      [
+        "show-update-button",
+        false
+      ],
+      [
+        "show-feedback-button",
+        false
+      ],
+      [
+        "set-active-satellites",
+        []
+      ]
+    ],
+    "steps": [
+      {
+        "log": "../logs/timeline-long.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "loaded"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 643,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -250, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "scrolled"
+      },
+      {
+        "advance": 1200
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "no-timer"
+      },
+      {
+        "main": "set-preferences",
+        "data": {
+          "theme": "system",
+          "robotAddress": "robot.local",
+          "remotePath": "/U/logs",
+          "liveMode": "nt4",
+          "liveSubscribeMode": "low-bandwidth",
+          "liveDiscard": 1200,
+          "publishFilter": "",
+          "rlogPort": 5800,
+          "coordinateSystem": "automatic",
+          "field3dModeAc": "standard",
+          "field3dModeBattery": "",
+          "field3dAntialiasing": true,
+          "tbaApiKey": "",
+          "userAssetsFolder": null,
+          "skipHootNonProWarning": false,
+          "skipFRCCoordinateSystemWarning": false,
+          "skipFTCCoordinateSystemWarning": false,
+          "ctreLicenseAccepted": false,
+          "systemcoreStaticAddress": "",
+          "hasScrolledLineGraph": false,
+          "hasScrolledTimeline": false,
+          "prefersFTC": false,
+          "timestamps": "original"
+        }
+      },
+      {
+        "eval": "window.tabs.timeline.scrollSensor.callback(0, -250, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "prefs-arrived"
+      },
+      {
+        "advance": 1100
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "timer-fired"
+      }
+    ]
+  }
+}

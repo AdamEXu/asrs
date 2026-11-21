@@ -1,0 +1,64 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/timeline-teleop-open.json"
+  ],
+  "fixture": {
+    "seed": 7,
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "preferences": {
+      "hasScrolledTimeline": true
+    },
+    "steps": [
+      {
+        "log": "../logs/timeline-teleop-open.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 10
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "loaded"
+      },
+      {
+        "event": {
+          "target": "div.timeline-scroll",
+          "kind": "MouseEvent",
+          "type": "mousemove",
+          "init": {
+            "clientX": 408,
+            "clientY": 60
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "selection",
+          {
+            "kind": "canvas",
+            "selector": ".timeline-canvas"
+          }
+        ],
+        "label": "hover-near-open-start"
+      }
+    ]
+  }
+}
