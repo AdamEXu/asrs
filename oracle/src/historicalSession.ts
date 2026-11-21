@@ -191,6 +191,7 @@ class Session {
   async settle(): Promise<void> {
     for (;;) {
       await turn();
+      await terminatedWorkersExited();
       let ran = false;
       this.task(() => (ran = this.timers.runNextTimeout()));
       if (ran) continue;
@@ -250,6 +251,7 @@ class Session {
   }
 
   async step(index: number, step: Step): Promise<void> {
+    await terminatedWorkersExited();
     trace({ step: index, op: step.op });
     switch (step.op) {
       case "open": {
