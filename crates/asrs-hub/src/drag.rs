@@ -1,4 +1,6 @@
-//! hub.ts's field dragging: `startDrag`, `dragMove`, `dragEnd` and the `#dragItem` they move.
+//! hub.ts's dragging: `startDrag`, `dragMove`, `dragEnd` and the `#dragItem` they move. The
+//! payload and item types default to the sidebar's field drags; other drags, such as tab
+//! drags, supply their own.
 
 use asrs_js::string::JsString;
 
@@ -18,38 +20,47 @@ pub struct DragPayload {
 
 /// The `detail` of a `drag-update` event.
 #[derive(Clone, Debug, PartialEq)]
-pub struct DragUpdate {
+pub struct DragUpdate<P = DragPayload> {
     pub end: bool,
     pub x: f64,
     pub y: f64,
-    pub data: DragPayload,
+    pub data: P,
 }
 
-#[derive(Debug, Default)]
-pub struct Drag {
+#[derive(Debug)]
+pub struct Drag<P = DragPayload, I = DragItem> {
     active: bool,
     offset_x: f64,
     offset_y: f64,
     last_x: f64,
     last_y: f64,
-    data: Option<DragPayload>,
-    item: Option<DragItem>,
+    data: Option<P>,
+    item: Option<I>,
     item_hidden: bool,
     item_position: Option<(f64, f64)>,
-    updates: Vec<DragUpdate>,
+    updates: Vec<DragUpdate<P>>,
 }
 
-impl Drag {
+impl<P, I> Default for Drag<P, I> {
+    fn default() -> Self {
+        Drag {
+            active: false,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            last_x: 0.0,
+            last_y: 0.0,
+            data: None,
+            item: None,
+            item_hidden: false,
+            item_position: None,
+            updates: Vec::new(),
+        }
+    }
+}
+
+impl<P: Clone, I> Drag<P, I> {
     /// `startDrag`, after the caller has filled `#dragItem` with `item`.
-    pub fn start(
-        &mut self,
-        x: f64,
-        y: f64,
-        offset_x: f64,
-        offset_y: f64,
-        item: DragItem,
-        data: DragPayload,
-    ) {
+    pub fn start(&mut self, x: f64, y: f64, offset_x: f64, offset_y: f64, item: I, data: P) {
         self.active = true;
         self.offset_x = offset_x;
         self.offset_y = offset_y;
@@ -94,7 +105,7 @@ impl Drag {
     }
 
     /// `drag-update` events dispatched since the last call.
-    pub fn take_updates(&mut self) -> Vec<DragUpdate> {
+    pub fn take_updates(&mut self) -> Vec<DragUpdate<P>> {
         std::mem::take(&mut self.updates)
     }
 
@@ -102,7 +113,7 @@ impl Drag {
         self.active
     }
 
-    pub fn item(&self) -> Option<&DragItem> {
+    pub fn item(&self) -> Option<&I> {
         self.item.as_ref()
     }
 
