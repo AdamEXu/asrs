@@ -15,3 +15,4 @@ pub mod simple_statistics;
 pub mod statistics;
 pub mod swerve;
 pub mod table;
+pub mod video;

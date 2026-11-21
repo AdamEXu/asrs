@@ -1,0 +1,392 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 1007,
+    "assets": "../assets/minimal.json",
+    "state": {
+      "tabs": {
+        "selected": 0,
+        "tabs": [
+          {
+            "type": 7,
+            "title": "",
+            "controller": null,
+            "controllerUUID": "video-a",
+            "renderer": null,
+            "controlsHeight": 85
+          }
+        ]
+      },
+      "sidebar": {
+        "width": 300,
+        "expanded": []
+      }
+    },
+    "steps": [
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-source button",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "not-video-a",
+          "imgFolder": "/wrong/",
+          "fps": 30,
+          "totalFrames": 10,
+          "completedFrames": 5,
+          "autoEndFrame": 0
+        }
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-a",
+          "imgFolder": "/frames/match/",
+          "fps": 30,
+          "totalFrames": 300,
+          "completedFrames": 120,
+          "autoEndFrame": 0
+        }
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          7.5
+        ]
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-section > button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "locked-start"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          8.0
+        ]
+      },
+      {
+        "advance": 32
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "locked-t8"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          20.0
+        ]
+      },
+      {
+        "advance": 32
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "locked-beyond-completed"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-section > button",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "commands",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "playing"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.video-timeline-slider",
+          "type": "input",
+          "props": {
+            "value": "45"
+          }
+        }
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "playing-reanchored"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 3,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 4,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-controls button",
+          "index": 5,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "skip-and-frame"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowUp"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "key-lock"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowDown"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Slash"
+          }
+        }
+      },
+      {
+        "advance": 250
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "key-play"
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Slash"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Comma"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Period"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowLeft"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "key-nav"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .video-timeline-section > button",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "locked-arrow-steps-cycle"
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-a",
+          "error": true
+        }
+      },
+      {
+        "main": "video-data",
+        "data": {
+          "uuid": "video-a"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "reset"
+      }
+    ]
+  }
+}

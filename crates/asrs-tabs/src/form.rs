@@ -143,6 +143,97 @@ fn is_valid_floating_point_number(s: &[u16]) -> bool {
     i == s.len()
 }
 
+/// An `<input type="range">` as jsdom models it. Assigning `value` keeps a valid
+/// floating-point number that parses finite and lies in `[min, max]` as written; one
+/// below `min` or above `max` becomes that bound, and anything else becomes the default
+/// (`min` when `max` is below it, else the midpoint). Nothing rounds to `step` and
+/// changing `min` or `max` does not re-sanitize. Chromium differs on all three (#263).
+#[derive(Clone, Debug)]
+pub struct RangeInput {
+    value: JsString,
+    min: JsString,
+    max: JsString,
+}
+
+impl RangeInput {
+    /// The `value`, `min` and `max` attributes from markup. jsdom sanitizes the `value`
+    /// attribute against the `min` and `max` present when it is parsed, and upstream's
+    /// markup lists `value` first, so it is kept as written.
+    pub fn new(value: &str, min: &str, max: &str) -> RangeInput {
+        RangeInput {
+            value: JsString::from(value),
+            min: JsString::from(min),
+            max: JsString::from(max),
+        }
+    }
+
+    pub fn value(&self) -> &JsString {
+        &self.value
+    }
+
+    pub fn max(&self) -> &JsString {
+        &self.max
+    }
+
+    pub fn set_value(&mut self, value: JsString) {
+        let (min, max) = (self.minimum(), self.maximum());
+        self.value = if !is_valid_floating_point_number(value.units())
+            || parse_floating_point_number(&value).is_none()
+        {
+            JsString::from(number::to_string(if max < min {
+                min
+            } else {
+                (min + max) / 2.0
+            }))
+        } else {
+            let n = number::to_number(value.units());
+            if n < min {
+                JsString::from(number::to_string(min))
+            } else if n > max {
+                JsString::from(number::to_string(max))
+            } else {
+                value
+            }
+        };
+    }
+
+    /// `input.min = attr` / `input.max = attr`: the attribute stores the raw string and
+    /// re-parses on each read.
+    pub fn set_min(&mut self, attr: JsString) {
+        self.min = attr;
+    }
+
+    pub fn set_max(&mut self, attr: JsString) {
+        self.max = attr;
+    }
+
+    /// `Number(input.value)`.
+    pub fn number(&self) -> f64 {
+        number::to_number(self.value.units())
+    }
+
+    fn minimum(&self) -> f64 {
+        parse_floating_point_number(&self.min).unwrap_or(0.0)
+    }
+
+    fn maximum(&self) -> f64 {
+        parse_floating_point_number(&self.max).unwrap_or(100.0)
+    }
+}
+
+/// jsdom's `parseFloatingPointNumber`: `parseFloat` after a leading run of ASCII
+/// whitespace only (any other whitespace `trimStart` would skip fails), finite or `None`.
+fn parse_floating_point_number(s: &JsString) -> Option<f64> {
+    let skipped = s.len() - s.trim_start().len();
+    if s.units()[..skipped]
+        .iter()
+        .any(|u| !matches!(u, 0x09 | 0x0A | 0x0C | 0x0D | 0x20))
+    {
+        return None;
+    }
+    Some(number::parse_float(s.units())).filter(|n| n.is_finite())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,6 +282,53 @@ mod tests {
                 JsString::from(expected),
                 "{text:?}"
             );
+        }
+    }
+
+    #[test]
+    fn range_input_sanitizes_like_jsdom() {
+        let mut r = RangeInput::new("0", "1", "1");
+        r.set_max(JsString::from("300"));
+        assert_eq!(r.value(), &JsString::from("0"));
+        for (input, expected) in [
+            ("59.639997482299805", "59.639997482299805"),
+            ("1.4999999999999999", "1.4999999999999999"),
+            ("7.000000000000001", "7.000000000000001"),
+            ("1e1", "1e1"),
+            ("abc", "150.5"),
+            ("", "150.5"),
+            ("1e400", "150.5"),
+            ("+5", "150.5"),
+            ("1e3", "300"),
+            ("301", "300"),
+            ("-5", "1"),
+            ("0", "1"),
+            ("45", "45"),
+        ] {
+            r.set_value(JsString::from(input));
+            assert_eq!(r.value(), &JsString::from(expected), "{input:?}");
+        }
+        r.set_value(JsString::from("300"));
+        r.set_max(JsString::from("100"));
+        assert_eq!(r.value(), &JsString::from("300"));
+        r.set_max(JsString::from("10.5"));
+        r.set_value(JsString::from("11"));
+        assert_eq!(r.value(), &JsString::from("10.5"));
+        r.set_max(JsString::from("0"));
+        r.set_value(JsString::from("5"));
+        assert_eq!(r.value(), &JsString::from("0"));
+        r.set_value(JsString::from("abc"));
+        assert_eq!(r.value(), &JsString::from("1"));
+        for (max, expected) in [
+            ("abc", "50.5"),
+            ("1e400", "50.5"),
+            (" 120", "60.5"),
+            ("121x", "61"),
+            ("\u{a0}120", "50.5"),
+        ] {
+            r.set_max(JsString::from(max));
+            r.set_value(JsString::from("abc"));
+            assert_eq!(r.value(), &JsString::from(expected), "{max:?}");
         }
     }
 }
