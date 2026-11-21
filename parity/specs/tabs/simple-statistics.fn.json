@@ -1,0 +1,8 @@
+{
+  "requests": "simple-statistics.requests.jsonl",
+  "platforms": [
+    "macos-aarch64",
+    "linux-aarch64",
+    "windows-aarch64"
+  ]
+}

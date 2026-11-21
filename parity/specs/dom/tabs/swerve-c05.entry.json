@@ -1,0 +1,346 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/c05.json",
+    "../logs/c05.json"
+  ],
+  "fixture": {
+    "seed": 1059,
+    "assets": "../assets/c05.json",
+    "typeMemory": {
+      "swerve": {
+        "/Drive/HeadingDeg": {
+          "type": "rotationLegacy",
+          "options": {
+            "units": "degrees"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "log": "../logs/c05.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 9
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/ModuleStates\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/Velocities\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/ChassisSpeeds\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/Rotation\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/Rotation3d\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/HeadingDeg\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/HeadingRad\")"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.getActiveFields()"
+          },
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])"
+          }
+        ],
+        "label": "sources"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection"
+        ],
+        "label": "selected"
+      },
+      {
+        "eval": "window.selection.setHoveredTime(6)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "canvas"
+        ],
+        "label": "hovered"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.max-speed",
+          "type": "change",
+          "props": {
+            "value": "0"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])"
+          }
+        ],
+        "label": "speed-clamped"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.max-speed",
+          "type": "change",
+          "props": {
+            "value": "abc"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "speed-invalid"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.max-speed",
+          "type": "change",
+          "props": {
+            "value": "1e400"
+          }
+        }
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "speed-overflow"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.max-speed",
+          "type": "change",
+          "props": {
+            "value": "8"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.size-x",
+          "type": "change",
+          "props": {
+            "value": "-2"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) input.size-y",
+          "type": "change",
+          "props": {
+            "value": "0.8"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "state",
+          "commands"
+        ],
+        "label": "inputs"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": "Enter",
+            "code": "Enter"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "state",
+          "commands"
+        ],
+        "label": "orientation"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "click",
+          "index": 0
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "keydown",
+          "index": 1,
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "keydown",
+          "index": 0,
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": "a",
+            "code": "KeyA"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "type": "click",
+          "index": 1
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "state",
+          "commands"
+        ],
+        "label": "orientation-wrap"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/Velocities\",\"logType\":\"SwerveModuleVelocity[]\",\"visible\":true,\"options\":{\"color\":\"#00ffff\",\"arrangement\":\"3,0,2,1\"}},{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/ModuleStates\",\"logType\":\"SwerveModuleState[]\",\"visible\":true,\"options\":{\"color\":\"#ff8c00\",\"arrangement\":\"1,0,3,2\"}},{\"type\":\"robotVelocities\",\"logKey\":\"/Drive/ChassisSpeeds\",\"logType\":\"ChassisSpeeds\",\"visible\":true,\"options\":{\"color\":\"#00ff00\"}},{\"type\":\"rotationLegacy\",\"logKey\":\"/Drive/HeadingRad\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"units\":\"radians\"}}],\"maxSpeed\":3.5,\"sizeX\":0.8,\"sizeY\":0.5,\"orientation\":2})"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "restored"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "saved"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"maxSpeed\":\"7\",\"sizeX\":0.9,\"sizeY\":1e21,\"orientation\":5})"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "partial-restore"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.hide",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "hidden"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.remove",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/ModuleStates\",\"logType\":\"SwerveModuleState[]\",\"visible\":true,\"options\":{\"color\":\"#ff0000\",\"arrangement\":\"4,1,2,3\"}}])"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "invalid-arrangement"
+      }
+    ]
+  }
+}

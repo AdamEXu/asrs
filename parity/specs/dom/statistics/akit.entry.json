@@ -1,0 +1,361 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/statistics-akit.json"
+  ],
+  "fixture": {
+    "seed": 1102,
+    "assets": "../assets/minimal.json",
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/statistics-akit.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{\"type\":\"independent\",\"logKey\":\"/RealOutputs/Speed\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"color\":\"#2b66a2\"}},{\"type\":\"independent\",\"logKey\":\"/RealOutputs/Sparse\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"color\":\"#e5b30b\"}},{\"type\":\"reference\",\"logKey\":\"/RealOutputs/Sparse\",\"logType\":\"Number\",\"visible\":true,\"options\":{}},{\"type\":\"absoluteError\",\"logKey\":\"/RealOutputs/Speed\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"color\":\"#af2437\"}}])"
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-4"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "16"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "2"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[0].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[5].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[6].disabled"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "full"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "enabled"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "auto"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "teleop"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "liveTime": 9.5
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "live-10"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[0].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[5].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[6].disabled"
+          }
+        ]
+      },
+      {
+        "liveTime": 45
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "live-30"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "liveTime": 31
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.showTimeline()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.getActiveFields()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[0].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[5].disabled"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.options[6].disabled"
+          }
+        ]
+      },
+      {
+        "log": [
+          [
+            "putString",
+            "NT:/AdvantageKit/Timestamp",
+            1,
+            "x"
+          ]
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "full"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "log": [
+          [
+            "deleteField",
+            "/Timestamp"
+          ]
+        ]
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      },
+      {
+        "log": [
+          [
+            "putString",
+            "/Timestamp",
+            1,
+            "x"
+          ]
+        ]
+      },
+      {
+        "advance": 150
+      },
+      {
+        "capture": [
+          "commands"
+        ]
+      }
+    ]
+  }
+}

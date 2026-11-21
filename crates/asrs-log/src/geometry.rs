@@ -3,7 +3,7 @@
 
 use asrs_js::math;
 use asrs_js::number;
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 
 use crate::log::log_util::{get_or_default, get_value_at};
 use crate::log::robot_state::{self, RobotMode};
@@ -175,6 +175,12 @@ impl GeometryError {
             Self::RangeError(m) => m,
             Self::TypeError(m) => m,
         }
+    }
+}
+
+impl From<GeometryError> for JsError {
+    fn from(error: GeometryError) -> Self {
+        JsError::new(error.name(), error.message())
     }
 }
 

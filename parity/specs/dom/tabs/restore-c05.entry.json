@@ -1,0 +1,221 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/c05.json",
+    "../logs/c05.json"
+  ],
+  "fixture": {
+    "seed": 1063,
+    "assets": "../assets/c05.json",
+    "steps": [
+      {
+        "log": "../logs/c05.json"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 0,
+            "tabs": [
+              {
+                "type": 9,
+                "title": "Swerve",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "moduleVelocities",
+                      "logKey": "/Drive/Velocities",
+                      "logType": "SwerveModuleVelocity[]",
+                      "visible": true,
+                      "options": {
+                        "color": "#ff0000",
+                        "arrangement": "2,3,0,1"
+                      }
+                    },
+                    {
+                      "type": "robotVelocities",
+                      "logKey": "/Drive/ChassisSpeeds",
+                      "logType": "ChassisSpeeds",
+                      "visible": true,
+                      "options": {
+                        "color": "#00ff00"
+                      }
+                    },
+                    {
+                      "type": "rotation",
+                      "logKey": "/Drive/Rotation",
+                      "logType": "Rotation2d",
+                      "visible": true,
+                      "options": {}
+                    }
+                  ],
+                  "maxSpeed": 4,
+                  "sizeX": 0.7,
+                  "sizeY": 0.6,
+                  "orientation": 0
+                },
+                "controllerUUID": "swerveuuid000000000000000000000a",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 10,
+                "title": "Mechanism",
+                "controller": [
+                  {
+                    "type": "mechanism",
+                    "logKey": "/Mech/Claw",
+                    "logType": "Mechanism2d",
+                    "visible": true,
+                    "options": {}
+                  },
+                  {
+                    "type": "mechanism",
+                    "logKey": "/Mech/Elevator",
+                    "logType": "Mechanism2d",
+                    "visible": true,
+                    "options": {}
+                  }
+                ],
+                "controllerUUID": "mechuuid0000000000000000000000ab",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 11,
+                "title": "Points",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "circle",
+                      "logKey": "/Vision/Translations",
+                      "logType": "Translation2d[]",
+                      "visible": true,
+                      "options": {
+                        "size": "large",
+                        "groupSize": "2"
+                      }
+                    },
+                    {
+                      "type": "plusSplit",
+                      "logKey": "/Vision/Xs",
+                      "logType": "NumberArray",
+                      "visible": true,
+                      "options": {
+                        "component": "x",
+                        "size": "small",
+                        "groupSize": "0"
+                      }
+                    },
+                    {
+                      "type": "component",
+                      "logKey": "/Vision/Ys",
+                      "logType": "NumberArray",
+                      "visible": true,
+                      "options": {
+                        "component": "y"
+                      }
+                    }
+                  ],
+                  "width": 640,
+                  "height": 480,
+                  "orientation": "xu,yl",
+                  "origin": "lr"
+                },
+                "controllerUUID": "pointsuuid00000000000000000000ab",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 8,
+                "title": "Joysticks",
+                "controller": [
+                  "Xbox Controller",
+                  "None",
+                  "Generic Joystick",
+                  "PS5 Controller",
+                  "None",
+                  "None"
+                ],
+                "controllerUUID": "joyuuid00000000000000000000000ab",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "eval": "window.selection.setSelectedTime(5.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state"
+        ],
+        "label": "restored-0"
+      },
+      {
+        "eval": "window.tabs.setSelected(1)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "restored-1"
+      },
+      {
+        "eval": "window.tabs.setSelected(2)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "restored-2"
+      },
+      {
+        "eval": "window.tabs.setSelected(3)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[window.tabs.selectedTab].controller.saveState()"
+          }
+        ],
+        "label": "restored-3"
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "round-trip"
+      }
+    ]
+  }
+}
