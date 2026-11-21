@@ -1,0 +1,24 @@
+{
+  "size": [1100, 650],
+  "antialias": true,
+  "fov": 50,
+  "camera": {"position": [0, 0, 10], "target": [0, 0, 0]},
+  "widthProbes": [
+    {"x": 450, "y0": 101, "y1": 131, "color": 65280},
+    {"x": 450, "y0": 178, "y1": 208, "color": 16747520},
+    {"x": 450, "y0": 254, "y1": 284, "color": 16711935},
+    {"x": 450, "y0": 331, "y1": 361, "color": 43775},
+    {"x": 450, "y0": 408, "y1": 438, "color": 16777215}
+  ],
+  "nodes": [
+    {"type": "hemisphere", "color": 16777215, "groundColor": 4473924, "intensity": 2},
+    {"type": "line2", "points": [-6, 3.0, 0, 3, 3.0, 0], "color": 65280, "linewidth": 1},
+    {"type": "line2", "points": [-6, 1.9, 0, 3, 1.9, 0], "color": 16747520, "linewidth": 2},
+    {"type": "line2", "points": [-6, 0.7999999999999998, 0, 3, 0.7999999999999998, 0], "color": 16711935, "linewidth": 3},
+    {"type": "line2", "points": [-6, -0.30000000000000027, 0, 3, -0.30000000000000027, 0], "color": 43775, "linewidth": 6},
+    {"type": "line", "points": [[-6, -1.4000000000000004, 0], [3, -1.4000000000000004, 0]], "color": 16777215},
+    {"type": "line2", "points": [3.5, 3, 0, 5, 1, 0, 6.5, 2.8, 0, 7, -2, 0, 4, -3.5, 0], "color": 16777215, "linewidth": 6},
+    {"type": "line2", "points": [-7, -3.2, 0, -2, -2.4, 0.5], "color": 16724016, "linewidth": 2},
+    {"type": "grid", "position": [0, -3.6, -1], "size": 2, "divisions": 4, "color1": 8947848, "color2": 4473924}
+  ]
+}

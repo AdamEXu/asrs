@@ -5,13 +5,20 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use asrs_js::math;
 
-use crate::three::{BufferGeometry, Color, Graph, Matrix4, ObjectId, Sphere, Vector3};
+use crate::three::{
+    ArrayData, Box3, BufferAttribute, BufferGeometry, Color, Graph, Matrix4, ObjectId, Sphere,
+    Vector3,
+};
 
 static NEXT_RESOURCE_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_MATERIAL_ID: AtomicU64 = AtomicU64::new(0);
 
 fn next_resource_id() -> u64 {
     NEXT_RESOURCE_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+fn next_material_id() -> u64 {
+    NEXT_MATERIAL_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 /// An immutable `BufferGeometry` as uploaded to the GPU. Changing geometry means building a new
@@ -144,7 +151,7 @@ pub struct PhongMaterial {
 impl Default for PhongMaterial {
     fn default() -> Self {
         PhongMaterial {
-            id: NEXT_MATERIAL_ID.fetch_add(1, Ordering::Relaxed),
+            id: next_material_id(),
             color: Color::hex(0xffffff as f64),
             emissive: Color::hex(0x000000 as f64),
             emissive_intensity: 1.0,
@@ -215,7 +222,7 @@ pub(crate) fn matrix_to_f32(m: &Matrix4) -> [f32; 16] {
     m.elements.map(|v| v as f32)
 }
 
-fn sphere_apply_matrix4(sphere: Sphere, m: &Matrix4) -> Sphere {
+pub(crate) fn sphere_apply_matrix4(sphere: Sphere, m: &Matrix4) -> Sphere {
     Sphere {
         center: sphere.center.apply_matrix4(m),
         radius: sphere.radius * m.max_scale_on_axis(),
@@ -289,6 +296,211 @@ impl Mesh {
     }
 }
 
+/// `LineMaterial` from `examples/jsm/lines` as upstream uses it: screen-space width
+/// (`worldUnits` false), no dashes, no alpha to coverage, so caps are round by discard.
+#[derive(Clone, Debug)]
+pub struct LineMaterial {
+    pub id: u64,
+    pub color: Color,
+    /// Full width in CSS pixels of the renderer viewport.
+    pub linewidth: f64,
+    pub opacity: f64,
+    pub transparent: bool,
+    pub depth_test: bool,
+    pub depth_write: bool,
+    pub visible: bool,
+}
+
+impl LineMaterial {
+    pub fn new(color: Color, linewidth: f64) -> Self {
+        LineMaterial {
+            id: next_material_id(),
+            color,
+            linewidth,
+            opacity: 1.0,
+            transparent: false,
+            depth_test: true,
+            depth_write: true,
+            visible: true,
+        }
+    }
+}
+
+/// `LineBasicMaterial`. WebGL clamps `linewidth` to 1, so lines are one device pixel wide.
+#[derive(Clone, Debug)]
+pub struct LineBasicMaterial {
+    pub id: u64,
+    pub color: Color,
+    pub opacity: f64,
+    pub transparent: bool,
+    pub vertex_colors: bool,
+    pub depth_test: bool,
+    pub depth_write: bool,
+    pub visible: bool,
+}
+
+impl LineBasicMaterial {
+    pub fn new(color: Color) -> Self {
+        LineBasicMaterial {
+            id: next_material_id(),
+            color,
+            opacity: 1.0,
+            transparent: false,
+            vertex_colors: false,
+            depth_test: true,
+            depth_write: true,
+            visible: true,
+        }
+    }
+}
+
+/// `LineSegmentsGeometry` after `setPositions`: one Float32 `[start, end]` pair per instance,
+/// with its bounding sphere computed as `computeBoundingSphere` does.
+#[derive(Debug)]
+pub struct LineSegmentsGeometry {
+    key: u64,
+    pub segments: Vec<[f32; 6]>,
+    bounding_sphere: Sphere,
+}
+
+impl LineSegmentsGeometry {
+    /// `LineGeometry.setPositions`: consecutive points become segments.
+    pub fn from_points(points: &[f64]) -> Arc<Self> {
+        let n = points.len().saturating_sub(3) / 3;
+        let segments = (0..n)
+            .map(|i| std::array::from_fn(|k| points[i * 3 + k] as f32))
+            .collect();
+        Self::from_segments(segments)
+    }
+
+    pub fn from_segments(segments: Vec<[f32; 6]>) -> Arc<Self> {
+        let point = |s: &[f32; 6], o: usize| {
+            Vector3::new(f64::from(s[o]), f64::from(s[o + 1]), f64::from(s[o + 2]))
+        };
+        let mut start = Box3::EMPTY;
+        let mut end = Box3::EMPTY;
+        for s in &segments {
+            start = start.expand_by_point(point(s, 0));
+            end = end.expand_by_point(point(s, 3));
+        }
+        let union = Box3 {
+            min: start.min.min(end.min),
+            max: start.max.max(end.max),
+        };
+        let center = union.center();
+        let mut max_radius_sq = 0.0;
+        for s in &segments {
+            max_radius_sq = math::max2(max_radius_sq, center.distance_to_squared(point(s, 0)));
+            max_radius_sq = math::max2(max_radius_sq, center.distance_to_squared(point(s, 3)));
+        }
+        let bounding_sphere = Sphere {
+            center,
+            radius: math::sqrt(max_radius_sq),
+        };
+        Arc::new(LineSegmentsGeometry {
+            key: next_resource_id(),
+            segments,
+            bounding_sphere,
+        })
+    }
+
+    pub fn key(&self) -> u64 {
+        self.key
+    }
+
+    pub fn bounding_sphere(&self) -> Sphere {
+        self.bounding_sphere
+    }
+}
+
+/// `Line2` (a `LineSegments2` mesh): instanced screen-space quads.
+#[derive(Clone, Debug)]
+pub struct FatLine {
+    pub geometry: Arc<LineSegmentsGeometry>,
+    pub material: Arc<LineMaterial>,
+}
+
+/// `Line` (`segments` false, a `LINE_STRIP`) or `LineSegments` (`LINES`).
+#[derive(Clone, Debug)]
+pub struct Line {
+    pub geometry: Arc<Geometry>,
+    pub material: Arc<LineBasicMaterial>,
+    pub segments: bool,
+}
+
+impl Line {
+    /// `new Line(new BufferGeometry().setFromPoints(points), material)`.
+    pub fn from_points(points: &[Vector3], material: LineBasicMaterial) -> Self {
+        let mut geometry = BufferGeometry::default();
+        let positions = points.iter().flat_map(|p| p.to_array()).map(|v| v as f32);
+        geometry.set_attribute(
+            "position",
+            BufferAttribute::new(ArrayData::Float32(positions.collect()), 3, false),
+        );
+        Line {
+            geometry: Geometry::new(geometry),
+            material: Arc::new(material),
+            segments: false,
+        }
+    }
+
+    /// `new GridHelper(size, divisions, color1, color2)`, which lies in the XZ plane.
+    pub fn grid_helper(size: f64, divisions: f64, color1: Color, color2: Color) -> Self {
+        let center = divisions / 2.0;
+        let step = size / divisions;
+        let half_size = size / 2.0;
+        let mut vertices = Vec::new();
+        let mut colors = Vec::new();
+        let mut i = 0.0;
+        let mut k = -half_size;
+        while i <= divisions {
+            vertices.extend([-half_size, 0.0, k, half_size, 0.0, k]);
+            vertices.extend([k, 0.0, -half_size, k, 0.0, half_size]);
+            let color = if i == center { color1 } else { color2 };
+            for _ in 0..4 {
+                colors.extend(color.to_array());
+            }
+            i += 1.0;
+            k += step;
+        }
+        let f32s = |v: Vec<f64>| ArrayData::Float32(v.into_iter().map(|x| x as f32).collect());
+        let mut geometry = BufferGeometry::default();
+        geometry.set_attribute("position", BufferAttribute::new(f32s(vertices), 3, false));
+        geometry.set_attribute("color", BufferAttribute::new(f32s(colors), 3, false));
+        let mut material = LineBasicMaterial::new(Color::hex(0xffffff as f64));
+        material.vertex_colors = true;
+        Line {
+            geometry: Geometry::new(geometry),
+            material: Arc::new(material),
+            segments: true,
+        }
+    }
+}
+
+/// `LightShadow` with the properties upstream sets on its spot lights.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LightShadow {
+    pub map_size: [f64; 2],
+    pub bias: f64,
+    pub normal_bias: f64,
+    pub radius: f64,
+    pub intensity: f64,
+    pub focus: f64,
+}
+
+impl Default for LightShadow {
+    fn default() -> Self {
+        LightShadow {
+            map_size: [512.0, 512.0],
+            bias: 0.0,
+            normal_bias: 0.0,
+            radius: 1.0,
+            intensity: 1.0,
+            focus: 1.0,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HemisphereLight {
     pub color: Color,
@@ -315,12 +527,15 @@ pub struct SpotLight {
     pub decay: f64,
     pub target: ObjectId,
     pub cast_shadow: bool,
+    pub shadow: LightShadow,
 }
 
 #[derive(Clone, Debug)]
 pub enum NodeKind {
     Group,
     Mesh(Mesh),
+    FatLine(FatLine),
+    Line(Line),
     HemisphereLight(HemisphereLight),
     PointLight(PointLight),
     SpotLight(SpotLight),
@@ -330,6 +545,7 @@ pub enum NodeKind {
 pub struct SceneNode {
     pub visible: bool,
     pub render_order: f64,
+    pub frustum_culled: bool,
     pub kind: NodeKind,
 }
 
@@ -338,6 +554,7 @@ impl SceneNode {
         SceneNode {
             visible: true,
             render_order: 0.0,
+            frustum_culled: true,
             kind,
         }
     }
@@ -440,6 +657,7 @@ impl Scene {
             decay,
             target,
             cast_shadow: false,
+            shadow: LightShadow::default(),
         }));
         self.place_at_default_up(light);
         (light, target)

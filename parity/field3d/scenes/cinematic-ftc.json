@@ -1,0 +1,29 @@
+{
+  "size": [1100, 650],
+  "antialias": true,
+  "shadows": true,
+  "fov": 50,
+  "camera": {"position": [0, 2.6, -3.6], "target": [0, 0, 0]},
+  "nodes": [
+    {"type": "hemisphere", "color": 16777215, "groundColor": 4473924, "intensity": 0.5},
+    {"type": "group", "name": "wpilib", "rotation": [-1.5707963267948966, 0, 3.141592653589793]},
+    {"type": "spot", "parent": "wpilib", "color": 16777215, "intensity": 30, "distance": 0, "angle": 0.8726646259971648, "penumbra": 0.2, "decay": 2, "position": [0, 0, 4], "target": [0, 0, 0], "castShadow": true, "shadow": {"mapSize": 2048, "bias": -0.0001}},
+    {"type": "spot", "parent": "wpilib", "color": 16777215, "intensity": 30, "distance": 0, "angle": 0.8726646259971648, "penumbra": 0.2, "decay": 2, "position": [2, -1.5, 4], "target": [0, 1, 0], "castShadow": true, "shadow": {"mapSize": 2048, "bias": -0.0001}},
+    {"type": "spot", "parent": "wpilib", "color": 16777215, "intensity": 30, "distance": 0, "angle": 0.8726646259971648, "penumbra": 0.2, "decay": 2, "position": [-2, 1.5, 4], "target": [0, -1, 0], "castShadow": true, "shadow": {"mapSize": 2048, "bias": -0.0001}},
+    {"type": "point", "parent": "wpilib", "color": 16711680, "intensity": 60, "position": [-4.5, 0, 5]},
+    {"type": "point", "parent": "wpilib", "color": 255, "intensity": 60, "position": [4.5, 0, 5]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "plane", "args": [3.6576, 3.6576, 1, 1]}, "material": {"color": 8947848, "side": "double", "specular": 6710886, "shininess": 0}, "castShadow": false, "receiveShadow": true},
+    {"type": "grid", "parent": "wpilib", "size": 3.6576, "divisions": 6, "color1": 8947848, "color2": 8947848, "rotation": [1.5707963267948966, 0, 0]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [3.6576, 0.04, 0.3, 1, 1, 1]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "color": 14540253}, "castShadow": true, "receiveShadow": true, "position": [0.0, 1.8288, 0.15]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [3.6576, 0.04, 0.3, 1, 1, 1]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "color": 14540253}, "castShadow": true, "receiveShadow": true, "position": [0.0, -1.8288, 0.15]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [0.04, 3.6576, 0.3, 1, 1, 1]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "color": 14540253}, "castShadow": true, "receiveShadow": true, "position": [1.8288, 0.0, 0.15]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [0.04, 3.6576, 0.3, 1, 1, 1]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "color": 14540253}, "castShadow": true, "receiveShadow": true, "position": [-1.8288, 0.0, 0.15]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [0.8, 0.8, 0.15, 1, 1, 1], "palette": [[200, 40, 40], [60, 60, 60], [230, 230, 230], [40, 80, 200]]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "vertexColors": true}, "castShadow": true, "receiveShadow": true, "position": [0.6, 0.4, 0.1], "rotation": [0, 0, 0.8]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [0.5, 0.5, 0.45, 1, 1, 1]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "color": 2763306}, "castShadow": true, "receiveShadow": true, "position": [0.6, 0.4, 0.4], "rotation": [0, 0, 0.8]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "cylinder", "args": [0.06, 0.06, 0.9, 12, 1, false, 0, 6.283185307179586]}, "material": {"specular": 6710886, "shininess": 100, "side": "double", "color": 13684944}, "castShadow": true, "receiveShadow": true, "position": [0.7741766773367913, 0.5793390227248807, 0.6], "rotation": [0.4, 0, 0.8]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "box", "args": [0.4, 0.4, 0.4, 1, 1, 1]}, "material": {"color": 14737632, "specular": 6710886, "shininess": 100}, "castShadow": true, "receiveShadow": true, "position": [-0.8, -0.6, 0.35], "rotation": [0.5, 0.3, 0.7]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "sphere", "args": [0.18, 24, 12, 0, 6.283185307179586, 0, 3.141592653589793]}, "material": {"color": 8934911, "specular": 6710886, "shininess": 100, "side": "front"}, "castShadow": true, "receiveShadow": true, "position": [-0.9, 0.9, 0.18]},
+    {"type": "mesh", "parent": "wpilib", "geometry": {"type": "cylinder", "args": [0.12, 0.12, 0.3, 16, 1, false, 0, 6.283185307179586]}, "material": {"color": 16755200, "specular": 6710886, "shininess": 100, "side": "back"}, "castShadow": true, "receiveShadow": true, "position": [1.1, -1.0, 0.15], "rotation": [1.5707963267948966, 0, 0]},
+    {"type": "line2", "parent": "wpilib", "points": [-1.4, -1.2, 0.02, -1.2599999999999998, -1.0285510962722744, 0.02, -1.1199999999999999, -0.8778911563811544, 0.02, -0.9799999999999999, -0.7662883872029915, 0.02, -0.8399999999999999, -0.7072751350057699, 0.02, -0.6999999999999998, -0.7080070265630315, 0.02, -0.5599999999999998, -0.768395316675563, 0.02, -0.4199999999999998, -0.8811176489327479, 0.02, -0.2799999999999998, -1.0325059249220474, 0.02, -0.13999999999999968, -1.2042036236835743, 0.02, 2.220446049250313e-16, -1.37539161384481, 0.02, 0.14000000000000012, -1.5253125685325835, 0.02, 0.28000000000000025, -1.6357878862067938, 0.02, 0.4200000000000004, -1.6934219292516182, 0.02, 0.5600000000000003, -1.6912263063121662, 0.02, 0.7000000000000002, -1.629467246713296, 0.02, 0.8400000000000003, -1.5156333189361608, 0.02, 0.9800000000000004, -1.3635274074348707, 0.02, 1.1200000000000006, -1.191593049757825, 0.02, 1.2600000000000002, -1.0206780732536003, 0.02], "color": 16747520, "linewidth": 6}
+  ]
+}

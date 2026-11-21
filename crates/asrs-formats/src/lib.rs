@@ -11,4 +11,5 @@ pub mod spark;
 pub mod urcl;
 pub mod worker;
 pub mod wpilog;
+pub mod wpilog_encoder;
 pub mod wpilog_worker;

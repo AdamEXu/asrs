@@ -1,17 +1,20 @@
 //! `src/hub/exportWorker.ts` (F10): field selection, timestamp sampling and the CSV
-//! writers. The `wpilog` branch dispatches to [`ExportError::Unported`] until F11's
-//! `WPILOGEncoder` lands; `mcap` is [`crate::mcap_export`].
+//! writers; `generateWPILOG` (F11) below; `generateMCAP` (F12) is [`crate::mcap_export`].
 
 use asrs_js::collation::locale_compare_numeric;
+use asrs_js::json;
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::sort::array_sort;
 use asrs_js::string::JsString;
-use asrs_js::value::JsObject;
+use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_key_utils::{filter_field_by_prefixes, split_log_key};
 use asrs_log::log::log_util::get_log_value_text_at;
 use asrs_log::log::robot_state::AKIT_TIMESTAMP_KEYS;
 use asrs_log::log::{Log, LogFieldTree, LoggableType};
 use asrs_log::util::{clean_float, upper_bound};
+
+use crate::wpilog_encoder::{Record, Sample, WpilogEncoder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -69,7 +72,7 @@ pub fn export(log: &Log, options: &ExportOptions) -> Result<Output, ExportError>
     match options.format {
         Format::CsvTable => Ok(Output::Text(csv_table(log, &fields, &timestamps))),
         Format::CsvList => Ok(Output::Text(csv_list(log, &fields, &timestamps))),
-        Format::Wpilog => Err(ExportError::Unported("wpilog export is unit F11")),
+        Format::Wpilog => Ok(Output::Bytes(wpilog(log, &fields, &timestamps)?)),
         Format::Mcap => Ok(Output::Bytes(crate::mcap_export::generate_mcap(
             log,
             &fields,
@@ -342,6 +345,128 @@ fn csv_list(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> Js
     out
 }
 
+/// `generateWPILOG`: one start record per filtered field at its first sample
+/// timestamp, then a data record per sample (or per sampled timestamp), all
+/// sorted by the f64 microsecond timestamp inside `getEncoded(true)`.
+fn wpilog(
+    log: &Log,
+    fields: &[JsString],
+    timestamps: &Option<Vec<f64>>,
+) -> Result<Vec<u8>, ExportError> {
+    let mut encoder = WpilogEncoder::new(&JsString::from("AdvantageScope"));
+    for (field_index, field) in fields.iter().enumerate() {
+        let Some(field_data) = log.get_range(field, f64::NEG_INFINITY, f64::INFINITY, None) else {
+            continue;
+        };
+        // Upstream skips on `fieldType === undefined`, which `null` never is, so a
+        // missing type keeps going with an empty base type string.
+        let field_type = log.get_type(field);
+        let entry_id = (field_index + 1) as f64;
+        let mut type_str = JsString::from(match field_type {
+            Some(LoggableType::Raw) => "raw",
+            Some(LoggableType::Boolean) => "boolean",
+            Some(LoggableType::Number) => "double",
+            Some(LoggableType::String) => "string",
+            Some(LoggableType::BooleanArray) => "boolean[]",
+            Some(LoggableType::NumberArray) => "double[]",
+            Some(LoggableType::StringArray) => "string[]",
+            Some(LoggableType::Empty) | None => "",
+        });
+        if let Some(wpilib_type) = log.get_wpilib_type(field) {
+            type_str = wpilib_type.clone();
+            // NT4 uses "int" but wpilog uses "int64".
+            if type_str == JsString::from("int") {
+                type_str = JsString::from("int64");
+            }
+            if type_str == JsString::from("int[]") {
+                type_str = JsString::from("int64[]");
+            }
+        }
+        let metadata = wpilog_metadata(&log.get_metadata_string(field));
+        let start_timestamp = if field_data.timestamps().is_empty() {
+            0.0
+        } else {
+            field_data.timestamps()[0]
+        };
+        encoder.add(Record::control_start(
+            start_timestamp * 1000000.0,
+            entry_id,
+            field,
+            &type_str,
+            &metadata,
+        ));
+        let type_name = type_str.as_string();
+        let mut add_value = |timestamp: f64, index: usize| {
+            let value = Sample::at(&field_data, index);
+            let timestamp_micros = timestamp * 1000000.0;
+            let record = match type_name.as_deref() {
+                Some("boolean") => Record::boolean(entry_id, timestamp_micros, &value),
+                Some("int64") => Record::integer(entry_id, timestamp_micros, &value)?,
+                Some("float") => Record::float(entry_id, timestamp_micros, &value),
+                Some("double") => Record::double(entry_id, timestamp_micros, &value),
+                Some("string" | "json") => Record::string(entry_id, timestamp_micros, &value),
+                Some("boolean[]") => Record::boolean_array(entry_id, timestamp_micros, &value)?,
+                Some("int64[]") => Record::integer_array(entry_id, timestamp_micros, &value)?,
+                Some("float[]") => Record::float_array(entry_id, timestamp_micros, &value)?,
+                Some("double[]") => Record::double_array(entry_id, timestamp_micros, &value)?,
+                Some("string[]") => Record::string_array(entry_id, timestamp_micros, &value)?,
+                _ => Record::raw(entry_id, timestamp_micros, &value),
+            };
+            encoder.add(record);
+            Ok(())
+        };
+        match timestamps {
+            // Upstream's per-sample guard drops every value when the resolved type
+            // string is empty; the sampled path has no such guard and emits raw
+            // records.
+            None if type_str.is_empty() => {}
+            None => {
+                for index in 0..field_data.len() {
+                    add_value(field_data.timestamps()[index], index)?;
+                }
+            }
+            Some(timestamps) => {
+                let mut next_index = 0usize;
+                for &timestamp in timestamps {
+                    next_index = upper_bound(field_data.timestamps(), timestamp, next_index);
+                    if next_index != 0 {
+                        add_value(timestamp, next_index - 1)?;
+                    }
+                }
+            }
+        }
+    }
+    encoder.get_encoded(true)
+}
+
+/// The `exporter` merge upstream does on the metadata string: `""` becomes
+/// `{"exporter":"AdvantageScope"}`; anything else is `JSON.parse`d, has its
+/// `exporter` set (in place if present, appended if not) and is `JSON.stringify`d
+/// back. A parse failure or a non-object result throws and leaves the string
+/// unchanged (a parsed array keeps the property, which `JSON.stringify` does not
+/// see, so it still comes out normalized).
+fn wpilog_metadata(metadata: &JsString) -> JsString {
+    if metadata.is_empty() {
+        return JsString::from("{\"exporter\":\"AdvantageScope\"}");
+    }
+    let Ok(mut parsed) = json::parse(metadata) else {
+        return metadata.clone();
+    };
+    if ops::set_key(
+        &mut parsed,
+        &JsString::from("exporter"),
+        JsValue::string("AdvantageScope"),
+    )
+    .is_err()
+    {
+        return metadata.clone();
+    }
+    match json::stringify(&parsed) {
+        Ok(Some(text)) => JsString::from(text),
+        _ => metadata.clone(),
+    }
+}
+
 fn join_rows(rows: &[Vec<JsString>]) -> JsString {
     let mut out = JsString::new();
     for (row_index, row) in rows.iter().enumerate() {
@@ -410,5 +535,45 @@ mod tests {
                 .map(String::from)
                 .to_vec())
         );
+    }
+
+    // Recorded from upstream's parse, `exporter` assignment and stringify under the oracle's
+    // Electron, in a strict-mode realm as the bundled worker is.
+    #[test]
+    fn wpilog_metadata_matches_upstream() {
+        let cases = [
+            (
+                r#"{"b":1,"2":0,"1":0,"exporter":"x","z":2}"#,
+                r#"{"1":0,"2":0,"b":1,"exporter":"AdvantageScope","z":2}"#,
+            ),
+            ("[1,2]", "[1,2]"),
+            ("[]", "[]"),
+            ("5", "5"),
+            ("1e1", "1e1"),
+            (r#""s""#, r#""s""#),
+            ("true", "true"),
+            ("null", "null"),
+            (
+                r#"{"__proto__":1}"#,
+                r#"{"__proto__":1,"exporter":"AdvantageScope"}"#,
+            ),
+            (r#" {"a" : 1 } "#, r#"{"a":1,"exporter":"AdvantageScope"}"#),
+            (r#"{"a":1,"a":2}"#, r#"{"a":2,"exporter":"AdvantageScope"}"#),
+            (r#""\ud800""#, r#""\ud800""#),
+            ("-0", "-0"),
+            (
+                r#"{"a":-0,"b":1e21,"c":1.5e-7}"#,
+                r#"{"a":0,"b":1e+21,"c":1.5e-7,"exporter":"AdvantageScope"}"#,
+            ),
+            ("not json", "not json"),
+            ("", r#"{"exporter":"AdvantageScope"}"#),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                wpilog_metadata(&JsString::from(input)).to_string_lossy(),
+                expected,
+                "{input}"
+            );
+        }
     }
 }
