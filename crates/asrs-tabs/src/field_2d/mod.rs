@@ -771,19 +771,8 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         }
         self.update_field_options(cx);
         if let Some(sources) = state.get("sources") {
-            let items = sources
-                .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .map(SourceListItemState::from_js)
-                        .collect::<Option<Vec<_>>>()
-                })
-                .flatten()
-                .ok_or_else(|| {
-                    JsError::type_error("sourcesFromJs: not a SourceListState")
-                })?;
-            with_env(cx, |env| self.list.set_state(env, items)).map_err(js_error)?;
+            with_env(cx, |env| self.list.set_state_value(env, sources))
+                .map_err(js_error)?;
         }
         if let Some(field) = state.get("field") {
             if let Some(field) = field.as_str() {
@@ -1418,7 +1407,6 @@ impl Field2dRenderer {
         let container_height = dom.client_height();
         let satellite = dom.satellite;
         let dpr = dom.device_pixel_ratio;
-        let images = &dom.images;
 
         self.last_command = Some(command.clone());
 
@@ -1498,7 +1486,8 @@ impl Field2dRenderer {
 
         if field_data.path != self.last_image_source {
             self.last_image_source = field_data.path.clone();
-            if images.contains_key(&self.last_image_source) {
+            let [w, h] = dom.image_size(&self.last_image_source);
+            if w > 0.0 && h > 0.0 {
                 self.pending_image_loads += 1;
             }
         }

@@ -11,7 +11,7 @@ use asrs_js::json;
 use asrs_js::math;
 use asrs_js::sort::array_sort;
 use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, ToJs};
+use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::colors::ensure_theme_contrast;
 use asrs_log::log::Log;
 
@@ -28,6 +28,36 @@ const DOUBLE_CLICK_MS: f64 = 400.0;
 
 pub(crate) fn eq_str(js: &JsString, s: &str) -> bool {
     js.units().iter().copied().eq(s.encode_utf16())
+}
+
+/// The text `'...' + value` produces for a saved-state property: only strings ever
+/// resolve to a type config, everything else lands in `Unknown type "..."`.
+fn js_label(value: Option<&JsValue>) -> String {
+    match value {
+        Some(JsValue::String(s)) => s.to_string_lossy(),
+        Some(JsValue::Number(n)) => asrs_js::number::to_string(*n),
+        Some(JsValue::Bool(b)) => if *b { "true" } else { "false" }.to_owned(),
+        Some(JsValue::Null) => "null".to_owned(),
+        Some(JsValue::Undefined) | None => "undefined".to_owned(),
+        Some(JsValue::Array(_)) | Some(JsValue::Object(_)) => "[object Object]".to_owned(),
+        Some(_) => "[object Object]".to_owned(),
+    }
+}
+
+fn truthy(value: &JsValue) -> bool {
+    match value {
+        JsValue::Undefined | JsValue::Null => false,
+        JsValue::Bool(b) => *b,
+        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
+        JsValue::String(s) => !s.units().is_empty(),
+        _ => true,
+    }
+}
+
+fn string_pairs(map: &JsObject) -> JsObject<JsString> {
+    map.iter()
+        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.clone())))
+        .collect()
 }
 
 /// An exception upstream throws out of a `SourceList` call.
@@ -388,6 +418,85 @@ impl SourceList {
             self.add_list_item(env, item, None)?;
         }
         Ok(())
+    }
+
+    /// `setState` on a raw saved-state value. Upstream iterates `state.forEach(item =>
+    /// addListItem(item))`, so a non-array fails inside `forEach` and items are stored
+    /// before `updateItem` validates them; malformed properties fall back to defaults.
+    pub fn set_state_value(&mut self, env: &mut Env<'_>, value: &JsValue) -> Result {
+        let Some(items) = value.as_array() else {
+            let on = match value {
+                JsValue::Null => "null",
+                JsValue::Undefined => "undefined",
+                _ => "",
+            };
+            return Err(SourceListError::Thrown(if on.is_empty() {
+                "TypeError: state.forEach is not a function".to_owned()
+            } else {
+                format!("TypeError: Cannot read properties of {on} (reading 'forEach')")
+            }));
+        };
+        self.clear();
+        for raw in items {
+            let item = self.restore_item(raw)?;
+            self.add_list_item(env, item, None)?;
+        }
+        Ok(())
+    }
+
+    /// One `setState` item: `addListItem` reads `type` to find the type config before
+    /// `updateItem` touches `options`, so the first failure matches upstream's order.
+    fn restore_item(&self, raw: &JsValue) -> Result<SourceListItemState> {
+        let type_value = raw.get("type");
+        let item_type = type_value.and_then(|t| t.as_str()).cloned();
+        let Some(type_config) = item_type
+            .as_ref()
+            .and_then(|t| self.type_config(t))
+        else {
+            return Err(SourceListError::UnknownType(JsString::from(js_label(
+                type_value,
+            ))));
+        };
+        let item_type = item_type.unwrap_or_default();
+        let options = raw.get("options");
+        if !type_config.color.starts_with('#') {
+            let color_key = type_config.color.clone();
+            match options {
+                Some(JsValue::Object(map)) => match map.get(&color_key) {
+                    None | Some(JsValue::String(_)) => {}
+                    Some(_) => {
+                        return Err(SourceListError::Thrown(format!(
+                            "TypeError: state.options.{color_key}.startsWith is not a function"
+                        )));
+                    }
+                },
+                Some(JsValue::Null) => {
+                    return Err(SourceListError::type_error("null", &color_key));
+                }
+                Some(JsValue::Undefined) | None => {
+                    return Err(SourceListError::type_error("undefined", &color_key));
+                }
+                Some(_) => {
+                    return Err(SourceListError::type_error("undefined", "startsWith"));
+                }
+            }
+        }
+        Ok(SourceListItemState {
+            item_type,
+            log_key: raw
+                .get("logKey")
+                .and_then(|v| v.as_str().cloned())
+                .unwrap_or_default(),
+            log_type: raw
+                .get("logType")
+                .and_then(|v| v.as_str().cloned())
+                .unwrap_or_default(),
+            visible: raw.get("visible").is_some_and(truthy),
+            options: options
+                .and_then(|v| v.as_object())
+                .map(string_pairs)
+                .unwrap_or_default(),
+        })
     }
 
     pub fn clear(&mut self) {

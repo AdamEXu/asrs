@@ -690,6 +690,11 @@ pub fn parse_field_2d(config_raw: &JsValue) -> ParseResult<Config2d> {
     if let Some(JsValue::String(s)) = prop(config_raw, "name")? {
         config.name = s.clone();
     }
+    // `window.assets` holds post-parse configs whose loader already stamped `path`;
+    // raw configs simply omit it.
+    if let Some(JsValue::String(s)) = prop(config_raw, "path")? {
+        config.path = s.clone();
+    }
     if let Some(JsValue::Bool(b)) = prop(config_raw, "isFTC")? {
         config.is_ftc = *b;
     } else {
