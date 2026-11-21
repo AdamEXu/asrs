@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Cubic helpers from Skia's `SkGeometry.cpp` with its f32 operation order (Chromium builds
 //! with `-ffp-contract=off`, so nothing here may fuse into an FMA).
 

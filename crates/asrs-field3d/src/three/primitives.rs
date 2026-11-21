@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 //! three's primitive geometry generators. Segment counts are JS numbers, so the loops count in
 //! `f64` exactly like the originals, including for fractional, zero or NaN arguments.
 

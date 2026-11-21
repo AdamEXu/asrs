@@ -1,3 +1,5 @@
+// Ported from protobufjs 8.3.0 (BSD-3-Clause, Copyright (c) 2016 Daniel Wirtz). See THIRD_PARTY_NOTICES.md.
+
 //! protobufjs's reflection tree (`Root`, `Namespace`, `Type`, `Enum`, `Service`, `Field`,
 //! `OneOf`) as an arena, with the add, remove, define and lookup rules that decide what a
 //! descriptor builds and what a type name resolves to.

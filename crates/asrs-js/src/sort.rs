@@ -1,3 +1,5 @@
+// Ported from V8 14.2 (BSD-3-Clause, Copyright the V8 project authors). See THIRD_PARTY_NOTICES.md.
+
 //! `Array.prototype.sort` and `Array.prototype.toSorted` as V8 14.2 runs them: a port of V8's
 //! TimSort (`third_party/v8/builtins/array-sort.tq` and `builtins/array-to-sorted.tq`). The
 //! comparator is called with the same arguments in the same order as in V8, so results match

@@ -1,3 +1,5 @@
+// Ported from protobufjs 8.3.0 (BSD-3-Clause, Copyright (c) 2016 Daniel Wirtz). See THIRD_PARTY_NOTICES.md.
+
 //! `shared/log/ProtoDecoder.ts` together with the parts of protobufjs 8.3.0 it relies on:
 //! `ext/descriptor` building a reflection tree from `FileDescriptorProto` payloads, the
 //! generated decoder, and `toObject(message, {defaults: true})`.

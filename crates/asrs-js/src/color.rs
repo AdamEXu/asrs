@@ -1,3 +1,5 @@
+// Ported from color-convert 2.0.1 (MIT, Copyright (c) 2011-2016 Heather Arthur). See THIRD_PARTY_NOTICES.md.
+
 //! `color-convert` 2.0.1, the subset upstream uses: `hex.rgb`, `hex.hsl`
 //! (hex -> rgb -> hsl) and `hsl.hex` (hsl -> rgb -> hex), plus the one
 //! composition in `src/shared/Colors.ts`. Ported from the npm package's

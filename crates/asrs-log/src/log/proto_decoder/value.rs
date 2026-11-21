@@ -1,3 +1,5 @@
+// Ported from protobufjs 8.3.0 (BSD-3-Clause, Copyright (c) 2016 Daniel Wirtz). See THIRD_PARTY_NOTICES.md.
+
 //! The JS values protobufjs works with: field defaults, `Long` instances and decoded
 //! message instances.
 

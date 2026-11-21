@@ -1,3 +1,5 @@
+// Ported from heatmap.js 2.0.5, jwbonner fork (MIT, Copyright (c) 2015 Patrick Wied). See THIRD_PARTY_NOTICES.md.
+
 //! Port of upstream `shared/renderers/Heatmap.ts` and the h337 fork pinned at
 //! `jwbonner/heatmap.js#24b4455`: grid binning, the sparse store, radial-gradient
 //! shadow stamps and the palette colorize pass all run through the crate's canvas

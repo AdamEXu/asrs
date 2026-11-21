@@ -1,3 +1,5 @@
+// Ported from bignumber.js 9.1.2 (MIT, Copyright (c) 2023 Michael Mclaughlin). See THIRD_PARTY_NOTICES.md.
+
 //! The bignumber.js 9.1.2 subset `getCanSignalValue` uses. A finite value is a sign, a
 //! significant-decimal-digit string and a base-10 exponent for the first digit, matching
 //! BigNumber's `s`/`c`/`e` triple: `value = 0.digits * 10^(exp + 1)`. Arithmetic is exact

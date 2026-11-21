@@ -1,3 +1,5 @@
+// Ported from Blink, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 /// A parsed CSS colour: straight-alpha channels in 0..=1, as Blink hands them to Skia.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rgba {

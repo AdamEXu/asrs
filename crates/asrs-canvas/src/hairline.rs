@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Skia's antialiased hairlines (`SkScan_Antihair`, `SkScan_Hairline`): a stroke at most one
 //! device pixel wide is drawn as one-pixel bands, one per line segment, each blended on its own.
 //! An x-major segment covers one pixel vertically at every column between its end points, a

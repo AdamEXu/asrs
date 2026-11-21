@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 use super::{BufferAttribute, Vector3};
 
 #[derive(Clone, Copy, Debug, PartialEq)]

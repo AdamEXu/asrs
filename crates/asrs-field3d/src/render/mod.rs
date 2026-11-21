@@ -1,3 +1,5 @@
+// Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
+
 //! The wgpu port of the `WebGLRenderer` path upstream's 3D field uses: three's render lists
 //! and sorts, `MeshPhongMaterial` in WGSL with the sRGB OETF in the shader over a `Bgra8Unorm`
 //! target, instancing, two-pass transparent double-sided draws, readback, and the render thread

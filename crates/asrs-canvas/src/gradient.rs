@@ -1,3 +1,5 @@
+// Ported from Skia and Blink, Chromium m142 (BSD-3-Clause, Copyright Google Inc. and The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 //! Gradient fills as Chromium's CPU canvas shades them: Blink's stop padding, Skia's gradient
 //! colour stages and device-to-unit matrices, then the raster pipeline's highp tail (premul,
 //! paint alpha, the ordered dither Blink turns on for every gradient, round-to-nearest-even

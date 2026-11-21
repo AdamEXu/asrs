@@ -1,3 +1,5 @@
+// Ported from @msgpack/msgpack 3.0.0-beta2 (ISC, Copyright 2019 The MessagePack Community). See THIRD_PARTY_NOTICES.md.
+
 //! `@msgpack/msgpack` 3.0.0-beta2 `Decoder` and `Encoder` with the default options every
 //! upstream call site uses (`new Decoder()` / `new Encoder()`): numbers decode to f64
 //! (64-bit ints truncate past 2^53, no BigInt), the default extension codec (timestamp

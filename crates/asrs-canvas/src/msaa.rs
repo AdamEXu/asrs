@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2011 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 //! Graphite's tessellated path fills under 4x MSAA, the way Chromium rasterizes DOM paths on
 //! macOS: every curve becomes a cubic or conic patch linearized at `2^resolveLevel` uniform
 //! parametric steps (Wang's formula at precision 4, at most 32 segments), vertices snap to the

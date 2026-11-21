@@ -1,3 +1,5 @@
+// Ported from Skia and Blink, Chromium m142 (BSD-3-Clause, Copyright Google Inc. and The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 use std::collections::HashMap;
 
 use asrs_js::string::JsString;
