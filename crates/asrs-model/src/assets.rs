@@ -1360,11 +1360,7 @@ impl AdvantageScopeAssets {
     /// `window.assets = message.data`: the hub stores what `set-assets` carried. Each config
     /// arrives as `loadAssets` produced it, so re-parsing keeps every entry that is a config.
     pub fn from_js(value: &JsValue) -> AdvantageScopeAssets {
-        fn configs<T>(
-            value: &JsValue,
-            key: &str,
-            parse: fn(&JsValue) -> ParseResult<T>,
-        ) -> Vec<T> {
+        fn configs<T>(value: &JsValue, key: &str, parse: fn(&JsValue) -> ParseResult<T>) -> Vec<T> {
             let mut out = Vec::new();
             if let Some(raw) = value.get(key)
                 && let Some(items) = raw.as_array()

@@ -1704,7 +1704,9 @@ impl Runner {
                 }
             }
             "set-assets" => {
-                let same = asrs_js::json::stringify(&self.host.assets_raw).ok().flatten()
+                let same = asrs_js::json::stringify(&self.host.assets_raw)
+                    .ok()
+                    .flatten()
                     == asrs_js::json::stringify(data).ok().flatten();
                 if !same {
                     let failures = |v: &JsValue| {

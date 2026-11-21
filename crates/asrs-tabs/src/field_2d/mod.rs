@@ -13,8 +13,8 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::create_uuid;
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::geometry::{
-    self, Alliance, AnnotatedPose2d, AnnotatedPose3d, HeatmapTimeRange,
-    ModuleVelocity, ModuleVelocitySample, Pose2d, RotationUnits, annotated_pose_3d_to_2d,
+    self, Alliance, AnnotatedPose2d, AnnotatedPose3d, HeatmapTimeRange, ModuleVelocity,
+    ModuleVelocitySample, Pose2d, RotationUnits, annotated_pose_3d_to_2d,
     convert_from_coordinate_system, grab_heatmap_data, grab_module_velocities, grab_poses_auto,
     rotation_3d_to_2d,
 };
@@ -220,7 +220,10 @@ fn pose2_js(pose: &Pose2d) -> JsValue {
     let mut o = JsObject::new();
     o.insert(
         "translation",
-        JsValue::Array(vec![pose.translation[0].to_js(), pose.translation[1].to_js()]),
+        JsValue::Array(vec![
+            pose.translation[0].to_js(),
+            pose.translation[1].to_js(),
+        ]),
     );
     o.insert("rotation", pose.rotation.to_js());
     JsValue::Object(o)
@@ -252,12 +255,7 @@ fn annotated_pose_js(pose: &AnnotatedPose2d, vision: bool) -> JsValue {
 }
 
 fn poses_js(poses: &[AnnotatedPose2d], vision: bool) -> JsValue {
-    JsValue::Array(
-        poses
-            .iter()
-            .map(|p| annotated_pose_js(p, vision))
-            .collect(),
-    )
+    JsValue::Array(poses.iter().map(|p| annotated_pose_js(p, vision)).collect())
 }
 
 fn module_velocity_js(sample: &ModuleVelocitySample) -> JsValue {
@@ -270,10 +268,7 @@ fn module_velocity_js(sample: &ModuleVelocitySample) -> JsValue {
         }
         ModuleVelocitySample::Partial { velocity, angle } => {
             let mut o = JsObject::new();
-            o.insert(
-                "velocity",
-                velocity.map_or(JsValue::Null, |v| v.to_js()),
-            );
+            o.insert("velocity", velocity.map_or(JsValue::Null, |v| v.to_js()));
             o.insert("angle", angle.map_or(JsValue::Null, |v| v.to_js()));
             JsValue::Object(o)
         }
@@ -406,15 +401,24 @@ fn annotated_pose_of(value: &JsValue) -> Option<AnnotatedPose2d> {
     let translation = pose.get("translation")?.as_array()?;
     Some(AnnotatedPose2d {
         pose: Pose2d {
-            translation: [translation.first()?.as_f64()?, translation.get(1)?.as_f64()?],
+            translation: [
+                translation.first()?.as_f64()?,
+                translation.get(1)?.as_f64()?,
+            ],
             rotation: pose.get("rotation")?.as_f64()?,
         },
         annotation: geometry::PoseAnnotations {
             is_2d_source: annotation.get("is2DSource")?.as_bool()?,
             has_april_tag_id: false,
             april_tag_id: None,
-            vision_color: annotation.get("visionColor").and_then(|v| v.as_str()).cloned(),
-            vision_size: annotation.get("visionSize").and_then(|v| v.as_str()).cloned(),
+            vision_color: annotation
+                .get("visionColor")
+                .and_then(|v| v.as_str())
+                .cloned(),
+            vision_size: annotation
+                .get("visionSize")
+                .and_then(|v| v.as_str())
+                .cloned(),
         },
     })
 }
@@ -492,10 +496,7 @@ impl Object {
                             .collect::<Option<Vec<_>>>()
                     })
                     .collect::<Option<_>>()?,
-                bumper_color: value
-                    .get("bumperColor")
-                    .and_then(|v| v.as_str())
-                    .cloned(),
+                bumper_color: value.get("bumperColor").and_then(|v| v.as_str()).cloned(),
                 vision_targets: annotated_poses_of(value.get("visionTargets"))?,
                 swerve_module_velocities: swerve_modules_of(value.get("swerveModuleVelocities"))?,
             }),
@@ -572,7 +573,10 @@ impl Field2dController {
             .unwrap_or(false)
     }
 
-    fn field_config<'a>(assets: Option<&'a AdvantageScopeAssets>, field: &JsString) -> Option<&'a Config2d> {
+    fn field_config<'a>(
+        assets: Option<&'a AdvantageScopeAssets>,
+        field: &JsString,
+    ) -> Option<&'a Config2d> {
         assets?.field2ds.iter().find(|f| f.id == *field)
     }
 
@@ -604,8 +608,16 @@ impl Field2dController {
     /// `selectDefaultField`.
     fn select_default_field<C: TabCx + ?Sized>(&mut self, cx: &C) {
         let prefers_ftc = self.prefers_ftc(cx);
-        let primary = if prefers_ftc { &self.controls.ftc } else { &self.controls.frc };
-        let secondary = if prefers_ftc { &self.controls.frc } else { &self.controls.ftc };
+        let primary = if prefers_ftc {
+            &self.controls.ftc
+        } else {
+            &self.controls.frc
+        };
+        let secondary = if prefers_ftc {
+            &self.controls.frc
+        } else {
+            &self.controls.ftc
+        };
         if let Some((value, _)) = primary.first().or_else(|| secondary.first()) {
             self.controls.field = value.clone();
         } else {
@@ -686,9 +698,7 @@ impl Field2dController {
     ) -> geometry::CoordinateSystem {
         use asrs_model::assets::CoordinateSystem as FieldSystem;
         let coordinate_system = match cx.tab_preferences().map(|p| p.coordinate_system) {
-            Some(CoordinateSystemPreference::Automatic) => {
-                field_data.map(|f| f.coordinate_system)
-            }
+            Some(CoordinateSystemPreference::Automatic) => field_data.map(|f| f.coordinate_system),
             Some(CoordinateSystemPreference::WallAlliance) => Some(FieldSystem::WallAlliance),
             Some(CoordinateSystemPreference::WallBlue) => Some(FieldSystem::WallBlue),
             Some(CoordinateSystemPreference::CenterRotated) => Some(FieldSystem::CenterRotated),
@@ -771,8 +781,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         }
         self.update_field_options(cx);
         if let Some(sources) = state.get("sources") {
-            with_env(cx, |env| self.list.set_state_value(env, sources))
-                .map_err(js_error)?;
+            with_env(cx, |env| self.list.set_state_value(env, sources)).map_err(js_error)?;
         }
         if let Some(field) = state.get("field") {
             if let Some(field) = field.as_str() {
@@ -832,7 +841,9 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         // same order and feed the range it returned.
         let mut heatmap_range: HashMap<usize, Option<[f64; 2]>> = HashMap::new();
         for (i, source) in sources.iter().enumerate() {
-            if !js_eq(&source.item_type, "heatmap") || heatmap_time_range(source) != HeatmapTimeRange::Visible {
+            if !js_eq(&source.item_type, "heatmap")
+                || heatmap_time_range(source) != HeatmapTimeRange::Visible
+            {
                 continue;
             }
             let mut count = 0usize;
@@ -849,18 +860,22 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         }
 
         let field_data = Self::field_config(cx.tab_assets(), &self.controls.field).cloned();
-        let field_width = field_data
-            .as_ref()
-            .map_or(0.0, |f| units::convert(f.width_inches, "inches", "meters").unwrap_or(f64::NAN));
-        let field_height = field_data
-            .as_ref()
-            .map_or(0.0, |f| units::convert(f.height_inches, "inches", "meters").unwrap_or(f64::NAN));
+        let field_width = field_data.as_ref().map_or(0.0, |f| {
+            units::convert(f.width_inches, "inches", "meters").unwrap_or(f64::NAN)
+        });
+        let field_height = field_data.as_ref().map_or(0.0, |f| {
+            units::convert(f.height_inches, "inches", "meters").unwrap_or(f64::NAN)
+        });
         let coordinate_system = self.coordinate_system(cx, field_data.as_ref());
         let is_red_alliance = time.is_some_and(|t| {
             let log = cx.tab_log();
             get_is_red_alliance(&log, t)
         });
-        let alliance = if is_red_alliance { Alliance::Red } else { Alliance::Blue };
+        let alliance = if is_red_alliance {
+            Alliance::Red
+        } else {
+            Alliance::Blue
+        };
         let uuid_str = uuid.as_str().map(JsString::to_string_lossy);
 
         let config = configs::field_2d();
@@ -914,10 +929,8 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                 )
                 .map_err(geometry_error)?;
             }
-            let mut poses: Vec<AnnotatedPose2d> = pose3ds
-                .into_iter()
-                .map(annotated_pose_3d_to_2d)
-                .collect();
+            let mut poses: Vec<AnnotatedPose2d> =
+                pose3ds.into_iter().map(annotated_pose_3d_to_2d).collect();
 
             let mut shared_trail: Vec<[f64; 2]> = Vec::new();
             if time.is_some() && js_eq(&source.item_type, "robot") {
@@ -1036,9 +1049,13 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                     poses,
                     trails,
                     bumper_color: match bumpers {
-                        Some(b) if b.units().is_empty() => Some(JsString::from(
-                            if is_red_alliance { "#ff0000" } else { "#0000ff" },
-                        )),
+                        Some(b) if b.units().is_empty() => {
+                            Some(JsString::from(if is_red_alliance {
+                                "#ff0000"
+                            } else {
+                                "#0000ff"
+                            }))
+                        }
                         other => other.cloned(),
                     },
                     vision_targets,
@@ -1061,9 +1078,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
                 Some(Object::Heatmap { poses })
             } else if js_eq(&source.item_type, "arrow") {
                 let position = match option(&source, "position") {
-                    Some(p)
-                        if js_eq(p, "center") || js_eq(p, "back") || js_eq(p, "front") =>
-                    {
+                    Some(p) if js_eq(p, "center") || js_eq(p, "back") || js_eq(p, "front") => {
                         p.clone()
                     }
                     _ => JsString::from("center"),
@@ -1080,13 +1095,25 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
 
         let size = match self.size {
             SizeSetting::Large => {
-                if field_data.as_ref().is_some_and(|f| f.is_ftc) { 18.0 } else { 30.0 }
+                if field_data.as_ref().is_some_and(|f| f.is_ftc) {
+                    18.0
+                } else {
+                    30.0
+                }
             }
             SizeSetting::Medium => {
-                if field_data.as_ref().is_some_and(|f| f.is_ftc) { 16.0 } else { 27.0 }
+                if field_data.as_ref().is_some_and(|f| f.is_ftc) {
+                    16.0
+                } else {
+                    27.0
+                }
             }
             SizeSetting::Small => {
-                if field_data.as_ref().is_some_and(|f| f.is_ftc) { 14.0 } else { 24.0 }
+                if field_data.as_ref().is_some_and(|f| f.is_ftc) {
+                    14.0
+                } else {
+                    24.0
+                }
             }
         };
 
@@ -1236,13 +1263,8 @@ impl Field2dRenderer {
         let dx = scroll_left - self.last_scroll[0];
         let dy = scroll_top - self.last_scroll[1];
         self.last_scroll = [scroll_left, scroll_top];
-        self.pending_scrolls.push([
-            dx,
-            dy,
-            0.0,
-            self.last_cursor[0],
-            self.last_cursor[1],
-        ]);
+        self.pending_scrolls
+            .push([dx, dy, 0.0, self.last_cursor[0], self.last_cursor[1]]);
     }
 
     /// `setTrackingMode`.
@@ -1338,8 +1360,14 @@ impl Field2dRenderer {
             self.zoom = math::min(&[10.0, math::max(&[1.0, self.zoom + zoom_change])]);
             if self.zoom != old_zoom {
                 self.pan = [
-                    (pan_x + (canvas_center_x / base_image_scalar) * (1.0 / old_zoom - 1.0 / self.zoom)).to_js(),
-                    (pan_y + (canvas_center_y / base_image_scalar) * (1.0 / old_zoom - 1.0 / self.zoom)).to_js(),
+                    (pan_x
+                        + (canvas_center_x / base_image_scalar)
+                            * (1.0 / old_zoom - 1.0 / self.zoom))
+                        .to_js(),
+                    (pan_y
+                        + (canvas_center_y / base_image_scalar)
+                            * (1.0 / old_zoom - 1.0 / self.zoom))
+                        .to_js(),
                 ];
             }
         }
@@ -1349,7 +1377,15 @@ impl Field2dRenderer {
     /// `mouse` events on `SCROLL_CONTAINER`: `ScrollSensor` pan tracking plus the
     /// context-menu `startPx`. `kind` is `down`, `move`, `up` or `leave`; `x`/`y` are
     /// `clientX`/`clientY`.
-    pub fn mouse(&mut self, cx: &mut dyn TabCx, kind: &str, button: f64, shift: bool, x: f64, y: f64) {
+    pub fn mouse(
+        &mut self,
+        cx: &mut dyn TabCx,
+        kind: &str,
+        button: f64,
+        shift: bool,
+        x: f64,
+        y: f64,
+    ) {
         let scroll_rect = self.dom.borrow().scroll_container;
         match kind {
             "down" => {
@@ -1368,19 +1404,18 @@ impl Field2dRenderer {
                     let dx = self.pan_last_cursor[0] - cursor[0];
                     let dy = self.pan_last_cursor[1] - cursor[1];
                     self.pan_last_cursor = cursor;
-                    self.pending_scrolls.push([dx, dy, 1.0, cursor[0], cursor[1]]);
+                    self.pending_scrolls
+                        .push([dx, dy, 1.0, cursor[0], cursor[1]]);
                 }
             }
             "up" => {
                 self.pan_active = false;
                 if let Some(start) = self.start_px
-                    && x == start[0] && y == start[1]
+                    && x == start[0]
+                    && y == start[1]
                 {
                     let mut data = JsObject::new();
-                    data.insert(
-                        "position",
-                        JsValue::Array(vec![x.to_js(), y.to_js()]),
-                    );
+                    data.insert("position", JsValue::Array(vec![x.to_js(), y.to_js()]));
                     data.insert("selectedIndex", self.tracking_mode.to_js());
                     cx.send_main_message(NamedMessage::new(
                         HubToMain::Ask2dCamera,
@@ -1410,7 +1445,9 @@ impl Field2dRenderer {
 
         self.last_command = Some(command.clone());
 
-        let Some(field_data) = assets.and_then(|a| a.field2ds.iter().find(|f| f.id == command.field)) else {
+        let Some(field_data) =
+            assets.and_then(|a| a.field2ds.iter().find(|f| f.id == command.field))
+        else {
             return;
         };
         let field_data = field_data.clone();
@@ -1421,20 +1458,25 @@ impl Field2dRenderer {
             self.tracking_mode = CAMERA_UNLOCKED;
         }
 
-        let primary_robot_pose = command
-            .objects
-            .iter()
-            .find_map(|object| match object {
-                Object::Robot { poses, .. } if !poses.is_empty() => Some(poses[0].pose),
-                _ => None,
-            });
+        let primary_robot_pose = command.objects.iter().find_map(|object| match object {
+            Object::Robot { poses, .. } if !poses.is_empty() => Some(poses[0].pose),
+            _ => None,
+        });
 
         let is_vertical = command.orientation == Orientation::Deg90.number()
             || command.orientation == Orientation::Deg270.number();
         let visible_y_offset = if satellite { 0.0 } else { -13.0 };
 
-        let mut width = if is_vertical { container_height } else { container_width };
-        let mut height = if is_vertical { container_width } else { container_height };
+        let mut width = if is_vertical {
+            container_height
+        } else {
+            container_width
+        };
+        let mut height = if is_vertical {
+            container_width
+        } else {
+            container_height
+        };
         let bounding_width = if is_vertical {
             container_height - math::abs(visible_y_offset * 2.0)
         } else {
@@ -1503,20 +1545,31 @@ impl Field2dRenderer {
 
         let mut target_field_x = field_center_x;
         let mut target_field_y = field_center_y;
-        if self.tracking_mode > CAMERA_UNLOCKED && let Some(pose) = primary_robot_pose {
+        if self.tracking_mode > CAMERA_UNLOCKED
+            && let Some(pose) = primary_robot_pose
+        {
             let position_inches = [
                 units::convert(pose.translation[0], "meters", "inches").unwrap_or(f64::NAN),
                 units::convert(pose.translation[1], "meters", "inches").unwrap_or(f64::NAN),
             ];
             target_field_x = scale_value(
                 position_inches[0],
-                [-field_data.width_inches / 2.0, field_data.width_inches / 2.0],
+                [
+                    -field_data.width_inches / 2.0,
+                    field_data.width_inches / 2.0,
+                ],
                 [field_data.top_left[0], field_data.top_left[0] + field_width],
             );
             target_field_y = scale_value(
                 position_inches[1],
-                [-field_data.height_inches / 2.0, field_data.height_inches / 2.0],
-                [field_data.top_left[1] + field_height, field_data.top_left[1]],
+                [
+                    -field_data.height_inches / 2.0,
+                    field_data.height_inches / 2.0,
+                ],
+                [
+                    field_data.top_left[1] + field_height,
+                    field_data.top_left[1],
+                ],
             );
         }
 

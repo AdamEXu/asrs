@@ -310,7 +310,11 @@ fn at(args: &[JsValue], i: usize) -> &JsValue {
 /// `putPose` reaches upstream as `(key, ts, pose)` but the port's logRun takes
 /// `(key, ts, translation, rotation)`; rewrite the op before it is applied.
 fn translate_pose_op(op: &[Value]) -> Result<Vec<Value>, String> {
-    if op.first().and_then(Value::as_str).is_some_and(|s| s.eq_str("putPose")) {
+    if op
+        .first()
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.eq_str("putPose"))
+    {
         if let [name, key, ts, pose, ..] = op {
             let translation = pose.get("translation").ok_or("putPose translation")?;
             let xy = translation.as_array().ok_or("putPose translation pair")?;
@@ -561,8 +565,7 @@ impl Harness {
                     if let Some(cs) = o.get("cs") {
                         if let Some(s) = cs.as_str() {
                             preferences.coordinate_system =
-                                CoordinateSystemPreference::from_js_str(s)
-                                    .ok_or("prefs.cs")?;
+                                CoordinateSystemPreference::from_js_str(s).ok_or("prefs.cs")?;
                         }
                     }
                     if let Some(ftc) = o.get("ftc").and_then(JsValue::as_bool) {
@@ -608,7 +611,9 @@ impl Harness {
             }
             let actual = encode(&msg.data);
             if actual != expected {
-                return Err(format!("main {name}\n upstream {expected}\n port     {actual}"));
+                return Err(format!(
+                    "main {name}\n upstream {expected}\n port     {actual}"
+                ));
             }
             self.stats.mains += 1;
         }
@@ -723,10 +728,9 @@ impl Harness {
                 "content",
                 "Some asset files failed to load. Check the developer console for details.".to_js(),
             );
-            self.host.sent.push_back(NamedMessage::new(
-                HubToMain::Error,
-                JsValue::Object(data),
-            ));
+            self.host
+                .sent
+                .push_back(NamedMessage::new(HubToMain::Error, JsValue::Object(data)));
         }
         for r in &inner {
             if r.field("sl").is_some() && r.field("op").is_some() {
@@ -814,9 +818,7 @@ impl Harness {
                 self.controllers[id].click_size(index(&js(record, "index")?)?);
                 self.drain_main()
             }
-            "restoreState" | "refresh" | "newAssets" => {
-                self.bracket(record, "f2d", records)
-            }
+            "restoreState" | "refresh" | "newAssets" => self.bracket(record, "f2d", records),
             other => Err(format!("unexpected f2d record {other}")),
         }
     }
@@ -825,8 +827,16 @@ impl Harness {
         let o = dom.as_object().ok_or("dom snapshot")?;
         let (_, dom_rc) = &self.renderers[id];
         let mut d = dom_rc.borrow_mut();
-        d.container = [0.0, 0.0, num(o.get("cw").ok_or("dom.cw")?)?, num(o.get("ch").ok_or("dom.ch")?)?];
-        let scroll = o.get("scroll").and_then(JsValue::as_array).ok_or("dom.scroll")?;
+        d.container = [
+            0.0,
+            0.0,
+            num(o.get("cw").ok_or("dom.cw")?)?,
+            num(o.get("ch").ok_or("dom.ch")?)?,
+        ];
+        let scroll = o
+            .get("scroll")
+            .and_then(JsValue::as_array)
+            .ok_or("dom.scroll")?;
         d.scroll_container = [
             num(at(scroll, 0))?,
             num(at(scroll, 1))?,
@@ -843,10 +853,8 @@ impl Harness {
             d.images.clear();
             for (src, size) in images.iter() {
                 let size = size.as_array().ok_or("image size")?;
-                d.images.insert(
-                    src.clone(),
-                    [num(at(&size, 0))?, num(at(&size, 1))?],
-                );
+                d.images
+                    .insert(src.clone(), [num(at(&size, 0))?, num(at(&size, 1))?]);
             }
         }
         Ok(())
@@ -894,11 +902,9 @@ impl Harness {
             .filter(|r| r.string("f2dr").as_deref() == Some("render"))
             .count();
         let result: Result<(), JsError> = match name.as_str() {
-            "restoreState" => TabRenderer::restore_state(
-                &mut self.renderers[id].0,
-                &mut self.host,
-                at(&args, 0),
-            ),
+            "restoreState" => {
+                TabRenderer::restore_state(&mut self.renderers[id].0, &mut self.host, at(&args, 0))
+            }
             "set2DCamera" => {
                 let index = num(at(&args, 0))?;
                 let should_render = (0.0..=2.0).contains(&index) && self.had_last_command[id];
@@ -932,7 +938,8 @@ impl Harness {
         match kind {
             "create" => {
                 let dom = Rc::new(RefCell::new(Field2dDom::default()));
-                self.renderers.push((Field2dRenderer::new(dom.clone()), dom));
+                self.renderers
+                    .push((Field2dRenderer::new(dom.clone()), dom));
                 self.had_last_command.push(false);
                 Ok(())
             }
@@ -942,10 +949,7 @@ impl Harness {
                 self.apply_context(record)?;
                 self.stats.saves += 1;
                 let expected = encode(&js(record, "value")?);
-                let actual = encode(&TabRenderer::save_state(
-                    &self.renderers[id].0,
-                    &self.host,
-                ));
+                let actual = encode(&TabRenderer::save_state(&self.renderers[id].0, &self.host));
                 if expected != actual {
                     return Err(format!(
                         "renderer save\n upstream {expected}\n port     {actual}"
@@ -1132,7 +1136,9 @@ impl Harness {
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut items = Some(items);
                 env(host, &mut |e| {
-                    controller.source_list_mut().set_state(e, items.take().unwrap_or_default())
+                    controller
+                        .source_list_mut()
+                        .set_state(e, items.take().unwrap_or_default())
                 })
                 .err()
                 .map(|e| e.to_string())
@@ -1141,11 +1147,9 @@ impl Harness {
                 controller.source_list_mut().clear();
                 None
             }
-            "refresh" => env(host, &mut |e| {
-                controller.source_list_mut().refresh(e)
-            })
-            .err()
-            .map(|e| e.to_string()),
+            "refresh" => env(host, &mut |e| controller.source_list_mut().refresh(e))
+                .err()
+                .map(|e| e.to_string()),
             "stop" => {
                 controller.source_list_mut().stop();
                 None
@@ -1354,7 +1358,15 @@ fn field_2d_fixtures() {
             Ok(s) => {
                 eprintln!(
                     "{id}: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops",
-                    s.commands, s.renders, s.saves, s.calls, s.mains, s.controls, s.events, s.dumps, s.ops
+                    s.commands,
+                    s.renders,
+                    s.saves,
+                    s.calls,
+                    s.mains,
+                    s.controls,
+                    s.events,
+                    s.dumps,
+                    s.ops
                 );
                 total.commands += s.commands;
                 total.renders += s.renders;

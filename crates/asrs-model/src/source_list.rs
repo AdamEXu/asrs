@@ -449,10 +449,7 @@ impl SourceList {
     fn restore_item(&self, raw: &JsValue) -> Result<SourceListItemState> {
         let type_value = raw.get("type");
         let item_type = type_value.and_then(|t| t.as_str()).cloned();
-        let Some(type_config) = item_type
-            .as_ref()
-            .and_then(|t| self.type_config(t))
-        else {
+        let Some(type_config) = item_type.as_ref().and_then(|t| self.type_config(t)) else {
             return Err(SourceListError::UnknownType(JsString::from(js_label(
                 type_value,
             ))));
