@@ -17,7 +17,6 @@ use asrs_log::log::Log;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{self, Session};
-use asrs_parity::vectors;
 
 use asrs_live::nt4::NetEvent;
 use support::{Driver, Env, js_arg, js_value};
@@ -317,37 +316,17 @@ pub fn replay(id: &str, session: &Session) -> Result<usize, String> {
         .and_then(Json::as_str)
         .map(|s| s.to_string_lossy())
         .unwrap_or_default();
-    let trace = support::run(session, |env| -> Box<dyn Driver> {
+    let produced = support::run(session, |env| -> Box<dyn Driver> {
         match source.as_str() {
             "nt4-client" => Box::new(client_driver(session)),
             "nt4" => Box::new(nt4_drivers::SourceDriver::new(session, env)),
-            "nt4-publisher" => Box::new(nt4_drivers::PublisherDriver::new(session, env)),
+            "nt4-publisher" => {
+                panic!("nt4-publisher sessions replay in asrs-model's publisher_sessions test")
+            }
             other => panic!("{other} is not an NT4 source"),
         }
     })?;
-    let expected: Vec<String> = vectors::load(id)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|r| r.text)
-        .collect();
-    let produced: Vec<String> = trace;
-    if let Some(i) =
-        (0..expected.len().max(produced.len())).find(|&i| expected.get(i) != produced.get(i))
-    {
-        let context = |lines: &[String]| {
-            lines[i.saturating_sub(3)..(i + 1).min(lines.len())]
-                .iter()
-                .map(|l| format!("    {}", &l[..l.len().min(400)]))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-        return Err(format!(
-            "{id}: line {i} differs\n  oracle:\n{}\n  port:\n{}",
-            context(&expected),
-            context(&produced)
-        ));
-    }
-    Ok(produced.len())
+    support::check_trace(id, produced)
 }
 
 fn nt4_sessions() -> Vec<(String, Session)> {
@@ -355,7 +334,12 @@ fn nt4_sessions() -> Vec<(String, Session)> {
         .into_iter()
         .filter_map(|path| {
             let session = Session::load(&path).unwrap_or_else(|e| panic!("{e}"));
-            (session.protocol == "nt4").then(|| (live::vector_id(&path), session))
+            let is_publisher = session
+                .client
+                .get("source")
+                .and_then(Json::as_str)
+                .is_some_and(|s| s.to_string_lossy() == "nt4-publisher");
+            (session.protocol == "nt4" && !is_publisher).then(|| (live::vector_id(&path), session))
         })
         .collect()
 }

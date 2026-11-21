@@ -1103,8 +1103,7 @@ impl Nt4Client {
         }
         if let Some(i) = self.abort_timers.iter().position(|(t, _)| *t == id) {
             let (_, request) = self.abort_timers.remove(i);
-            if self.requests.iter().any(|r| r.id == request) {
-                cx.net.fetch_abort(request);
+            if self.requests.iter().any(|r| r.id == request) && cx.net.fetch_abort(request) {
                 self.request_rejected(request, cx);
             }
             return Some(Ok(()));

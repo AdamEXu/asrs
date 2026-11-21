@@ -19,6 +19,7 @@ use asrs_log::realm::JsRealm;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::live::{ClientEvent, Payload, ServerEvent, ServerHost, Session, trace_line};
+use asrs_parity::vectors;
 
 #[path = "../../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code, clippy::all)]
@@ -101,6 +102,19 @@ fn href(url: &str) -> String {
     } else {
         format!("{url}/")
     }
+}
+
+/// Whether `new URL(url)` throws; special schemes reject an empty host, so a robot publisher
+/// with no preferences produces "http://:5810" whose reply settles but never resolves
+/// upstream (`request.done` is already true, so even the abort is silent).
+fn url_throws(url: &str) -> bool {
+    let Some((_, rest)) = url.split_once("://") else {
+        return true;
+    };
+    rest.split('/')
+        .next()
+        .and_then(|authority| authority.split(':').next())
+        .is_none_or(str::is_empty)
 }
 
 impl FakeNet {
@@ -211,6 +225,7 @@ impl FakeNet {
                 Some(r) if !r.done => {
                     r.done = true;
                     match status {
+                        Some(_) if url_throws(&r.url) => Vec::new(),
                         Some(status) => {
                             vec![NetEvent::FetchResponse(
                                 RequestId(id),
@@ -302,15 +317,16 @@ impl Nt4Transport for FakeNet {
         RequestId(id)
     }
 
-    fn fetch_abort(&mut self, id: RequestId) {
+    fn fetch_abort(&mut self, id: RequestId) -> bool {
         let Some(request) = self.requests.get_mut(&id.0) else {
-            return;
+            return false;
         };
         if request.done {
-            return;
+            return false;
         }
         request.done = true;
         self.send_to_server(ClientEvent::HttpAbort { id: id.0 });
+        true
     }
 }
 
@@ -430,6 +446,32 @@ pub fn run(
     }
     driver.finish(&mut env);
     Ok(trace.lines())
+}
+
+/// Loads the session's committed vector and checks `produced` against it, line for line.
+pub fn check_trace(id: &str, produced: Vec<String>) -> Result<usize, String> {
+    let expected: Vec<String> = vectors::load(id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|r| r.text)
+        .collect();
+    if let Some(i) =
+        (0..expected.len().max(produced.len())).find(|&i| expected.get(i) != produced.get(i))
+    {
+        let context = |lines: &[String]| {
+            lines[i.saturating_sub(3)..(i + 1).min(lines.len())]
+                .iter()
+                .map(|l| format!("    {}", &l[..l.len().min(400)]))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        return Err(format!(
+            "{id}: line {i} differs\n  oracle:\n{}\n  port:\n{}",
+            context(&expected),
+            context(&produced)
+        ));
+    }
+    Ok(produced.len())
 }
 
 pub fn js_arg(json: &Json) -> Result<asrs_js::value::JsValue, Thrown> {
