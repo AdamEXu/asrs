@@ -255,9 +255,10 @@ impl Frustum {
 
     fn intersects_sphere(&self, sphere: Sphere) -> bool {
         let neg_radius = -sphere.radius;
-        self.planes
+        !self
+            .planes
             .iter()
-            .all(|(normal, constant)| !(normal.dot(sphere.center) + constant < neg_radius))
+            .any(|(normal, constant)| normal.dot(sphere.center) + constant < neg_radius)
     }
 }
 
