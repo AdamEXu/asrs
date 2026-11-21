@@ -1,0 +1,909 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../assets/field3d.json",
+  "../logs/field3d-time.json"
+ ],
+ "fixture": {
+  "seed": 1011,
+  "assets": "../assets/field3d.json",
+  "steps": [
+   {
+    "log": "../logs/field3d-time.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"robot\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}},{\"type\":\"ghost\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"model\":\"GhostBot\",\"color\":\"#00ff00\"}},{\"type\":\"gamePiece\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"Fuel\"}},{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"16h5-6in\"}},{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"36h11-6.5in\"}}])"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     3
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "frc-2026"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FTC:2026"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "ftc-2026"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FRC:Axes"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "frc-axes"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FRC:2026"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "frc-2026-again"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "nope"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "unknown-field"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FTC:Evergreen"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "ftc-evergreen"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "change-without-value"
+   },
+   {
+    "main": "set-assets",
+    "data": {
+     "field2ds": [],
+     "field3ds": [
+      {
+       "name": "2026 Field",
+       "path": "bundledAssets/Field3d_2026FRCFieldV1/model.glb",
+       "id": "FRC:2026",
+       "isFTC": false,
+       "coordinateSystem": "center-red",
+       "useGrid": false,
+       "rotations": [],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "widthInches": 651.22,
+       "heightInches": 317.69,
+       "driverStations": [
+        [
+         -8.1,
+         1.9
+        ],
+        [
+         -8.1,
+         0
+        ],
+        [
+         -8.1,
+         -1.9
+        ],
+        [
+         8.1,
+         1.9
+        ],
+        [
+         8.1,
+         0
+        ],
+        [
+         8.1,
+         -1.9
+        ]
+       ],
+       "gamePieces": [
+        {
+         "name": "Note",
+         "position": [
+          0.25,
+          0,
+          0
+         ],
+         "rotations": [],
+         "stagedObjects": []
+        },
+        {
+         "name": "Fuel",
+         "position": [
+          0.1,
+          0,
+          0
+         ],
+         "rotations": [
+          {
+           "axis": "y",
+           "degrees": 90
+          }
+         ],
+         "stagedObjects": []
+        }
+       ],
+       "aprilTags": [
+        {
+         "variant": "36h11-6.5in",
+         "id": 3,
+         "position": [
+          1,
+          2,
+          0.25
+         ],
+         "rotations": [
+          {
+           "axis": "z",
+           "degrees": 45
+          }
+         ]
+        },
+        {
+         "variant": "36h11-6.5in",
+         "id": 4,
+         "position": [
+          2,
+          3,
+          0.25
+         ],
+         "rotations": []
+        },
+        {
+         "variant": "16h5-6in",
+         "id": 7,
+         "position": [
+          3,
+          1,
+          0.5
+         ],
+         "rotations": [
+          {
+           "axis": "x",
+           "degrees": 90
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "2026 FTC Field",
+       "path": "bundledAssets/Field3d_2026FTCField/model.glb",
+       "id": "FTC:2026",
+       "isFTC": true,
+       "coordinateSystem": "center-red",
+       "useGrid": true,
+       "rotations": [],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "widthInches": 141.73,
+       "heightInches": 141.73,
+       "driverStations": [
+        [
+         -1.8,
+         0
+        ],
+        [
+         1.8,
+         0
+        ]
+       ],
+       "gamePieces": [
+        {
+         "name": "Sample",
+         "position": [
+          0.05,
+          0,
+          0
+         ],
+         "rotations": [],
+         "stagedObjects": []
+        }
+       ],
+       "aprilTags": []
+      },
+      {
+       "name": "Wall FTC",
+       "path": "bundledAssets/Field3d_2026FTCField/model.glb",
+       "id": "FTC:Wall",
+       "isFTC": true,
+       "coordinateSystem": "wall-blue",
+       "useGrid": true,
+       "rotations": [],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "widthInches": 141.73,
+       "heightInches": 141.73,
+       "driverStations": [
+        [
+         -1.8,
+         0
+        ],
+        [
+         1.8,
+         0
+        ]
+       ],
+       "gamePieces": [],
+       "aprilTags": [
+        {
+         "variant": "36h11-2in",
+         "id": 1,
+         "position": [
+          0.5,
+          0.5,
+          0.1
+         ],
+         "rotations": [
+          {
+           "axis": "y",
+           "degrees": -90
+          }
+         ]
+        },
+        {
+         "variant": "36h11-4in",
+         "id": 2,
+         "position": [
+          0.5,
+          -0.5,
+          0.1
+         ],
+         "rotations": []
+        },
+        {
+         "variant": "36h11-2in",
+         "id": 586,
+         "position": [
+          -0.5,
+          0.5,
+          0.1
+         ],
+         "rotations": [
+          {
+           "axis": "z",
+           "degrees": 180
+          },
+          {
+           "axis": "x",
+           "degrees": 30
+          }
+         ]
+        }
+       ]
+      }
+     ],
+     "robots": [
+      {
+       "name": "KitBot",
+       "path": "bundledAssets/Robot_KitBot/model.glb",
+       "isFTC": false,
+       "disableSimplification": false,
+       "rotations": [
+        {
+         "axis": "z",
+         "degrees": 90
+        }
+       ],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "cameras": [],
+       "components": [
+        {
+         "name": "Arm",
+         "zeroedPosition": [
+          0.2,
+          0,
+          0.4
+         ],
+         "zeroedRotations": [],
+         "disabledRotations": []
+        }
+       ]
+      },
+      {
+       "name": "GhostBot",
+       "path": "bundledAssets/Robot_GhostBot/model.glb",
+       "isFTC": false,
+       "disableSimplification": false,
+       "rotations": [],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "cameras": [],
+       "components": []
+      },
+      {
+       "name": "FTCBot",
+       "path": "bundledAssets/Robot_FTCBot/model.glb",
+       "isFTC": true,
+       "disableSimplification": false,
+       "rotations": [],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "cameras": [],
+       "components": []
+      },
+      {
+       "name": "FTCBot2",
+       "path": "bundledAssets/Robot_FTCBot/model.glb",
+       "isFTC": true,
+       "disableSimplification": false,
+       "rotations": [],
+       "position": [
+        0,
+        0,
+        0
+       ],
+       "cameras": [],
+       "components": []
+      }
+     ],
+     "joysticks": [],
+     "loadFailures": []
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "new-assets"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FTC:Wall"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "ftc-wall"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FRC:2026"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "frc-center"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 0,
+     "props": {
+      "value": "FTC:Wall"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "default-tab-changed"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "coordinateSystem": "wall-alliance",
+     "prefersFTC": false
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "pref-wall-alliance"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FTC:Wall"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "ftc-wall-fixed"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "coordinateSystem": "automatic",
+     "prefersFTC": true
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "pref-automatic"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FTC:2026"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "ftc-2026-automatic"
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "b-prefers-ftc"
+   },
+   {
+    "eval": "window.tabs.setSelected(1)"
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"robot\",\"logKey\":\"/Pose3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}},{\"type\":\"ghost\",\"logKey\":\"/Poses3d\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"model\":\"GhostBot\",\"color\":\"#00ff00\"}}])"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "c-spliced"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 1,
+     "props": {
+      "value": "FRC:Evergreen"
+     }
+    }
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     5
+    ]
+   },
+   {
+    "eval": "window.tabs.setSelected(3)"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "a-by-creation-order"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 3,
+     "props": {
+      "value": "FTC:Axes"
+     }
+    }
+   },
+   {
+    "eval": "window.tabs.setSelected(2)"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "c-by-creation-order"
+   },
+   {
+    "main": "shift-tab",
+    "data": 1
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "c-shifted"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 2,
+     "props": {
+      "value": "FRC:Axes"
+     }
+    }
+   },
+   {
+    "eval": "window.tabs.setSelected(4)"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "b-after-shift"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .field-select",
+     "type": "change",
+     "index": 4,
+     "props": {
+      "value": "FRC:Axes"
+     }
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "template-select"
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "click",
+     "index": 0
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "click",
+     "index": 1
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "click",
+     "index": 3
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "click",
+     "index": 4
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "keydown",
+     "index": 2,
+     "init": {
+      "key": "Enter",
+      "code": "Enter"
+     }
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "keydown",
+     "index": 2,
+     "kind": "KeyboardEvent",
+     "init": {
+      "key": "Enter",
+      "code": "Enter"
+     }
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "keydown",
+     "index": 3,
+     "kind": "KeyboardEvent",
+     "init": {
+      "key": " ",
+      "code": "Space"
+     }
+    }
+   },
+   {
+    "event": {
+     "target": ".field-3d-settings .xr-button",
+     "type": "keydown",
+     "index": 1,
+     "kind": "KeyboardEvent",
+     "init": {
+      "key": "a",
+      "code": "KeyA"
+     }
+    }
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.setXRActive(true)"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "xr"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[],\"game\":\"\"})"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "restore-empty-game"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"game\":\"FTC:Wall\"})"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "restore-game-only"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"16h5-6in\"}},{\"type\":\"aprilTag\",\"logKey\":\"/Tags\",\"logType\":\"Pose3d[]\",\"visible\":true,\"options\":{\"variant\":\"36h11-6.5in\"}}],\"game\":\"gone\"})"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "restore-unknown-game"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"game\":5})"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "restore-number-game"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(null)"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "restore-null"
+   },
+   {
+    "main": "set-assets",
+    "data": {
+     "field2ds": [],
+     "field3ds": [],
+     "robots": [],
+     "joysticks": [],
+     "loadFailures": []
+    }
+   },
+   {
+    "frames": 2
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "empty-assets"
+   }
+  ]
+ }
+}
