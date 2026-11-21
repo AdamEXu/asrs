@@ -17,6 +17,7 @@
 mod js_json;
 
 use std::cell::{Cell, Ref, RefCell};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -27,7 +28,7 @@ use asrs_js::time::{Clock, Rng, create_uuid};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
-use asrs_model::assets::{AdvantageScopeAssets, Parsed, parse_joystick};
+use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
@@ -44,6 +45,7 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
+use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use asrs_tabs::mechanism::MechanismController;
@@ -317,10 +319,25 @@ fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
     )
 }
 
+fn field_2d_container_el(hidden: bool, pos: usize) -> ElDesc {
+    el(
+        "div",
+        &["field-2d-canvas-container"],
+        false,
+        1,
+        root_el(hidden, pos),
+    )
+}
+
+fn field_2d_scroll_el(hidden: bool, pos: usize) -> ElDesc {
+    el("div", &["field-2d-scroll"], false, 2, root_el(hidden, pos))
+}
+
 #[derive(Clone)]
 enum DomKind {
     Table(Rc<RefCell<TableDom>>),
     Console(Rc<RefCell<ConsoleDom>>),
+    Field2d(Rc<RefCell<Field2dDom>>),
     Other,
 }
 
@@ -379,6 +396,7 @@ fn recorded_command(renderer: &dyn TabRenderer<Host>) -> Option<Rc<RefCell<Optio
         TableRenderer,
         ConsoleRenderer,
         MetadataRenderer,
+        Field2dRenderer,
         PendingRenderer,
         StubRenderer
     );
@@ -504,6 +522,18 @@ impl TabFactory<Host> for Factory {
                     slot,
                 }),
             },
+            Some(TabType::Field2d) => {
+                let dom = Rc::new(RefCell::new(Field2dDom::default()));
+                self.doms.borrow_mut().last_mut().unwrap().1 = DomKind::Field2d(dom.clone());
+                TabParts {
+                    uuid: uuid.clone(),
+                    controller: Box::new(Field2dController::new(cx)),
+                    renderer: Box::new(Recorder {
+                        inner: Field2dRenderer::new(dom),
+                        slot,
+                    }),
+                }
+            }
             Some(
                 kind
                 @ (TabType::Joysticks | TabType::Swerve | TabType::Mechanism | TabType::Points),
@@ -538,7 +568,7 @@ impl TabFactory<Host> for Factory {
                 // owns, after its own UUID.
                 let source_lists = match other {
                     Some(TabType::LineGraph) => 3,
-                    Some(TabType::Field2d | TabType::Field3d | TabType::Statistics) => 1,
+                    Some(TabType::Field3d | TabType::Statistics) => 1,
                     _ => 0,
                 };
                 for _ in 0..source_lists {
@@ -587,6 +617,10 @@ impl TabCx for Host {
         self.preferences.as_ref()
     }
 
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
+        self.preferences.as_mut()
+    }
+
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
         self.assets.as_ref()
     }
@@ -615,10 +649,9 @@ impl SourceListCx for Host {
     }
 }
 
-/// `window.assets = message.data`, parsed into the typed assets controllers read. Only
-/// joysticks are converted so far: no ported controller reads the other kinds, so one that
-/// starts to sees empty lists and mismatches until this converts them. Load failures, whose
-/// alert belongs to D07's hub lifecycle, fail the run.
+/// `window.assets = message.data`, parsed into the typed assets controllers read. An entry
+/// the config parsers drop, and load failures (whose alert belongs to D07's hub lifecycle),
+/// fail the run.
 fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String> {
     let JsValue::Object(o) = data else {
         return match data {
@@ -627,28 +660,24 @@ fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String
         };
     };
     let list = |key: &str| match o.get(key) {
-        Some(JsValue::Array(items)) => Ok(items.clone()),
+        Some(JsValue::Array(items)) => Ok(items.len()),
         _ => Err(format!("set-assets without a {key} array is not modeled")),
     };
-    for key in ["field2ds", "field3ds", "robots"] {
-        list(key)?;
-    }
-    if !list("loadFailures")?.is_empty() {
+    if list("loadFailures")? > 0 {
         return Err("set-assets with load failures is not modeled".to_owned());
     }
-    let joysticks = list("joysticks")?
-        .iter()
-        .map(|raw| match parse_joystick(raw) {
-            Ok(Parsed::Config(j)) => Ok(j),
-            other => Err(format!(
-                "set-assets joystick {raw:?} does not parse: {other:?}"
-            )),
-        })
-        .collect::<Result<_, _>>()?;
-    Ok(Some(AdvantageScopeAssets {
-        joysticks,
-        ..AdvantageScopeAssets::default()
-    }))
+    let assets = AdvantageScopeAssets::from_js(data);
+    for (key, parsed) in [
+        ("field2ds", assets.field2ds.len()),
+        ("field3ds", assets.field3ds.len()),
+        ("robots", assets.robots.len()),
+        ("joysticks", assets.joysticks.len()),
+    ] {
+        if list(key)? != parsed {
+            return Err(format!("set-assets {key} has an entry that does not parse"));
+        }
+    }
+    Ok(Some(assets))
 }
 
 fn type_memory_from_js(data: &JsValue) -> Result<SourceListTypeMemory, String> {
@@ -751,6 +780,8 @@ struct Runner {
     sidebar_width: f64,
     sidebar_expanded: Vec<JsString>,
     ignored: Vec<String>,
+    device_pixel_ratio: f64,
+    images: HashMap<JsString, [f64; 2]>,
 }
 
 impl Runner {
@@ -810,6 +841,15 @@ impl Runner {
                     dom.container = self.layout.rect_of(&console_container_el(hidden, pos));
                     dom.scroll_height = asrs_js::math::round(dom.container.height);
                 }
+                DomKind::Field2d(dom) => {
+                    let mut dom = dom.borrow_mut();
+                    let container = self.layout.rect_of(&field_2d_container_el(hidden, pos));
+                    let scroll = self.layout.rect_of(&field_2d_scroll_el(hidden, pos));
+                    dom.container = [container.x, container.y, container.width, container.height];
+                    dom.scroll_container = [scroll.x, scroll.y, scroll.width, scroll.height];
+                    dom.device_pixel_ratio = self.device_pixel_ratio;
+                    dom.images = self.images.clone();
+                }
                 DomKind::Other => {}
             }
         }
@@ -842,6 +882,17 @@ impl Runner {
         self.host.renderer_top = self.renderer_top();
         self.tagged_tables.clear();
         self.sync_dom();
+        for i in 0..self.tabs.len() {
+            let index = JsValue::Number(i as f64);
+            if let Some(r) = self
+                .tabs
+                .renderer_mut(&index)
+                .ok()
+                .and_then(|r| r.downcast_mut::<Recorder<Field2dRenderer>>())
+            {
+                r.inner.flush_image_loads();
+            }
+        }
         let out = self.tabs.periodic(&mut self.host);
         if let Some(e) = out.error {
             self.frame_loop_dead = true;
@@ -1437,10 +1488,6 @@ fn skippable(record: &Record) -> bool {
         || record.field("sourceLists").is_some()
         || record.field("measure").is_some()
         || record.field("tuner").is_some()
-        || record
-            .field("main")
-            .and_then(Json::as_str)
-            .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
 }
 
 fn selection_step(
@@ -1527,6 +1574,27 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     let live_time: Rc<Cell<Option<f64>>> = Rc::new(Cell::new(None));
     let log = Rc::new(RefCell::new(Log::new(true)));
     let selection = SelectionImpl::new(log.clone(), Rc::new(ScriptedClock(clock_cell.clone())));
+    let theme_dark = window
+        .and_then(|w| w.get("theme"))
+        .and_then(Json::as_str)
+        .is_some_and(|t| t.to_string_lossy() == "dark");
+    let device_pixel_ratio = wnum("devicePixelRatio", 1.0);
+    let mut images = HashMap::new();
+    if let Some(Json::Object(map)) = fixture.get("images") {
+        for (src, size) in map {
+            if let Some(pair) = size.as_array()
+                && pair.len() == 2
+            {
+                images.insert(
+                    JsString::from(src.to_string_lossy()),
+                    [
+                        pair[0].as_f64().unwrap_or(0.0),
+                        pair[1].as_f64().unwrap_or(0.0),
+                    ],
+                );
+            }
+        }
+    }
     let mut host = Host {
         log: log.clone(),
         selection,
@@ -1538,7 +1606,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         assets_raw: JsValue::Null,
         assets: None,
         type_memory: SourceListTypeMemory::new(),
-        dark: false,
+        dark: theme_dark,
     };
     // Boot `set-assets`: `window.assets` is assigned before any controller exists, so
     // `tabs.newAssets()` at boot only reaches the stub tab.
@@ -1639,6 +1707,8 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         sidebar_width: 300.0,
         sidebar_expanded: Vec::new(),
         ignored,
+        device_pixel_ratio,
+        images,
     };
 
     // `fixture.state` boots through `restore-state`.
@@ -1863,6 +1933,15 @@ impl Runner {
             }
             "restore-type-memory" => {
                 self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
+            }
+            "set-2d-camera" => {
+                if let Some(r) = self
+                    .tabs
+                    .selected_renderer_as::<Recorder<Field2dRenderer>>(TabType::Field2d)?
+                {
+                    r.inner
+                        .set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN));
+                }
             }
             "set-version"
             | "set-fullscreen"
@@ -2438,6 +2517,16 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     let records = vectors::load(vector_id)?;
     let mut expected = records.iter().peekable();
     let mut skipped = 0;
+    // The Field3d controller is still a stub, so its coordinate-system warnings have no
+    // port side yet.
+    let stub_warning = |record: &Record| {
+        vector_id.ends_with("/field-3d")
+            && record
+                .field("main")
+                .and_then(Json::as_str)
+                .is_some_and(|m| m.to_string_lossy().ends_with("coordinate-system-warning"))
+    };
+    let skippable = |record: &Record| skippable(record) || stub_warning(record);
     for emit in &emitted {
         while let Some(record) = expected.peek() {
             if skippable(record) {

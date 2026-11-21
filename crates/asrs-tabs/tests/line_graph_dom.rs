@@ -261,6 +261,11 @@ impl TabCx for Host {
     fn tab_preferences(&self) -> Option<&Preferences> {
         Some(&self.preferences)
     }
+
+    fn tab_preferences_mut(&mut self) -> Option<&mut Preferences> {
+        Some(&mut self.preferences)
+    }
+
     fn tab_rng(&mut self) -> &mut dyn Rng {
         &mut self.rng
     }
