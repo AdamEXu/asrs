@@ -759,6 +759,21 @@ renderer and controls at a selected time and again while hovering), `dom/hub/sel
 (timeline hover and click, playback, step, zoom, sidebar expand, collapse and search) and
 `dom/canvas/fixed-advance`.
 
+### Tabs model
+
+`dom/tabs-model/<case>` (`crates/asrs-hub/tests/tabs_dom.rs`) drives `Tabs` through main messages,
+tab-bar and controls-handle events and restores of well-formed and malformed states. Until the
+controllers and renderers are ported the port runs with stub halves, so each fixture's first
+step is a `/*tabs:recorder*/` eval that wraps `window.tabs.addTab` to list every created tab
+(with its creation-time UUID) and log its `restoreState` calls, plus each Table renderer's
+`getTimestampRange` results and Table controller's `addRendererRange` calls, which
+`/*tabs:ranges*/` drains along with the renderer UUIDs. Every capture then starts with
+`/*tabs:info*/`, which reports per created tab what its controller and renderer save, its
+`showTimeline()` and active fields; the stubs answer from it. The other evals compare what
+`Tabs` owns: `window.tabs.saveState()`, `/*tabs:view*/` (tab bar classes and text, hidden flags,
+CSS variables, drag highlight and item), `/*tabs:restores*/` and `[...window.tabs.getActiveFields()]`.
+`/*tabs:tag*/` sets `data-i` on the title elements so layout rules can place them.
+
 ### Source lists
 
 With `"sourceLists": true` (`src/dom/sourceLists.ts`) the run records what the port's
