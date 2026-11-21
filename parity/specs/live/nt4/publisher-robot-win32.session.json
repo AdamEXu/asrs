@@ -1,0 +1,25 @@
+{
+  "protocol": "nt4",
+  "seed": 7812,
+  "latencyMs": 2,
+  "endMs": 1900,
+  "client": {
+    "source": "nt4-publisher",
+    "mode": "robot",
+    "platform": "win32"
+  },
+  "server": {
+    "version": "4.1",
+    "offsetUs": 1000000
+  },
+  "steps": [
+    { "t": 0, "client": ["log", "putNumber", "NT:/Data/x", 1, 1] },
+    { "t": 0, "client": ["prefs", { "systemcoreStaticAddress": "usb" }] },
+    { "t": 0, "client": ["connect"] },
+    { "t": 700, "client": ["prefs", { "systemcoreStaticAddress": "wifi" }] },
+    { "t": 700, "client": ["connect"] },
+    { "t": 1400, "client": ["prefs", { "systemcoreStaticAddress": "" }] },
+    { "t": 1400, "client": ["connect"] },
+    { "t": 1800, "client": ["stop"] }
+  ]
+}
