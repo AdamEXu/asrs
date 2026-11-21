@@ -81,7 +81,7 @@ pub fn merge_geometries(
     Ok(merged)
 }
 
-/// `BufferGeometryUtils.mergeAttributes` for non-interleaved attributes.
+/// `BufferGeometryUtils.mergeAttributes`. The result is never interleaved.
 pub fn merge_attributes(attributes: &[&BufferAttribute]) -> Option<BufferAttribute> {
     let first = attributes.first()?;
     let kind = first.array.kind();
@@ -90,6 +90,7 @@ pub fn merge_attributes(attributes: &[&BufferAttribute]) -> Option<BufferAttribu
         if attribute.array.kind() != kind
             || attribute.item_size != first.item_size
             || attribute.normalized != first.normalized
+            || attribute.interleaved != first.interleaved
         {
             return None;
         }
