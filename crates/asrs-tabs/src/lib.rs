@@ -1,6 +1,7 @@
 pub mod ansi;
 pub mod console;
 pub mod cx;
+pub mod field_2d;
 pub mod heatmap;
 pub mod line_graph;
 pub mod list_cx;

@@ -1352,6 +1352,45 @@ impl ConfigJoystick {
 }
 
 impl AdvantageScopeAssets {
+    /// `window.assets = message.data`: the hub stores what `set-assets` carried. Each config
+    /// arrives as `loadAssets` produced it, so re-parsing keeps every entry that is a config.
+    pub fn from_js(value: &JsValue) -> AdvantageScopeAssets {
+        fn configs<T>(
+            value: &JsValue,
+            key: &str,
+            parse: fn(&JsValue) -> ParseResult<T>,
+        ) -> Vec<T> {
+            let mut out = Vec::new();
+            if let Some(raw) = value.get(key)
+                && let Some(items) = raw.as_array()
+            {
+                for item in items {
+                    if let Ok(Parsed::Config(config)) = parse(item) {
+                        out.push(config);
+                    }
+                }
+            }
+            out
+        }
+        let mut load_failures = Vec::new();
+        if let Some(raw) = value.get("loadFailures")
+            && let Some(items) = raw.as_array()
+        {
+            for item in items {
+                if let Some(s) = item.as_str() {
+                    load_failures.push(s.clone());
+                }
+            }
+        }
+        AdvantageScopeAssets {
+            field2ds: configs(value, "field2ds", parse_field_2d),
+            field3ds: configs(value, "field3ds", parse_field_3d),
+            robots: configs(value, "robots", parse_robot),
+            joysticks: configs(value, "joysticks", parse_joystick),
+            load_failures,
+        }
+    }
+
     pub fn to_js(&self) -> JsValue {
         let mut o = JsObject::new();
         o.insert(

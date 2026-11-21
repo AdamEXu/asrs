@@ -25,7 +25,7 @@ use asrs_hub::tabs::{TabFactory, TabParts, Tabs, TabsHost};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng, create_uuid};
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
 use asrs_model::assets::AdvantageScopeAssets;
@@ -34,6 +34,7 @@ use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_model::source_list::Rect;
+use asrs_model::source_list_config::SourceListTypeMemory;
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -42,6 +43,8 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
+use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
+use asrs_tabs::list_cx::{ListParts, SourceListCx};
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 
@@ -310,10 +313,25 @@ fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
     )
 }
 
+fn field_2d_container_el(hidden: bool, pos: usize) -> ElDesc {
+    el(
+        "div",
+        &["field-2d-canvas-container"],
+        false,
+        1,
+        root_el(hidden, pos),
+    )
+}
+
+fn field_2d_scroll_el(hidden: bool, pos: usize) -> ElDesc {
+    el("div", &["field-2d-scroll"], false, 2, root_el(hidden, pos))
+}
+
 #[derive(Clone)]
 enum DomKind {
     Table(Rc<RefCell<TableDom>>),
     Console(Rc<RefCell<ConsoleDom>>),
+    Field2d(Rc<RefCell<Field2dDom>>),
     Other,
 }
 
@@ -460,6 +478,18 @@ impl TabFactory<Host> for Factory {
                     slot,
                 }),
             },
+            Some(TabType::Field2d) => {
+                let dom = Rc::new(RefCell::new(Field2dDom::default()));
+                self.doms.borrow_mut().last_mut().unwrap().1 = DomKind::Field2d(dom.clone());
+                TabParts {
+                    uuid: uuid.clone(),
+                    controller: Box::new(Field2dController::new(cx)),
+                    renderer: Box::new(Recorder {
+                        inner: Field2dRenderer::new(dom),
+                        slot,
+                    }),
+                }
+            }
             other => {
                 let timeline = !matches!(
                     other,
@@ -476,8 +506,7 @@ impl TabFactory<Host> for Factory {
                 let source_lists = match other {
                     Some(TabType::LineGraph) => 3,
                     Some(
-                        TabType::Field2d
-                        | TabType::Field3d
+                        TabType::Field3d
                         | TabType::Statistics
                         | TabType::Swerve
                         | TabType::Mechanism
@@ -505,6 +534,10 @@ struct Host {
     log: Rc<RefCell<Log>>,
     selection: SelectionImpl,
     preferences: Option<Preferences>,
+    assets: Option<AdvantageScopeAssets>,
+    assets_raw: JsValue,
+    type_memory: SourceListTypeMemory,
+    dark: bool,
     rng: DomRng,
     inner_height: f64,
     renderer_top: f64,
@@ -525,7 +558,7 @@ impl TabCx for Host {
     }
 
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
-        None
+        self.assets.as_ref()
     }
 
     fn tab_rng(&mut self) -> &mut dyn Rng {
@@ -534,6 +567,21 @@ impl TabCx for Host {
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         self.messages.push(message);
+    }
+}
+
+impl SourceListCx for Host {
+    fn tab_dark(&self) -> bool {
+        self.dark
+    }
+
+    fn list_parts(&mut self) -> ListParts<'_> {
+        ListParts {
+            log: self.log.borrow(),
+            type_memory: &mut self.type_memory,
+            selection: &mut self.selection,
+            dark: self.dark,
+        }
     }
 }
 
@@ -618,6 +666,8 @@ struct Runner {
     sidebar_width: f64,
     sidebar_expanded: Vec<JsString>,
     ignored: Vec<String>,
+    device_pixel_ratio: f64,
+    images: HashMap<JsString, [f64; 2]>,
 }
 
 impl Runner {
@@ -677,6 +727,15 @@ impl Runner {
                     dom.container = self.layout.rect_of(&console_container_el(hidden, pos));
                     dom.scroll_height = asrs_js::math::round(dom.container.height);
                 }
+                DomKind::Field2d(dom) => {
+                    let mut dom = dom.borrow_mut();
+                    let container = self.layout.rect_of(&field_2d_container_el(hidden, pos));
+                    let scroll = self.layout.rect_of(&field_2d_scroll_el(hidden, pos));
+                    dom.container = [container.x, container.y, container.width, container.height];
+                    dom.scroll_container = [scroll.x, scroll.y, scroll.width, scroll.height];
+                    dom.device_pixel_ratio = self.device_pixel_ratio;
+                    dom.images = self.images.clone();
+                }
                 DomKind::Other => {}
             }
         }
@@ -709,6 +768,17 @@ impl Runner {
         self.host.renderer_top = self.renderer_top();
         self.tagged_tables.clear();
         self.sync_dom();
+        for i in 0..self.tabs.len() {
+            let index = JsValue::Number(i as f64);
+            if let Some(r) = self
+                .tabs
+                .renderer_mut(&index)
+                .ok()
+                .and_then(|r| r.downcast_mut::<Recorder<Field2dRenderer>>())
+            {
+                r.inner.flush_image_loads();
+            }
+        }
         let out = self.tabs.periodic(&mut self.host);
         if let Some(e) = out.error {
             self.frame_loop_dead = true;
@@ -1284,10 +1354,42 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     let live_time: Rc<Cell<Option<f64>>> = Rc::new(Cell::new(None));
     let log = Rc::new(RefCell::new(Log::new(true)));
     let selection = SelectionImpl::new(log.clone(), Rc::new(ScriptedClock(clock_cell.clone())));
+    let theme_dark = window
+        .and_then(|w| w.get("theme"))
+        .and_then(Json::as_str)
+        .is_some_and(|t| t.to_string_lossy() == "dark");
+    let device_pixel_ratio = wnum("devicePixelRatio", 1.0);
+    let mut images = HashMap::new();
+    if let Some(Json::Object(map)) = fixture.get("images") {
+        for (src, size) in map {
+            if let Some(pair) = size.as_array()
+                && pair.len() == 2
+            {
+                images.insert(
+                    JsString::from(src.to_string_lossy()),
+                    [
+                        pair[0].as_f64().unwrap_or(0.0),
+                        pair[1].as_f64().unwrap_or(0.0),
+                    ],
+                );
+            }
+        }
+    }
     let mut host = Host {
         log: log.clone(),
         selection,
         preferences: Some(Preferences::default()),
+        assets: fixture
+            .get("assets")
+            .map(|a| to_js(a).unwrap_or_default())
+            .filter(|a| matches!(a, JsValue::Object(_)))
+            .map(|a| AdvantageScopeAssets::from_js(&a)),
+        assets_raw: fixture
+            .get("assets")
+            .map(|a| to_js(a).unwrap_or_default())
+            .unwrap_or(JsValue::Null),
+        type_memory: SourceListTypeMemory::default(),
+        dark: theme_dark,
         rng: DomRng(seed),
         inner_height,
         renderer_top: 92.0,
@@ -1322,8 +1424,20 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                         .map_err(|e| err(format!("boot set-preferences: {e:?}")))?;
                     host.preferences = Some(p);
                 }
+                "set-assets" => {
+                    let data = js_json::to_js(&data).unwrap_or_default();
+                    let same = asrs_js::json::stringify(&host.assets_raw).ok().flatten()
+                        == asrs_js::json::stringify(&data).ok().flatten();
+                    if !same {
+                        host.assets_raw = data.clone();
+                        host.assets = if matches!(data, JsValue::Object(_)) {
+                            Some(AdvantageScopeAssets::from_js(&data))
+                        } else {
+                            None
+                        };
+                    }
+                }
                 "set-version"
-                | "set-assets"
                 | "set-fullscreen"
                 | "set-battery"
                 | "show-update-button"
@@ -1373,6 +1487,8 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         sidebar_width: 300.0,
         sidebar_expanded: Vec::new(),
         ignored,
+        device_pixel_ratio,
+        images,
     };
 
     // `fixture.state` boots through `restore-state`.
@@ -1587,8 +1703,46 @@ impl Runner {
                     _ => {}
                 }
             }
+            "set-assets" => {
+                let same = asrs_js::json::stringify(&self.host.assets_raw).ok().flatten()
+                    == asrs_js::json::stringify(data).ok().flatten();
+                if !same {
+                    let failures = |v: &JsValue| {
+                        truthy(&js_json::from_js(v))
+                            && v.get("loadFailures")
+                                .and_then(JsValue::as_array)
+                                .is_some_and(|f| !f.is_empty())
+                    };
+                    let old_had_failed = failures(&self.host.assets_raw);
+                    let new_had_failed = failures(data);
+                    self.host.assets_raw = data.clone();
+                    self.host.assets = if matches!(data, JsValue::Object(_)) {
+                        Some(AdvantageScopeAssets::from_js(data))
+                    } else {
+                        None
+                    };
+                    self.tabs.new_assets(&mut self.host)?;
+                    if new_had_failed && !old_had_failed {
+                        let mut data = JsObject::new();
+                        data.insert("title", "Failed to load assets".to_js());
+                        data.insert(
+                            "content",
+                            "Some asset files failed to load. Check the developer console for details.".to_js(),
+                        );
+                        self.emit_main("error", js_json::from_js(&JsValue::Object(data)));
+                    }
+                }
+            }
+            "set-2d-camera" => {
+                if let Some(r) = self
+                    .tabs
+                    .selected_renderer_as::<Recorder<Field2dRenderer>>(TabType::Field2d)?
+                {
+                    r.inner
+                        .set_2d_camera(&mut self.host, data.as_f64().unwrap_or(f64::NAN));
+                }
+            }
             "set-version"
-            | "set-assets"
             | "set-fullscreen"
             | "set-battery"
             | "show-update-button"
