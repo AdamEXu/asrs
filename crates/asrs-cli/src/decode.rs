@@ -2,20 +2,15 @@
 //! canonical CVE-1 dump for the "initial" and "full" phases, matching `oracle decode`
 //! (oracle/src/decode.ts, oracle/src/historical/dump.ts). Where upstream's worker never returns,
 //! nothing is printed and the exit code is `NEVER_COMPLETES`, the oracle's timeout. With
-//! `--initial` only the "initial" phase is printed; a partial log (WPILOG) has no "full" phase
-//! until lazy field loading is ported (unit F09).
+//! `--initial` only the "initial" phase is printed.
 
 use std::process::ExitCode;
 
-use asrs_formats::historical::HistoricalDataSource;
-use asrs_formats::worker::Abort;
 use asrs_js::string::JsString;
-use asrs_js::time::{SetClock, V8MathRandom};
-use asrs_log::log::{Log, SerializedLog};
-use asrs_log::realm::JsRealm;
+use asrs_log::log::SerializedLog;
 use asrs_parity::Value;
-use asrs_services::historical_start;
 
+use crate::historical_session::{End, Session};
 use crate::log_field::{serialized_value, string_value};
 use crate::log_run;
 
@@ -99,49 +94,37 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let mut source = HistoricalDataSource::open_file(path);
-    let mut log = Log::new(true);
-    let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
-    let files = historical_start::read_files(source.path());
-    match source.handle_main_message(
-        &mut log,
-        &mut realm,
-        files,
-        Box::new(V8MathRandom::from_entropy()),
-        Box::new(SetClock(WORKER_FROZEN_MS)),
-    ) {
-        Ok(Some(Abort::NeverReturns)) => {
-            eprintln!("{path}: upstream's worker never returns");
-            return ExitCode::from(NEVER_COMPLETES);
-        }
-        Ok(Some(Abort::Unmodeled(what))) => {
-            eprintln!("{path}: not modeled: {what}");
-            return ExitCode::from(UNMODELED);
-        }
-        Ok(_) => {}
-        Err(unported) => {
-            eprintln!("{path}: {:?} worker is not ported yet", unported.0);
-            return ExitCode::FAILURE;
-        }
-    }
-    let serialized = log.to_serialized();
-    let status = source.status().name();
+    let mut session = Session::new(false, true);
+    let root = session.open(&JsString::from(path.as_str()), &JsString::new());
     let mut out = String::new();
-    if !initial_only && source.log_is_partial() {
-        eprintln!("{path}: the full phase of a partial log needs lazy field loading (unit F09)");
-        return ExitCode::FAILURE;
-    }
-    let phases: &[&str] = if initial_only {
-        &["initial"]
-    } else {
-        &["initial", "full"]
-    };
-    for &phase in phases {
-        for line in dump_log(&serialized, phase, status, &[]) {
+    let mut dump = |session: &Session, phase: &str| {
+        let loading: Vec<JsString> = session.source(root).get_loading_fields().into_iter().collect();
+        let serialized = session.log().to_serialized();
+        for line in dump_log(&serialized, phase, session.status(root).name(), &loading) {
             out.push_str(&line);
             out.push('\n');
         }
+    };
+    let result = session.settle().map(|()| dump(&session, "initial")).and_then(|()| {
+        if initial_only {
+            return Ok(());
+        }
+        session.load_everything()?;
+        dump(&session, "full");
+        Ok(())
+    });
+    match result {
+        Ok(()) => {
+            print!("{out}");
+            ExitCode::SUCCESS
+        }
+        Err(End::NeverReturns) => {
+            eprintln!("{path}: upstream's worker never returns");
+            ExitCode::from(NEVER_COMPLETES)
+        }
+        Err(End::Unmodeled(what)) => {
+            eprintln!("{path}: not modeled: {what}");
+            ExitCode::from(UNMODELED)
+        }
     }
-    print!("{out}");
-    ExitCode::SUCCESS
 }

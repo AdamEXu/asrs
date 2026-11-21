@@ -14,6 +14,7 @@ mod oracle;
 mod pack;
 mod parity;
 mod public;
+mod sessions;
 mod tables;
 mod text;
 mod ui;
