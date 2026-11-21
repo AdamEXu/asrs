@@ -343,6 +343,7 @@ dependencies = [
  "asrs-js",
  "asrs-log",
  "asrs-parity",
+ "indexmap",
 ]
 
 [[package]]
