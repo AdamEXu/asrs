@@ -432,6 +432,29 @@ function nanFieldGlb(): Buffer {
   return b.glb();
 }
 
+// Meshes whose largest vertex distance is the nearest float32 below and above each
+// simplification limit, so the comparison and the limit arithmetic are pinned.
+function thresholdsGlb(): Buffer {
+  const b = new Builder();
+  const roots: number[] = [];
+  const f32 = new Float32Array(1);
+  const nearest = (v: number, direction: number) => {
+    f32[0] = v;
+    const bits = new Uint32Array(f32.buffer);
+    if (direction < 0 ? f32[0] >= v : f32[0] <= v) bits[0] += direction;
+    return f32[0];
+  };
+  [0.08, 0.04, 0.02, 0.08 * 0.25, 0.04 * 0.25, 0.02 * 0.25].forEach((limit, i) => {
+    for (const direction of [-1, 1]) {
+      const r = nearest(limit, direction);
+      const g = { positions: [-r, 0, 0, r, 0, 0, 0, 0, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2] };
+      roots.push(b.node({ name: `limit ${i} ${direction}`, mesh: b.mesh([prim(b, g)]) }));
+    }
+  });
+  b.json.scenes = [{ nodes: roots }];
+  return b.glb();
+}
+
 function simpleBuilder(): Builder {
   const b = new Builder();
   b.json.scenes = [{ nodes: [b.node({ name: "one", mesh: b.mesh([prim(b, blob([0, 0, 0], 0.5))]) })] }];
@@ -476,6 +499,7 @@ export function syntheticCases(): AssetCase[] {
     ...robotCases("hierarchy", hierarchy),
     ...robotCases("mixed-index", mixedIndexGlb()),
     ...robotCases("interleaved-mix", interleavedMixGlb()),
+    ...robotCases("thresholds", simpleBuilder().glb(), [thresholdsGlb()]),
     ...robotCases("big-index", bigIndexGlb())
   ];
 
@@ -502,7 +526,7 @@ export function syntheticCases(): AssetCase[] {
   ];
   cases.push({ case: "field/synthetic", kind: "field", config: JSON.stringify(field), files: [["model.glb", hexOf(fieldGlb())], ...pieceFiles] });
   cases.push({ case: "field/synthetic-ftc", kind: "field", config: JSON.stringify({ ...field, isFTC: true }), files: [["model.glb", hexOf(fieldGlb())], ...pieceFiles] });
-  cases.push({ case: "field/names", kind: "field", config: JSON.stringify({ ...field, gamePieces: [{ name: "n", rotations: [], position: [0, 0, 0], stagedObjects: ["Note_1_1", "constructor_NaN", "carpet_Area", "Note_2"] }] }), files: [["model.glb", hexOf(names)], ["model_0.glb", hexOf(materials)]] });
+  cases.push({ case: "field/names", kind: "field", config: JSON.stringify({ ...field, gamePieces: [{ name: "n", rotations: [], position: [0, 0, 0], stagedObjects: ["Note_1_1", "constructor_NaN", "carpet_Area", "Note_2", "abcde", "Tab_Name_x_y_z", "Carpet_thing", "mesh_2", "mesh_3_1", "toString_NaN", "__proto___NaN", "shared_mesh_instance_1", "multi_shared_instance_0", "cam", "camnode", "Note_1_3", "Scene"] }] }), files: [["model.glb", hexOf(names)], ["model_0.glb", hexOf(materials)]] });
   cases.push({ case: "field/geometry", kind: "field", config: JSON.stringify({ ...field, gamePieces: [] }), files: [["model.glb", hexOf(geometry)]] });
   cases.push({ case: "field/nan", kind: "field", config: JSON.stringify({ ...field, gamePieces: [] }), files: [["model.glb", hexOf(nanFieldGlb())]], modes: once });
   cases.push({ case: "field/missing-piece", kind: "field", config: JSON.stringify(field), files: [["model.glb", hexOf(fieldGlb())], ["model_0.glb", hexOf(pieceGlb(false))]], modes: once });
