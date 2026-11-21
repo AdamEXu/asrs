@@ -257,7 +257,7 @@ impl Reader {
                 loop {
                     let line = self.until(b"\r\n").await?;
                     let size = std::str::from_utf8(&line).ok()?;
-                    let size = size.split(';').next()?.trim();
+                    let size = size.split(';').next()?.trim_ascii();
                     let size = usize::from_str_radix(size, 16).ok()?;
                     if size == 0 {
                         return Some(body);
@@ -340,17 +340,21 @@ fn framing(head: &[u8]) -> Framing {
         let Some((name, value)) = line.split_once(':') else {
             continue;
         };
-        let value = value.trim();
+        let value = value.trim_ascii();
         if name.eq_ignore_ascii_case("transfer-encoding")
             && value
                 .rsplit(',')
                 .next()
-                .is_some_and(|v| v.trim().eq_ignore_ascii_case("chunked"))
+                .is_some_and(|v| v.trim_ascii().eq_ignore_ascii_case("chunked"))
         {
             return Framing::Chunked;
         }
         if name.eq_ignore_ascii_case("content-length")
-            && let Ok(n) = value.parse()
+            && !value.is_empty()
+            && value.bytes().all(|b| b.is_ascii_digit())
+            && let Some(n) = value.bytes().try_fold(0usize, |n, b| {
+                n.checked_mul(10)?.checked_add(usize::from(b - b'0'))
+            })
         {
             framing = Framing::Length(n);
         }

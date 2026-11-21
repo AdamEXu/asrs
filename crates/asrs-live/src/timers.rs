@@ -87,7 +87,11 @@ impl TimerQueue {
         self.timers.push(Timer {
             id,
             due: self.clock.now() + delay,
-            repeat: repeat.then_some(delay.max(MIN_DELAY_MS)),
+            repeat: repeat.then_some(if delay < MIN_DELAY_MS {
+                MIN_DELAY_MS
+            } else {
+                delay
+            }),
             level,
         });
         id
