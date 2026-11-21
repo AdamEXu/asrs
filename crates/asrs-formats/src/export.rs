@@ -392,10 +392,11 @@ fn wpilog(
             &type_str,
             &metadata,
         ));
+        let type_name = type_str.as_string();
         let mut add_value = |timestamp: f64, index: usize| {
             let value = Sample::at(&field_data, index);
             let timestamp_micros = timestamp * 1000000.0;
-            let record = match type_str.as_string().as_deref() {
+            let record = match type_name.as_deref() {
                 Some("boolean") => Record::boolean(entry_id, timestamp_micros, &value),
                 Some("int64") => Record::integer(entry_id, timestamp_micros, &value)?,
                 Some("float") => Record::float(entry_id, timestamp_micros, &value),
