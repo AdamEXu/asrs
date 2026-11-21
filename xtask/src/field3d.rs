@@ -21,10 +21,17 @@ commands:
   run [<scene>...]    render with the port (example field3d_scenes) into port/ and apply gate 4:
                       SSIM >= 0.995, interior pixels (over 2 px from an edge of the port's id and
                       depth buffers) within 2 levels and at most 0.05 % differing, at most 1 %
-                      of all pixels differing
+                      of all pixels differing; in every scene no blob of over 4 px (edge zone
+                      included) more than 32 levels off. Cinematic scenes (\"shadows\": true)
+                      are judged by a temporary exception (#243): the standard rule with the
+                      interior clauses replaced by at most 0.2 % differing and no blob of over
+                      2 px more than 2 levels off, plus mean CIEDE2000 <= 1.5; the standard
+                      rule is reported too. Shadow maps must be equal texel for texel, and line
+                      widths at the scene's widthProbes within 0.05 px
   bench [<args>...]   frame-time benchmark of the render thread (example field3d_bench)";
 
 const SCALES: [u32; 2] = [1, 2];
+const LINE_WIDTH_MAX_DIFF_PX: f64 = 0.05;
 const THEMES: [&str; 2] = ["dark", "light"];
 const STAMP: &str = "generator.txt";
 
@@ -131,6 +138,53 @@ fn scene_names(paths: &Paths, wanted: &[String]) -> Result<Vec<String>> {
     Ok(names)
 }
 
+/// The width in device pixels of a horizontal line crossing column `x` between rows `y0` and
+/// `y1`: the sum of each pixel's coverage, its colour's fraction of the way from the background
+/// to the line colour.
+fn line_width(
+    image: &Rgba,
+    x: u32,
+    y0: u32,
+    y1: u32,
+    background: [f64; 3],
+    color: [f64; 3],
+) -> f64 {
+    let span: Vec<f64> = (0..3).map(|c| color[c] - background[c]).collect();
+    let norm: f64 = span.iter().map(|v| v * v).sum();
+    (y0..y1.min(image.height))
+        .map(|y| {
+            let o = ((y * image.width + x) * 4) as usize;
+            let along: f64 = (0..3)
+                .map(|c| (f64::from(image.data[o + c]) - background[c]) * span[c])
+                .sum();
+            (along / norm).clamp(0.0, 1.0)
+        })
+        .sum()
+}
+
+fn width_probes(paths: &Paths, name: &str) -> Result<Vec<[f64; 4]>> {
+    let path = scenes_dir(paths).join(format!("{name}.json"));
+    let spec = asrs_parity::json::parse(&fs::read_to_string(&path).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(spec
+        .get("widthProbes")
+        .and_then(Json::as_array)
+        .unwrap_or_default()
+        .iter()
+        .map(|p| {
+            let n = |k| p.get(k).and_then(Json::as_f64).unwrap_or(0.0);
+            [n("x"), n("y0"), n("y1"), n("color")]
+        })
+        .collect())
+}
+
+fn is_cinematic(paths: &Paths, name: &str) -> Result<bool> {
+    let path = scenes_dir(paths).join(format!("{name}.json"));
+    let spec = asrs_parity::json::parse(&fs::read_to_string(&path).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(matches!(spec.get("shadows"), Some(Json::Bool(true))))
+}
+
 fn edges_from_png(image: &Rgba) -> Vec<bool> {
     image
         .data
@@ -191,10 +245,67 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
     let mut rows = Vec::new();
     let mut failed = Vec::new();
     eprintln!(
-        "{:<26} {:>8} {:>9} {:>6} {:>10} {:>6} | result",
-        "capture", "ssim", "differ %", "imax", "idiffer %", "max"
+        "{:<26} {:>8} {:>9} {:>6} {:>10} {:>6} {:>7} {:>5} {:>5} | {:>8} {:>9} | result",
+        "capture",
+        "ssim",
+        "differ %",
+        "imax",
+        "idiffer %",
+        "max",
+        "dE00",
+        "blob",
+        "iblob",
+        "standard",
+        "cinematic"
     );
     for name in scene_names(paths, wanted)? {
+        let cinematic = is_cinematic(paths, &name)?;
+        let probes = width_probes(paths, &name)?;
+        for layer in 0.. {
+            let file = format!("{name}.shadow{layer}.png");
+            let (reference, ours) = (
+                pixel::read_png(&base.join("ref").join(&file)),
+                pixel::read_png(&port.join(&file)),
+            );
+            let label = format!("{name} shadow map {layer}");
+            match (reference, ours) {
+                (Err(_), Err(_)) => {
+                    if cinematic && layer == 0 {
+                        eprintln!("{label}: missing on both sides");
+                        failed.push(label);
+                    }
+                    break;
+                }
+                (Ok(reference), Ok(ours))
+                    if (reference.width, reference.height) == (ours.width, ours.height) =>
+                {
+                    let texels = reference
+                        .data
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .zip(ours.data.as_chunks::<4>().0)
+                        .filter(|(a, b)| a != b)
+                        .count();
+                    eprintln!("{label}: {texels} texels differ");
+                    if texels > 0 {
+                        failed.push(label);
+                    }
+                }
+                (reference, ours) => {
+                    let size = |r: &Result<Rgba>| match r {
+                        Ok(i) => format!("{}x{}", i.width, i.height),
+                        Err(_) => "missing".to_owned(),
+                    };
+                    eprintln!(
+                        "{label}: upstream {}, port {}",
+                        size(&reference),
+                        size(&ours)
+                    );
+                    failed.push(label);
+                }
+            }
+        }
         for scale in SCALES {
             let edges = edges_from_png(&pixel::read_png(
                 &port.join(format!("{name}@{scale}x.edges.png")),
@@ -205,15 +316,62 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                 let ours = pixel::read_png(&port.join(format!("{capture}.png")))?;
                 let g = pixel3d::gate4(&reference, &ours, &edges)
                     .map_err(|e| format!("{capture}: {e}"))?;
+                let mut pass = if cinematic { g.cinematic_pass } else { g.pass };
+                let verdict = |p: bool| if p { "pass" } else { "fail" };
                 eprintln!(
-                    "{capture:<26} {:>8.5} {:>9.3} {:>6} {:>10.4} {:>6} | {}",
+                    "{capture:<26} {:>8.5} {:>9.3} {:>6} {:>10.4} {:>6} {:>7.4} {:>5} {:>5} | {:>8} {:>9} | {}",
                     g.ssim,
                     g.differing_pct,
                     g.interior_max_delta,
                     g.interior_differing_pct,
                     g.max_delta,
-                    if g.pass { "pass" } else { "FAIL" }
+                    g.mean_delta_e,
+                    g.outlier_blob,
+                    g.interior_blob,
+                    verdict(g.pass),
+                    verdict(g.cinematic_pass),
+                    if pass {
+                        if cinematic {
+                            "pass (cinematic exception, #243)"
+                        } else {
+                            "pass"
+                        }
+                    } else {
+                        "FAIL"
+                    }
                 );
+                let background = if theme == "dark" {
+                    [34.0; 3]
+                } else {
+                    [255.0; 3]
+                };
+                for [x, y0, y1, color] in &probes {
+                    let hex = *color as u32;
+                    let color =
+                        [hex >> 16, (hex >> 8) & 255, hex & 255].map(|c| f64::from(c & 255));
+                    if color == background {
+                        continue;
+                    }
+                    let s = f64::from(scale);
+                    let at = |image: &Rgba| {
+                        line_width(
+                            image,
+                            (x * s) as u32,
+                            (y0 * s) as u32,
+                            (y1 * s) as u32,
+                            background,
+                            color,
+                        )
+                    };
+                    let (theirs, mine) = (at(&reference), at(&ours));
+                    let off = theirs < 0.5 || (theirs - mine).abs() > LINE_WIDTH_MAX_DIFF_PX;
+                    eprintln!(
+                        "    line #{hex:06x} at x={x}: upstream {theirs:.3} px, port {mine:.3} px, difference {:.3}{}",
+                        (theirs - mine).abs(),
+                        if off { " FAIL" } else { "" }
+                    );
+                    pass &= !off;
+                }
                 if g.max_delta > 0 {
                     pixel::write_png(
                         &port.join(format!("diff/{capture}.png")),
@@ -229,7 +387,7 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                         ),
                     )?;
                 }
-                if !g.pass {
+                if !pass {
                     failed.push(capture.clone());
                 }
                 rows.push(Json::object([
@@ -245,7 +403,13 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                         Json::Number(g.interior_differing_pct),
                     ),
                     ("maxDelta", Json::Number(f64::from(g.max_delta))),
-                    ("pass", Json::Bool(g.pass)),
+                    ("meanDeltaE00", Json::Number(g.mean_delta_e)),
+                    ("outlierBlob", Json::Number(g.outlier_blob as f64)),
+                    ("interiorBlob", Json::Number(g.interior_blob as f64)),
+                    ("cinematic", Json::Bool(cinematic)),
+                    ("standardRulePass", Json::Bool(g.pass)),
+                    ("cinematicRulePass", Json::Bool(g.cinematic_pass)),
+                    ("pass", Json::Bool(pass)),
                 ]));
             }
         }
