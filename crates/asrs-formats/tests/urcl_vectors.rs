@@ -104,7 +104,9 @@ fn parse_record(
         "string[]" => {
             log.put_string_array(key, timestamp, log_field::array(v, log_field::js_string)?)
         }
-        "json" => log.put_json(key, timestamp, log_field::js_string(v)?),
+        "json" => log
+            .put_json(key, timestamp, log_field::js_string(v)?)
+            .map_err(|e| format!("{e:?}"))?,
         other => {
             if other.starts_with("struct:")
                 || other.starts_with("photon:")

@@ -111,6 +111,12 @@ pub enum MapValue {
     Array(Vec<MapValue>),
 }
 
+/// How deep upstream's recursive `putUnknownStruct` gets before V8 throws `RangeError`, as
+/// measured in the oracle's decode worker: about 9500 levels, a little more for arrays than
+/// for objects. Like every JS recursion bound it depends on frame sizes, JIT tier and the
+/// stack in use, so values within a few hundred levels of it are not byte-exact.
+const MAX_UNKNOWN_DEPTH: usize = 9415;
+
 /// What `put_unknown_tree` writes for one node of either input shape: a leaf field, a
 /// uniform-array candidate, named children, or the `ExtData` pair.
 enum UnknownPut<'a, V> {
@@ -905,8 +911,11 @@ impl Log {
         allow_root_write: bool,
         classify: impl Fn(&'a V) -> UnknownPut<'a, V>,
     ) -> Result<(), LogError> {
-        let mut pending = vec![(key.clone(), value, allow_root_write)];
-        while let Some((key, value, allow_write)) = pending.pop() {
+        let mut pending = vec![(key.clone(), value, allow_root_write, 0)];
+        while let Some((key, value, allow_write, depth)) = pending.pop() {
+            if depth > MAX_UNKNOWN_DEPTH {
+                return Err(LogError::StackOverflow);
+            }
             match classify(value) {
                 UnknownPut::Skip => {}
                 UnknownPut::Bool(b) => {
@@ -957,13 +966,13 @@ impl Log {
                         self.field_mut_existing(&length_key)
                             .put_number(timestamp, items.len() as f64);
                         for (i, item) in items.iter().enumerate().rev() {
-                            pending.push((child_key(&key, &format!("{i}")), item, true));
+                            pending.push((child_key(&key, &format!("{i}")), item, true, depth + 1));
                         }
                     }
                 }
                 UnknownPut::Entries(entries) => {
                     for (name, item) in entries.rev() {
-                        pending.push((child_key_js(&key, name), item, true));
+                        pending.push((child_key_js(&key, name), item, true, depth + 1));
                     }
                 }
                 UnknownPut::Ext(kind, data) => {
@@ -976,19 +985,25 @@ impl Log {
     }
 
     /// Writes a JSON string and its decoded children; text that does not parse writes only the
-    /// string.
-    pub fn put_json(&mut self, key: &JsString, timestamp: f64, value: JsString) {
+    /// string. The only error is [`LogError::StackOverflow`]: JSON values hold no bytes, so
+    /// they never reach `putRaw`.
+    pub fn put_json(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: JsString,
+    ) -> Result<(), LogError> {
         self.put_string(key, timestamp, value.clone());
         if self.get_type(key) != Some(LoggableType::String) {
-            return;
+            return Ok(());
         }
         self.set_generated_parent(key);
         self.set_structured_type(key, Some(JsString::from("JSON")));
         let decoded = json::parse(&value).unwrap_or(JsValue::Null);
-        if !decoded.is_null() {
-            self.put_unknown_struct(key, timestamp, &decoded, false)
-                .expect("JSON values hold no bytes, so they never reach putRaw");
+        if decoded.is_null() {
+            return Ok(());
         }
+        self.put_unknown_struct(key, timestamp, &decoded, false)
     }
 
     /// Writes a pose as `translation/x`, `translation/y` and `rotation/value` under a "Pose2d"
