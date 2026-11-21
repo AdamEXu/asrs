@@ -34,7 +34,9 @@ use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_model::source_list::{Rect, SourceList};
-use asrs_model::source_list_config::{SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry};
+use asrs_model::source_list_config::{
+    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
+};
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -701,10 +703,7 @@ fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, JsErro
         }
     };
     let load_failures = match o.get("loadFailures") {
-        Some(JsValue::Array(items)) => items
-            .iter()
-            .filter_map(|i| i.as_str().cloned())
-            .collect(),
+        Some(JsValue::Array(items)) => items.iter().filter_map(|i| i.as_str().cloned()).collect(),
         _ => Vec::new(),
     };
     Ok(Some(AdvantageScopeAssets {
@@ -1261,9 +1260,7 @@ fn tab_index(r: &Runner, index: &JsValue) -> Option<usize> {
     }
 }
 
-fn c5_source_list<'a>(
-    controller: &'a mut dyn TabController<Host>,
-) -> Option<&'a mut SourceList> {
+fn c5_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut SourceList> {
     if controller
         .as_any_mut()
         .downcast_mut::<SwerveController>()
@@ -1389,17 +1386,10 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .and_then(|s| s.strip_suffix(')'))
         {
             let (key, parent) = match arg.rfind(',') {
-                Some(pos)
-                    if arg[pos + 1..]
-                        .trim()
-                        .parse::<f64>()
-                        .is_ok() =>
-                {
-                    (
-                        &arg[..pos],
-                        Some(arg[pos + 1..].trim().parse::<f64>().unwrap() as usize),
-                    )
-                }
+                Some(pos) if arg[pos + 1..].trim().parse::<f64>().is_ok() => (
+                    &arg[..pos],
+                    Some(arg[pos + 1..].trim().parse::<f64>().unwrap() as usize),
+                ),
                 _ => (arg, None),
             };
             let JsValue::String(key) = parse_arg(key)? else {
@@ -1430,10 +1420,7 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             with_env(host, |env| list.refresh(env)).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
-        if let Some(arg) = op
-            .strip_prefix("remove(")
-            .and_then(|s| s.strip_suffix(')'))
-        {
+        if let Some(arg) = op.strip_prefix("remove(").and_then(|s| s.strip_suffix(')')) {
             let i = arg
                 .trim()
                 .parse::<f64>()
@@ -1974,7 +1961,8 @@ impl Runner {
                 let same = asrs_js::json::stringify(&self.host.assets_raw)
                     == asrs_js::json::stringify(data);
                 if !same {
-                    let old_failed = failures_len(&self.host.assets_raw).map_err(TabsError::Thrown)? > 0.0;
+                    let old_failed =
+                        failures_len(&self.host.assets_raw).map_err(TabsError::Thrown)? > 0.0;
                     let new_failed = failures_len(data).map_err(TabsError::Thrown)? > 0.0;
                     self.host.assets = assets_from_js(data).map_err(TabsError::Thrown)?;
                     self.host.assets_raw = data.clone();
@@ -2084,9 +2072,7 @@ impl Runner {
             // DOM-only (row filtering and the console jump scroll belong to the view layer).
             (t, "input") if t.contains("input.filter") => {}
             (t, "keydown" | "click") if t.contains("console-table-jump") => {}
-            (t, "change") if t.contains("input.max-speed") => {
-                self.swerve_change("maxSpeed", props)
-            }
+            (t, "change") if t.contains("input.max-speed") => self.swerve_change("maxSpeed", props),
             (t, "change") if t.contains("input.size-x") => self.swerve_change("sizeX", props),
             (t, "change") if t.contains("input.size-y") => self.swerve_change("sizeY", props),
             (t, "click") if t.contains("orientation-switcher") => self.swerve_rotate(index),
@@ -2096,19 +2082,13 @@ impl Runner {
                     self.swerve_rotate(index);
                 }
             }
-            (t, "change") if t.contains("dimensions-width") => {
-                self.points_change("width", props)
-            }
-            (t, "change") if t.contains("dimensions-height") => {
-                self.points_change("height", props)
-            }
+            (t, "change") if t.contains("dimensions-width") => self.points_change("width", props),
+            (t, "change") if t.contains("dimensions-height") => self.points_change("height", props),
             (t, "change") if t.contains("select.orientation") => {
                 self.points_select("orientation", props)
             }
             (t, "change") if t.contains("select.origin") => self.points_select("origin", props),
-            (t, "change") if t.contains("joystick-selector") => {
-                self.joystick_change(index, props)
-            }
+            (t, "change") if t.contains("joystick-selector") => self.joystick_change(index, props),
             // `button.hide` and `button.remove` on a `.source-list` item, which the four C05
             // lists share; `index` is the item position among `.item` elements.
             (t, "click") if t.contains("button.hide") => self.c5_item_click(index, false),

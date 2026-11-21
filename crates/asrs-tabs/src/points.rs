@@ -85,7 +85,10 @@ impl PointsController {
             _ => return,
         };
         if math::rem(to_number(&value), 1.0) != 0.0 {
-            self.set_input(input, JsString::from(number::to_string(math::round(to_number(&value)))));
+            self.set_input(
+                input,
+                JsString::from(number::to_string(math::round(to_number(&value)))),
+            );
         }
         let value = self.input_value(input).unwrap_or_default();
         if to_number(&value) <= 0.0 {
@@ -219,10 +222,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
                 s @ ("small" | "medium" | "large") => JsString::from(s),
                 _ => JsString::from("medium"),
             };
-            let group_size = source
-                .options
-                .get("groupSize")
-                .map_or(0.0, to_number);
+            let group_size = source.options.get("groupSize").map_or(0.0, to_number);
 
             let mut points: Vec<[f64; 2]> = Vec::new();
             match type_key.as_str() {
@@ -257,8 +257,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
             }
 
             for child in children {
-                let values: Vec<f64> =
-                    get_or_default(&log, &child.log_key, time, Vec::new(), uuid);
+                let values: Vec<f64> = get_or_default(&log, &child.log_key, time, Vec::new(), uuid);
                 for (index, value) in values.iter().enumerate() {
                     if let Some(point) = points.get_mut(index) {
                         if child
@@ -277,7 +276,11 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
             let mut o = JsObject::new();
             o.insert(
                 "points",
-                points.iter().map(|p| point_to_js(*p)).collect::<Vec<_>>().to_js(),
+                points
+                    .iter()
+                    .map(|p| point_to_js(*p))
+                    .collect::<Vec<_>>()
+                    .to_js(),
             );
             o.insert("shape", JsString::from(shape).to_js());
             o.insert("size", size.to_js());
@@ -293,7 +296,9 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
                 continue;
             };
             for point in points.iter_mut() {
-                let JsValue::Array(coords) = point else { continue };
+                let JsValue::Array(coords) = point else {
+                    continue;
+                };
                 let (x, y) = (
                     coords.first().and_then(JsValue::as_f64).unwrap_or(f64::NAN),
                     coords.get(1).and_then(JsValue::as_f64).unwrap_or(f64::NAN),

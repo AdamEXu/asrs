@@ -145,7 +145,9 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
                     .iter()
                     .map(|item| {
                         asrs_model::source_list_config::SourceListItemState::from_js(item)
-                            .ok_or_else(|| JsError::new("", "a restored source item of another shape"))
+                            .ok_or_else(|| {
+                                JsError::new("", "a restored source item of another shape")
+                            })
                     })
                     .collect(),
                 None => Err(JsError::new("", "restored sources that are not an array")),
@@ -154,7 +156,11 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
             let result = with_env(cx, |env| self.source_list.set_state(env, items));
             result.map_err(js_error)?;
         }
-        for (key, input) in [("maxSpeed", "maxSpeed"), ("sizeX", "sizeX"), ("sizeY", "sizeY")] {
+        for (key, input) in [
+            ("maxSpeed", "maxSpeed"),
+            ("sizeX", "sizeX"),
+            ("sizeY", "sizeY"),
+        ] {
             if let Some(n) = state.get(key).and_then(JsValue::as_f64) {
                 self.set_input(input, JsString::from(number::to_string(n)));
             }
@@ -234,7 +240,11 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
                     let mut o = JsObject::new();
                     o.insert(
                         "values",
-                        velocities.iter().map(velocity_to_js).collect::<Vec<_>>().to_js(),
+                        velocities
+                            .iter()
+                            .map(velocity_to_js)
+                            .collect::<Vec<_>>()
+                            .to_js(),
                     );
                     o.insert(
                         "color",
@@ -246,8 +256,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
                     module_entries.push(JsValue::Object(o));
                 }
                 Some("robotVelocities") => {
-                    let mut speeds =
-                        grab_robot_velocities(&log, &source.log_key, time, uuid);
+                    let mut speeds = grab_robot_velocities(&log, &source.log_key, time, uuid);
                     let angle = math::atan2(speeds.vy, speeds.vx);
                     let mut length = math::hypot(&[speeds.vx, speeds.vy]);
                     length = clamp_value(length / max_speed, -1.0, 1.0);
@@ -269,18 +278,16 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
                     robot_entries.push(JsValue::Object(o));
                 }
                 _ => {
-                    let poses = grab_poses_auto(
-                        &log,
-                        &source.log_key,
-                        &source.log_type,
-                        time,
-                        uuid,
-                        units,
-                    )
-                    .map_err(|e| match e {
-                        asrs_log::geometry::GeometryError::RangeError(m) => JsError::range(m),
-                        asrs_log::geometry::GeometryError::TypeError(m) => JsError::type_error(m),
-                    })?;
+                    let poses =
+                        grab_poses_auto(&log, &source.log_key, &source.log_type, time, uuid, units)
+                            .map_err(|e| match e {
+                                asrs_log::geometry::GeometryError::RangeError(m) => {
+                                    JsError::range(m)
+                                }
+                                asrs_log::geometry::GeometryError::TypeError(m) => {
+                                    JsError::type_error(m)
+                                }
+                            })?;
                     if let Some(first) = poses.first() {
                         rotation = rotation_3d_to_2d(first.pose.rotation);
                     }

@@ -5,9 +5,7 @@ use std::rc::Rc;
 use asrs_js::number;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
-use asrs_log::log::joystick_state::{
-    JOYSTICK_KEYS, JoystickState, get_joystick_state,
-};
+use asrs_log::log::joystick_state::{JOYSTICK_KEYS, JoystickState, get_joystick_state};
 use asrs_log::util::check_array_type;
 use asrs_model::tab_controller::{Command, TabController};
 

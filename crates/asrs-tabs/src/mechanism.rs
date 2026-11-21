@@ -39,8 +39,14 @@ impl MechanismController {
 fn line_to_js(line: &MechanismLine) -> JsValue {
     let coord = |x: &Option<f64>| x.map_or(JsValue::Null, |x| x.to_js());
     let mut o = JsObject::new();
-    o.insert("start", line.start.iter().map(coord).collect::<Vec<_>>().to_js());
-    o.insert("end", line.end.iter().map(coord).collect::<Vec<_>>().to_js());
+    o.insert(
+        "start",
+        line.start.iter().map(coord).collect::<Vec<_>>().to_js(),
+    );
+    o.insert(
+        "end",
+        line.end.iter().map(coord).collect::<Vec<_>>().to_js(),
+    );
     o.insert(
         "color",
         line.color.as_ref().map_or(0.0_f64.to_js(), |c| c.to_js()),
@@ -53,7 +59,15 @@ fn state_to_js(state: &MechanismState) -> JsValue {
     let mut o = JsObject::new();
     o.insert("backgroundColor", state.background_color.to_js());
     o.insert("dimensions", state.dimensions.to_js());
-    o.insert("lines", state.lines.iter().map(line_to_js).collect::<Vec<_>>().to_js());
+    o.insert(
+        "lines",
+        state
+            .lines
+            .iter()
+            .map(line_to_js)
+            .collect::<Vec<_>>()
+            .to_js(),
+    );
     JsValue::Object(o)
 }
 
