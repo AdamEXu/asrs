@@ -807,6 +807,24 @@ fixture's `window.__oracleTheme` overrides `window.theme` for `matchMedia`, so a
 the colour scheme. jsdom's `:nth-child` goes stale after DOM moves, so source-list fixtures tag
 items with a `data-i` attribute before each event and lay them out by it.
 
+### LineGraph controller
+
+`dom/line-graph/<case>` (`crates/asrs-tabs/tests/line_graph_dom.rs`) replays every LineGraph
+controller call. `node oracle/tools/lineGraphSpecs.mjs` writes the specs and their logs
+(`parity/specs/dom/logs/line-graph-*.json`); edit the script, not the specs. Each fixture sets
+`"sourceLists": true` and starts with a `/*lg:recorder*/` eval, which hooks every LineGraph
+controller (the hub's default tab and any `addTab` creates) and writes inline records:
+
+| Record | Written |
+|---|---|
+| `{"lg": "create", "id", "uuids"}` | when a controller is hooked; `uuids` are its left, right and discrete list UUIDs |
+| `{"lg": "command" \| "preview" \| "save" \| "activeFields", "id", "dark", "ts", "args"?, "value" \| "threw", "reads"}` | after `getCommand`, `getPreview` (key and time only), `saveState` and `getActiveFields` return; `reads` lists each outermost `window.selection` getter called during it with its result, and `ts` is `preferences.timestamps` |
+| `{"lg": <method>, "id", "phase": "begin", "args", "dark"}` and `{"lg": <method>, "id", "phase": "end", "threw"?}` | around `restoreState`, `editAxis`, `clearAxis`, `setRobotModeVisible` and `refresh`; the list ops and nested `getCommand` between them belong to the call |
+| `{"lg": "edit", "id", "list", "rect"}` | before an axis's edit button handler runs, with the button's rect |
+
+The harness answers the port's selection reads from `reads`, so a read upstream did not make,
+or one it skipped, fails the case.
+
 Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
 workers and historical or live sources (logs are built with `log` steps), drag sessions other
 than through dispatched events, the documentation iframe's content, and 3D rendering.
