@@ -25,15 +25,18 @@ use asrs_hub::tabs::{TabFactory, TabParts, Tabs, TabsHost};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng, create_uuid};
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
-use asrs_model::assets::AdvantageScopeAssets;
+use asrs_model::assets::{
+    AdvantageScopeAssets, Parsed, parse_field_2d, parse_field_3d, parse_joystick, parse_robot,
+};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_model::source_list::Rect;
+use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -42,6 +45,8 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
+use asrs_tabs::field3d::Field3dController;
+use asrs_tabs::list_cx::{ListParts, SourceListCx};
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 
@@ -59,6 +64,108 @@ fn cve_str(s: &str) -> Value {
 
 fn to_js(json: &Json) -> Result<JsValue, String> {
     js_json::to_js(&Value::from_json_lenient(json))
+}
+
+/// `window.assets`/`message.data` `&& .loadFailures.length > 0`; the
+/// `undefined`/`null` read throws the way upstream's does.
+fn load_failures_failed(v: &JsValue) -> Result<bool, asrs_hub::tabs::TabsError> {
+    use asrs_hub::tabs::TabsError;
+    let truthy = match v {
+        JsValue::Null | JsValue::Undefined | JsValue::Bool(false) => false,
+        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
+        JsValue::String(s) => !s.units().is_empty(),
+        _ => true,
+    };
+    if !truthy {
+        return Ok(false);
+    }
+    let failures = v.get("loadFailures").cloned().unwrap_or(JsValue::Undefined);
+    match &failures {
+        JsValue::Undefined => Err(TabsError::Thrown(JsError::type_error(
+            "Cannot read properties of undefined (reading 'length')",
+        ))),
+        JsValue::Null => Err(TabsError::Thrown(JsError::type_error(
+            "Cannot read properties of null (reading 'length')",
+        ))),
+        JsValue::Array(a) => Ok(!a.is_empty()),
+        JsValue::String(s) => Ok(!s.units().is_empty()),
+        _ => Ok(false),
+    }
+}
+
+/// `window.assets` in the DOM oracle is the raw `set-assets` data; the parsers give
+/// every entry its config fields, but `id` is the raw value's, not the parser's
+/// recomputed `"FRC:"+name`.
+fn assets_from_js(v: &JsValue) -> AdvantageScopeAssets {
+    let mut assets = AdvantageScopeAssets::default();
+    let Some(o) = v.as_object() else {
+        return assets;
+    };
+    let raw_id = |item: &JsValue, parsed: &JsString| -> JsString {
+        item.as_object()
+            .and_then(|o| o.get("id"))
+            .and_then(|id| match id {
+                JsValue::String(s) => Some(s.clone()),
+                JsValue::Number(n) => Some(JsString::from(asrs_js::number::to_string(*n))),
+                _ => None,
+            })
+            .unwrap_or_else(|| parsed.clone())
+    };
+    if let Some(JsValue::Array(items)) = o.get("field2ds") {
+        for item in items {
+            if let Ok(Parsed::Config(mut c)) = parse_field_2d(item) {
+                c.id = raw_id(item, &c.id);
+                assets.field2ds.push(c);
+            }
+        }
+    }
+    if let Some(JsValue::Array(items)) = o.get("field3ds") {
+        for item in items {
+            if let Ok(Parsed::Config(mut c)) = parse_field_3d(item) {
+                c.id = raw_id(item, &c.id);
+                assets.field3ds.push(c);
+            }
+        }
+    }
+    if let Some(JsValue::Array(items)) = o.get("robots") {
+        for item in items {
+            if let Ok(Parsed::Config(c)) = parse_robot(item) {
+                assets.robots.push(c);
+            }
+        }
+    }
+    if let Some(JsValue::Array(items)) = o.get("joysticks") {
+        for item in items {
+            if let Ok(Parsed::Config(c)) = parse_joystick(item) {
+                assets.joysticks.push(c);
+            }
+        }
+    }
+    if let Some(JsValue::Array(items)) = o.get("loadFailures") {
+        assets.load_failures = items
+            .iter()
+            .filter_map(|i| i.as_str().cloned())
+            .collect();
+    }
+    assets
+}
+
+fn type_memory_of(value: &JsValue) -> SourceListTypeMemory {
+    let mut out = SourceListTypeMemory::new();
+    if let JsValue::Object(ids) = value {
+        for (id, entries) in ids.iter() {
+            let mut inner = JsObject::new();
+            if let JsValue::Object(entries) = entries {
+                for (key, entry) in entries.iter() {
+                    if let Some(entry) = SourceListTypeMemoryEntry::from_js(entry) {
+                        inner.insert(key.clone(), entry);
+                    }
+                }
+            }
+            out.insert(id.clone(), inner);
+        }
+    }
+    out
 }
 
 fn truthy(v: &Value) -> bool {
@@ -416,8 +523,61 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for StubRenderer {
     }
 }
 
+/// `oracle/src/dom/field3dStub.ts`: the renderer state slot (`null` until a restore) and a
+/// no-op `render`; `getAspectRatio` is `null`.
+#[derive(Default)]
+struct Field3dStubRenderer {
+    state: JsValue,
+}
+
+impl Field3dStubRenderer {
+    fn new() -> Self {
+        Field3dStubRenderer {
+            state: JsValue::Null,
+        }
+    }
+}
+
+impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for Field3dStubRenderer {
+    fn save_state(&self, _cx: &Cx) -> JsValue {
+        self.state.clone()
+    }
+
+    fn restore_state(&mut self, _cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
+        self.state = state.clone();
+        Ok(())
+    }
+
+    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
+        None
+    }
+
+    fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
+        Ok(())
+    }
+}
+
 impl TabFactory<Host> for Factory {
     fn create(&mut self, cx: &mut Host, tab_type: Option<TabType>) -> TabParts<Host> {
+        if tab_type == Some(TabType::Field3d) {
+            let controller = Field3dController::new(cx);
+            let uuid = controller.uuid().clone();
+            let slot: Rc<RefCell<Option<JsValue>>> = Rc::new(RefCell::new(None));
+            self.commands
+                .borrow_mut()
+                .insert(uuid.to_string_lossy(), slot.clone());
+            self.doms
+                .borrow_mut()
+                .push((uuid.to_string_lossy(), DomKind::Other));
+            return TabParts {
+                uuid,
+                controller: Box::new(controller),
+                renderer: Box::new(Recorder {
+                    inner: Field3dStubRenderer::new(),
+                    slot,
+                }),
+            };
+        }
         let uuid = JsString::from(create_uuid(&mut cx.rng));
         let slot: Rc<RefCell<Option<JsValue>>> = Rc::new(RefCell::new(None));
         self.commands
@@ -505,6 +665,13 @@ struct Host {
     log: Rc<RefCell<Log>>,
     selection: SelectionImpl,
     preferences: Option<Preferences>,
+    /// `window.assets`, parsed for controller reads.
+    assets: Option<AdvantageScopeAssets>,
+    /// `window.assets`, raw for the `JSON.stringify` change gate.
+    assets_raw: Option<JsValue>,
+    type_memory: SourceListTypeMemory,
+    /// `matchMedia("(prefers-color-scheme: dark)").matches`.
+    dark: bool,
     rng: DomRng,
     inner_height: f64,
     renderer_top: f64,
@@ -529,7 +696,7 @@ impl TabCx for Host {
     }
 
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
-        None
+        self.assets.as_ref()
     }
 
     fn tab_rng(&mut self) -> &mut dyn Rng {
@@ -538,6 +705,21 @@ impl TabCx for Host {
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         self.messages.push(message);
+    }
+}
+
+impl SourceListCx for Host {
+    fn tab_dark(&self) -> bool {
+        self.dark
+    }
+
+    fn list_parts(&mut self) -> ListParts<'_> {
+        ListParts {
+            log: self.log.borrow(),
+            type_memory: &mut self.type_memory,
+            selection: &mut self.selection,
+            dark: self.dark,
+        }
     }
 }
 
@@ -1090,7 +1272,12 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
         let is_stub = i
             .and_then(|i| r.tabs.tab(i))
             .and_then(|t| t.tab_type())
-            .map(|k| !matches!(k, TabType::Table | TabType::Console | TabType::Metadata))
+            .map(|k| {
+                !matches!(
+                    k,
+                    TabType::Table | TabType::Console | TabType::Metadata | TabType::Field3d
+                )
+            })
             .unwrap_or(false);
         if is_stub {
             return Ok(JsValue::Undefined);
@@ -1113,10 +1300,31 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
         let is_stub = i
             .and_then(|i| r.tabs.tab(i))
             .and_then(|t| t.tab_type())
-            .map(|k| !matches!(k, TabType::Table | TabType::Console | TabType::Metadata))
+            .map(|k| {
+                !matches!(
+                    k,
+                    TabType::Table | TabType::Console | TabType::Metadata | TabType::Field3d
+                )
+            })
             .unwrap_or(false);
         if is_stub {
             return Ok(JsValue::Undefined);
+        }
+    }
+    if let Some(rest) = suffix.strip_prefix(".controller.") {
+        let i = tab_index(r, index);
+        let field3d_tab = i
+            .and_then(|i| r.tabs.tab(i))
+            .and_then(|t| t.tab_type())
+            .is_some_and(|k| k == TabType::Field3d);
+        if field3d_tab && let Some(result) = field3d_eval(r, rest, index)? {
+            return Ok(result);
+        }
+        if let Some(prop) = rest.strip_prefix("sourceList.") {
+            let prop = prop.split('(').next().unwrap_or_default();
+            return Err(err(format!(
+                "TypeError: Cannot read properties of undefined (reading '{prop}')"
+            )));
         }
     }
     if suffix == ".controller.getActiveFields()" {
@@ -1130,6 +1338,64 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
         ));
     }
     Err(err(format!("unsupported tab eval suffix {suffix}")))
+}
+
+/// `.controller.<rest>` on a Field3d tab: `sourceList` calls and `setXRActive`.
+/// `None` falls through to the generic suffixes.
+fn field3d_eval(
+    r: &mut Runner,
+    rest: &str,
+    index: &JsValue,
+) -> Result<Option<JsValue>, String> {
+    let parse_arg = |arg: &str| -> Result<JsValue, String> {
+        let json = json::parse(arg).map_err(|e| err(e.to_string()))?;
+        js_json::to_js(&Value::from_json_lenient(&json))
+    };
+    if let Some(arg) = rest
+        .strip_prefix("sourceList.addField(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
+        let key = match parse_arg(arg)? {
+            JsValue::String(ref s) => s.clone(),
+            other => return Err(err(format!("addField argument {other:?}"))),
+        };
+        field3d_mut(&mut r.tabs, index)?
+            .add_field(&mut r.host, &key)
+            .map_err(|e| e.message)?;
+        return Ok(Some(JsValue::Undefined));
+    }
+    if let Some(arg) = rest
+        .strip_prefix("sourceList.setState(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
+        let state = parse_arg(arg)?;
+        field3d_mut(&mut r.tabs, index)?
+            .set_source_state(&mut r.host, &state)
+            .map_err(|e| e.message)?;
+        return Ok(Some(JsValue::Undefined));
+    }
+    if let Some(arg) = rest
+        .strip_prefix("setXRActive(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
+        let active = match parse_arg(arg)? {
+            JsValue::Bool(b) => b,
+            other => return Err(err(format!("setXRActive argument {other:?}"))),
+        };
+        field3d_mut(&mut r.tabs, index)?.set_xr_active(active);
+        return Ok(Some(JsValue::Undefined));
+    }
+    Ok(None)
+}
+
+fn field3d_mut<'a>(
+    tabs: &'a mut Tabs<Host>,
+    index: &JsValue,
+) -> Result<&'a mut Field3dController, String> {
+    tabs.controller_mut(index)
+        .map_err(|e| err(e.to_string()))?
+        .downcast_mut::<Field3dController>()
+        .ok_or_else(|| err("tab is not Field3d"))
 }
 
 fn eval_selection_expr(sel: &mut SelectionImpl, expr: &str) -> Option<JsValue> {
@@ -1199,6 +1465,7 @@ fn skippable(record: &Record) -> bool {
         || record.field("sourceLists").is_some()
         || record.field("measure").is_some()
         || record.field("tuner").is_some()
+        // The same warning comes out of Field2d's `getCommand`, still a stub here.
         || record
             .field("main")
             .and_then(Json::as_str)
@@ -1285,6 +1552,87 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     let seed = fixture.get("seed").and_then(Json::as_f64).unwrap_or(1.0) as u32;
     let layout = json_to_layout(fixture)?;
 
+    // `fixture.assets` may be a JSON file relative to the spec or an inline value;
+    // `dom.ts`'s `load` resolves it the same way.
+    let assets_data: JsValue = match fixture.get("assets") {
+        None | Some(Json::Null) => JsValue::Null,
+        Some(Json::String(path)) => {
+            let target = spec_dir_join(spec_path, &path.to_string_lossy());
+            let text = std::fs::read_to_string(&target)
+                .map_err(|e| err(format!("{}: {e}", target.display())))?;
+            let parsed = json::parse(&text).map_err(|e| err(e.to_string()))?;
+            js_json::to_js(&Value::from_json_lenient(&parsed))?
+        }
+        Some(other) => to_js(other)?,
+    };
+    // The handler merges into `Preferences::default()`, so the fixture's
+    // `preferences` object alone reproduces upstream's merged DEFAULT_PREFS.
+    let prefs_value = fixture
+        .get("preferences")
+        .map(to_js)
+        .transpose()?
+        .unwrap_or_else(|| JsValue::Object(JsObject::new()));
+
+    let boot: Vec<(String, JsValue)> = match fixture.get("boot") {
+        Some(boot) => boot
+            .as_array()
+            .ok_or_else(|| err("boot is a list"))?
+            .iter()
+            .map(|message| {
+                let name = message
+                    .as_array()
+                    .and_then(|m| m.first())
+                    .and_then(Json::as_str)
+                    .map(|s| s.to_string_lossy())
+                    .ok_or_else(|| err("boot entries are [name, data]"))?;
+                let data = message
+                    .as_array()
+                    .and_then(|m| m.get(1))
+                    .map(|d| js_json::to_js(&Value::from_json_lenient(d)))
+                    .transpose()?
+                    .unwrap_or(JsValue::Undefined);
+                Ok((name, data))
+            })
+            .collect::<Result<_, String>>()?,
+        None => {
+            let mut default: Vec<(String, JsValue)> = vec![
+                ("set-assets".to_owned(), assets_data),
+                ("set-fullscreen".to_owned(), JsValue::Bool(false)),
+                ("set-battery".to_owned(), JsValue::Bool(false)),
+                (
+                    "set-version".to_owned(),
+                    fixture
+                        .get("version")
+                        .map(to_js)
+                        .transpose()?
+                        .unwrap_or_else(|| {
+                            let mut v = JsObject::new();
+                            v.insert("platform", "darwin".to_js());
+                            v.insert("platformRelease", "25.0.0".to_js());
+                            v.insert("platformArch", "arm64".to_js());
+                            v.insert("appVersion", "0.0.0-lite".to_js());
+                            JsValue::Object(v)
+                        }),
+                ),
+                ("show-update-button".to_owned(), JsValue::Bool(false)),
+                ("show-feedback-button".to_owned(), JsValue::Bool(false)),
+                ("show-when-ready".to_owned(), JsValue::Undefined),
+                ("set-preferences".to_owned(), prefs_value),
+                (
+                    "set-active-satellites".to_owned(),
+                    JsValue::Array(Vec::new()),
+                ),
+            ];
+            if let Some(memory) = fixture.get("typeMemory") {
+                default.push(("restore-type-memory".to_owned(), to_js(memory)?));
+            }
+            if let Some(state) = fixture.get("state") {
+                default.push(("restore-state".to_owned(), to_js(state)?));
+            }
+            default
+        }
+    };
+
     let clock_cell = Rc::new(Cell::new(start));
     let live_time: Rc<Cell<Option<f64>>> = Rc::new(Cell::new(None));
     let log = Rc::new(RefCell::new(Log::new(true)));
@@ -1292,53 +1640,27 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
     let mut host = Host {
         log: log.clone(),
         selection,
-        preferences: Some(Preferences::default()),
+        preferences: None,
+        assets: None,
+        assets_raw: None,
+        type_memory: SourceListTypeMemory::new(),
+        dark: window
+            .and_then(|w| w.get("theme"))
+            .and_then(Json::as_str)
+            .is_some_and(|t| t.to_string_lossy() == "dark"),
         rng: DomRng(seed),
         inner_height,
         renderer_top: 92.0,
         messages: Vec::new(),
     };
-    if let Some(prefs) = fixture.get("preferences") {
-        let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;
-        host.preferences
-            .as_mut()
-            .unwrap()
-            .merge(&prefs)
-            .map_err(|e| err(format!("preferences: {e:?}")))?;
-    }
-    if let Some(boot) = fixture.get("boot") {
-        host.preferences = None;
-        for message in boot.as_array().ok_or_else(|| err("boot is a list"))? {
-            let name = message
-                .as_array()
-                .and_then(|m| m.first())
-                .and_then(Json::as_str)
-                .map(|s| s.to_string_lossy())
-                .ok_or_else(|| err("boot entries are [name, data]"))?;
-            let data = message
-                .as_array()
-                .and_then(|m| m.get(1))
-                .map(Value::from_json_lenient)
-                .unwrap_or(Value::Undefined);
-            match name.as_str() {
-                "set-preferences" => {
-                    let mut p = Preferences::default();
-                    p.merge(&js_json::to_js(&data)?)
-                        .map_err(|e| err(format!("boot set-preferences: {e:?}")))?;
-                    host.preferences = Some(p);
-                }
-                "set-version"
-                | "set-assets"
-                | "set-fullscreen"
-                | "set-battery"
-                | "show-update-button"
-                | "show-feedback-button"
-                | "show-when-ready"
-                | "set-active-satellites" => {}
-                other => return Err(err(format!("boot message {other} is not modeled"))),
-            }
-        }
-    }
+    let mut ctx = host.selection.context().clone();
+    ctx.platform = fixture
+        .get("version")
+        .and_then(|v| v.get("platform"))
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy())
+        .unwrap_or_else(|| "darwin".to_owned());
+    host.selection.set_context(ctx);
 
     let ignored: Vec<String> = match fixture.get("ignoreMain").and_then(Json::as_array) {
         Some(names) => names
@@ -1380,15 +1702,28 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         ignored,
     };
 
-    // `fixture.state` boots through `restore-state`.
-    if let Some(state) = fixture.get("state") {
-        if let Some(tabs_state) = state.get("tabs") {
-            let tabs_state = js_json::to_js(&Value::from_json_lenient(tabs_state))?;
-            runner
-                .tabs
-                .restore_state(&mut runner.host, &tabs_state)
-                .map_err(|e| err(e.to_string()))?;
+    // Boot messages run through the same handler the steps use; a throw is an
+    // unhandled rejection, which the oracle records.
+    for (name, data) in boot {
+        if let Err(e) = runner.main_message(&name, &data) {
+            // hub.ts handles main messages in an async function: a thrown value
+            // without a name reports as `undefined: undefined`.
+            let error = match e {
+                asrs_hub::tabs::TabsError::Thrown(e) if e.name.is_empty() => {
+                    "undefined: undefined".to_owned()
+                }
+                asrs_hub::tabs::TabsError::Thrown(e) => format!("{}: {}", e.name, e.message),
+                asrs_hub::tabs::TabsError::Unmodeled(what) => {
+                    return Err(err(format!("unmodeled upstream state: {what}")))
+                }
+            };
+            runner.exception("unhandledRejection".to_owned(), error);
         }
+    }
+
+    // `fixture.state` boots through `restore-state` (the tabs half went above);
+    // the sidebar half lives outside `Tabs`.
+    if let Some(state) = fixture.get("state") {
         if let Some(sidebar) = state.get("sidebar") {
             if let Some(w) = sidebar.get("width").and_then(Json::as_f64) {
                 runner.sidebar_width = w;
@@ -1556,6 +1891,39 @@ impl Runner {
                 self.tabs
                     .add_table_range(&mut self.host, &controller, &renderer_uuid, range)?;
             }
+            "set-assets" => {
+                let old_failed = load_failures_failed(
+                    &self.host.assets_raw.clone().unwrap_or(JsValue::Null),
+                )?;
+                let new_failed = load_failures_failed(data)?;
+                let same = asrs_js::json::stringify(
+                    &self.host.assets_raw.clone().unwrap_or(JsValue::Null),
+                )
+                .ok()
+                .flatten()
+                    == asrs_js::json::stringify(data).ok().flatten();
+                if !same {
+                    self.host.assets_raw = Some(data.clone());
+                    self.host.assets = if matches!(data, JsValue::Null) {
+                        None
+                    } else {
+                        Some(assets_from_js(data))
+                    };
+                    self.tabs.new_assets(&mut self.host)?;
+                    if new_failed && !old_failed {
+                        let mut o = JsObject::new();
+                        o.insert("title", "Failed to load assets".to_js());
+                        o.insert(
+                            "content",
+                            "Some asset files failed to load. Check the developer console for details.".to_js(),
+                        );
+                        self.emit_main("error", js_json::from_js(&JsValue::Object(o)));
+                    }
+                }
+            }
+            "restore-type-memory" => {
+                self.host.type_memory = type_memory_of(data);
+            }
             "set-preferences" => {
                 let mut p = Preferences::default();
                 p.merge(data).map_err(|e| {
@@ -1593,7 +1961,6 @@ impl Runner {
                 }
             }
             "set-version"
-            | "set-assets"
             | "set-fullscreen"
             | "set-battery"
             | "show-update-button"
@@ -1669,6 +2036,10 @@ impl Runner {
             }
             (t, "click") if t.contains("console-table-key-delete") => self.close_field(None),
             (t, "click") if t.contains("highlight-button") => self.console_highlight_click(),
+            (t, "change") if t.contains("field-select") => {
+                self.field_select_change(index, props)?;
+            }
+            (t, "click") if t.contains("xr-button") => self.xr_click(index),
             // Match 0 is the header row; match i + 1 is data row i.
             (t, "click" | "contextmenu") if t.ends_with(" tr") => {
                 if let Some(row) = index.checked_sub(1) {
@@ -1834,6 +2205,61 @@ impl Runner {
         }
     }
 
+    /// `index` is the nth `.field-select` in DOM order, one per Field3d tab.
+    fn field_select_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
+        let Some(tab) = self
+            .tabs
+            .tabs()
+            .enumerate()
+            .filter(|(_, t)| t.tab_type() == Some(TabType::Field3d))
+            .nth(index)
+            .map(|(i, _)| i)
+        else {
+            return Err(err(format!("no Field3d tab for field-select {index}")));
+        };
+        let value = props
+            .and_then(|p| p.get("value"))
+            .map(|v| js(&v.as_str().map(|s| s.to_string_lossy()).unwrap_or_default()))
+            .unwrap_or_else(|| js(""));
+        let controller = self
+            .tabs
+            .controller_mut(&JsValue::Number(tab as f64))
+            .map_err(|e| err(e.to_string()))?
+            .downcast_mut::<Field3dController>()
+            .ok_or_else(|| err("tab is not Field3d"))?;
+        controller.set_field_value(&value);
+        controller
+            .field_select_change(&mut self.host)
+            .map_err(|e| e.message)
+    }
+
+    fn xr_click(&mut self, index: usize) {
+        let Some(tab) = self
+            .tabs
+            .tabs()
+            .enumerate()
+            .filter(|(_, t)| t.tab_type() == Some(TabType::Field3d))
+            .nth(index)
+            .map(|(i, _)| i)
+        else {
+            return;
+        };
+        let uuid = self
+            .tabs
+            .tab(tab)
+            .map(|t| t.uuid().clone())
+            .unwrap_or(JsValue::Null);
+        if let Ok(controller) = self
+            .tabs
+            .controller_mut(&JsValue::Number(tab as f64))
+            .map(|c| c.downcast_mut::<Field3dController>())
+        {
+            if let Some(controller) = controller {
+                controller.xr_click(&mut self.host, &uuid);
+            }
+        }
+    }
+
     fn console_highlight_click(&mut self) {
         let Some(i) = self.tabs.selected_index() else {
             return;
@@ -1986,7 +2412,7 @@ fn patch_state(expected: &Value, actual: &mut Value) {
     };
     for (expected_tab, actual_tab) in expected_tabs.iter().zip(actual_tabs.iter_mut()) {
         let ty = expected_tab.get("type").and_then(Value::as_f64);
-        if matches!(ty, Some(4.0 | 5.0 | 12.0)) {
+        if matches!(ty, Some(3.0 | 4.0 | 5.0 | 12.0)) {
             continue;
         }
         let Value::Object(fields) = actual_tab else {
@@ -2005,12 +2431,32 @@ fn patch_state(expected: &Value, actual: &mut Value) {
 
 fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     let emitted = replay(spec)?;
+    if std::env::var("DOM_DUMP").is_ok() {
+        eprintln!("== {vector_id}");
+        for e in &emitted {
+            let parts: Vec<String> = e
+                .values
+                .iter()
+                .map(|(k, v)| format!("{k}={v:?}"))
+                .collect();
+            eprintln!("emit {}", parts.join(" "));
+        }
+    }
     let records = vectors::load(vector_id)?;
     let mut expected = records.iter().peekable();
     let mut skipped = 0;
     for emit in &emitted {
         while let Some(record) = expected.peek() {
-            if skippable(record) {
+            // A skippable record still compares when the emit produces it: the
+            // Field3d controller really does send the coordinate warning.
+            let emit_matches = emit.values.iter().any(|(k, v)| {
+                *k == "main"
+                    && matches!(v, Value::String(s) if record
+                        .field("main")
+                        .and_then(Json::as_str)
+                        .is_some_and(|m| m.to_string_lossy() == s.to_string_lossy()))
+            });
+            if skippable(record) && !emit_matches {
                 expected.next();
                 skipped += 1;
                 continue;
@@ -2026,7 +2472,7 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
             .find(|(k, _)| *k == "command")
             .and_then(|(_, v)| v.get("type"))
             .and_then(Value::as_f64)
-            .is_some_and(|t| !matches!(t, 4.0 | 5.0 | 12.0));
+            .is_some_and(|t| !matches!(t, 3.0 | 4.0 | 5.0 | 12.0));
         for (key, value) in &emit.values {
             let expected_value = record
                 .value(key)

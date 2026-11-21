@@ -69,8 +69,8 @@ pub struct Field3dCommand {
     /// own key order.
     objects: Vec<JsValue>,
     /// `cameraOverride`: `AnnotatedPose3d | null` upstream, `undefined` where
-    /// `poses[0]` read past the end.
-    camera_override: Option<AnnotatedPose3d>,
+    /// `poses[0]` read past the end, so the serialized value is stored.
+    camera_override: JsValue,
     auto_driver_station: f64,
     all_robot_models: Vec<JsValue>,
 }
@@ -85,12 +85,7 @@ impl TabCommand for Field3dCommand {
             JsValue::String(self.coordinate_system.clone()),
         );
         o.insert("objects", JsValue::Array(self.objects.clone()));
-        o.insert(
-            "cameraOverride",
-            self.camera_override
-                .as_ref()
-                .map_or(JsValue::Undefined, annotated_pose_js),
-        );
+        o.insert("cameraOverride", self.camera_override.clone());
         o.insert("autoDriverStation", JsValue::Number(self.auto_driver_station));
         o.insert(
             "allRobotModels",
@@ -298,6 +293,8 @@ fn geometry_error(error: GeometryError) -> JsError {
 
 /// `Field3dController`.
 pub struct Field3dController {
+    /// `UUID = createUUID()`; `Tabs` may overwrite it with a restored value.
+    uuid: JsString,
     config: SourceListConfig,
     source_list: SourceList,
     /// `option.value` order inside each optgroup.
@@ -313,10 +310,11 @@ impl Field3dController {
     /// The constructor cannot throw: the only fallible calls here are
     /// `setOptionValues`, which never reaches its error paths on an empty state.
     pub fn new(cx: &mut impl SourceListCx) -> Self {
-        let _controller_uuid = time::create_uuid(cx.tab_rng());
+        let controller_uuid = JsString::from(time::create_uuid(cx.tab_rng()));
         let list_uuid = time::create_uuid(cx.tab_rng());
         let config = configs::field_3d();
         let mut controller = Field3dController {
+            uuid: controller_uuid,
             config: config.clone(),
             source_list: SourceList::new(config, list_uuid, false),
             frc_field_options: Vec::new(),
@@ -330,6 +328,11 @@ impl Field3dController {
         let _ = controller.update_field_options(cx);
         let _ = controller.update_robot_options(cx);
         controller
+    }
+
+    /// `controller.UUID` as drawn in the constructor.
+    pub fn uuid(&self) -> &JsString {
+        &self.uuid
     }
 
     /// `XR_BUTTON` click; `uuid` is the tab's `controller.UUID` (`Tabs` restores it).
@@ -552,13 +555,13 @@ impl Field3dController {
         uuid: Option<&str>,
         time: Option<f64>,
         field_data: Option<&Config3dField>,
-    ) -> Result<(Vec<JsValue>, Option<AnnotatedPose3d>), JsError> {
+    ) -> Result<(Vec<JsValue>, JsValue), JsError> {
         // `list_parts` borrows the log and selection together: `grabHeatmapData`
         // reads `getTimelineRange` mid-command.
         let parts = cx.list_parts();
         let log = &*parts.log;
         let mut objects: Vec<JsValue> = Vec::new();
-        let mut camera_override: Option<AnnotatedPose3d> = None;
+        let mut camera_override = JsValue::Null;
         let sources = self.source_list.displayed_state(log);
         let mut i = 0;
         let mut seen_camera_override = false;
@@ -816,7 +819,9 @@ impl Field3dController {
                 Some("cameraOverride") => {
                     if !seen_camera_override {
                         seen_camera_override = true;
-                        camera_override = poses.first().cloned();
+                        camera_override = poses
+                            .first()
+                            .map_or(JsValue::Undefined, annotated_pose_js);
                     }
                     continue;
                 }
