@@ -469,7 +469,9 @@ fn source_error(e: SourceListError) -> JsError {
 
 /// `state.forEach` plus the `addListItem` item reads, so a `sourceList.setState` argument the
 /// item parser rejects still throws what upstream would.
-fn item_states_or_throw(value: &JsValue) -> Result<Vec<SourceListItemState>, JsError> {
+fn item_states_or_throw(
+    value: &JsValue,
+) -> Result<(Vec<SourceListItemState>, Option<JsError>), JsError> {
     let JsValue::Array(items) = value else {
         return Err(JsError::type_error("state.forEach is not a function"));
     };
@@ -482,7 +484,7 @@ fn item_states_or_throw(value: &JsValue) -> Result<Vec<SourceListItemState>, JsE
                 let type_value = asrs_js::ops::get(item, "type")?;
                 let matched = matches!(&type_value, JsValue::String(s)
                     if config.types.iter().any(|t| t.key == s.to_string_lossy()));
-                return Err(if matched {
+                let failure = if matched {
                     JsError::type_error(
                         "Cannot read properties of undefined (reading 'color')",
                     )
@@ -490,11 +492,12 @@ fn item_states_or_throw(value: &JsValue) -> Result<Vec<SourceListItemState>, JsE
                     source_error(SourceListError::UnknownType(asrs_js::ops::to_string(
                         &type_value,
                     )))
-                });
+                };
+                return Ok((out, Some(failure)));
             }
         }
     }
-    Ok(out)
+    Ok((out, None))
 }
 
 struct Runner {
@@ -825,14 +828,21 @@ impl Runner {
                         })
                     })?
                 }
-                "sourceList.setState" => match item_states_or_throw(&arg) {
-                    Err(e) => Err(e),
-                    Ok(states) => self.stats(tab_i, |c, host| {
+                "sourceList.setState" => {
+                    let (states, failure) = match item_states_or_throw(&arg) {
+                        Ok(v) => v,
+                        Err(e) => return Ok(Err(e)),
+                    };
+                    let r = self.stats(tab_i, |c, host| {
                         host.with_source_env(|env| {
                             c.source_list_mut().set_state(env, states).map_err(source_error)
                         })
-                    })?,
-                },
+                    })?;
+                    match failure {
+                        Some(e) => Err(e),
+                        None => r,
+                    }
+                }
                 "restoreState" => {
                     self.stats(tab_i, |c, host| c.restore_state(host, &arg))?
                 }
@@ -911,11 +921,35 @@ impl Runner {
         let (index, member) = Self::split_controller(&self.tabs, expr)
             .ok_or_else(|| fatal(format!("unsupported eval {expr}")))?;
         let member = member.strip_suffix("()").unwrap_or(&member);
-        let tab = self
-            .tabs
-            .tab(index)
-            .ok_or_else(|| fatal(format!("no tab {index}")))?;
+        let Some(tab) = self.tabs.tab(index) else {
+            return Err(EvalError::Thrown(
+                "TypeError: Cannot read properties of undefined (reading 'controller')"
+                    .to_owned(),
+            ));
+        };
         let uuid = tab.uuid().clone();
+        // Members every controller answers.
+        match member {
+            "showTimeline" => {
+                return Ok(js_json::from_js(&JsValue::Bool(
+                    tab.controller().show_timeline(&self.host),
+                )))
+            }
+            "getActiveFields" => {
+                return Ok(js_json::from_js(&JsValue::Array(
+                    tab.controller()
+                        .active_fields(&self.host)
+                        .into_iter()
+                        .map(JsValue::String)
+                        .collect(),
+                )))
+            }
+            "saveState" => {
+                return Ok(js_json::from_js(&tab.controller().save_state(&self.host)))
+            }
+            "UUID" => return Ok(js_json::from_js(&uuid)),
+            _ => {}
+        }
         let controller = tab
             .controller()
             .downcast_ref::<StatsHalf>()
@@ -924,15 +958,6 @@ impl Runner {
         let inputs = controller.histogram_inputs();
         let js = |s: &JsString| js_json::from_js(&JsValue::String(s.clone()));
         Ok(match member {
-            "showTimeline" => js_json::from_js(&JsValue::Bool(controller.show_timeline(&self.host))),
-            "getActiveFields" => js_json::from_js(&JsValue::Array(
-                controller
-                    .active_fields(&self.host)
-                    .into_iter()
-                    .map(JsValue::String)
-                    .collect(),
-            )),
-            "saveState" => js_json::from_js(&controller.save_state(&self.host)),
             "shouldUpdate" => js_json::from_js(&JsValue::Bool(controller.should_update())),
             "RANGE_MIN.value" => js(&inputs.range_min),
             "RANGE_MAX.value" => js(&inputs.range_max),
@@ -957,7 +982,6 @@ impl Runner {
                     displayed.iter().map(ToJs::to_js).collect(),
                 ))
             }
-            "UUID" => js_json::from_js(&uuid),
             other => return Err(fatal(format!("unsupported eval member {other}"))),
         })
     }

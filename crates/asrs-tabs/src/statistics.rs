@@ -763,13 +763,14 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
             };
             let config = configs::statistics();
             let mut parsed = Vec::with_capacity(items.len());
+            let mut failure = None;
             for item in items {
                 match SourceListItemState::from_js(item) {
                     Some(item_state) => parsed.push(item_state),
                     None => {
                         let type_value = ops::get(item, "type")?;
                         let matched = matches!(&type_value, JsValue::String(s) if type_key(&config.types, s).is_some());
-                        return Err(source_error(if matched {
+                        failure = Some(if matched {
                             // `state.options[typeConfig.color]`: a matching type with no usable
                             // options fails there first.
                             SourceListError::Thrown(
@@ -778,12 +779,18 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
                             )
                         } else {
                             SourceListError::UnknownType(ops::to_string(&type_value))
-                        }));
+                        });
+                        break;
                     }
                 }
             }
-            cx.with_source_env(|env| self.source_list.set_state(env, parsed))
-                .map_err(source_error)?;
+            let result = cx
+                .with_source_env(|env| self.source_list.set_state(env, parsed))
+                .map_err(source_error);
+            if let Some(e) = failure {
+                return Err(source_error(e));
+            }
+            result?;
         }
         if ops::has(state, "timeRange")? {
             if let JsValue::String(v) = ops::get(state, "timeRange")? {

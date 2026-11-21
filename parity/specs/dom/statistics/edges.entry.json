@@ -1,0 +1,358 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/robot.json"
+  ],
+  "fixture": {
+    "seed": 1006,
+    "assets": "../assets/minimal.json",
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/robot.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.saveState()"
+          }
+        ],
+        "label": "empty"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.addField(\"/DriverStation/Enabled\")"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.addField(\"/Missing/Key\")"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          }
+        ],
+        "label": "noops"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{\"type\":\"bogus\",\"logKey\":\"/x\",\"logType\":\"Number\",\"visible\":true,\"options\":{}}])"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{}])"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState(42)"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{\"type\":\"independent\"}])"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState(true)"
+          }
+        ],
+        "label": "setstate-errors"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.RANGE_MIN.value = \"abc\""
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.RANGE_MAX.value = \"-3\""
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.STEP_SIZE.value = \"0\""
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MAX.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          }
+        ],
+        "label": "inputs-zero"
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "-2"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.range-max",
+          "props": {
+            "value": "20000"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "event": {
+          "target": "input.step-size",
+          "props": {
+            "value": "1"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.step"
+          }
+        ],
+        "label": "inputs-clamp"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.STEP_SIZE.value = \"3.5e-1\""
+      },
+      {
+        "event": {
+          "target": "input.range-min",
+          "props": {
+            "value": "0"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.step"
+          }
+        ],
+        "label": "inputs-exp"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.TIME_RANGE.value = \"bogus\""
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          }
+        ],
+        "label": "bogus-range"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({})"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState(null)"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.restoreState({\"sources\":[{\"type\":\"independent\",\"logKey\":\"/Drive/LeftVelocity\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"color\":\"#2b66a2\"}}],\"timeRange\":\"full\",\"rangeMin\":1,\"rangeMax\":8,\"stepSize\":2})"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.TIME_RANGE.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.RANGE_MIN.value"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.STEP_SIZE.value"
+          }
+        ],
+        "label": "restores"
+      },
+      {
+        "selection": [
+          "setLiveConnected"
+        ]
+      },
+      {
+        "liveTime": 7.0
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          7.0
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.addField(\"/Drive/RightVelocity\")"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "live-30"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "live-30"
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "live-10"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "live-10"
+      },
+      {
+        "selection": [
+          "setLiveDisconnected"
+        ]
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "live-off"
+      },
+      {
+        "log": [
+          [
+            "deleteField",
+            "/DriverStation/Enabled"
+          ],
+          [
+            "deleteField",
+            "/DriverStation/Autonomous"
+          ]
+        ]
+      },
+      {
+        "event": {
+          "target": "select.time-range",
+          "props": {
+            "value": "enabled"
+          },
+          "type": "change"
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands"
+        ],
+        "label": "no-ds"
+      },
+      {
+        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{\"type\":\"independent\",\"logKey\":\"/NoSuch/Field\",\"logType\":\"Number\",\"visible\":true,\"options\":{\"color\":\"#2b66a2\"}}])"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "window.tabs.tabList[2].controller.sourceList.getState()"
+          },
+          "selection"
+        ],
+        "label": "fatal"
+      }
+    ]
+  }
+}
