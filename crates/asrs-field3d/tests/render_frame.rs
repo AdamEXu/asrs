@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use asrs_field3d::render::{
-    Frame, FrameOptions, Geometry, Mesh, NodeKind, PhongMaterial, Scene, Side, build_frame,
+    DrawKind, FatLine, Frame, FrameOptions, Geometry, Line, LineMaterial, LineSegmentsGeometry,
+    Mesh, NodeKind, PhongMaterial, Scene, Side, build_frame,
 };
 use asrs_field3d::three::{Color, ObjectId, PerspectiveCamera, Vector3, primitives};
 use asrs_js::math;
@@ -208,4 +209,143 @@ fn background_clear_is_the_srgb_colour() {
     let level = math::round(frame.clear[0] * 255.0);
     assert_eq!(level, 34.0);
     assert_eq!(frame.clear[3], 1.0);
+}
+
+fn spot(scene: &mut Scene, cast: bool) -> ObjectId {
+    let root = scene.root;
+    let (light, target) = scene.create_spot_light(
+        Color::hex(16777215.0),
+        150.0,
+        0.0,
+        0.8726646259971648,
+        0.2,
+        2.0,
+    );
+    if let NodeKind::SpotLight(l) = &mut scene.node_mut(light).kind {
+        l.cast_shadow = cast;
+        l.shadow.map_size = [2048.0, 2048.0];
+        l.shadow.bias = -0.0001;
+    }
+    scene.graph.object_mut(light).position = Vector3::new(0.0, 8.0, 1.0);
+    scene.graph.add(root, light);
+    scene.graph.add(root, target);
+    light
+}
+
+#[test]
+fn shadow_passes_follow_the_shadow_casting_spot_lights() {
+    let mut scene = Scene::new();
+    let front = Arc::new(PhongMaterial::new());
+    let double = Arc::new(PhongMaterial {
+        side: Side::Double,
+        ..PhongMaterial::new()
+    });
+    let caster = add(&mut scene, &front, 0.0);
+    let receiver = add(&mut scene, &double, -2.0);
+    let hidden = add(&mut scene, &front, 1.0);
+    for (id, cast, receive) in [
+        (caster, true, false),
+        (receiver, false, true),
+        (hidden, true, true),
+    ] {
+        let mesh = scene.mesh_mut(id).unwrap();
+        mesh.cast_shadow = cast;
+        mesh.receive_shadow = receive;
+    }
+    scene.node_mut(hidden).visible = false;
+    spot(&mut scene, false);
+    spot(&mut scene, true);
+
+    let off = build_frame(&mut scene, &mut camera(), OPTIONS);
+    assert!(off.shadows.is_empty() && off.lights.spot_shadow.is_empty());
+
+    let options = FrameOptions {
+        shadow_map: true,
+        ..OPTIONS
+    };
+    let frame = build_frame(&mut scene, &mut camera(), options);
+    assert_eq!(frame.lights.spot.len(), 2);
+    assert_eq!(frame.lights.spot_shadow.len(), 1);
+    assert_eq!(frame.lights.spot_shadow[0].bias, -0.0001f32);
+    assert_eq!(frame.lights.spot_shadow[0].map_size, [2048.0, 2048.0]);
+    assert_eq!(frame.shadows.len(), 1);
+    let pass = &frame.shadows[0];
+    assert_eq!(pass.map_size, [2048, 2048]);
+    assert_eq!(
+        pass.draws
+            .iter()
+            .map(|d| (d.object, d.side))
+            .collect::<Vec<_>>(),
+        vec![(caster, Side::Back)]
+    );
+    let receives = |id| {
+        frame
+            .draws
+            .iter()
+            .find(|d| d.object == id)
+            .map(|d| d.receive_shadow)
+    };
+    assert_eq!(receives(caster), Some(false));
+    assert_eq!(receives(receiver), Some(true));
+}
+
+#[test]
+fn objects_outside_the_frustum_are_culled_unless_frustum_culling_is_off() {
+    let mut scene = Scene::new();
+    let material = Arc::new(PhongMaterial::new());
+    let behind = add(&mut scene, &material, 20.0);
+    let culled = build_frame(&mut scene, &mut camera(), OPTIONS);
+    assert!(order(&culled).is_empty());
+    scene.node_mut(behind).frustum_culled = false;
+    let kept = build_frame(&mut scene, &mut camera(), OPTIONS);
+    assert_eq!(order(&kept), vec![(behind, Side::Front)]);
+}
+
+#[test]
+fn fat_lines_take_the_viewport_size_as_resolution() {
+    let mut scene = Scene::new();
+    let root = scene.root;
+    let geometry =
+        LineSegmentsGeometry::from_points(&[-1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]);
+    assert_eq!(geometry.segments.len(), 2);
+    assert_eq!(
+        geometry.bounding_sphere().center,
+        Vector3::new(0.0, 0.5, 0.0)
+    );
+    let id = scene.add(
+        root,
+        NodeKind::FatLine(FatLine {
+            geometry,
+            material: Arc::new(LineMaterial::new(Color::hex(16747520.0), 6.0)),
+        }),
+    );
+    let options = FrameOptions::new(1100.0, 650.0, 2.0, true);
+    assert_eq!(
+        (options.width, options.height, options.samples),
+        (2200, 1300, 4)
+    );
+    let frame = build_frame(&mut scene, &mut camera(), options);
+    assert_eq!(frame.draws.len(), 1);
+    assert_eq!(frame.draws[0].object, id);
+    match &frame.draws[0].kind {
+        DrawKind::FatLine { resolution, .. } => assert_eq!(*resolution, [1100.0, 650.0]),
+        other => panic!("unexpected draw {other:?}"),
+    }
+}
+
+#[test]
+fn grid_helper_matches_three() {
+    let grid = Line::grid_helper(3.6576, 6.0, Color::hex(8947848.0), Color::hex(4473924.0));
+    assert!(grid.segments && grid.material.vertex_colors);
+    let positions = grid.geometry.geometry.attribute("position").unwrap();
+    let colors = grid.geometry.geometry.attribute("color").unwrap();
+    assert_eq!((positions.count(), colors.count()), (28, 28));
+    let half = 3.6576f64 / 2.0;
+    assert_eq!(positions.get_component(0, 0), (-half as f32) as f64);
+    let center = Color::hex(8947848.0).r as f32;
+    assert_eq!(colors.get_component(12, 0), center as f64);
+    assert_eq!(
+        colors.get_component(0, 0),
+        Color::hex(4473924.0).r as f32 as f64
+    );
 }

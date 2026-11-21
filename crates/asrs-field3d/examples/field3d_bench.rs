@@ -1,7 +1,8 @@
 //! Frame-time benchmark for the render thread, sized like S3's measurement: about 70 draw items
 //! (a carpet, rails and posts, glass panes, a robot-sized instanced mesh) at 2200x1300 with
-//! MSAA 4x, the camera orbiting so every frame is new. Usage:
-//! `field3d_bench [width] [height] [frames] [samples]`.
+//! MSAA 4x, the camera orbiting so every frame is new. With `cinematic`, upstream's cinematic
+//! lighting: three shadow-casting 2048x2048 spot lights, two point lights, every mesh casting and
+//! receiving. Usage: `field3d_bench [width] [height] [frames] [samples] [cinematic]`.
 
 #![allow(clippy::disallowed_methods)]
 
@@ -10,12 +11,12 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use asrs_field3d::render::{
-    FrameOptions, Geometry, Mesh, PhongMaterial, RenderThread, Scene, Side, build_frame,
+    FrameOptions, Geometry, Mesh, NodeKind, PhongMaterial, RenderThread, Scene, Side, build_frame,
 };
 use asrs_field3d::three::{Color, Euler, EulerOrder, PerspectiveCamera, Vector3, primitives};
 use asrs_js::math;
 
-fn build() -> Scene {
+fn build(cinematic: bool) -> Scene {
     let mut scene = Scene::new();
     scene.background = Some(Color::hex(0x222222 as f64));
     let root = scene.root;
@@ -23,7 +24,7 @@ fn build() -> Scene {
         root,
         Color::hex(0xffffff as f64),
         Color::hex(0x444444 as f64),
-        2.0,
+        if cinematic { 0.5 } else { 2.0 },
     );
     let field = scene.add_group(root);
     scene.graph.object_mut(field).set_rotation(Euler::new(
@@ -32,8 +33,38 @@ fn build() -> Scene {
         std::f64::consts::PI,
         EulerOrder::Xyz,
     ));
-    let light = scene.add_point_light(field, Color::hex(0xffffff as f64), 0.5);
-    scene.graph.object_mut(light).position = Vector3::new(0.0, 0.0, 10.0);
+    if cinematic {
+        for [x, y, z, tx, ty, tz] in [
+            [0.0, 1.0, 8.0, 0.0, -2.0, 0.0],
+            [6.0, -3.0, 8.0, 6.0, 2.0, 0.0],
+            [-6.0, -3.0, 8.0, -6.0, 2.0, 0.0],
+        ] {
+            let (light, target) = scene.create_spot_light(
+                Color::hex(0xffffff as f64),
+                150.0,
+                0.0,
+                50.0 * (std::f64::consts::PI / 180.0),
+                0.2,
+                2.0,
+            );
+            if let NodeKind::SpotLight(spot) = &mut scene.node_mut(light).kind {
+                spot.cast_shadow = true;
+                spot.shadow.map_size = [2048.0, 2048.0];
+                spot.shadow.bias = -0.0001;
+            }
+            scene.graph.object_mut(light).position = Vector3::new(x, y, z);
+            scene.graph.object_mut(target).position = Vector3::new(tx, ty, tz);
+            scene.graph.add(field, light);
+            scene.graph.add(field, target);
+        }
+        for (color, x) in [(0xff0000, -4.5), (0x0000ff, 4.5)] {
+            let light = scene.add_point_light(field, Color::hex(f64::from(color)), 60.0);
+            scene.graph.object_mut(light).position = Vector3::new(x, 0.0, 5.0);
+        }
+    } else {
+        let light = scene.add_point_light(field, Color::hex(0xffffff as f64), 0.5);
+        scene.graph.object_mut(light).position = Vector3::new(0.0, 0.0, 10.0);
+    }
 
     let carpet = PhongMaterial {
         color: Color::hex(0x888888 as f64),
@@ -114,6 +145,14 @@ fn build() -> Scene {
         }
     }
     scene.add_mesh(field, mesh);
+    if cinematic {
+        for id in scene.graph.descendants(root) {
+            if let Some(mesh) = scene.mesh_mut(id) {
+                mesh.cast_shadow = true;
+                mesh.receive_shadow = true;
+            }
+        }
+    }
     scene
 }
 
@@ -135,6 +174,7 @@ fn report(name: &str, mut values: Vec<f64>) {
 }
 
 fn main() -> Result<(), String> {
+    let cinematic = std::env::args().any(|a| a == "cinematic");
     let args: Vec<u32> = std::env::args()
         .skip(1)
         .filter_map(|a| a.parse().ok())
@@ -149,14 +189,14 @@ fn main() -> Result<(), String> {
         let _ = wake_tx.send(Instant::now());
     })
     .map_err(|e| e.to_string())?;
-    let mut scene = build();
+    let mut scene = build(cinematic);
     let mut camera = PerspectiveCamera::new(50.0, width as f64 / height as f64, 0.15, 1000.0);
     let options = FrameOptions {
         width,
         height,
         samples,
         viewport: [f64::from(width), f64::from(height)],
-        shadow_map: false,
+        shadow_map: cinematic,
     };
     let frame = build_frame(&mut scene, &mut camera, options);
     println!(

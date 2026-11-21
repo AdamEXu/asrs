@@ -3,7 +3,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use asrs_field3d::render::{
-    FrameOptions, Geometry, Mesh, PhongMaterial, RenderThread, Renderer, Scene, build_frame,
+    FatLine, FrameOptions, Geometry, Line, LineMaterial, LineSegmentsGeometry, Mesh, NodeKind,
+    PhongMaterial, RenderThread, Renderer, Scene, build_frame,
 };
 use asrs_field3d::three::{Color, PerspectiveCamera, Vector3, primitives};
 
@@ -116,4 +117,60 @@ fn an_instanced_mesh_with_no_instances_draws_nothing() {
     renderer.render(&frame, &mut bgra);
     assert_eq!(pixel(&bgra, W / 2, H / 4), [0, 0, 0xff, 0xff]);
     assert_eq!(pixel(&bgra, W / 2, H * 3 / 4), [0x22, 0x22, 0x22, 0xff]);
+}
+
+#[test]
+fn a_shadowed_frame_with_lines_renders_and_dumps_its_shadow_map() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let mut scene = Scene::new();
+    scene.background = Some(Color::style(&"#222222".into()));
+    let root = scene.root;
+    let floor = Geometry::new(primitives::plane_geometry(6.0, 6.0, 1.0, 1.0));
+    let floor = scene.add_mesh(root, Mesh::new(floor, Arc::new(PhongMaterial::new())));
+    scene.graph.object_mut(floor).position = Vector3::new(0.0, 0.0, -1.0);
+    let cube = Geometry::new(primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
+    let cube = scene.add_mesh(root, Mesh::new(cube, Arc::new(PhongMaterial::new())));
+    scene.mesh_mut(cube).unwrap().cast_shadow = true;
+    scene.mesh_mut(floor).unwrap().receive_shadow = true;
+    let (light, target) = scene.create_spot_light(Color::hex(16777215.0), 40.0, 0.0, 0.8, 0.2, 2.0);
+    if let NodeKind::SpotLight(l) = &mut scene.node_mut(light).kind {
+        l.cast_shadow = true;
+    }
+    scene.graph.object_mut(light).position = Vector3::new(0.5, 0.5, 5.0);
+    scene.graph.add(root, light);
+    scene.graph.add(root, target);
+    scene.add(
+        root,
+        NodeKind::FatLine(FatLine {
+            geometry: LineSegmentsGeometry::from_points(&[-2.0, -2.0, 0.6, 2.0, -2.0, 0.6]),
+            material: Arc::new(LineMaterial::new(Color::hex(16747520.0), 4.0)),
+        }),
+    );
+    scene.add(
+        root,
+        NodeKind::Line(Line::grid_helper(
+            4.0,
+            4.0,
+            Color::hex(16711680.0),
+            Color::hex(65280.0),
+        )),
+    );
+    let (_, mut camera) = scene_with_box_at(0.0);
+    let options = FrameOptions {
+        shadow_map: true,
+        ..FrameOptions::new(f64::from(W), f64::from(H), 1.0, true)
+    };
+    let frame = build_frame(&mut scene, &mut camera, options);
+    assert_eq!(frame.shadows.len(), 1);
+    let mut bgra = Vec::new();
+    renderer.render(&frame, &mut bgra);
+    let (w, h, texels) = renderer.shadow_map(0).expect("shadow map");
+    assert_eq!((w, h, texels.len()), (512, 512, 512 * 512 * 4));
+    assert_eq!(&texels[..4], &[255, 255, 255, 255]);
+    assert!(texels.chunks(4).any(|t| t != [255, 255, 255, 255]));
+    assert!(renderer.shadow_map(1).is_none());
+    let aux = renderer.render_aux(&frame);
+    assert_eq!(aux.opaque_ids.len(), (W * H) as usize);
 }
