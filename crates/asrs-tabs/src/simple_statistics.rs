@@ -10,31 +10,189 @@ use asrs_js::number;
 use asrs_js::ops;
 use asrs_js::sort;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::JsValue;
 
-type JsArray = Vec<JsValue>;
+/// What a call does upstream other than return: throw, or never return.
+#[derive(Clone, Debug, PartialEq)]
+pub enum StatsError {
+    Thrown(JsError),
+    /// Upstream spins forever in `quickselect` (see there).
+    NeverCompletes,
+}
 
-type Result<T> = std::result::Result<T, JsError>;
+impl From<JsError> for StatsError {
+    fn from(e: JsError) -> Self {
+        StatsError::Thrown(e)
+    }
+}
+
+/// For callers that only use the library on paths that cannot reach `NeverCompletes`.
+impl From<StatsError> for JsError {
+    fn from(e: StatsError) -> Self {
+        match e {
+            StatsError::Thrown(e) => e,
+            StatsError::NeverCompletes => {
+                JsError::new("Unmodeled", "simple-statistics quickselect never completes")
+            }
+        }
+    }
+}
+
+type Result<T> = std::result::Result<T, StatsError>;
 
 fn num(x: f64) -> JsValue {
     JsValue::Number(x)
 }
 
+/// The largest array index (`2^32 - 2`).
+const MAX_INDEX: f64 = 4_294_967_294.0;
+
+/// How far past the end `quickselect` may write before the port stops calling it a dense array.
+const MAX_GROWTH: usize = 1 << 24;
+
+fn array_index(i: f64) -> Option<usize> {
+    (i.fract() == 0.0 && (0.0..=MAX_INDEX).contains(&i)).then_some(i as usize)
+}
+
 fn elem(x: &[JsValue], i: f64) -> JsValue {
-    if i.fract() == 0.0 && i >= 0.0 && i < x.len() as f64 {
-        x[i as usize].clone()
-    } else {
-        JsValue::Undefined
+    array_index(i)
+        .and_then(|i| x.get(i))
+        .cloned()
+        .unwrap_or(JsValue::Undefined)
+}
+
+/// An element of the array `quantile` selects in, with the identity `===` compares objects by:
+/// the index it had in the copy.
+#[derive(Clone)]
+struct Elem {
+    value: JsValue,
+    id: usize,
+}
+
+impl Elem {
+    const UNDEFINED: Elem = Elem {
+        value: JsValue::Undefined,
+        id: usize::MAX,
+    };
+
+    fn strict_equals(&self, other: &Elem) -> bool {
+        let object = |v: &JsValue| {
+            matches!(
+                v,
+                JsValue::Array(_)
+                    | JsValue::Object(_)
+                    | JsValue::Bytes(_)
+                    | JsValue::Date(_)
+                    | JsValue::ExtData(..)
+            )
+        };
+        if object(&self.value) && object(&other.value) {
+            self.id == other.id
+        } else {
+            ops::strict_equals(&self.value, &other.value)
+        }
     }
 }
 
-fn set(x: &mut JsArray, i: f64, v: JsValue) {
-    if i.fract() == 0.0 && i >= 0.0 && i < (u32::MAX - 1) as f64 {
-        let i = i as usize;
-        if i >= x.len() {
-            x.resize(i + 1, JsValue::Undefined);
+/// The array `quantile` selects in: `arr[k]` with a `k` that is not an array index (negative,
+/// fractional, infinite) reads and writes a named property, which later reads see.
+struct SelectArray {
+    items: Vec<Elem>,
+    named: Vec<(f64, Elem)>,
+}
+
+impl SelectArray {
+    fn new(x: &[JsValue]) -> Self {
+        SelectArray {
+            items: x
+                .iter()
+                .enumerate()
+                .map(|(id, value)| Elem {
+                    value: value.clone(),
+                    id,
+                })
+                .collect(),
+            named: Vec::new(),
         }
-        x[i] = v;
+    }
+
+    fn len(&self) -> f64 {
+        self.items.len() as f64
+    }
+
+    fn get(&self, i: f64) -> Elem {
+        match array_index(i) {
+            Some(i) => self.items.get(i).cloned().unwrap_or(Elem::UNDEFINED),
+            None => self
+                .named
+                .iter()
+                .find(|(k, _)| same_key(*k, i))
+                .map_or(Elem::UNDEFINED, |(_, v)| v.clone()),
+        }
+    }
+
+    fn set(&mut self, i: f64, v: Elem) -> Result<()> {
+        match array_index(i) {
+            Some(i) if i < self.items.len() => self.items[i] = v,
+            Some(i) if i - self.items.len() <= MAX_GROWTH => {
+                self.items.resize(i, Elem::UNDEFINED);
+                self.items.push(v);
+            }
+            Some(_) => {
+                return Err(
+                    JsError::new("Unmodeled", "quickselect writing far past the end").into(),
+                );
+            }
+            None => match self.named.iter_mut().find(|(k, _)| same_key(*k, i)) {
+                Some(slot) => slot.1 = v,
+                None => self.named.push((i, v)),
+            },
+        }
+        Ok(())
+    }
+
+    fn swap(&mut self, i: f64, j: f64) -> Result<()> {
+        let a = self.get(i);
+        let b = self.get(j);
+        self.set(i, b)?;
+        self.set(j, a)
+    }
+}
+
+/// Property keys of two non-index numbers are equal when their `ToString`s are.
+#[allow(clippy::float_cmp)]
+fn same_key(a: f64, b: f64) -> bool {
+    a == b || (a.is_nan() && b.is_nan())
+}
+
+#[allow(clippy::float_cmp)]
+fn stuck(x: f64, step: f64) -> bool {
+    x + step == x
+}
+
+/// `x.length` and `x[i]` for `quantileSorted`, on a plain array or a selected copy.
+trait Indexed {
+    fn length(&self) -> f64;
+    fn at(&self, i: f64) -> JsValue;
+}
+
+impl Indexed for [JsValue] {
+    fn length(&self) -> f64 {
+        self.len() as f64
+    }
+
+    fn at(&self, i: f64) -> JsValue {
+        elem(self, i)
+    }
+}
+
+impl Indexed for SelectArray {
+    fn length(&self) -> f64 {
+        self.len()
+    }
+
+    fn at(&self, i: f64) -> JsValue {
+        self.get(i).value
     }
 }
 
@@ -125,15 +283,13 @@ fn sub(a: &JsValue, b: &JsValue) -> Result<f64> {
 /// TypeError than the arithmetic operators do.
 fn math_num(v: &JsValue) -> Result<f64> {
     if let JsValue::BigInt(_) = v {
-        return Err(JsError::type_error(
-            "Cannot convert a BigInt value to a number",
-        ));
+        return Err(JsError::type_error("Cannot convert a BigInt value to a number").into());
     }
-    ops::value_to_number(v)
+    Ok(ops::value_to_number(v)?)
 }
 
-fn error(message: &str) -> JsError {
-    JsError::new("Error", message)
+fn error(message: &str) -> StatsError {
+    StatsError::Thrown(JsError::new("Error", message))
 }
 
 pub fn min_sorted(x: &[JsValue]) -> JsValue {
@@ -153,37 +309,41 @@ pub fn max_sorted(x: &[JsValue]) -> JsValue {
 }
 
 pub fn sum(x: &[JsValue]) -> JsValue {
-    if x.is_empty() {
-        return num(0.0);
-    }
-    let mut sum = match &x[0] {
-        JsValue::Number(v) => *v,
-        _ => return num(f64::NAN),
+    num(sum_f64(x))
+}
+
+fn sum_f64(x: &[JsValue]) -> f64 {
+    let Some((first, rest)) = x.split_first() else {
+        return 0.0;
+    };
+    let JsValue::Number(mut sum) = *first else {
+        return f64::NAN;
     };
     let mut correction = 0.0;
-    for v in &x[1..] {
-        let JsValue::Number(xi) = v else {
-            return num(f64::NAN);
+    for v in rest {
+        let JsValue::Number(xi) = *v else {
+            return f64::NAN;
         };
         let transition = sum + xi;
-        if math::abs(sum) >= math::abs(*xi) {
+        if math::abs(sum) >= math::abs(xi) {
             correction += sum - transition + xi;
         } else {
             correction += xi - transition + sum;
         }
         sum = transition;
     }
-    num(sum + correction)
+    sum + correction
 }
 
 pub fn mean(x: &[JsValue]) -> Result<JsValue> {
+    Ok(num(mean_f64(x)?))
+}
+
+fn mean_f64(x: &[JsValue]) -> Result<f64> {
     if x.is_empty() {
         return Err(error("mean requires at least one data point"));
     }
-    let JsValue::Number(s) = sum(x) else {
-        unreachable!()
-    };
-    Ok(num(s / x.len() as f64))
+    Ok(sum_f64(x) / x.len() as f64)
 }
 
 fn quantile_index(length: f64, p: &JsValue) -> Result<f64> {
@@ -205,20 +365,25 @@ fn truthy(x: f64) -> bool {
     x != 0.0 && !x.is_nan()
 }
 
-fn swap(arr: &mut JsArray, i: f64, j: f64) {
-    let a = elem(arr, i);
-    let b = elem(arr, j);
-    set(arr, i, b);
-    set(arr, j, a);
+/// `left = left || 0; right = right || arr.length - 1`.
+fn window(arr: &SelectArray, left: f64, right: f64) -> (f64, f64) {
+    (
+        if truthy(left) { left } else { 0.0 },
+        if truthy(right) {
+            right
+        } else {
+            arr.len() - 1.0
+        },
+    )
 }
 
-fn quickselect(arr: &mut JsArray, k: f64, mut left: f64, mut right: f64) {
-    if !truthy(left) {
-        left = 0.0;
-    }
-    if !truthy(right) {
-        right = arr.len() as f64 - 1.0;
-    }
+/// Never completes when `k` is NaN (neither bound moves), and once `i++` or `j--` stops changing
+/// its operand inside the partition loop (`-Infinity`, `+Infinity`, or past `2^53`): `i < j`
+/// then holds forever, or a scan loop's condition does. A recursive call with the window it was
+/// given is the same call again (nothing moved in between), so upstream recurses until the
+/// stack overflows; with a NaN or infinite `k` on a window over 600 that comes first.
+fn quickselect(arr: &mut SelectArray, k: f64, left: f64, right: f64) -> Result<()> {
+    let (mut left, mut right) = window(arr, left, right);
 
     while right > left {
         if right - left > 600.0 {
@@ -232,36 +397,51 @@ fn quickselect(arr: &mut JsArray, k: f64, mut left: f64, mut right: f64) {
             }
             let new_left = math::max2(left, math::floor(k - (m * s) / n + sd));
             let new_right = math::min2(right, math::floor(k + ((n - m) * s) / n + sd));
-            quickselect(arr, k, new_left, new_right);
+            if window(arr, new_left, new_right) == (left, right) {
+                return Err(JsError::range("Maximum call stack size exceeded").into());
+            }
+            quickselect(arr, k, new_left, new_right)?;
+        }
+        if k.is_nan() {
+            return Err(StatsError::NeverCompletes);
         }
 
-        let t = elem(arr, k);
+        let t = arr.get(k);
         let mut i = left;
         let mut j = right;
-        swap(arr, left, k);
+        arr.swap(left, k)?;
 
-        if gt(&elem(arr, right), &t) {
-            swap(arr, left, right);
+        if gt(&arr.get(right).value, &t.value) {
+            arr.swap(left, right)?;
         }
 
         while i < j {
-            swap(arr, i, j);
+            if stuck(i, 1.0) || stuck(j, -1.0) {
+                return Err(StatsError::NeverCompletes);
+            }
+            arr.swap(i, j)?;
             i += 1.0;
             j -= 1.0;
 
-            while lt(&elem(arr, i), &t) {
+            while lt(&arr.get(i).value, &t.value) {
+                if stuck(i, 1.0) {
+                    return Err(StatsError::NeverCompletes);
+                }
                 i += 1.0;
             }
-            while gt(&elem(arr, j), &t) {
+            while gt(&arr.get(j).value, &t.value) {
+                if stuck(j, -1.0) {
+                    return Err(StatsError::NeverCompletes);
+                }
                 j -= 1.0;
             }
         }
 
-        if ops::strict_equals(&elem(arr, left), &t) {
-            swap(arr, left, j);
+        if arr.get(left).strict_equals(&t) {
+            arr.swap(left, j)?;
         } else {
             j += 1.0;
-            swap(arr, j, right);
+            arr.swap(j, right)?;
         }
 
         if j <= k {
@@ -271,29 +451,34 @@ fn quickselect(arr: &mut JsArray, k: f64, mut left: f64, mut right: f64) {
             right = j - 1.0;
         }
     }
+    Ok(())
 }
 
 pub fn quantile_sorted(x: &[JsValue], p: &JsValue) -> Result<JsValue> {
-    let length = x.len() as f64;
+    quantile_sorted_in(x, p)
+}
+
+fn quantile_sorted_in<X: Indexed + ?Sized>(x: &X, p: &JsValue) -> Result<JsValue> {
+    let length = x.length();
     let idx = length * ops::value_to_number(p)?;
 
-    if x.is_empty() {
+    if length == 0.0 {
         Err(error("quantile requires at least one data point."))
     } else if lt(p, &num(0.0)) || gt(p, &num(1.0)) {
         Err(error("quantiles must be between 0 and 1"))
     } else if ops::strict_equals(p, &num(1.0)) {
-        Ok(elem(x, length - 1.0))
+        Ok(x.at(length - 1.0))
     } else if ops::strict_equals(p, &num(0.0)) {
-        Ok(elem(x, 0.0))
+        Ok(x.at(0.0))
     } else if math::rem(idx, 1.0) != 0.0 {
-        Ok(elem(x, math::ceil(idx) - 1.0))
-    } else if x.len().is_multiple_of(2) {
+        Ok(x.at(math::ceil(idx) - 1.0))
+    } else if math::rem(length, 2.0) == 0.0 {
         Ok(num(ops::value_to_number(&add(
-            &elem(x, idx - 1.0),
-            &elem(x, idx),
+            &x.at(idx - 1.0),
+            &x.at(idx),
         )?)? / 2.0))
     } else {
-        Ok(elem(x, idx))
+        Ok(x.at(idx))
     }
 }
 
@@ -356,7 +541,11 @@ pub fn root_mean_square(x: &[JsValue]) -> Result<JsValue> {
 
 /// `sumNthPowerDeviations`; the `n === 2` fast path is a plain multiply, not `Math.pow`.
 pub fn sum_nth_power_deviations(x: &[JsValue], n: &JsValue) -> Result<JsValue> {
-    let mean_value = mean(x)?;
+    Ok(num(sum_nth_power_deviations_f64(x, n)?))
+}
+
+fn sum_nth_power_deviations_f64(x: &[JsValue], n: &JsValue) -> Result<f64> {
+    let mean_value = num(mean_f64(x)?);
     let mut sum = 0.0;
     for v in x {
         let diff = sub(v, &mean_value)?;
@@ -366,38 +555,36 @@ pub fn sum_nth_power_deviations(x: &[JsValue], n: &JsValue) -> Result<JsValue> {
             sum += math::pow(diff, math_num(n)?);
         }
     }
-    Ok(num(sum))
+    Ok(sum)
 }
 
 pub fn sample_variance(x: &[JsValue]) -> Result<JsValue> {
+    Ok(num(sample_variance_f64(x)?))
+}
+
+fn sample_variance_f64(x: &[JsValue]) -> Result<f64> {
     if x.len() < 2 {
         return Err(error("sampleVariance requires at least two data points"));
     }
-    let JsValue::Number(deviations) = sum_nth_power_deviations(x, &num(2.0))? else {
-        unreachable!()
-    };
-    Ok(num(deviations / (x.len() as f64 - 1.0)))
+    Ok(sum_nth_power_deviations_f64(x, &num(2.0))? / (x.len() as f64 - 1.0))
 }
 
 pub fn sample_standard_deviation(x: &[JsValue]) -> Result<JsValue> {
-    let JsValue::Number(v) = sample_variance(x)? else {
-        unreachable!()
-    };
-    Ok(num(math::sqrt(v)))
+    Ok(num(math::sqrt(sample_variance_f64(x)?)))
 }
 
-fn quantile_select(arr: &mut JsArray, k: f64, left: f64, right: f64) {
+fn quantile_select(arr: &mut SelectArray, k: f64, left: f64, right: f64) -> Result<()> {
     if math::rem(k, 1.0) == 0.0 {
-        quickselect(arr, k, left, right);
+        quickselect(arr, k, left, right)
     } else {
         let k = math::floor(k);
-        quickselect(arr, k, left, right);
-        quickselect(arr, k + 1.0, k + 1.0, right);
+        quickselect(arr, k, left, right)?;
+        quickselect(arr, k + 1.0, k + 1.0, right)
     }
 }
 
-fn multi_quantile_select(arr: &mut JsArray, p: &[JsValue]) -> Result<()> {
-    let length = arr.len() as f64;
+fn multi_quantile_select(arr: &mut SelectArray, p: &[JsValue]) -> Result<()> {
+    let length = arr.len();
     let mut indices = Vec::with_capacity(p.len() + 2);
     indices.push(0.0);
     for p_i in p {
@@ -418,7 +605,7 @@ fn multi_quantile_select(arr: &mut JsArray, p: &[JsValue]) -> Result<()> {
             indices[m as usize],
             math::floor(indices[l as usize]),
             math::ceil(indices[r as usize]),
-        );
+        )?;
         stack.push(l);
         stack.push(m);
         stack.push(m);
@@ -428,19 +615,19 @@ fn multi_quantile_select(arr: &mut JsArray, p: &[JsValue]) -> Result<()> {
 }
 
 pub fn quantile(x: &[JsValue], p: &JsValue) -> Result<JsValue> {
-    let mut copy = x.to_vec();
+    let mut copy = SelectArray::new(x);
     if let JsValue::Array(ps) = p {
         multi_quantile_select(&mut copy, ps)?;
         let mut results = Vec::with_capacity(ps.len());
         for p_i in ps {
-            results.push(quantile_sorted(&copy, p_i)?);
+            results.push(quantile_sorted_in(&copy, p_i)?);
         }
         return Ok(JsValue::Array(results));
     }
-    let idx = quantile_index(copy.len() as f64, p)?;
-    let right = copy.len() as f64 - 1.0;
-    quantile_select(&mut copy, idx, 0.0, right);
-    quantile_sorted(&copy, p)
+    let idx = quantile_index(copy.len(), p)?;
+    let right = copy.len() - 1.0;
+    quantile_select(&mut copy, idx, 0.0, right)?;
+    quantile_sorted_in(&copy, p)
 }
 
 pub fn median(x: &[JsValue]) -> Result<JsValue> {
@@ -470,9 +657,7 @@ pub fn sample_skewness(x: &[JsValue]) -> Result<JsValue> {
     if x.len() < 3 {
         return Err(error("sampleSkewness requires at least three data points"));
     }
-    let JsValue::Number(mean_value) = mean(x)? else {
-        unreachable!()
-    };
+    let mean_value = mean_f64(x)?;
     let mut sum_squared_deviations = 0.0;
     let mut sum_cubed_deviations = 0.0;
     for v in x {
@@ -506,42 +691,48 @@ pub fn log_average(x: &[JsValue]) -> Result<JsValue> {
     Ok(num(math::exp(value / x.len() as f64)))
 }
 
-pub fn field_stats(
-    values: &[JsValue],
-    sorted: &[JsValue],
-    positive_sorted: &[JsValue],
-    geometric_mean: &JsValue,
-) -> Result<JsObject> {
-    let mut stats = JsObject::new();
-    stats.insert("count", num(values.len() as f64));
-    stats.insert("min", min_sorted(sorted));
-    stats.insert("max", max_sorted(sorted));
-    stats.insert("mean", mean(values)?);
-    stats.insert("median", median_sorted(sorted)?);
-    stats.insert("mode", mode_sorted(sorted)?);
-    stats.insert("geometricMean", geometric_mean.clone());
-    stats.insert("harmonicMean", harmonic_mean(positive_sorted)?);
-    stats.insert("quadraticMean", root_mean_square(values)?);
-    stats.insert("standardDeviation", sample_standard_deviation(values)?);
-    stats.insert(
-        "medianAbsoluteDeviation",
-        median_absolute_deviation(values)?,
-    );
-    stats.insert("interquartileRange", interquartile_range(values)?);
-    stats.insert("skewness", sample_skewness(values)?);
-    for p in [0.01f64, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99] {
-        let name = match p.to_bits() {
-            b if b == 0.01f64.to_bits() => "percentile01",
-            b if b == 0.05f64.to_bits() => "percentile05",
-            b if b == 0.1f64.to_bits() => "percentile10",
-            b if b == 0.25f64.to_bits() => "percentile25",
-            b if b == 0.5f64.to_bits() => "percentile50",
-            b if b == 0.75f64.to_bits() => "percentile75",
-            b if b == 0.9f64.to_bits() => "percentile90",
-            b if b == 0.95f64.to_bits() => "percentile95",
-            _ => "percentile99",
-        };
-        stats.insert(name, quantile_sorted(sorted, &num(p))?);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn nums(xs: &[f64]) -> Vec<JsValue> {
+        xs.iter().copied().map(num).collect()
     }
-    Ok(stats)
+
+    #[test]
+    fn quantile_with_a_nan_probability_never_completes() {
+        let x = nums(&[3.0, 1.0, 2.0]);
+        for p in [
+            num(f64::NAN),
+            JsValue::Undefined,
+            JsValue::String("x".into()),
+        ] {
+            assert_eq!(quantile(&x, &p), Err(StatsError::NeverCompletes));
+        }
+        assert_eq!(
+            quantile(&x, &num(f64::NEG_INFINITY)),
+            Err(StatsError::NeverCompletes)
+        );
+    }
+
+    #[test]
+    fn quantile_past_the_floyd_rivest_window_overflows_the_stack_instead() {
+        let big: Vec<JsValue> = (0..2000).map(|i| num(f64::from(i % 7))).collect();
+        for p in [f64::NAN, f64::INFINITY] {
+            assert_eq!(
+                quantile(&big, &num(p)),
+                Err(StatsError::Thrown(JsError::range(
+                    "Maximum call stack size exceeded"
+                )))
+            );
+        }
+    }
+
+    #[test]
+    fn quantile_with_a_nan_probability_returns_on_one_element() {
+        assert_eq!(
+            quantile(&nums(&[4.0]), &num(f64::NAN)),
+            Ok(JsValue::Undefined)
+        );
+    }
 }

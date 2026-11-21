@@ -26,9 +26,7 @@ use asrs_model::messages::NamedMessage;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{SelectionImpl, SharedLog};
 use asrs_model::source_list::{Env, SourceListError};
-use asrs_model::source_list_config::{
-    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
-};
+use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -468,37 +466,6 @@ fn source_error(e: SourceListError) -> JsError {
     }
 }
 
-/// `state.forEach` plus the `addListItem` item reads, so a `sourceList.setState` argument the
-/// item parser rejects still throws what upstream would.
-fn item_states_or_throw(
-    value: &JsValue,
-) -> Result<(Vec<SourceListItemState>, Option<JsError>), JsError> {
-    let JsValue::Array(items) = value else {
-        return Err(JsError::type_error("state.forEach is not a function"));
-    };
-    let config = asrs_model::source_list::configs::statistics();
-    let mut out = Vec::with_capacity(items.len());
-    for item in items {
-        match SourceListItemState::from_js(item) {
-            Some(state) => out.push(state),
-            None => {
-                let type_value = asrs_js::ops::get(item, "type")?;
-                let matched = matches!(&type_value, JsValue::String(s)
-                    if config.types.iter().any(|t| t.key == s.to_string_lossy()));
-                let failure = if matched {
-                    JsError::type_error("Cannot read properties of undefined (reading 'color')")
-                } else {
-                    source_error(SourceListError::UnknownType(asrs_js::ops::to_string(
-                        &type_value,
-                    )))
-                };
-                return Ok((out, Some(failure)));
-            }
-        }
-    }
-    Ok((out, None))
-}
-
 struct Runner {
     tabs: Tabs<Host>,
     host: Host,
@@ -521,7 +488,8 @@ impl Runner {
     ) -> Result<R, String> {
         let controller = self
             .tabs
-            .controller_mut(index)
+            .controller_mut(&JsValue::Number(index as f64))
+            .ok()
             .and_then(|c| c.downcast_mut::<StatsHalf>().map(|h| &mut h.inner))
             .ok_or_else(|| format!("tab {index} is not statistics"))?;
         Ok(f(controller, &mut self.host))
@@ -561,13 +529,20 @@ impl Runner {
         }
     }
 
-    fn report(&mut self, where_: &str, result: Result<(), JsError>) {
+    fn report(&mut self, where_: &str, result: Result<(), JsError>) -> Result<(), String> {
         self.drain();
-        if let Err(e) = result {
-            self.emitted.push(Emit::new(vec![
-                ("exception", cve_str(where_)),
-                ("error", cve_str(&thrown_text(&e))),
-            ]));
+        match result {
+            Err(e) if e.name == "Unmodeled" => {
+                Err(err(format!("unmodeled in {where_}: {}", e.message)))
+            }
+            Err(e) => {
+                self.emitted.push(Emit::new(vec![
+                    ("exception", cve_str(where_)),
+                    ("error", cve_str(&thrown_text(&e))),
+                ]));
+                Ok(())
+            }
+            Ok(()) => Ok(()),
         }
     }
 
@@ -576,10 +551,9 @@ impl Runner {
             Ok(()) => self.report(where_, Ok(())),
             Err(TabsError::Thrown(e)) => self.report(where_, Err(e)),
             Err(TabsError::Unmodeled(what)) => {
-                return Err(err(format!("unmodeled upstream state: {what}")));
+                Err(err(format!("unmodeled upstream state: {what}")))
             }
         }
-        Ok(())
     }
 
     fn frame(&mut self) -> Result<(), String> {
@@ -594,6 +568,13 @@ impl Runner {
                 ("data", js_json::from_js(&message.data)),
             ]));
         }
+        let tab_error = out.error;
+        let mut list_errors = Vec::new();
+        for i in 0..self.tabs.len() {
+            if let Ok(r) = self.stats(i, |c, host| c.source_list_frame(host)) {
+                list_errors.extend(r.err());
+            }
+        }
         let sel = &mut self.host.selection;
         sel.get_timeline_range();
         sel.get_hovered_time();
@@ -602,13 +583,14 @@ impl Runner {
         sel.get_render_time();
         sel.get_grab_zoom_range();
         sel.get_current_live_time();
-        match out.error {
-            Some(e) => self.report_tabs("requestAnimationFrame", Err(e)),
-            None => {
-                self.drain();
-                Ok(())
-            }
+        match tab_error {
+            Some(e) => self.report_tabs("requestAnimationFrame", Err(e))?,
+            None => self.drain(),
         }
+        for e in list_errors {
+            self.report("requestAnimationFrame", Err(e))?;
+        }
+        Ok(())
     }
 
     fn advance(&mut self, ms: f64) -> Result<(), String> {
@@ -679,7 +661,15 @@ impl Runner {
             | "call-selection-setter" => Ok(()),
             other => return Err(err(format!("unsupported main message {other}"))),
         };
-        self.report_tabs(&format!("main {name}"), result)
+        // hub.ts handles main messages in an async function, so a throw is an unhandled
+        // rejection, which the oracle records as `${reason.name}: ${reason.message}`.
+        let result = result.map_err(|e| match e {
+            TabsError::Thrown(e) if e.name.is_empty() => {
+                TabsError::Thrown(JsError::new("undefined", "undefined"))
+            }
+            other => other,
+        });
+        self.report_tabs("unhandledRejection", result)
     }
 
     /// `window.selection.<method>(<json args>)` on a `selection` step's `[method, ...args]`.
@@ -764,8 +754,7 @@ impl Runner {
         }
         if let Some((tab_i, rest)) = Self::split_controller(&self.tabs, expr) {
             let result = self.controller_call(tab_i, &rest, expr)?;
-            self.report("eval", result);
-            return Ok(());
+            return self.report("eval", result);
         }
         if expr.starts_with("window.selection.") {
             if let Some(rest) = expr.strip_prefix("window.selection.")
@@ -781,11 +770,8 @@ impl Runner {
                     .map(|a| a.iter().map(Value::from_json_lenient).collect())
                     .unwrap_or_default();
                 let method = method.to_owned();
-                return {
-                    let r = self.selection_call(&method, &args);
-                    self.report("eval", r);
-                    Ok(())
-                };
+                let r = self.selection_call(&method, &args);
+                return self.report("eval", r);
             }
             return Err(err(format!("unsupported eval {expr}")));
         }
@@ -831,21 +817,7 @@ impl Runner {
                     })?
                 }
                 "sourceList.setState" => {
-                    let (states, failure) = match item_states_or_throw(&arg) {
-                        Ok(v) => v,
-                        Err(e) => return Ok(Err(e)),
-                    };
-                    let r = self.stats(tab_i, |c, host| {
-                        host.with_source_env(|env| {
-                            c.source_list_mut()
-                                .set_state(env, states)
-                                .map_err(source_error)
-                        })
-                    })?;
-                    match failure {
-                        Some(e) => Err(e),
-                        None => r,
-                    }
+                    self.stats(tab_i, |c, host| c.set_source_state(host, &arg))?
                 }
                 "restoreState" => self.stats(tab_i, |c, host| c.restore_state(host, &arg))?,
                 other => return Err(err(format!("unsupported eval member {other}"))),
@@ -875,6 +847,39 @@ impl Runner {
         Err(err(format!("unsupported eval {expr}")))
     }
 
+    /// The `/*tabs:info*/` record with each live statistics tab's `saveState()`,
+    /// `showTimeline()` and `getActiveFields()` taken from the port; the stub tabs answer from
+    /// the record itself, and column 0 is the creation-time UUID the recorder logged.
+    fn with_port_stats_rows(&self, info: Value) -> Value {
+        let Value::Array(mut rows) = info else {
+            return info;
+        };
+        for tab in self.tabs.tabs() {
+            let Some(half) = tab.controller().downcast_ref::<StatsHalf>() else {
+                continue;
+            };
+            let Some(Value::Array(row)) = rows.get_mut(half.k) else {
+                continue;
+            };
+            let fields = half
+                .active_fields(&self.host)
+                .into_iter()
+                .map(JsValue::String)
+                .collect();
+            let port = [
+                (1, half.save_state(&self.host)),
+                (3, JsValue::Bool(half.show_timeline(&self.host))),
+                (4, JsValue::Array(fields)),
+            ];
+            for (column, value) in port {
+                if let Some(cell) = row.get_mut(column) {
+                    *cell = js_json::from_js(&value);
+                }
+            }
+        }
+        Value::Array(rows)
+    }
+
     /// A `{kind: "eval"}` capture: `/*tabs:info*/` records verbatim, `/*tabs:restores*/`, and
     /// controller/Tabs probes answered from the port.
     fn eval_capture(&mut self, expr: &str) -> Result<Value, EvalError> {
@@ -893,7 +898,7 @@ impl Runner {
                 )));
             }
             self.host.current = current;
-            return Ok(info);
+            return Ok(self.with_port_stats_rows(info));
         }
         if expr.starts_with("/*tabs:restores*/") {
             return Ok(Value::Array(
@@ -968,6 +973,14 @@ impl Runner {
             "RANGE_MAX.step" => js(&inputs.range_max_step),
             "STEP_SIZE.step" => js(&inputs.step_size_step),
             "TIME_RANGE.value" => js(&inputs.time_range.clone().unwrap_or_default()),
+            "TIME_RANGE.options[0].disabled"
+            | "TIME_RANGE.options[1].disabled"
+            | "TIME_RANGE.options[2].disabled"
+            | "TIME_RANGE.options[3].disabled"
+            | "TIME_RANGE.options[4].disabled" => js_json::from_js(&JsValue::Bool(false)),
+            "TIME_RANGE.options[5].disabled" | "TIME_RANGE.options[6].disabled" => {
+                js_json::from_js(&JsValue::Bool(controller.live_options_disabled()))
+            }
             "sourceList.getState" => js_json::from_js(&JsValue::Array(
                 controller
                     .source_list()
@@ -1381,7 +1394,9 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
                 .to_string_lossy();
             let args: Vec<Value> = args.iter().map(Value::from_json_lenient).collect();
             let r = runner.selection_call(&method, &args);
-            runner.report(&format!("selection {method}"), r);
+            runner
+                .report(&format!("selection {method}"), r)
+                .map_err(where_)?;
         } else if let Some(live) = step.get("liveTime") {
             let v = Value::from_json_lenient(live);
             let t = v

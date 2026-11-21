@@ -64,13 +64,7 @@
         "eval": "window.tabs.tabList[2].controller.sourceList.setState([{\"type\":\"bogus\",\"logKey\":\"/x\",\"logType\":\"Number\",\"visible\":true,\"options\":{}}])"
       },
       {
-        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{}])"
-      },
-      {
         "eval": "window.tabs.tabList[2].controller.sourceList.setState(42)"
-      },
-      {
-        "eval": "window.tabs.tabList[2].controller.sourceList.setState([{\"type\":\"independent\"}])"
       },
       {
         "capture": [

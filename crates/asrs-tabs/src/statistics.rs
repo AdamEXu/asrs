@@ -18,7 +18,7 @@ use asrs_log::log::robot_state::{
 };
 use asrs_model::selection::Selection;
 use asrs_model::source_list::{Env, SourceList, SourceListError, configs};
-use asrs_model::source_list_config::{SourceListItemState, SourceListTypeConfig};
+use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
 use crate::simple_statistics as stats;
@@ -69,6 +69,7 @@ pub struct StatisticsController {
     last_source_str: String,
     last_timeline_range: [f64; 2],
     last_update_time: f64,
+    live_options_disabled: bool,
 }
 
 impl StatisticsController {
@@ -88,6 +89,7 @@ impl StatisticsController {
             last_source_str: String::new(),
             last_timeline_range: [0.0, 0.0],
             last_update_time: 0.0,
+            live_options_disabled: false,
         };
         controller.update_histogram_inputs();
         controller
@@ -138,6 +140,51 @@ impl StatisticsController {
 
     pub fn should_update(&self) -> bool {
         self.should_update
+    }
+
+    /// `option.disabled` of the `live-only` time range options, which `getCommand` sets.
+    pub fn live_options_disabled(&self) -> bool {
+        self.live_options_disabled
+    }
+
+    /// One run of the source list's own `requestAnimationFrame` loop, which the hub schedules
+    /// after its tab loop. Statistics types have no previews, so only the first run (and a
+    /// theme change) does anything: it re-renders every item, and a throw there ends the loop.
+    pub fn source_list_frame(&mut self, cx: &mut impl StatisticsEnv) -> Result<(), JsError> {
+        let time = if self.source_list.state().is_empty() {
+            None
+        } else {
+            cx.selection().get_render_time()
+        };
+        cx.with_source_env(|env| self.source_list.frame(env, time, None))
+            .map_err(source_error)
+    }
+
+    /// `sourceList.setState(value)`: `clear()`, then `value.forEach(addListItem)`. An item
+    /// `SourceListItemState` cannot hold stays in upstream's state after `addListItem` pushes it,
+    /// so the port reports it as unmodeled instead of guessing.
+    pub fn set_source_state(
+        &mut self,
+        cx: &mut impl StatisticsEnv,
+        value: &JsValue,
+    ) -> Result<(), JsError> {
+        let JsValue::Array(items) = value else {
+            self.source_list.clear();
+            if let JsValue::Bytes(_) = value {
+                return Err(JsError::new("Unmodeled", "a typed array of sources"));
+            }
+            ops::get(value, "forEach")?;
+            return Err(JsError::type_error("state.forEach is not a function"));
+        };
+        let items = items
+            .iter()
+            .map(|item| {
+                SourceListItemState::from_js(item)
+                    .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        cx.with_source_env(|env| self.source_list.set_state(env, items))
+            .map_err(source_error)
     }
 
     /// `select.value = v`, without the `change` listener's `shouldUpdate`.
@@ -371,13 +418,6 @@ impl StatisticsController {
         };
         Ok(())
     }
-}
-
-fn type_key<'a>(
-    config: &'a [SourceListTypeConfig],
-    t: &JsString,
-) -> Option<&'a SourceListTypeConfig> {
-    config.iter().find(|c| eq_str(t, &c.key))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -772,41 +812,7 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
         }
         if ops::has(state, "sources")? {
             let sources = ops::get(state, "sources")?;
-            let JsValue::Array(items) = &sources else {
-                return Err(JsError::type_error(
-                    "state.sources.forEach is not a function",
-                ));
-            };
-            let config = configs::statistics();
-            let mut parsed = Vec::with_capacity(items.len());
-            let mut failure = None;
-            for item in items {
-                match SourceListItemState::from_js(item) {
-                    Some(item_state) => parsed.push(item_state),
-                    None => {
-                        let type_value = ops::get(item, "type")?;
-                        let matched = matches!(&type_value, JsValue::String(s) if type_key(&config.types, s).is_some());
-                        failure = Some(if matched {
-                            // `state.options[typeConfig.color]`: a matching type with no usable
-                            // options fails there first.
-                            SourceListError::Thrown(
-                                "TypeError: Cannot read properties of undefined (reading 'color')"
-                                    .to_owned(),
-                            )
-                        } else {
-                            SourceListError::UnknownType(ops::to_string(&type_value))
-                        });
-                        break;
-                    }
-                }
-            }
-            let result = cx
-                .with_source_env(|env| self.source_list.set_state(env, parsed))
-                .map_err(source_error);
-            if let Some(e) = failure {
-                return Err(source_error(e));
-            }
-            result?;
+            self.set_source_state(cx, &sources)?;
         }
         if ops::has(state, "timeRange")?
             && let JsValue::String(v) = ops::get(state, "timeRange")?
@@ -852,6 +858,7 @@ impl<Cx: StatisticsEnv> TabController<Cx> for StatisticsController {
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
+        self.live_options_disabled = cx.selection().get_current_live_time().is_none();
         let sources_js = JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect());
         let sources_str = json::stringify(&sources_js)
             .map_err(|e| JsError {
