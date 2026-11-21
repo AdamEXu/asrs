@@ -42,7 +42,7 @@ From a source checkout of asrs, edit `crates/asrs-libm-lgpl/src`. Development bu
 directory made by `cargo xtask bundle`, rebuild just the library into it:
 
 ```sh
-cargo xtask libm --release --out target/bundle/host   # or the directory holding advantagescope
+cargo xtask libm --release --out target/bundle/host   # or the directory holding asrs
 ```
 
 From a release, the bundle contains this crate's source in `asrs-libm-lgpl/` with a
@@ -51,11 +51,11 @@ standalone `Cargo.toml`:
 ```sh
 cd asrs-libm-lgpl
 cargo build --release
-cp target/release/libasrs_libm_lgpl.dylib <directory containing advantagescope>
-# Linux: libasrs_libm_lgpl.so; Windows: asrs_libm_lgpl.dll next to advantagescope.exe
+cp target/release/libasrs_libm_lgpl.dylib <directory containing asrs>
+# Linux: libasrs_libm_lgpl.so; Windows: asrs_libm_lgpl.dll next to asrs.exe
 ```
 
-Instead of copying, `ASRS_LIBM_LGPL=/path/to/library advantagescope` runs asrs with the
+Instead of copying, `ASRS_LIBM_LGPL=/path/to/library asrs` runs asrs with the
 library at that path. `cargo xtask libm plant` builds a copy with one table entry changed
 and checks that asrs's math tests catch it, which shows the tests run whichever library is
 loaded.

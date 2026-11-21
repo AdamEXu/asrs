@@ -15,7 +15,7 @@ impl Render for EmptyHub {
 
 fn main() {
     if let Err(e) = asrs_js::math::libm::load() {
-        eprintln!("advantagescope: {e}");
+        eprintln!("asrs: {e}");
         std::process::exit(1);
     }
     application().run(|cx: &mut App| {
