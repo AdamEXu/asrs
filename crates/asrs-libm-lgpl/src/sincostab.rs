@@ -2,7 +2,7 @@
 // as bundled by V8 under third_party/glibc.
 // Copyright (C) 2001-2022 Free Software Foundation, Inc.
 // Licensed under the GNU Lesser General Public License, version 2.1 or (at your option) any
-// later version. See licenses/LGPL-2.1.txt and THIRD_PARTY_NOTICES.md.
+// later version. See LICENSE in this crate.
 
 pub(super) static SINCOSTAB: [u64; 440] = [
     0x0000000000000000,

@@ -4,9 +4,11 @@
 
 pub mod channel;
 pub mod ftc;
+pub mod http;
 pub mod live_data_source;
 pub mod live_data_tuner;
 pub mod nt4;
+pub mod phoenix;
 pub mod runtime;
 mod thrown;
 pub mod timers;

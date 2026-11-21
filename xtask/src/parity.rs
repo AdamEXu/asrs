@@ -35,6 +35,12 @@ suites:
   historical [<log file>...] [--jobs N] [--shard N] [--plant]
         scripted hub sessions through the real HistoricalDataSource and the port,
         compared trace for trace (`cargo xtask parity historical --help`)
+  glb [--zips <dir>] [--jobs N] [--plant]
+        load every Field3d_/Robot_ asset from the release zips (default <cache>/asset-zips)
+        in all three render modes with upstream's real loadField/loadRobot workers and with
+        asrs-field3d, and compare the merged buffers. Zips are extracted one per asset folder
+        into target/parity/glb-release/<name of the zips directory>, again when a zip changes.
+        --plant flips a bit in the first asrs-cli line, so the run fails on purpose.
   diff <expected> <actual>
         structured diff of two files: JSONL (.jsonl or .jsonl.zst) line by line,
         anything else byte by byte
@@ -51,6 +57,7 @@ pub fn run(args: &[String]) -> Result {
         Some("fn") => fn_suite(rest),
         Some("decode") => decode_suite(rest),
         Some("historical") => crate::sessions::run(rest),
+        Some("glb") => crate::glb::run(rest),
         Some("diff") => match rest {
             [expected, actual] => diff_files(Path::new(expected), Path::new(actual)),
             _ => Err(USAGE.to_owned()),

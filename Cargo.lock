@@ -293,6 +293,7 @@ name = "asrs-app"
 version = "0.1.0"
 dependencies = [
  "asrs-field3d",
+ "asrs-js",
  "asrs-ui",
  "async-channel",
  "image",
@@ -315,6 +316,7 @@ name = "asrs-cli"
 version = "0.1.0"
 dependencies = [
  "asrs-canvas",
+ "asrs-field3d",
  "asrs-formats",
  "asrs-js",
  "asrs-live",
@@ -323,6 +325,7 @@ dependencies = [
  "asrs-parity",
  "asrs-services",
  "asrs-tabs",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -330,9 +333,12 @@ name = "asrs-field3d"
 version = "0.1.0"
 dependencies = [
  "asrs-js",
+ "asrs-log",
+ "asrs-model",
  "asrs-parity",
  "bytemuck",
  "pollster 0.4.0",
+ "sha2 0.10.9",
  "wgpu",
 ]
 
@@ -370,8 +376,13 @@ dependencies = [
  "indexmap",
  "jiff",
  "jiff-tzdb",
+ "libloading",
  "ryu-js",
 ]
+
+[[package]]
+name = "asrs-libm-lgpl"
+version = "0.1.0"
 
 [[package]]
 name = "asrs-live"

@@ -7,6 +7,7 @@ mod decode_worker;
 mod fn_cmd;
 mod functions;
 mod geometry;
+mod glb;
 mod heatmap;
 mod historical_session;
 mod js_color;
@@ -45,7 +46,10 @@ commands:
                 oracle historicalSession)
   canvas lut    fit the mask-gamma table from the oracle's calibration scenes
   canvas render rasterize the oracle's canvas scenes with asrs-canvas
-  heatmap       replay the oracle's heatmap fixtures with asrs-tabs";
+  heatmap       replay the oracle's heatmap fixtures with asrs-tabs
+  glb release <dir> [--jobs N]
+                load every Field3d_/Robot_ asset under <dir> in all three render modes
+                (same lines as oracle genGlb release)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -57,6 +61,7 @@ fn main() -> ExitCode {
         Some("canvas") => canvas_cmd::run(&args[1..]),
         Some("heatmap") => heatmap::run(&args[1..]),
         Some("wpilog") => wpilog::run(&args[1..]),
+        Some("glb") => glb::run(&args[1..]),
         _ => Err(USAGE.to_owned()),
     };
     match result {

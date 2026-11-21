@@ -1,14 +1,17 @@
 #![allow(clippy::disallowed_methods)]
 
 mod assets;
+mod bundle;
 mod canvas;
 mod check;
 mod corpus;
 mod field3d;
+mod glb;
 mod gpui;
 mod historical;
 mod host;
 mod layout;
+mod libm;
 mod licenses;
 mod oracle;
 mod pack;
@@ -32,6 +35,8 @@ commands:
   layout    crate dependency and lint opt-out rules only
   assets    copy upstream assets into assets/
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
+  bundle    release directory: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
+  libm      build or plant-test the LGPL sin/cos library asrs loads at runtime (see `cargo xtask libm help`)
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
   host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
@@ -50,6 +55,8 @@ fn main() -> ExitCode {
         Some("layout") => layout::run(),
         Some("assets") => assets::run(),
         Some("licenses") => licenses::run(),
+        Some("bundle") => bundle::run(&args[1..]),
+        Some("libm") => libm::run(&args[1..]),
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         Some("gpui") => gpui::run(&args[1..]),
