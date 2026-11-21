@@ -6,6 +6,7 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::{Response, diff, vectors};
 
 use crate::Result;
+use crate::corpus;
 use crate::oracle::{self, Paths};
 
 const MANIFEST: &str = "MANIFEST.json";
@@ -58,6 +59,25 @@ impl Spec {
                 .collect(),
             Kind::Fn { .. } => vec![&self.path],
         }
+    }
+
+    /// Synthetic corpora the generator reads, named by an arg or input path through
+    /// `corpus/synthetic/<name>` (the generated tree or the committed manifest).
+    fn corpora(&self, known: &[String]) -> Vec<String> {
+        let Kind::Entry { args, inputs, .. } = &self.kind else {
+            return Vec::new();
+        };
+        let mut found: Vec<String> = args
+            .iter()
+            .map(String::as_str)
+            .chain(inputs.iter().filter_map(|p| p.to_str()))
+            .flat_map(|text| text.split("corpus/synthetic/").skip(1))
+            .map(|rest| rest.split(['/', '.']).next().unwrap_or_default().to_owned())
+            .filter(|name| known.contains(name))
+            .collect();
+        found.sort();
+        found.dedup();
+        found
     }
 
     /// One vector per zone or per platform; a spec with neither makes one UTC vector named
@@ -221,6 +241,16 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
             );
         }
     }
+
+    let known = corpus::names(&paths.root)?;
+    let mut corpora: Vec<String> = jobs
+        .iter()
+        .filter(|(v, _)| !v.is_foreign())
+        .flat_map(|(v, _)| v.spec.corpora(&known))
+        .collect();
+    corpora.sort();
+    corpora.dedup();
+    corpus::ensure(paths, &corpora)?;
 
     let mut failures = Vec::new();
     let mut foreign_stale = Vec::new();
@@ -1130,6 +1160,56 @@ mod tests {
         let before = entry_hashes(&dir.0, &inputs()).unwrap();
         dir.write("src/genA.ts", "a\r\nb\r\n");
         assert_eq!(before, entry_hashes(&dir.0, &inputs()).unwrap());
+    }
+
+    #[test]
+    fn entry_specs_name_the_corpora_they_read() {
+        let dir = harness("corpora");
+        dir.write(
+            "x/args.entry.json",
+            r#"{"entry": "genA", "args": ["target/parity/corpus/synthetic/b", "7"]}"#,
+        );
+        dir.write(
+            "x/inputs.entry.json",
+            r#"{"entry": "genA", "inputs": ["../../corpus/synthetic/a.manifest.json", "../../corpus/public.toml"]}"#,
+        );
+        dir.write(
+            "x/unknown.entry.json",
+            r#"{"entry": "genA", "args": ["target/parity/corpus/synthetic/zz"]}"#,
+        );
+        dir.write("x/none.entry.json", r#"{"entry": "genA", "args": ["7"]}"#);
+        let known = ["a".to_owned(), "b".to_owned()];
+        let corpora: Vec<(String, Vec<String>)> = discover(&dir.0)
+            .unwrap()
+            .iter()
+            .map(|s| (s.id.clone(), s.corpora(&known)))
+            .collect();
+        let want = |id: &str, names: &[&str]| {
+            (
+                id.to_owned(),
+                names.iter().map(|n| (*n).to_owned()).collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            corpora,
+            [
+                want("x/args", &["b"]),
+                want("x/inputs", &["a"]),
+                want("x/none", &[]),
+                want("x/unknown", &[]),
+            ]
+        );
+    }
+
+    #[test]
+    fn committed_specs_that_read_corpus_b_declare_it() {
+        let root = crate::workspace_root();
+        let known = corpus::names(&root).unwrap();
+        let specs = discover(&specs_dir(&root)).unwrap();
+        for id in ["log/merge-offset", "urcl/urcl"] {
+            let spec = specs.iter().find(|s| s.id == id).expect(id);
+            assert_eq!(spec.corpora(&known), ["b"], "{id}");
+        }
     }
 
     #[test]

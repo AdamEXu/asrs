@@ -18,7 +18,7 @@ commands:
   list [<name>]
             print case ids and descriptions from the committed manifests
   fuzz [--seed <u32>] [--count <n>] [--check]
-            mutate the generated synthetic corpora (run `corpus gen` first) into
+            mutate the generated synthetic corpora (regenerated first if missing or stale) into
             target/parity/corpus/fuzz/<seed>/ with list.jsonl naming each mutant's source and
             mutations; --check runs the fuzzer twice and fails unless both runs are identical
   fetch [<name>...] [--offline]
@@ -91,6 +91,14 @@ fn discover(root: &Path) -> Result<Vec<Spec>> {
     Ok(specs)
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Write,
+    Check,
+    /// Rebuild target/ for commands that read the corpus, leaving the committed manifest alone.
+    Restore,
+}
+
 fn generate(paths: &Paths, args: &[String]) -> Result {
     let check = args.iter().any(|a| a == "--check");
     if let Some(flag) = args.iter().find(|a| a.starts_with("--") && *a != "--check") {
@@ -105,16 +113,29 @@ fn generate(paths: &Paths, args: &[String]) -> Result {
             ));
         }
     }
+    let selected: Vec<&Spec> = specs
+        .iter()
+        .filter(|s| wanted.is_empty() || wanted.contains(&&s.name))
+        .collect();
+    run_specs(
+        paths,
+        &selected,
+        if check { Mode::Check } else { Mode::Write },
+    )?;
+    if check {
+        eprintln!("corpus gen --check: every corpus regenerates byte-identically");
+    }
+    Ok(())
+}
+
+fn run_specs(paths: &Paths, specs: &[&Spec], mode: Mode) -> Result {
     oracle::build_harness(paths)?;
     let oracle_hash = oracle::hash_tree(
         &paths.oracle_src,
         &["src", "build.mjs", "package-lock.json"],
     )?;
     let mut failures = Vec::new();
-    for spec in specs
-        .iter()
-        .filter(|s| wanted.is_empty() || wanted.contains(&&s.name))
-    {
+    for spec in specs {
         eprintln!("==> corpus {}", spec.name);
         let out = output_dir(&paths.root, &spec.name);
         let staging = out.with_file_name(format!(".{}.staging", spec.name));
@@ -135,22 +156,33 @@ fn generate(paths: &Paths, args: &[String]) -> Result {
             .as_bytes(),
         );
         let manifest = build_manifest(paths, spec, &generator, &stdout, &staging)?;
-        let manifest_path =
-            synthetic_dir(&paths.root).join(format!("{}{MANIFEST_SUFFIX}", spec.name));
-        if check {
+        let manifest_path = manifest_path(&paths.root, &spec.name);
+        if mode != Mode::Write {
             let committed =
                 String::from_utf8(oracle::read(&manifest_path)?).map_err(|e| e.to_string())?;
-            remove_dir(&staging)?;
-            match compare(&committed, &manifest) {
-                Some(report) => failures.push(format!("{}: {report}", spec.name)),
-                None => eprintln!("  {} cases, byte-identical", count_cases(&manifest)),
+            if let Some(report) = compare(&committed, &manifest) {
+                remove_dir(&staging)?;
+                failures.push(match mode {
+                    Mode::Restore => format!(
+                        "{}: {report}\nthe corpus generator no longer reproduces the committed manifest; run `cargo xtask corpus gen {}` and commit the result",
+                        spec.name, spec.name
+                    ),
+                    _ => format!("{}: {report}", spec.name),
+                });
+                continue;
             }
-            continue;
+            if mode == Mode::Check {
+                remove_dir(&staging)?;
+                eprintln!("  {} cases, byte-identical", count_cases(&manifest));
+                continue;
+            }
         }
         remove_dir(&out)?;
         fs::rename(&staging, &out).map_err(|e| format!("{}: {e}", out.display()))?;
-        fs::write(&manifest_path, &manifest)
-            .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+        if mode == Mode::Write {
+            fs::write(&manifest_path, &manifest)
+                .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
+        }
         eprintln!(
             "  {} cases -> {}",
             count_cases(&manifest),
@@ -158,13 +190,91 @@ fn generate(paths: &Paths, args: &[String]) -> Result {
         );
     }
     if failures.is_empty() {
-        if check {
-            eprintln!("corpus gen --check: every corpus regenerates byte-identically");
-        }
         Ok(())
     } else {
         Err(failures.join("\n"))
     }
+}
+
+fn manifest_path(root: &Path, name: &str) -> PathBuf {
+    synthetic_dir(root).join(format!("{name}{MANIFEST_SUFFIX}"))
+}
+
+/// Regenerates every named corpus whose target/ tree is missing or differs from its committed
+/// manifest, so commands reading corpus files never run on a partial or stale tree.
+pub(crate) fn ensure(paths: &Paths, names: &[String]) -> Result {
+    let mut stale = Vec::new();
+    for name in names {
+        if let Some(problem) = drift(&paths.root, name)? {
+            eprintln!(
+                "corpus {name} is not current ({problem}); regenerating it (`cargo xtask corpus gen {name}`)"
+            );
+            stale.push(name);
+        }
+    }
+    if stale.is_empty() {
+        return Ok(());
+    }
+    let specs = discover(&paths.root)?;
+    let selected: Vec<&Spec> = specs.iter().filter(|s| stale.contains(&&s.name)).collect();
+    if selected.len() != stale.len() {
+        return Err(format!(
+            "corpus: no spec for one of {stale:?} under parity/corpus/synthetic"
+        ));
+    }
+    run_specs(paths, &selected, Mode::Restore)?;
+    for name in stale {
+        if let Some(problem) = drift(&paths.root, name)? {
+            return Err(format!(
+                "corpus {name} is still not current after regenerating it: {problem}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The first way the generated tree of corpus `name` departs from its committed manifest.
+fn drift(root: &Path, name: &str) -> Result<Option<String>> {
+    let path = manifest_path(root, name);
+    let text = String::from_utf8(oracle::read(&path)?).map_err(|e| e.to_string())?;
+    let manifest = json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let dir = output_dir(root, name);
+    if !dir.is_dir() {
+        return Ok(Some(format!("{} is missing", rel_display(root, &dir))));
+    }
+    let mut listed = Vec::new();
+    for case in manifest
+        .get("list")
+        .and_then(Json::as_array)
+        .unwrap_or_default()
+    {
+        for file in case
+            .get("files")
+            .and_then(Json::as_array)
+            .unwrap_or_default()
+        {
+            let rel = str_field(file, "path")?;
+            let hash = str_field(file, "hash")?;
+            let Ok(bytes) = fs::read(dir.join(&rel)) else {
+                return Ok(Some(format!("{rel} is missing")));
+            };
+            if oracle::hash_bytes(&bytes) != hash {
+                return Ok(Some(format!("{rel} differs from the manifest")));
+            }
+            listed.push(rel);
+        }
+    }
+    let mut on_disk = Vec::new();
+    collect_files(&dir, &dir, &mut on_disk)?;
+    listed.sort();
+    Ok(on_disk
+        .into_iter()
+        .find(|rel| listed.binary_search(rel).is_err())
+        .map(|rel| format!("{rel} is not in the manifest")))
+}
+
+fn rel_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).display().to_string()
 }
 
 /// The manifest keeps one case per line so diffs stay readable.
@@ -319,7 +429,7 @@ fn list(paths: &Paths, args: &[String]) -> Result {
         if args.first().is_some_and(|n| n != &spec.name) {
             continue;
         }
-        let path = synthetic_dir(&paths.root).join(format!("{}{MANIFEST_SUFFIX}", spec.name));
+        let path = manifest_path(&paths.root, &spec.name);
         let text = String::from_utf8(oracle::read(&path)?).map_err(|e| e.to_string())?;
         let manifest = json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         for case in manifest
@@ -361,16 +471,12 @@ fn fuzz(paths: &Paths, args: &[String]) -> Result {
             other => return Err(format!("corpus fuzz: unknown argument {other}")),
         }
     }
-    let inputs: Vec<PathBuf> = discover(&paths.root)?
+    let names = names(&paths.root)?;
+    ensure(paths, &names)?;
+    let inputs: Vec<PathBuf> = names
         .iter()
-        .map(|spec| output_dir(&paths.root, &spec.name))
+        .map(|name| output_dir(&paths.root, name))
         .collect();
-    if let Some(missing) = inputs.iter().find(|dir| !dir.is_dir()) {
-        return Err(format!(
-            "corpus fuzz: {} is missing; run `cargo xtask corpus gen` first",
-            missing.display()
-        ));
-    }
     oracle::build_harness(paths)?;
     let out = paths.root.join("target/parity/corpus/fuzz").join(&seed);
     let run = |dir: &Path| -> Result<String> {
@@ -448,4 +554,132 @@ fn collect_files(base: &Path, dir: &Path, out: &mut Vec<String>) -> Result {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("asrs-corpus-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+
+        fn write(&self, rel: &str, bytes: &[u8]) {
+            let path = self.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, bytes).unwrap();
+        }
+
+        fn corpus(&self, name: &str, files: &[(&str, &[u8])]) {
+            let entries: Vec<String> = files
+                .iter()
+                .map(|(rel, bytes)| {
+                    self.write(
+                        &format!("target/parity/corpus/synthetic/{name}/{rel}"),
+                        bytes,
+                    );
+                    format!(
+                        r#"{{"id":"{}","about":"","files":[{{"path":"{rel}","hash":"{}"}}]}}"#,
+                        rel.split('.').next().unwrap(),
+                        oracle::hash_bytes(bytes)
+                    )
+                })
+                .collect();
+            self.write(
+                &format!("parity/corpus/synthetic/{name}{MANIFEST_SUFFIX}"),
+                format!(r#"{{"list":[{}]}}"#, entries.join(",")).as_bytes(),
+            );
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn drift_reports_missing_changed_and_unlisted_files() {
+        let root = Scratch::new("drift");
+        root.corpus("b", &[("urcl/a.wpilog", b"a"), ("merge/x.wpilog", b"x")]);
+        assert_eq!(drift(&root.0, "b").unwrap(), None);
+        let dir = output_dir(&root.0, "b");
+
+        fs::write(dir.join("urcl/a.wpilog"), b"changed").unwrap();
+        assert_eq!(
+            drift(&root.0, "b").unwrap().as_deref(),
+            Some("urcl/a.wpilog differs from the manifest")
+        );
+        fs::remove_file(dir.join("urcl/a.wpilog")).unwrap();
+        assert_eq!(
+            drift(&root.0, "b").unwrap().as_deref(),
+            Some("urcl/a.wpilog is missing")
+        );
+        fs::write(dir.join("urcl/a.wpilog"), b"a").unwrap();
+        fs::write(dir.join("urcl/extra.wpilog"), b"e").unwrap();
+        assert_eq!(
+            drift(&root.0, "b").unwrap().as_deref(),
+            Some("urcl/extra.wpilog is not in the manifest")
+        );
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            drift(&root.0, "b").unwrap().as_deref(),
+            Some("target/parity/corpus/synthetic/b is missing")
+        );
+    }
+
+    /// Runs the real generators, so it only runs once `cargo xtask oracle setup` has built them.
+    #[test]
+    fn corpus_generators_fail_on_a_missing_corpus_file() {
+        let paths = Paths::new().unwrap();
+        if paths.electron().is_err() {
+            eprintln!("oracle is not set up; skipping");
+            return;
+        }
+        let root = Scratch::new("generators");
+        root.corpus(
+            "b",
+            &[
+                ("urcl/a.wpilog", b"a"),
+                ("merge/p/target.wpilog", b"t"),
+                ("merge/p/source.wpilog", b"s"),
+            ],
+        );
+        let dir = output_dir(&root.0, "b");
+        fs::remove_file(dir.join("urcl/a.wpilog")).unwrap();
+        fs::remove_file(dir.join("merge/p/source.wpilog")).unwrap();
+        for (entry, args, missing) in [
+            ("genUrcl", vec![dir.display().to_string()], "urcl/a.wpilog"),
+            (
+                "genMergeCalculator",
+                vec!["1".to_owned(), "1".to_owned()],
+                "merge/p/source.wpilog",
+            ),
+        ] {
+            if !paths.dist.join(format!("{entry}.mjs")).exists() {
+                eprintln!("{entry} is not built; skipping");
+                continue;
+            }
+            let output = oracle::oracle_command(&paths, entry)
+                .unwrap()
+                .args(&args)
+                .current_dir(&root.0)
+                .output()
+                .unwrap();
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!output.status.success(), "{entry} succeeded:\n{stderr}");
+            assert!(output.stdout.is_empty(), "{entry} emitted cases");
+            assert!(
+                stderr.contains(missing) && stderr.contains("cargo xtask corpus gen b"),
+                "{entry}: {stderr}"
+            );
+        }
+    }
 }
