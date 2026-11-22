@@ -699,6 +699,9 @@ pub struct RunImage {
     pub width: u32,
     pub height: u32,
     pub alpha: Vec<u8>,
+    /// Straight RGBA of the whole run when it holds a colour glyph, which `alpha` then only
+    /// approximates.
+    pub rgba: Option<Vec<u8>>,
 }
 
 /// Paints `glyphs` from an origin `fraction` `LayoutUnit`s right of a device pixel boundary, as
@@ -733,6 +736,15 @@ pub fn rasterize(
     let top = placed.iter().map(|(_, m)| m.top).min()?;
     let bottom = placed.iter().map(|(_, m)| m.top + m.height as i32).max()?;
     let (width, height) = ((right - left) as u32, (bottom - top) as u32);
+    if placed.iter().any(|(_, m)| m.color) {
+        return Some(composite_color(
+            lut,
+            &placed,
+            [left, top],
+            [width, height],
+            color,
+        ));
+    }
     let mut alpha = vec![0u8; width as usize * height as usize];
     for (x, mask) in &placed {
         for row in 0..mask.height as usize {
@@ -755,7 +767,76 @@ pub fn rasterize(
         width,
         height,
         alpha,
+        rgba: None,
     })
+}
+
+/// A run with colour glyphs, composited source-over in premultiplied RGBA as Skia draws its
+/// glyphs in order: masks in `color` through the mask-gamma row, colour glyphs as they are.
+fn composite_color(
+    lut: &MaskGammaLut,
+    placed: &[(i32, Arc<Mask>)],
+    [left, top]: [i32; 2],
+    [width, height]: [u32; 2],
+    color: [u8; 3],
+) -> RunImage {
+    let mut premul = vec![[0f32; 4]; width as usize * height as usize];
+    for (x, mask) in placed {
+        let bpp = if mask.color { 4 } else { 1 };
+        for row in 0..mask.height as usize {
+            let y = (mask.top - top) as usize + row;
+            let dst_start = y * width as usize + (x + mask.left - left) as usize;
+            for col in 0..mask.width as usize {
+                let i = (row * mask.width as usize + col) * bpp;
+                let src = if mask.color {
+                    let p = &mask.data[i..i + 4];
+                    [p[0], p[1], p[2], p[3]].map(f32::from)
+                } else {
+                    let raw = mask.data[i];
+                    if raw == 0 {
+                        continue;
+                    }
+                    let a = f32::from(lut.apply(color, raw));
+                    [
+                        f32::from(color[0]) * a / 255.0,
+                        f32::from(color[1]) * a / 255.0,
+                        f32::from(color[2]) * a / 255.0,
+                        a,
+                    ]
+                };
+                if src[3] == 0.0 {
+                    continue;
+                }
+                let d = &mut premul[dst_start + col];
+                let keep = 1.0 - src[3] / 255.0;
+                for k in 0..4 {
+                    d[k] = src[k] + d[k] * keep;
+                }
+            }
+        }
+    }
+    let mut alpha = Vec::with_capacity(premul.len());
+    let mut rgba = Vec::with_capacity(premul.len() * 4);
+    for p in premul {
+        let a = p[3].round().clamp(0.0, 255.0);
+        alpha.push(a as u8);
+        let straight = |v: f32| {
+            if a == 0.0 {
+                0
+            } else {
+                (v * 255.0 / p[3]).round().clamp(0.0, 255.0) as u8
+            }
+        };
+        rgba.extend_from_slice(&[straight(p[0]), straight(p[1]), straight(p[2]), a as u8]);
+    }
+    RunImage {
+        left,
+        top,
+        width,
+        height,
+        alpha,
+        rgba: Some(rgba),
+    }
 }
 
 #[cfg(test)]

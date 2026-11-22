@@ -20,6 +20,8 @@ pub struct Mask {
     pub width: u32,
     pub height: u32,
     pub data: Vec<u8>,
+    /// `data` is a colour glyph's premultiplied RGBA, four bytes a pixel, not coverage.
+    pub color: bool,
 }
 
 /// A glyph of one sized font instance. `face` is the backend's id for that instance: the primary
@@ -78,7 +80,7 @@ pub trait TextBackend {
 
     /// Raw coverage, before mask gamma, of `glyph` drawn at device scale `scale`, compressed
     /// horizontally by `x_scale`, with its origin `phase` quarter pixels right of the pixel grid.
-    /// `left` and `top` are relative to that pixel.
+    /// `left` and `top` are relative to that pixel. A colour glyph comes back as its RGBA image.
     fn raw_mask(&mut self, glyph: Glyph, scale: f64, x_scale: f64, phase: u8) -> Option<Arc<Mask>>;
 
     /// Raw coverage of `glyph` under any device matrix `[a, b, c, d]` (`x' = a x + c y`,

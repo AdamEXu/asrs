@@ -28,6 +28,8 @@ use super::{
 
 const K_CT_FONT_UI_FONT_SYSTEM: u32 = 2;
 const K_CG_IMAGE_ALPHA_ONLY: u32 = 7;
+const K_CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST: u32 = 2;
+const K_CG_BITMAP_BYTE_ORDER_32_HOST: u32 = 2 << 12;
 const WGHT: i64 = 0x7767_6874;
 const OS2: u32 = 0x4f53_2f32;
 const EMOJI: [&str; 2] = [".AppleColorEmojiUI", "AppleColorEmoji"];
@@ -294,6 +296,57 @@ fn read_mask(mut cx: CGContext, x0: i32, y1: i32, w: usize, h: usize) -> Arc<Mas
         width: w as u32,
         height: h as u32,
         data: bytes,
+        color: false,
+    })
+}
+
+/// `SkScalerContext_Mac`'s offscreen for colour glyphs: premultiplied ARGB in host order on
+/// a device RGB context, cleared to transparent, with CoreGraphics left to pick and scale the
+/// bitmap strike.
+fn color_context(width: usize, height: usize) -> CGContext {
+    let mut cx = CGContext::create_bitmap_context(
+        None,
+        width,
+        height,
+        8,
+        width * 4,
+        &CGColorSpace::create_device_rgb(),
+        K_CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST | K_CG_BITMAP_BYTE_ORDER_32_HOST,
+    );
+    cx.data().fill(0);
+    cx.set_allows_font_subpixel_quantization(false);
+    cx.set_should_subpixel_quantize_fonts(false);
+    cx.set_allows_font_subpixel_positioning(true);
+    cx.set_should_subpixel_position_fonts(true);
+    cx.set_text_drawing_mode(CGTextDrawingMode::CGTextFill);
+    cx.set_rgb_fill_color(0.0, 0.0, 0.0, 1.0);
+    cx.set_should_antialias(true);
+    cx.set_should_smooth_fonts(false);
+    cx
+}
+
+fn read_color(mut cx: CGContext, left: i32, top: i32, w: usize, h: usize) -> Arc<Mask> {
+    let stride = cx.bytes_per_row();
+    let data = cx.data();
+    let mut bytes = Vec::with_capacity(w * h * 4);
+    for row in 0..h {
+        for px in data[row * stride..row * stride + w * 4].chunks_exact(4) {
+            let argb = u32::from_ne_bytes([px[0], px[1], px[2], px[3]]);
+            bytes.extend_from_slice(&[
+                (argb >> 16) as u8,
+                (argb >> 8) as u8,
+                argb as u8,
+                (argb >> 24) as u8,
+            ]);
+        }
+    }
+    Arc::new(Mask {
+        left,
+        top,
+        width: w as u32,
+        height: h as u32,
+        data: bytes,
+        color: true,
     })
 }
 
@@ -466,6 +519,56 @@ impl CoreText {
         pen
     }
 
+    /// `SkScalerContext_Mac::generateMetrics` and `generateImage` for a colour glyph: the face
+    /// at the device text size, the rest of the device matrix as the text matrix, bounds rounded
+    /// out with a pixel of margin, and the glyph drawn from the inverse-mapped corner.
+    fn color_image(
+        &mut self,
+        glyph: Glyph,
+        scale: f64,
+        x_scale: f64,
+        phase: u8,
+    ) -> Option<Arc<Mask>> {
+        let face = &self.faces[glyph.face as usize];
+        let font = face.font.clone();
+        let skew = face.skew;
+        let id = glyph.id as CGGlyph;
+        let size = font.pt_size() as f32;
+        let text_size = size * relax(scale as f32);
+        let a = f64::from(size * relax((scale * x_scale) as f32) / text_size);
+        let c = if skew { 0.25 * a } else { 0.0 };
+        let m = CGAffineTransform::new(a, 0.0, c, 1.0, 0.0, 0.0);
+        let device = self.device_font(glyph.face, &font, text_size);
+        let advance = {
+            let mut advance = CGSize::new(0.0, 0.0);
+            // SAFETY: one glyph in, one advance out.
+            unsafe {
+                device.get_advances_for_glyphs(kCTFontOrientationHorizontal, &id, &mut advance, 1)
+            };
+            advance
+        };
+        let rect = device.get_bounding_rects_for_glyphs(kCTFontOrientationHorizontal, &[id]);
+        if (advance.width == 0.0 && advance.height == 0.0)
+            || rect.size.width <= 0.0
+            || rect.size.height <= 0.0
+        {
+            return None;
+        }
+        let [l, b, r, t] = transformed_rect(rect, m).map(|v| v as f32);
+        let sub_x = f32::from(phase) / 4.0;
+        let left = l.floor() as i32 - 1;
+        let top = (-t).floor() as i32 - 1;
+        let right = (r + sub_x).ceil() as i32 + 1;
+        let bottom = (-b).ceil() as i32 + 1;
+        let (w, h) = ((right - left) as usize, (bottom - top) as usize);
+        let cx = color_context(w, h);
+        cx.set_text_matrix(&m);
+        let point = CGPoint::new(f64::from(sub_x) - f64::from(left), f64::from(bottom));
+        let point = CGPoint::new((point.x - c * point.y) / a, point.y);
+        device.draw_glyphs(&[id], &[point], cx.clone());
+        Some(read_color(cx, left, top, w, h))
+    }
+
     fn glyph_rect(&self, glyph: Glyph) -> Option<(CTFont, CGGlyph, [f64; 4])> {
         let face = self.faces.get(glyph.face as usize)?;
         let font = face.font.clone();
@@ -561,6 +664,9 @@ impl TextBackend for CoreText {
     }
 
     fn raw_mask(&mut self, glyph: Glyph, scale: f64, x_scale: f64, phase: u8) -> Option<Arc<Mask>> {
+        if self.faces.get(glyph.face as usize)?.color {
+            return self.color_image(glyph, scale, x_scale, phase);
+        }
         let (font, id, [l, b, r, t]) = self.glyph_rect(glyph)?;
         let size = font.pt_size() as f32;
         let text_size = size * relax(scale as f32);

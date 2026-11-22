@@ -161,8 +161,17 @@ impl TextSystem {
         )
         .and_then(|run| {
             let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
-            for &a in &run.alpha {
-                bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+            match &run.rgba {
+                Some(rgba) => {
+                    for p in rgba.chunks_exact(4) {
+                        bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+                    }
+                }
+                None => {
+                    for &a in &run.alpha {
+                        bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+                    }
+                }
             }
             let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
             Some((
