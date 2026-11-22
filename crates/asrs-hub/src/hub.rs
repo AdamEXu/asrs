@@ -34,6 +34,7 @@ use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, TimeSupplier};
 use asrs_model::selection_impl::{SelectionContext, SelectionImpl, SharedLog};
+use asrs_model::source_list::Rect;
 use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::cx::TabCx;
@@ -171,6 +172,26 @@ pub trait HubView {
     fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect>;
     /// `clientWidth` of a displayed `.field-value` showing `value`.
     fn measure_value(&self, value: &RowValue) -> f64;
+    /// The tab bar's geometry; see [`TabsHost`].
+    fn title_rect(&self, _index: usize) -> Rect {
+        Rect::default()
+    }
+    fn overlay_rect(&self) -> Rect {
+        Rect::default()
+    }
+    fn add_button_rect(&self) -> Rect {
+        Rect::default()
+    }
+    fn tab_bar_scroll_left(&self) -> f64 {
+        0.0
+    }
+    fn set_tab_bar_scroll_left(&self, _value: f64) {}
+    fn tab_bar_scroll_width(&self) -> f64 {
+        0.0
+    }
+    fn tab_bar_client_width(&self) -> f64 {
+        0.0
+    }
 }
 
 /// The `title` element's text after `setWindowTitle`: upstream `htmlEncode`s the name and
@@ -365,6 +386,34 @@ impl TabsHost for HubPage {
 
     fn renderer_top(&self, show_timeline: bool) -> f64 {
         self.view.renderer_top(show_timeline)
+    }
+
+    fn title_rect(&self, index: usize) -> Rect {
+        self.view.title_rect(index)
+    }
+
+    fn overlay_rect(&self) -> Rect {
+        self.view.overlay_rect()
+    }
+
+    fn add_button_rect(&self) -> Rect {
+        self.view.add_button_rect()
+    }
+
+    fn tab_bar_scroll_left(&self) -> f64 {
+        self.view.tab_bar_scroll_left()
+    }
+
+    fn set_tab_bar_scroll_left(&self, value: f64) {
+        self.view.set_tab_bar_scroll_left(value);
+    }
+
+    fn tab_bar_scroll_width(&self) -> f64 {
+        self.view.tab_bar_scroll_width()
+    }
+
+    fn tab_bar_client_width(&self) -> f64 {
+        self.view.tab_bar_client_width()
     }
 }
 
@@ -1169,7 +1218,9 @@ impl HubModel {
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
             HubFrame::Tabs => {
-                let out = self.tabs.periodic(&mut self.page);
+                let now = self.page.clock.now();
+                self.tabs.scroll_step(&self.page, now);
+                let out = self.tabs.periodic(&mut self.page, now);
                 for update in out.satellite_updates {
                     host.send_main_message(update.to_message());
                 }

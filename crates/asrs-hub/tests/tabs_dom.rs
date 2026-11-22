@@ -3,6 +3,16 @@
 //! Replays `parity/specs/dom/tabs-model/<case>.entry.json` against `asrs_hub::tabs::Tabs` and
 //! compares the emitted records with the committed `dom/tabs-model/<case>` vector, line for line.
 //!
+//! The vectors are Blink runs with real geometry. Every geometry read `Tabs` makes (title,
+//! overlay, add button and renderer rects; the tab bar's `scrollLeft`, `scrollWidth` and
+//! `clientWidth`) is answered, in order, from upstream's `read` records through
+//! `asrs_parity::geometry::ScriptedReads`, and every `scrollLeft` assignment to the tab bar is
+//! checked against upstream's `write` record. Each assignment's resulting offset, which the
+//! app's tab bar computes with `assign_scroll_offset`, must equal the next recorded read. The
+//! scroll overlay's own reads and writes are the DOM field `ScrollSensor` replaces: overlay
+//! scrolls in the fixtures (`/*tabs:scroll dx dy*/`) reach the port as precise wheel input.
+//! Geometry records of the sidebar, timeline and tab renderers belong to other models.
+//!
 //! Controllers and renderers are ported by other units, so every tab here gets stub halves.
 //! The fixtures wrap upstream's `addTab` (`/*tabs:recorder*/`) to list each created tab with its
 //! creation-time UUID, and every capture starts with `/*tabs:info*/`, which reports what each
@@ -25,20 +35,25 @@ use std::rc::Rc;
 
 use asrs_hub::drag::Drag;
 use asrs_hub::tabs::{TabDragData, TabFactory, TabParts, Tabs, TabsError, TabsHost};
-use asrs_js::number;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue};
+use asrs_js::{math, number};
 use asrs_log::log::Log;
 use asrs_model::messages::NamedMessage;
+use asrs_model::scroll_sensor::{Wheel, assign_scroll_offset};
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
+use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
+use asrs_tabs::form::css::{Property, Style};
 
 const FRAME_PERIOD: f64 = 16.0;
+const OVERLAY_CLIENT_WIDTH: f64 = 636.0;
+const OVERLAY_CLIENT_HEIGHT: f64 = 50.0;
 const DEFAULT_IGNORED: [&str; 3] = ["save-state", "save-type-memory", "update-touch-bar-slider"];
 
 fn js(s: &str) -> JsString {
@@ -70,7 +85,9 @@ struct Current {
 
 struct Host {
     inner_height: f64,
-    renderer_top: f64,
+    reads: RefCell<ScriptedReads>,
+    bar: RefCell<BarScroll>,
+    device_pixel_ratio: f64,
     seeds: Vec<Seed>,
     current: Vec<Current>,
     restores: Vec<(usize, &'static str, JsValue)>,
@@ -98,13 +115,137 @@ fn range_of(value: &JsValue) -> Result<Option<[f64; 2]>, String> {
     }
 }
 
+/// The tab bar's scroll position as the app's host keeps it: each assignment and each layout
+/// clamps and snaps it with `assign_scroll_offset`, against the extent upstream reads.
+#[derive(Default)]
+struct BarScroll {
+    left: f64,
+    scroll_width: f64,
+    client_width: f64,
+    last_read: Option<f64>,
+    checks: usize,
+    error: Option<String>,
+}
+
+impl BarScroll {
+    fn check(&mut self, upstream: f64, port: f64) {
+        self.checks += 1;
+        if upstream.to_bits() != port.to_bits() && self.error.is_none() {
+            self.error = Some(format!(
+                "the tab bar's scrollLeft is {port} in the port, {upstream} upstream"
+            ));
+        }
+    }
+
+    fn relayout(&mut self, device_pixel_ratio: f64) {
+        self.left = assign_scroll_offset(
+            self.left,
+            self.scroll_width - self.client_width,
+            device_pixel_ratio,
+        );
+    }
+}
+
+const TAB_BAR: &str = "div.tab-bar:0";
+const OVERLAY: &str = "div.tab-bar-scroll:4";
+const RENDERER: &str = "div.renderer-content:5";
+const ADD_BUTTON: &str = "button.add-tab:10";
+
+fn rect_of([x, y, width, height]: [f64; 4]) -> Rect {
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+/// Whether a geometry record is one `Tabs` makes: everything on the tab bar and its titles,
+/// the renderer and add button rects, and the overlay's rect. The overlay's scroll position
+/// reads and writes are `ScrollSensor`'s DOM field.
+fn owned_by_tabs(g: &GeometryRecord) -> bool {
+    let segments: Vec<&str> = g.el.split('>').collect();
+    let classes = |segment: &str| -> Vec<String> {
+        let name = segment.rsplit_once(':').map_or(segment, |(n, _)| n);
+        name.split('.').skip(1).map(str::to_owned).collect()
+    };
+    let last = classes(segments[segments.len() - 1]);
+    let parent = segments
+        .len()
+        .checked_sub(2)
+        .map(|i| classes(segments[i]))
+        .unwrap_or_default();
+    let has = |list: &[String], c: &str| list.iter().any(|x| x == c);
+    has(&last, "tab-bar")
+        || (has(&parent, "tab-bar") && has(&last, "tab"))
+        || (has(&last, "tab-bar-scroll") && g.name == "getBoundingClientRect")
+        || has(&last, "renderer-content")
+        || has(&last, "add-tab")
+}
+
 impl TabsHost for Host {
     fn inner_height(&self) -> f64 {
         self.inner_height
     }
 
     fn renderer_top(&self, _show_timeline: bool) -> f64 {
-        self.renderer_top
+        self.reads.borrow_mut().read_rect(RENDERER)[1]
+    }
+
+    fn title_rect(&self, index: usize) -> Rect {
+        rect_of(
+            self.reads
+                .borrow_mut()
+                .read_rect(&format!("{TAB_BAR}>div.tab:{index}")),
+        )
+    }
+
+    fn overlay_rect(&self) -> Rect {
+        rect_of(self.reads.borrow_mut().read_rect(OVERLAY))
+    }
+
+    fn add_button_rect(&self) -> Rect {
+        rect_of(self.reads.borrow_mut().read_rect(ADD_BUTTON))
+    }
+
+    fn tab_bar_scroll_left(&self) -> f64 {
+        let upstream = self.reads.borrow_mut().read_f64("scrollLeft", TAB_BAR);
+        self.bar.borrow_mut().last_read = Some(upstream);
+        upstream
+    }
+
+    fn set_tab_bar_scroll_left(&self, value: f64) {
+        self.reads
+            .borrow_mut()
+            .write_f64("scrollLeft", TAB_BAR, value);
+        let mut bar = self.bar.borrow_mut();
+        if let Some(read) = bar.last_read.take() {
+            let left = bar.left;
+            bar.check(read, left);
+        }
+        bar.left = assign_scroll_offset(
+            value,
+            bar.scroll_width - bar.client_width,
+            self.device_pixel_ratio,
+        );
+    }
+
+    fn tab_bar_scroll_width(&self) -> f64 {
+        let width = self.reads.borrow_mut().read_f64("scrollWidth", TAB_BAR);
+        self.bar.borrow_mut().scroll_width = width;
+        width
+    }
+
+    fn tab_bar_client_width(&self) -> f64 {
+        let width = self.reads.borrow_mut().read_f64("clientWidth", TAB_BAR);
+        let mut bar = self.bar.borrow_mut();
+        bar.client_width = width;
+        bar.relayout(self.device_pixel_ratio);
+        if let Some(read) = bar.last_read.take() {
+            let left = bar.left;
+            bar.check(read, left);
+        }
+        width
     }
 }
 
@@ -344,13 +485,12 @@ fn range_seeds(records: &[Record]) -> Result<RangeSeeds, String> {
     Ok((uuids, returns))
 }
 
-struct LayoutRule {
-    selector: String,
-    rect: Rect,
-}
-
+/// `style.left = n + "px"` read back, as Blink serializes it.
 fn px(n: f64) -> Value {
-    cve_str(&format!("{}px", number::to_string(n)))
+    let mut style = Style::new();
+    let assigned = format!("{}px", number::to_string(n));
+    style.set(Property::Left, &js(&assigned));
+    js_str_value(&style.get(Property::Left))
 }
 
 fn opt_px(n: Option<f64>) -> Value {
@@ -381,8 +521,6 @@ struct Runner {
     host: Host,
     log: Log,
     drag: Drag<TabDragData, TabDragItem>,
-    layout: Vec<LayoutRule>,
-    tags: Vec<Option<usize>>,
     ignored: Vec<String>,
     infos: Vec<Value>,
     info_seen: usize,
@@ -394,38 +532,11 @@ struct Runner {
 }
 
 impl Runner {
-    fn rule(&self, selector: &str) -> Option<Rect> {
-        self.layout
-            .iter()
-            .find(|r| r.selector == selector)
-            .map(|r| r.rect)
-    }
-
     fn creation_index(&self, index: usize) -> Option<usize> {
         let tab = self.tabs.tab(index)?;
         tab.controller()
             .downcast_ref::<StubController>()
             .map(|c| c.0)
-    }
-
-    fn tab_rects(&self) -> Vec<Rect> {
-        (0..self.tabs.len())
-            .map(|i| {
-                self.creation_index(i)
-                    .and_then(|k| self.tags.get(k).copied().flatten())
-                    .and_then(|tag| self.rule(&format!("div.tab[data-i=\"{tag}\"]")))
-                    .unwrap_or_default()
-            })
-            .collect()
-    }
-
-    fn overlay(&self) -> Rect {
-        self.rule("div.tab-bar-scroll").unwrap_or(Rect {
-            x: 310.0,
-            y: 0.0,
-            width: 636.0,
-            height: 50.0,
-        })
     }
 
     fn drain_messages(&mut self) {
@@ -453,7 +564,8 @@ impl Runner {
     }
 
     fn frame(&mut self) -> Result<(), String> {
-        let out = self.tabs.periodic(&mut self.host);
+        let now = self.start_time + self.now;
+        let out = self.tabs.periodic(&mut self.host, now);
         for update in out.satellite_updates {
             if self.ignored.iter().any(|n| n == "update-satellite") {
                 continue;
@@ -478,12 +590,20 @@ impl Runner {
         }
     }
 
+    /// The real Blink frame the harness waits for after every step and every callback, where
+    /// native `scroll` events are dispatched; the fake clock's frames never dispatch them.
+    fn settle(&mut self) {
+        let now = self.start_time + self.now;
+        self.tabs.scroll_step(&self.host, now);
+    }
+
     fn advance(&mut self, ms: f64) -> Result<(), String> {
         let end = self.now + ms;
         while self.last_frame + FRAME_PERIOD <= end {
             self.last_frame += FRAME_PERIOD;
             self.now = self.last_frame;
             self.frame()?;
+            self.settle();
         }
         self.now = end;
         Ok(())
@@ -557,9 +677,7 @@ impl Runner {
             _ => self.drag.end(),
         }
         for update in self.drag.take_updates() {
-            let rects = self.tab_rects();
-            let overlay = self.overlay();
-            let r = self.tabs.drag_update(&self.host, &update, &rects, &overlay);
+            let r = self.tabs.drag_update(&self.host, &update);
             self.report("event", r)?;
             let mut data = JsObject::new();
             data.insert("tabIndex", JsValue::Number(update.data.tab_index));
@@ -574,40 +692,18 @@ impl Runner {
     }
 }
 
-fn spec_layout(fixture: &Json) -> Vec<LayoutRule> {
-    let mut rules = Vec::new();
-    for rule in fixture
-        .get("layout")
-        .and_then(Json::as_array)
-        .unwrap_or(&[])
-    {
-        let (Some(selector), Some(rect)) = (
-            rule.get("selector").and_then(str_of),
-            rule.get("rect").and_then(Json::as_array),
-        ) else {
-            continue;
-        };
-        let n = |i: usize| rect.get(i).and_then(Json::as_f64).unwrap_or(0.0);
-        rules.push(LayoutRule {
-            selector,
-            rect: Rect {
-                x: n(0),
-                y: n(1),
-                width: n(2),
-                height: n(3),
-            },
-        });
-    }
-    rules
-}
-
 fn view(runner: &Runner) -> Value {
     let tabs = &runner.tabs;
     let controls = tabs.controls();
     let highlight = tabs.drag_highlight();
     let bar = tabs
         .bar()
-        .map(|e| Value::Array(vec![cve_str(&e.class_name()), js_str_value(&e.text)]))
+        .map(|e| {
+            Value::Array(vec![
+                cve_str(&e.class_name()),
+                js_str_value(&e.inner_text()),
+            ])
+        })
         .collect();
     let content = tabs
         .tabs()
@@ -719,6 +815,14 @@ fn capture(runner: &mut Runner, spec: &Json) -> Result<(), String> {
                 js_json::from_js(&runner.tabs.save_state(&runner.host))
             } else if expr.starts_with("/*tabs:view*/") {
                 view(runner)
+            } else if expr.starts_with("/*tabs:bar*/") {
+                let opacity = |o: Option<&str>| cve_str(o.unwrap_or(""));
+                let [left, right] = runner.tabs.shadows();
+                Value::Array(vec![
+                    opacity(left),
+                    opacity(right),
+                    Value::number(runner.host.bar.borrow().left),
+                ])
             } else if expr.starts_with("/*tabs:restores*/") {
                 Value::Array(
                     runner
@@ -808,7 +912,13 @@ fn load_json(spec: &Path, value: &Json) -> Result<Json, String> {
     }
 }
 
-fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
+struct Replayed {
+    emitted: Vec<Emit>,
+    geometry: usize,
+    scroll_checks: usize,
+}
+
+fn replay(spec_path: &Path, records: &[Record]) -> Result<Replayed, String> {
     let text = std::fs::read_to_string(spec_path).map_err(|e| e.to_string())?;
     let spec = asrs_parity::json::parse(&text).map_err(|e| e.to_string())?;
     let fixture = spec.get("fixture").ok_or("spec has no fixture")?;
@@ -817,7 +927,21 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         .and_then(|w| w.get("height"))
         .and_then(Json::as_f64)
         .unwrap_or(650.0);
-    let layout = spec_layout(fixture);
+    let window = fixture.get("window");
+    let device_pixel_ratio = window
+        .and_then(|w| w.get("devicePixelRatio"))
+        .and_then(Json::as_f64)
+        .unwrap_or(1.0);
+    let geometry: Vec<Record> = records
+        .iter()
+        .filter(|r| {
+            GeometryRecord::parse(r)
+                .ok()
+                .flatten()
+                .is_some_and(|g| owned_by_tabs(&g))
+        })
+        .cloned()
+        .collect();
     let ignored = match fixture.get("ignoreMain").and_then(Json::as_array) {
         Some(names) => names.iter().filter_map(str_of).collect(),
         None => DEFAULT_IGNORED.iter().map(|s| (*s).to_owned()).collect(),
@@ -826,10 +950,9 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
     let (renderer_uuids, timestamp_ranges) = range_seeds(records)?;
     let mut host = Host {
         inner_height: height,
-        renderer_top: layout
-            .iter()
-            .find(|r| r.selector == "div.renderer-content")
-            .map_or(92.0, |r| r.rect.y),
+        reads: RefCell::new(ScriptedReads::from_records(&geometry)?),
+        bar: RefCell::new(BarScroll::default()),
+        device_pixel_ratio,
         seeds: seeds(&infos)?,
         current: Vec::new(),
         restores: Vec::new(),
@@ -845,8 +968,6 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         host,
         log: Log::new(true),
         drag: Drag::default(),
-        layout,
-        tags: Vec::new(),
         ignored,
         infos,
         info_seen: 0,
@@ -859,6 +980,10 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         emitted: Vec::new(),
         event_x: 0.0,
     };
+    runner.tabs.tab_bar_sensor_mut().set_layout(
+        [OVERLAY_CLIENT_WIDTH, OVERLAY_CLIENT_HEIGHT],
+        device_pixel_ratio,
+    );
     runner.main("set-active-satellites", JsValue::Array(Vec::new()))?;
 
     let steps = fixture.get("steps").and_then(Json::as_array).unwrap_or(&[]);
@@ -880,16 +1005,26 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         } else if let Some(n) = step.get("frames").and_then(Json::as_f64) {
             runner.advance(n * FRAME_PERIOD).map_err(where_)?;
         } else if let Some(expr) = step.get("eval").and_then(str_of) {
-            if expr.starts_with("/*tabs:tag*/") {
-                for i in 0..runner.tabs.len() {
-                    if let Some(k) = runner.creation_index(i) {
-                        if runner.tags.len() <= k {
-                            runner.tags.resize(k + 1, None);
-                        }
-                        runner.tags[k] = Some(i);
-                    }
-                }
-            } else if !expr.starts_with("/*tabs:recorder*/") {
+            if let Some(rest) = expr.strip_prefix("/*tabs:scroll ") {
+                let deltas: Vec<f64> = rest
+                    .split("*/")
+                    .next()
+                    .unwrap_or_default()
+                    .split(' ')
+                    .map(|n| number::parse_float(js(n).units()))
+                    .collect();
+                let [dx, dy] = deltas[..] else {
+                    return Err(where_(format!("bad scroll tag {expr}")));
+                };
+                let now = runner.start_time + runner.now;
+                runner.tabs.tab_bar_wheel(
+                    Wheel {
+                        delta: [-dx, -dy],
+                        precise: true,
+                    },
+                    now,
+                );
+            } else if !expr.starts_with("/*tabs:recorder*/") && !expr.starts_with("/*tabs:tag*/") {
                 return Err(where_(format!("unsupported eval {expr}")));
             }
         } else if let Some(event) = step.get("event") {
@@ -908,8 +1043,23 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         } else {
             return Err(where_("unknown step".to_owned()));
         }
+        runner.settle();
     }
-    Ok(runner.emitted)
+    let geometry = runner
+        .host
+        .reads
+        .into_inner()
+        .finish()
+        .map_err(|e| format!("geometry: {e}"))?;
+    let bar = runner.host.bar.into_inner();
+    if let Some(e) = bar.error {
+        return Err(e);
+    }
+    Ok(Replayed {
+        emitted: runner.emitted,
+        geometry,
+        scroll_checks: bar.checks,
+    })
 }
 
 fn run_event(runner: &mut Runner, event: &Json) -> Result<(), String> {
@@ -922,18 +1072,16 @@ fn run_event(runner: &mut Runner, event: &Json) -> Result<(), String> {
             .and_then(Json::as_f64)
             .unwrap_or(0.0)
     };
-    let (x, y) = (num("clientX"), num("clientY"));
+    let (x, y) = (math::floor(num("clientX")), math::floor(num("clientY")));
     runner.event_x = x;
     match (target.as_str(), kind.as_str()) {
         ("div.tab-bar-scroll", "mousedown") => runner.tabs.overlay_mouse_down(x, y),
         ("div.tab-bar-scroll", "mouseup") => {
-            let rects = runner.tab_rects();
-            let r = runner.tabs.overlay_mouse_up(&runner.host, x, y, &rects);
+            let r = runner.tabs.overlay_mouse_up(&runner.host, x, y);
             runner.report("event", r)?;
         }
         ("div.tab-bar-scroll", "mousemove") => {
-            let rects = runner.tab_rects();
-            if let Some(start) = runner.tabs.overlay_mouse_move(x, y, &rects) {
+            if let Some(start) = runner.tabs.overlay_mouse_move(&runner.host, x, y) {
                 runner.drag.start(
                     start.x,
                     start.y,
@@ -951,8 +1099,7 @@ fn run_event(runner: &mut Runner, event: &Json) -> Result<(), String> {
         }
         ("div.tab-bar-scroll", "mouseout") => runner.tabs.overlay_mouse_out(),
         ("div.tab-bar-scroll", "contextmenu") => {
-            let rects = runner.tab_rects();
-            runner.tabs.overlay_context_menu(x, y, &rects);
+            runner.tabs.overlay_context_menu(&runner.host, x, y);
             runner.drain_messages();
         }
         ("div.controls-handle", "mousedown") => runner.tabs.controls_handle_mouse_down(),
@@ -982,8 +1129,7 @@ fn run_event(runner: &mut Runner, event: &Json) -> Result<(), String> {
             runner.report("event", r)?;
         }
         ("button.add-tab", "click") => {
-            let rect = runner.rule("button.add-tab").unwrap_or_default();
-            runner.tabs.add_button(&rect);
+            runner.tabs.add_button(&runner.host);
             runner.drain_messages();
         }
         ("window", _) => {}
@@ -1079,10 +1225,19 @@ fn tabs_dom_matches_upstream() {
     assert!(!specs.is_empty(), "no tabs-model specs");
     let mut failures = Vec::new();
     let mut lines = 0;
+    let (mut geometry, mut scroll_checks) = (0, 0);
     for (spec, id) in &specs {
         let result = load_records(id).and_then(|records| {
             lines += records.len();
-            compare(&replay(spec, &records)?, &records)
+            let replayed = replay(spec, &records)?;
+            geometry += replayed.geometry;
+            scroll_checks += replayed.scroll_checks;
+            let others: Vec<Record> = records
+                .iter()
+                .filter(|r| r.field("read").is_none() && r.field("write").is_none())
+                .cloned()
+                .collect();
+            compare(&replayed.emitted, &others)
         });
         if let Err(e) = result {
             failures.push(format!("{id}: {e}"));
@@ -1090,7 +1245,9 @@ fn tabs_dom_matches_upstream() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
     eprintln!(
-        "dom/tabs-model: {} fixtures, {lines} records, 0 mismatches",
+        "dom/tabs-model: {} fixtures, {lines} records ({geometry} Tabs geometry accesses, \
+         {scroll_checks} tab bar scroll offsets), 0 mismatches",
         specs.len()
     );
+    assert!(geometry > 0 && scroll_checks > 0);
 }
