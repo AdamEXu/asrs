@@ -23,6 +23,7 @@ pub use optimize::{
     CINEMATIC_MAX_RADIUS, FTC_MULTIPLIER, LOW_POWER_MAX_RADIUS, OptimizeError, Optimized,
     OptimizedMaterial, OptimizedMesh, STANDARD_MAX_RADIUS, optimize_geometries,
 };
+pub(crate) use workers::three_quaternion;
 pub use workers::{
     Fetch, LoadError, LoadJob, LoadOptions, LoadedField, load_field, load_robot, read_file_url,
     spawn_load_field, spawn_load_robot, with_load_stack,

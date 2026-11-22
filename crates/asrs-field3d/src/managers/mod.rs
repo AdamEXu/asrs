@@ -2,16 +2,18 @@
 // r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
 
 //! `field3d/ObjectManager.ts`, `ResizableInstancedMesh.ts` and the object managers that turn one
-//! `Field3dRendererCommand_AnyObj` into scene objects under a root group (robots are T08's).
+//! `Field3dRendererCommand_AnyObj` into scene objects under a root group.
 
 #![deny(clippy::disallowed_methods)]
 
 mod april_tag;
 mod axes;
+mod canvas_texture;
 mod cone;
 mod game_piece;
 mod heatmap;
 mod instanced;
+mod robot;
 mod trajectory;
 
 use asrs_js::string::JsString;
@@ -23,16 +25,25 @@ use crate::three::{Color, ObjectId, Quaternion};
 
 pub use april_tag::{AprilTagManager, TextureRequest, april_tag_texture_path, decode_png_texture};
 pub use axes::AxesManager;
-pub use cone::{CanvasTexture, ConeManager};
+pub use canvas_texture::CanvasTexture;
+pub use cone::ConeManager;
 pub use game_piece::{GamePieceManager, GamePieces};
 pub use heatmap::{HeatmapField, HeatmapManager};
 pub use instanced::{InstanceSource, ResizableInstancedMesh};
+pub use robot::{
+    RobotKind, RobotLoadRequest, RobotManager, RobotMechanisms, RobotObj, SwerveModuleSet,
+};
 pub use trajectory::TrajectoryManager;
 
 /// `rotation3dToQuaternion` from `Field3dRendererImpl.ts`: WPILib's `[w, x, y, z]` as a three
 /// quaternion, unnormalized.
 pub fn rotation3d_to_quaternion(input: &Rotation3d) -> Quaternion {
     Quaternion::new(input[1], input[2], input[3], input[0])
+}
+
+/// `quaternionToRotation3d` from `Field3dRendererImpl.ts`.
+pub fn quaternion_to_rotation3d(input: &Quaternion) -> Rotation3d {
+    [input.w, input.x, input.y, input.z]
 }
 
 /// The constructor arguments every `ObjectManager` shares (`requestRender` excepted: the only
