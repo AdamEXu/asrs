@@ -126,6 +126,8 @@ function layoutScene(dark: boolean): TextScene {
   add({ id: "center-odd", x: 510, y: 170, width: 101, height: 20, font: `12px ${SYSTEM}`, align: "center", text: "Center me" });
   add({ id: "tab-centered", x: 10, y: 220, width: 260, height: null, font: `italic 16px ${SYSTEM}`, align: "center", whiteSpace: "normal", text: "Drag a field here to begin, or open the documentation for this tab type." });
   add({ id: "paragraph", x: 290, y: 220, width: 330, height: null, font: `14px ${SYSTEM}`, whiteSpace: "normal", text: "This field contains values that were logged as a sub-key of a struct-encoded value. Values are read-only and match the robot-side representation exactly." });
+  add({ id: "first-char-clip", x: 650, y: 130, width: 8, height: 20, font: `16px ${SYSTEM}`, lineHeight: "20px", overflow: "ellipsis", text: "Wide" });
+  add({ id: "first-char-clip-rtl", x: 650, y: 170, width: 8, height: 20, font: `14px ${SYSTEM}`, lineHeight: "20px", align: "right", direction: "rtl", overflow: "ellipsis", text: "Drive/Pose" });
   add({ id: "pre-lines", x: 640, y: 50, width: null, height: null, font: `12px ${COURIER}`, whiteSpace: "pre", text: "Line one\n  indented line\nLast" });
   return finish(`text-layout-${dark ? "dark" : "light"}`, dark, 760, 330, boxes);
 }
