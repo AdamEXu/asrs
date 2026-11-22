@@ -117,7 +117,7 @@ fn load_all(urls: &[JsString], fetch: &Fetch<'_>) -> Result<Vec<GltfScene>, Load
         .collect()
 }
 
-fn three_quaternion(rotations: &[assets::Config3dRotation]) -> Quaternion {
+pub(crate) fn three_quaternion(rotations: &[assets::Config3dRotation]) -> Quaternion {
     let q = assets::rotation_sequence_to_quaternion(rotations);
     Quaternion::new(q.x, q.y, q.z, q.w)
 }

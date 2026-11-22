@@ -109,6 +109,10 @@ impl ResizableInstancedMesh {
         }
     }
 
+    pub fn sources(&self) -> &[InstanceSource] {
+        &self.sources
+    }
+
     /// The current mesh of each source, `None` before the first resize.
     pub fn meshes(&self) -> &[Option<ObjectId>] {
         &self.meshes

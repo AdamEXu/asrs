@@ -874,7 +874,7 @@ items with a `data-i` attribute before each event and lay them out by it.
 ### LineGraph controller
 
 `dom/line-graph/<case>` (`crates/asrs-tabs/tests/line_graph_dom.rs`) replays every LineGraph
-controller call. `node oracle/tools/lineGraphSpecs.mjs` writes the specs and their logs
+controller call and every renderer frame. `node oracle/tools/lineGraphSpecs.mjs` writes the specs and their logs
 (`parity/specs/dom/logs/line-graph-*.json`); edit the script, not the specs. Each fixture sets
 `"sourceLists": true` and starts with a `/*lg:recorder*/` eval, which hooks every LineGraph
 controller (the hub's default tab and any `addTab` creates) and writes inline records:
@@ -885,9 +885,17 @@ controller (the hub's default tab and any `addTab` creates) and writes inline re
 | `{"lg": "command" \| "preview" \| "save" \| "activeFields", "id", "dark", "ts", "args"?, "value" \| "threw", "reads"}` | after `getCommand`, `getPreview` (key and time only), `saveState` and `getActiveFields` return; `reads` lists each outermost `window.selection` getter called during it with its result, and `ts` is `preferences.timestamps` |
 | `{"lg": <method>, "id", "phase": "begin", "args", "dark"}` and `{"lg": <method>, "id", "phase": "end", "threw"?}` | around `restoreState`, `editAxis`, `clearAxis`, `setRobotModeVisible` and `refresh`; the list ops and nested `getCommand` between them belong to the call |
 | `{"lg": "edit", "id", "list", "rect"}` | before an axis's edit button handler runs, with the button's rect |
+| `{"lg": "render", "id", "width", "height", "dpr", "dark", "prefs", "threw"?, "writes", "size"?, "calls"?, "style"}` | after the tab's `LineGraphRenderer.render` returns or throws; `width` and `height` are the canvas's client size, `prefs` is `[timestamps, hasScrolledLineGraph]` (or undefined before `set-preferences`), `size` and `calls` are the canvas's pixel size and its recorded calls when the render reset it, and `style` is the scroll overlay's `top`, `left`, `right`, the help overlay's `display` and whether it has `fading-out` |
+| `{"lg": "event", "type", "x", "shift", "targets", "writes"}` | after a `mousemove`, `mousedown`, `mouseup`, `click`, `contextmenu` or `mouseleave` dispatch; `targets` holds, per hooked renderer, `[id, ROOT.hidden, on overlay, ROOT x, overlay x, overlay clientWidth]` |
+| `{"lg": "scroll", "id", "args", "pointer", "prefs", "writes", "style"}` | after the renderer's scroll sensor callback (wheel input, which fixtures call directly) |
 
-The harness answers the port's selection reads from `reads`, so a read upstream did not make,
-or one it skipped, fails the case.
+`writes` lists the outermost `window.selection` setters (`setHoveredTime`, `setSelectedTime`,
+`setGrabZoomRange`, `finishGrabZoom`, `goIdle`, `applyTimelineScroll`) called during the
+render, dispatch or callback. The harness answers the port's selection reads from `reads`, so
+a read upstream did not make, or one it skipped, fails the case. Each `render` runs the port's
+`LineGraphRenderer` on the command the port's controller built in the preceding `command`
+record and compares the trace, the writes and the styles; `event` and `scroll` records drive
+its pointer and wheel handlers.
 
 ### Field2d controller
 

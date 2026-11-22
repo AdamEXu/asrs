@@ -41,3 +41,7 @@ harness = false
 [[test]]
 name = "hub_entity"
 required-features = ["parity"]
+
+[[test]]
+name = "app_menu_mac"
+harness = false

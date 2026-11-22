@@ -59,8 +59,8 @@ const setups = [
   { mode: "low-power", specular: SPECULAR_STANDARD, shininess: 0 }
 ];
 
-function emit(manager: string, name: string, setup: object, ops: unknown[][]) {
-  const states = run(manager, setup, ops);
+async function emit(manager: string, name: string, setup: object, ops: unknown[][]) {
+  const states = await run(manager, setup, ops);
   out({ manager, case: name, setup: toTree(setup), ops: toTree(ops), out: toTree(states) });
 }
 
@@ -68,7 +68,7 @@ const growth = [0, 1, 2, 3, 5, 4, 9, 2, 0, 1, 17];
 
 // Axes: one instanced merged mesh; resizes at powers of two and parks unused instances.
 for (const setup of setups) {
-  emit(
+  await emit(
     "axes",
     `axes/${setup.mode}`,
     setup,
@@ -84,7 +84,7 @@ const pieces = {
 };
 for (const setup of setups.slice(0, 2)) {
   const gp = (variant: string, n: number) => ["set", { type: "gamePiece", variant, poses: poses(n) }];
-  emit("gamePiece", `game-piece/${setup.mode}`, { ...setup, pieces }, [
+  await emit("gamePiece", `game-piece/${setup.mode}`, { ...setup, pieces }, [
     gp("Note", 3),
     gp("Note", 5),
     gp("Algae", 1),
@@ -98,7 +98,7 @@ for (const setup of setups.slice(0, 2)) {
     gp("Note", 3)
   ]);
 }
-emit("gamePiece", "game-piece/first-missing", { ...setups[0], pieces }, [
+await emit("gamePiece", "game-piece/first-missing", { ...setups[0], pieces }, [
   ["set", { type: "gamePiece", variant: "Missing", poses: poses(2) }],
   ["set", { type: "gamePiece", variant: "Missing", poses: poses(2) }],
   ["set", { type: "gamePiece", variant: "Algae", poses: poses(2) }]
@@ -112,7 +112,7 @@ for (const setup of setups.slice(0, 2)) {
     "set",
     { type, poses: tags(ids), variant: { family, inches } }
   ];
-  emit("aprilTag", `april-tag/${setup.mode}`, setup, [
+  await emit("aprilTag", `april-tag/${setup.mode}`, setup, [
     at("36h11", 6.5, [1, 2, 586]),
     ["loadTextures"],
     at("36h11", 6.5, [2, 1, 3, undefined]),
@@ -133,7 +133,7 @@ for (const setup of setups.slice(0, 2)) {
 // Cones: canvas textures redrawn on colour changes, geometry shifted on position changes.
 for (const setup of setups.slice(0, 2)) {
   const cone = (color: string, position: string, n: number) => ["set", { type: "cone", color, position, poses: poses(n) }];
-  emit("cone", `cone/${setup.mode}`, setup, [
+  await emit("cone", `cone/${setup.mode}`, setup, [
     cone("#ff0000", "center", 1),
     cone("#ff0000", "front", 3),
     cone("#00ffff", "back", 2),
@@ -146,7 +146,7 @@ for (const setup of setups.slice(0, 2)) {
     ["dispose"]
   ]);
 }
-emit("cone", "cone/blank", setups[0], [
+await emit("cone", "cone/blank", setups[0], [
   ["set", { type: "cone", color: "", position: "center", poses: poses(2) }],
   ["set", { type: "cone", color: "", position: "back", poses: poses(2) }],
   ["set", { type: "cone", color: "#0000ff", position: "back", poses: poses(2) }]
@@ -155,7 +155,7 @@ emit("cone", "cone/blank", setups[0], [
 // Trajectories: one Line2, hidden below two poses, 2D sources lifted onto the carpet.
 {
   const tr = (color: string, size: string, n: number) => ["set", { type: "trajectory", color, size, poses: poses(n) }];
-  emit("trajectory", "trajectory", setups[0], [
+  await emit("trajectory", "trajectory", setups[0], [
     ["resolution", 800, 600],
     tr("#ff8c00", "normal", 0),
     tr("#ff8c00", "normal", 1),
@@ -185,7 +185,7 @@ emit("cone", "cone/blank", setups[0], [
     }));
   const hm = (p: object[]) => ["set", { type: "heatmap", poses: p }];
   const first = spread(12);
-  emit("heatmap", "heatmap", { ...setups[0], field: null, preferences: undefined }, [
+  await emit("heatmap", "heatmap", { ...setups[0], field: null, preferences: undefined }, [
     hm(first),
     ["field", frc],
     hm(first),
