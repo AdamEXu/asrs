@@ -468,7 +468,7 @@ impl<H: FrameHost> HubFrame<H> {
         let height = f64::from(metrics.client_height);
         let (timeline, sensor) = (&mut self.timeline, &mut self.timeline_sensor);
         sensor.animate(now);
-        let scroll = sensor.scroll_step(now, height != 0.0);
+        let scroll = sensor.scroll_step(now, width != 0.0 || height != 0.0);
         if height != 0.0 {
             sensor.periodic(now);
         }
