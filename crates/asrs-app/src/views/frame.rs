@@ -307,7 +307,13 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
-        self.line_graph_mouse_move(x, y, event.modifiers.shift, event.pressed_button.is_some(), cx);
+        self.line_graph_mouse_move(
+            x,
+            y,
+            event.modifiers.shift,
+            event.pressed_button.is_some(),
+            cx,
+        );
         if let Some(p) = self.timeline_pointer(x, y, cx) {
             let (timeline, was_hovered) = (&mut self.timeline, self.timeline_hovered);
             self.host.input(cx, |hub| {

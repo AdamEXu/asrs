@@ -61,6 +61,12 @@ fn help_icon(name: &str) -> Option<IconSource> {
 
 /// `cubic-bezier(0, 0, 0.58, 1)` (`ease-out`) at `t`.
 fn ease_out(t: f64) -> f64 {
+    if t <= 0.0 {
+        return 0.0;
+    }
+    if t >= 1.0 {
+        return 1.0;
+    }
     let (x1, x2) = (0.0, 0.58);
     let (y1, y2) = (0.0, 1.0);
     let bezier = |a: f64, b: f64, s: f64| {
@@ -581,7 +587,7 @@ fn help_overlay(
                 .w(px(w as f32))
                 .h(px(h as f32))
                 .child(
-                    Text::new(label, style.clone())
+                    Text::new(label, style)
                         .color(color)
                         .subpixel(snap_remainder(abs_x, scale), snap_remainder(abs_y, scale)),
                 ),
@@ -605,9 +611,8 @@ mod tests {
 
     #[test]
     fn ease_out_matches_its_control_points() {
-        assert_eq!(ease_out(0.0), 0.0);
-        assert!((ease_out(1.0) - 1.0).abs() < 1e-12);
-        assert!(ease_out(0.5) > 0.5);
+        assert_eq!((ease_out(0.0), ease_out(1.0)), (0.0, 1.0));
+        assert!((0.68..0.69).contains(&ease_out(0.5)));
     }
 
     #[test]
