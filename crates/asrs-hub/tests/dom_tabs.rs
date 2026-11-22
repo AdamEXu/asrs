@@ -550,6 +550,7 @@ impl SourceListCx for Host {
             type_memory: &mut self.type_memory,
             selection: &mut self.selection,
             dark: self.dark,
+            dom: asrs_model::source_list::Undisplayed::dom(),
         }
     }
 }

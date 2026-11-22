@@ -18,7 +18,7 @@ use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SystemClock, V8MathRandom};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_ui::gpui::{App, Context, EventEmitter, Window};
+use asrs_ui::gpui::{App, BackgroundExecutor, Context, EventEmitter, Window};
 
 use host::{GpuiHost, HostState};
 
@@ -33,6 +33,32 @@ fn frame_time(origin: Instant, cx: &App) -> f64 {
         .saturating_duration_since(origin)
         .as_secs_f64()
         * 1000.0
+}
+
+/// `Date` on the frame clock: the wall time when made, then advancing only as the executor's
+/// clock does, so under a simulated dispatcher the page's timers and its animations agree.
+pub struct FrameClock {
+    executor: BackgroundExecutor,
+    origin: Instant,
+    epoch: f64,
+}
+
+impl FrameClock {
+    pub fn new(cx: &App) -> Self {
+        let executor = cx.background_executor().clone();
+        FrameClock {
+            origin: executor.now(),
+            executor,
+            epoch: SystemClock.now(),
+        }
+    }
+}
+
+impl Clock for FrameClock {
+    fn now(&self) -> f64 {
+        let elapsed = self.executor.now().saturating_duration_since(self.origin);
+        self.epoch + elapsed.as_millis() as f64
+    }
 }
 
 pub struct HubConfig {

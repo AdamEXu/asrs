@@ -59,15 +59,18 @@ use asrs_js::time::Rng;
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::realm::JsRealm;
+use asrs_model::source_list::layout::{ListLayout, ListRoot, controller_roots};
 use asrs_model::source_list::{
-    Env, ItemDragPayload, ItemDragStart, ItemView, Length, ListGeometry, Rect, SourceList,
-    SourceListError, TypePrompt, configs,
+    ClearPrompt, Env, ItemDragPayload, ItemDragStart, ItemView, Length, ListButton, Rect,
+    SourceList, SourceListDom, SourceListError, TypePrompt, configs,
 };
 use asrs_model::source_list_config::{
     SourceListConfig, SourceListItemState, SourceListOptionValueConfig, SourceListTypeMemory,
     SourceListTypeMemoryEntry,
 };
+use asrs_model::tab_type::TabType;
 use asrs_parity::Value;
+use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::vectors::{Record, load, vectors_dir};
 
 const CASES: &str = "dom/source-list";
@@ -90,16 +93,248 @@ struct Stats {
     ops: usize,
     dumps: usize,
     previews: usize,
+    reads: usize,
+    widths: usize,
+    checked: usize,
     configs: Vec<&'static str>,
+}
+
+/// Answers the lists' layout reads from the run's `read` records on `div.source-list`
+/// elements, in order. A list's root element is the first recorded element of its own class
+/// that one of its reads lands in, and no two lists share a root.
+///
+/// Every answer is also checked against [`ListLayout`], the layout the app draws: roots placed
+/// by `controller_roots` in the fixtures' controls box, the rest from the list's items as they
+/// were when the op began.
+struct ScriptedDom {
+    reads: ScriptedReads,
+    /// uuid, the class of the list's root in hub.html, and its element path once seen.
+    roots: Vec<(String, &'static str, Option<String>)>,
+    /// Per list: the items when the current op began, whether its root was laid out when last
+    /// read (until then, whether the read itself found a box), and the `scrollTop` a
+    /// `/*sl:scroll*/` capture gave its `div.list`.
+    views: Vec<Vec<ItemView>>,
+    shown: Vec<Option<bool>>,
+    scroll: Vec<f64>,
+    checked: usize,
+    type_names: usize,
+    scroll_writes: usize,
+    error: Option<String>,
+}
+
+/// `div.controls-content` in the fixtures' default 1100 x 650 window: right of the 300 px
+/// sidebar, 200 px tall at the bottom.
+const CONTROLS: Rect = Rect {
+    x: 300.0,
+    y: 450.0,
+    width: 800.0,
+    height: 200.0,
+};
+
+/// The controller a root class belongs to and the list's place among its lists.
+fn controller_of(class: &str) -> (TabType, usize) {
+    match class {
+        "line-graph-left" => (TabType::LineGraph, 0),
+        "line-graph-right" => (TabType::LineGraph, 1),
+        "line-graph-discrete" => (TabType::LineGraph, 2),
+        "field-2d-sources" => (TabType::Field2d, 0),
+        "field-3d-sources" => (TabType::Field3d, 0),
+        "stats-sources" => (TabType::Statistics, 0),
+        "swerve-sources" => (TabType::Swerve, 0),
+        "mechanism-sources" => (TabType::Mechanism, 0),
+        _ => (TabType::Points, 0),
+    }
+}
+
+fn bits(r: Rect) -> [u64; 4] {
+    [r.x, r.y, r.width, r.height].map(f64::to_bits)
+}
+
+const LIST: &str = "div.list:4";
+
+impl ScriptedDom {
+    fn root(&mut self, list: &str) -> String {
+        let Some(slot) = self.roots.iter().position(|(uuid, _, _)| uuid == list) else {
+            self.error
+                .get_or_insert(format!("a read on unregistered list {list}"));
+            return String::from("?");
+        };
+        if let Some(path) = &self.roots[slot].2 {
+            return path.clone();
+        }
+        let class = format!(".{}", self.roots[slot].1);
+        let path = self.reads.peek().and_then(|g| {
+            let segments: Vec<&str> = g.el.split('>').collect();
+            let i = segments
+                .iter()
+                .position(|s| s.contains(".source-list") && s.contains(class.as_str()))?;
+            Some(segments[..=i].join(">"))
+        });
+        match path {
+            Some(path) if !self.roots.iter().any(|(_, _, p)| p.as_ref() == Some(&path)) => {
+                self.roots[slot].2 = Some(path.clone());
+                path
+            }
+            _ => {
+                self.error.get_or_insert(format!(
+                    "list {list} read its layout, upstream's next access is {:?}",
+                    self.reads.peek().map(|g| (&g.name, &g.el, g.line))
+                ));
+                String::from("?")
+            }
+        }
+    }
+
+    fn rect(&mut self, target: &str) -> Rect {
+        let [x, y, width, height] = self.reads.read_rect(target);
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn slot(&self, list: &str) -> usize {
+        self.roots
+            .iter()
+            .position(|(uuid, _, _)| uuid == list)
+            .unwrap_or(usize::MAX)
+    }
+
+    fn controller_root(&self, slot: usize) -> ListRoot {
+        let (tab_type, index) = controller_of(self.roots[slot].1);
+        controller_roots(tab_type, CONTROLS)[index]
+    }
+
+    fn layout(&self, slot: usize, blink: Rect) -> ListLayout {
+        let shown = self.shown[slot].unwrap_or(blink.width != 0.0 || blink.height != 0.0);
+        let root = if shown {
+            self.controller_root(slot)
+        } else {
+            ListRoot::default()
+        };
+        ListLayout::new(root, &self.views[slot], self.scroll[slot])
+    }
+
+    fn check(
+        &mut self,
+        list: &str,
+        what: String,
+        blink: Rect,
+        port: impl FnOnce(&ListLayout) -> Rect,
+    ) {
+        let slot = self.slot(list);
+        if slot == usize::MAX {
+            return;
+        }
+        let port = port(&self.layout(slot, blink));
+        self.checked += 1;
+        if bits(port) != bits(blink) && !blink.x.is_nan() {
+            self.error.get_or_insert(format!(
+                "list {list}: {what} is {blink:?} in Blink, {port:?} in ListLayout"
+            ));
+        }
+    }
+}
+
+impl SourceListDom for ScriptedDom {
+    fn root_rect(&mut self, list: &str) -> Rect {
+        let root = self.root(list);
+        let blink = self.rect(&root);
+        let slot = self.slot(list);
+        if slot != usize::MAX {
+            let displayed = blink.width != 0.0 || blink.height != 0.0;
+            self.shown[slot] = Some(displayed);
+            let port = if displayed {
+                self.controller_root(slot).rect
+            } else {
+                Rect::default()
+            };
+            self.checked += 1;
+            if bits(port) != bits(blink) && !blink.x.is_nan() {
+                self.error.get_or_insert(format!(
+                    "list {list}: root is {blink:?} in Blink, {port:?} from controller_roots"
+                ));
+            }
+        }
+        blink
+    }
+    fn list_rect(&mut self, list: &str) -> Rect {
+        let root = self.root(list);
+        let blink = self.rect(&format!("{root}>{LIST}"));
+        self.check(list, "the list".into(), blink, |l| l.list_rect());
+        blink
+    }
+    fn item_rect(&mut self, list: &str, index: usize) -> Rect {
+        let root = self.root(list);
+        let blink = self.rect(&format!("{root}>{LIST}>div.item:{index}"));
+        self.check(list, format!("item {index}"), blink, |l| l.item_rect(index));
+        blink
+    }
+    fn item_client_width(&mut self, list: &str, index: usize) -> f64 {
+        let root = self.root(list);
+        let blink = self
+            .reads
+            .read_f64("clientWidth", &format!("{root}>{LIST}>div.item:{index}"));
+        let width = |w: f64| Rect {
+            width: w,
+            ..Rect::default()
+        };
+        self.check(
+            list,
+            format!("item {index} clientWidth"),
+            width(blink),
+            |l| width(l.item_client_width(index)),
+        );
+        blink
+    }
+    fn button_rect(&mut self, list: &str, button: ListButton) -> Rect {
+        let root = self.root(list);
+        let target = match button {
+            ListButton::Edit => format!("{root}>button.edit:1"),
+            ListButton::Clear => format!("{root}>button.clear:2"),
+            ListButton::Type(index) => format!("{root}>{LIST}>div.item:{index}>button.type:0"),
+        };
+        let blink = self.rect(&target);
+        self.check(list, format!("{button:?}"), blink, |l| {
+            l.button_rect(button)
+        });
+        blink
+    }
+    fn type_name_width(&mut self, _text: &str) -> f64 {
+        self.type_names += 1;
+        self.reads
+            .read_f64("clientWidth", "body:1>div.source-list:*>div.type-name:0")
+    }
+}
+
+/// The hub.html class of a list's root: the controller templates' `*-sources` elements and
+/// the line graph's three axis columns.
+fn root_class(config: &str, title: &str) -> Result<&'static str, String> {
+    Ok(match (config, title) {
+        ("line_graph_numeric", "Left Axis") => "line-graph-left",
+        ("line_graph_numeric", "Right Axis") => "line-graph-right",
+        ("line_graph_discrete", _) => "line-graph-discrete",
+        ("field_2d", _) => "field-2d-sources",
+        ("field_3d", _) => "field-3d-sources",
+        ("statistics", _) => "stats-sources",
+        ("swerve", _) => "swerve-sources",
+        ("mechanism", _) => "mechanism-sources",
+        ("points", _) => "points-sources",
+        other => return Err(format!("no root element for {other:?}")),
+    })
 }
 
 struct Harness {
     log: Log,
     realm: JsRealm,
     memory: SourceListTypeMemory,
+    dom: ScriptedDom,
     lists: Vec<Slot>,
     pending_errors: VecDeque<String>,
     pending_prompt: Option<TypePrompt>,
+    pending_clear: Option<ClearPrompt>,
     pending_drag: Option<(usize, ItemDragStart)>,
     stats: Stats,
 }
@@ -164,26 +399,19 @@ fn states(v: &JsValue) -> Result<Vec<SourceListItemState>, String> {
 }
 
 fn rect(v: &JsValue) -> Result<Rect, String> {
-    let a = v.as_array().ok_or("a rect is [x, y, width, height]")?;
     Ok(Rect {
-        x: num(at(a, 0))?,
-        y: num(at(a, 1))?,
-        width: num(at(a, 2))?,
-        height: num(at(a, 3))?,
+        x: num(get(v, "x"))?,
+        y: num(get(v, "y"))?,
+        width: num(get(v, "width"))?,
+        height: num(get(v, "height"))?,
     })
 }
 
-fn geometry(v: &JsValue) -> Result<ListGeometry, String> {
-    Ok(ListGeometry {
-        root: rect(get(v, "root"))?,
-        list: rect(get(v, "list"))?,
-        items: get(v, "items")
-            .as_array()
-            .ok_or("geometry items")?
-            .iter()
-            .map(rect)
-            .collect::<Result<_, _>>()?,
-    })
+fn same_rect(a: Rect, b: Rect) -> bool {
+    [a.x, a.y, a.width, a.height]
+        .iter()
+        .zip([b.x, b.y, b.width, b.height])
+        .all(|(p, q)| p.to_bits() == q.to_bits())
 }
 
 fn supplemental(v: &JsValue) -> Result<Vec<Vec<SourceListItemState>>, String> {
@@ -309,17 +537,35 @@ fn split_pair(lists: &mut [Slot], a: usize, b: usize) -> (&mut SourceList, &mut 
 }
 
 impl Harness {
-    fn new() -> Harness {
-        Harness {
+    fn new(records: &[Record]) -> Result<Harness, String> {
+        let mut ours = Vec::new();
+        for record in records {
+            if GeometryRecord::parse(record)?.is_some_and(|g| g.el.contains(".source-list")) {
+                ours.push(record.clone());
+            }
+        }
+        Ok(Harness {
             log: Log::new(true),
             realm: JsRealm::new(Box::new(NoRandom)),
             memory: JsObject::new(),
+            dom: ScriptedDom {
+                reads: ScriptedReads::from_records(&ours)?,
+                roots: Vec::new(),
+                views: Vec::new(),
+                shown: Vec::new(),
+                scroll: Vec::new(),
+                checked: 0,
+                type_names: 0,
+                scroll_writes: 0,
+                error: None,
+            },
             lists: Vec::new(),
             pending_errors: VecDeque::new(),
             pending_prompt: None,
+            pending_clear: None,
             pending_drag: None,
             stats: Stats::default(),
-        }
+        })
     }
 
     fn apply_log(&mut self, ops: &Value) -> Result<(), String> {
@@ -351,6 +597,7 @@ impl Harness {
                 log: &self.log,
                 type_memory: &mut self.memory,
                 dark,
+                dom: &mut self.dom,
             },
             &mut self.lists,
         )
@@ -376,6 +623,12 @@ impl Harness {
         if title != list.title() {
             list.set_title(&title);
         }
+        self.dom
+            .roots
+            .push((list.uuid().to_owned(), root_class(name, &title)?, None));
+        self.dom.views.push(Vec::new());
+        self.dom.shown.push(None);
+        self.dom.scroll.push(0.0);
         self.lists.push(Slot {
             list,
             number_preview: boolean(get(&create, "numberPreview"))?,
@@ -398,6 +651,11 @@ impl Harness {
             .ok()
             .and_then(|d| d.as_bool())
             .unwrap_or(false);
+        self.dom.views = self
+            .lists
+            .iter()
+            .map(|slot| slot.list.items().cloned().collect())
+            .collect();
         let result = self.dispatch(record, id, dark, &name, args)?;
         let error = result.err().map(|e| e.to_string());
         if recorded && error != threw {
@@ -466,7 +724,6 @@ impl Harness {
             }
             "itemDrag" => {
                 let data = at(args, 1);
-                let geometry = geometry(at(args, 2))?;
                 let source = match get(data, "source") {
                     JsValue::Null => return Err("item drag from an unregistered list".to_owned()),
                     v => index(v)?,
@@ -490,19 +747,19 @@ impl Harness {
                     log: &self.log,
                     type_memory: &mut self.memory,
                     dark,
+                    dom: &mut self.dom,
                 };
                 if source == id {
                     self.lists[id]
                         .list
-                        .handle_item_drag(&mut env, &payload, None, x, y, end, &geometry)
+                        .handle_item_drag(&mut env, &payload, None, x, y, end)
                 } else {
                     let (target, source) = split_pair(&mut self.lists, id, source);
-                    target.handle_item_drag(&mut env, &payload, Some(source), x, y, end, &geometry)
+                    target.handle_item_drag(&mut env, &payload, Some(source), x, y, end)
                 }
             }
             "fieldDrag" => {
                 let data = at(args, 1);
-                let geometry = geometry(at(args, 2))?;
                 let extra = supplemental(at(args, 3))?;
                 let extra: Vec<&[SourceListItemState]> = extra.iter().map(Vec::as_slice).collect();
                 let fields = keys(get(data, "fields"))?;
@@ -515,7 +772,7 @@ impl Harness {
                 let (mut env, lists) = self.env(dark);
                 lists[id]
                     .list
-                    .handle_field_drag(&mut env, &extra, &fields, &children, x, y, end, &geometry)
+                    .handle_field_drag(&mut env, &extra, &fields, &children, x, y, end)
             }
             "frame" => return self.frame(record, id, args),
             "mouseDown" => {
@@ -529,22 +786,27 @@ impl Harness {
                 Ok(())
             }
             "mouseMove" => {
-                let geometry = geometry(at(args, 3))?;
                 if let Some(start) = self.lists[id].list.mouse_move(
+                    &mut self.dom,
                     num(at(args, 1))?,
                     num(at(args, 2))?,
-                    &geometry.items,
                 ) {
                     self.pending_drag = Some((id, start));
                 }
                 Ok(())
             }
             "contextMenu" => {
-                self.pending_prompt = self.lists[id].list.context_menu(index(at(args, 1))?);
+                self.pending_prompt = self.lists[id].list.context_menu(
+                    index(at(args, 1))?,
+                    num(at(args, 2))?,
+                    num(at(args, 3))?,
+                );
                 Ok(())
             }
             "promptType" => {
-                self.pending_prompt = self.lists[id].list.prompt_type(index(at(args, 1))?);
+                self.pending_prompt = self.lists[id]
+                    .list
+                    .prompt_type(&mut self.dom, index(at(args, 1))?);
                 Ok(())
             }
             "typeResponse" => {
@@ -566,7 +828,7 @@ impl Harness {
                 Ok(())
             }
             "clearClick" => {
-                self.lists[id].list.request_clear();
+                self.pending_clear = Some(self.lists[id].list.request_clear(&mut self.dom));
                 Ok(())
             }
             "clearResponse" => {
@@ -639,6 +901,9 @@ impl Harness {
     }
 
     fn record(&mut self, record: &Record) -> Result<(), String> {
+        if GeometryRecord::parse(record)?.is_some() {
+            return Ok(());
+        }
         if record.field("dragStart").is_none()
             && let Some((id, start)) = self.pending_drag.take()
         {
@@ -682,10 +947,36 @@ impl Harness {
             if prompt.uuid != text(get(&data, "uuid"))?
                 || prompt.state != state
                 || prompt.config != config
+                || !same_rect(prompt.rect, rect(get(&data, "rect"))?)
             {
                 return Err(format!("type prompt differs: port {prompt:?}"));
             }
             return Ok(());
+        }
+        if record.string("main").as_deref() == Some("source-list-clear-prompt") {
+            let data = js(record, "data")?;
+            let prompt = self
+                .pending_clear
+                .take()
+                .ok_or("the oracle prompted to clear, the port did not")?;
+            if prompt.uuid != text(get(&data, "uuid"))?
+                || !same_rect(prompt.rect, rect(get(&data, "rect"))?)
+            {
+                return Err(format!("clear prompt differs: port {prompt:?}"));
+            }
+            return Ok(());
+        }
+        if record
+            .string("eval")
+            .is_some_and(|e| e.starts_with("/*sl:widths*/"))
+        {
+            return self.type_widths(record);
+        }
+        if record
+            .string("eval")
+            .is_some_and(|e| e.starts_with("/*sl:scroll*/"))
+        {
+            return self.scroll(record);
         }
         if record.field("capture").is_some() {
             if !self.pending_errors.is_empty() {
@@ -697,6 +988,11 @@ impl Harness {
             if let Some(prompt) = self.pending_prompt.take() {
                 return Err(format!(
                     "the port prompted for a type, the oracle did not: {prompt:?}"
+                ));
+            }
+            if let Some(prompt) = self.pending_clear.take() {
+                return Err(format!(
+                    "the port prompted to clear, the oracle did not: {prompt:?}"
                 ));
             }
             return Ok(());
@@ -765,6 +1061,89 @@ impl Harness {
     }
 }
 
+impl Harness {
+    /// A fixture set the `scrollTop` of the one displayed list with this root class.
+    fn scroll(&mut self, record: &Record) -> Result<(), String> {
+        let value = js(record, "value")?;
+        let class = text(at(value.as_array().ok_or("sl:scroll is a pair")?, 0))?;
+        let top = num(at(value.as_array().ok_or("sl:scroll is a pair")?, 1))?;
+        let mut slots = (0..self.dom.roots.len())
+            .filter(|&i| self.dom.roots[i].1 == class && self.dom.shown[i] == Some(true));
+        let (Some(slot), None) = (slots.next(), slots.next()) else {
+            return Err(format!("sl:scroll: not one displayed {class} list"));
+        };
+        let root = self.dom.roots[slot]
+            .2
+            .clone()
+            .ok_or_else(|| format!("sl:scroll: list {slot} was never read"))?;
+        self.dom
+            .reads
+            .write_f64("scrollTop", &format!("{root}>{LIST}"), top);
+        self.dom.scroll[slot] = top;
+        self.dom.scroll_writes += 1;
+        Ok(())
+    }
+
+    /// Each item's type name and `--type-width`, per list root in document order. A root
+    /// class names the lists created with it, which hub.html lays out in creation order.
+    fn type_widths(&mut self, record: &Record) -> Result<(), String> {
+        let value = js(record, "value")?;
+        let mut seen: Vec<&'static str> = Vec::new();
+        for root in value.as_array().ok_or("sl:widths is a list")? {
+            let class_name = text(at(root.as_array().ok_or("a root")?, 0))?;
+            let items = at(root.as_array().ok_or("a root")?, 1)
+                .as_array()
+                .ok_or("root items")?;
+            let class = self
+                .dom
+                .roots
+                .iter()
+                .map(|(_, class, _)| *class)
+                .find(|class| class_name.split(' ').any(|c| c == *class))
+                .ok_or_else(|| format!("no list has the root {class_name:?}"))?;
+            let nth = seen.iter().filter(|c| **c == class).count();
+            seen.push(class);
+            let id = self
+                .dom
+                .roots
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, c, _))| *c == class)
+                .nth(nth)
+                .map(|(id, _)| id)
+                .ok_or_else(|| format!("{class_name:?} #{nth} was never created"))?;
+            let port: Vec<(String, String)> = self.lists[id]
+                .list
+                .items()
+                .map(|item| {
+                    let name = item
+                        .rendered
+                        .as_ref()
+                        .map_or(String::new(), |r| r.type_name.clone());
+                    let width = item.type_width.map_or(String::new(), |w| {
+                        format!("{}px", asrs_js::number::to_string(w))
+                    });
+                    (name, width)
+                })
+                .collect();
+            let blink = items
+                .iter()
+                .map(|item| {
+                    let item = item.as_array().ok_or("an item")?;
+                    Ok((text(at(item, 0))?, text(at(item, 1))?))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            if port != blink {
+                return Err(format!(
+                    "list {id} type widths\n oracle {blink:?}\n port   {port:?}"
+                ));
+            }
+            self.stats.widths += port.len();
+        }
+        Ok(())
+    }
+}
+
 fn hooked(name: &str) -> bool {
     matches!(
         name,
@@ -797,11 +1176,29 @@ fn case_ids() -> Vec<String> {
 }
 
 fn run_case(id: &str) -> Result<Stats, String> {
-    let mut harness = Harness::new();
-    for record in load(id)? {
+    let records = load(id)?;
+    let mut harness = Harness::new(&records)?;
+    for record in &records {
         harness
-            .record(&record)
+            .record(record)
             .map_err(|e| format!("{id} line {}: {e}", record.line))?;
+        if let Some(e) = harness.dom.error.take() {
+            return Err(format!("{id} line {}: {e}", record.line));
+        }
+    }
+    harness.stats.checked = harness.dom.checked;
+    let (type_names, scroll_writes) = (harness.dom.type_names, harness.dom.scroll_writes);
+    harness.stats.reads = harness
+        .dom
+        .reads
+        .finish()
+        .map_err(|e| format!("{id}: {e}"))?;
+    if harness.stats.checked + type_names + scroll_writes != harness.stats.reads {
+        return Err(format!(
+            "{id}: {} layout reads, {} checked against ListLayout, {type_names} type names, \
+             {scroll_writes} scroll writes",
+            harness.stats.reads, harness.stats.checked
+        ));
     }
     if let Some((list, start)) = harness.pending_drag {
         return Err(format!(
@@ -823,14 +1220,22 @@ fn source_list_fixtures() {
     assert!(!ids.is_empty(), "no {CASES} vectors");
     let mut failures = Vec::new();
     let mut configs: Vec<&str> = Vec::new();
+    let mut reads = 0;
     for id in &ids {
         match run_case(id) {
             Ok(stats) => {
                 assert!(stats.dumps > 0, "{id}: no source list dumps");
                 eprintln!(
-                    "{id}: {} ops, {} dumps, {} item previews",
-                    stats.ops, stats.dumps, stats.previews
+                    "{id}: {} ops, {} dumps, {} item previews, {} layout reads ({} against \
+                     ListLayout), {} type widths",
+                    stats.ops,
+                    stats.dumps,
+                    stats.previews,
+                    stats.reads,
+                    stats.checked,
+                    stats.widths
                 );
+                reads += stats.reads;
                 for name in stats.configs {
                     if !configs.contains(&name) {
                         configs.push(name);
@@ -847,6 +1252,7 @@ fn source_list_fixtures() {
         ids.len(),
         failures.join("\n")
     );
+    assert!(reads > 0, "no layout reads replayed");
     for (name, _) in configs::all() {
         assert!(
             configs.contains(&name),

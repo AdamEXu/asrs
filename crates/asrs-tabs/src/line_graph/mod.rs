@@ -22,7 +22,9 @@ use asrs_log::units::{self, UnitConfig};
 use asrs_log::util::{clamp_value, lower_bound, scale_value_clamped, upper_bound};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::selection::{Selection, SelectionMode};
-use asrs_model::source_list::{Env, Rect, SourceList, SourceListError, configs};
+use asrs_model::source_list::{
+    Env, ListInput, ListOutput, Rect, SourceList, SourceListError, configs,
+};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
@@ -38,7 +40,7 @@ pub use renderer::{
 };
 
 use crate::cx::{TabCx, display_offset};
-use crate::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
+use crate::list_cx::{ListParts, SourceListCx, js_error, route_lists, source_state, with_env};
 use axis::unmodeled;
 
 const RANGE_MARGIN: f64 = 0.05;
@@ -420,11 +422,13 @@ impl LineGraphController {
             type_memory,
             selection,
             dark,
+            dom,
         } = cx.list_parts();
         let mut env = Env {
             log: &log,
             type_memory,
             dark,
+            dom,
         };
         let (source_list, preview) = match list {
             ListId::Left => (
@@ -1235,6 +1239,41 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for LineGraphController {
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
         Ok(Rc::new(self.get_command(cx)?))
+    }
+
+    fn source_lists(&self) -> Vec<&SourceList> {
+        vec![&self.left_list, &self.right_list, &self.discrete_list]
+    }
+
+    fn source_list_input(
+        &mut self,
+        cx: &mut Cx,
+        input: ListInput<'_>,
+        errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        if let ListInput::Frame = input {
+            for id in [ListId::Left, ListId::Right, ListId::Discrete] {
+                let time = if self.list(id).state().is_empty() {
+                    None
+                } else {
+                    cx.tab_selection().get_render_time()
+                };
+                if let Err(e) = self.frame_list(cx, id, time) {
+                    errors.push(e);
+                }
+            }
+            return ListOutput::default();
+        }
+        route_lists(
+            &mut [
+                &mut self.left_list,
+                &mut self.right_list,
+                &mut self.discrete_list,
+            ],
+            cx,
+            input,
+            errors,
+        )
     }
 }
 

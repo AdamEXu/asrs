@@ -1,0 +1,185 @@
+{
+  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first and trackpad deltas second; each capture compares selection.getTimelineRange(). Chromium animates a notched tick (capped at the overlay's size), so each one gets 500 ms to settle, and the ranges are compared within 1e-9 of the visible span, since the animation's compositor-timed steps compound the zoom differently in the last bits between upstream runs. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The port's scroll sensors and Date run on the scenario's frame clock, so each wait is simulated frames, not real time. The timeline is compared unmasked; .tab-bar is masked until #214 (emoji titles) and the line graph and mechanism (U11, U16) with .renderer-content and .controls-content until they land",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Resized",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "main": "new-tab",
+      "data": 10
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "before",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 105,
+        "deltaY": -40,
+        "wheelTicksY": -1
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 105,
+        "deltaY": 120,
+        "wheelTicksY": 3
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 500,
+        "y": 105,
+        "deltaY": -40,
+        "wheelTicksY": -1
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 820,
+        "y": 105,
+        "deltaY": 80,
+        "wheelTicksY": 2
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "notched",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 105,
+        "deltaY": -3,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 105,
+        "deltaY": -11,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 105,
+        "deltaY": -24,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 105,
+        "deltaX": 17,
+        "deltaY": -2,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 820,
+        "y": 105,
+        "deltaY": 9,
+        "precise": true
+      }
+    },
+    {
+      "capture": "trackpad",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    }
+  ]
+}
