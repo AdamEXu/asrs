@@ -211,6 +211,17 @@
     "src/lazyHelpers/field3dManagersRun.ts",
     "src/shims.ts"
   ],
+  "genField3dRenderer": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/environment.ts",
+    "src/genField3dRenderer.ts",
+    "src/glb/worker.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dRendererRun.ts",
+    "src/shims.ts"
+  ],
   "genField3dRobot": [
     "src/canvas/fixedAdvance.json",
     "src/cve1.ts",
@@ -568,6 +579,13 @@
     "src/dom/recordingCanvas.ts",
     "src/heatmap/fakeDom.ts",
     "src/lazyHelpers/field3dManagersRun.ts"
+  ],
+  "lazyHelpers/field3dRendererRun": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dRendererRun.ts"
   ],
   "lazyHelpers/mergeCalculatorRun": [
     "src/lazyHelpers/mergeCalculatorRun.ts"
