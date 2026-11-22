@@ -446,8 +446,10 @@ dependencies = [
  "asrs-js",
  "asrs-model",
  "asrs-parity",
+ "idna",
  "miniz_oxide 0.9.1",
  "sha2 0.10.9",
+ "url",
 ]
 
 [[package]]

@@ -241,6 +241,19 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
   feature) and linked into the app
 - Used in: `.wpilogxz` decompression (`crates/asrs-formats/src/wpilogxz.rs`)
 
+## npm packages behind the asset downloader
+
+- License: MIT ([`licenses/asset-download-npm.txt`](licenses/asset-download-npm.txt), one
+  copyright notice per package)
+- Packages and versions (from upstream's lockfile): download 8.0.0, got 8.3.2,
+  url-parse-lax 3.0.0, prepend-http 2.0.0, decompress 4.2.1, decompress-unzip 4.0.1,
+  yauzl 2.10.0, archive-type 4.0.0 (file-type 4.4.0), file-type 11.1.0, ext-name 5.0.0,
+  ext-list 2.2.2, mime-db 1.52.0, filenamify 3.0.0, filename-reserved-regex 2.0.0,
+  content-disposition 0.5.4
+- Used in: `crates/asrs-services/src/{asset_downloader,download_deps,file_type,zip}.rs`,
+  translated to Rust; `crates/asrs-services/src/ext_list.rs` is generated from ext-list over
+  mime-db, and `zip.rs` carries yauzl's CP437 table
+
 ## Not yet ported
 
 Upstream also depends on mathjs (Apache-2.0) and Chart.js (MIT). No code from them has

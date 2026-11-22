@@ -4,16 +4,21 @@
 //! reproduces what that stack does on the wire and on disk, one HTTP request at a time through
 //! [`DownloadHost`].
 
+use crate::Invalid;
 use asrs_js::json::parse as json_parse;
 use asrs_js::string::{JsString, decode_uri_component};
 use asrs_js::time::{LocalZone, to_locale_time_string};
 use asrs_js::value::JsValue;
 
 use crate::asset_loader::AssetFolders;
+use crate::download_deps::{
+    disposition_filename, ext_name_mime, filenamify, url_parse_lax, url_path_basename,
+};
+use crate::file_type::{Guess, archive_type, file_type_11};
 use crate::fs::Fs;
 use crate::legacy_url::{self, LegacyUrl};
 use crate::path::PathStyle;
-use crate::zip;
+use crate::zip::{self, EntryKind, ZipEntry};
 
 pub const GITHUB_REPOSITORY: &str = "Mechanical-Advantage/AdvantageScope";
 pub const GITHUB_ASSETS_REPOSITORY: &str = "Mechanical-Advantage/AdvantageScopeAssets";
@@ -250,6 +255,10 @@ impl AssetDownloader {
             .to_string_lossy()
     }
 
+    fn dirname(&self, path: &str) -> String {
+        self.style.dirname(&JsString::from(path)).to_string_lossy()
+    }
+
     fn push_timer(&mut self, delay: f64, kind: TimerKind) -> u64 {
         let seq = self.seq;
         self.seq += 1;
@@ -342,10 +351,11 @@ impl AssetDownloader {
         self.check_failed = false;
         self.spawning = true;
         let mut sync_fail = false;
-        for info in &infos {
-            if info.optional || fs.exists(&info.target) {
-                continue;
-            }
+        let wanted: Vec<&AssetInfo> = infos
+            .iter()
+            .filter(|info| !info.optional && !fs.exists(&info.target))
+            .collect();
+        for info in wanted {
             match self.spawn(info, fs, host) {
                 SpawnResult::SyncFail => {
                     sync_fail = true;
@@ -423,21 +433,17 @@ impl AssetDownloader {
         let Some(source) = &info.source else {
             return SpawnResult::SyncFail;
         };
-        let mut source = source.to_string_lossy();
-        if source.starts_with("unix:") {
-            source = format!("http://{source}");
-        }
-        if decode_uri_component(&JsString::from(source.as_str())).is_err() {
+        let source = if source.to_string_lossy().starts_with("unix:") {
+            let mut units = JsString::from("http://").units().to_vec();
+            units.extend_from_slice(source.units());
+            JsString::from_units(units)
+        } else {
+            source.clone()
+        };
+        if decode_uri_component(&source).is_err() {
             return SpawnResult::SyncFail;
         }
-        let trimmed = JsString::from(source.as_str()).trim().to_string_lossy();
-        let trimmed = trimmed.as_str();
-        let with_protocol = if prepend_http_preserved(trimmed) || already_slashed(trimmed) {
-            trimmed.to_owned()
-        } else {
-            format!("https://{trimmed}")
-        };
-        let Ok(parsed) = legacy_url::parse(&with_protocol, false) else {
+        let Ok(parsed) = url_parse_lax(&source) else {
             return SpawnResult::SyncFail;
         };
         if parsed.auth.as_deref().is_some_and(|a| !a.is_empty()) {
@@ -529,7 +535,7 @@ impl AssetDownloader {
                             self.downloads[di].url = url;
                             self.issue_request(di, fs, host);
                         }
-                        Err(()) => self.fail_download(di),
+                        Err(Invalid) => self.fail_download(di),
                     }
                 } else if (200..=299).contains(&status) || status == 304 {
                     self.complete_download(di, &headers, &body, fs, host);
@@ -556,45 +562,30 @@ impl AssetDownloader {
                 dl.first_href.clone(),
             )
         };
-        let filename = match single_filename(headers, body, &first_href) {
-            Err(()) => {
+        let filename = match self.filename(headers, body, &first_href) {
+            Err(Invalid) => {
                 self.fail_download(di);
                 return;
             }
-            Ok(filename) => filename,
+            Ok(None) => return,
+            Ok(Some(filename)) => filename,
         };
         let output_file = self.join(&download_path, &filenamify(&filename));
-        let saved = if zip::is_zip_archive(body) {
-            match zip::read_entries(body) {
-                Err(()) => false,
-                Ok(entries) => {
-                    let output = posix_dirname(&output_file);
-                    let mut failed = false;
-                    for entry in entries {
-                        if fs.mkdir_all(&output).is_err() {
-                            failed = true;
-                            continue;
-                        }
-                        let dest = self.join(&output, &entry.name);
-                        if entry.is_dir {
-                            if fs.mkdir_all(&dest).is_err() {
-                                failed = true;
-                            }
-                        } else {
-                            let parent = posix_dirname(&dest);
-                            if fs.mkdir_all(&parent).is_err()
-                                || fs.write(&dest, &entry.data).is_err()
-                            {
-                                failed = true;
-                            }
-                        }
-                    }
-                    !failed
-                }
-            }
-        } else {
-            fs.mkdir_all(&posix_dirname(&output_file)).is_ok()
-                && fs.write(&output_file, body).is_ok()
+        let output = self.dirname(&output_file);
+        let saved = match archive_type(body) {
+            None => fs.mkdir_all(&output).is_ok() && fs.write(&output_file, body).is_ok(),
+            Some("zip") => match zip::decompress_unzip(body) {
+                Err(Invalid) => false,
+                Ok(entries) => entries
+                    .iter()
+                    .map(|entry| self.extract_entry(fs, &output, entry).is_ok())
+                    // Not `all`: decompress writes every entry even after one fails.
+                    .fold(true, |all, ok| all & ok),
+            },
+            // decompress has no plugin for these, so it writes nothing and succeeds.
+            Some("7z" | "rar" | "xz") => true,
+            // tar, gz and bz2 extraction is not ported (#220).
+            Some(_) => false,
         };
         if !saved || fs.rename(&download_path, &target).is_err() {
             self.fail_download(di);
@@ -607,6 +598,87 @@ impl AssetDownloader {
                 self.finish_check(fs, host);
             }
         }
+    }
+
+    /// download's `getFilename`: `Ok(None)` when file-type's ASF walk never returns.
+    fn filename(
+        &self,
+        headers: &[(String, String)],
+        body: &[u8],
+        request_url: &str,
+    ) -> Result<Option<String>, Invalid> {
+        let header = |name: &str| {
+            headers
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        if let Some(disposition) = header("content-disposition").filter(|h| !h.is_empty())
+            && let Some(name) = disposition_filename(disposition)?
+            && !name.is_empty()
+        {
+            return Ok(Some(name));
+        }
+        let mut filename = url_path_basename(request_url, self.style)?;
+        if self
+            .style
+            .extname(&JsString::from(filename.as_str()))
+            .units()
+            .is_empty()
+        {
+            let ext = match file_type_11(body) {
+                Guess::Stalls => return Ok(None),
+                Guess::Ext(ext) => Some(ext),
+                Guess::Unknown => header("content-type")
+                    .filter(|h| !h.is_empty())
+                    .map(ext_name_mime)
+                    .and_then(|exts| (exts.len() == 1).then(|| exts[0])),
+            };
+            if let Some(ext) = ext {
+                filename = format!("{filename}.{ext}");
+            }
+        }
+        Ok(Some(filename))
+    }
+
+    /// One entry of decompress 4.2's `extractFile`, with its guards against leaving the output
+    /// folder through symlinks. Symlink entries themselves are not ported and fail.
+    fn extract_entry(&self, fs: &dyn Fs, output: &str, entry: &ZipEntry) -> Result<(), Invalid> {
+        let dest = self.join(output, &entry.name);
+        fs.mkdir_all(output).map_err(|_| Invalid)?;
+        let real_output = fs.realpath(output).map_err(|_| Invalid)?;
+        if entry.kind == EntryKind::Directory {
+            self.safe_make_dir(fs, &dest, &real_output)?;
+            return Ok(());
+        }
+        let parent = self.dirname(&dest);
+        self.safe_make_dir(fs, &parent, &real_output)?;
+        if entry.kind == EntryKind::File && fs.readlink(&dest).is_ok() {
+            return Err(Invalid);
+        }
+        let real_parent = fs.realpath(&parent).map_err(|_| Invalid)?;
+        if !real_parent.starts_with(&real_output) || entry.kind == EntryKind::Symlink {
+            return Err(Invalid);
+        }
+        fs.write(&dest, &entry.data).map_err(|_| Invalid)
+    }
+
+    fn safe_make_dir(&self, fs: &dyn Fs, dir: &str, real_output: &str) -> Result<String, Invalid> {
+        let real_parent = match fs.realpath(dir) {
+            Ok(real) => real,
+            Err(_) => {
+                let parent = self.dirname(dir);
+                if parent == dir {
+                    return Err(Invalid);
+                }
+                self.safe_make_dir(fs, &parent, real_output)?
+            }
+        };
+        if !real_parent.starts_with(real_output) {
+            return Err(Invalid);
+        }
+        fs.mkdir_all(dir).map_err(|_| Invalid)?;
+        fs.realpath(dir).map_err(|_| Invalid)
     }
 
     fn fail_download(&mut self, di: usize) {
@@ -648,380 +720,4 @@ enum SpawnResult {
     Issued,
     SyncFail,
     AsyncFail,
-}
-
-/// `prepend-http`: `^\.*\/` or `^(?!localhost)\w+:` keeps the trimmed source.
-fn prepend_http_preserved(url: &str) -> bool {
-    let dots = url.bytes().take_while(|&b| b == b'.').count();
-    if url[dots..].starts_with('/') {
-        return true;
-    }
-    if url.starts_with("localhost") {
-        return false;
-    }
-    let word = url
-        .bytes()
-        .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
-        .count();
-    word > 0 && url.as_bytes().get(word) == Some(&b':')
-}
-
-/// The negative lookahead in `prepend-http`'s replacement: `^(?:\w+:)?\/\/`.
-fn already_slashed(url: &str) -> bool {
-    if url.starts_with("//") {
-        return true;
-    }
-    let word = url
-        .bytes()
-        .take_while(|b| b.is_ascii_alphanumeric() || *b == b'_')
-        .count();
-    word > 0 && url.as_bytes().get(word) == Some(&b':') && url[word + 1..].starts_with("//")
-}
-
-fn posix_dirname(path: &str) -> String {
-    let trimmed = path.trim_end_matches('/');
-    if trimmed.is_empty() {
-        return if path.is_empty() { "." } else { "/" }.to_owned();
-    }
-    match trimmed.rfind('/') {
-        Some(0) => "/".to_owned(),
-        Some(i) => trimmed[..i].to_owned(),
-        None => ".".to_owned(),
-    }
-}
-
-fn posix_basename(path: &str) -> String {
-    let trimmed = path.trim_end_matches('/');
-    trimmed.rsplit('/').next().unwrap_or_default().to_owned()
-}
-
-fn posix_extname(path: &str) -> String {
-    let base = posix_basename(path);
-    let base = base.trim_start_matches('.');
-    match base.rfind('.') {
-        Some(i) => base[i..].to_owned(),
-        None => String::new(),
-    }
-}
-
-const WINDOWS_NAMES: &[&str] = &[
-    "con", "prn", "aux", "nul", "com0", "com1", "com2", "com3", "com4", "com5", "com6", "com7",
-    "com8", "com9", "lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
-];
-
-/// `filenamify` 3.0.0 with the default `!` replacement, on UTF-16 code units.
-fn filenamify(name: &str) -> String {
-    let reserved = |u: u16| {
-        matches!(u, 0..=0x1f)
-            || matches!(
-                u as u8 as char,
-                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
-            ) && u < 0x80
-    };
-    let control = |u: u16| matches!(u, 0..=0x1f | 0x80..=0x9f);
-    let units: Vec<u16> = name.encode_utf16().collect();
-    let mut out: Vec<u16> = Vec::new();
-    let mut leading = true;
-    let mut i = 0;
-    while i < units.len() {
-        let u = units[i];
-        if reserved(u) || control(u) {
-            out.push(u16::from(b'!'));
-        } else if leading && u == u16::from(b'.') {
-            while i + 1 < units.len() && units[i + 1] == u16::from(b'.') {
-                i += 1;
-            }
-            out.push(u16::from(b'!'));
-        } else {
-            out.push(u);
-        }
-        if u != u16::from(b'.') || !leading {
-            leading = false;
-        }
-        i += 1;
-    }
-    let mut collapsed: Vec<u16> = Vec::new();
-    for &u in &out {
-        if u == u16::from(b'!') && collapsed.last() == Some(&u16::from(b'!')) {
-            continue;
-        }
-        collapsed.push(u);
-    }
-    if collapsed.len() > 1 {
-        while collapsed.first() == Some(&u16::from(b'!')) {
-            collapsed.remove(0);
-        }
-        while collapsed.last() == Some(&u16::from(b'!')) {
-            collapsed.pop();
-        }
-    }
-    let mut s = String::from_utf16_lossy(&collapsed);
-    let lowered = JsString::from(s.as_str()).to_lower_case().to_string_lossy();
-    if WINDOWS_NAMES.iter().any(|n| *n == lowered) {
-        s.push('!');
-    }
-    let units: Vec<u16> = s.encode_utf16().take(100).collect();
-    String::from_utf16_lossy(&units)
-}
-
-fn is_token(b: u8) -> bool {
-    matches!(b,
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'0'..=b'9'
-            | b'A'..=b'Z' | b'^' | b'_' | b'`' | b'a'..=b'z' | b'|' | b'~')
-}
-
-fn match_param(s: &[u16], at: usize) -> Option<(usize, String, String)> {
-    let mut i = at;
-    if s.get(i) != Some(&0x3b) {
-        return None;
-    }
-    i += 1;
-    while matches!(s.get(i), Some(&0x09) | Some(&0x20)) {
-        i += 1;
-    }
-    let key_start = i;
-    while i < s.len() && s[i] < 0x80 && is_token(s[i] as u8) {
-        i += 1;
-    }
-    if i == key_start {
-        return None;
-    }
-    let key = String::from_utf16_lossy(&s[key_start..i]);
-    while matches!(s.get(i), Some(&0x09) | Some(&0x20)) {
-        i += 1;
-    }
-    if s.get(i) != Some(&0x3d) {
-        return None;
-    }
-    i += 1;
-    while matches!(s.get(i), Some(&0x09) | Some(&0x20)) {
-        i += 1;
-    }
-    let value = if s.get(i) == Some(&0x22) {
-        i += 1;
-        let mut value = String::new();
-        loop {
-            match s.get(i) {
-                None => return None,
-                Some(&0x22) => {
-                    i += 1;
-                    break;
-                }
-                Some(&0x5c) => match s.get(i + 1) {
-                    Some(&c) if (0x20..=0x7e).contains(&c) => {
-                        value.push(char::from_u32(u32::from(c)).unwrap_or('\u{fffd}'));
-                        i += 2;
-                    }
-                    _ => return None,
-                },
-                Some(&u) if matches!(u, 0x20 | 0x21 | 0x23..=0x5b | 0x5d..=0x7e | 0x80..=0xff) => {
-                    value.push(char::from_u32(u32::from(u)).unwrap_or('\u{fffd}'));
-                    i += 1;
-                }
-                _ => return None,
-            }
-        }
-        value
-    } else {
-        let value_start = i;
-        while i < s.len() && s[i] < 0x80 && is_token(s[i] as u8) {
-            i += 1;
-        }
-        if i == value_start {
-            return None;
-        }
-        String::from_utf16_lossy(&s[value_start..i])
-    };
-    while matches!(s.get(i), Some(&0x09) | Some(&0x20)) {
-        i += 1;
-    }
-    Some((i, key, value))
-}
-
-/// `content-disposition` 0.5.4 `parse`: returns the `filename` parameter (the
-/// `filename*` form overwrites) or `Err` when the header does not parse.
-fn disposition_filename(header: &str) -> Result<Option<String>, ()> {
-    let s: Vec<u16> = header.encode_utf16().collect();
-    let mut i = 0;
-    while i < s.len() && s[i] < 0x80 && is_token(s[i] as u8) {
-        i += 1;
-    }
-    if i == 0 {
-        return Err(());
-    }
-    let mut j = i;
-    while matches!(s.get(j), Some(&0x09) | Some(&0x20)) {
-        j += 1;
-    }
-    if j != s.len() && s[j] != 0x3b {
-        return Err(());
-    }
-    let mut index = j;
-    let mut names: Vec<String> = Vec::new();
-    let mut params: Vec<(String, String)> = Vec::new();
-    while let Some((next, key_raw, value)) = match_param(&s, index) {
-        index = next;
-        let key = JsString::from(key_raw.as_str())
-            .to_lower_case()
-            .to_string_lossy();
-        if names.contains(&key) {
-            return Err(());
-        }
-        names.push(key.clone());
-        if key.ends_with('*') {
-            let key = key[..key.len() - 1].to_owned();
-            let value = decode_ext_value(&value)?;
-            if let Some(p) = params.iter_mut().find(|(k, _)| *k == key) {
-                p.1 = value;
-            } else {
-                params.push((key, value));
-            }
-            continue;
-        }
-        if params.iter().any(|(k, _)| *k == key) {
-            continue;
-        }
-        params.push((key, value));
-    }
-    if index != s.len() {
-        return Err(());
-    }
-    Ok(params
-        .iter()
-        .find(|(k, _)| k == "filename")
-        .map(|(_, v)| v.clone()))
-}
-
-fn decode_ext_value(value: &str) -> Result<String, ()> {
-    let mut parts = value.splitn(3, '\'');
-    let charset = JsString::from(parts.next().ok_or(())?)
-        .to_lower_case()
-        .to_string_lossy();
-    if charset.is_empty()
-        || !charset.bytes().all(|b| {
-            b.is_ascii_alphanumeric()
-                || matches!(
-                    b,
-                    b'!' | b'#'
-                        | b'$'
-                        | b'%'
-                        | b'&'
-                        | b'+'
-                        | b'-'
-                        | b'^'
-                        | b'_'
-                        | b'`'
-                        | b'{'
-                        | b'}'
-                        | b'~'
-                )
-        })
-    {
-        return Err(());
-    }
-    let language = parts.next().ok_or(())?;
-    let language_ok = language.is_empty()
-        || (language
-            .bytes()
-            .all(|b| b.is_ascii_alphabetic() || b == b'-')
-            && language.split('-').all(|seg| (2..=8).contains(&seg.len()))
-            && language.len() <= 8);
-    if !language_ok {
-        return Err(());
-    }
-    let encoded = parts.next().ok_or(())?;
-    if encoded.is_empty()
-        || !encoded.bytes().all(|b| {
-            b == b'%'
-                || b.is_ascii_alphanumeric()
-                || matches!(
-                    b,
-                    b'!' | b'#'
-                        | b'$'
-                        | b'&'
-                        | b'+'
-                        | b'-'
-                        | b'.'
-                        | b'^'
-                        | b'_'
-                        | b'`'
-                        | b'|'
-                        | b'~'
-                )
-        })
-    {
-        return Err(());
-    }
-    let mut bytes = Vec::new();
-    let mut chars = encoded.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let h: String = chars.by_ref().take(2).collect();
-            if h.len() != 2 || !h.bytes().all(|b| b.is_ascii_hexdigit()) {
-                return Err(());
-            }
-            bytes.push(u8::from_str_radix(&h, 16).map_err(|_| ())?);
-        } else {
-            let mut buf = [0u8; 4];
-            bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
-        }
-    }
-    match charset.as_str() {
-        "utf-8" => Ok(String::from_utf8_lossy(&bytes).into_owned()),
-        "iso-8859-1" => Ok(bytes.iter().map(|&b| char::from(b)).collect()),
-        _ => Err(()),
-    }
-}
-
-fn single_filename(
-    headers: &[(String, String)],
-    body: &[u8],
-    first_href: &str,
-) -> Result<String, ()> {
-    if let Some((_, header)) = headers.iter().find(|(n, _)| n == "content-disposition")
-        && let Some(name) = disposition_filename(header)?
-        && !name.is_empty()
-    {
-        return Ok(name);
-    }
-    let mut filename = legacy_url::whatwg_basename(first_href).unwrap_or_default();
-    if posix_extname(&filename).is_empty()
-        && let Some(ext) = infer_ext(body, headers)
-    {
-        filename = format!("{filename}.{ext}");
-    }
-    Ok(filename)
-}
-
-fn infer_ext(body: &[u8], headers: &[(String, String)]) -> Option<&'static str> {
-    if body.starts_with(b"%PDF") {
-        return Some("pdf");
-    }
-    if body.starts_with(&[0x89, 0x50, 0x4e, 0x47]) {
-        return Some("png");
-    }
-    if body.starts_with(&[0xff, 0xd8, 0xff]) {
-        return Some("jpg");
-    }
-    if body.starts_with(b"GIF8") {
-        return Some("gif");
-    }
-    match headers
-        .iter()
-        .find(|(n, _)| n == "content-type")
-        .map(|(_, v)| {
-            JsString::from(v.split(';').next().unwrap_or_default())
-                .trim()
-                .to_string_lossy()
-        })
-        .as_deref()
-    {
-        Some("application/pdf") => Some("pdf"),
-        Some("image/png") => Some("png"),
-        Some("image/jpeg") => Some("jpg"),
-        Some("image/gif") => Some("gif"),
-        Some("image/webp") => Some("webp"),
-        Some("image/svg+xml") => Some("svg"),
-        _ => None,
-    }
 }

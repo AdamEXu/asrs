@@ -1,6 +1,7 @@
 //! Node's legacy `url` module (`lib/url.js`): `url.parse` without query parsing,
 //! `url.format` and `url.resolve`, as got 8 uses them.
 
+use crate::Invalid;
 use asrs_js::string::{JsString, decode_uri_component};
 
 #[derive(Clone, Debug, Default)]
@@ -151,14 +152,38 @@ fn parse_host(host: &str) -> (String, Option<String>) {
     (host.to_owned(), None)
 }
 
+/// JavaScript's `\s`.
+fn is_js_space(u: u16) -> bool {
+    matches!(
+        u,
+        0x09..=0x0d | 0x20 | 0xa0 | 0x1680 | 0x2000..=0x200a | 0x2028 | 0x2029 | 0x202f | 0x205f
+            | 0x3000 | 0xfeff
+    )
+}
+
+/// `simplePathPattern` (`/^(\/\/?(?!\/)[^?\s]*)(\?[^\s]*)?$/`): the index of the `?` that
+/// starts the search, or the length when there is none.
+fn simple_path(rest: &[u16]) -> Option<usize> {
+    if rest.first() != Some(&0x2f) || rest.iter().any(|&u| is_js_space(u)) {
+        return None;
+    }
+    let slashes = if rest.get(1) == Some(&0x2f) { 2 } else { 1 };
+    if rest.get(slashes) == Some(&0x2f) {
+        return None;
+    }
+    Some(rest.iter().position(|&u| u == 0x3f).unwrap_or(rest.len()))
+}
+
 /// `url.parse(url)` / `url.parse(url, false, slashesDenoteHost)`.
-pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
+pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, Invalid> {
     let url: Vec<u16> = input.encode_utf16().collect();
     let mut rest: Vec<u16> = Vec::new();
     let mut start: Option<usize> = None;
     let mut end: Option<usize> = None;
     let mut in_ws = false;
     let mut split = false;
+    let mut has_hash = false;
+    let mut has_at = false;
     let mut last_pos = 0usize;
     for (i, &code) in url.iter().enumerate() {
         let is_ws = code < 33 || code == 0xa0 || code == 0xfeff;
@@ -184,7 +209,12 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
         }
         if !split {
             match code {
-                0x23 | 0x3f => split = true,
+                0x40 => has_at = true,
+                0x23 => {
+                    has_hash = true;
+                    split = true;
+                }
+                0x3f => split = true,
                 0x5c => {
                     if i > last_pos {
                         rest.extend_from_slice(&url[last_pos..i]);
@@ -194,6 +224,8 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
                 }
                 _ => {}
             }
+        } else if code == 0x23 {
+            has_hash = true;
         }
     }
     if let Some(start) = start {
@@ -210,6 +242,20 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
     }
 
     let mut out = LegacyUrl::default();
+    if !slashes_denote_host
+        && !has_hash
+        && !has_at
+        && let Some(question) = simple_path(&rest)
+    {
+        out.path = Some(text(&rest));
+        out.href = text(&rest);
+        out.pathname = Some(text(&rest[..question]));
+        if question < rest.len() {
+            out.search = Some(text(&rest[question..]));
+            out.query = Some(text(&rest[question + 1..]));
+        }
+        return Ok(out);
+    }
     let proto_len = rest
         .iter()
         .take_while(|&&u| {
@@ -278,7 +324,7 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
         let mut start2 = 0;
         if let Some(at) = at_sign {
             let auth = decode_uri_component(&JsString::from_units(rest[..at].to_vec()))
-                .map_err(|_| ())?
+                .map_err(|_| Invalid)?
                 .to_string_lossy();
             out.auth = Some(auth);
             start2 = at + 1;
@@ -324,7 +370,7 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
             }
         }
         let mut hostname = out.hostname.take().unwrap_or_default();
-        if hostname.len() > 255 {
+        if hostname.encode_utf16().count() > 255 {
             hostname = String::new();
         } else {
             hostname = JsString::from(hostname.as_str())
@@ -334,12 +380,12 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
         if !hostname.is_empty() {
             if ipv6 {
                 if forbidden_host(&hostname, true) {
-                    return Err(());
+                    return Err(Invalid);
                 }
             } else {
                 let ascii = to_ascii(&hostname);
                 if ascii.is_empty() || forbidden_host(&ascii, false) {
-                    return Err(());
+                    return Err(Invalid);
                 }
                 hostname = ascii;
             }
@@ -411,16 +457,16 @@ pub fn parse(input: &str, slashes_denote_host: bool) -> Result<LegacyUrl, ()> {
     Ok(out)
 }
 
-/// `domainToASCII` approximation: ASCII hostnames pass through; anything else is
-/// left as is rather than punycoded (the vectors never exercise IDNA).
+/// `internal/idna`'s `toASCII` (ada's UTS 46 processing, nontransitional, no STD3 rules or
+/// DNS length check); `""` where ada fails.
 fn to_ascii(hostname: &str) -> String {
-    hostname.to_owned()
+    idna::domain_to_ascii(hostname).unwrap_or_default()
 }
 
 fn encode_auth(auth: &str) -> String {
     fn allowed(u: u16) -> bool {
         matches!(u,
-            0x21 | 0x27..=0x2a | 0x2d | 0x2e | 0x30..=0x39 | 0x41..=0x5a | 0x5f | 0x61..=0x7a
+            0x21 | 0x27..=0x2a | 0x2d | 0x2e | 0x30..=0x3a | 0x41..=0x5a | 0x5f | 0x61..=0x7a
                 | 0x7e)
     }
     let mut out = String::new();
@@ -451,16 +497,16 @@ pub fn format(url: &LegacyUrl) -> String {
     let mut pathname = url.pathname.clone().unwrap_or_default();
     let mut hash = url.hash.clone().unwrap_or_default();
     let mut host = String::new();
-    if let Some(h) = &url.host {
+    if let Some(h) = url.host.as_ref().filter(|h| !h.is_empty()) {
         host = format!("{auth}{h}");
-    } else if let Some(h) = &url.hostname {
+    } else if let Some(h) = url.hostname.as_ref().filter(|h| !h.is_empty()) {
         let h = if h.contains(':') && !(h.starts_with('[') && h.ends_with(']')) {
             format!("[{h}]")
         } else {
             h.clone()
         };
         host = format!("{auth}{h}");
-        if let Some(port) = &url.port {
+        if let Some(port) = url.port.as_ref().filter(|p| !p.is_empty()) {
             host.push(':');
             host.push_str(port);
         }
@@ -499,12 +545,55 @@ pub fn format(url: &LegacyUrl) -> String {
 }
 
 /// `url.resolve(source, relative)`.
-pub fn resolve(source: &str, relative: &str) -> Result<String, ()> {
+pub fn resolve(source: &str, relative: &str) -> Result<String, Invalid> {
     let source = parse(source, true)?;
     let relative = parse(relative, true)?;
     Ok(format(&resolve_object(&source, relative)))
 }
 
+fn truthy(value: &Option<String>) -> bool {
+    value.as_deref().is_some_and(|v| !v.is_empty())
+}
+
+fn join_path(path: &[Option<String>]) -> String {
+    path.iter()
+        .map(|p| p.as_deref().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn split_path(pathname: &Option<String>) -> Vec<Option<String>> {
+    match pathname.as_deref() {
+        Some(p) if !p.is_empty() => p.split('/').map(|s| Some(s.to_owned())).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn set_path(result: &mut LegacyUrl) {
+    if result.pathname.is_some() || result.search.is_some() {
+        result.path = Some(format!(
+            "{}{}",
+            result.pathname.as_deref().unwrap_or_default(),
+            result.search.as_deref().unwrap_or_default()
+        ));
+    }
+}
+
+fn split_auth_in_host(result: &mut LegacyUrl) {
+    let Some(host) = result
+        .host
+        .clone()
+        .filter(|h| h.find('@').is_some_and(|i| i > 0))
+    else {
+        return;
+    };
+    let mut parts = host.split('@');
+    result.auth = parts.next().map(str::to_owned);
+    result.host = parts.next().map(str::to_owned);
+    result.hostname = result.host.clone();
+}
+
+/// `Url.prototype.resolveObject` (node 22).
 fn resolve_object(source: &LegacyUrl, mut relative: LegacyUrl) -> LegacyUrl {
     let mut result = source.clone();
     result.hash = relative.hash.clone();
@@ -513,56 +602,53 @@ fn resolve_object(source: &LegacyUrl, mut relative: LegacyUrl) -> LegacyUrl {
         return result;
     }
     if relative.slashes && relative.protocol.is_none() {
-        result.slashes = relative.slashes;
-        result.auth = relative.auth.clone();
-        result.host = relative.host.clone();
-        result.port = relative.port.clone();
-        result.hostname = relative.hostname.clone();
-        result.hash = relative.hash.clone();
-        result.search = relative.search.clone();
-        result.query = relative.query.clone();
-        result.pathname = relative.pathname.clone();
-        result.path = relative.path.clone();
+        let protocol = result.protocol.take();
+        result = relative;
+        result.protocol = protocol;
         if is_slashed(result.protocol.as_deref().unwrap_or_default())
-            && result.hostname.as_deref().is_some_and(|h| !h.is_empty())
-            && result.pathname.is_none()
+            && truthy(&result.hostname)
+            && !truthy(&result.pathname)
         {
-            result.path = Some("/".to_owned());
             result.pathname = Some("/".to_owned());
+            result.path = Some("/".to_owned());
         }
         result.href = format(&result);
         return result;
     }
-    if relative.protocol.is_some() && relative.protocol != result.protocol {
-        let rel_proto = relative.protocol.as_deref().unwrap_or_default();
-        if !is_slashed(rel_proto) {
-            relative.href = format(&relative);
-            return relative;
+    if truthy(&relative.protocol) && relative.protocol != result.protocol {
+        let protocol = relative.protocol.clone().unwrap_or_default();
+        if !is_slashed(&protocol) {
+            result = relative;
+            result.href = format(&result);
+            return result;
         }
         result.protocol = relative.protocol.clone();
-        if relative.host.is_none()
-            && !matches!(rel_proto, "file" | "file:")
-            && !is_hostless(rel_proto)
+        if !truthy(&relative.host)
+            && protocol != "file"
+            && protocol != "file:"
+            && !is_hostless(&protocol)
         {
             let mut rel_path: Vec<String> = relative
                 .pathname
-                .clone()
+                .as_deref()
                 .unwrap_or_default()
                 .split('/')
                 .map(str::to_owned)
                 .collect();
+            rel_path.reverse();
             let mut host = String::new();
-            while !rel_path.is_empty() {
-                host = rel_path.remove(0);
-                if !host.is_empty() {
+            while let Some(segment) = rel_path.pop() {
+                if !segment.is_empty() {
+                    host = segment;
                     break;
                 }
             }
+            rel_path.reverse();
             relative.host = Some(host);
-            if relative.hostname.is_none() {
+            if !truthy(&relative.hostname) {
                 relative.hostname = Some(String::new());
             }
-            if rel_path.first().map(String::as_str) != Some("") {
+            if rel_path.first().is_none_or(|p| !p.is_empty()) {
                 rel_path.insert(0, String::new());
             }
             if rel_path.len() < 2 {
@@ -576,18 +662,18 @@ fn resolve_object(source: &LegacyUrl, mut relative: LegacyUrl) -> LegacyUrl {
         result.query = relative.query.clone();
         result.host = Some(relative.host.clone().unwrap_or_default());
         result.auth = relative.auth.clone();
-        result.hostname = Some(
-            relative
-                .hostname
-                .clone()
-                .or_else(|| relative.host.clone())
-                .unwrap_or_default(),
-        );
+        result.hostname = if truthy(&relative.hostname) {
+            relative.hostname.clone()
+        } else {
+            relative.host.clone()
+        };
         result.port = relative.port.clone();
-        if result.pathname.is_some() || result.search.is_some() {
-            let p = result.pathname.as_deref().unwrap_or_default();
-            let s = result.search.as_deref().unwrap_or_default();
-            result.path = Some(format!("{p}{s}"));
+        if truthy(&result.pathname) || truthy(&result.search) {
+            result.path = Some(format!(
+                "{}{}",
+                result.pathname.as_deref().unwrap_or_default(),
+                result.search.as_deref().unwrap_or_default()
+            ));
         }
         result.slashes = result.slashes || relative.slashes;
         result.href = format(&result);
@@ -598,54 +684,45 @@ fn resolve_object(source: &LegacyUrl, mut relative: LegacyUrl) -> LegacyUrl {
         .pathname
         .as_deref()
         .is_some_and(|p| p.starts_with('/'));
-    let is_rel_abs = relative.host.is_some()
+    let is_rel_abs = truthy(&relative.host)
         || relative
             .pathname
             .as_deref()
             .is_some_and(|p| p.starts_with('/'));
     let mut must_end_abs =
-        is_rel_abs || is_source_abs || (result.host.is_some() && relative.pathname.is_some());
+        is_rel_abs || is_source_abs || (truthy(&result.host) && truthy(&relative.pathname));
     let remove_all_dots = must_end_abs;
-    let mut src_path: Vec<String> = result
-        .pathname
-        .as_deref()
-        .map(|p| p.split('/').map(str::to_owned).collect())
-        .unwrap_or_default();
-    let mut rel_path: Vec<String> = relative
-        .pathname
-        .as_deref()
-        .map(|p| p.split('/').map(str::to_owned).collect())
-        .unwrap_or_default();
+    let mut src_path = split_path(&result.pathname);
+    let mut rel_path = split_path(&relative.pathname);
     let no_leading_slashes =
-        result.protocol.is_some() && !is_slashed(result.protocol.as_deref().unwrap_or_default());
-
+        truthy(&result.protocol) && !is_slashed(result.protocol.as_deref().unwrap_or_default());
     if no_leading_slashes {
         result.hostname = Some(String::new());
         result.port = None;
-        if let Some(host) = result.host.clone().filter(|h| !h.is_empty()) {
-            if src_path.first().map(String::as_str) == Some("") {
-                src_path[0] = host;
+        if truthy(&result.host) {
+            if src_path.first() == Some(&Some(String::new())) {
+                src_path[0] = result.host.clone();
             } else {
-                src_path.insert(0, host);
+                src_path.insert(0, result.host.clone());
             }
         }
         result.host = Some(String::new());
-        if relative.protocol.is_some() {
+        if truthy(&relative.protocol) {
             relative.hostname = None;
             relative.port = None;
             result.auth = None;
-            if let Some(host) = relative.host.clone().filter(|h| !h.is_empty()) {
-                if rel_path.first().map(String::as_str) == Some("") {
-                    rel_path[0] = host;
+            if truthy(&relative.host) {
+                if rel_path.first() == Some(&Some(String::new())) {
+                    rel_path[0] = relative.host.clone();
                 } else {
-                    rel_path.insert(0, host);
+                    rel_path.insert(0, relative.host.clone());
                 }
             }
             relative.host = None;
         }
+        let empty = Some(Some(String::new()));
         must_end_abs = must_end_abs
-            && (rel_path.first().map(String::as_str) == Some("")
-                || src_path.first().map(String::as_str) == Some(""));
+            && (rel_path.first().cloned() == empty || src_path.first().cloned() == empty);
     }
 
     if is_rel_abs {
@@ -671,47 +748,45 @@ fn resolve_object(source: &LegacyUrl, mut relative: LegacyUrl) -> LegacyUrl {
         result.search = relative.search.clone();
         result.query = relative.query.clone();
     } else if relative.search.is_some() {
-        if no_leading_slashes && !src_path.is_empty() {
-            let host = src_path.remove(0);
-            result.hostname = Some(host.clone());
-            result.host = Some(host);
-            if let Some(at) = result
-                .host
-                .as_deref()
-                .and_then(|h| h.find('@').filter(|&i| i > 0))
-            {
-                let host = result.host.take().unwrap_or_default();
-                result.auth = Some(host[..at].to_owned());
-                result.hostname = Some(host[at + 1..].to_owned());
-                result.host = Some(host[at + 1..].to_owned());
-            }
+        if no_leading_slashes {
+            let first = if src_path.is_empty() {
+                None
+            } else {
+                src_path.remove(0)
+            };
+            result.host = first.clone();
+            result.hostname = first;
+            split_auth_in_host(&mut result);
         }
         result.search = relative.search.clone();
         result.query = relative.query.clone();
-        if result.pathname.is_some() || result.search.is_some() {
-            let p = result.pathname.as_deref().unwrap_or_default();
-            let s = result.search.as_deref().unwrap_or_default();
-            result.path = Some(format!("{p}{s}"));
-        }
+        set_path(&mut result);
         result.href = format(&result);
         return result;
     }
 
     if src_path.is_empty() {
         result.pathname = None;
-        result.path = result.search.as_ref().map(|s| format!("/{s}"));
+        result.path = if truthy(&result.search) {
+            Some(format!("/{}", result.search.as_deref().unwrap_or_default()))
+        } else {
+            None
+        };
         result.href = format(&result);
         return result;
     }
 
-    let last = src_path.last().cloned().unwrap_or_default();
+    let segment = |p: &Option<String>| p.as_deref().unwrap_or_default().to_owned();
+    let last = src_path.last().map(segment).unwrap_or_default();
     let has_trailing_slash =
-        ((result.host.is_some() || relative.host.is_some() || src_path.len() > 1)
+        ((truthy(&result.host) || truthy(&relative.host) || src_path.len() > 1)
             && (last == "." || last == ".."))
             || last.is_empty();
-    let mut up = 0;
-    for i in (0..src_path.len()).rev() {
-        let last = src_path[i].as_str();
+    let mut up = 0usize;
+    let mut i = src_path.len();
+    while i > 0 {
+        i -= 1;
+        let last = segment(&src_path[i]);
         if last == "." {
             src_path.remove(i);
         } else if last == ".." {
@@ -724,89 +799,48 @@ fn resolve_object(source: &LegacyUrl, mut relative: LegacyUrl) -> LegacyUrl {
     }
     if !must_end_abs && !remove_all_dots {
         for _ in 0..up {
-            src_path.insert(0, "..".to_owned());
+            src_path.insert(0, Some("..".to_owned()));
         }
     }
-    if must_end_abs && src_path.first().is_some_and(|s| !s.is_empty()) {
-        src_path.insert(0, String::new());
+    let first_is = |path: &[Option<String>], f: &dyn Fn(&str) -> bool| {
+        path.first().and_then(|p| p.as_deref()).is_some_and(f)
+    };
+    if must_end_abs
+        && !first_is(&src_path, &|p| p.is_empty())
+        && !first_is(&src_path, &|p| p.starts_with('/'))
+    {
+        src_path.insert(0, Some(String::new()));
     }
-    if has_trailing_slash && !src_path.join("/").ends_with('/') {
-        src_path.push(String::new());
+    if has_trailing_slash && !join_path(&src_path).ends_with('/') {
+        src_path.push(Some(String::new()));
     }
-    let is_absolute = src_path
-        .first()
-        .is_some_and(|s| s.is_empty() || s.starts_with('/'));
+    let is_absolute =
+        first_is(&src_path, &|p| p.is_empty()) || first_is(&src_path, &|p| p.starts_with('/'));
     if no_leading_slashes {
-        let host = if is_absolute {
-            String::new()
+        let host = if is_absolute || src_path.is_empty() {
+            Some(String::new())
         } else {
-            src_path.first().cloned().unwrap_or_default()
+            src_path.remove(0)
         };
-        if !is_absolute && !src_path.is_empty() {
-            src_path.remove(0);
-        }
-        result.hostname = Some(host.clone());
-        result.host = Some(host);
-        if let Some(at) = result
-            .host
-            .as_deref()
-            .and_then(|h| h.find('@').filter(|&i| i > 0))
-        {
-            let host = result.host.take().unwrap_or_default();
-            result.auth = Some(host[..at].to_owned());
-            result.hostname = Some(host[at + 1..].to_owned());
-            result.host = Some(host[at + 1..].to_owned());
-        }
+        result.host = host.clone();
+        result.hostname = host;
+        split_auth_in_host(&mut result);
     }
-    must_end_abs = must_end_abs
-        || (result.host.as_deref().is_some_and(|h| !h.is_empty()) && !src_path.is_empty());
+    must_end_abs = must_end_abs || (truthy(&result.host) && !src_path.is_empty());
     if must_end_abs && !is_absolute {
-        src_path.insert(0, String::new());
+        src_path.insert(0, Some(String::new()));
     }
     if src_path.is_empty() {
         result.pathname = None;
         result.path = None;
     } else {
-        result.pathname = Some(src_path.join("/"));
+        result.pathname = Some(join_path(&src_path));
     }
-    if result.pathname.is_some() || result.search.is_some() {
-        let p = result.pathname.as_deref().unwrap_or_default();
-        let s = result.search.as_deref().unwrap_or_default();
-        result.path = Some(format!("{p}{s}"));
-    }
-    if relative.auth.is_some() {
+    set_path(&mut result);
+    if truthy(&relative.auth) {
         result.auth = relative.auth.clone();
     }
     result.slashes = result.slashes || relative.slashes;
     result.href = format(&result);
     result
-}
-
-/// `path.basename(new URL(url).pathname)`: the last pathname segment of an
-/// absolute `scheme://` URL, or `None` when the URL is not in that shape.
-pub fn whatwg_basename(url: &str) -> Option<String> {
-    let after_scheme = url.split_once("://").map(|(_, rest)| rest)?;
-    let path = match after_scheme.find(['/', '?', '#']) {
-        None => "/",
-        Some(i) if after_scheme[i..].starts_with('/') => {
-            &after_scheme[i..after_scheme[i..]
-                .find(['?', '#'])
-                .map(|j| i + j)
-                .unwrap_or(after_scheme.len())]
-        }
-        Some(_) => "/",
-    };
-    Some(posix_basename(path))
-}
-
-fn posix_basename(path: &str) -> String {
-    let trimmed = path.trim_end_matches('/');
-    if trimmed.is_empty() {
-        return if path.is_empty() {
-            String::new()
-        } else {
-            "/".to_owned()
-        };
-    }
-    trimmed.rsplit('/').next().unwrap_or_default().to_owned()
 }

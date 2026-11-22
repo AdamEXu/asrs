@@ -65,6 +65,16 @@ pub trait Fs {
     fn remove_all(&self, path: &str) -> Result<(), JsError> {
         Err(enosys("rm", path))
     }
+
+    /// `fs.realpathSync(path)`.
+    fn realpath(&self, path: &str) -> Result<String, JsError> {
+        Err(enosys("realpath", path))
+    }
+
+    /// `fs.readlinkSync(path)`: fails unless `path` is a symlink.
+    fn readlink(&self, path: &str) -> Result<String, JsError> {
+        Err(enosys("readlink", path))
+    }
 }
 
 fn enosys(syscall: &str, path: &str) -> JsError {
@@ -178,13 +188,31 @@ impl Fs for RealFs {
     }
 
     fn remove_all(&self, path: &str) -> Result<(), JsError> {
-        match std::fs::symlink_metadata(path) {
-            Err(e) => Err(node_error("lstat", path, &e)),
-            Ok(meta) if meta.is_dir() => {
-                std::fs::remove_dir_all(path).map_err(|e| node_error("rm", path, &e))
-            }
-            Ok(_) => std::fs::remove_file(path).map_err(|e| node_error("rm", path, &e)),
-        }
+        let meta = std::fs::symlink_metadata(path).map_err(|e| node_error("lstat", path, &e))?;
+        let removed = if meta.is_dir() {
+            std::fs::remove_dir_all(path)
+        } else {
+            std::fs::remove_file(path).or_else(|e| {
+                if cfg!(windows) && meta.file_type().is_symlink() {
+                    std::fs::remove_dir(path)
+                } else {
+                    Err(e)
+                }
+            })
+        };
+        removed.map_err(|e| node_error("rm", path, &e))
+    }
+
+    fn realpath(&self, path: &str) -> Result<String, JsError> {
+        std::fs::canonicalize(path)
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| node_error("realpath", path, &e))
+    }
+
+    fn readlink(&self, path: &str) -> Result<String, JsError> {
+        std::fs::read_link(path)
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| node_error("readlink", path, &e))
     }
 }
 
@@ -599,5 +627,34 @@ impl Fs for MemFs {
             dirs.remove(&d);
         }
         Ok(())
+    }
+
+    fn realpath(&self, path: &str) -> Result<String, JsError> {
+        let key = dir_key(path);
+        let prefix = format!("{key}/");
+        let exists = key == "/"
+            || self.files.borrow().contains_key(path)
+            || self.files.borrow().contains_key(&key)
+            || self
+                .dirs
+                .borrow()
+                .iter()
+                .any(|d| *d == key || d.starts_with(&prefix));
+        if exists {
+            Ok(key)
+        } else {
+            Err(enoent("realpath", path))
+        }
+    }
+
+    fn readlink(&self, path: &str) -> Result<String, JsError> {
+        if self.exists(path) {
+            Err(JsError::new(
+                "Error",
+                format!("EINVAL: invalid argument, readlink '{path}'"),
+            ))
+        } else {
+            Err(enoent("readlink", path))
+        }
     }
 }

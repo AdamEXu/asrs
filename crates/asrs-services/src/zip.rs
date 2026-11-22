@@ -2,11 +2,22 @@
 //! decoding (stored and raw-deflate) and the file/directory classification
 //! `decompress` uses when writing an archive out.
 
+use crate::Invalid;
+
 const CP437: &str = "\u{0}☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼ !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u{a0}";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryKind {
+    File,
+    Directory,
+    Symlink,
+}
 
 pub struct ZipEntry {
     pub name: String,
-    pub is_dir: bool,
+    pub kind: EntryKind,
+    /// `(externalFileAttributes >> 16) & 0xFFFF`, with decompress-unzip's 0 -> 493/420 default.
+    pub mode: u32,
     pub data: Vec<u8>,
 }
 
@@ -44,25 +55,27 @@ fn decode_name(bytes: &[u8], utf8: bool) -> String {
     if utf8 {
         String::from_utf8_lossy(bytes).into_owned()
     } else {
-        bytes
-            .iter()
-            .map(|&b| CP437.chars().nth(b as usize).unwrap_or('\u{fffd}'))
-            .collect()
+        let table: Vec<char> = CP437.chars().collect();
+        bytes.iter().map(|&b| table[usize::from(b)]).collect()
     }
 }
 
-fn validate_name(name: &str) -> Result<(), ()> {
+fn past(start: usize, len: usize, size: usize) -> bool {
+    start.checked_add(len).is_none_or(|end| end > size)
+}
+
+fn validate_name(name: &str) -> Result<(), Invalid> {
     if name.contains('\\') {
-        return Err(());
+        return Err(Invalid);
     }
     if name.starts_with('/')
         || name.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
             && name[1..].starts_with(':')
     {
-        return Err(());
+        return Err(Invalid);
     }
     if name.split('/').any(|seg| seg == "..") {
-        return Err(());
+        return Err(Invalid);
     }
     Ok(())
 }
@@ -70,35 +83,38 @@ fn validate_name(name: &str) -> Result<(), ()> {
 /// `yauzl.fromBuffer` plus `decompress-unzip`'s entry extraction: every entry is
 /// parsed and its data decoded before anything is returned, so a failure
 /// anywhere means nothing was written.
-pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, ()> {
+pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, Invalid> {
     let size = buf.len();
     let window = (22 + 0xffff).min(size);
+    if window < 22 {
+        return Err(Invalid);
+    }
     let start = size - window;
     let mut entry_count: u64 = 0;
     let mut cd_offset: u64 = 0;
     let mut found = false;
-    for i in (0..=window.saturating_sub(22)).rev() {
+    for i in (0..=window - 22).rev() {
         let at = start + i;
-        if at + 4 > size || u32le(buf, at) != 0x0605_4b50 {
+        if u32le(buf, at) != 0x0605_4b50 {
             continue;
         }
         let eocdr = &buf[at..];
         if u16le(eocdr, 4) != 0 {
-            return Err(());
+            return Err(Invalid);
         }
         if usize::from(u16le(eocdr, 20)) != eocdr.len() - 22 {
-            return Err(());
+            return Err(Invalid);
         }
         entry_count = u64::from(u16le(eocdr, 10));
         cd_offset = u64::from(u32le(eocdr, 16));
         if u16le(eocdr, 10) == 0xffff || u32le(eocdr, 16) == 0xffff_ffff {
-            let loc = at.checked_sub(20).ok_or(())?;
-            if loc + 20 > size || u32le(buf, loc) != 0x0706_4b50 {
-                return Err(());
+            let loc = at.checked_sub(20).ok_or(Invalid)?;
+            if u32le(buf, loc) != 0x0706_4b50 {
+                return Err(Invalid);
             }
-            let eocdr64 = usize::try_from(u64le(buf, loc + 8)).map_err(|_| ())?;
-            if eocdr64 + 56 > size || u32le(buf, eocdr64) != 0x0606_4b50 {
-                return Err(());
+            let eocdr64 = usize::try_from(u64le(buf, loc + 8)).map_err(|_| Invalid)?;
+            if past(eocdr64, 56, size) || u32le(buf, eocdr64) != 0x0606_4b50 {
+                return Err(Invalid);
             }
             entry_count = u64le(buf, eocdr64 + 32);
             cd_offset = u64le(buf, eocdr64 + 48);
@@ -107,17 +123,17 @@ pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, ()> {
         break;
     }
     if !found {
-        return Err(());
+        return Err(Invalid);
     }
     let mut entries = Vec::new();
-    let mut cursor = usize::try_from(cd_offset).map_err(|_| ())?;
+    let mut cursor = usize::try_from(cd_offset).map_err(|_| Invalid)?;
     for _ in 0..entry_count {
-        if cursor + 46 > size {
-            return Err(());
+        if past(cursor, 46, size) {
+            return Err(Invalid);
         }
         let h = &buf[cursor..];
         if u32le(h, 0) != 0x0201_4b50 {
-            return Err(());
+            return Err(Invalid);
         }
         let made_by = u16le(h, 4);
         let flags = u16le(h, 8);
@@ -130,11 +146,11 @@ pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, ()> {
         let external = u32le(h, 38);
         let mut local_offset = u64::from(u32le(h, 42));
         if flags & 0x40 != 0 {
-            return Err(());
+            return Err(Invalid);
         }
         cursor += 46;
-        if cursor + name_len + extra_len + comment_len > size {
-            return Err(());
+        if past(cursor, name_len + extra_len + comment_len, size) {
+            return Err(Invalid);
         }
         let name_bytes = &buf[cursor..cursor + name_len];
         let extra = &buf[cursor + name_len..cursor + name_len + extra_len];
@@ -146,7 +162,7 @@ pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, ()> {
             let id = u16le(extra, i);
             let data_end = i + 4 + usize::from(u16le(extra, i + 2));
             if data_end > extra.len() {
-                return Err(());
+                return Err(Invalid);
             }
             extras.push((id, &extra[i + 4..data_end]));
             i = data_end;
@@ -157,12 +173,12 @@ pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, ()> {
                 .iter()
                 .find(|(id, _)| *id == 0x0001)
                 .map(|(_, d)| *d)
-                .ok_or(())?;
+                .ok_or(Invalid)?;
             let mut idx = 0usize;
             for field in [&mut uncompressed, &mut compressed, &mut local_offset] {
                 if *field == 0xffff_ffff {
                     if idx + 8 > eief.len() {
-                        return Err(());
+                        return Err(Invalid);
                     }
                     *field = u64le(eief, idx);
                     idx += 8;
@@ -180,55 +196,71 @@ pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, ()> {
             }
         }
         if method == 0 && compressed != uncompressed + u64::from(flags & 1 != 0) * 12 {
-            return Err(());
+            return Err(Invalid);
         }
         name = name.replace('\\', "/");
         validate_name(&name)?;
         if flags & 1 != 0 {
-            return Err(());
+            return Err(Invalid);
         }
-        let local = usize::try_from(local_offset).map_err(|_| ())?;
-        if local + 30 > size || u32le(buf, local) != 0x0403_4b50 {
-            return Err(());
+        let local = usize::try_from(local_offset).map_err(|_| Invalid)?;
+        if past(local, 30, size) || u32le(buf, local) != 0x0403_4b50 {
+            return Err(Invalid);
         }
         let data_start =
             local + 30 + usize::from(u16le(buf, local + 26)) + usize::from(u16le(buf, local + 28));
-        let compressed = usize::try_from(compressed).map_err(|_| ())?;
-        if compressed != 0 && data_start + compressed > size {
-            return Err(());
+        if method != 0 && method != 8 {
+            return Err(Invalid);
         }
-        let raw = &buf[data_start..(data_start + compressed).min(size)];
-        let data = match method {
-            0 => raw.to_vec(),
-            8 => {
-                let data = miniz_oxide::inflate::decompress_to_vec(raw).map_err(|_| ())?;
-                if data.len() as u64 != uncompressed {
-                    return Err(());
-                }
-                data
-            }
-            _ => return Err(()),
+        let compressed = usize::try_from(compressed).unwrap_or(usize::MAX);
+        let raw: &[u8] = if compressed == 0 {
+            &[]
+        } else if past(data_start, compressed, size) {
+            return Err(Invalid);
+        } else {
+            &buf[data_start..data_start + compressed]
         };
-        let mode = (external >> 16) & 0xffff;
-        let is_dir = (mode & 0xf000) == 0x4000 || (made_by >> 8 == 0 && external == 16);
-        entries.push(ZipEntry { name, is_dir, data });
+        let data = if method == 0 {
+            raw.to_vec()
+        } else {
+            let limit = usize::try_from(uncompressed).map_err(|_| Invalid)?;
+            let data = miniz_oxide::inflate::decompress_to_vec_with_limit(raw, limit)
+                .map_err(|_| Invalid)?;
+            if data.len() as u64 != uncompressed {
+                return Err(Invalid);
+            }
+            data
+        };
+        let mut mode = (external >> 16) & 0xffff;
+        let kind = if mode & 0xf000 == 0xa000 {
+            EntryKind::Symlink
+        } else if mode & 0xf000 == 0x4000 || (made_by >> 8 == 0 && external == 16) {
+            EntryKind::Directory
+        } else {
+            EntryKind::File
+        };
+        if mode == 0 && kind == EntryKind::Directory {
+            mode = 0o755;
+        }
+        if mode == 0 {
+            mode = 0o644;
+        }
+        entries.push(ZipEntry {
+            name,
+            kind,
+            mode,
+            data,
+        });
     }
     Ok(entries)
 }
 
-/// `archive-type`: the `file-type` checks that matter for extraction; an `xpi`
-/// is a zip to `file-type` but not to `archive-type`'s extension set.
-pub fn is_zip_archive(data: &[u8]) -> bool {
-    if data.len() < 4 {
-        return false;
+/// The `decompress-unzip` plugin: buffers its own file-type 3.9 does not call a zip yield no
+/// entries. For every buffer, that check agrees with `archive-type`'s (file-type 4.4) `zip`.
+pub fn decompress_unzip(buf: &[u8]) -> Result<Vec<ZipEntry>, Invalid> {
+    if crate::file_type::archive_type(buf) == Some("zip") {
+        read_entries(buf)
+    } else {
+        Ok(Vec::new())
     }
-    if data[..4] == [0x50, 0x4b, 0x03, 0x04]
-        && data.len() >= 48
-        && &data[30..48] == b"META-INF/mozilla.rsa"
-    {
-        return false;
-    }
-    data[..2] == [0x50, 0x4b]
-        && matches!(data[2], 0x03 | 0x05 | 0x07)
-        && matches!(data[3], 0x04 | 0x06 | 0x08)
 }
