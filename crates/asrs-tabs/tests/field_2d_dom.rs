@@ -502,6 +502,9 @@ struct Harness {
     tab_render_due: Vec<bool>,
     /// What the last replayed controller or renderer call threw, for an `eval` exception.
     last_threw: Option<String>,
+    /// What the port's render threw inside an animation frame, for upstream's
+    /// `requestAnimationFrame` exception.
+    frame_threw: Option<String>,
     stats: Stats,
 }
 
@@ -546,6 +549,7 @@ impl Harness {
             frame_requests: Vec::new(),
             tab_render_due: Vec::new(),
             last_threw: None,
+            frame_threw: None,
             stats: Stats::default(),
         }
     }
@@ -903,6 +907,9 @@ impl Harness {
         let result = self.renderers[id].0.render_command(&self.host, &command);
         self.had_last_command[id] = true;
         self.stats.renders += 1;
+        if let Err(e) = &result {
+            self.frame_threw = Some(error_text(e));
+        }
         self.frame_matches(id, record, result.err())?;
         self.camera(id, record)?;
         let dom = js(record, "dom")?;
@@ -1358,6 +1365,15 @@ impl Harness {
                 )),
             };
         }
+        if record.string("exception").as_deref() == Some("requestAnimationFrame") {
+            let error = record.string("error").unwrap_or_default();
+            return match self.frame_threw.take() {
+                Some(port) if port == error => Ok(()),
+                port => Err(format!(
+                    "animation frame exception: upstream {error:?}, port {port:?}"
+                )),
+            };
+        }
         if record.string("exception").as_deref() == Some("eval") {
             let error = record.string("error").unwrap_or_default();
             return match self.last_threw.take() {
@@ -1496,6 +1512,9 @@ fn run_case(id: &str) -> Result<Stats, String> {
             .map_err(|e| format!("{id} line {}: {e}", record.line))?;
     }
     harness.drain_main().map_err(|e| format!("{id}: {e}"))?;
+    if let Some(e) = &harness.frame_threw {
+        return Err(format!("{id}: the port's render threw {e:?}, upstream's did not"));
+    }
     if harness.scrolls.iter().any(|q| !q.is_empty()) {
         return Err(format!(
             "{id}: port wheel callbacks upstream never dispatched"
