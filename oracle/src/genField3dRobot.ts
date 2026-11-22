@@ -183,6 +183,7 @@ let scratchCount = 0;
 
 async function loadAssets(setup: { mode: string; specular: number; shininess: number }) {
   const configs: any[] = [];
+  const payloads: any[] = [];
   const results: (unknown[][] | null)[] = [];
   for (const asset of ASSETS) {
     const dir = path.join(scratch, String(scratchCount++));
@@ -190,22 +191,24 @@ async function loadAssets(setup: { mode: string; specular: number; shininess: nu
     for (const [name, source] of asset.files) fs.copyFileSync(path.join(UPSTREAM_DIR, source.bundled), path.join(dir, name));
     const config: any = parseRobot(JSON.parse(asset.config));
     config.path = encodePath(path.join(dir, "model.glb"));
-    const result = await runWorker("loadRobot.js", {
+    const payload = {
       robotConfig: config,
       isFTC: config.isFTC,
       mode: setup.mode,
       materialSpecular: new THREE.Color(setup.specular).toArray(),
       materialShininess: setup.shininess
-    });
+    };
+    const result = await runWorker("loadRobot.js", payload);
     configs.push(config);
+    payloads.push(payload);
     results.push("never" in result ? null : result.ok);
   }
-  return { configs, results };
+  return { configs, payloads, results };
 }
 
 async function emit(name: string, setup: (typeof MODES)[number], ops: unknown[][]) {
-  const { configs, results } = await loadAssets(setup);
-  const robots: RobotSetup = { ids: ASSETS.map((a) => a.id), configs, results };
+  const { configs, payloads, results } = await loadAssets(setup);
+  const robots: RobotSetup = { ids: ASSETS.map((a) => a.id), configs, payloads, results };
   const states = await run("robot", setup, ops, robots);
   const assets = ASSETS.map((asset, i) => ({ ...asset, never: results[i] === null }));
   out({ manager: "robot", case: name, setup: toTree({ ...setup, assets }), ops: toTree(ops), out: toTree(states) });

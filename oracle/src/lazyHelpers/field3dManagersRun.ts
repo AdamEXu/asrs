@@ -80,7 +80,7 @@ type Pending = { url: string; texture: THREE.Texture; onLoad?: (texture: THREE.T
 let pending: Pending[] = [];
 let requested: string[] = [];
 
-export type RobotSetup = { ids: string[]; configs: any[]; results: (unknown[][] | null)[] };
+export type RobotSetup = { ids: string[]; configs: any[]; payloads: any[]; results: (unknown[][] | null)[] };
 let robotLoads: { worker: LoadRobotWorker; id: number; payload: any }[] = [];
 let robotRequests: unknown[] = [];
 
@@ -103,8 +103,14 @@ async function answerRobotLoads(robots: RobotSetup) {
   const loads = robotLoads;
   robotLoads = [];
   for (const load of loads) {
-    const result = robots.results[robots.configs.indexOf(load.payload.robotConfig)];
+    const index = robots.configs.indexOf(load.payload.robotConfig);
+    const result = robots.results[index];
     if (result === undefined) throw new Error("field3dManagersRun: a loadRobot request for an unknown config");
+    const { robotConfig: _sent, ...sent } = load.payload;
+    const { robotConfig: _ran, ...ran } = robots.payloads[index];
+    if (JSON.stringify(sent) !== JSON.stringify(ran)) {
+      throw new Error("field3dManagersRun: a loadRobot payload the worker was not run on");
+    }
     if (result !== null) load.worker.onmessage!({ data: { id: load.id, payload: structuredClone(result) } });
   }
   await new Promise((resolve) => setTimeout(resolve, 0));

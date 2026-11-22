@@ -46,8 +46,9 @@ pub fn quaternion_to_rotation3d(input: &Quaternion) -> Rotation3d {
     [input.w, input.x, input.y, input.z]
 }
 
-/// The constructor arguments every `ObjectManager` shares (`requestRender` excepted: the only
-/// manager that calls it, `AprilTagManager`, leaves it to whoever delivers its textures).
+/// The constructor arguments every `ObjectManager` shares (`requestRender` excepted: the managers
+/// that call it, `AprilTagManager` and `RobotManager`, leave it to whoever delivers their textures
+/// or models).
 #[derive(Clone, Debug)]
 pub struct ManagerContext {
     pub root: ObjectId,
