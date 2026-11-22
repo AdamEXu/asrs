@@ -10,6 +10,7 @@ use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 
 use crate::{Result, app, cargo, workspace_root};
+pub(crate) use gates::TIMELINE_TOLERANCE;
 use gates::{Capture, Dump, GlDump, Outcome, Patch, PlatformMask, Rect, RenderMode};
 
 const USAGE: &str = r"usage: cargo xtask pixel <command>

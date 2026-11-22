@@ -521,10 +521,31 @@ fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Resu
             read_json(&captures.join(&file))?,
             read_json(&b.join("captures").join(&file))?,
         );
-        if without_key(&ja, "timing") != without_key(&jb, "timing") {
+        let record = |j: &Json| without_key(&without_key(j, "timing"), "timelineRange");
+        if record(&ja) != record(&jb) {
             report.failures.push(format!(
                 "{label} {name}: DOM dump or capture record differs"
             ));
+        }
+        let range = |j: &Json| {
+            j.get("timelineRange")
+                .and_then(Json::as_array)
+                .and_then(|r| Some([r.first()?.as_f64()?, r.get(1)?.as_f64()?]))
+        };
+        match (range(&ja), range(&jb)) {
+            (None, None) => {}
+            (Some(x), Some(y))
+                if (x[0] - y[0]).abs().max((x[1] - y[1]).abs())
+                    <= crate::pixel::TIMELINE_TOLERANCE * (x[1] - x[0]) =>
+            {
+                report.compared.push(format!(
+                    "{label} {name}: timeline range within {:e} of the span",
+                    crate::pixel::TIMELINE_TOLERANCE
+                ));
+            }
+            (x, y) => report.failures.push(format!(
+                "{label} {name}: timeline range {x:?} against {y:?}"
+            )),
         }
         if let Some(state) = ja.get("hubState").and_then(Json::as_str) {
             let state = state.to_string();
