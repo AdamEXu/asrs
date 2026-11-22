@@ -1,0 +1,1639 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "boot": [],
+    "steps": [
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "-0.5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              ".5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "-.5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "0"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "-0"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "00012"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "0.1"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "0.30000000000000004"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e3"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1E+3"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "2e-1"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e-7"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e21"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e308"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1.7976931348623157e308"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1.7976931348623159e308"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e400"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "-1e400"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "4.9e-324"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "2e-324"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e-400"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "9007199254740993"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "123456789012345678901234567890"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "33.333333333333336"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "59.639997482299805"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1.4999999999999999"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "7.000000000000001"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "5."
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1.e5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1.E5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "."
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "-"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "+5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "--5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "e5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1e+"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1.5e3.2"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "0x10"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1_000"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "1,5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              " 5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "5 "
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "\t5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "5\n"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              " 5"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "١٢"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "５"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "abc"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "NaN"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "Infinity"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "-Infinity"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"max-speed\" type=\"number\" value=\"5\" title=\"Maximum speed (meters per second)\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              ""
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"-0.5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\".5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"-.5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"0\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"-0\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"00012\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"0.1\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"0.30000000000000004\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e3\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1E+3\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"2e-1\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e-7\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e21\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e308\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1.7976931348623157e308\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1.7976931348623159e308\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e400\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"-1e400\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"4.9e-324\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"2e-324\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e-400\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"9007199254740993\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"123456789012345678901234567890\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"33.333333333333336\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"59.639997482299805\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1.4999999999999999\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"7.000000000000001\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"5.\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1.e5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1.E5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\".\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"-\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"+5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"--5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"e5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1e+\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1.5e3.2\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"0x10\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1_000\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"1,5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\" 5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"5 \">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"\t5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"5\n\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\" 5\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"١٢\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"５\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"abc\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"NaN\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"Infinity\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"-Infinity\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"number\" value=\"\">",
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input class=\"data-table-jump-input\" type=\"number\" placeholder=\"0.000\" title=\"Go to timestamp\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "5"
+            ],
+            [
+              "set",
+              "value",
+              "-0.5"
+            ],
+            [
+              "set",
+              "value",
+              ".5"
+            ],
+            [
+              "set",
+              "value",
+              "-.5"
+            ],
+            [
+              "set",
+              "value",
+              "0"
+            ],
+            [
+              "set",
+              "value",
+              "-0"
+            ],
+            [
+              "set",
+              "value",
+              "00012"
+            ],
+            [
+              "set",
+              "value",
+              "0.1"
+            ],
+            [
+              "set",
+              "value",
+              "0.30000000000000004"
+            ],
+            [
+              "set",
+              "value",
+              "1e3"
+            ],
+            [
+              "set",
+              "value",
+              "1E+3"
+            ],
+            [
+              "set",
+              "value",
+              "2e-1"
+            ],
+            [
+              "set",
+              "value",
+              "1e-7"
+            ],
+            [
+              "set",
+              "value",
+              "1e21"
+            ],
+            [
+              "set",
+              "value",
+              "1e308"
+            ],
+            [
+              "set",
+              "value",
+              "1.7976931348623157e308"
+            ],
+            [
+              "set",
+              "value",
+              "1.7976931348623159e308"
+            ],
+            [
+              "set",
+              "value",
+              "1e400"
+            ],
+            [
+              "set",
+              "value",
+              "-1e400"
+            ],
+            [
+              "set",
+              "value",
+              "4.9e-324"
+            ],
+            [
+              "set",
+              "value",
+              "2e-324"
+            ],
+            [
+              "set",
+              "value",
+              "1e-400"
+            ],
+            [
+              "set",
+              "value",
+              "9007199254740993"
+            ],
+            [
+              "set",
+              "value",
+              "123456789012345678901234567890"
+            ],
+            [
+              "set",
+              "value",
+              "33.333333333333336"
+            ],
+            [
+              "set",
+              "value",
+              "59.639997482299805"
+            ],
+            [
+              "set",
+              "value",
+              "1.4999999999999999"
+            ],
+            [
+              "set",
+              "value",
+              "7.000000000000001"
+            ],
+            [
+              "set",
+              "value",
+              "5."
+            ],
+            [
+              "set",
+              "value",
+              "1.e5"
+            ],
+            [
+              "set",
+              "value",
+              "1.E5"
+            ],
+            [
+              "set",
+              "value",
+              "."
+            ],
+            [
+              "set",
+              "value",
+              "-"
+            ],
+            [
+              "set",
+              "value",
+              "+5"
+            ],
+            [
+              "set",
+              "value",
+              "--5"
+            ],
+            [
+              "set",
+              "value",
+              "e5"
+            ],
+            [
+              "set",
+              "value",
+              "1e"
+            ],
+            [
+              "set",
+              "value",
+              "1e+"
+            ],
+            [
+              "set",
+              "value",
+              "1.5e3.2"
+            ],
+            [
+              "set",
+              "value",
+              "0x10"
+            ],
+            [
+              "set",
+              "value",
+              "1_000"
+            ],
+            [
+              "set",
+              "value",
+              "1,5"
+            ],
+            [
+              "set",
+              "value",
+              " 5"
+            ],
+            [
+              "set",
+              "value",
+              "5 "
+            ],
+            [
+              "set",
+              "value",
+              "\t5"
+            ],
+            [
+              "set",
+              "value",
+              "5\n"
+            ],
+            [
+              "set",
+              "value",
+              " 5"
+            ],
+            [
+              "set",
+              "value",
+              "١٢"
+            ],
+            [
+              "set",
+              "value",
+              "５"
+            ],
+            [
+              "set",
+              "value",
+              "abc"
+            ],
+            [
+              "set",
+              "value",
+              "NaN"
+            ],
+            [
+              "set",
+              "value",
+              "Infinity"
+            ],
+            [
+              "set",
+              "value",
+              "-Infinity"
+            ],
+            [
+              "set",
+              "value",
+              ""
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber"
+          ]
+        }
+      }
+    ]
+  }
+}
