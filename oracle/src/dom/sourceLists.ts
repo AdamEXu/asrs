@@ -1,4 +1,5 @@
 import { fromTree, toTree } from "../cve1";
+import { quiet } from "./realGeometry";
 
 // Records every call into the real SourceList instances so the port can replay it (fixture key
 // "sourceLists", see oracle/README.md "Source lists"). Only outermost calls are recorded:
@@ -18,7 +19,7 @@ function errorText(error: unknown): string {
 }
 
 function rect(el: Element): number[] {
-  const r = el.getBoundingClientRect();
+  const r = quiet(() => el.getBoundingClientRect());
   return [r.x, r.y, r.width, r.height];
 }
 
