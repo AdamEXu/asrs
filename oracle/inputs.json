@@ -156,6 +156,10 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genAssetDownload": [
+    "src/environment.ts",
+    "src/genAssetDownload.ts"
+  ],
   "genAssets": [
     "src/cve1.ts",
     "src/environment.ts",
@@ -194,6 +198,9 @@
     "src/logRun.ts",
     "src/registry.ts",
     "src/shims.ts"
+  ],
+  "genDownloadHelpers": [
+    "src/genDownloadHelpers.ts"
   ],
   "genField3dFields": [
     "src/cve1.ts",
@@ -436,6 +443,14 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genRevlog": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genRevlog.ts",
+    "src/shims.ts"
+  ],
   "genRobotState": [
     "src/corpus/bytes.ts",
     "src/corpus/rng.ts",
@@ -500,6 +515,17 @@
     "src/environment.ts",
     "src/genUnitDialog.ts",
     "src/shims.ts"
+  ],
+  "genUpdate": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/fakes/globals.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/genUpdate.ts",
+    "src/update/bundle.ts",
+    "src/update/cases.ts",
+    "src/update/dialogs.ts"
   ],
   "genUrcl": [
     "src/corpus/bytes.ts",
