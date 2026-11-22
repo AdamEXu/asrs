@@ -113,6 +113,39 @@ pub fn native_menu_roundtrip(menu: &PopupMenu) -> Option<PopupMenu> {
     imp::probe::native_menu_roundtrip(menu)
 }
 
+/// A `<select>` popup's native menu read back from the OS.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectMenuReading {
+    pub items: Vec<SelectMenuItemReading>,
+    /// The tag of the item the popup cell positions over the control.
+    pub selected_tag: Option<isize>,
+    pub pulls_down: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectMenuItemReading {
+    pub separator: bool,
+    /// The plain title, which AppKit's type-to-select matches.
+    pub title: String,
+    /// The string the menu draws.
+    pub attributed_title: Option<String>,
+    pub font_size: Option<f64>,
+    pub enabled: bool,
+    pub tag: isize,
+}
+
+/// Chooses item `index` of the popup open over `window`, as a click on it would, and closes the
+/// menu. Returns whether a popup was open.
+pub fn choose_open_popup_item(window: &Window, index: usize) -> bool {
+    imp::probe::choose_open_popup_item(window, index)
+}
+
+/// Builds the native popup for a `<select>` and reads its menu and cell back from the OS,
+/// without running it.
+pub fn select_menu_roundtrip(menu: &super::SelectMenu) -> Option<SelectMenuReading> {
+    imp::probe::select_menu_roundtrip(menu)
+}
+
 /// The application's main menu read back from the OS, with each item's role as its native
 /// wiring shows it, and the titles of the items the OS added on its own. `works_when_hidden`
 /// is read only for items with a key equivalent, the only ones it affects, and is true for the

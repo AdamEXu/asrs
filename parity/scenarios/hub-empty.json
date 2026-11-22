@@ -1,6 +1,21 @@
 {
-  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph",
+  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph. Masked on both sides: .tab-bar, whose emoji titles the port measures and draws unlike Blink (#214: advance does not scale with DPR, drawn monochrome), and .renderer-content and .controls-content until U11's line graph and controls land; each mask is deleted when its gap closes",
   "actions": [
-    { "capture": "launch", "probes": [".title-bar", ".side-bar", ".tab-bar", ".renderer-content", ".controls-content", ".timeline"] }
+    {
+      "capture": "launch",
+      "probes": [
+        ".title-bar",
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ],
+      "masks": [
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    }
   ]
 }

@@ -78,6 +78,17 @@ pub fn paint(
     window: &mut Window,
     cx: &mut App,
 ) {
+    paint_with_app(key, bounds, |_| draw(), window, cx);
+}
+
+/// [`paint`] with a `draw` that reads the app, such as the text system.
+pub fn paint_with_app(
+    key: impl Hash,
+    bounds: Bounds<Pixels>,
+    draw: impl FnOnce(&mut App) -> Option<Pixmap>,
+    window: &mut Window,
+    cx: &mut App,
+) {
     let mut hasher = DefaultHasher::new();
     key.hash(&mut hasher);
     window.scale_factor().to_bits().hash(&mut hasher);
@@ -85,15 +96,17 @@ pub fn paint(
     let cache = cx.default_global::<PartCache>();
     cache.clock += 1;
     let clock = cache.clock;
-    let image = match cache.images.get_mut(&key) {
-        Some((image, used)) => {
-            *used = clock;
-            image.clone()
-        }
+    let cached = cache.images.get_mut(&key).map(|(image, used)| {
+        *used = clock;
+        image.clone()
+    });
+    let image = match cached {
+        Some(image) => image,
         None => {
-            let Some(pixmap) = draw() else {
+            let Some(pixmap) = draw(cx) else {
                 return;
             };
+            let cache = cx.default_global::<PartCache>();
             let (w, h) = (pixmap.width(), pixmap.height());
             let Some(buffer) = RgbaImage::from_raw(w, h, into_straight_bgra(pixmap)) else {
                 return;

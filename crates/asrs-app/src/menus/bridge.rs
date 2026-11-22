@@ -13,9 +13,8 @@ use super::context::{ContextMenu, Effect};
 use super::model::{Command, ItemType, MenuItem};
 use super::roles::{BuiltItem, build_appended, build_from_template};
 
-/// `app.name` of the packaged upstream app (`productName` in its package.json), which Electron
-/// puts into role labels such as "Hide AdvantageScope".
-pub const APP_NAME: &str = "AdvantageScope";
+/// `app.name`, which Electron puts into role labels such as "Hide AdvantageScope".
+pub const APP_NAME: &str = crate::IDENTITY.name;
 
 /// What choosing a menu entry asks for: a template's command, or a role Electron executes
 /// itself (reload, zoom and the like) that has no native selector.

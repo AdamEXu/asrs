@@ -1,0 +1,9 @@
+{
+ "name": "missing-input",
+ "version": "ffmpeg version 6.0 Copyright (c) 2000-2023 the FFmpeg developers",
+ "file": "does-not-exist.mp4",
+ "chunks": [
+  "ffmpeg version 6.0 Copyright (c) 2000-2023 the FFmpeg developers\n  built with Apple clang version 13.1.6 (clang-1316.0.21.2.5)\n  configuration: --prefix=/Volumes/tempdisk/sw --extra-cflags=-fno-stack-check --arch=arm64 --cc=/usr/bin/clang --enable-gpl --enable-libvmaf --enable-libbluray --enable-libopenjpeg --enable-libopus --enable-libmp3lame --enable-libx264 --enable-libx265 --enable-libvpx --enable-libwebp --enable-libass --enable-libfreetype --enable-fontconfig --enable-libtheora --enable-libvorbis --enable-libsnappy --enable-libaom --enable-libvidstab --enable-libzimg --enable-libsvtav1 --enable-libkvazaar --enable-version3 --pkg-config-flags=--static --enable-ffplay --enable-postproc --enable-nonfree --enable-neon --enable-runtime-cpudetect --disable-indev=qtkit --disable-indev=x11grab_xcb\n  libavutil      58.  2.100 / 58.  2.100\n  libavcodec     60.  3.100 / 60.  3.100\n  libavformat    60.  3.100 / 60.  3.100\n  libavdevice    60.  1.100 / 60.  1.100\n  libavfilter     9.  3.100 /  9.  3.100\n  libswscale      7.  1.100 /  7.  1.100\n  libswresample   4. 10.100 /  4. 10.100\n  libpostproc    57.  1.100 / 57.  1.100\ndoes-not-exist.mp4: No such file or directory\n"
+ ],
+ "exitCode": 1
+}

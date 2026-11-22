@@ -1039,6 +1039,25 @@ the parse and after each op the step writes `{"form": markup, "op": <op or null>
 the parsed element, with numeric segments indexing collections (`options.1.value`,
 `style.width`).
 
+### Select input vectors
+
+`form/select-keys` (`src/selectKeys.ts`, with `src/selectKeysMain.ts` as its Electron main
+process) records what trusted input does to a closed `<select>` in a real Chromium page. Each
+step of the spec's fixture is `{"markup", "focus"?, "ops"}`: the markup is loaded into an
+offscreen window, the first `<select>` is focused unless `focus` is `false`, and each op runs:
+`["char", text, ms, modifiers?]` types a character and `["key", name, ms, modifiers?]` presses a
+named key (`Enter`, `Escape`, `Home`, `End`, `PageUp`, `PageDown`, `ArrowLeft`, `ArrowRight`,
+`Backspace`), both through the DevTools protocol's `Input.dispatchKeyEvent` with the event
+timestamp `ms` after a fixed origin, since type-ahead compares event times; `["press", null, ms]`
+presses the mouse at the select's centre; `["set", property, value]`, `["blur"]` and
+`["focus"]` are script. After the markup and after each op it writes `{"step", "op", "value",
+"selectedIndex", "focused", "events"}`, where `events` lists the DOM events the select received
+since the previous record. Keys and presses that open the native popup on macOS (up, down, F4,
+space outside a type-ahead session, a press on an enabled select) would block in AppKit's menu
+loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift`; `meta` combinations
+can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
+`selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
@@ -1092,7 +1111,8 @@ unscripted one fails the run; `prefs.json` is the scenario's `prefs` plus its th
 A session preload installs a tap in each page's main world before page scripts run. It records
 every canvas context, and for 3D scenarios reads each WebGL drawing buffer with `gl.readPixels`
 right after the animation-frame callback that drew into it (the buffer is only defined until the
-compositor takes the frame), flipped to top-down rows.
+compositor takes the frame), flipped to top-down rows. It also keeps the data of the last
+`save-state` message the page posts on its message port, which is the HubState main saves.
 
 Scenario file:
 
@@ -1121,9 +1141,40 @@ It writes `captures/<name>.png` (capturePage), `captures/<name>.json` (size, col
 probed boxes, every visible text node's line boxes with font and colour, form controls, masks
 for focused text inputs, webviews and the scenario's mask selectors, the canvas and GL dump
 list, and a `timing` object that differs between runs), `<name>.canvas-<i>.png` (`getImageData`
-on each visible 2D canvas) and `<name>.gl-<i>.png`. After the last action the driver waits for
-upstream's periodic state saves and copies the top-level JSON files and asset folders of
-userData into `files/`.
+on each visible 2D canvas) and `<name>.gl-<i>.png`. Each GL entry names its render mode (`mode`:
+`standard`, `low-power` or `cinematic`, read from the context's `powerPreference`, which
+`Field3dRendererImpl` sets from the mode alone), and gate 4 picks its rule from it. On the `app`
+page the capture also waits for the next `save-state` and writes its data as
+`<name>.hub-state.json` (`JSON.stringify`, compared byte for byte) and records
+`selection.getTimelineRange()` as `timelineRange` (compared within 1e-9 of the span: Chromium
+animates a notched wheel tick in compositor-timed steps, so the zoom `ScrollSensor` compounds
+differs in the last bits between runs). After the last action
+the driver waits for upstream's periodic state saves and copies the top-level JSON files and
+asset folders of userData into `files/`.
+
+The port's side is `asrs --parity-scenario` (built with the `parity` feature; `cargo xtask pixel
+port` runs it). It reads the same files and writes the same layout headless. Actions go through
+the hub's model APIs (`main` and `open` as main messages, `selection` on the model's
+`SelectionImpl`) and the window's input dispatch (`mouse`, `wheel`, `key`; a notched wheel event
+becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); `eval`,
+`dialog` and a non-empty `userData` are refused because the port has no page script and no main
+yet. Before the window opens it seeds `prefs.json` as the driver does and runs main's own
+startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
+rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
+(`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's
+`save-state` and `save-type-memory` go to main's `StateTracker` and type memory, with the window
+where the driver puts its own: 16 px into the primary work area that `xtask pixel port` reads
+from the upstream run (`--work-area`). What lands in `userData/` is copied to `files/` and listed
+in `run.json` with the driver's filter, and `xtask pixel compare` requires every file the port
+wrote to equal upstream's and every file upstream wrote to be written by the port. Its
+page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle
+makes while its imports evaluate, so restored and default controller UUIDs match. Idle means the
+same busy reasons, read from the model. Probes and mask selectors resolve through
+`parity/probes.json` to the parity ids of painted elements (`asrs_ui::parity`), text runs come
+from every painted `Text`, canvas dumps from each presented canvas bitmap, and 3D dumps (with an
+edge mask PNG and the mode) from views that record them. A capture is taken when two consecutive
+frames give the same pixels and records. Windows the hub opens transparent on macOS clear to
+alpha 0, as `capturePage` gives where the vibrancy shows.
 
 Colour: with `--force-color-profile=srgb` the colour-patch capture is exact on the macOS dev
 display (512 of 512). Without it capturePage returns the display's colour space (Display P3

@@ -1,8 +1,9 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui_kit::{
-    AnyWindowHandle, App, AssetSource, Entity, HeadlessAppContext, Pixels, Render, Result, Size,
-    Window, WindowHandle, platform,
+    AnyWindowHandle, App, AssetSource, Entity, HeadlessAppContext, Pixels,
+    PlatformHeadlessRenderer, Render, Result, Size, Window, WindowHandle, platform,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -32,6 +33,50 @@ impl Capture {
 
 pub struct HeadlessCapture {
     cx: HeadlessAppContext,
+    transparent: Arc<AtomicBool>,
+}
+
+/// GPUI's headless Metal renderer clears every frame to opaque black. A transparent window's
+/// real layer clears to alpha 0 instead, which is what `capturePage` gives where the vibrancy
+/// backdrop shows, so windows opened as transparent get a renderer with that clear.
+#[cfg(target_os = "macos")]
+struct TransparentMetal(gpui_apple::metal_renderer::MetalRenderer);
+
+#[cfg(target_os = "macos")]
+impl PlatformHeadlessRenderer for TransparentMetal {
+    fn render_scene_to_image(
+        &mut self,
+        scene: &gpui_kit::Scene,
+        size: Size<gpui_kit::DevicePixels>,
+    ) -> Result<image::RgbaImage> {
+        self.0.render_scene_to_image(scene, size)
+    }
+
+    fn render_scene(
+        &mut self,
+        scene: &gpui_kit::Scene,
+        size: Size<gpui_kit::DevicePixels>,
+    ) -> Result<()> {
+        self.0.render_scene(scene, size)
+    }
+
+    fn sprite_atlas(&self) -> Arc<dyn gpui_kit::PlatformAtlas> {
+        self.0.sprite_atlas().clone()
+    }
+}
+
+fn renderer(transparent: bool) -> Result<Option<Box<dyn PlatformHeadlessRenderer>>> {
+    #[cfg(target_os = "macos")]
+    if transparent {
+        let pool = Arc::new(parking_lot::Mutex::new(
+            gpui_apple::metal_renderer::InstanceBufferPool::default(),
+        ));
+        let mut metal = gpui_apple::metal_renderer::MetalRenderer::new_headless(pool)?;
+        metal.update_transparency(true);
+        return Ok(Some(Box::new(TransparentMetal(metal))));
+    }
+    let _ = transparent;
+    platform::current_headless_renderer()
 }
 
 impl HeadlessCapture {
@@ -42,12 +87,20 @@ impl HeadlessCapture {
             anyhow::bail!("this platform has no headless renderer");
         }
         let text_system = platform::current_platform(true).text_system();
-        let mut cx = HeadlessAppContext::with_platform(text_system, assets, || {
-            platform::current_headless_renderer()
+        let transparent = Arc::new(AtomicBool::new(false));
+        let flag = transparent.clone();
+        let mut cx = HeadlessAppContext::with_platform(text_system, assets, move || {
+            renderer(flag.load(Ordering::Relaxed))
         });
         cx.update(crate::init);
         cx.run_until_parked();
-        Ok(Self { cx })
+        Ok(Self { cx, transparent })
+    }
+
+    /// Whether windows opened from now on are transparent: frames clear to alpha 0 rather than
+    /// opaque black (macOS; elsewhere windows are opaque).
+    pub fn set_transparent_windows(&mut self, transparent: bool) {
+        self.transparent.store(transparent, Ordering::Relaxed);
     }
 
     pub fn context(&mut self) -> &mut HeadlessAppContext {

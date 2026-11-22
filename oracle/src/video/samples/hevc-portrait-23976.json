@@ -1,0 +1,17 @@
+{
+ "name": "hevc-portrait-23976",
+ "version": "ffmpeg version 6.0 Copyright (c) 2000-2023 the FFmpeg developers",
+ "file": "hevc-portrait.mkv",
+ "chunks": [
+  "ffmpeg version 6.0 Copyright (c) 2000-2023 the FFmpeg developers\n  built with Apple clang version 13.1.6 (clang-1316.0.21.2.5)\n  configuration: --prefix=/Volumes/tempdisk/sw --extra-cflags=-fno-stack-check --arch=arm64 --cc=/usr/bin/clang --enable-gpl --enable-libvmaf --enable-libbluray --enable-libopenjpeg --enable-libopus --enable-libmp3lame --enable-libx264 --enable-libx265 --enable-libvpx --enable-libwebp --enable-libass --enable-libfreetype --enable-fontconfig --enable-libtheora --enable-libvorbis --enable-libsnappy --enable-libaom --enable-libvidstab --enable-libzimg --enable-libsvtav1 --enable-libkvazaar --enable-version3 --pkg-config-flags=--static --enable-ffplay --enable-postproc --enable-nonfree --enable-neon --enable-runtime-cpudetect --disable-indev=qtkit --disable-indev=x11grab_xcb\n  libavutil      58.  2.100 / 58.  2.100\n  libavcodec     60.  3.100 / 60.  3.100\n  libavformat    60.  3.100 / 60.  3.100\n  libavdevice    60.  1.100 / 60.  1.100\n  libavfilter     9.  3.100 /  9.  3.100\n  libswscale      7.  1.100 /  7.  1.100\n  libswresample   4. 10.100 /  4. 10.100\n  libpostproc    57.  1.100 / 57.  1.100\n",
+  "Input #0, matroska,webm, from 'hevc-portrait.mkv':\n  Metadata:\n    ENCODER         : Lavf60.3.100\n  Duration: 00:00:02.00, start: 0.000000, bitrate: 140 kb/s\n  Stream #0:0: Video: hevc (Rext), gbrp(pc, gbr/unknown/unknown, progressive), 720x1280 [SAR 1:1 DAR 9:16], 23.98 fps, 23.98 tbr, 1k tbn\n    Metadata:\n      ENCODER         : Lavc60.3.100 libx265\n      DURATION        : 00:00:02.002000000\nStream mapping:\n  Stream #0:0 -> #0:0 (hevc (native) -> mjpeg (native))\nPress [q] to stop, [?] for help\n",
+  "[swscaler @ 0x148d68000] deprecated pixel format used, make sure you did set range correctly\n",
+  "[swscaler @ 0x108680000] deprecated pixel format used, make sure you did set range correctly\n",
+  "    Last message repeated 1 times\n[swscaler @ 0x148d68000] deprecated pixel format used, make sure you did set range correctly\n",
+  "Output #0, image2, to 'cache-hevc-portrait-23976/%08d.jpg':\n  Metadata:\n    encoder         : Lavf60.3.100\n",
+  "  Stream #0:0: Video: mjpeg, yuvj444p(pc, progressive), 1920x3414 [SAR 1:1 DAR 320:569], q=2-31, 200 kb/s, 23.98 fps, 23.98 tbn\n    Metadata:\n      DURATION        : 00:00:02.002000000\n      encoder         : Lavc60.3.100 mjpeg\n    Side data:\n      cpb: bitrate max/min/avg: 0/0/200000 buffer size: 0 vbv_delay: N/A\nframe=    0 fps=0.0 q=0.0 size=       0kB time=-577014:32:22.77 bitrate=  -0.0kbits/s speed=N/A    \r",
+  "frame=   25 fps=0.0 q=2.0 size=N/A time=00:00:01.04 bitrate=N/A speed=1.95x    \r",
+  "frame=   48 fps=0.0 q=2.0 Lsize=N/A time=00:00:01.96 bitrate=N/A speed=2.43x    \nvideo:14587kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown\n"
+ ],
+ "exitCode": 0
+}

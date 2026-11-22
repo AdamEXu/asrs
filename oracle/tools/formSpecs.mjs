@@ -214,6 +214,53 @@ const selectProbes = [
       ["set", "value", "enabled"]
     ],
     read: optionReads(3)
+  },
+  {
+    markup: '<select class="field-select" title="Select field image"><optgroup label="FRC Fields"></optgroup><optgroup label="FTC Fields"></optgroup></select>',
+    ops: [
+      ["set", "children.0.innerHTML", '<option value="frc-2025">2025 Field</option><option value="frc-2024">2024 Field</option>'],
+      ["set", "children.1.innerHTML", '<option value="ftc-2025">2025 FTC</option>'],
+      ["set", "value", "ftc-2025"],
+      ["set", "children.1.innerHTML", ""],
+      ["set", "value", "frc-2024"],
+      ["set", "children.0.innerHTML", ""],
+      ["set", "selectedIndex", 0],
+      ["set", "children.1.innerHTML", '<option value="ftc-2024">2024 FTC</option>'],
+      ["set", "children.0.innerHTML", '<option value="frc-2023">2023 Field</option>'],
+      ["set", "selectedIndex", 0],
+      ["set", "children.0.disabled", true],
+      ["set", "children.0.innerHTML", '<option value="frc-2022">2022 Field</option>'],
+      ["set", "children.1.innerHTML", '<option value="ftc-2023">2023 FTC</option>']
+    ],
+    read: optionReads(3).concat([0, 1, 2].map((i) => `options.${i}.disabled`))
+  },
+  {
+    markup: '<select><option value="a" disabled>A</option><option value="b">B</option><option value="c" disabled>C</option><option value="d">D</option></select>',
+    ops: [
+      ["set", "value", "a"],
+      ["set", "selectedIndex", 2],
+      ["remove", 2],
+      ["set", "options.0.disabled", false],
+      ["set", "selectedIndex", -1],
+      ["appendElement", "option", [["innerText", "E"]]],
+      ["remove", 1],
+      ["set", "value", "zzz"],
+      ["set", "options.0.disabled", true],
+      ["appendElement", "option", [["innerText", "F"]]],
+      ["remove", 0]
+    ],
+    read: optionReads(4).concat([0, 1, 2, 3].map((i) => `options.${i}.disabled`))
+  },
+  {
+    markup: '<select><option value="a" disabled>A</option><optgroup label="G" disabled><option value="b">B</option></optgroup></select>',
+    ops: [
+      ["set", "children.1.disabled", false],
+      ["remove", 1],
+      ["appendElement", "option", [["innerText", "C"]]],
+      ["set", "options.0.disabled", false],
+      ["remove", 1]
+    ],
+    read: optionReads(2).concat([0, 1].map((i) => `options.${i}.disabled`))
   }
 ];
 

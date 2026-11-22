@@ -10,6 +10,7 @@ use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 
 use crate::{Result, app, cargo, workspace_root};
+pub(crate) use gates::TIMELINE_TOLERANCE;
 use gates::{Capture, Dump, GlDump, Outcome, Patch, PlatformMask, Rect, RenderMode};
 
 const USAGE: &str = r"usage: cargo xtask pixel <command>
@@ -30,8 +31,11 @@ with run.json and captures/<name>.{png,json} plus canvas and 3D dumps.
                   same platform, scale and colour settings, and a variant on one side only
                   fails. Writes report.html (default target/parity/pixel/report)
   port [<scenario>...] [--scale 1|2]... [--theme light|dark]... [--label <label>]
+       [--upstream <label>]
                   build asrs with the parity feature and run each scenario headless into
-                  target/parity/port/<label> (default `run`)
+                  target/parity/port/<label> (default `run`); logs a scenario opens as
+                  `app:<name>` come from the inputs/ the Electron driver wrote for that
+                  scenario under target/parity/app/<upstream label> (default: the port label)
   check           the port's exit criteria: colour-patch and hub-empty at 1x and 2x, every
                   capture the scenario's window size times the scale, every patch exact
   selftest [<upstream variant dir>...]
@@ -201,6 +205,8 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
+/// Capture names are `[a-z0-9-]`, so a dotted stem (`<name>.hub-state.json`) is a capture's
+/// side file.
 pub(crate) fn capture_names(variant: &Path) -> Result<Vec<String>> {
     Ok(sorted_entries(&variant.join("captures"))?
         .iter()
@@ -208,6 +214,7 @@ pub(crate) fn capture_names(variant: &Path) -> Result<Vec<String>> {
             e.file_name()?
                 .to_str()?
                 .strip_suffix(".json")
+                .filter(|stem| !stem.contains('.'))
                 .map(str::to_owned)
         })
         .collect())
@@ -385,6 +392,23 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         ),
         _ => None,
     };
+    let hub_state = match string(&record, "hubState") {
+        Some(file) => Some(
+            fs::read(captures.join(&file))
+                .map_err(|e| format!("{}: {e}", captures.join(&file).display()))?,
+        ),
+        None => None,
+    };
+    let timeline_range = match record.get("timelineRange") {
+        None | Some(Json::Null) => None,
+        Some(range) => Some(
+            range
+                .as_array()
+                .filter(|a| a.len() == 2)
+                .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]))
+                .ok_or_else(|| format!("{name}: timelineRange is not two numbers"))?,
+        ),
+    };
     Ok(Capture {
         scale,
         image,
@@ -395,6 +419,8 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         canvases,
         gl,
         patches,
+        hub_state,
+        timeline_range,
     })
 }
 
@@ -447,7 +473,7 @@ pub(crate) fn compare_variant(
     }
     let masks = platform_masks(&platform)?;
     let names = capture_names(reference)?;
-    let mut results = Vec::new();
+    let mut results = vec![compare_files(label, reference, port)?];
     for extra in capture_names(port)?
         .into_iter()
         .filter(|n| !names.contains(n))
@@ -479,6 +505,73 @@ pub(crate) fn compare_variant(
         });
     }
     Ok(results)
+}
+
+/// `run.json`'s `files`: (path under files/, changed from its seed).
+fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
+    let run = read_json(&variant.join("run.json"))?;
+    Ok(list(&run, "files")
+        .iter()
+        .filter_map(|f| {
+            let changed = f.get("changed") != Some(&Json::Bool(false));
+            Some((string(f, "file")?, changed))
+        })
+        .collect())
+}
+
+/// Every file the port wrote equals the file upstream wrote at the same path, and every file
+/// upstream wrote the port wrote too.
+fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureResult> {
+    let ours = written_files(port)?;
+    let theirs = written_files(reference)?;
+    let mut outcome = Outcome::default();
+    for (file, _) in ours.iter().filter(|(_, changed)| *changed) {
+        let read = |side: &Path| fs::read(side.join("files").join(file)).ok();
+        let upstream_wrote = theirs.iter().any(|(f, changed)| f == file && *changed);
+        let (pass, detail) = match (upstream_wrote, read(reference), read(port)) {
+            (true, Some(expected), Some(actual)) if actual == expected => {
+                (true, format!("{} bytes equal", actual.len()))
+            }
+            (true, Some(expected), Some(actual)) => (
+                false,
+                format!(
+                    "{} bytes upstream, {} on the port, contents differ",
+                    expected.len(),
+                    actual.len()
+                ),
+            ),
+            (true, _, _) => (false, "listed but not copied into files/".to_owned()),
+            (false, _, _) => (false, "written by the port only".to_owned()),
+        };
+        outcome.push("files", file, pass, detail);
+    }
+    let unwritten = theirs
+        .iter()
+        .filter(|(f, changed)| *changed && !ours.iter().any(|(o, c)| o == f && *c))
+        .map(|(f, _)| f.as_str());
+    for file in unwritten {
+        outcome.push(
+            "files",
+            file,
+            false,
+            "written by upstream, not by the port".into(),
+        );
+    }
+    if outcome.checks.is_empty() {
+        outcome.push(
+            "files",
+            "written files",
+            true,
+            "neither side wrote a file".into(),
+        );
+    }
+    Ok(CaptureResult {
+        label: format!("{label} files"),
+        outcome,
+        error: None,
+        reference: None,
+        port: None,
+    })
 }
 
 fn colour_key(variant: &Path) -> Result<String> {
@@ -595,6 +688,7 @@ struct PortOptions {
     scenarios: Vec<String>,
     flags: Vec<String>,
     label: String,
+    upstream: Option<String>,
 }
 
 impl PortOptions {
@@ -611,6 +705,9 @@ impl PortOptions {
                     options.flags.extend([arg.clone(), value.clone()]);
                 }
                 "--label" => options.label = iter.next().ok_or("--label needs a value")?.clone(),
+                "--upstream" => {
+                    options.upstream = Some(iter.next().ok_or("--upstream needs a label")?.clone());
+                }
                 flag if flag.starts_with("--") => {
                     return Err(format!("unknown option {flag}\n\n{USAGE}"));
                 }
@@ -642,6 +739,18 @@ fn port_binary() -> Result<PathBuf> {
         .join(format!("asrs{}", std::env::consts::EXE_SUFFIX)))
 }
 
+/// The work-area origin of the display at the global origin (Electron's primary) in an upstream
+/// run, where the driver placed its window.
+fn primary_work_area(run_json: &Path) -> Option<(f64, f64)> {
+    let run = read_json(run_json).ok()?;
+    list(&run, "displays").iter().find_map(|display| {
+        let bounds = display.get("bounds")?;
+        let origin = (bounds.get("x")?.as_f64()?, bounds.get("y")?.as_f64()?);
+        let area = display.get("workArea")?;
+        (origin == (0.0, 0.0)).then_some((area.get("x")?.as_f64()?, area.get("y")?.as_f64()?))
+    })
+}
+
 fn run_port(options: &PortOptions) -> Result<PathBuf> {
     let exe = port_binary()?;
     let scenarios = workspace_root().join("parity/scenarios");
@@ -667,11 +776,38 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
         if out.exists() {
             fs::remove_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
         }
+        let upstream = parity_dir()
+            .join("app")
+            .join(options.upstream.as_ref().unwrap_or(&options.label))
+            .join(&name);
+        let variants = match upstream.is_dir() {
+            true => variant_dirs(&upstream)?,
+            false => Vec::new(),
+        };
+        let inputs = variants
+            .iter()
+            .map(|v| v.join("inputs"))
+            .find(|i| i.is_dir());
+        let work_area = variants
+            .iter()
+            .find_map(|v| primary_work_area(&v.join("run.json")));
         let status = Command::new(&exe)
             .arg("--parity-scenario")
             .arg(scenarios.join(format!("{name}.json")))
             .arg("--out")
             .arg(&out)
+            .args(
+                inputs
+                    .iter()
+                    .flat_map(|i| [std::ffi::OsStr::new("--inputs"), i.as_os_str()]),
+            )
+            .arg("--bundled-assets")
+            .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
+            .args(
+                work_area
+                    .iter()
+                    .flat_map(|(x, y)| ["--work-area".to_owned(), format!("{x},{y}")]),
+            )
             .args(&options.flags)
             .current_dir(workspace_root())
             .status()
@@ -747,5 +883,57 @@ fn check() -> Result {
         Ok(())
     } else {
         Err(failures.join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn variant(root: &Path, side: &str, files: &[(&str, &str)]) -> PathBuf {
+        let dir = root.join(side);
+        let listed: Vec<String> = files
+            .iter()
+            .map(|(file, bytes)| {
+                let path = dir.join("files").join(file);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, bytes).unwrap();
+                format!(
+                    r#"{{"file":"{file}","bytes":{},"changed":true}}"#,
+                    bytes.len()
+                )
+            })
+            .collect();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("run.json"),
+            format!(r#"{{"files":[{}]}}"#, listed.join(",")),
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn every_upstream_file_must_be_written_and_equal() {
+        let root = std::env::temp_dir().join(format!("asrs-compare-files-{}", std::process::id()));
+        let readme = ("userAssets/README.txt", "readme");
+        let upstream = variant(
+            &root,
+            "upstream",
+            &[readme, ("prefs.json", "{}"), ("state-dev.json", "{}")],
+        );
+        let port = variant(
+            &root,
+            "port",
+            &[readme, ("prefs.json", "{}"), ("state-dev.json", "{}")],
+        );
+        let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
+        assert!(outcome.pass(), "{:?}", outcome.checks);
+
+        let port = variant(&root, "partial", &[readme, ("prefs.json", "{ }")]);
+        let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
+        let failed: Vec<&str> = outcome.failures().map(|c| c.what.as_str()).collect();
+        assert_eq!(failed, ["prefs.json", "state-dev.json"]);
+        let _ = fs::remove_dir_all(&root);
     }
 }
