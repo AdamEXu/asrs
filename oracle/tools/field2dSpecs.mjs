@@ -264,6 +264,7 @@ const RECORDER = String.raw`(() => {
           record.size = tree([r.CANVAS.width, r.CANVAS.height]);
           record.style = tree([styleWrites.width, styleWrites.height, styleWrites.transform]);
           record.calls = tree(traceCalls(ctx));
+          record.heatmap = tree(r.heatmap.heatmap === null ? null : r.heatmap.heatmap.getData());
         }
         write(record);
       }
@@ -391,9 +392,9 @@ const FIELD_FTC_GRID = {
   name: "FTC Grid",
   path: "fields/ftc-grid.png",
   topLeft: [40, 40],
-  bottomRight: [680, 680],
+  bottomRight: [680, 600],
   widthInches: 144.0,
-  heightInches: 144.0,
+  heightInches: 126.0,
   isFTC: true,
   coordinateSystem: "center-rotated",
   useGrid: true
@@ -476,6 +477,7 @@ const logs = {
     ["putStruct", "/Corner", 0.0, bytev(pose2d(0.3, 0.25, 0.4)), "Pose2d", false],
     ["putStruct", "/Corner", 1.0, bytev(pose2d(17.2, 7.8, -2.5)), "Pose2d", false],
     ["putStruct", "/Corner", 2.0, bytev(pose2d(60.0, 40.0, 1.0)), "Pose2d", false],
+    ["putStruct", "/Corner", 3.0, bytev(pose2d(8.0, 40.0, 0.5)), "Pose2d", false],
     ["putStruct", "/Path", 0.0, bytev(pose2d(1.0, 1.0, 0.0) + pose2d(2.0, 3.0, 0.5) + pose2d(3.5, 2.5, 1.0) + pose2d(4.0, 0.5, 1.5)), "Pose2d", true]
   ],
   "field-2d-trail.json": [
@@ -974,11 +976,29 @@ const fixtures = [
       { frames: 1 },
       { eval: selTime(2.0) },
       { frames: 1 },
+      { eval: selTime(3.0) },
+      { frames: 1 },
       { eval: `${rend} r.set2DCamera(0); })()` },
       { frames: 1 },
       { eval: sl([item("/Corner", "robot", "Pose2d"), item("/SwerveEdge", "swerveModuleVelocities", "SwerveModuleState[]", { arrangement: "0,1,2,7" })]) },
       { eval: selTime(0.0) },
       { frames: 2 }
+    ]
+  },
+  {
+    id: "missing-options",
+    seed: 7222,
+    log: "field-2d-edges.json",
+    steps: [
+      { eval: sl([item("/Path", "ghost", "Pose2d[]", { color: "#ff00ff" }), Object.assign(item("/Corner", "robot", "Pose2d"), { options: {} })]) },
+      { eval: selTime(0.0) },
+      { frames: 2 },
+      { eval: sl([item("/Corner", "robot", "Pose2d"), Object.assign(item("/Path", "ghost", "Pose2d[]"), { options: {} })]) },
+      { frames: 1 },
+      { eval: sl([Object.assign(item("/Path", "trajectory", "Pose2d[]"), { options: { size: "bold" } })]) },
+      { frames: 1 },
+      { eval: sl([item("/Corner", "robot", "Pose2d"), Object.assign(item("/SwerveEdge", "swerveModuleVelocities", "SwerveModuleState[]"), { options: { arrangement: "0,1,2,3" } })]) },
+      { frames: 1 }
     ]
   },
   {

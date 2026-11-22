@@ -502,7 +502,7 @@ struct Harness {
     tab_render_due: Vec<bool>,
     /// What the last replayed controller or renderer call threw, for an `eval` exception.
     last_threw: Option<String>,
-    /// What the port's render threw inside an animation frame, for upstream's
+    /// What the port's render or list frame threw inside an animation frame, for upstream's
     /// `requestAnimationFrame` exception.
     frame_threw: Option<String>,
     stats: Stats,
@@ -925,7 +925,7 @@ impl Harness {
     }
 
     /// A `render` record's throw, and the frame it painted if it reset the canvas: pixel size,
-    /// the `CANVAS.style` strings and the call trace.
+    /// the `CANVAS.style` strings, the call trace and the heatmap store behind `@heatmap`.
     fn frame_matches(
         &mut self,
         id: usize,
@@ -960,7 +960,17 @@ impl Harness {
                         "canvas style\n upstream {expected_style}\n port     {style}"
                     ));
                 }
-                compare_calls(&record.value("calls").map_err(|e| e.0)?, &canvas)
+                compare_calls(&record.value("calls").map_err(|e| e.0)?, &canvas)?;
+                drop(dom);
+                let store = heatmap_store(self.renderers[id].0.heatmap().get_data());
+                let expected_store = encode(&js(record, "heatmap")?);
+                if encode(&store) != expected_store {
+                    return Err(format!(
+                        "heatmap getData()\n upstream {expected_store}\n port     {}",
+                        encode(&store)
+                    ));
+                }
+                Ok(())
             }
         }
     }
@@ -1224,7 +1234,11 @@ impl Harness {
         }
         if name == "frame" {
             let port = self.frame(record, ctrl, &args)?;
-            return same_error(&name, threw(record), port);
+            same_error(&name, threw(record), port.clone())?;
+            if port.is_some() {
+                self.frame_threw = port;
+            }
+            return Ok(());
         }
         let controller = &mut self.controllers[ctrl];
         let host = &mut self.host;
@@ -1320,7 +1334,10 @@ impl Harness {
             "setTitle" | "setState" | "clear" | "refresh" | "stop" | "addField" | "frame"
         );
         if hooked || record.field("threw").is_some() {
-            same_error(&name, threw(record), port)?;
+            same_error(&name, threw(record), port.clone())?;
+            if port.is_some() {
+                self.last_threw = port;
+            }
         } else if let Some(error) = port {
             self.pending_errors.push_back(error);
         }
@@ -1455,6 +1472,33 @@ impl Harness {
         }
         Ok(())
     }
+}
+
+fn heatmap_store(store: Option<asrs_canvas::heatmap::StoreData>) -> JsValue {
+    let Some(store) = store else {
+        return JsValue::Null;
+    };
+    let mut o = JsObject::new();
+    o.insert("min", store.min.to_js());
+    o.insert("max", store.max.to_js());
+    o.insert(
+        "data",
+        JsValue::Array(
+            store
+                .data
+                .iter()
+                .map(|p| {
+                    let mut point = JsObject::new();
+                    point.insert("x", p.x.as_str().to_js());
+                    point.insert("y", p.y.as_str().to_js());
+                    point.insert("radius", p.radius.to_js());
+                    point.insert("value", p.value.to_js());
+                    JsValue::Object(point)
+                })
+                .collect(),
+        ),
+    );
+    JsValue::Object(o)
 }
 
 fn compare_calls(expected: &Value, canvas: &asrs_canvas::Canvas2d) -> Result<(), String> {
