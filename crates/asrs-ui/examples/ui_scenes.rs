@@ -18,7 +18,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::snap_remainder;
 use asrs_ui::theme::Appearance;
 use gpui_kit::{
-    AnyElement, AnyView, AppContext, Context, IntoElement, Modifiers, MouseButton,
+    AnyElement, AnyView, AppContext, Context, Corners, IntoElement, Modifiers, MouseButton,
     MouseDownEvent, MouseMoveEvent, ParentElement, PlatformInput, Render, Styled, Window, div,
     point, px, rgb, size,
 };
@@ -189,6 +189,9 @@ fn probe_svg(p: &Probe) -> String {
     )
 }
 
+/// `div.video-timeline-container { border-radius: 5px; overflow: hidden }` in `hub.css`.
+const VIDEO_TIMELINE_RADIUS: f32 = 5.0;
+
 struct Number(form::NumberInput);
 
 impl FieldModel for Number {
@@ -296,8 +299,12 @@ fn part(
                 max: max.parse().expect("max"),
             };
             return Part::View(
-                cx.new(|_| Slider::new(model, SliderStyle::VIDEO_TIMELINE))
-                    .into(),
+                cx.new(|_| {
+                    let mut slider = Slider::new(model, SliderStyle::VIDEO_TIMELINE);
+                    slider.set_corner_radii(Corners::all(px(VIDEO_TIMELINE_RADIUS)));
+                    slider
+                })
+                .into(),
             );
         }
         "split" => return Part::Split(index),

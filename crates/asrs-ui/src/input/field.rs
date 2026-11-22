@@ -51,8 +51,9 @@ fn px_of(v: i64) -> f32 {
 }
 
 /// The parts of a `width` x `height` (CSS px) input whose inner editor is `line` device px
-/// tall. The editor fills the content box less the cancel button and is centred in it, by
-/// LayoutUnit halving, even when the content box is shorter.
+/// tall. The editor fills the content box less the cancel button and its UA margins (1 px
+/// before, 3 px after) and is centred in it, by LayoutUnit halving, even when the content box
+/// is shorter.
 pub fn geometry(
     style: &FieldStyle,
     width: f32,
@@ -72,12 +73,12 @@ pub fn geometry(
     let ch = h - 2 * border - pt - pb;
     let (editor_w, cancel) = if style.cancel_button {
         let em = lu(style.font.size * scale);
-        let margin = lu(scale);
-        let editor_w = (cw - em - margin).max(0);
+        let (start, end) = (lu(scale), lu(3.0 * scale));
+        let editor_w = (cw - start - em - end).max(0);
         let top = y + (ch - em) / 2;
         (
             editor_w,
-            Some([x + editor_w + margin, top, em, em].map(px_of)),
+            Some([x + editor_w + start, top, em, em].map(px_of)),
         )
     } else {
         (cw.max(0), None)

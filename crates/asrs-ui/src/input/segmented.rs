@@ -146,7 +146,7 @@ impl RenderOnce for SegmentedControl {
                         style.badge_text
                     };
                     let badge = SPLIT_BADGE * scale;
-                    let bx = ((cw - badge) / 2.0 * 64.0).trunc() / 64.0;
+                    let bx = x - left + ((cw - badge) / 2.0 * 64.0).trunc() / 64.0;
                     let by = ch / 2.0 - badge / 2.0;
                     let mut font_style = TextStyle::new(FontSpec {
                         weight: 700.0,
@@ -158,8 +158,8 @@ impl RenderOnce for SegmentedControl {
                     let snapped = text_top.round();
                     div()
                         .absolute()
-                        .left(px((border + bx.round()) / scale))
-                        .top(px((border + by.round()) / scale))
+                        .left(px(bx.round() / scale))
+                        .top(px(by.round() / scale))
                         .w(px(SPLIT_BADGE))
                         .h(px(SPLIT_BADGE))
                         .rounded(px(SPLIT_BADGE_RADIUS))
@@ -185,7 +185,7 @@ impl RenderOnce for SegmentedControl {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;
                     let iw = lu(cw * SPLIT_ICON_FRACTION);
                     let ih = lu(ch * SPLIT_ICON_FRACTION);
-                    let ix = lu((cw - iw as f32) / 2.0);
+                    let ix = f64::from(x - left) + lu((cw - iw as f32) / 2.0);
                     let top = lu(ch / 2.0);
                     let chain = if style.invert_icons { chains::INVERT } else { "" };
                     canvas(
