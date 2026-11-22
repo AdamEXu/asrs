@@ -106,7 +106,7 @@ fn parent(path: &str) -> &str {
 
 /// `fs.mkdirSync(name, { recursive: true })` as the oracle's putDir and putFile do it.
 fn put_dir_all(fs: &MemFs, path: &str) {
-    if path == "/" || path == "." {
+    if path == "/" || path == "." || fs.dirs().iter().any(|d| d == path) {
         return;
     }
     put_dir_all(fs, parent(path));

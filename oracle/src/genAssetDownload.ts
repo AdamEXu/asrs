@@ -22,11 +22,12 @@ import zlib from "node:zlib";
 //   clock: Date, setTimeout and AbortSignal.timeout are fake. A hung fetch rejects when its
 //     abort timer fires. Math.random returns the case's constant (got's retry noise).
 // Records: {"case","step","op","args"?,"status","timers","fetches","requests","disk",
-// "callbacks","files","dirs"}. `timers` is every pending fake timer as {due, delay} sorted by
-// due then delay; `fetches`, `requests` and `disk` are the calls made during the op (requests
-// sorted by URL, arrival order within a URL); `callbacks` counts updateCallback calls during
-// the op; `files`/`dirs` is the whole tree under /fake/userData after the op. Every op waits
-// until nothing but hung requests and pending timers is left running.
+// "callbacks","files","dirs"}. Scripted inputs in `args` carry bytes as {hex}. `timers` is
+// every pending fake timer as {due, delay} sorted by due then delay; `fetches`, `requests` and
+// `disk` are the calls made during the op (requests sorted by URL, arrival order within a URL);
+// `callbacks` counts updateCallback calls during the op; `files`/`dirs` is the whole tree under
+// /fake/userData after the op. Every op waits until nothing but hung requests and pending
+// timers is left running.
 //
 //   genAssetDownload <randomCount> <seed>
 
@@ -263,6 +264,8 @@ const fileValue = (bytes: Uint8Array) =>
     ? { hex: Buffer.from(bytes).toString("hex") }
     : { len: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 
+const hexValue = (bytes: Uint8Array) => ({ hex: Buffer.from(bytes).toString("hex") });
+
 const out = (value: object) => process.stdout.write(fakePath(JSON.stringify(value)) + "\n");
 
 async function record(op: string, args: unknown, run: () => unknown | Promise<unknown>) {
@@ -359,7 +362,7 @@ async function reset(dist: Distribution, now: number, random = 0.5) {
 
 const putDir = (name: string) => record("putDir", { name }, () => fs.mkdirSync(real(name), { recursive: true }));
 const putFile = (name: string, data: Uint8Array) =>
-  record("putFile", { name, data: fileValue(data) }, () => {
+  record("putFile", { name, data: hexValue(data) }, () => {
     fs.mkdirSync(path.dirname(real(name)), { recursive: true });
     fs.writeFileSync(real(name), data);
   });
@@ -367,7 +370,7 @@ const putText = (name: string, text: string) => putFile(name, utf8(text));
 
 function fetchArgs(outcome: FetchOutcome): object {
   if ("status" in outcome) {
-    const body = outcome.body === null ? null : fileValue(typeof outcome.body === "string" ? utf8(outcome.body) : outcome.body);
+    const body = outcome.body === null ? null : hexValue(typeof outcome.body === "string" ? utf8(outcome.body) : outcome.body);
     return { status: outcome.status, body };
   }
   return outcome;
@@ -376,7 +379,7 @@ const queueFetch = (outcome: FetchOutcome) => record("queueFetch", fetchArgs(out
 
 function serveArgs(url: string, outcome: ServeOutcome): object {
   if ("status" in outcome) {
-    return { url, status: outcome.status, headers: outcome.headers ?? {}, body: fileValue(outcome.body ?? new Uint8Array()) };
+    return { url, status: outcome.status, headers: outcome.headers ?? {}, body: hexValue(outcome.body ?? new Uint8Array()) };
   }
   return { url, ...outcome };
 }
