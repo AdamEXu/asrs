@@ -1,139 +1,16 @@
 {
   "entry": "dom",
+  "backend": "blink",
   "inputs": [
     "../logs/source-list.json"
   ],
   "fixture": {
     "sourceLists": true,
-    "layout": [
-      {
-        "selector": "div.stats-sources",
-        "rect": [
-          310,
-          460,
-          400,
-          180
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list",
-        "rect": [
-          310,
-          490,
-          400,
-          150
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"0\"]",
-        "rect": [
-          310,
-          490,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"1\"]",
-        "rect": [
-          310,
-          520,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"2\"]",
-        "rect": [
-          310,
-          550,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"3\"]",
-        "rect": [
-          310,
-          580,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"4\"]",
-        "rect": [
-          310,
-          610,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"5\"]",
-        "rect": [
-          310,
-          640,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"6\"]",
-        "rect": [
-          310,
-          670,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"7\"]",
-        "rect": [
-          310,
-          700,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"8\"]",
-        "rect": [
-          310,
-          730,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"9\"]",
-        "rect": [
-          310,
-          760,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"10\"]",
-        "rect": [
-          310,
-          790,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.stats-sources > div.list > div.item[data-i=\"11\"]",
-        "rect": [
-          310,
-          820,
-          400,
-          30
-        ]
-      }
-    ],
+    "geometry": "real",
     "steps": [
+      {
+        "eval": "/*sl:mouse*/ window.__slMouse = (type, target, root, anchor, dx, dy) => { const [x, y] = window.__oracleQuiet(() => { const r = document.querySelector(root).getBoundingClientRect(); if (anchor === 'root') return [r.left + dx, r.top + dy]; const items = document.querySelector(root + ' > div.list').children; if (anchor < items.length) { const i = items[anchor].getBoundingClientRect(); return [r.left + dx, i.top + Math.round(dy * i.height / 30)]; } const end = items.length === 0 ? document.querySelector(root + ' > div.list').getBoundingClientRect().top : items[items.length - 1].getBoundingClientRect().bottom; return [r.left + dx, end + (anchor - items.length) * 30 + dy]; }); const t = target === 'window' ? window : document.querySelector(target); t.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })); }"
+      },
       {
         "log": "../logs/source-list.json"
       },
@@ -172,29 +49,13 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 520
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.stats-sources\", 1, 90, 0)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 525
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.stats-sources\", 1, 90, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -216,15 +77,7 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 525
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.stats-sources\", 1, 90, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -246,15 +99,7 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 495
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.stats-sources\", 0, 90, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -329,15 +174,7 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 495
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.stats-sources\", 0, 90, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -353,43 +190,19 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.stats-sources > div.list > div.item[data-i=\"1\"]",
-          "type": "mousedown",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 525
-          }
-        }
+        "eval": "__slMouse(\"mousedown\", \"div.stats-sources > div.list > div.item[data-i=\\\"1\\\"]\", \"div.stats-sources\", 1, 10, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.stats-sources > div.list",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 531
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"div.stats-sources > div.list\", \"div.stats-sources\", 1, 10, 11)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 580
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.stats-sources\", 3, 10, 0)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
