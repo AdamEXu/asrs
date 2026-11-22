@@ -1,0 +1,6 @@
+{
+  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph",
+  "actions": [
+    { "capture": "launch", "probes": [".title-bar", ".side-bar", ".tab-bar", ".renderer-content", ".controls-content", ".timeline"] }
+  ]
+}
