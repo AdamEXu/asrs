@@ -10,6 +10,7 @@ use fallback as imp;
 #[cfg(target_os = "macos")]
 use mac as imp;
 
+pub mod dialog;
 pub mod probe;
 
 use gpui_kit::{App, ScrollDelta, ScrollEvent, Window};
@@ -134,6 +135,71 @@ pub fn keep_visible_when_inactive(window: &Window) -> bool {
 /// removes the lock.
 pub fn set_aspect_ratio(window: &Window, aspect_ratio: f64) {
     imp::set_aspect_ratio(window, aspect_ratio);
+}
+
+/// A window's native handle for the work AppKit answers with synchronous resize and move
+/// notifications. GPUI handles those by borrowing the app, so these calls belong in a
+/// foreground task outside any window update. `None` off macOS.
+pub fn native_window(window: &Window) -> Option<NativeWindow> {
+    imp::window::native(window).map(NativeWindow)
+}
+
+/// Electron's `getBounds()`: the window frame as `(x, y, width, height)` in top-left
+/// coordinates of the primary screen. `None` off macOS.
+pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
+    imp::window::bounds(window)
+}
+
+pub struct NativeWindow(imp::window::NativeWindow);
+
+impl NativeWindow {
+    /// Electron's `titleBarStyle: "hiddenInset"`: an empty toolbar under the transparent title
+    /// bar, which moves the traffic lights in from the window edge. The window must be opened
+    /// with a transparent title bar and no `traffic_light_position`.
+    pub fn hidden_inset_titlebar(&self) {
+        self.0.hidden_inset_titlebar();
+    }
+
+    /// The content size a frame of `width` by `height` leaves for this window's style, which is
+    /// how Electron reads the sizes of windows without `useContentSize`.
+    pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {
+        self.0.content_size_for_frame(width, height)
+    }
+
+    pub fn content_size(&self) -> (f64, f64) {
+        self.0.content_size()
+    }
+
+    /// Resizes the content, keeping the frame's top-left corner in place.
+    pub fn set_content_size(&self, width: f64, height: f64) {
+        self.0.set_content_size(width, height);
+    }
+
+    /// Minimum and maximum content sizes, enforced during live resize.
+    pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
+        self.0.set_content_size_limits(min, max);
+    }
+
+    /// Electron's `fullscreenable` option.
+    pub fn set_fullscreenable(&self, fullscreenable: bool) {
+        self.0.set_fullscreenable(fullscreenable);
+    }
+
+    /// Attaches `sheet` to this window as a sheet, as Electron does for `modal: true` with a
+    /// `parent`.
+    pub fn begin_sheet(&self, sheet: &NativeWindow) {
+        self.0.begin_sheet(&sheet.0);
+    }
+
+    /// Detaches this window from the window it is a sheet on, if any.
+    pub fn end_sheet(&self) {
+        self.0.end_sheet();
+    }
+
+    /// Shows a window opened hidden, making it key when `focus` is set.
+    pub fn show(&self, focus: bool) {
+        self.0.show(focus);
+    }
 }
 
 /// Tags the window's drawable as sRGB so the compositor converts it to the display's colour
