@@ -5,6 +5,8 @@
 //! The options are macOS's (`process.platform === "darwin"`): the hub's `vibrancy` and
 //! `titleBarStyle`, and no `icon` (`WINDOW_ICON` is undefined there).
 
+use asrs_js::value::JsObject;
+
 use crate::constants::{
     HUB_DEFAULT_HEIGHT, HUB_DEFAULT_WIDTH, SATELLITE_DEFAULT_HEIGHT, SATELLITE_DEFAULT_WIDTH,
 };
@@ -174,7 +176,7 @@ pub struct WindowManager {
     next_id: WindowId,
     windows: Vec<Entry>,
     hubs: Vec<WindowId>,
-    satellites: Vec<(String, Vec<WindowId>)>,
+    satellites: JsObject<Vec<WindowId>>,
     preferences: Option<WindowId>,
     download: Option<WindowId>,
     licenses: Option<WindowId>,
@@ -191,12 +193,6 @@ fn centered(parent: Rect, width: f64, height: f64) -> (f64, f64) {
         (parent.x + parent.width / 2.0 - width / 2.0).floor(),
         (parent.y + parent.height / 2.0 - height / 2.0).floor(),
     )
-}
-
-/// Whether `key` is an array index, which `Object.values` lists first, in ascending order.
-fn array_index(key: &str) -> Option<u32> {
-    let n: u32 = key.parse().ok()?;
-    (n != u32::MAX && n.to_string() == key).then_some(n)
 }
 
 impl WindowManager {
@@ -264,7 +260,7 @@ impl WindowManager {
     pub fn closed(&mut self, id: WindowId) {
         self.windows.retain(|e| e.id != id);
         self.hubs.retain(|h| *h != id);
-        for (_, list) in &mut self.satellites {
+        for (_, list) in self.satellites.iter_mut() {
             list.retain(|s| *s != id);
         }
         self.blur(id);
@@ -276,22 +272,16 @@ impl WindowManager {
         &self.hubs
     }
 
-    /// `Object.values(satelliteWindows)`: uuids keep their entry (possibly empty) once created.
-    pub fn satellites(&self) -> Vec<(&str, &[WindowId])> {
-        let mut out: Vec<(&str, &[WindowId])> = self
-            .satellites
+    /// `Object.entries(satelliteWindows)`: uuids keep their entry, possibly empty, once created.
+    pub fn satellites(&self) -> Vec<(String, &[WindowId])> {
+        self.satellites
             .iter()
-            .map(|(uuid, list)| (uuid.as_str(), list.as_slice()))
-            .collect();
-        out.sort_by_key(|(uuid, _)| match array_index(uuid) {
-            Some(n) => (0, n),
-            None => (1, 0),
-        });
-        out
+            .map(|(uuid, list)| (uuid.to_string_lossy(), list.as_slice()))
+            .collect()
     }
 
     /// The uuids with at least one satellite, as `sendActiveSatellites` lists them.
-    pub fn active_satellites(&self) -> Vec<&str> {
+    pub fn active_satellites(&self) -> Vec<String> {
         self.satellites()
             .into_iter()
             .filter(|(_, list)| !list.is_empty())
@@ -366,9 +356,11 @@ impl WindowManager {
             }
         }
         let id = self.add(WindowKind::Satellite);
-        match self.satellites.iter_mut().find(|(u, _)| u == uuid) {
-            Some((_, list)) => list.push(id),
-            None => self.satellites.push((uuid.to_owned(), vec![id])),
+        match self.satellites.get_mut(uuid) {
+            Some(list) => list.push(id),
+            None => {
+                self.satellites.insert(uuid, vec![id]);
+            }
         }
         (id, options)
     }
