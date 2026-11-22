@@ -126,7 +126,7 @@ const immediate = () => new Promise((resolve) => setImmediate(resolve));
 
 async function settle(hasReply: () => boolean): Promise<void> {
   const start = performance.now();
-  while (!hasReply() && performance.now() - start < 1500) await immediate();
+  while (!hasReply() && performance.now() - start < 5000) await immediate();
   for (let i = 0; i < 20; i++) await immediate();
 }
 
@@ -273,6 +273,8 @@ export async function run(): Promise<void> {
   await runCase({ files: [[`${ROOT}/café \u{1f600}.csv`, { bytes: text }]], request: start(`${ROOT}/café \u{1f600}.csv`) });
   await runCase({ files: [[`${ROOT}/lone\ud800.csv`, { bytes: text }]], request: start(`${ROOT}/lone\ud800.csv`) });
   await runCase({ files: [[`${ROOT}/nul\u0000.csv`, { bytes: text }]], request: start(`${ROOT}/nul\u0000.csv`) });
+  await runCase({ files: [[`${ROOT}/nul\u0000.wpilogxz`, { bytes: text }]], request: start(`${ROOT}/nul\u0000.wpilogxz`) });
+  await runCase({ files: [[`${ROOT}/nul\u0000.dslog`, { bytes: text }]], request: start(`${ROOT}/nul\u0000.dslog`) });
   await runCase({ files: [[`${ROOT}/noext`, { bytes: text }]], request: start(`${ROOT}/noext`) });
   await runCase({ files: [[`${ROOT}/UPPER.DSLOG`, { bytes: text }]], request: start(`${ROOT}/UPPER.DSLOG`) });
   await runCase({

@@ -1,6 +1,5 @@
 #![allow(clippy::disallowed_methods)]
 
-
 //! Replays `files/historical-start` (main.ts's real handlers against the oracle's fake fs and the
 //! real lzma-native) through `asrs_services::historical_start`, comparing the reply, the
 //! recent document, the thrown-after-reply flag, the write log and the files left behind.
