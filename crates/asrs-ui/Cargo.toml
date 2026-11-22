@@ -28,6 +28,7 @@ svgtypes = "=0.16.2"
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
 [dev-dependencies]
+asrs-js = { path = "../asrs-js" }
 asrs-parity = { path = "../asrs-parity" }
 
 [target.'cfg(target_os = "macos")'.dependencies]

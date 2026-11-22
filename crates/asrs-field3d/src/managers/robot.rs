@@ -280,10 +280,14 @@ impl RobotManager {
     }
 
     /// The worker's answer to `request`: `loadRobot`'s meshes per model file. The meshes join
-    /// the scene on the next `set_object_data`.
-    pub fn load_finished(&mut self, request: &RobotLoadRequest, result: &[Vec<OptimizedMesh>]) {
+    /// the scene on the next `set_object_data`. `false` when a later model switch discarded it.
+    pub fn load_finished(
+        &mut self,
+        request: &RobotLoadRequest,
+        result: &[Vec<OptimizedMesh>],
+    ) -> bool {
         if request.counter != self.loading_counter {
-            return;
+            return false;
         }
         self.meshes = Vec::new();
         self.dimensions = [0.0; 4];
@@ -343,6 +347,7 @@ impl RobotManager {
         }
         (self.loading_end)();
         self.is_loading = false;
+        true
     }
 
     fn robot_config(&self, model: &JsString) -> Option<Config3dRobot> {

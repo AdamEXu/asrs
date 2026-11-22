@@ -15,6 +15,11 @@ if (scenesDir === undefined || outDir === undefined) {
   process.exit(2);
 }
 const here = path.dirname(fileURLToPath(import.meta.url));
+const upstream = process.env.ORACLE_UPSTREAM_DIR;
+if (upstream === undefined) {
+  console.error("ORACLE_UPSTREAM_DIR is not set");
+  process.exit(2);
+}
 
 app.commandLine.appendSwitch("lang", "en-US");
 
@@ -41,7 +46,7 @@ app.whenReady().then(async () => {
       for (const scale of SCALES) {
         for (const theme of THEMES) {
           const result = await win.webContents.executeJavaScript(
-            `renderScene(${JSON.stringify(spec)}, ${theme === "dark"}, ${scale})`
+            `renderScene(${JSON.stringify(spec)}, ${theme === "dark"}, ${scale}, ${JSON.stringify(upstream)})`
           );
           const file = path.join(outDir, `${name}@${scale}x-${theme}.png`);
           fs.writeFileSync(file, encodePng(result.width, result.height, Buffer.from(result.rgba, "base64")));

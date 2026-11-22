@@ -1652,7 +1652,14 @@ impl HubModel {
                 }
             }
             MainToHub::Set3dCamera | MainToHub::EditFov => {
-                self.tabs.selected_tab_type()?;
+                let value = data.as_f64().unwrap_or(f64::NAN);
+                if let Some(renderer) = self.tabs.selected_renderer(TabType::Field3d)? {
+                    if message.name == MainToHub::Set3dCamera {
+                        renderer.set_3d_camera(&mut self.page, value);
+                    } else {
+                        renderer.set_fov(&mut self.page, value);
+                    }
+                }
             }
             MainToHub::Set2dCamera => {
                 if let Some(r) = self

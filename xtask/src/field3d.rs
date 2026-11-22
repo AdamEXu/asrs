@@ -92,6 +92,7 @@ fn reference(paths: &Paths, scenes: &[String]) -> Result {
         .arg(scenes_dir(paths))
         .arg(&ref_dir)
         .args(scenes)
+        .env("ORACLE_UPSTREAM_DIR", &paths.upstream)
         .env_remove("ELECTRON_RUN_AS_NODE");
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
     let status = command
