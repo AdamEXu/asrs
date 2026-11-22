@@ -28,6 +28,9 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use super::probe::GpuiDelta;
 use super::{MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, WheelDelta};
 
+pub(super) mod dialog;
+pub(super) mod window;
+
 pub(super) fn init() {
     if MainThreadMarker::new().is_some() {
         install_wheel_monitor();
@@ -473,11 +476,14 @@ pub(super) fn popup_menu(
 ) {
     let ns_window = ns_window(window);
     let cx = cx.to_async();
-    let job = move || {
+    perform_on_run_loop(move || {
         let selection = ns_window.and_then(|w| show_popup(&w, &menu, x, y));
         cx.spawn(async move |cx| cx.update(|cx| on_close(selection, cx)))
             .detach();
-    };
+    });
+}
+
+fn perform_on_run_loop(job: impl FnOnce() + 'static) {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
@@ -505,9 +511,9 @@ struct PopupRunnerIvars {
     job: RefCell<Option<Box<dyn FnOnce()>>>,
 }
 
-// Menu tracking runs a nested run loop. Starting it from a GCD main-queue block (where GPUI runs
-// its foreground tasks) would stall every other main-queue block until the menu closes, so the
-// popup starts from a run loop perform instead, as Chromium's posted task does.
+// Menu tracking and modal panels run a nested run loop. Starting one from a GCD main-queue block
+// (where GPUI runs its foreground tasks) would stall every other main-queue block until it
+// closes, so they start from a run loop perform instead, as Chromium's posted task does.
 define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]

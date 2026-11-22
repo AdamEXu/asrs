@@ -10,6 +10,7 @@ use fallback as imp;
 #[cfg(target_os = "macos")]
 use mac as imp;
 
+pub mod dialog;
 pub mod probe;
 
 use gpui_kit::{App, ScrollDelta, ScrollEvent, Window};
@@ -134,6 +135,35 @@ pub fn keep_visible_when_inactive(window: &Window) -> bool {
 /// removes the lock.
 pub fn set_aspect_ratio(window: &Window, aspect_ratio: f64) {
     imp::set_aspect_ratio(window, aspect_ratio);
+}
+
+/// Electron's `titleBarStyle: "hiddenInset"`: an empty toolbar under the transparent title bar,
+/// which moves the traffic lights in from the window edge. The window must be opened with a
+/// transparent title bar and no `traffic_light_position`.
+pub fn hidden_inset_titlebar(window: &Window) -> bool {
+    imp::window::hidden_inset_titlebar(window)
+}
+
+/// The content size a window frame of `width` by `height` leaves for this window's style, which
+/// is how Electron reads frame sizes for windows without `useContentSize`. `None` where the
+/// platform has no such conversion.
+pub fn content_size_for_frame(window: &Window, width: f64, height: f64) -> Option<(f64, f64)> {
+    imp::window::content_size_for_frame(window, width, height)
+}
+
+/// Minimum and maximum content sizes, enforced during live resize.
+pub fn set_content_size_limits(window: &Window, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
+    imp::window::set_content_size_limits(window, min, max);
+}
+
+/// Electron's `fullscreenable` option.
+pub fn set_fullscreenable(window: &Window, fullscreenable: bool) {
+    imp::window::set_fullscreenable(window, fullscreenable);
+}
+
+/// Electron's placement of a window opened without `x` and `y`.
+pub fn center_window(window: &Window) {
+    imp::window::center(window);
 }
 
 /// Tags the window's drawable as sRGB so the compositor converts it to the display's colour
