@@ -16,7 +16,7 @@ const FRAME_MS: f64 = 1000.0 / 60.0;
 fn numbers(value: &Json) -> Vec<f64> {
     value
         .as_array()
-        .unwrap_or(&[])
+        .expect("array")
         .iter()
         .map(|n| n.as_f64().expect("number"))
         .collect()
@@ -49,11 +49,14 @@ fn run(file: &str) -> Result<(usize, usize), String> {
         for (i, step) in steps.as_array().ok_or("steps")?.iter().enumerate() {
             let at = |what: String| format!("{file} {name} step {i}: {what}");
             let delta = numbers(step.get("wheel").ok_or("wheel")?);
-            let precise = matches!(step.get("precise"), Some(Json::Bool(true)));
+            let precise = match step.get("precise") {
+                Some(Json::Bool(b)) => *b,
+                other => return Err(at(format!("precise is {other:?}"))),
+            };
             let scrolls: Vec<Vec<f64>> = step
                 .get("scrolls")
                 .and_then(Json::as_array)
-                .unwrap_or(&[])
+                .ok_or_else(|| at("no scrolls".to_owned()))?
                 .iter()
                 .map(numbers)
                 .collect();

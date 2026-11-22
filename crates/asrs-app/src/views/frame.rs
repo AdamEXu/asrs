@@ -787,12 +787,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                             frame.tab_bar_mouse_down(event, cx)
                         }))
-                        .on_mouse_up(
-                            MouseButton::Left,
-                            cx.listener(|frame, event: &MouseUpEvent, _, cx| {
-                                frame.tab_bar_mouse_up(event, cx)
-                            }),
-                        )
+                        .capture_any_mouse_up(cx.listener(|frame, event: &MouseUpEvent, _, cx| {
+                            frame.tab_bar_mouse_up(event, cx)
+                        }))
                         .on_mouse_move(cx.listener(|frame, event: &MouseMoveEvent, _, cx| {
                             frame.tab_bar_mouse_move(event, cx)
                         }))

@@ -1,7 +1,8 @@
 // Records how Chromium turns wheel input into ScrollSensor overlay scrolls, for
 // crates/asrs-model/tests/wheel_calibration.rs. Run from the repo root with upstream's Electron:
 //   "$(cargo xtask oracle env | jq -r .electron)" oracle/tools/wheelCalibration.cjs \
-//     [--force-device-scale-factor=2] parity/calibration/wheel-<platform>-<scale>x.json
+//     --force-device-scale-factor=<scale> parity/calibration/wheel-<platform>-<scale>x.json
+// The flag is needed at 1x too: without it a Retina display records at 2x.
 // The page holds one overlay built like upstream's (`overflow: scroll`, hidden scrollbars, a
 // 1000000 px child) and recentres it the way ScrollSensor.reset does before each case. Every
 // case sends its events through webContents.sendInputEvent, whose deltaX/deltaY are
