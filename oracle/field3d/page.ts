@@ -5,6 +5,12 @@ import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import ObjectManager from "@upstream/shared/renderers/field3d/ObjectManager";
+import AprilTagManager from "@upstream/shared/renderers/field3d/objectManagers/AprilTagManager";
+import AxesManager from "@upstream/shared/renderers/field3d/objectManagers/AxesManager";
+import ConeManager from "@upstream/shared/renderers/field3d/objectManagers/ConeManager";
+import HeatmapManager from "@upstream/shared/renderers/field3d/objectManagers/HeatmapManager";
+import TrajectoryManager from "@upstream/shared/renderers/field3d/objectManagers/TrajectoryManager";
 
 type Vec3 = [number, number, number];
 
@@ -22,8 +28,16 @@ type MaterialSpec = {
   map?: { checker: [number, number, number, number]; filter?: "nearest" | "linear" };
 };
 
+// A "manager" node is a group that one of upstream's object managers fills: it is constructed
+// with `specular`/`shininess` in standard mode and given each of `commands` in turn. AprilTag
+// textures load asynchronously, so the capture sees the white placeholder material.
 type NodeSpec = {
-  type: "group" | "mesh" | "instanced" | "hemisphere" | "point" | "spot" | "line2" | "line" | "grid";
+  type: "group" | "mesh" | "instanced" | "hemisphere" | "point" | "spot" | "line2" | "line" | "grid" | "manager";
+  manager?: "aprilTag" | "axes" | "cone" | "heatmap" | "trajectory";
+  commands?: any[];
+  specular?: number;
+  shininess?: number;
+  field?: { widthInches: number; heightInches: number; coordinateSystem: string };
   name?: string;
   parent?: string;
   position?: Vec3;
@@ -213,6 +227,21 @@ function build(spec: SceneSpec, scene: THREE.Scene) {
       case "grid":
         object = new THREE.GridHelper(node.size, node.divisions, node.color1, node.color2);
         break;
+      case "manager": {
+        object = new THREE.Group();
+        const args = [object, new THREE.Color(node.specular ?? 0), node.shininess ?? 0, "standard", false, () => {}] as const;
+        const field = node.field ?? null;
+        const managers: Record<string, () => ObjectManager<any>> = {
+          aprilTag: () => new AprilTagManager(...args),
+          axes: () => new AxesManager(...args),
+          cone: () => new ConeManager(...args),
+          heatmap: () => new HeatmapManager(...args, () => field as any),
+          trajectory: () => new TrajectoryManager(...args)
+        };
+        const manager = managers[node.manager!]();
+        for (const command of node.commands!) manager.setObjectData(command);
+        break;
+      }
     }
     place(object, node);
     if (node.visible !== undefined) object.visible = node.visible;

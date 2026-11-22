@@ -1,4 +1,5 @@
 import defaultLayout from "./layout.json";
+import { installRealGeometry, quiet } from "./realGeometry";
 import { fixedWidth, RecordingContext } from "./recordingCanvas";
 
 export type Rect = [number, number, number, number];
@@ -11,6 +12,7 @@ export interface LayoutRule {
 
 export interface Fixture {
   window?: { width?: number; height?: number; devicePixelRatio?: number; theme?: "light" | "dark"; framePeriod?: number };
+  geometry?: "scripted" | "real";
   seed?: number;
   startTime?: number;
   version?: object;
@@ -32,17 +34,19 @@ const view = fixture.window ?? {};
 export const framePeriod = view.framePeriod ?? 16;
 const theme = view.theme ?? "light";
 
+const realGeometry = fixture.geometry === "real";
+
 // jsdom has no text codecs. Encoded bytes are copied into this realm so `instanceof Uint8Array`
 // holds for upstream code.
 
 const outer = w.__oracleOuter;
-w.TextEncoder = class TextEncoder {
+if (w.TextEncoder === undefined) w.TextEncoder = class TextEncoder {
   readonly encoding = "utf-8";
   encode(input = ""): Uint8Array {
     return new Uint8Array(new outer.TextEncoder().encode(input));
   }
 };
-w.TextDecoder = class TextDecoder {
+if (w.TextDecoder === undefined) w.TextDecoder = class TextDecoder {
   private decoder: any;
   constructor(label?: string, options?: object) {
     this.decoder = new outer.TextDecoder(label, options);
@@ -190,11 +194,13 @@ export async function advance(ms: number, beforeFrame: () => void) {
 
 const define = (target: object, name: string, get: () => unknown) =>
   Object.defineProperty(target, name, { get, configurable: true });
-define(w, "innerWidth", () => view.width ?? 1100);
-define(w, "innerHeight", () => view.height ?? 650);
+if (!realGeometry) {
+  define(w, "innerWidth", () => view.width ?? 1100);
+  define(w, "innerHeight", () => view.height ?? 650);
+  define(w, "devicePixelRatio", () => view.devicePixelRatio ?? 1);
+}
 define(w, "outerWidth", () => view.width ?? 1100);
 define(w, "outerHeight", () => view.height ?? 650);
-define(w, "devicePixelRatio", () => view.devicePixelRatio ?? 1);
 w.matchMedia = (query: string) => ({
   matches: query.replace(/\s+/g, "").includes("prefers-color-scheme:" + (w.__oracleTheme ?? theme)),
   media: query,
@@ -211,7 +217,7 @@ w.ResizeObserver = class {
   disconnect() {}
 };
 
-Object.defineProperty(w.HTMLElement.prototype, "innerText", {
+if (!("innerText" in w.HTMLElement.prototype)) Object.defineProperty(w.HTMLElement.prototype, "innerText", {
   configurable: true,
   get(this: HTMLElement) {
     let out = "";
@@ -261,36 +267,41 @@ function domRect([x, y, width, height]: Rect) {
   return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height, toJSON() {} };
 }
 
-const proto = w.Element.prototype;
-proto.getBoundingClientRect = function (this: Element) {
-  return domRect(rectOf(this));
-};
-proto.getClientRects = function (this: Element) {
-  const r = rectOf(this);
-  return r[2] === 0 && r[3] === 0 ? [] : [domRect(r)];
-};
-for (const [name, index] of [
-  ["clientWidth", 2],
-  ["clientHeight", 3],
-  ["scrollWidth", 2],
-  ["scrollHeight", 3]
-] as [string, number][]) {
-  define(proto, name, function (this: Element) {
-    return Math.round(rectOf(this)[index]);
-  });
+function installScriptedGeometry() {
+  const proto = w.Element.prototype;
+  proto.getBoundingClientRect = function (this: Element) {
+    return domRect(rectOf(this));
+  };
+  proto.getClientRects = function (this: Element) {
+    const r = rectOf(this);
+    return r[2] === 0 && r[3] === 0 ? [] : [domRect(r)];
+  };
+  for (const [name, index] of [
+    ["clientWidth", 2],
+    ["clientHeight", 3],
+    ["scrollWidth", 2],
+    ["scrollHeight", 3]
+  ] as [string, number][]) {
+    define(proto, name, function (this: Element) {
+      return Math.round(rectOf(this)[index]);
+    });
+  }
+  for (const [name, index] of [
+    ["offsetWidth", 2],
+    ["offsetHeight", 3],
+    ["offsetLeft", 0],
+    ["offsetTop", 1]
+  ] as [string, number][]) {
+    define(w.HTMLElement.prototype, name, function (this: Element) {
+      return Math.round(rectOf(this)[index]);
+    });
+  }
+  proto.scrollIntoView = function () {};
+  proto.scrollTo = function () {};
 }
-for (const [name, index] of [
-  ["offsetWidth", 2],
-  ["offsetHeight", 3],
-  ["offsetLeft", 0],
-  ["offsetTop", 1]
-] as [string, number][]) {
-  define(w.HTMLElement.prototype, name, function (this: Element) {
-    return Math.round(rectOf(this)[index]);
-  });
-}
-proto.scrollIntoView = function () {};
-proto.scrollTo = function () {};
+w.__oracleQuiet = quiet;
+if (realGeometry) installRealGeometry(w, (record) => w.__oracleWrite(JSON.stringify(record)));
+else installScriptedGeometry();
 
 export const contexts: RecordingContext[] = [];
 const canvasIds = new WeakMap<object, string>();

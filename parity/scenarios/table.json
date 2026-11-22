@@ -1,0 +1,11 @@
+{
+  "about": "Generated drive log on a new Table tab with numeric, boolean, string and array columns, sidebar expanded",
+  "actions": [
+    { "open": ["app:drive"] },
+    { "idle": true },
+    { "main": "new-tab", "data": 4 },
+    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"/Drive/LeftVelocity\", \"/DriverStation/Enabled\", \"/Drive/Mode\", \"/Drive/ModuleSpeeds\"])" },
+    { "selection": ["setSelectedTime", 2.5] },
+    { "capture": "selected", "probes": [".side-bar", ".tab-bar", ".renderer-content", ".timeline", "table", "th", "tr"] }
+  ]
+}

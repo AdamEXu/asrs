@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 asrs-parity = { path = "../crates/asrs-parity" }
 flate2 = "=1.1.11"
+lcms2 = { version = "=6.3.0", features = ["static"] }
 sha2 = "=0.10.9"
 tar = { version = "=0.4.46", default-features = false }
 toml = "=0.8.23"
