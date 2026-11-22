@@ -316,6 +316,7 @@ logs.magnitudes = [
   ["putNumber", "/Big/Flat", 0, 5],
   ["putNumber", "/Big/Flat", 9, 5]
 ];
+logs.vast = [2e13, 2e13 + 4, 2e13 + 8].map((t, i) => ["putNumber", "/Vast/Value", t, [1, 3, 2][i]]);
 logs.offset = [["putNumber", "/A", 100, 1], ["putNumber", "/A", 101, 2]];
 logs.blank = [["createBlankField", "/Blank", 2], ["putNumber", "/One", 3, 1]];
 logs.live = [["putNumber", "/Live/Value", 0, 1], ["putBoolean", "/Live/Flag", 0, true], ["putNumber", "/Timestamp", 0, 0]];
@@ -1295,6 +1296,24 @@ fixtures.magnitudes = {
     mouse("mousemove", 600),
     frames(1),
     capture("degenerate")
+  ]
+};
+
+fixtures.vast = {
+  seed: 39,
+  logs: ["vast"],
+  steps: [
+    { log: "vast" },
+    restore(controller({ leftSources: [num0("smooth", "/Vast/Value", 0)] })),
+    frames(),
+    sel("setTimelineRange", [2e13 + 4, 2e13 + 4], false),
+    sel("setSelectedTime", 2e13 + 4),
+    frames(1),
+    mouse("mousemove", 600),
+    frames(1),
+    mouse("mousemove", 300),
+    frames(1),
+    capture("vast")
   ]
 };
 

@@ -73,6 +73,7 @@
     "dom/line-graph/units-auto": {"cases":969,"content":"bb6bc5d09c51c971","generator":"87eb4268f2a0e3dc","spec":"parity/specs/dom/line-graph/units-auto.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/line-graph/units-manual": {"cases":381,"content":"06eef4c8a2f10116","generator":"998c46b2c2914f10","spec":"parity/specs/dom/line-graph/units-manual.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/line-graph/unknown-unit": {"cases":153,"content":"779237de98cddbc0","generator":"9f7d66389288ad9a","spec":"parity/specs/dom/line-graph/unknown-unit.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/line-graph/vast": {"cases":100,"content":"20b5d97dd5ba9fb9","generator":"6fdabcf2df496d56","spec":"parity/specs/dom/line-graph/vast.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/selection/akit": {"cases":14,"content":"8542ef64385b42be","generator":"48940157f229f5bf","spec":"parity/specs/dom/selection/akit.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/selection/edges": {"cases":20,"content":"a5fb065d246074b6","generator":"fb77bc380355047d","spec":"parity/specs/dom/selection/edges.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/selection/extremes": {"cases":28,"content":"bdf861b8d0d938ea","generator":"3582d53d052f4ecb","spec":"parity/specs/dom/selection/extremes.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
