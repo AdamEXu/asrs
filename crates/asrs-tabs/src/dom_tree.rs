@@ -2,8 +2,6 @@
 //! style declaration list and children, kept the way Blink keeps them so the attribute strings
 //! a renderer leaves behind equal upstream's.
 
-#![allow(clippy::todo, dead_code)]
-
 /// An element's inline style (`element.style`): declarations in insertion order, each holding
 /// Blink's serialized value.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -17,23 +15,39 @@ impl InlineStyle {
     /// accepted one replaces the declaration in place or appends it. `quirks` as in
     /// [`crate::css_value::serialize`]. Returns whether the declaration list was mutated.
     pub fn set(&mut self, property: &str, value: &str, quirks: bool) -> bool {
-        let _ = (property, value, quirks);
-        todo!("R08: InlineStyle::set")
+        let existing = self.declarations.iter().position(|(p, _)| p == property);
+        if value.is_empty() {
+            return existing.map(|i| self.declarations.remove(i)).is_some();
+        }
+        let Some(serialized) = crate::css_value::serialize(property, value, quirks) else {
+            return false;
+        };
+        match existing {
+            Some(i) => self.declarations[i].1 = serialized,
+            None => self.declarations.push((property.to_owned(), serialized)),
+        }
+        true
     }
 
     /// `style.getPropertyValue(property)`.
     pub fn get(&self, property: &str) -> &str {
-        let _ = property;
-        todo!("R08: InlineStyle::get")
+        self.declarations
+            .iter()
+            .find(|(p, _)| p == property)
+            .map_or("", |(_, v)| v)
     }
 
     /// `style.cssText`.
     pub fn css_text(&self) -> String {
-        todo!("R08: InlineStyle::css_text")
+        self.declarations
+            .iter()
+            .map(|(p, v)| format!("{p}: {v};"))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     pub fn declarations(&self) -> &[(String, String)] {
-        todo!("R08: InlineStyle::declarations")
+        &self.declarations
     }
 }
 
@@ -55,8 +69,7 @@ pub struct Element {
 
 impl Element {
     pub fn new(namespace: Namespace, tag: &str) -> Element {
-        let _ = (namespace, tag);
-        todo!("R08: Element::new")
+        Element::with_attributes(namespace, tag, &[])
     }
 
     /// An element as parsed from markup, attributes in source order.
@@ -65,64 +78,81 @@ impl Element {
         tag: &str,
         attributes: &[(&str, &str)],
     ) -> Element {
-        let _ = (namespace, tag, attributes);
-        todo!("R08: Element::with_attributes")
+        Element {
+            namespace,
+            tag: tag.to_owned(),
+            attributes: attributes
+                .iter()
+                .map(|(n, v)| ((*n).to_owned(), (*v).to_owned()))
+                .collect(),
+            style: InlineStyle::default(),
+            style_dirty: false,
+            children: Vec::new(),
+        }
     }
 
     pub fn namespace(&self) -> Namespace {
-        todo!("R08: Element::namespace")
+        self.namespace
     }
 
     /// `localName`.
     pub fn tag(&self) -> &str {
-        todo!("R08: Element::tag")
+        &self.tag
     }
 
     /// `setAttribute(name, value)`: replaces in place or appends.
     pub fn set_attribute(&mut self, name: &str, value: &str) {
-        let _ = (name, value);
-        todo!("R08: Element::set_attribute")
+        match self.attributes.iter_mut().find(|(n, _)| n == name) {
+            Some((_, v)) => *v = value.to_owned(),
+            None => self.attributes.push((name.to_owned(), value.to_owned())),
+        }
     }
 
     pub fn style(&self) -> &InlineStyle {
-        todo!("R08: Element::style")
+        &self.style
     }
 
     /// `element.style.setProperty(property, value)`, parsed with quirks on SVG elements. The
     /// `style` attribute is not touched until the next [`Element::sync_style_attribute`].
     pub fn set_style(&mut self, property: &str, value: &str) {
-        let _ = (property, value);
-        todo!("R08: Element::set_style")
+        let quirks = self.namespace == Namespace::Svg;
+        if self.style.set(property, value, quirks) {
+            self.style_dirty = true;
+        }
     }
 
     /// What Blink does before any attribute read: once the inline style was mutated, the
     /// `style` attribute takes its `cssText`, in place if it exists and appended otherwise
     /// (so an emptied declaration list still leaves `style=""`).
     pub fn sync_style_attribute(&mut self) {
-        todo!("R08: Element::sync_style_attribute")
+        if std::mem::take(&mut self.style_dirty) {
+            let text = self.style.css_text();
+            self.set_attribute("style", &text);
+        }
     }
 
     /// `getAttributeNames()` with each `getAttribute()`, which first syncs the `style`
     /// attribute.
     pub fn attributes(&mut self) -> &[(String, String)] {
-        todo!("R08: Element::attributes")
+        self.sync_style_attribute();
+        &self.attributes
     }
 
     pub fn children(&self) -> &[Element] {
-        todo!("R08: Element::children")
+        &self.children
     }
 
     pub fn children_mut(&mut self) -> &mut Vec<Element> {
-        todo!("R08: Element::children_mut")
+        &mut self.children
     }
 
     pub fn append_child(&mut self, child: Element) -> &mut Element {
-        let _ = child;
-        todo!("R08: Element::append_child")
+        self.children.push(child);
+        self.children.last_mut().expect("just appended")
     }
 
     /// `while (el.firstChild) el.removeChild(el.firstChild)`.
     pub fn clear_children(&mut self) {
-        todo!("R08: Element::clear_children")
+        self.children.clear();
     }
 }

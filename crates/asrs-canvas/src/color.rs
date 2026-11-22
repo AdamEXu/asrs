@@ -156,7 +156,7 @@ fn parse_rgb(body: &str) -> Option<Rgba> {
     for (slot, t) in c.iter_mut().zip(&tokens) {
         let v = match (t, percent) {
             (Token::Number(v), false) => *v,
-            (Token::Percent(p), true) => p * 2.55,
+            (Token::Percent(p), true) => p / 100.0 * 255.0,
             _ => return None,
         };
         *slot = (v.clamp(0.0, 255.0) + 0.5).floor() as u8;
@@ -391,6 +391,11 @@ mod tests {
         assert_eq!(u8s("not a color"), None);
         assert_eq!(u8s("#12345"), None);
         assert_eq!(u8s("rgb(1, 2)"), None);
+    }
+
+    #[test]
+    fn percentage_channels_scale_like_blink() {
+        assert_eq!(u8s("rgb(100%, 50%, 0%)"), Some(([255, 128, 0], 1.0)));
     }
 
     #[test]

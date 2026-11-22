@@ -21,8 +21,10 @@ use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::line_graph::LineGraphController;
 use asrs_tabs::list_cx::SourceListCx;
 use asrs_tabs::mechanism::MechanismController;
+use asrs_tabs::mechanism_renderer::MechanismRenderer;
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::points::PointsController;
+use asrs_tabs::points_renderer::PointsRenderer;
 use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::SwerveController;
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
@@ -153,11 +155,11 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
             ),
             Some(TabType::Mechanism) => (
                 Box::new(MechanismController::new(cx)),
-                pending(TabType::Mechanism),
+                Box::new(MechanismRenderer::new()),
             ),
             Some(TabType::Points) => (
                 Box::new(PointsController::new(cx)),
-                pending(TabType::Points),
+                Box::new(PointsRenderer::new()),
             ),
             Some(TabType::Metadata) => (
                 Box::new(MetadataController::new(cx)?),
