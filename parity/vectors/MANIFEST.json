@@ -324,8 +324,8 @@
     "tabs/simple-statistics/macos-aarch64": {"cases":742,"content":"34133ea6dc107fc2","generator":"769419880a12804f","spec":"parity/specs/tabs/simple-statistics.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/simple-statistics/windows-aarch64": {"cases":742,"content":"9bd6b2a1e9b15ecc","generator":"769419880a12804f","spec":"parity/specs/tabs/simple-statistics.fn.json","zone":"UTC","generatedOn":"windows-aarch64"},
     "urcl/urcl": {"cases":59,"content":"a1a6377a142d71f7","generator":"6422340c97e352cf","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "windows/fresh-darwin": {"cases":46,"content":"2342a155d83b7bba","generator":"ab388a761c9586e1","spec":"parity/specs/windows/fresh-darwin.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "windows/saved-darwin": {"cases":10,"content":"106f34c94a69db3a","generator":"d43798a2c5ffde8c","spec":"parity/specs/windows/saved-darwin.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "windows/fresh-darwin": {"cases":47,"content":"71d671c955572bbd","generator":"3d66a30f09777c43","spec":"parity/specs/windows/fresh-darwin.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "windows/saved-darwin": {"cases":11,"content":"680e02f586856896","generator":"2fb40fb88c14b1a3","spec":"parity/specs/windows/saved-darwin.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "wpilog/corpus": {"cases":237,"content":"4a7bc113666b02bc","generator":"17d9e1ff28ded89a","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
   }
 }

@@ -228,6 +228,7 @@ if (scenario === "fresh") {
   await order(a);
   await close(download);
   await menu("Download Logs...", a);
+  await domReady(lastCreated());
   await order(a);
 } else {
   const state = {
@@ -241,7 +242,9 @@ if (scenario === "fresh") {
       { x: -4000, y: 10, width: 640, height: 480, state: { tab: 2 }, uuid: "sat-b" }
     ]
   };
-  fakeFs.putFile(Constants.STATE_FILENAME, new Uint8Array(Buffer.from(JSON.stringify(state), "utf8")));
+  const text = JSON.stringify(state);
+  out({ op: "putState", file: Constants.STATE_FILENAME, text });
+  fakeFs.putFile(Constants.STATE_FILENAME, new Uint8Array(Buffer.from(text, "utf8")));
   await ready();
   const ids = electronFake.windowList().map((w) => w.id);
   for (const id of ids) await domReady(id);
