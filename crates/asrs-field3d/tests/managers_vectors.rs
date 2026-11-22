@@ -409,7 +409,9 @@ impl RobotAssets {
                 self.results.insert(index, loaded.ok());
             }
             match (&self.results[&index], self.never[index]) {
-                (Some(meshes), false) => manager.load_finished(&request, meshes),
+                (Some(meshes), false) => {
+                    manager.load_finished(&request, meshes);
+                }
                 (None, true) => {}
                 (Some(_), true) => {
                     return Err(format!("{} loads; upstream never answers", self.ids[index]));

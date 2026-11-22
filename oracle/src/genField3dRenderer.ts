@@ -388,6 +388,10 @@ function orbitOps(): unknown[][] {
   frames(ops, auto4, 1);
   ops.push(["env", { width: 500, height: 375, parentWidth: 500, parentHeight: 500 }]);
   frames(ops, auto4, 1);
+  ops.push(["env", { parentWidth: 777, parentHeight: 501 }]);
+  frames(ops, auto4, 1);
+  ops.push(["env", { parentWidth: 333, parentHeight: 701 }]);
+  frames(ops, auto4, 1);
   ops.push(["camera", 2]);
   frames(ops, auto4, 1);
   const override = command("FRC:Evergreen", auto4.objects, { cameraOverride: pose([1, 2, 1.5], rotation()) });

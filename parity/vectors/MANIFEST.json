@@ -183,6 +183,7 @@
     "field3d/glb-procedural": {"cases":114,"content":"53a360a8bc967de3","generator":"c881b6c3713ce5df","spec":"parity/specs/field3d/glb-procedural.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/glb-synthetic": {"cases":177,"content":"ade15095ccf20c08","generator":"8eead1bc276a97a4","spec":"parity/specs/field3d/glb-synthetic.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/managers": {"cases":13,"content":"bfb1ebbd23d4d2b4","generator":"e6c15a9ef0fa9961","spec":"parity/specs/field3d/managers.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/renderer": {"cases":8,"content":"979fba63b633114a","generator":"062e974de7a8dfe2","spec":"parity/specs/field3d/renderer.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/robot": {"cases":6,"content":"406c671e0b827aeb","generator":"02dc4b594a72795d","spec":"parity/specs/field3d/robot.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/three": {"cases":9460,"content":"df05db1732c3129d","generator":"e4b47b5f6f0e3309","spec":"parity/specs/field3d/three.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "files/beta/main/America/Los_Angeles": {"cases":2498,"content":"9bcda456114c5bb0","generator":"be06066e09f5f5ac","spec":"parity/specs/files/beta/main.entry.json","zone":"America/Los_Angeles","generatedOn":"macos-aarch64"},

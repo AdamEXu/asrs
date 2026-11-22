@@ -701,7 +701,7 @@ impl Scene {
         penumbra: f64,
         decay: f64,
     ) -> (ObjectId, ObjectId) {
-        let target = self.create(NodeKind::Group);
+        let target = self.create(NodeKind::Object3D);
         let light = self.create(NodeKind::SpotLight(SpotLight {
             color,
             intensity,

@@ -222,6 +222,7 @@ function fakeGl(canvas: { width: number; height: number }) {
 
 class FakeCanvas extends FakeHTMLElement {
   readonly tagName = "CANVAS";
+  readonly tag = "canvas";
   private w = 300;
   private h = 150;
   className = "";
