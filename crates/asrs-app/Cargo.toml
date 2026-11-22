@@ -45,6 +45,10 @@ name = "hub_entity"
 required-features = ["parity"]
 
 [[test]]
+name = "bundled_assets"
+required-features = ["parity"]
+
+[[test]]
 name = "parity_scenario"
 harness = false
 required-features = ["parity"]
