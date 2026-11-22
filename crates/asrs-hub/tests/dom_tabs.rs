@@ -1293,7 +1293,7 @@ fn video_view(r: &Runner) -> JsValue {
                         bool_(b.controls_disabled),
                     ]),
                 ),
-                ("progress", JsValue::String(video.progress_width().clone())),
+                ("progress", JsValue::String(video.progress_width())),
                 (
                     "animating",
                     JsValue::Array(vec![

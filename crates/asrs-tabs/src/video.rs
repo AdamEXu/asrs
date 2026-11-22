@@ -19,6 +19,7 @@ use asrs_model::video::VideoSource;
 
 use crate::cx::TabCx;
 use crate::form::RangeInput;
+use crate::form::css::{Property, Style};
 
 /// What the controller reads besides [`TabCx`].
 pub trait VideoCx: TabCx {
@@ -41,7 +42,7 @@ pub struct Buttons {
 pub struct VideoController {
     buttons: Buttons,
     slider: RangeInput,
-    progress_width: JsString,
+    progress: Style,
     youtube_animating: bool,
     tba_animating: bool,
     img_folder: JsValue,
@@ -64,7 +65,7 @@ impl VideoController {
         let mut controller = VideoController {
             buttons: Buttons::default(),
             slider: RangeInput::new("0", "1", "1", "1"),
-            progress_width: JsString::new(),
+            progress: Style::new(),
             youtube_animating: false,
             tba_animating: false,
             img_folder: JsValue::Null,
@@ -144,8 +145,9 @@ impl VideoController {
         &self.slider
     }
 
-    pub fn progress_width(&self) -> &JsString {
-        &self.progress_width
+    /// `VIDEO_TIMELINE_PROGRESS.style.width`.
+    pub fn progress_width(&self) -> JsString {
+        self.progress.get(Property::Width)
     }
 
     pub fn youtube_animating(&self) -> bool {
@@ -321,10 +323,10 @@ impl VideoController {
                 return Ok(());
             }
             let percent = num(&self.completed_frames) / num(&self.total_frames) * 100.0;
-            // CSS rejects a NaN, infinite or negative width and keeps the previous one.
-            if percent >= 0.0 && percent.is_finite() {
-                self.progress_width = JsString::from(format!("{}%", number::to_string(percent)));
-            }
+            self.progress.set(
+                Property::Width,
+                &JsString::from(format!("{}%", number::to_string(percent))),
+            );
             self.slider.set_max(member_to_string(&self.total_frames)?);
             if !ops::strict_equals(&self.img_folder, &self.last_img_folder) {
                 self.last_img_folder = self.img_folder.clone();
