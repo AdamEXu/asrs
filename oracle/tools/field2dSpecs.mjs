@@ -215,9 +215,35 @@ const RECORDER = String.raw`(() => {
       };
     };
 
+    // The CANVAS style strings render assigns, as written (Blink re-serializes lengths on read).
+    const styleWrites = {};
+    // Blink serves these names from a named-property interceptor, so the shadowing accessors
+    // forward to the equivalent setProperty / getPropertyValue.
+    for (const name of ["width", "height", "transform"]) {
+      Object.defineProperty(r.CANVAS.style, name, {
+        configurable: true,
+        get() {
+          return this.getPropertyValue(name);
+        },
+        set(value) {
+          styleWrites[name] = value;
+          this.setProperty(name, value);
+        }
+      });
+    }
+    // The heatmap canvas is named by the recording canvas's creation counter; the trace
+    // calls it "@heatmap", the id the port draws it under.
+    const traceCalls = (ctx) => {
+      const heatmapCanvas = r.heatmap.getCanvas();
+      const heatmapId = heatmapCanvas === null ? null : ctx.argValue(heatmapCanvas);
+      return ctx.calls.map((call) => (call[0] === "drawImage" && call[1] === heatmapId ? ["drawImage", "@heatmap", ...call.slice(2)] : call));
+    };
+
     const originalRender = r.render;
     r.render = function (command) {
       const dom = domSnapshot();
+      const before = r.CANVAS.__oracleContext?.frames;
+      for (const name of Object.keys(styleWrites)) delete styleWrites[name];
       const record = Object.assign({ f2dr: "render", command: tree(command) }, base());
       try {
         const value = originalRender.apply(this, arguments);
@@ -233,6 +259,13 @@ const RECORDER = String.raw`(() => {
         dom.loads = r.imageLoadCount;
         record.dom = tree(dom);
         record.camera = camera(r);
+        const ctx = r.CANVAS.__oracleContext;
+        if (ctx !== undefined && ctx.frames !== before) {
+          record.size = tree([r.CANVAS.width, r.CANVAS.height]);
+          record.style = tree([styleWrites.width, styleWrites.height, styleWrites.transform]);
+          record.calls = tree(traceCalls(ctx));
+          record.heatmap = tree(r.heatmap.heatmap === null ? null : r.heatmap.heatmap.getData());
+        }
         write(record);
       }
     };
@@ -354,6 +387,18 @@ const FIELD_FTC = {
   coordinateSystem: "center-rotated",
   useGrid: false
 };
+const FIELD_FTC_GRID = {
+  id: "FTC:FTC Grid",
+  name: "FTC Grid",
+  path: "fields/ftc-grid.png",
+  topLeft: [40, 40],
+  bottomRight: [680, 600],
+  widthInches: 144.0,
+  heightInches: 126.0,
+  isFTC: true,
+  coordinateSystem: "center-rotated",
+  useGrid: true
+};
 const assets = (field2ds) => ({ field2ds, field3ds: [], robots: [], joysticks: [], loadFailures: [] });
 const ASSETS_ALL = assets([FIELD_FRC, FIELD_FRC2, FIELD_FTC]);
 const ASSETS_MISSING = assets([FIELD_FRC2, FIELD_FTC]);
@@ -363,6 +408,8 @@ const IMAGES_ALL = {
   "fields/frc2024.png": [1440, 720],
   "fields/ftc-decode.png": [720, 720]
 };
+const ASSETS_GRID = assets([FIELD_FRC, FIELD_FTC_GRID]);
+const IMAGES_GRID = { "fields/frc2025.png": [1440, 720], "fields/ftc-grid.png": [720, 720] };
 const IMAGES_MISSING = { "fields/frc2024.png": [1440, 720], "fields/ftc-decode.png": [720, 720] };
 
 const logs = {
@@ -423,6 +470,15 @@ const logs = {
     ["putNumber", "/DriverStation/AllianceStation", 0.0, 1],
     ["putNumber", "/DriverStation/AllianceStation", 1.75, 4],
     ["putNumber", "/DriverStation/Enabled", 0.0, 1]
+  ],
+  "field-2d-edges.json": [
+    ...SCHEMA_OPS,
+    ["putStruct", "/SwerveEdge", 0.0, bytev(moduleState(0.2, 0.0) + moduleState(-2.0, 1.0) + moduleState(NaN, 0.5) + moduleState(3.0, Infinity)), "SwerveModuleState", true],
+    ["putStruct", "/Corner", 0.0, bytev(pose2d(0.3, 0.25, 0.4)), "Pose2d", false],
+    ["putStruct", "/Corner", 1.0, bytev(pose2d(17.2, 7.8, -2.5)), "Pose2d", false],
+    ["putStruct", "/Corner", 2.0, bytev(pose2d(60.0, 40.0, 1.0)), "Pose2d", false],
+    ["putStruct", "/Corner", 3.0, bytev(pose2d(8.0, 40.0, 0.5)), "Pose2d", false],
+    ["putStruct", "/Path", 0.0, bytev(pose2d(1.0, 1.0, 0.0) + pose2d(2.0, 3.0, 0.5) + pose2d(3.5, 2.5, 1.0) + pose2d(4.0, 0.5, 1.5)), "Pose2d", true]
   ],
   "field-2d-trail.json": [
     ...SCHEMA_OPS,
@@ -862,6 +918,87 @@ const fixtures = [
       { frames: 2 },
       { eval: `(() => { const c = ${last}.controller; c.getActiveFields(); })()` },
       { capture: ["sourceLists"] }
+    ]
+  },
+  {
+    id: "ftc-grid",
+    seed: 7219,
+    log: "field-2d-edges.json",
+    window: { devicePixelRatio: 2 },
+    assets: ASSETS_GRID,
+    images: IMAGES_GRID,
+    steps: [
+      { eval: sl([
+        item("/Corner", "robot", "Pose2d"),
+        item("/Path", "trajectory", "Pose2d[]", { color: "#ff8c00", size: "bold" }),
+        item("/Path", "arrow", "Pose2d[]", { position: "center" }),
+        item("/Path", "ghost", "Pose2d[]", { color: "#ff00ff" })
+      ]) },
+      { eval: selTime(0.0) },
+      { frames: 2 },
+      { eval: field("FTC:FTC Grid") },
+      { frames: 2 },
+      { eval: `${rend} r.set2DCamera(2); })()` },
+      { frames: 1 },
+      { eval: `${rend} r.set2DCamera(1); })()` },
+      { frames: 1 }
+    ]
+  },
+  {
+    id: "satellite",
+    seed: 7220,
+    log: "field-2d-edges.json",
+    window: { devicePixelRatio: 1.5, theme: "dark" },
+    steps: [
+      { eval: `(() => { document.body.classList.add("satellite"); })()` },
+      { eval: sl([item("/Corner", "robot", "Pose2d"), item("/Path", "trajectory", "Pose2d[]")]) },
+      { eval: selTime(0.0) },
+      { frames: 2 },
+      { eval: click("ORIENTATION_SWITCHER", 0) },
+      { frames: 1 },
+      { eval: `${rend} const c = r.SCROLL_CONTAINER; const d = (e) => { c.dispatchEvent(e); window.__f2dCamera(r); }; d(new MouseEvent("mousemove", { clientX: 200, clientY: 150 })); c.scrollTop = c.scrollTop - 200; c.dispatchEvent(new Event("scroll")); })()` },
+      { frames: 1 },
+      { eval: click("ORIENTATION_SWITCHER", 1) },
+      { frames: 1 }
+    ]
+  },
+  {
+    id: "edges",
+    seed: 7221,
+    log: "field-2d-edges.json",
+    steps: [
+      { eval: sl([item("/Corner", "robot", "Pose2d"), item("/SwerveEdge", "swerveModuleVelocities", "SwerveModuleState[]")]) },
+      { eval: selTime(0.0) },
+      { frames: 2 },
+      { eval: `${rend} r.restoreState({ zoom: 4, pan: [0, 0], trackingMode: 1 }); })()` },
+      { frames: 1 },
+      { eval: selTime(1.0) },
+      { frames: 1 },
+      { eval: selTime(2.0) },
+      { frames: 1 },
+      { eval: selTime(3.0) },
+      { frames: 1 },
+      { eval: `${rend} r.set2DCamera(0); })()` },
+      { frames: 1 },
+      { eval: sl([item("/Corner", "robot", "Pose2d"), item("/SwerveEdge", "swerveModuleVelocities", "SwerveModuleState[]", { arrangement: "0,1,2,7" })]) },
+      { eval: selTime(0.0) },
+      { frames: 2 }
+    ]
+  },
+  {
+    id: "missing-options",
+    seed: 7222,
+    log: "field-2d-edges.json",
+    steps: [
+      { eval: sl([item("/Path", "ghost", "Pose2d[]", { color: "#ff00ff" }), Object.assign(item("/Corner", "robot", "Pose2d"), { options: {} })]) },
+      { eval: selTime(0.0) },
+      { frames: 2 },
+      { eval: sl([item("/Corner", "robot", "Pose2d"), Object.assign(item("/Path", "ghost", "Pose2d[]"), { options: {} })]) },
+      { frames: 1 },
+      { eval: sl([Object.assign(item("/Path", "trajectory", "Pose2d[]"), { options: { size: "bold" } })]) },
+      { frames: 1 },
+      { eval: sl([item("/Corner", "robot", "Pose2d"), Object.assign(item("/SwerveEdge", "swerveModuleVelocities", "SwerveModuleState[]"), { options: { arrangement: "0,1,2,3" } })]) },
+      { frames: 1 }
     ]
   },
   {

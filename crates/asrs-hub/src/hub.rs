@@ -1695,7 +1695,7 @@ impl HubModel {
                     .tabs
                     .selected_renderer_as::<Field2dRenderer>(TabType::Field2d)?
                 {
-                    r.set_2d_camera(&self.page, data.as_f64().unwrap_or(f64::NAN));
+                    r.set_2d_camera(&self.page, data.as_f64().unwrap_or(f64::NAN))?;
                 }
             }
             MainToHub::AddTableRange => {
