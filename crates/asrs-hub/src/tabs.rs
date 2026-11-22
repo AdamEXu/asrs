@@ -165,8 +165,13 @@ pub struct TabParts<Cx: ?Sized> {
 /// The switch in `addTab`. `None` is its `default` branch (`NoopController` and
 /// `NoopRenderer`), taken for a restored `type` such as `"1"` that names a template but is no
 /// `TabType` member.
+/// An `Err` is a constructor that threw: upstream adds no tab.
 pub trait TabFactory<Cx: ?Sized> {
-    fn create(&mut self, cx: &mut Cx, tab_type: Option<TabType>) -> TabParts<Cx>;
+    fn create(
+        &mut self,
+        cx: &mut Cx,
+        tab_type: Option<TabType>,
+    ) -> std::result::Result<TabParts<Cx>, JsError>;
 }
 
 /// A tab's `div.tab` in the tab bar.
@@ -668,7 +673,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             return Err(missing("removeAttribute"));
         }
         let kind = kind_of(type_value);
-        let parts = self.factory.create(cx, kind);
+        let parts = self.factory.create(cx, kind)?;
         let element = Rc::new(RefCell::new(TitleElement {
             text: title_text(kind, &JsValue::string("")),
             classes: vec!["tab"],

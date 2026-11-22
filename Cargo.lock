@@ -362,6 +362,7 @@ name = "asrs-hub"
 version = "0.1.0"
 dependencies = [
  "asrs-canvas",
+ "asrs-formats",
  "asrs-js",
  "asrs-log",
  "asrs-model",

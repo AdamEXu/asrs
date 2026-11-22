@@ -208,17 +208,23 @@ impl TabRenderer<Host> for StubRenderer {
 struct StubFactory;
 
 impl TabFactory<Host> for StubFactory {
-    fn create(&mut self, cx: &mut Host, _tab_type: Option<TabType>) -> TabParts<Host> {
-        let k = cx.created;
-        cx.created += 1;
-        TabParts {
-            uuid: cx
-                .seeds
-                .get(k)
-                .map_or_else(|| js(&format!("unseeded-{k}")), |s| s.uuid.clone()),
-            controller: Box::new(StubController(k)),
-            renderer: Box::new(StubRenderer(k, cx.renderer_uuids.get(k).cloned().flatten())),
-        }
+    fn create(
+        &mut self,
+        cx: &mut Host,
+        _tab_type: Option<TabType>,
+    ) -> Result<TabParts<Host>, JsError> {
+        Ok({
+            let k = cx.created;
+            cx.created += 1;
+            TabParts {
+                uuid: cx
+                    .seeds
+                    .get(k)
+                    .map_or_else(|| js(&format!("unseeded-{k}")), |s| s.uuid.clone()),
+                controller: Box::new(StubController(k)),
+                renderer: Box::new(StubRenderer(k, cx.renderer_uuids.get(k).cloned().flatten())),
+            }
+        })
     }
 }
 
