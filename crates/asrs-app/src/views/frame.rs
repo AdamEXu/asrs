@@ -28,6 +28,8 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::source_list::{self, ListsGeometry};
+
 /// The boxes of the frame elements a scenario probe selector (`.title-bar`) names, as
 /// `getBoundingClientRect()` gives them for each rendered match; `None` when the selector names
 /// no frame element.
@@ -61,6 +63,8 @@ pub trait FrameHost: 'static {
     /// Runs `f`, the frame's handler for an input event, as one page task.
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R;
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
+    /// The layout the hub model's `HubView` answers source list reads from.
+    fn source_list_geometry(&self) -> ListsGeometry;
     /// The contents of `slot`, laid out in a box of the slot's size.
     fn slot(
         &mut self,
@@ -240,6 +244,7 @@ impl<H: FrameHost> HubFrame<H> {
     fn mouse_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
         let x = client_coordinate(f64::from(f32::from(event.position.x)));
         let y = client_coordinate(f64::from(f32::from(event.position.y)));
+        self.source_list_mouse_move(x, y, cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -499,6 +504,8 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(content) = self.host.slot(FrameSlot::ControlsContent, window, cx) {
                     controls = controls.child(content);
                 }
+                self.layout_source_lists(rect, width, scale, cx);
+                controls = controls.children(self.source_lists(rect, appearance, cx));
                 viewer = viewer.child(controls);
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsHandle) {
@@ -609,7 +616,12 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     Some(tab) => item.opacity(0.5).child(tab).into_any_element(),
                     None => item.into_any_element(),
                 },
-                DragContent::ListItem { .. } => item.into_any_element(),
+                DragContent::ListItem {
+                    item: list_item,
+                    width,
+                } => item
+                    .child(source_list::drag_item(&list_item, width, appearance))
+                    .into_any_element(),
             };
             root = root.child(item);
         }
