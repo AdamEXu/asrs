@@ -39,7 +39,7 @@ pub fn load(src: &JsString) -> Option<FieldImage> {
     let frame = reader.next_frame(&mut buffer).ok()?;
     let (width, height) = (frame.width, frame.height);
     let pixels = &buffer[..frame.buffer_size()];
-    let mut rgba: Vec<u8> = match frame.color_type {
+    let rgba: Vec<u8> = match frame.color_type {
         png::ColorType::Rgba => pixels.to_vec(),
         png::ColorType::Rgb => pixels
             .as_chunks::<3>()
@@ -56,11 +56,12 @@ pub fn load(src: &JsString) -> Option<FieldImage> {
         png::ColorType::Grayscale => pixels.iter().flat_map(|&v| [v, v, v, 255]).collect(),
         png::ColorType::Indexed => return None,
     };
-    if let Some(transform) = transform {
-        transform.apply(&mut rgba);
-    }
+    let pixmap = match transform {
+        Some(transform) => transform.pixmap(width, height, &rgba)?,
+        None => pixmap_from_straight_rgba(width, height, &rgba)?,
+    };
     Some(FieldImage {
         size: [f64::from(width), f64::from(height)],
-        pixmap: Arc::new(pixmap_from_straight_rgba(width, height, &rgba)?),
+        pixmap: Arc::new(pixmap),
     })
 }
