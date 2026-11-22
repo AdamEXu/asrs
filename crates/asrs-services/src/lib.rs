@@ -1,3 +1,4 @@
+pub mod asset_downloader;
 pub mod asset_loader;
 pub mod beta;
 pub mod constants;

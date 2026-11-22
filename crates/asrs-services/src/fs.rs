@@ -48,6 +48,30 @@ pub trait Fs {
 
     /// `fs.mkdirSync(path)`.
     fn mkdir(&self, path: &str) -> Result<(), JsError>;
+
+    /// `fs.mkdirSync(path, { recursive: true })`: every missing ancestor too.
+    fn mkdir_all(&self, path: &str) -> Result<(), JsError> {
+        Err(enosys("mkdir", path))
+    }
+
+    /// `fs.renameSync(from, to)` for a file or a whole directory tree.
+    fn rename(&self, from: &str, to: &str) -> Result<(), JsError> {
+        let _ = to;
+        Err(enosys("rename", from))
+    }
+
+    /// `fs.rmSync(path, { recursive: true })`: a file or a whole directory tree; a missing path
+    /// throws.
+    fn remove_all(&self, path: &str) -> Result<(), JsError> {
+        Err(enosys("rm", path))
+    }
+}
+
+fn enosys(syscall: &str, path: &str) -> JsError {
+    JsError::new(
+        "Error",
+        format!("ENOSYS: function not implemented, {syscall} '{path}'"),
+    )
 }
 
 /// libuv's code and description for the errors file opens and writes commonly hit.
@@ -142,6 +166,21 @@ impl Fs for RealFs {
 
     fn mkdir(&self, path: &str) -> Result<(), JsError> {
         std::fs::create_dir(path).map_err(|e| node_error("mkdir", path, &e))
+    }
+
+    fn mkdir_all(&self, path: &str) -> Result<(), JsError> {
+        let _ = path;
+        todo!("A02b: RealFs::mkdir_all")
+    }
+
+    fn rename(&self, from: &str, to: &str) -> Result<(), JsError> {
+        let _ = (from, to);
+        todo!("A02b: RealFs::rename")
+    }
+
+    fn remove_all(&self, path: &str) -> Result<(), JsError> {
+        let _ = path;
+        todo!("A02b: RealFs::remove_all")
     }
 }
 
@@ -359,5 +398,20 @@ impl Fs for MemFs {
         }
         self.dirs.borrow_mut().insert(key);
         Ok(())
+    }
+
+    fn mkdir_all(&self, path: &str) -> Result<(), JsError> {
+        let _ = path;
+        todo!("A02b: MemFs::mkdir_all")
+    }
+
+    fn rename(&self, from: &str, to: &str) -> Result<(), JsError> {
+        let _ = (from, to);
+        todo!("A02b: MemFs::rename")
+    }
+
+    fn remove_all(&self, path: &str) -> Result<(), JsError> {
+        let _ = path;
+        todo!("A02b: MemFs::remove_all")
     }
 }
