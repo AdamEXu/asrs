@@ -153,6 +153,8 @@ export function handCheckerCases(): CheckerCase[] {
     hand("newer windows", WIN_X64, all(newer, [0, 1, 2])),
     hand("newer windows ia32", WIN_IA32, all(newer, [0, 1, 2])),
     hand("newer windows emulated", WIN_EMULATED, all(newer, [0, 2])),
+    hand("arm64 reporting translation", ["darwin", "arm64", true], all(newer, [0])),
+    hand("same version arm64 reporting translation", ["win32", "arm64", true], all(same, [0])),
     hand("only mac asset", WIN_X64, all(ok([MAC_ONLY]), [0]), { version: "27.0.0", beta: false }),
     hand("stable ignores prereleases", DARWIN_ARM, all(ok([ALPHA7, STABLE27, STABLE26]), [0]), { version: "26.2.1", beta: false }),
     hand("stable same major prerelease only", DARWIN_ARM, all(ok([ALPHA7, ALPHA6, STABLE26]), [0]), { version: "27.0.0", beta: false }),
@@ -237,7 +239,19 @@ const PUBLISHED: unknown[] = [
 ];
 const PRERELEASE: unknown[] = [true, false, false, undefined, "false", 0, null, 1];
 const VERSIONS = ["27.0.0-alpha-6", "27.0.0", "27.1.0", "27.0.0-alpha-7", "26.2.1", "28.0.0-beta-1", "4.1.0", "27", ""];
-const ARCHES: Arch[] = [DARWIN_ARM, DARWIN_X64, DARWIN_ROSETTA, LINUX_X64, ["linux", "arm64", false], WIN_X64, WIN_EMULATED, WIN_IA32, ["win32", "arm64", false]];
+const ARCHES: Arch[] = [
+  DARWIN_ARM,
+  DARWIN_X64,
+  DARWIN_ROSETTA,
+  ["darwin", "arm64", true],
+  LINUX_X64,
+  ["linux", "arm64", false],
+  WIN_X64,
+  WIN_EMULATED,
+  WIN_IA32,
+  ["win32", "arm64", false],
+  ["win32", "arm64", true]
+];
 const ASSET_NAMES = [
   "advantagescope-mac-arm64.dmg",
   "advantagescope-mac-x64.dmg",
