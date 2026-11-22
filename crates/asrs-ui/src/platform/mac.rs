@@ -389,16 +389,27 @@ fn build_menu(
     let ns_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::new());
     ns_menu.setAutoenablesItems(false);
     for (index, item) in menu.items.iter().enumerate() {
-        match item {
-            PopupItem::Separator => ns_menu.addItem(&NSMenuItem::separatorItem(mtm)),
+        let ns_item = match item {
+            PopupItem::Separator => NSMenuItem::separatorItem(mtm),
             PopupItem::Entry(entry) => {
                 let mut path = prefix.to_vec();
                 path.push(index);
-                ns_menu.addItem(&build_item(mtm, entry, target, path));
+                build_item(mtm, entry, target, path)
             }
-        }
+        };
+        mark_built(&ns_item);
+        ns_menu.addItem(&ns_item);
     }
     ns_menu
+}
+
+const BUILT_MARKER: &str = "asrs.menu";
+
+/// Tags an item as ours, so a read-back can tell it from items AppKit adds to menus on its own
+/// (dictation, emoji and writing tools in a menu with editing selectors).
+fn mark_built(item: &NSMenuItem) {
+    // SAFETY: an immutable NSString is a valid represented object.
+    unsafe { item.setRepresentedObject(Some(&NSString::from_str(BUILT_MARKER))) };
 }
 
 /// `-[ElectronMenuController makeMenuItemForIndex:fromModel:]` followed by
@@ -517,6 +528,7 @@ fn empty_submenu(mtm: MainThreadMarker) -> Retained<NSMenu> {
         )
     };
     item.setEnabled(false);
+    mark_built(&item);
     menu.addItem(&item);
     menu
 }
@@ -845,14 +857,21 @@ pub(super) mod probe {
     fn read_menu(menu: &NSMenu) -> Option<PopupMenu> {
         let mut items = Vec::new();
         for item in menu.itemArray().iter() {
+            let built = item
+                .representedObject()
+                .and_then(|o| o.downcast::<objc2_foundation::NSString>().ok())
+                .is_some_and(|marker| marker.to_string() == super::BUILT_MARKER);
+            if !built {
+                ADDED_BY_APPKIT.with_borrow_mut(|added| added.push(item.title().to_string()));
+                continue;
+            }
             if item.isSeparatorItem() {
                 items.push(PopupItem::Separator);
                 continue;
             }
-            let swatch = match item.image() {
-                Some(image) => Some(read_swatch(&image)?),
-                None => None,
-            };
+            // macOS 26 gives items with standard selectors a system symbol image of its own;
+            // only a swatch reads back as one.
+            let swatch = item.image().and_then(|image| read_swatch(&image));
             let submenu = match item.submenu() {
                 Some(sub) => Some(read_menu(&sub)?),
                 None => None,
@@ -867,9 +886,9 @@ pub(super) mod probe {
                 visible: !item.isHidden(),
                 checked: item.state() == NSControlStateValueOn,
                 swatch,
+                works_when_hidden: key.is_empty() || works_when_hidden.as_bool(),
                 key_equivalent: (!key.is_empty())
                     .then(|| (key, item.keyEquivalentModifierMask().bits() as u32)),
-                works_when_hidden: works_when_hidden.as_bool(),
                 role: read_role(&item),
                 submenu,
             }));
@@ -901,11 +920,75 @@ pub(super) mod probe {
             .map(|(role, _)| (*role).to_owned())
     }
 
-    /// The application's main menu as AppKit holds it.
-    pub fn read_application_menu() -> Option<PopupMenu> {
+    pub fn perform_application_menu_item(path: &[usize]) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
+        };
+        let Some(mut menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
+            return false;
+        };
+        let Some((&last, parents)) = path.split_last() else {
+            return false;
+        };
+        for &index in parents {
+            let Some(submenu) = menu
+                .itemAtIndex(index as isize)
+                .and_then(|item| item.submenu())
+            else {
+                return false;
+            };
+            menu = submenu;
+        }
+        if last as isize >= menu.numberOfItems() {
+            return false;
+        }
+        menu.performActionForItemAtIndex(last as isize);
+        true
+    }
+
+    pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
+        };
+        let Some(menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
+            return false;
+        };
+        let characters = objc2_foundation::NSString::from_str(key);
+        // SAFETY: NSEvent's documented key event constructor; a nil graphics context is the
+        // value AppKit requires.
+        let event: Option<Retained<NSEvent>> = unsafe {
+            msg_send![
+                <NSEvent as objc2::ClassType>::class(),
+                keyEventWithType: objc2_app_kit::NSEventType::KeyDown,
+                location: objc2_foundation::NSPoint::ZERO,
+                modifierFlags: objc2_app_kit::NSEventModifierFlags::from_bits_retain(
+                    modifiers as usize
+                ),
+                timestamp: 0.0f64,
+                windowNumber: 0isize,
+                context: None::<&objc2::runtime::AnyObject>,
+                characters: &*characters,
+                charactersIgnoringModifiers: &*characters,
+                isARepeat: false,
+                keyCode: 0u16
+            ]
+        };
+        event.is_some_and(|event| menu.performKeyEquivalent(&event))
+    }
+
+    thread_local! {
+        static ADDED_BY_APPKIT: std::cell::RefCell<Vec<String>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// The application's main menu as AppKit holds it, without the items AppKit added itself,
+    /// whose titles come second.
+    pub fn read_application_menu() -> Option<(PopupMenu, Vec<String>)> {
         let mtm = MainThreadMarker::new()?;
         let menu = NSApplication::sharedApplication(mtm).mainMenu()?;
-        read_menu(&menu)
+        ADDED_BY_APPKIT.with_borrow_mut(Vec::clear);
+        let read = read_menu(&menu)?;
+        Some((read, ADDED_BY_APPKIT.with_borrow_mut(std::mem::take)))
     }
 
     fn read_swatch(image: &NSImage) -> Option<[u8; 3]> {

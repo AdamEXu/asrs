@@ -34,3 +34,7 @@ workspace = true
 [[test]]
 name = "window_sizes"
 harness = false
+
+[[test]]
+name = "app_menu_mac"
+harness = false

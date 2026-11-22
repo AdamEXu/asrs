@@ -7,7 +7,6 @@ use asrs_services::window_manager::Platform;
 /// A key, by its unshifted US-layout identity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Key {
-    /// GPUI's name for the key.
     pub name: String,
     /// Chromium's `character_ignoring_all_modifiers` for the key on macOS, `None` where
     /// `MacKeyCodeForWindowsKeyCode` has no key code.
@@ -238,5 +237,85 @@ fn unknown() -> Key {
     Key {
         name: String::new(),
         mac_char: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mac(shortcut: &str) -> Option<(String, u32)> {
+        Accelerator::parse(shortcut, Platform::Mac)?.mac_key_equivalent()
+    }
+
+    #[test]
+    fn mac_key_equivalents_follow_electron_menu_controller() {
+        let cases: &[(&str, &str, u32)] = &[
+            ("CmdOrCtrl+Shift+O", "o", MAC_COMMAND | MAC_SHIFT),
+            ("Shift+CmdOrCtrl+W", "w", MAC_COMMAND | MAC_SHIFT),
+            ("CommandOrControl+Plus", "+", MAC_COMMAND),
+            ("CmdOrCtrl+?", "?", MAC_COMMAND),
+            (
+                "Cmd+Option+Shift+V",
+                "v",
+                MAC_COMMAND | MAC_OPTION | MAC_SHIFT,
+            ),
+            ("Control+Command+F", "f", MAC_COMMAND | MAC_CONTROL),
+            (
+                "CmdOrCtrl+Alt+Shift+K",
+                "k",
+                MAC_COMMAND | MAC_OPTION | MAC_SHIFT,
+            ),
+            ("CmdOrCtrl+Left", "\u{f702}", MAC_COMMAND),
+            ("CmdOrCtrl+\\", "\\", MAC_COMMAND),
+            ("CommandOrControl+-", "-", MAC_COMMAND),
+            ("CommandOrControl+0", "0", MAC_COMMAND),
+            ("Alt+G", "g", MAC_OPTION),
+            ("F11", "\u{f70e}", 0),
+        ];
+        for &(shortcut, key, mask) in cases {
+            assert_eq!(mac(shortcut), Some((key.to_owned(), mask)), "{shortcut}");
+        }
+    }
+
+    #[test]
+    fn electron_rejects_these() {
+        for shortcut in [
+            "Cmd+Foo",
+            "Ctrl+",
+            "Shift",
+            "Cmd+\u{e9}",
+            "F25",
+            "num10",
+            "Cmd+O+Foo",
+        ] {
+            assert_eq!(
+                Accelerator::parse(shortcut, Platform::Mac),
+                None,
+                "{shortcut}"
+            );
+        }
+        assert_eq!(mac("F21"), None);
+    }
+
+    #[test]
+    fn keystrokes_for_accelerator_tables() {
+        let keystroke = |s: &str, p| Accelerator::parse(s, p).and_then(|a| a.gpui_keystroke());
+        assert_eq!(
+            keystroke("CmdOrCtrl+Shift+O", Platform::Windows).as_deref(),
+            Some("ctrl-shift-o")
+        );
+        assert_eq!(
+            keystroke("Alt+G", Platform::Linux).as_deref(),
+            Some("alt-g")
+        );
+        assert_eq!(
+            keystroke("CommandOrControl+Plus", Platform::Linux).as_deref(),
+            Some("ctrl-shift-=")
+        );
+        assert_eq!(
+            keystroke("CmdOrCtrl+Right", Platform::Mac).as_deref(),
+            Some("cmd-right")
+        );
     }
 }

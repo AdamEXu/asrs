@@ -11,7 +11,8 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, Global,
     InteractiveElement, IntoElement, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent,
     OperatingSystem, ParentElement, Pixels, Point, Render, Styled, Subscription, Window,
-    WindowBounds, WindowKind, WindowOptions, anchored, canvas, deferred, div, point, px, rgb, size,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, anchored, canvas,
+    deferred, div, point, px, rgb, size,
 };
 
 use crate::platform::{MenuPath, PopupEntry, PopupItem, PopupMenu};
@@ -74,7 +75,6 @@ pub fn menu_size(cx: &mut App, menu: &PopupMenu, scale: f32) -> (f32, f32) {
     )
 }
 
-/// The offset of entry `index` from the top of the menu box.
 fn row_top(menu: &PopupMenu, index: usize) -> f32 {
     PADDING
         + visible_items(menu)
@@ -96,6 +96,7 @@ pub struct MenuView {
     submenu: Option<(usize, Entity<MenuView>, Option<AnyWindowHandle>)>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     on_close: CloseHandler,
+    own_window: Option<AnyWindowHandle>,
     _activation: Option<Subscription>,
 }
 
@@ -116,6 +117,7 @@ impl MenuView {
             submenu: None,
             bounds: Rc::default(),
             on_close,
+            own_window: None,
             _activation: None,
         }
     }
@@ -162,6 +164,7 @@ impl MenuView {
             focus: true,
             show: true,
             kind: WindowKind::PopUp,
+            window_background: WindowBackgroundAppearance::Transparent,
             is_movable: false,
             is_resizable: false,
             is_minimizable: false,
@@ -170,6 +173,7 @@ impl MenuView {
         crate::open_window(options, cx, move |window, cx| {
             let view = cx.new(|cx| {
                 let mut view = MenuView::new(menu, prefix, Host::PopUpWindow, on_close, cx);
+                view.own_window = Some(window.window_handle());
                 view._activation =
                     Some(cx.observe_window_activation(window, |view, window, cx| {
                         if !window.is_window_active() && view.submenu.is_none() {
@@ -194,20 +198,16 @@ impl MenuView {
     fn close_submenu(&mut self, cx: &mut App) {
         if let Some((_, view, handle)) = self.submenu.take() {
             view.update(cx, |view, cx| view.close_submenu(cx));
-            if let Some(handle) = handle {
-                handle
-                    .update(cx, |_, window, _| window.remove_window())
-                    .ok();
-            }
+            remove_window(handle, cx);
         }
     }
 
+    /// `window` is the window the choice was made in, which for a submenu in a `PopUp` window
+    /// is not this menu's.
     fn finish(&mut self, path: Option<MenuPath>, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.close_submenu(cx);
         (self.on_close)(path, window, cx);
-        if self.host == Host::PopUpWindow && self.prefix.is_empty() {
-            window.remove_window();
-        }
+        remove_window(self.own_window, cx);
     }
 
     fn dismiss(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -233,11 +233,18 @@ impl MenuView {
         let parent = cx.entity().downgrade();
         let on_close: CloseHandler = Rc::new(move |path, window, cx| {
             if let Some(parent) = parent.upgrade() {
-                parent.update(cx, |parent, cx| match path {
-                    Some(path) => parent.finish(Some(path), window, cx),
-                    None => {
-                        parent.submenu = None;
-                        cx.notify();
+                parent.update(cx, |parent, cx| {
+                    parent.submenu = None;
+                    match path {
+                        Some(path) => parent.finish(Some(path), window, cx),
+                        None => {
+                            if let Some(handle) = parent.own_window {
+                                cx.defer(move |cx| {
+                                    handle.update(cx, |_, w, _| w.activate_window()).ok();
+                                });
+                            }
+                            cx.notify();
+                        }
                     }
                 });
             }
@@ -385,13 +392,13 @@ impl MenuView {
                     .flex()
                     .justify_center()
                     .when_some(entry.checked.then_some(()), |d, _| {
-                        d.child(Text::new("\u{2713}", style.clone()).color(text))
+                        d.child(Text::new("\u{2713}", style).color(text))
                     }),
             )
             .child(
                 div()
                     .flex_1()
-                    .child(Text::new(entry.label.clone(), style.clone()).color(text)),
+                    .child(Text::new(entry.label.clone(), style).color(text)),
             )
             .child(
                 div()
@@ -485,6 +492,16 @@ impl Render for MenuView {
             _ => None,
         };
         div().child(body).children(submenu)
+    }
+}
+
+fn remove_window(handle: Option<AnyWindowHandle>, cx: &mut App) {
+    if let Some(handle) = handle {
+        cx.defer(move |cx| {
+            handle
+                .update(cx, |_, window, _| window.remove_window())
+                .ok();
+        });
     }
 }
 

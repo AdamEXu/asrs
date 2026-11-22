@@ -205,8 +205,16 @@ pub(super) mod probe {
         None
     }
 
-    pub fn read_application_menu() -> Option<PopupMenu> {
+    pub fn read_application_menu() -> Option<(PopupMenu, Vec<String>)> {
         None
+    }
+
+    pub fn perform_application_menu_item(_path: &[usize]) -> bool {
+        false
+    }
+
+    pub fn perform_key_equivalent(_key: &str, _modifiers: u32) -> bool {
+        false
     }
 
     pub fn read_wheel_sample(_sample: &WheelSample) -> Option<WheelReading> {

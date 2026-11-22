@@ -114,9 +114,22 @@ pub fn native_menu_roundtrip(menu: &PopupMenu) -> Option<PopupMenu> {
 }
 
 /// The application's main menu read back from the OS, with each item's role as its native
-/// wiring shows it.
-pub fn read_application_menu() -> Option<PopupMenu> {
+/// wiring shows it, and the titles of the items the OS added on its own. `works_when_hidden`
+/// is read only for items with a key equivalent, the only ones it affects, and is true for the
+/// rest.
+pub fn read_application_menu() -> Option<(PopupMenu, Vec<String>)> {
     imp::probe::read_application_menu()
+}
+
+/// Chooses the main menu entry at `path`, as a click on it would.
+pub fn perform_application_menu_item(path: &[usize]) -> bool {
+    imp::probe::perform_application_menu_item(path)
+}
+
+/// Offers the main menu a key-down event with the given characters and `NSEventModifierFlags`.
+/// Returns whether an entry took it.
+pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {
+    imp::probe::perform_key_equivalent(key, modifiers)
 }
 
 pub fn read_wheel_sample(sample: &WheelSample) -> Option<WheelReading> {
