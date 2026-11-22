@@ -44,13 +44,82 @@ const RECORDER = `/*lg:recorder*/ (() => {
       }
     };
   }
+  const writes = [];
+  let writeDepth = 0;
+  for (const name of ["setHoveredTime", "setSelectedTime", "setGrabZoomRange", "finishGrabZoom", "goIdle", "applyTimelineScroll"]) {
+    const original = selection[name];
+    selection[name] = function (...args) {
+      if (writes.length === 0 || writeDepth > 0) return original.apply(this, args);
+      writes[writes.length - 1].push([name, tree(args)]);
+      writeDepth++;
+      try {
+        return original.apply(this, args);
+      } finally {
+        writeDepth--;
+      }
+    };
+  }
+  const renderers = [];
+  const style = (r) => [r.SCROLL_OVERLAY.style.top, r.SCROLL_OVERLAY.style.left, r.SCROLL_OVERLAY.style.right, r.HELP_OVERLAY.style.display, r.HELP_OVERLAY.classList.contains("fading-out")];
+  const pointer = (r, target) => [r.ROOT.hidden, target instanceof w.Node && r.SCROLL_OVERLAY.contains(target), tree(r.ROOT.getBoundingClientRect().x), tree(r.SCROLL_OVERLAY.getBoundingClientRect().x), tree(r.SCROLL_OVERLAY.clientWidth)];
+  const hookRenderer = (r, id) => {
+    renderers.push([id, r]);
+    const render = r.render;
+    r.render = function (...args) {
+      const canvas = r.CANVAS;
+      const before = canvas.__oracleContext?.frames;
+      const record = { lg: "render", id: tree(id), width: tree(canvas.clientWidth), height: tree(canvas.clientHeight), dpr: tree(w.devicePixelRatio), dark: dark(), prefs: tree(w.preferences === undefined ? undefined : [w.preferences.timestamps, w.preferences.hasScrolledLineGraph]) };
+      writes.push([]);
+      try {
+        return render.apply(this, args);
+      } catch (e) {
+        record.threw = errorText(e);
+        throw e;
+      } finally {
+        record.writes = writes.pop();
+        const ctx = canvas.__oracleContext;
+        if (ctx !== undefined && ctx.frames !== before) {
+          record.size = tree([canvas.width, canvas.height]);
+          record.calls = tree(ctx.calls);
+        }
+        record.style = style(r);
+        write(record);
+      }
+    };
+    const sensor = r.scrollSensor;
+    const callback = sensor.callback;
+    sensor.callback = function (...args) {
+      const record = { lg: "scroll", id: tree(id), args: tree(args.slice(0, 3)), pointer: pointer(r, null), prefs: tree(w.preferences === undefined ? undefined : [w.preferences.timestamps, w.preferences.hasScrolledLineGraph]) };
+      writes.push([]);
+      try {
+        return callback.apply(this, args);
+      } finally {
+        record.writes = writes.pop();
+        record.style = style(r);
+        write(record);
+      }
+    };
+  };
+  const dispatch = w.EventTarget.prototype.dispatchEvent;
+  w.EventTarget.prototype.dispatchEvent = function (event) {
+    if (renderers.length === 0 || !["mousemove", "mousedown", "mouseup", "click", "contextmenu", "mouseleave"].includes(event.type)) return dispatch.call(this, event);
+    const record = { lg: "event", type: event.type, x: tree(event.clientX), shift: event.shiftKey, targets: renderers.map(([id, r]) => [tree(id), ...pointer(r, this)]) };
+    writes.push([]);
+    try {
+      return dispatch.call(this, event);
+    } finally {
+      record.writes = writes.pop();
+      write(record);
+    }
+  };
   const controllers = [];
   const lists = (c) => [["left", c.leftSourceList], ["right", c.rightSourceList], ["discrete", c.discreteSourceList]];
-  const hook = (c) => {
+  const hook = (c, r) => {
     if (controllers.includes(c)) return;
     const id = controllers.length;
     controllers.push(c);
     write({ lg: "create", id: tree(id), uuids: lists(c).map(([, sl]) => sl.UUID) });
+    hookRenderer(r, id);
     const observe = (name, kind, argCount) => {
       const original = c[name];
       c[name] = function (...args) {
@@ -101,11 +170,11 @@ const RECORDER = `/*lg:recorder*/ (() => {
       }
     });
   }, true);
-  w.tabs.tabList.forEach((t) => t.type === 1 && hook(t.controller));
+  w.tabs.tabList.forEach((t) => t.type === 1 && hook(t.controller, t.renderer));
   const addTab = w.tabs.addTab;
   w.tabs.addTab = function (...args) {
     const result = addTab.apply(this, args);
-    this.tabList.forEach((t) => t.type === 1 && hook(t.controller));
+    this.tabList.forEach((t) => t.type === 1 && hook(t.controller, t.renderer));
     return result;
   };
 })()`.replace(/\n\s*/g, " ");
@@ -1018,6 +1087,170 @@ fixtures["two-tabs"] = {
     add("left", "/Arm/AngleRadians"),
     frames(),
     capture("third")
+  ]
+};
+
+const mouse = (type, x, target = "div.line-graph-scroll", init = {}) => ({
+  event: { target, kind: "MouseEvent", type, init: { clientX: x, ...init } }
+});
+const wheel = (dx, dy, isPan = false) => ({
+  eval: `window.tabs.tabList[window.tabs.selectedTab].renderer.scrollSensor.callback(${dx}, ${dy}, ${isPan}, 0, 0)`
+});
+
+fixtures.pointer = {
+  seed: 33,
+  logs: ["numeric", "discrete"],
+  steps: [
+    { log: "numeric" },
+    { log: "discrete" },
+    restore(
+      controller({
+        leftSources: [num0("smooth", "/Drive/LeftPositionMeters", 0)],
+        rightSources: [num0("stepped", "/Motor/Temp", 1, "bold")],
+        discreteSources: [item("stripes", "/D/Bool", "Boolean", { color: colors[3] }), item("graph", "/D/Steady", "Number", { color: colors[4] })]
+      })
+    ),
+    frames(),
+    mouse("mousemove", 500),
+    frames(1),
+    capture("hover"),
+    ...[541, 543, 640, 642, 1099, 1090, 320].flatMap((x) => [mouse("mousemove", x), frames(1)]),
+    mouse("mousemove", 520),
+    frames(1),
+    mouse("mousedown", 520),
+    mouse("mouseup", 520),
+    mouse("click", 523),
+    frames(1),
+    capture("selected"),
+    mouse("mousedown", 520),
+    mouse("mousemove", 560),
+    frames(1),
+    mouse("mousemove", 600),
+    mouse("mouseup", 600),
+    mouse("click", 600),
+    frames(1),
+    capture("panned"),
+    mouse("mousemove", 650),
+    frames(1),
+    mouse("mousedown", 650, "div.line-graph-scroll", { shiftKey: true }),
+    mouse("mousemove", 700, "window"),
+    frames(1),
+    mouse("mousemove", 740),
+    frames(1),
+    mouse("mouseleave", 740),
+    mouse("mousemove", 800, "window"),
+    frames(1),
+    mouse("mouseup", 800, "window"),
+    frames(1),
+    capture("grab-zoom"),
+    mouse("mousemove", 700),
+    frames(1),
+    mouse("mousedown", 700, "div.line-graph-scroll", { shiftKey: true }),
+    mouse("mousemove", 760),
+    frames(1),
+    mouse("mouseup", 760, "window"),
+    frames(1),
+    mouse("contextmenu", 760),
+    frames(1),
+    capture("idle"),
+    sel("setSelectedTime", 0.6),
+    sel("setTimelineRange", [3, 8], false),
+    frames(1),
+    ...[700, 360, 1080].flatMap((x) => [mouse("mousemove", x), frames(1)]),
+    sel("setSelectedTime", 9.5),
+    frames(1),
+    ...[1080, 400].flatMap((x) => [mouse("mousemove", x), frames(1)]),
+    sel("play"),
+    frames(1),
+    mouse("mouseleave", 400),
+    frames(1),
+    capture("out-of-range"),
+    { main: "new-tab", data: 1 },
+    frames(1),
+    mouse("mousemove", 500, "window"),
+    mouse("mouseup", 500, "window"),
+    frames(1),
+    capture("hidden")
+  ]
+};
+
+fixtures["help-fade"] = {
+  seed: 34,
+  logs: ["numeric"],
+  window: { devicePixelRatio: 2 },
+  steps: [
+    { log: "numeric" },
+    add("left", "/Drive/VelocityMetersPerSec"),
+    add("right", "/Arm/AngleRadians"),
+    frames(),
+    wheel(0, -120),
+    frames(1),
+    wheel(40, 30),
+    wheel(-15, -79),
+    frames(1),
+    wheel(0, -1),
+    frames(1),
+    capture("fading"),
+    { advance: 1100 },
+    wheel(0, -500),
+    frames(1),
+    capture("sent"),
+    mouse("mousedown", 600),
+    mouse("mousemove", 640),
+    mouse("mousemove", 590),
+    mouse("mouseup", 590),
+    frames(1),
+    capture("dragged")
+  ]
+};
+
+fixtures.scrolled = {
+  seed: 35,
+  logs: ["numeric", "alerts"],
+  window: { devicePixelRatio: 1.5, theme: "dark" },
+  preferences: { hasScrolledLineGraph: true, timestamps: "original" },
+  steps: [
+    { log: "numeric" },
+    { log: "alerts" },
+    restore(
+      controller({
+        leftSources: [num0("points", "/Drive/RightPositionInches", 0), num0("stepped", "/Arm/AngleDegrees", 1, "verybold")],
+        discreteSources: [item("alerts", "/Alerts", "Alerts", {}), item("stripes", "/Misc/Name", "String", { color: colors[5] })],
+        showRobotMode: true
+      })
+    ),
+    frames(),
+    wheel(0, -300),
+    frames(1),
+    mouse("mousemove", 700),
+    frames(1),
+    sel("setSelectedTime", 4.2),
+    frames(1),
+    capture("scrolled")
+  ]
+};
+
+fixtures.tiny = {
+  seed: 36,
+  logs: ["numeric", "alerts"],
+  window: { devicePixelRatio: 3 },
+  layout: [{ selector: "div.renderer-content", rect: [300, 92, 61, 37] }],
+  steps: [
+    { log: "numeric" },
+    { log: "alerts" },
+    restore(
+      controller({
+        leftSources: [num0("smooth", "/Drive/LeftPositionMeters", 0)],
+        rightSources: [num0("smooth", "/Motor/Temp", 1)],
+        discreteSources: [item("alerts", "/Alerts", "Alerts", {})]
+      })
+    ),
+    frames(),
+    mouse("mousemove", 340),
+    frames(1),
+    sel("setSelectedTime", 2),
+    frames(1),
+    capture("tiny")
   ]
 };
 
