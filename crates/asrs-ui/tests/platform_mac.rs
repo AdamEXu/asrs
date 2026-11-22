@@ -1,5 +1,10 @@
-use asrs_ui::platform::probe::{native_menu_roundtrip, read_wheel_sample, wheel_gesture_samples};
-use asrs_ui::platform::{PopupEntry, PopupItem, PopupMenu, WheelDelta, native_menu_label};
+use asrs_ui::platform::probe::{
+    native_menu_roundtrip, read_wheel_sample, select_menu_roundtrip, wheel_gesture_samples,
+};
+use asrs_ui::platform::{
+    PopupEntry, PopupItem, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind, WheelDelta,
+    native_menu_label,
+};
 
 fn main() {
     if asrs_parity::ci::skip_in_ci("platform mac", "a display") {
@@ -8,8 +13,9 @@ fn main() {
     if cfg!(target_os = "macos") {
         labels();
         menu_tree();
+        select_menu();
         wheel_gesture();
-        println!("platform mac: labels, menu tree and wheel gesture ok");
+        println!("platform mac: labels, menu tree, select menu and wheel gesture ok");
     } else {
         println!("platform mac: skipped on this platform");
     }
@@ -121,4 +127,66 @@ fn wheel_gesture() {
         };
         assert_eq!(reading.chromium, expected, "{sample:?}: {reading:?}");
     }
+}
+
+/// `WebMenuRunner`'s menu for Field2d's field select: optgroup rows disabled, option rows
+/// indented in the drawn title and trimmed in the plain one, the menu font at the select's
+/// size, each item tagged with its index, and the cell on the selected item.
+fn select_menu() {
+    let row = |label: &str, kind, enabled| SelectMenuItem {
+        label: label.to_owned(),
+        kind,
+        enabled,
+        tool_tip: String::new(),
+    };
+    let menu = SelectMenu {
+        items: vec![
+            row("FRC Fields", SelectMenuItemKind::Group, true),
+            row("    2025 Field", SelectMenuItemKind::Option, true),
+            row("    2024 Field", SelectMenuItemKind::Option, false),
+            row("", SelectMenuItemKind::Separator, true),
+            row("FTC Fields", SelectMenuItemKind::Group, true),
+            row("    Into the Deep", SelectMenuItemKind::Option, true),
+        ],
+        font_size: 13.0,
+        selected: Some(5),
+        right_aligned: false,
+    };
+    let read = select_menu_roundtrip(&menu).expect("select menu");
+    assert!(!read.pulls_down);
+    assert_eq!(read.selected_tag, Some(5));
+    type Row<'a> = (bool, &'a str, Option<&'a str>, Option<f64>, bool, isize);
+    let rows: Vec<Row<'_>> = read
+        .items
+        .iter()
+        .map(|i| {
+            (
+                i.separator,
+                i.title.as_str(),
+                i.attributed_title.as_deref(),
+                i.font_size,
+                i.enabled,
+                i.tag,
+            )
+        })
+        .collect();
+    let font = Some(13.0);
+    assert_eq!(
+        rows,
+        vec![
+            (false, "FRC Fields", Some("FRC Fields"), font, false, 0),
+            (false, "2025 Field", Some("    2025 Field"), font, true, 1),
+            (false, "2024 Field", Some("    2024 Field"), font, false, 2),
+            (true, "", None, None, false, 0),
+            (false, "FTC Fields", Some("FTC Fields"), font, false, 4),
+            (
+                false,
+                "Into the Deep",
+                Some("    Into the Deep"),
+                font,
+                true,
+                5
+            ),
+        ]
+    );
 }

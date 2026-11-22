@@ -24,6 +24,7 @@ asrs-canvas = { path = "../asrs-canvas" }
 gpui-kit.workspace = true
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
+icu_properties = "=1.4.3"
 image = { version = "=0.25.10", default-features = false }
 roxmltree = "=0.21.2"
 simplecss = "=0.2.2"
@@ -50,24 +51,32 @@ features = [
     "objc2-core-foundation",
     "objc2-core-graphics",
     "objc2-quartz-core",
+    "NSActionCell",
     "NSAlert",
     "NSApplication",
+    "NSAttributedString",
     "NSBitmapImageRep",
     "NSButton",
+    "NSButtonCell",
     "NSCell",
     "NSControl",
     "NSEvent",
+    "NSFont",
     "NSGraphics",
     "NSImage",
     "NSImageRep",
     "NSMenu",
     "NSMenuItem",
+    "NSMenuItemCell",
     "NSOpenPanel",
     "NSPanel",
+    "NSParagraphStyle",
+    "NSPopUpButtonCell",
     "NSResponder",
     "NSRunningApplication",
     "NSSavePanel",
     "NSScreen",
+    "NSText",
     "NSToolbar",
     "NSView",
     "NSVisualEffectView",
@@ -104,6 +113,9 @@ features = [
     "std",
     "objc2-core-foundation",
     "NSArray",
+    "NSAttributedString",
+    "NSCharacterSet",
+    "NSDictionary",
     "NSGeometry",
     "NSObjCRuntime",
     "NSObject",

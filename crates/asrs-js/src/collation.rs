@@ -87,6 +87,12 @@ fn utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().collect()
 }
 
+/// Whether `a` and `b` are equal at primary strength under the `en-US` collation, which
+/// ignores case and accents (ICU string search with `UCOL_PRIMARY`).
+pub fn primary_equal_utf16(a: &[u16], b: &[u16]) -> bool {
+    collator(Kind::PlainPrimary).compare_utf16(a, b) == Ordering::Equal
+}
+
 /// The number `localeCompare` returns: -1, 0 or 1.
 pub fn ordering_to_number(order: Ordering) -> f64 {
     match order {

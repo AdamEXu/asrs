@@ -12,7 +12,7 @@ use asrs_parity::record_vectors;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::Record;
 use asrs_tabs::form::css::{Property, Style};
-use asrs_tabs::form::{NumberInput, RangeInput, Select, SelectOption};
+use asrs_tabs::form::{NumberInput, OptGroup, RangeInput, Select, SelectItem, SelectOption};
 
 enum Element {
     Number(NumberInput),
@@ -23,6 +23,7 @@ enum Element {
 
 struct Tag {
     name: String,
+    closing: bool,
     attributes: Vec<(String, String)>,
     text: String,
 }
@@ -46,7 +47,13 @@ fn tags(markup: &str) -> Result<Vec<Tag>, String> {
         let end = rest.find('>').ok_or("unterminated tag")?;
         let inside = &rest[..end];
         rest = &rest[end + 1..];
-        if inside.starts_with('/') {
+        if let Some(name) = inside.strip_prefix('/') {
+            out.push(Tag {
+                name: name.to_owned(),
+                closing: true,
+                attributes: Vec::new(),
+                text: String::new(),
+            });
             continue;
         }
         let (name, mut attrs) = inside.split_once(' ').unwrap_or((inside, ""));
@@ -56,6 +63,11 @@ fn tags(markup: &str) -> Result<Vec<Tag>, String> {
             if attrs.is_empty() {
                 break;
             }
+            if let Some(after) = attrs.strip_prefix("disabled") {
+                attributes.push(("disabled".to_owned(), String::new()));
+                attrs = after;
+                continue;
+            }
             let (attr, after) = attrs.split_once("=\"").ok_or("unquoted attribute")?;
             let (value, after) = after.split_once('"').ok_or("unterminated attribute")?;
             attributes.push((attr.to_owned(), value.to_owned()));
@@ -64,11 +76,62 @@ fn tags(markup: &str) -> Result<Vec<Tag>, String> {
         let text = &rest[..rest.find('<').unwrap_or(rest.len())];
         out.push(Tag {
             name: name.to_owned(),
+            closing: false,
             attributes,
             text: text.to_owned(),
         });
     }
     Ok(out)
+}
+
+fn option_of(tag: &Tag) -> SelectOption {
+    SelectOption::new(tag.attribute("value"), &tag.text)
+        .disabled(tag.attribute("disabled").is_some())
+}
+
+/// The list items of a select's markup: options, and optgroups with the options inside them.
+fn select_items(tags: &[Tag]) -> Result<Vec<SelectItem>, String> {
+    let mut items = Vec::new();
+    let mut in_group = false;
+    for t in tags {
+        match (t.name.as_str(), t.closing) {
+            ("option", false) => items.push(SelectItem::Option {
+                option: option_of(t),
+                grouped: in_group,
+            }),
+            ("optgroup", false) => {
+                items.push(SelectItem::Group(
+                    OptGroup::new(t.attribute("label").unwrap_or(""))
+                        .disabled(t.attribute("disabled").is_some()),
+                ));
+                in_group = true;
+            }
+            ("optgroup", true) => in_group = false,
+            ("option" | "select", true) => {}
+            (other, _) => return Err(format!("unexpected <{other}> in a select")),
+        }
+    }
+    Ok(items)
+}
+
+/// `optgroup.innerHTML = markup`: every option is removed, then each new one appended.
+fn set_group_options(select: &mut Select, group: usize, markup: &str) -> Result<(), String> {
+    select.clear_group(group);
+    for tag in tags(markup)? {
+        match (tag.name.as_str(), tag.closing) {
+            ("option", false) => select.append_to_group(group, option_of(&tag)),
+            ("option", true) => {}
+            (other, _) => return Err(format!("unexpected <{other}> in an optgroup")),
+        }
+    }
+    Ok(())
+}
+
+fn child_path(path: &str, prop: &str) -> Option<usize> {
+    path.strip_prefix("children.")?
+        .strip_suffix(prop)?
+        .parse()
+        .ok()
 }
 
 fn parse(markup: &str) -> Result<Element, String> {
@@ -83,16 +146,9 @@ fn parse(markup: &str) -> Result<Element, String> {
             attr("max"),
             attr("step"),
         ))),
-        ("select", None) => {
-            let options = tags[1..]
-                .iter()
-                .map(|t| match t.name.as_str() {
-                    "option" => Ok(SelectOption::new(t.attribute("value"), &t.text)),
-                    other => Err(format!("unexpected <{other}> in a select")),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Element::Select(Select::with_options(options)))
-        }
+        ("select", None) => Ok(Element::Select(Select::with_items(select_items(
+            &tags[1..],
+        )?))),
         ("div", None) => Ok(Element::Div(Style::new())),
         _ => Err(format!("no model for {markup}")),
     }
@@ -103,6 +159,13 @@ fn string_arg(op: &[Json], i: usize) -> Result<JsString, String> {
         .and_then(Json::as_str)
         .map(|s| JsString::from_units(s.units().to_vec()))
         .ok_or_else(|| format!("op argument {i} is not a string"))
+}
+
+fn bool_arg(op: &[Json], i: usize) -> Result<bool, String> {
+    match op.get(i) {
+        Some(Json::Bool(b)) => Ok(*b),
+        _ => Err(format!("op argument {i} is not a boolean")),
+    }
 }
 
 fn number_arg(op: &[Json], i: usize) -> Result<f64, String> {
@@ -136,6 +199,24 @@ fn apply(element: &mut Element, op: &[Json]) -> Result<(), String> {
             s.set_selected_index(number_arg(op, 2)? as i32)
         }
         (Element::Select(s), Some("remove"), _) => s.remove(number_arg(op, 1)? as usize),
+        (Element::Select(s), Some("set"), Some(path))
+            if let Some(group) = child_path(path, ".innerHTML") =>
+        {
+            set_group_options(s, group, &string_arg(op, 2)?.to_string_lossy())?
+        }
+        (Element::Select(s), Some("set"), Some(path))
+            if let Some(group) = child_path(path, ".disabled") =>
+        {
+            s.set_group_disabled(group, bool_arg(op, 2)?)
+        }
+        (Element::Select(s), Some("set"), Some(path))
+            if let Some(index) = path
+                .strip_prefix("options.")
+                .and_then(|p| p.strip_suffix(".disabled"))
+                .and_then(|i| i.parse().ok()) =>
+        {
+            s.set_option_disabled(index, bool_arg(op, 2)?)
+        }
         (Element::Select(s), Some("appendElement"), Some("option")) => {
             let props = op
                 .get(2)
@@ -186,13 +267,13 @@ fn read(element: &Element, path: &str) -> Result<Read, String> {
         (Element::Range(r), "step") => string(r.step()),
         (Element::Select(s), "value") => string(&s.value()),
         (Element::Select(s), "selectedIndex") => number(f64::from(s.selected_index())),
-        (Element::Select(s), "options.length") => number(s.options().len() as f64),
+        (Element::Select(s), "options.length") => number(s.length() as f64),
         (Element::Select(s), path) if path.starts_with("options.") => {
             let (index, prop) = path["options.".len()..]
                 .split_once('.')
                 .ok_or_else(|| format!("unknown read {path}"))?;
             let index: usize = index.parse().map_err(|_| format!("unknown read {path}"))?;
-            let Some(option) = s.options().get(index) else {
+            let Some(option) = s.option(index) else {
                 return Ok(Read::Threw(format!(
                     "TypeError: Cannot read properties of undefined (reading '{prop}')"
                 )));
@@ -201,6 +282,7 @@ fn read(element: &Element, path: &str) -> Result<Read, String> {
                 "value" => string(&option.value()),
                 "text" | "label" => string(&option.text()),
                 "textContent" | "innerText" => string(option.text_content()),
+                "disabled" => Read::Value(Value::Bool(option.is_disabled())),
                 _ => return Err(format!("unknown read {path}")),
             }
         }

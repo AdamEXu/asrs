@@ -22,7 +22,14 @@ export interface UiProbe {
   opacity: number;
 }
 
-export type ControlKind = "text" | "number" | "search" | "checkbox" | "segmented" | "range" | "progress";
+export type ControlKind = "text" | "number" | "search" | "checkbox" | "segmented" | "range" | "progress" | "select";
+
+export interface UiOption {
+  label: string;
+  group: string | null;
+  selected: boolean;
+  disabled: boolean;
+}
 
 export interface UiSegment {
   icon: string | null;
@@ -44,6 +51,8 @@ export interface UiControl {
   step: string | null;
   segments: UiSegment[];
   selected: number | null;
+  options: UiOption[];
+  disabled: boolean;
 }
 
 export interface UiScene {
@@ -175,6 +184,8 @@ function control(kind: ControlKind, preset: string, x: number, y: number, width:
     step: null,
     segments: [],
     selected: null,
+    options: [],
+    disabled: false,
     ...extra
   };
 }
@@ -262,6 +273,56 @@ function searchHoverScene(dark: boolean): UiScene {
   return scene;
 }
 
+function option(label: string, extra: Partial<UiOption> = {}): UiOption {
+  return { label, group: null, selected: false, disabled: false, ...extra };
+}
+
+const FIELD_OPTIONS: UiOption[] = [
+  option("2025 Field", { group: "FRC Fields" }),
+  option("2024 Field", { group: "FRC Fields" }),
+  option("Evergreen", { group: "FRC Fields" }),
+  option("2024-25 Into the Deep", { group: "FTC Fields" })
+];
+const TIME_RANGES: UiOption[] = ["Visible Range", "Full Log", "Enabled", "Auto", "Teleop", "Live: 30 Seconds"].map((l) => option(l));
+const JOYSTICK_OPTIONS: UiOption[] = ["None", "Generic Joystick", "Xbox Controller (Blue)", "PS4 Controller"].map((l) => option(l));
+
+function picked(options: UiOption[], label: string): UiOption[] {
+  return options.map((o) => ({ ...o, selected: o.label === label }));
+}
+
+function hubSelectScene(dark: boolean): UiScene {
+  const controls = [
+    control("select", "field-select", 0, 0, 300, 40, { options: FIELD_OPTIONS }),
+    control("select", "field-select", 0, 45, 300, 40, { options: picked(FIELD_OPTIONS, "2024-25 Into the Deep") }),
+    control("select", "setting-select", 0, 90, 300, 35, { options: picked(TIME_RANGES, "Full Log") }),
+    control("select", "setting-select", 0, 130, 120, 35, { options: picked(TIME_RANGES, "Live: 30 Seconds") }),
+    control("select", "setting-select", 0, 170, 300, 35, { options: [] }),
+    control("select", "joystick-select", 310, 0, 200, 40, { options: picked(JOYSTICK_OPTIONS, "Xbox Controller (Blue)") }),
+    control("select", "joystick-select", 310, 45, 97, 40, { options: picked(JOYSTICK_OPTIONS, "Xbox Controller (Blue)") }),
+    control("select", "joystick-select", 310, 90, 200, 40, { options: JOYSTICK_OPTIONS })
+  ];
+  return inputScene(`ui-select-hub-${dark ? "dark" : "light"}`, 520, 210, dark, ["www/hub.css"], controls);
+}
+
+function promptSelectScene(dark: boolean): UiScene {
+  const units = ["meters", "inches", "feet", "centimeters"].map((l) => option(l));
+  const controls = [
+    control("select", "prompt-select", 10, 10, 200, 21, { options: units }),
+    control("select", "prompt-select", 10, 40, 200, 21, { options: picked(units, "feet"), disabled: true }),
+    control("select", "prompt-select", 10, 70, 200, 21, { options: [], disabled: true }),
+    control("select", "prompt-select", 10, 100, 200, 21, { options: [option("Disabled", { disabled: true }), option("CSV (Table)")] })
+  ];
+  return inputScene(`ui-select-prompts-${dark ? "dark" : "light"}`, 230, 130, dark, ["www/prompts.css"], controls);
+}
+
+function selectHoverScene(dark: boolean): UiScene {
+  const scene = inputScene(`ui-select-hover-${dark ? "dark" : "light"}`, 310, 45, dark, ["www/hub.css"], [
+    control("select", "setting-select", 0, 0, 300, 35, { options: picked(TIME_RANGES, "Enabled") })
+  ]);
+  scene.pointer = { x: 150, y: 17, down: false, selector: "select" };
+  return scene;
+}
+
 export function uiScenes(upstream: string): UiScene[] {
   return [false, true].flatMap((dark) => [
     iconScene(upstream, dark),
@@ -272,7 +333,10 @@ export function uiScenes(upstream: string): UiScene[] {
     downloadInputScene(dark),
     betaInputScene(dark),
     hoverScene(dark),
-    searchHoverScene(dark)
+    searchHoverScene(dark),
+    hubSelectScene(dark),
+    promptSelectScene(dark),
+    selectHoverScene(dark)
   ]);
 }
 
@@ -305,7 +369,23 @@ function valueAttrs(c: UiControl): string {
     if (v !== null) parts.push(` ${key}="${esc(v)}"`);
   }
   if (c.checked) parts.push(" checked");
+  if (c.disabled) parts.push(" disabled");
   return parts.join("");
+}
+
+function optionsMarkup(options: UiOption[]): string {
+  let out = "";
+  let group: string | null = null;
+  for (const o of options) {
+    if (o.group !== group) {
+      if (group !== null) out += "</optgroup>";
+      if (o.group !== null) out += `<optgroup label="${esc(o.group)}">`;
+      group = o.group;
+    }
+    out += `<option${o.selected ? " selected" : ""}${o.disabled ? " disabled" : ""}>${esc(o.label)}</option>`;
+  }
+  if (group !== null) out += "</optgroup>";
+  return out;
 }
 
 function controlMarkup(c: UiControl, href: (rel: string) => string): string {
@@ -340,6 +420,14 @@ function controlMarkup(c: UiControl, href: (rel: string) => string): string {
       return `<progress${tag}${a}></progress>`;
     case "beta":
       return `<input${tag} type="checkbox"${a}>`;
+    case "field-select":
+      return `<div class="setting-blocks"><div class="field input" style="height:${c.height}px"><div><select${tag} class="field-select"${a}>${optionsMarkup(c.options)}</select></div></div></div>`;
+    case "setting-select":
+      return `<div class="setting-blocks"><div class="input" style="height:${c.height}px"><div><select${tag}${a}>${optionsMarkup(c.options)}</select></div></div></div>`;
+    case "joystick-select":
+      return `<table class="joystick-selector"><tr><td><select${tag}${a}>${optionsMarkup(c.options)}</select></td></tr></table>`;
+    case "prompt-select":
+      return `<select${tag}${a}>${optionsMarkup(c.options)}</select>`;
     default:
       throw new Error(`unknown control preset ${c.preset}`);
   }
