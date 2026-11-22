@@ -130,13 +130,6 @@ impl ListLayout {
         }
     }
 
-    /// The items' total height, the list's `scrollHeight` when it overflows.
-    pub fn content_height(&self) -> f64 {
-        self.items
-            .last()
-            .map_or(0.0, |(top, height, _)| top + height)
-    }
-
     pub fn item_rect(&self, index: usize) -> Rect {
         let Some(&(top, height, _)) = self.items.get(index).filter(|_| self.displayed()) else {
             return Rect::default();

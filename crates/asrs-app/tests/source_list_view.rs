@@ -113,7 +113,6 @@ fn keys(list: &SourceList) -> Vec<String> {
         .collect()
 }
 
-/// The line graph's left and right lists' keys.
 fn lists(headless: &mut HeadlessCapture, hub: &Entity<Hub>) -> (Vec<String>, Vec<String>) {
     page(headless, hub, |model| {
         let tab = model

@@ -29,7 +29,6 @@ use super::frame::{FrameHost, HubFrame};
 
 const TITLE_HEIGHT: f64 = 30.0;
 const BUTTON: f32 = 25.0;
-/// `div.type-name`'s and `div.key-container`'s offsets, and the child indent.
 const NAME_LEFT: f64 = 30.0;
 const CHILD_INDENT: f64 = 25.0;
 const VALUE_COLOR: u32 = 0x777777;
@@ -129,7 +128,6 @@ impl ListsGeometry {
         self.0.borrow().lists.get(list).cloned().unwrap_or_default()
     }
 
-    /// The displayed list whose `div.list` box holds the client point `(x, y)`.
     fn list_at(&self, x: f64, y: f64) -> Option<String> {
         let layout = self.0.borrow();
         layout.lists.iter().find_map(|(uuid, l)| {
@@ -161,7 +159,6 @@ impl SourceListDom for ListsGeometry {
     }
 }
 
-/// The displayed tab's lists with their roots in the `div.controls-content` box `controls`.
 fn displayed_lists(hub: &HubModel, controls: Rect) -> Vec<(&SourceList, ListRoot)> {
     let Some(tab) = hub.tabs().tabs().find(|t| !t.content_hidden()) else {
         return Vec::new();
@@ -217,13 +214,11 @@ const NO_FILTER: IconTint = IconTint {
     disabled: ["", ""],
 };
 
-/// `button > object`'s `scale(75%)`.
 const OBJECT_FIT: IconFit = IconFit::Centered {
     max: 1.0,
     scale: 0.75,
 };
 
-/// `div.hidden`'s `opacity: 0.4` on the parts of an item it dims.
 fn fade<E: Styled>(element: E, hidden: bool) -> E {
     if hidden {
         element.opacity(0.4)
@@ -255,7 +250,6 @@ impl Shown {
     }
 }
 
-/// Sends a pointer event to one list as a page task.
 type Dispatch = Rc<dyn Fn(ListPointer, &mut App)>;
 
 fn on(
@@ -285,18 +279,29 @@ fn symbol(name: &str) -> Symbol {
     Symbol::named(name).unwrap_or_else(|| panic!("bundled symbol {name}"))
 }
 
+#[derive(Clone, Copy)]
+struct ItemPlace {
+    width: f64,
+    borders: (f64, f64),
+    origin_x: f64,
+    scale: f32,
+}
+
 /// One `div.item` at `index`, `width` wide: the list's, whose buttons `dispatch`, or the drag
 /// copy's. `borders` are its top and bottom border widths.
 fn item_body(
     item: &ItemView,
     index: usize,
-    width: f64,
-    borders: (f64, f64),
+    place: ItemPlace,
     appearance: Appearance,
     dispatch: &Option<Dispatch>,
-    origin_x: f64,
-    scale: f32,
 ) -> Stateful<Div> {
+    let ItemPlace {
+        width,
+        borders,
+        origin_x,
+        scale,
+    } = place;
     let text_dx = |x: f64| snap_remainder((origin_x + x) as f32, scale);
     let theme = appearance.theme();
     let dark = appearance == Appearance::Dark;
@@ -489,12 +494,14 @@ pub fn drag_item(item: &ItemView, width: f64, appearance: Appearance) -> AnyElem
         .child(item_body(
             item,
             0,
-            width,
-            (0.0, 0.0),
+            ItemPlace {
+                width,
+                borders: (0.0, 0.0),
+                origin_x: 0.0,
+                scale: 1.0,
+            },
             appearance,
             &None,
-            0.0,
-            1.0,
         ))
         .into_any_element()
 }
@@ -554,7 +561,6 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
-    /// The displayed tab's lists, placed in the controls box at `controls`.
     pub(super) fn source_lists(
         &mut self,
         controls: [f64; 4],
@@ -726,23 +732,22 @@ impl<H: FrameHost> HubFrame<H> {
                 layout.item_border_top(index),
                 if index + 1 == count { 1.0 } else { 0.0 },
             );
-            let row = item_body(
-                item,
-                index,
-                inner,
+            let place = ItemPlace {
+                width: inner,
                 borders,
-                appearance,
-                &dispatch,
-                left,
-                scale as f32,
-            )
-            .on_mouse_down(MouseButton::Right, {
-                let uuid = uuid.clone();
-                cx.listener(move |frame, e: &MouseDownEvent, _, cx| {
-                    let (x, y) = client_point(e.position);
-                    frame.list_input(&uuid, ListPointer::ContextMenu { index, x, y }, cx)
-                })
-            });
+                origin_x: left,
+                scale: scale as f32,
+            };
+            let row = item_body(item, index, place, appearance, &dispatch).on_mouse_down(
+                MouseButton::Right,
+                {
+                    let uuid = uuid.clone();
+                    cx.listener(move |frame, e: &MouseDownEvent, _, cx| {
+                        let (x, y) = client_point(e.position);
+                        frame.list_input(&uuid, ListPointer::ContextMenu { index, x, y }, cx)
+                    })
+                },
+            );
             items = items.child(row);
         }
         element = element.child(items);
