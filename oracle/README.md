@@ -247,8 +247,9 @@ The committed graph cannot drift silently through an import edit: adding or remo
 changes a file already in the graph, which makes its vectors stale, and regenerating rewrites
 `oracle/inputs.json`. It can drift only when an unchanged specifier starts resolving to a
 different file under esbuild's extension order, such as a new `x.ts` beside an imported
-`x.js` or `x.tsx` beside `x.ts`. Then `--check-hashes` keeps hashing the old file and misses edits to the new one until
-the next `gen`, and only `gen --check` (which rebuilds the graph) notices.
+`x.js` or `x.tsx` beside `x.ts`. Then `--check-hashes` keeps hashing the old file and misses
+the new one and later edits to it until the next `gen`; only `gen --check`, which rebuilds the
+graph, notices.
 
 Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
 checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a
