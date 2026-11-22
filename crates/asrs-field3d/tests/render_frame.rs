@@ -349,3 +349,45 @@ fn grid_helper_matches_three() {
         Color::hex(4473924.0).r as f32 as f64
     );
 }
+
+#[test]
+fn material_arrays_draw_one_group_per_visible_material() {
+    let mut scene = Scene::new();
+    let root = scene.root;
+    let geometry = Geometry::new(primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
+    let groups = geometry.geometry.groups.clone();
+    assert_eq!(groups.len(), 6);
+    let opaque = Arc::new(PhongMaterial::new());
+    let hidden = Arc::new(PhongMaterial {
+        visible: false,
+        ..PhongMaterial::new()
+    });
+    let glass = Arc::new(PhongMaterial {
+        transparent: true,
+        side: Side::Double,
+        ..PhongMaterial::new()
+    });
+    let materials = vec![opaque.clone(), hidden, glass.clone(), opaque.clone()];
+    let id = scene.add_mesh(root, Mesh::new(geometry, materials));
+    let frame = build_frame(&mut scene, &mut camera(), OPTIONS);
+    let draws: Vec<(u64, Option<usize>, Side)> = frame
+        .draws
+        .iter()
+        .map(|d| match &d.kind {
+            DrawKind::Mesh {
+                material, group, ..
+            } => (material.id, group.map(|g| g.start), d.side),
+            _ => panic!("only the mesh draws"),
+        })
+        .collect();
+    assert!(frame.draws.iter().all(|d| d.object == id));
+    assert_eq!(
+        draws,
+        vec![
+            (opaque.id, Some(groups[0].start), Side::Front),
+            (opaque.id, Some(groups[3].start), Side::Front),
+            (glass.id, Some(groups[2].start), Side::Back),
+            (glass.id, Some(groups[2].start), Side::Front),
+        ]
+    );
+}

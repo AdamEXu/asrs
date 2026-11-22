@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use asrs_js::math;
 
 use crate::three::{
-    ArrayData, Box3, BufferAttribute, BufferGeometry, Color, Graph, Matrix4, ObjectId, Sphere,
-    Vector3,
+    ArrayData, Box3, BufferAttribute, BufferGeometry, Color, Graph, Group, Matrix4, ObjectId,
+    Sphere, Vector3,
 };
 
 static NEXT_RESOURCE_ID: AtomicU64 = AtomicU64::new(1);
@@ -268,30 +268,81 @@ fn sphere_union(sphere: Sphere, other: Sphere) -> Sphere {
     sphere_expand_by_point(sphere, other.center - v2)
 }
 
+/// A mesh's `material`: one material, or an array that three draws once per geometry group with
+/// `materials[group.materialIndex]`, skipping groups whose material is missing or invisible.
+#[derive(Clone, Debug)]
+pub enum Materials {
+    Single(Arc<PhongMaterial>),
+    Array(Vec<Arc<PhongMaterial>>),
+}
+
+impl Materials {
+    pub fn single(&self) -> Option<&Arc<PhongMaterial>> {
+        match self {
+            Materials::Single(material) => Some(material),
+            Materials::Array(_) => None,
+        }
+    }
+}
+
+impl From<Arc<PhongMaterial>> for Materials {
+    fn from(material: Arc<PhongMaterial>) -> Self {
+        Materials::Single(material)
+    }
+}
+
+impl From<Vec<Arc<PhongMaterial>>> for Materials {
+    fn from(materials: Vec<Arc<PhongMaterial>>) -> Self {
+        Materials::Array(materials)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Mesh {
     pub geometry: Arc<Geometry>,
-    pub material: Arc<PhongMaterial>,
+    pub material: Materials,
     pub instances: Option<Instances>,
     pub cast_shadow: bool,
     pub receive_shadow: bool,
 }
 
 impl Mesh {
-    pub fn new(geometry: Arc<Geometry>, material: Arc<PhongMaterial>) -> Self {
+    pub fn new(geometry: Arc<Geometry>, material: impl Into<Materials>) -> Self {
         Mesh {
             geometry,
-            material,
+            material: material.into(),
             instances: None,
             cast_shadow: false,
             receive_shadow: false,
         }
     }
 
-    pub fn instanced(geometry: Arc<Geometry>, material: Arc<PhongMaterial>, count: usize) -> Self {
+    pub fn instanced(
+        geometry: Arc<Geometry>,
+        material: impl Into<Materials>,
+        count: usize,
+    ) -> Self {
         Mesh {
             instances: Some(Instances::new(count)),
             ..Mesh::new(geometry, material)
+        }
+    }
+
+    /// The `(material, group)` pairs three's render list gets for this mesh, in group order.
+    pub fn material_groups(&self) -> Vec<(&Arc<PhongMaterial>, Option<Group>)> {
+        match &self.material {
+            Materials::Single(material) => vec![(material, None)],
+            Materials::Array(materials) => self
+                .geometry
+                .geometry
+                .groups
+                .iter()
+                .filter_map(|group| {
+                    materials
+                        .get(group.material_index)
+                        .map(|material| (material, Some(*group)))
+                })
+                .collect(),
         }
     }
 }

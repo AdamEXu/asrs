@@ -5,11 +5,13 @@
 //! shadow stamps and the palette colorize pass all run through the crate's canvas
 //! rasterizer.
 
+#![deny(clippy::disallowed_methods)]
+
 use std::collections::HashMap;
 
-use asrs_canvas::display::ImageDataSource;
-use asrs_canvas::raster::CanvasError;
-use asrs_canvas::{Call, Canvas2d, Gradient, ImageData, Pixmap, Property, Raster};
+use crate::display::ImageDataSource;
+use crate::raster::CanvasError;
+use crate::{Call, Canvas2d, Gradient, ImageData, Pixmap, Property, Raster};
 use asrs_js::math;
 use asrs_js::math::int::{to_uint8_clamp, to_uint32};
 use asrs_js::number::{self, to_int32};

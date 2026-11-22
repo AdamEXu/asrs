@@ -9,6 +9,7 @@ pub mod display;
 pub mod geometry;
 pub mod gradient;
 pub mod hairline;
+pub mod heatmap;
 pub mod msaa;
 pub mod path;
 pub mod pixels;

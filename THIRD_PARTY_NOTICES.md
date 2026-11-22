@@ -71,7 +71,7 @@ asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
 - License: MIT ([`licenses/heatmap.js.txt`](licenses/heatmap.js.txt))
 - Copyright (c) 2015 Patrick Wied
 - Version: 2.0.5, the fork at `github.com/jwbonner/heatmap.js#24b4455`
-- Used in: `crates/asrs-tabs/src/heatmap.rs`
+- Used in: `crates/asrs-canvas/src/heatmap.rs`
 
 ## @msgpack/msgpack
 

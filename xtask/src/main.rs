@@ -1,5 +1,6 @@
 #![allow(clippy::disallowed_methods)]
 
+mod app;
 mod assets;
 mod bundle;
 mod canvas;
@@ -31,6 +32,7 @@ type Result<T = ()> = std::result::Result<T, String>;
 const USAGE: &str = "usage: cargo xtask <command>
 
 commands:
+  app       Electron scenario driver: run upstream on parity/scenarios, compare, normalize (see `cargo xtask app`)
   check     layout rules, gpui vendor and features, rustfmt, clippy, tests
   layout    crate dependency and lint opt-out rules only
   assets    copy upstream assets into assets/
@@ -51,6 +53,7 @@ commands:
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
+        Some("app") => app::run(&args[1..]),
         Some("check") => check::run(),
         Some("layout") => layout::run(),
         Some("assets") => assets::run(),

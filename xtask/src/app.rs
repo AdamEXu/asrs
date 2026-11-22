@@ -1,0 +1,836 @@
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use asrs_parity::json::{self, Json};
+use asrs_parity::pixel::{self, Rgba};
+use lcms2::{Intent, PixelFormat, Profile, Transform};
+
+use crate::Result;
+use crate::oracle::{self, Paths};
+
+const USAGE: &str = r"usage: cargo xtask app <command>
+
+The Electron scenario driver (oracle/src/appMain.ts) runs upstream's real app on scenarios from
+parity/scenarios/*.json with an isolated userData directory and drives it with executeJavaScript
+and sendInputEvent only. Each run directory holds run.json, captures/<name>.png (capturePage)
+with captures/<name>.json (probed boxes, text boxes, masks, colour space), per-canvas getImageData
+dumps (<name>.canvas-<i>.png), WebGL drawing-buffer dumps read right after the draw
+(<name>.gl-<i>.png), files/ (what the app wrote to userData) and inputs/ (generated logs).
+
+Captures are sRGB: Chromium composites with --force-color-profile=srgb. With --colour display it
+keeps the display's colour space instead and the driver stores the display's ICC profile as
+display.icc beside the captures; `normalize` converts those to sRGB.
+
+  run [<scenario>...] [--scale 1|2] [--theme light|dark] [--gl <mode>] [--colour srgb|display]
+      [--label <label>]
+                  every variant (scales x themes) of each scenario (default: all), into
+                  target/parity/app/<label>/<scenario>/<scale>x-<theme>/ (label default `run`).
+                  --gl native|swiftshader|d3d11-warp picks the 3D switches (default native on
+                  macOS, swiftshader elsewhere)
+  compare <dir> <dir>
+                  two run labels or directories: window captures equal outside the recorded
+                  masks; canvas and drawing-buffer dumps, DOM dumps and written files equal
+  normalize <dir> every window capture to sRGB through display.icc (lcms2, relative
+                  colorimetric, 8 bit) as captures/<name>.srgb.png
+  check [--scale 1|2]... [--theme light|dark]... [--gl <mode>]
+                  the driver's exit criteria on this host: every scenario run twice and compared,
+                  the colour-patch capture within 1 level per channel of its source, and the
+                  colour patch with the display profile normalized and reported";
+
+const SCALES: [u32; 2] = [1, 2];
+const THEMES: [&str; 2] = ["light", "dark"];
+const GL_MODES: [&str; 3] = ["native", "swiftshader", "d3d11-warp"];
+const COLOURS: [&str; 2] = ["srgb", "display"];
+const RANDOM_SEED: u32 = 1;
+
+pub fn run(args: &[String]) -> Result {
+    let paths = Paths::new()?;
+    match args.split_first() {
+        Some((cmd, rest)) if cmd == "run" => {
+            let options = RunOptions::parse(rest)?;
+            oracle::build_harness(&paths)?;
+            run_scenarios(&paths, &options).map(|_| ())
+        }
+        Some((cmd, [a, b])) if cmd == "compare" => {
+            let report = compare(&run_dir(&paths, a), &run_dir(&paths, b))?;
+            report.print();
+            report.result()
+        }
+        Some((cmd, [dir])) if cmd == "normalize" => {
+            normalize_tree(&run_dir(&paths, dir)).map(|n| eprintln!("normalized {n} captures"))
+        }
+        Some((cmd, rest)) if cmd == "check" => check(&paths, rest),
+        _ => Err(USAGE.to_owned()),
+    }
+}
+
+fn run_dir(paths: &Paths, arg: &str) -> PathBuf {
+    let dir = PathBuf::from(arg);
+    if dir.is_dir() {
+        dir
+    } else {
+        paths.root.join("target/parity/app").join(arg)
+    }
+}
+
+#[derive(Default)]
+struct RunOptions {
+    scenarios: Vec<String>,
+    scales: Vec<u32>,
+    themes: Vec<String>,
+    gl: Option<String>,
+    colour: String,
+    label: String,
+}
+
+impl RunOptions {
+    fn parse(args: &[String]) -> Result<Self> {
+        let mut options = RunOptions {
+            label: "run".to_owned(),
+            colour: "srgb".to_owned(),
+            ..Default::default()
+        };
+        let mut iter = args.iter();
+        while let Some(arg) = iter.next() {
+            let mut value = |name: &str| {
+                iter.next()
+                    .cloned()
+                    .ok_or_else(|| format!("{name} needs a value\n\n{USAGE}"))
+            };
+            match arg.as_str() {
+                "--scale" => options.scales.push(
+                    value("--scale")?
+                        .parse()
+                        .ok()
+                        .filter(|s| SCALES.contains(s))
+                        .ok_or("--scale is 1 or 2")?,
+                ),
+                "--theme" => {
+                    let theme = value("--theme")?;
+                    if !THEMES.contains(&theme.as_str()) {
+                        return Err("--theme is light or dark".to_owned());
+                    }
+                    options.themes.push(theme);
+                }
+                "--gl" => {
+                    let gl = value("--gl")?;
+                    if !GL_MODES.contains(&gl.as_str()) {
+                        return Err(format!("--gl is one of {}", GL_MODES.join(", ")));
+                    }
+                    options.gl = Some(gl);
+                }
+                "--colour" => {
+                    options.colour = value("--colour")?;
+                    if !COLOURS.contains(&options.colour.as_str()) {
+                        return Err("--colour is srgb or display".to_owned());
+                    }
+                }
+                "--label" => options.label = value("--label")?,
+                flag if flag.starts_with("--") => {
+                    return Err(format!("unknown option {flag}\n\n{USAGE}"));
+                }
+                name => options
+                    .scenarios
+                    .push(name.trim_end_matches(".json").to_owned()),
+            }
+        }
+        Ok(options)
+    }
+}
+
+struct Scenario {
+    name: String,
+    file: PathBuf,
+    page: String,
+    scales: Vec<u32>,
+    themes: Vec<String>,
+    gl: bool,
+}
+
+fn scenarios_dir(paths: &Paths) -> PathBuf {
+    paths.root.join("parity/scenarios")
+}
+
+fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
+    let dir = scenarios_dir(paths);
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            e.file_name()
+                .to_str()?
+                .strip_suffix(".json")
+                .map(str::to_owned)
+        })
+        .collect();
+    names.sort();
+    if let Some(missing) = only.iter().find(|n| !names.contains(n)) {
+        return Err(format!("no scenario {missing} in {}", dir.display()));
+    }
+    names
+        .into_iter()
+        .filter(|n| only.is_empty() || only.contains(n))
+        .map(|name| {
+            let file = dir.join(format!("{name}.json"));
+            let value = read_json(&file)?;
+            let numbers = |key: &str, default: &[u32]| -> Vec<u32> {
+                value.get(key).and_then(Json::as_array).map_or_else(
+                    || default.to_vec(),
+                    |a| {
+                        a.iter()
+                            .filter_map(Json::as_f64)
+                            .map(|n| n as u32)
+                            .collect()
+                    },
+                )
+            };
+            let strings = |key: &str, default: &[&str]| -> Vec<String> {
+                value.get(key).and_then(Json::as_array).map_or_else(
+                    || default.iter().map(|s| (*s).to_owned()).collect(),
+                    |a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(ToString::to_string))
+                            .collect()
+                    },
+                )
+            };
+            Ok(Scenario {
+                page: value
+                    .get("page")
+                    .and_then(Json::as_str)
+                    .map_or_else(|| "app".to_owned(), ToString::to_string),
+                scales: numbers("scales", &SCALES),
+                themes: strings("themes", &THEMES),
+                gl: value.get("gl") == Some(&Json::Bool(true)),
+                name,
+                file,
+            })
+        })
+        .collect()
+}
+
+fn default_gl() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "native"
+    } else {
+        "swiftshader"
+    }
+}
+
+/// Chromium reads these before the main script runs, so they go on the command line; the
+/// driver refuses to start when one is missing or an unexpected GL or colour switch is present.
+fn electron_switches(scale: u32, gl: Option<&str>, colour: &str) -> Vec<String> {
+    let mut switches = vec![
+        format!("--force-device-scale-factor={scale}"),
+        "--lang=en-US".to_owned(),
+        "--disable-accelerated-2d-canvas".to_owned(),
+        format!("--js-flags=--random-seed={RANDOM_SEED}"),
+        "--force-prefers-reduced-motion".to_owned(),
+        "--disable-partial-raster".to_owned(),
+    ];
+    if colour == "srgb" {
+        switches.push("--force-color-profile=srgb".to_owned());
+    }
+    match gl {
+        Some("swiftshader") => switches.push("--enable-unsafe-swiftshader".to_owned()),
+        Some("d3d11-warp") => {
+            switches.push("--enable-unsafe-swiftshader".to_owned());
+            switches.push("--use-angle=d3d11-warp".to_owned());
+        }
+        _ => {}
+    }
+    switches
+}
+
+fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path) -> Result {
+    let Variant {
+        scale,
+        theme,
+        gl,
+        colour,
+    } = variant;
+    let gl_switch = scenario.gl.then_some(*gl);
+    let mut command = Command::new(paths.electron()?);
+    command
+        .args(electron_switches(*scale, gl_switch, colour))
+        .arg(paths.dist.join("appMain.mjs"))
+        .arg(&scenario.file)
+        .arg(out)
+        .arg(format!("--scale={scale}"))
+        .arg(format!("--theme={theme}"))
+        .arg(format!("--gl={gl}"))
+        .arg(format!("--colour={colour}"))
+        .current_dir(&paths.root)
+        .env_remove("ELECTRON_RUN_AS_NODE");
+    oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
+    let status = command
+        .status()
+        .map_err(|e| format!("running Electron: {e}"))?;
+    let record = out.join("run.json");
+    if !record.exists() {
+        return Err(format!(
+            "{} {scale}x {theme}: the driver wrote no run.json ({status})",
+            scenario.name
+        ));
+    }
+    let errors = read_json(&record)?
+        .get("errors")
+        .and_then(Json::as_array)
+        .map_or(0, <[Json]>::len);
+    if !status.success() || errors > 0 {
+        return Err(format!(
+            "{} {scale}x {theme}: driver failed ({status}, {errors} errors in {})",
+            scenario.name,
+            record.display()
+        ));
+    }
+    Ok(())
+}
+
+struct Variant<'a> {
+    scale: u32,
+    theme: &'a str,
+    gl: &'a str,
+    colour: &'a str,
+}
+
+fn run_scenarios(paths: &Paths, options: &RunOptions) -> Result<PathBuf> {
+    let root = paths.root.join("target/parity/app").join(&options.label);
+    let gl = options.gl.as_deref().unwrap_or(default_gl());
+    let mut failures = Vec::new();
+    for scenario in load_scenarios(paths, &options.scenarios)? {
+        for &scale in &scenario.scales {
+            if !options.scales.is_empty() && !options.scales.contains(&scale) {
+                continue;
+            }
+            for theme in &scenario.themes {
+                if !options.themes.is_empty() && !options.themes.contains(theme) {
+                    continue;
+                }
+                let out = root.join(&scenario.name).join(format!("{scale}x-{theme}"));
+                let variant = Variant {
+                    scale,
+                    theme,
+                    gl,
+                    colour: &options.colour,
+                };
+                if let Err(e) = launch(paths, &scenario, &variant, &out) {
+                    eprintln!("{e}");
+                    failures.push(e);
+                }
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(root)
+    } else {
+        Err(format!(
+            "{} runs failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        ))
+    }
+}
+
+fn read_json(path: &Path) -> Result<Json> {
+    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn rects(value: Option<&Json>) -> Vec<[f64; 4]> {
+    value
+        .and_then(Json::as_array)
+        .map_or_else(Vec::new, |items| {
+            items
+                .iter()
+                .filter_map(|m| {
+                    let r: Vec<f64> = m
+                        .get("rect")
+                        .and_then(Json::as_array)?
+                        .iter()
+                        .filter_map(Json::as_f64)
+                        .collect();
+                    r.try_into().ok()
+                })
+                .collect()
+        })
+}
+
+fn mask_image(width: u32, height: u32, scale: f64, masks: &[[f64; 4]]) -> Vec<bool> {
+    let mut masked = vec![false; (width * height) as usize];
+    for [x, y, w, h] in masks {
+        let clamp = |v: f64, max: u32| (v.max(0.0) as u32).min(max);
+        let (x0, y0) = (
+            clamp((x * scale).floor(), width),
+            clamp((y * scale).floor(), height),
+        );
+        let (x1, y1) = (
+            clamp(((x + w) * scale).ceil(), width),
+            clamp(((y + h) * scale).ceil(), height),
+        );
+        for row in y0..y1 {
+            let start = (row * width) as usize;
+            masked[start + x0 as usize..start + x1 as usize].fill(true);
+        }
+    }
+    masked
+}
+
+fn differing_pixels(a: &Rgba, b: &Rgba, masked: Option<&[bool]>) -> Option<usize> {
+    if a.width != b.width || a.height != b.height {
+        return None;
+    }
+    Some(
+        a.data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(b.data.as_chunks::<4>().0)
+            .enumerate()
+            .filter(|(i, (p, q))| p != q && !masked.is_some_and(|m| m[*i]))
+            .count(),
+    )
+}
+
+#[derive(Default)]
+struct Report {
+    compared: Vec<String>,
+    failures: Vec<String>,
+}
+
+impl Report {
+    fn print(&self) {
+        for line in &self.compared {
+            eprintln!("  {line}");
+        }
+        for line in &self.failures {
+            eprintln!("FAIL {line}");
+        }
+    }
+
+    fn result(&self) -> Result {
+        if self.failures.is_empty() && !self.compared.is_empty() {
+            Ok(())
+        } else if self.compared.is_empty() {
+            Err("nothing compared".to_owned())
+        } else {
+            Err(format!("{} comparisons failed", self.failures.len()))
+        }
+    }
+}
+
+fn variant_dirs(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut dirs = Vec::new();
+    for scenario in sorted_entries(root)? {
+        if !scenario.is_dir() {
+            continue;
+        }
+        for variant in sorted_entries(&scenario)? {
+            if variant.join("run.json").exists() {
+                dirs.push(variant);
+            }
+        }
+    }
+    Ok(dirs)
+}
+
+fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut entries: Vec<PathBuf> = fs::read_dir(dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .collect();
+    entries.sort();
+    Ok(entries)
+}
+
+fn without_key(value: &Json, key: &str) -> Json {
+    match value {
+        Json::Object(pairs) => Json::Object(
+            pairs
+                .iter()
+                .filter(|(k, _)| !k.eq_str(key))
+                .cloned()
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+fn compare(a_root: &Path, b_root: &Path) -> Result<Report> {
+    let mut report = Report::default();
+    for a in variant_dirs(a_root)? {
+        let rel = a.strip_prefix(a_root).expect("variant under its root");
+        let label = rel.display().to_string();
+        let b = b_root.join(rel);
+        if !b.join("run.json").exists() {
+            report
+                .failures
+                .push(format!("{label}: missing in {}", b_root.display()));
+            continue;
+        }
+        compare_variant(&label, &a, &b, &mut report)?;
+    }
+    for b in variant_dirs(b_root)? {
+        let rel = b.strip_prefix(b_root).expect("variant under its root");
+        if !a_root.join(rel).join("run.json").exists() {
+            report.failures.push(format!(
+                "{}: missing in {}",
+                rel.display(),
+                a_root.display()
+            ));
+        }
+    }
+    Ok(report)
+}
+
+fn capture_names(captures: &Path) -> Result<BTreeSet<String>> {
+    Ok(sorted_entries(captures)?
+        .iter()
+        .filter_map(|e| {
+            e.file_name()?
+                .to_str()?
+                .strip_suffix(".json")
+                .map(str::to_owned)
+        })
+        .collect())
+}
+
+fn record_scale(record: &Json, file: &Path) -> Result<f64> {
+    record
+        .get("scale")
+        .and_then(Json::as_f64)
+        .ok_or_else(|| format!("{}: no scale", file.display()))
+}
+
+fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Result {
+    let captures = a.join("captures");
+    let names = capture_names(&captures)?;
+    for extra in capture_names(&b.join("captures"))?.difference(&names) {
+        report
+            .failures
+            .push(format!("{label} {extra}: missing in {}", a.display()));
+    }
+    for name in &names {
+        let file = format!("{name}.json");
+        let (ja, jb) = (
+            read_json(&captures.join(&file))?,
+            read_json(&b.join("captures").join(&file))?,
+        );
+        if without_key(&ja, "timing") != without_key(&jb, "timing") {
+            report.failures.push(format!(
+                "{label} {name}: DOM dump or capture record differs"
+            ));
+        }
+        let scale = record_scale(&ja, &captures.join(&file))?;
+        let image_a = pixel::read_png(&captures.join(format!("{name}.png")))?;
+        let image_b = pixel::read_png(&b.join("captures").join(format!("{name}.png")))?;
+        let mut masks = rects(ja.get("masks"));
+        masks.extend(rects(jb.get("masks")));
+        let masked = mask_image(image_a.width, image_a.height, scale, &masks);
+        let masked_px = masked.iter().filter(|m| **m).count();
+        match differing_pixels(&image_a, &image_b, Some(&masked)) {
+            Some(0) => report.compared.push(format!(
+                "{label} {name}: window {}x{} equal ({} masks, {masked_px} px masked)",
+                image_a.width,
+                image_a.height,
+                masks.len()
+            )),
+            Some(n) => report.failures.push(format!(
+                "{label} {name}: {n} window pixels differ outside the masks"
+            )),
+            None => report
+                .failures
+                .push(format!("{label} {name}: window captures differ in size")),
+        }
+        for (kind, key) in [("canvas", "canvases"), ("drawing buffer", "gl")] {
+            let dumps = ja
+                .get(key)
+                .and_then(Json::as_array)
+                .ok_or_else(|| format!("{label} {name}: capture record has no {key}"))?;
+            for dump in dumps {
+                let file = dump
+                    .get("file")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| format!("{label} {name}: {kind} dump without a file"))?
+                    .to_string();
+                let pa = pixel::read_png(&captures.join(&file))?;
+                let pb = pixel::read_png(&b.join("captures").join(&file))?;
+                if pa == pb {
+                    report.compared.push(format!(
+                        "{label} {name}: {kind} {file} {}x{} byte-identical",
+                        pa.width, pa.height
+                    ));
+                } else {
+                    report.failures.push(format!(
+                        "{label} {name}: {kind} {file} differs ({:?} px)",
+                        differing_pixels(&pa, &pb, None)
+                    ));
+                }
+            }
+        }
+    }
+    if names.is_empty() {
+        report.failures.push(format!("{label}: no captures"));
+    }
+    let files = |dir: &Path| -> Result<Vec<(String, Vec<u8>)>> {
+        let mut out = Vec::new();
+        let root = dir.join("files");
+        if root.exists() {
+            collect_files(&root, &root, &mut out)?;
+        }
+        Ok(out)
+    };
+    let (fa, fb) = (files(a)?, files(b)?);
+    if fa == fb {
+        report.compared.push(format!(
+            "{label}: {} written files equal ({})",
+            fa.len(),
+            fa.iter()
+                .map(|(n, _)| n.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    } else {
+        report
+            .failures
+            .push(format!("{label}: written files differ"));
+    }
+    Ok(())
+}
+
+fn collect_files(root: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> Result {
+    for entry in sorted_entries(dir)? {
+        if entry.is_dir() {
+            collect_files(root, &entry, out)?;
+        } else {
+            let rel = entry
+                .strip_prefix(root)
+                .expect("file under its root")
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.push((
+                rel,
+                fs::read(&entry).map_err(|e| format!("{}: {e}", entry.display()))?,
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Converts a capture from the display's colour space to sRGB. Alpha is carried over unchanged.
+pub(crate) fn normalize(image: &Rgba, icc: Option<&[u8]>) -> Result<Rgba> {
+    let Some(icc) = icc else {
+        return Ok(image.clone());
+    };
+    let input = Profile::new_icc(icc).map_err(|e| format!("display profile: {e}"))?;
+    let srgb = Profile::new_srgb();
+    let transform: Transform<[u8; 3], [u8; 3]> = Transform::new(
+        &input,
+        PixelFormat::RGB_8,
+        &srgb,
+        PixelFormat::RGB_8,
+        Intent::RelativeColorimetric,
+    )
+    .map_err(|e| format!("display profile transform: {e}"))?;
+    let pixels = image.data.as_chunks::<4>().0;
+    let rgb: Vec<[u8; 3]> = pixels.iter().map(|p| [p[0], p[1], p[2]]).collect();
+    let mut converted = vec![[0u8; 3]; rgb.len()];
+    transform.transform_pixels(&rgb, &mut converted);
+    let data = converted
+        .iter()
+        .zip(pixels)
+        .flat_map(|(c, p)| [c[0], c[1], c[2], p[3]])
+        .collect();
+    Ok(Rgba {
+        width: image.width,
+        height: image.height,
+        data,
+    })
+}
+
+fn display_profile(variant: &Path) -> Result<Option<Vec<u8>>> {
+    let record = read_json(&variant.join("run.json"))?;
+    let source = record
+        .get("displayProfile")
+        .and_then(|p| p.get("source"))
+        .and_then(Json::as_str)
+        .map(ToString::to_string);
+    match source.as_deref() {
+        Some("none" | "forced-srgb") => Ok(None),
+        Some(_) => fs::read(variant.join("display.icc"))
+            .map(Some)
+            .map_err(|e| format!("{}: {e}", variant.display())),
+        None => Err(format!(
+            "{}: run.json records no display profile",
+            variant.display()
+        )),
+    }
+}
+
+fn normalize_variant(variant: &Path) -> Result<Vec<(String, Rgba)>> {
+    let icc = display_profile(variant)?;
+    let captures = variant.join("captures");
+    let mut out = Vec::new();
+    for entry in sorted_entries(&captures)? {
+        let name = entry
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        let Some(name) = name.strip_suffix(".json") else {
+            continue;
+        };
+        let image = pixel::read_png(&captures.join(format!("{name}.png")))?;
+        let srgb = normalize(&image, icc.as_deref())?;
+        pixel::write_png(&captures.join(format!("{name}.srgb.png")), &srgb)?;
+        out.push((name.to_owned(), srgb));
+    }
+    Ok(out)
+}
+
+fn normalize_tree(root: &Path) -> Result<usize> {
+    let mut count = 0;
+    for variant in variant_dirs(root)? {
+        count += normalize_variant(&variant)?.len();
+    }
+    Ok(count)
+}
+
+struct PatchResult {
+    patches: usize,
+    exact: usize,
+    max_delta: u8,
+    over: Vec<String>,
+}
+
+fn check_patches(variant: &Path) -> Result<PatchResult> {
+    let mut result = PatchResult {
+        patches: 0,
+        exact: 0,
+        max_delta: 0,
+        over: Vec::new(),
+    };
+    for (name, image) in normalize_variant(variant)? {
+        let file = variant.join("captures").join(format!("{name}.json"));
+        let record = read_json(&file)?;
+        let scale = record_scale(&record, &file)?;
+        let patches = record
+            .get("patches")
+            .and_then(Json::as_array)
+            .ok_or_else(|| format!("{}: no patches", file.display()))?;
+        for patch in patches {
+            let rgb: [u8; 3] = patch
+                .get("rgb")
+                .and_then(Json::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Json::as_f64)
+                        .map(|v| v as u8)
+                        .collect::<Vec<_>>()
+                })
+                .and_then(|v| v.try_into().ok())
+                .ok_or_else(|| format!("{}: patch without an rgb triple", file.display()))?;
+            let [x, y, w, h] = rects(Some(&Json::Array(vec![patch.clone()])))
+                .first()
+                .copied()
+                .ok_or("patch without a rect")?;
+            let mut worst = 0u8;
+            for py in (y * scale) as u32..((y + h) * scale) as u32 {
+                for px in (x * scale) as u32..((x + w) * scale) as u32 {
+                    let at = ((py * image.width + px) * 4) as usize;
+                    for c in 0..3 {
+                        worst = worst.max(image.data[at + c].abs_diff(rgb[c]));
+                    }
+                }
+            }
+            result.patches += 1;
+            result.exact += usize::from(worst == 0);
+            result.max_delta = result.max_delta.max(worst);
+            if worst > 1 {
+                result.over.push(format!(
+                    "{name} rgb({},{},{}) off by {worst}",
+                    rgb[0], rgb[1], rgb[2]
+                ));
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn colour_patch_results(root: &Path, scenario: &Scenario) -> Result<Vec<(String, PatchResult)>> {
+    let mut results = Vec::new();
+    for variant in sorted_entries(&root.join(&scenario.name))? {
+        if variant.join("run.json").exists() {
+            let label = variant
+                .strip_prefix(root)
+                .expect("under root")
+                .display()
+                .to_string();
+            results.push((label, check_patches(&variant)?));
+        }
+    }
+    Ok(results)
+}
+
+fn check(paths: &Paths, args: &[String]) -> Result {
+    let mut options = RunOptions::parse(args)?;
+    if !options.scenarios.is_empty() || options.label != "run" || options.colour != "srgb" {
+        return Err(USAGE.to_owned());
+    }
+    oracle::build_harness(paths)?;
+    let scenarios = load_scenarios(paths, &[])?;
+    let mut roots = Vec::new();
+    for label in ["check-a", "check-b"] {
+        options.label = label.to_owned();
+        roots.push(run_scenarios(paths, &options)?);
+    }
+    let mut failures = Vec::new();
+    let report = compare(&roots[0], &roots[1])?;
+    report.print();
+    if let Err(e) = report.result() {
+        failures.push(format!("repeat runs: {e}"));
+    }
+    let app_scenarios = scenarios.iter().filter(|s| s.page == "app").count();
+    let gl_scenarios = scenarios.iter().filter(|s| s.gl).count();
+    if app_scenarios < 5 || gl_scenarios == 0 {
+        failures.push(format!(
+            "{app_scenarios} app scenarios and {gl_scenarios} 3D scenarios; the check needs at least 5 and 1"
+        ));
+    }
+    for scenario in scenarios.iter().filter(|s| s.page == "colour-patch") {
+        for (label, r) in colour_patch_results(&roots[0], scenario)? {
+            eprintln!(
+                "  {label}: {}/{} patches exact after normalization, max delta {}",
+                r.exact, r.patches, r.max_delta
+            );
+            if r.patches != 512 || !r.over.is_empty() {
+                failures.push(format!(
+                    "{label}: {} patches, {} over 1 level: {}",
+                    r.patches,
+                    r.over.len(),
+                    r.over.join("; ")
+                ));
+            }
+        }
+        options.label = "check-display".to_owned();
+        options.scenarios = vec![scenario.name.clone()];
+        options.colour = "display".to_owned();
+        let root = run_scenarios(paths, &options)?;
+        for (label, r) in colour_patch_results(&root, scenario)? {
+            eprintln!(
+                "  {label} with the display profile (reported, not gated): {}/{} exact after lcms2 normalization, max delta {}, {} over 1 level",
+                r.exact,
+                r.patches,
+                r.max_delta,
+                r.over.len()
+            );
+        }
+    }
+    if failures.is_empty() {
+        eprintln!("app check: passed");
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
+}

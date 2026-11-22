@@ -32,6 +32,7 @@ await esbuild.build({
   platform: "browser",
   target: "esnext",
   nodePaths: [path.join(upstream, "node_modules")],
+  alias: { "@upstream": path.join(upstream, "src") },
   logLevel: "warning"
 });
 fs.writeFileSync(
