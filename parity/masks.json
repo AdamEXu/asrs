@@ -1,0 +1,13 @@
+{
+  "about": "Per-platform masks of PLAN section 2.5 gate 5, keyed by process.platform as run.json records it. Rects are CSS px of the window content; deviceRow and deviceColumn are device pixels, negative from the bottom or right; transparent masks pixels with alpha 0 on either side. Per-capture masks (focused text inputs, webviews, scrollbars, scenario selectors) come from the capture records of both sides.",
+  "darwin": [
+    { "reason": "traffic lights", "rect": [0, 0, 80, 38] },
+    { "reason": "vibrancy backdrop", "transparent": true }
+  ],
+  "win32": [
+    { "reason": "acrylic backdrop", "transparent": true },
+    { "reason": "DWM border", "deviceRow": 0 },
+    { "reason": "DWM border", "deviceColumn": -1 }
+  ],
+  "linux": []
+}
