@@ -4,7 +4,7 @@
 //! timers, window frames, decode threads pumped by foreground tasks, `historical-start` on the
 //! background executor).
 //!
-//! Each session of `parity/specs/hub/entity.sessions.jsonl` runs twice: through `asrs-cli
+//! Each session of `parity/specs/hub/entity-sessions.requests.jsonl` runs twice: through `asrs-cli
 //! historical-session`, whose trace must equal the oracle's (`hub/entity-sessions`), and
 //! through the entity, driven by the main messages that make the hub do the same (`open-files`
 //! for `open`, `prepare-export` for `loadAll`). The entity's status callbacks must equal the
@@ -58,7 +58,7 @@ use asrs_ui::gpui::{
     Render, Window, div, px, size,
 };
 
-const SESSIONS: &str = "parity/specs/hub/entity.sessions.jsonl";
+const SESSIONS: &str = "parity/specs/hub/entity-sessions.requests.jsonl";
 const TIMEOUT: Duration = Duration::from_secs(120);
 
 fn root() -> PathBuf {

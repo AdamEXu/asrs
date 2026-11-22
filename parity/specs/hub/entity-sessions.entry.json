@@ -1,8 +1,8 @@
 {
   "entry": "historicalSession",
-  "args": ["parity/specs/hub/entity.sessions.jsonl"],
+  "args": ["parity/specs/hub/entity-sessions.requests.jsonl"],
   "inputs": [
-    "entity.sessions.jsonl",
+    "entity-sessions.requests.jsonl",
     "logs/corpus-a-struct-wpilib.wpilog",
     "logs/corpus-b-random-r2-3.rlog"
   ]
