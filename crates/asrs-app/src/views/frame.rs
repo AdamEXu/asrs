@@ -69,32 +69,38 @@ pub trait FrameHost: 'static {
 
 /// What the page reads from its layout while the model runs: the frame keeps it current
 /// before every input it dispatches and every render.
-#[derive(Clone, Debug)]
-pub struct FrameGeometry(Rc<RefCell<(BodyClasses, f64)>>);
+#[derive(Clone, Debug, Default)]
+pub struct FrameGeometry(Rc<RefCell<GeometryState>>);
 
-impl Default for FrameGeometry {
-    fn default() -> Self {
-        FrameGeometry(Rc::new(RefCell::new((BodyClasses::default(), 0.0))))
-    }
+#[derive(Debug, Default)]
+struct GeometryState {
+    classes: BodyClasses,
+    inner_height: f64,
+    side_bar: [f64; 4],
 }
 
 impl FrameGeometry {
     pub fn sync(&self, hub: &HubModel) {
-        self.0.borrow_mut().0 = BodyClasses::from_names(hub.body_classes().iter().copied());
+        self.0.borrow_mut().classes = BodyClasses::from_names(hub.body_classes().iter().copied());
     }
 
     pub fn set_inner_height(&self, height: f64) {
-        self.0.borrow_mut().1 = height;
+        self.0.borrow_mut().inner_height = height;
     }
 
     /// `window.innerHeight`.
     pub fn inner_height(&self) -> f64 {
-        self.0.borrow().1
+        self.0.borrow().inner_height
     }
 
     /// `RENDERER_CONTENT.getBoundingClientRect().top`.
     pub fn renderer_top(&self, show_timeline: bool) -> f64 {
-        renderer_top(self.0.borrow().0, show_timeline)
+        renderer_top(self.0.borrow().classes, show_timeline)
+    }
+
+    /// `div.side-bar`'s box as last laid out.
+    pub fn side_bar(&self) -> [f64; 4] {
+        self.0.borrow().side_bar
     }
 }
 
@@ -455,6 +461,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             root = root.child(probe(FrameElement::ViewerBackground, bg));
         }
         if let Some(rect) = layout.rect(FrameElement::SideBar) {
+            self.geometry.0.borrow_mut().side_bar = rect;
             let mut side_bar = place(rect, (0.0, 0.0)).overflow_hidden();
             if let Some(content) = self.host.slot(FrameSlot::SideBar, window, cx) {
                 side_bar = side_bar.child(content);

@@ -990,7 +990,8 @@ Geometry, fixture key `"geometry"`:
   where it happens as `{"read": name, "el": path, "value": <CVE-1>}` (`getBoundingClientRect`
   as `[x, y, width, height]`, `getClientRects` as a list of those, `client*`, `scroll*`,
   `offset*` as numbers), and every `scrollTop` or `scrollLeft` assignment and `scrollTo`,
-  `scrollBy` or `scrollIntoView` call as `{"write": name, "el", "value"}`. `el` is
+  `scrollBy`, `scrollIntoView` or `scrollIntoViewIfNeeded` call as `{"write": name, "el",
+  "value"}`. `el` is
   `tag.class.class:index` for each element from `<body>` down, joined by `>`. Harness code reads
   inside `window.__oracleQuiet(fn)`, which records nothing; fixtures use it too, for scrolls
   that are inputs rather than upstream behaviour. `asrs_parity::geometry::ScriptedReads`

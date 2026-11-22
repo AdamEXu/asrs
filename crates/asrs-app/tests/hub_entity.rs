@@ -46,7 +46,7 @@ use std::time::{Duration, Instant};
 use asrs_app::hub::{Hub, HubConfig, HubEvent};
 use asrs_formats::historical::Status;
 use asrs_hub::hub::HubView;
-use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::string::JsString;
 use asrs_js::time::{SetClock, V8MathRandom};
 use asrs_js::value::{JsObject, JsValue};
@@ -69,7 +69,9 @@ fn js(s: &str) -> JsString {
     JsString::from(s)
 }
 
-struct View;
+struct View {
+    sidebar: NoLayout,
+}
 
 impl HubView for View {
     fn inner_height(&self) -> f64 {
@@ -84,16 +86,8 @@ impl HubView for View {
         false
     }
 
-    fn can_scroll_into_view(&self) -> bool {
-        false
-    }
-
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
-        vec![RowRect::default(); sidebar.rows().len()]
-    }
-
-    fn measure_value(&self, _value: &RowValue) -> f64 {
-        0.0
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
+        &mut self.sidebar
     }
 }
 
@@ -125,7 +119,7 @@ impl Page {
         let built = slot.clone();
         let window = cx
             .open_window(size(px(1100.0), px(650.0)), move |window, cx| {
-                let mut config = HubConfig::new(Box::new(View));
+                let mut config = HubConfig::new(Box::new(View { sidebar: NoLayout }));
                 config.worker_realm = Box::new(|| {
                     (
                         Box::new(V8MathRandom::from_entropy()),
