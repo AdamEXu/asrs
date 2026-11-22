@@ -494,6 +494,17 @@
     "src/genThree.ts",
     "src/shims.ts"
   ],
+  "genUpdate": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/fakes/globals.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/genUpdate.ts",
+    "src/update/bundle.ts",
+    "src/update/cases.ts",
+    "src/update/dialogs.ts"
+  ],
   "genUrcl": [
     "src/corpus/bytes.ts",
     "src/corpus/emit.ts",
