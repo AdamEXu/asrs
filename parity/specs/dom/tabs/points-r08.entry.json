@@ -1,0 +1,60 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../logs/c05.json",
+  "../logs/r08.json"
+ ],
+ "fixture": {
+  "seed": 808,
+  "steps": [
+   {
+    "log": "../logs/c05.json"
+   },
+   {
+    "log": "../logs/r08.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 11
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"plus\",\"logKey\":\"/Vision/Corner\",\"logType\":\"Translation2d\",\"visible\":true,\"options\":{\"size\":\"small\",\"groupSize\":\"2\"}},{\"type\":\"circle\",\"logKey\":\"/Vision/Translations\",\"logType\":\"Translation2d[]\",\"visible\":true,\"options\":{\"size\":\"large\",\"groupSize\":\"1\"}}],\"width\":4,\"height\":3})"
+   },
+   {
+    "eval": "window.selection.setSelectedTime(1)"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "drawn"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"cross\",\"logKey\":\"/Vision/Translations\",\"logType\":\"Translation2d[]\",\"visible\":true,\"options\":{\"size\":\"medium\",\"groupSize\":\"abc\"}}],\"width\":4,\"height\":3})"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "threw"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "stopped"
+   }
+  ]
+ }
+}

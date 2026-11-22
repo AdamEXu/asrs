@@ -948,6 +948,33 @@ a `requestAnimationFrame` exception must match what the port's render or list fr
 canvas pixel scenes: each field image is a generated stand-in at its recorded natural size and
 the heatmap canvas is transparent (its pixels are gated by `cargo xtask canvas heatmap`).
 
+### Mechanism and Points renderers
+
+`dom/mechanism/<case>` and `dom/points/<case>` (`crates/asrs-tabs/tests/mechanism_points_dom.rs`)
+record every `render` of every `MechanismRenderer` and `PointsRenderer`, both of which draw
+with DOM elements rather than a canvas. `node oracle/tools/r08Specs.mjs` writes the specs,
+`parity/specs/dom/logs/r08.json`, the `dom/css-style/*` specs and the hub-level
+`dom/tabs/{mechanism,points}-r08` cases; edit the script, not the specs. The fixtures run on
+Blink with `"geometry": "real"`, so container sizes are Blink's layout (fractional at
+`devicePixelRatio` 1.5 and 2). Their recorder eval adds `window.__r08Render(type, index,
+command)`, which renders a command directly on the `index`th tab of that type, and
+`window.__r08Size(width, height)`, which resizes `div.renderer-content` inside
+`__oracleQuiet`.
+
+| Record | Written |
+|---|---|
+| `{"r08": "create", "kind", "id", "dom", "aspect"}` | when a renderer is hooked: its root element (`svg.mechanism-svg` or `div.points-background`) and `getAspectRatio()` |
+| `{"r08": "render", "kind", "id", "command", "dark", "reads", "assigns", "threw"?, "created", "dom", "aspect"}` | after `render` returns or throws: the container reads it made (`clientWidth`/`clientHeight`, or `rect` for `getBoundingClientRect()`), each inline style assignment as `[target, camelCaseProperty, value as assigned]` with `target` `"root"` or the creation index of the element it made, how many elements it created or cloned, and the root's tree |
+
+A tree node is `[localName, [[name, value], ...], [children...]]`, read with
+`getAttributeNames()`, which first syncs the `style` attribute. Blink appends that attribute
+at the first sync after the inline style is mutated, not when it is first set, and it parses
+inline style on SVG elements with quirks behaviour (hashless hex colours on `background-color`,
+unitless lengths). `dom/css-style/*` pin the serializations on the element types the renderers
+use: each `{"eval"}` value lists `[property, namespace, tag, [[input, getPropertyValue, style
+attribute or null], ...]]` per group, and `declarations` replays attribute and style scripts
+with the attribute list after each `["sync"]` step and at the end.
+
 Not modelled on jsdom: CSS (so no computed styles or real text layout), scrolling (`scrollTop`
 stays 0). On either backend: workers and historical or live sources (logs are built with `log`
 steps), drag sessions other than through dispatched events, the documentation iframe's

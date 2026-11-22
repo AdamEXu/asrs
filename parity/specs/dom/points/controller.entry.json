@@ -1,0 +1,61 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../logs/c05.json",
+  "../logs/r08.json"
+ ],
+ "fixture": {
+  "geometry": "real",
+  "steps": [
+   {
+    "log": "../logs/c05.json"
+   },
+   {
+    "log": "../logs/r08.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 11
+   },
+   {
+    "eval": "(() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const view = new DataView(new ArrayBuffer(8));\n  const bits = (x) => {\n    view.setFloat64(0, x);\n    return view.getUint32(0).toString(16).padStart(8, \"0\") + view.getUint32(4).toString(16).padStart(8, \"0\");\n  };\n  const tree = (v) => {\n    if (v === undefined) return { u: null };\n    if (v === null || typeof v === \"boolean\" || typeof v === \"string\") return v;\n    if (typeof v === \"number\") return { n: bits(v) };\n    if (Array.isArray(v)) {\n      const out = [];\n      for (let i = 0; i < v.length; i++) out.push(tree(v[i]));\n      return out;\n    }\n    return { o: Object.keys(v).map((k) => [k, tree(v[k])]) };\n  };\n  const errorText = (e) => (e instanceof Error ? e.name + \": \" + e.message : String(e));\n  const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n  const node = (el) => [el.localName, el.getAttributeNames().map((n) => [n, el.getAttribute(n)]), Array.from(el.children).map(node)];\n\n  const STYLE = {\n    display: \"display\",\n    backgroundColor: \"background-color\",\n    stroke: \"stroke\",\n    strokeWidth: \"stroke-width\",\n    fill: \"fill\",\n    transform: \"transform\",\n    left: \"left\",\n    top: \"top\",\n    width: \"width\",\n    height: \"height\"\n  };\n  let active = null;\n  const instrument = (el, who) => {\n    for (const [camel, css] of Object.entries(STYLE)) {\n      Object.defineProperty(el.style, camel, {\n        configurable: true,\n        get() {\n          return this.getPropertyValue(css);\n        },\n        set(value) {\n          if (active !== null) active.assigns.push([who(), camel, tree(value)]);\n          this.setProperty(css, value);\n        }\n      });\n    }\n  };\n\n  const renderers = [];\n  const hook = (kind, r) => {\n    if (renderers.includes(r)) return;\n    const id = renderers.length;\n    renderers.push(r);\n    const root = kind === \"mechanism\" ? r.SVG : r.BACKGROUND;\n    instrument(root, () => \"root\");\n    if (kind === \"mechanism\") {\n      for (const name of [\"clientWidth\", \"clientHeight\"]) {\n        const getter = Object.getOwnPropertyDescriptor(Element.prototype, name).get;\n        Object.defineProperty(r.CONTAINER, name, {\n          configurable: true,\n          get() {\n            const value = getter.call(this);\n            if (active !== null) active.reads.push([name, tree(value)]);\n            return value;\n          }\n        });\n      }\n    } else {\n      r.CONTAINER.getBoundingClientRect = function () {\n        const rect = Element.prototype.getBoundingClientRect.call(this);\n        if (active !== null) active.reads.push([\"rect\", tree([rect.x, rect.y, rect.width, rect.height])]);\n        return rect;\n      };\n    }\n    write({ r08: \"create\", kind, id: tree(id), dom: node(root), aspect: tree(r.getAspectRatio()) });\n\n    const render = r.render;\n    r.render = function (command) {\n      const record = { r08: \"render\", kind, id: tree(id), command: tree(command), dark: tree(dark()), reads: [], assigns: [] };\n      const created = [];\n      const createElementNS = document.createElementNS;\n      const cloneNode = Node.prototype.cloneNode;\n      const track = (el) => {\n        const index = created.length;\n        created.push(el);\n        instrument(el, () => index);\n        return el;\n      };\n      document.createElementNS = function (...args) {\n        return track(createElementNS.apply(this, args));\n      };\n      Node.prototype.cloneNode = function (...args) {\n        const el = cloneNode.apply(this, args);\n        return el instanceof Element ? track(el) : el;\n      };\n      active = record;\n      try {\n        return render.apply(this, arguments);\n      } catch (e) {\n        record.threw = tree(errorText(e));\n        throw e;\n      } finally {\n        active = null;\n        document.createElementNS = createElementNS;\n        Node.prototype.cloneNode = cloneNode;\n        record.created = created.length;\n        record.dom = node(root);\n        record.aspect = tree(r.getAspectRatio());\n        write(record);\n      }\n    };\n  };\n  const hookAll = () => {\n    w.tabs.tabList.forEach((t) => {\n      if (t.type === 10) hook(\"mechanism\", t.renderer);\n      if (t.type === 11) hook(\"points\", t.renderer);\n    });\n  };\n  hookAll();\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const result = addTab.apply(this, args);\n    hookAll();\n    return result;\n  };\n\n  w.__r08Render = (type, index, command) => {\n    const tab = w.tabs.tabList.filter((t) => t.type === type)[index];\n    try {\n      tab.renderer.render(command);\n    } catch (e) {}\n  };\n  w.__r08Size = (width, height) =>\n    w.__oracleQuiet(() => {\n      const content = document.querySelector(\"div.renderer-content\");\n      content.style.width = width;\n      content.style.height = height;\n      content.style.bottom = \"auto\";\n    });\n})()"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.selection.setSelectedTime(1)"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"plus\",\"logKey\":\"/Vision/Corner\",\"logType\":\"Translation2d\",\"visible\":true,\"options\":{\"size\":\"small\",\"groupSize\":\"2\"}},{\"type\":\"circle\",\"logKey\":\"/Vision/Translations\",\"logType\":\"Translation2d[]\",\"visible\":true,\"options\":{\"size\":\"large\",\"groupSize\":\"1\"}},{\"type\":\"plusSplit\",\"logKey\":\"/R08/Pts/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\",\"size\":\"medium\",\"groupSize\":\"3\"}},{\"type\":\"component\",\"logKey\":\"/R08/Pts/Ys\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"y\"}}],\"width\":4,\"height\":3})"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.selection.setSelectedTime(3.5)"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"crossSplit\",\"logKey\":\"/R08/Pts/Xs\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"x\",\"size\":\"large\",\"groupSize\":\"0\"}},{\"type\":\"component\",\"logKey\":\"/R08/Pts/Ys\",\"logType\":\"NumberArray\",\"visible\":true,\"options\":{\"component\":\"y\"}},{\"type\":\"plus\",\"logKey\":\"/Vision/Translations\",\"logType\":\"Translation2d[]\",\"visible\":true,\"options\":{\"size\":\"small\",\"groupSize\":\"abc\"}}],\"width\":4,\"height\":3})"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.selection.setSelectedTime(1)"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"cross\",\"logKey\":\"/Vision/Translations\",\"logType\":\"Translation2d[]\",\"visible\":true,\"options\":{\"size\":\"medium\",\"groupSize\":\"1\"}}],\"width\":1,\"height\":1})"
+   },
+   {
+    "advance": 50
+   }
+  ]
+ }
+}
