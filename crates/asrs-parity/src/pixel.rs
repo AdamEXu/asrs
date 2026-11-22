@@ -58,6 +58,29 @@ pub fn encode_png(image: &Rgba) -> Vec<u8> {
     out
 }
 
+/// The profile of a PNG's `iCCP` chunk, if it has one.
+pub fn png_icc_profile(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    let reader = png::Decoder::new(Cursor::new(bytes))
+        .read_info()
+        .map_err(|e| format!("png: {e}"))?;
+    Ok(reader.info().icc_profile.as_ref().map(|p| p.to_vec()))
+}
+
+pub fn encode_png_with_icc(image: &Rgba, icc: &[u8]) -> Vec<u8> {
+    let mut info = png::Info::with_size(image.width, image.height);
+    info.color_type = png::ColorType::Rgba;
+    info.bit_depth = png::BitDepth::Eight;
+    info.icc_profile = Some(icc.to_vec().into());
+    let mut out = Vec::new();
+    let encoder = png::Encoder::with_info(&mut out, info).expect("png info");
+    let mut writer = encoder.write_header().expect("png header into a Vec");
+    writer
+        .write_image_data(&image.data)
+        .expect("png data into a Vec");
+    writer.finish().expect("png end into a Vec");
+    out
+}
+
 pub fn read_png(path: &Path) -> Result<Rgba, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     decode_png(&bytes).map_err(|e| format!("{}: {e}", path.display()))
@@ -230,6 +253,18 @@ mod tests {
         let mut image = solid(5, 3, [1, 2, 3, 4]);
         image.data[7] = 200;
         assert_eq!(decode_png(&encode_png(&image)).unwrap(), image);
+    }
+
+    #[test]
+    fn icc_profile_round_trip() {
+        let image = solid(2, 2, [9, 8, 7, 255]);
+        let tagged = encode_png_with_icc(&image, b"not really a profile");
+        assert_eq!(decode_png(&tagged).unwrap(), image);
+        assert_eq!(
+            png_icc_profile(&tagged).unwrap().as_deref(),
+            Some(&b"not really a profile"[..])
+        );
+        assert_eq!(png_icc_profile(&encode_png(&image)).unwrap(), None);
     }
 
     #[test]
