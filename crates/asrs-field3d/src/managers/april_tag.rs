@@ -73,7 +73,12 @@ impl AprilTagManager {
 
     /// The `TextureLoader` success callback: nearest filtering, and a textured material in the
     /// front-face slot of the tag the request came from.
-    pub fn texture_loaded(&mut self, scene: &mut Scene, request: &TextureRequest, texture: Texture) {
+    pub fn texture_loaded(
+        &mut self,
+        scene: &mut Scene,
+        request: &TextureRequest,
+        texture: Texture,
+    ) {
         let mut texture = texture;
         texture.min_filter = MinFilter::Nearest;
         texture.mag_filter = Filter::Nearest;
@@ -148,16 +153,18 @@ impl ObjectManager for AprilTagManager {
                 id_text.as_ref().unwrap_or(&JsString::new()),
             ]);
 
-            let index = match self.tags.iter().position(|t| !t.active && t.id_str == id_str) {
+            let index = match self
+                .tags
+                .iter()
+                .position(|t| !t.active && t.id_str == id_str)
+            {
                 Some(index) => {
                     self.tags[index].active = true;
                     index
                 }
                 None => {
-                    let mut mesh = Mesh::new(
-                        geometry.clone(),
-                        vec![self.white_material.clone(); 6],
-                    );
+                    let mut mesh =
+                        Mesh::new(geometry.clone(), vec![self.white_material.clone(); 6]);
                     mesh.cast_shadow = true;
                     let object_id = scene.create(NodeKind::Mesh(mesh));
                     scene.graph.add(self.ctx.root, object_id);
@@ -226,11 +233,15 @@ pub fn decode_png_texture(bytes: &[u8]) -> Option<Texture> {
     let rgba: Vec<u8> = match info.color_type {
         png::ColorType::Rgba => pixels.to_vec(),
         png::ColorType::Rgb => pixels
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         png::ColorType::GrayscaleAlpha => pixels
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Grayscale => pixels.iter().flat_map(|&v| [v, v, v, 255]).collect(),

@@ -26,7 +26,11 @@ pub struct ResizableInstancedMesh {
 }
 
 impl ResizableInstancedMesh {
-    pub fn new(parent: ObjectId, sources: Vec<InstanceSource>, cast_shadow: Option<&[bool]>) -> Self {
+    pub fn new(
+        parent: ObjectId,
+        sources: Vec<InstanceSource>,
+        cast_shadow: Option<&[bool]>,
+    ) -> Self {
         let cast_shadow = (0..sources.len())
             .map(|i| cast_shadow.and_then(|c| c.get(i)).copied().unwrap_or(true))
             .collect();

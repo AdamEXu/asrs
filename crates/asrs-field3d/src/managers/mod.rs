@@ -21,9 +21,7 @@ use asrs_model::preferences::Field3dMode;
 use crate::render::Scene;
 use crate::three::{Color, ObjectId, Quaternion};
 
-pub use april_tag::{
-    AprilTagManager, TextureRequest, april_tag_texture_path, decode_png_texture,
-};
+pub use april_tag::{AprilTagManager, TextureRequest, april_tag_texture_path, decode_png_texture};
 pub use axes::AxesManager;
 pub use cone::{CanvasTexture, ConeManager};
 pub use game_piece::{GamePieceManager, GamePieces};

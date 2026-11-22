@@ -1532,7 +1532,7 @@ fn draw_range(group: Option<Group>, count: u32) -> Option<std::ops::Range<u32>> 
         None => (0, usize::MAX),
     };
     let end = end.min(count as usize);
-    (start <= end).then(|| start as u32..end as u32)
+    (start <= end).then_some(start as u32..end as u32)
 }
 
 fn draw_geometry(
@@ -1738,7 +1738,10 @@ fn upload_geometry(device: &wgpu::Device, geometry: &Geometry) -> GpuGeometry {
     }
 }
 
-/// Mip chain by 2x2 box filter with round-half-up, the reduction `generateMipmap` performs.
+/// The mip chain `generateMipmap` builds on ANGLE's Metal backend: each level is a linear-filtered
+/// blit of the one above, sampling at the destination texel centres with clamp to edge. Measured
+/// against Electron's levels (weights quantized to 1/256 and rounded), even sizes reduce to the
+/// exact 2x2 average; odd sizes, such as the 25x25 level of a 100x100 canvas, do not.
 fn mip_chain(texture: &Texture) -> Vec<(u32, u32, Vec<u8>)> {
     let (w, h) = (texture.width, texture.height);
     let mut base = texture.rgba.to_vec();
@@ -1750,24 +1753,29 @@ fn mip_chain(texture: &Texture) -> Vec<(u32, u32, Vec<u8>)> {
     if !(texture.generate_mipmaps && texture.min_filter.uses_mipmaps()) {
         return levels;
     }
+    let taps = |dst: u32, src: u32, i: u32| {
+        let u = (i as f32 + 0.5) / dst as f32 * src as f32 - 0.5;
+        let i0 = u.floor();
+        let weight = ((u - i0) as f64 * 256.0 + 0.5).floor() / 256.0;
+        let clamp = |v: f32| v.clamp(0.0, (src - 1) as f32) as u32;
+        (clamp(i0), clamp(i0 + 1.0), weight)
+    };
     while let Some((pw, ph, prev)) = levels.last()
         && (*pw > 1 || *ph > 1)
     {
-        let (nw, nh) = ((*pw / 2).max(1), (*ph / 2).max(1));
+        let (pw, ph) = (*pw, *ph);
+        let (nw, nh) = ((pw / 2).max(1), (ph / 2).max(1));
         let mut next = vec![0u8; (nw * nh * 4) as usize];
         for y in 0..nh {
+            let (y0, y1, fy) = taps(nh, ph, y);
             for x in 0..nw {
+                let (x0, x1, fx) = taps(nw, pw, x);
                 for c in 0..4 {
-                    let at = |sx: u32, sy: u32| {
-                        let sx = sx.min(pw - 1);
-                        let sy = sy.min(ph - 1);
-                        u32::from(prev[((sy * pw + sx) * 4 + c) as usize])
-                    };
-                    let sum = at(2 * x, 2 * y)
-                        + at(2 * x + 1, 2 * y)
-                        + at(2 * x, 2 * y + 1)
-                        + at(2 * x + 1, 2 * y + 1);
-                    next[((y * nw + x) * 4 + c) as usize] = ((sum + 2) / 4) as u8;
+                    let at = |sx: u32, sy: u32| f64::from(prev[((sy * pw + sx) * 4 + c) as usize]);
+                    let top = at(x0, y0) * (1.0 - fx) + at(x1, y0) * fx;
+                    let bottom = at(x0, y1) * (1.0 - fx) + at(x1, y1) * fx;
+                    let value = top * (1.0 - fy) + bottom * fy;
+                    next[((y * nw + x) * 4 + c) as usize] = (value + 0.5).floor() as u8;
                 }
             }
         }

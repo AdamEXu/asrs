@@ -610,9 +610,7 @@ pub fn build_frame(
             NodeKind::Mesh(mesh) => {
                 let material = match (&mesh.material, item.group) {
                     (Materials::Single(material), _) => material,
-                    (Materials::Array(materials), Some(group)) => {
-                        &materials[group.material_index]
-                    }
+                    (Materials::Array(materials), Some(group)) => &materials[group.material_index],
                     (Materials::Array(_), None) => continue,
                 };
                 let part = MeshPart {

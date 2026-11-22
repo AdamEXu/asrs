@@ -173,7 +173,10 @@ impl ObjectManager for HeatmapManager {
                 ..PhongMaterial::new()
             };
             let plane = plane_geometry(field_dimensions[0], field_dimensions[1], 1.0, 1.0);
-            let mesh = scene.add_mesh(self.root, Mesh::new(Geometry::new(plane), Arc::new(material)));
+            let mesh = scene.add_mesh(
+                self.root,
+                Mesh::new(Geometry::new(plane), Arc::new(material)),
+            );
             scene.graph.object_mut(mesh).position = Vector3::new(0.0, 0.0, 0.02);
             self.mesh = Some(mesh);
         } else if outcome.set_data.is_some()

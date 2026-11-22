@@ -201,6 +201,7 @@ impl Labels {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Manager {
     GamePiece(GamePieceManager),
     AprilTag(AprilTagManager),
@@ -382,13 +383,14 @@ impl Case {
                     ),
                     Manager::Heatmap(m) => m.set_object_data(scene, &HeatmapObj { poses: p }),
                 }
-                .map_err(|e| e.to_string())
+                .map_err(|e| format!("{e}"))
             }
             ("loadTextures", Manager::AprilTag(m)) => {
                 for request in std::mem::take(&mut self.pending) {
-                    let Some(path) =
-                        april_tag_texture_path(&workspace_root().join("reference/AdvantageScope"), &request.url)
-                    else {
+                    let Some(path) = april_tag_texture_path(
+                        &workspace_root().join("reference/AdvantageScope"),
+                        &request.url,
+                    ) else {
                         continue;
                     };
                     let Ok(bytes) = std::fs::read(&path) else {
@@ -536,9 +538,10 @@ impl Case {
         let (kind, cast, receive, geometry, materials, instances) = match &node.kind {
             NodeKind::Mesh(mesh) => {
                 let materials = match &mesh.material {
-                    Materials::Single(m) => {
-                        Value::Array(vec![Value::string("single"), Value::Array(vec![self.phong(m)?])])
-                    }
+                    Materials::Single(m) => Value::Array(vec![
+                        Value::string("single"),
+                        Value::Array(vec![self.phong(m)?]),
+                    ]),
                     Materials::Array(ms) => {
                         let dumps = ms.iter().map(|m| self.phong(m)).collect::<Result<_>>()?;
                         Value::Array(vec![Value::string("array"), Value::Array(dumps)])
@@ -658,7 +661,11 @@ impl Case {
         }
     }
 
-    fn state(&mut self, outcome: std::result::Result<(), String>, requested: &[TextureRequest]) -> Result<Value> {
+    fn state(
+        &mut self,
+        outcome: std::result::Result<(), String>,
+        requested: &[TextureRequest],
+    ) -> Result<Value> {
         let children = self.scene.graph.node(self.root).children().to_vec();
         let children = children
             .into_iter()
@@ -666,7 +673,10 @@ impl Case {
             .collect::<Result<_>>()?;
         let mut fields = Vec::new();
         if let Err(message) = outcome {
-            fields.push(("throw", Value::Error("Error".into(), message.as_str().into())));
+            fields.push((
+                "throw",
+                Value::Error("Error".into(), message.as_str().into()),
+            ));
         }
         fields.push(("children", Value::Array(children)));
         fields.push(("extra", self.extra(requested)));
@@ -676,9 +686,9 @@ impl Case {
 
 fn check_case(record: &Record, compared: &mut usize) -> Result<()> {
     let kind = record.string("manager").ok_or("record has no manager")?;
-    let setup = record.value("setup").map_err(|e| e.to_string())?;
-    let ops = record.value("ops").map_err(|e| e.to_string())?;
-    let expected = record.value("out").map_err(|e| e.to_string())?;
+    let setup = record.value("setup").map_err(|e| format!("{e}"))?;
+    let ops = record.value("ops").map_err(|e| format!("{e}"))?;
+    let expected = record.value("out").map_err(|e| format!("{e}"))?;
     let (ops, expected) = (items(&ops)?, items(&expected)?);
     if ops.len() != expected.len() {
         return Err(format!("{} ops but {} states", ops.len(), expected.len()));
