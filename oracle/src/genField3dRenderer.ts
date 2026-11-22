@@ -455,6 +455,7 @@ function orbitOps(): unknown[][] {
     frames(ops, c, 1);
   }
   const plain = command("FRC:Evergreen", [robot("KitBot", [pose([2, 1, 0], yaw(0.3))])]);
+  frames(ops, plain, 1);
   ops.push(["env", { dark: false }]);
   frames(ops, plain, 1);
   ops.push(["env", { width: 640, height: 400, parentWidth: 640, parentHeight: 400 }]);
@@ -565,6 +566,10 @@ function restoreOps(): unknown[][] {
   ops.push(["camera", -3]);
   frames(ops, command("FRC:Evergreen", c.objects, { autoDriverStation: 3 }), 2);
   frames(ops, command("FTC:Evergreen", c.objects, { autoDriverStation: 3 }), 2);
+  ops.push(["camera", -4.5]);
+  frames(ops, command("FTC:Evergreen", c.objects, { autoDriverStation: 3 }), 2);
+  ops.push(["camera", -1]);
+  frames(ops, command("FTC:Evergreen", c.objects, { autoDriverStation: 3 }), 1);
   return ops;
 }
 

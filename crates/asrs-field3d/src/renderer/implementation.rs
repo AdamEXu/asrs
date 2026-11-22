@@ -718,7 +718,7 @@ impl Field3dRendererImpl {
         is_ftc: bool,
         animate: bool,
         env: &Field3dEnv,
-    ) {
+    ) -> Result<(), JsError> {
         let animate = animate && !env.reduced_motion;
         self.controls.min_distance = if is_ftc {
             CONTROLS_MIN_DISTANCE_FTC
@@ -762,10 +762,12 @@ impl Field3dRendererImpl {
             } else {
                 command.auto_driver_station
             };
-            if driver_station >= 0.0
-                && driver_station < field_config.driver_stations.len() as f64
-                && driver_station.fract() == 0.0
-            {
+            if driver_station >= 0.0 && driver_station < field_config.driver_stations.len() as f64 {
+                if driver_station.fract() != 0.0 {
+                    return Err(JsError::type_error(
+                        "Cannot read properties of undefined (reading '0')",
+                    ));
+                }
                 let position = field_config.driver_stations[driver_station as usize];
                 let group = self.scene.graph.object_mut(self.ds_camera_group);
                 group.position = Vector3::new(position[0], position[1], 0.0);
@@ -790,6 +792,7 @@ impl Field3dRendererImpl {
                 look(&mut self.controls, camera_position.to_array(), target);
             }
         }
+        Ok(())
     }
 
     fn get_field_config(
@@ -1082,7 +1085,7 @@ impl Field3dRendererImpl {
         };
 
         if self.should_reset_camera {
-            self.reset_camera(command, field_config.is_ftc, true, env);
+            self.reset_camera(command, field_config.is_ftc, true, env)?;
             self.should_reset_camera = false;
         }
 
@@ -1120,7 +1123,7 @@ impl Field3dRendererImpl {
             if (Some(field_config.is_ftc) != self.last_is_ftc && self.last_is_ftc.is_some())
                 || self.camera_index < -2.0
             {
-                self.reset_camera(command, field_config.is_ftc, true, env);
+                self.reset_camera(command, field_config.is_ftc, true, env)?;
             }
 
             if self.mode == Field3dMode::Cinematic && Some(field_config.is_ftc) != self.last_is_ftc
@@ -1444,7 +1447,7 @@ impl Field3dRendererImpl {
                     && self.last_auto_driver_station != command.auto_driver_station)
             {
                 let animate = self.last_camera_index < 0.0;
-                self.reset_camera(command, field_config.is_ftc, animate, env);
+                self.reset_camera(command, field_config.is_ftc, animate, env)?;
             }
         } else {
             dom.canvas_fixed = true;
