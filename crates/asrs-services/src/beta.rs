@@ -6,8 +6,10 @@ use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, LocalZone, local_date, time_clip};
 use asrs_js::value::JsValue;
+use asrs_model::build_constants::Distribution;
 use asrs_model::json_file;
 
+use crate::dialog::MessageBox;
 use crate::fs::Fs;
 
 /// `BETA_CONFIG` for this release, or `None` on non-beta builds.
@@ -170,4 +172,153 @@ pub fn open_beta_survey(
         JsValue::Bool(true),
     )?;
     fs.write(path, &json_file::stringify(&state)?)
+}
+
+/// What a hub's dom-ready does in a beta build (main.ts, after the button messages).
+#[derive(Clone, Debug, PartialEq)]
+pub enum BetaStartup {
+    Nothing,
+    /// The "is complete" alert; answer with [`beta_expired_response`].
+    Expired(MessageBox),
+    /// `openBetaWelcome(window)`: see [`beta_welcome_window`].
+    Welcome,
+    /// The "Share feedback?" prompt; answer with [`beta_survey_response`].
+    Survey(MessageBox),
+}
+
+/// The beta block of a hub's dom-ready handler. Errors are what `getState()` throws on an
+/// unreadable beta file (the handler throws out of dom-ready).
+pub fn beta_startup(
+    fs: &dyn Fs,
+    beta_file: Option<&str>,
+    config: Option<&BetaConfig>,
+    clock: &dyn Clock,
+    distribution: Distribution,
+    app_name: &str,
+) -> Result<BetaStartup, JsError> {
+    let Some(config) = config else {
+        return Ok(BetaStartup::Nothing);
+    };
+    if is_beta_expired(Some(config), clock) {
+        let mut detail = JsString::from("The ");
+        detail.push_str(&JsString::from(app_name));
+        detail.push_str(&JsString::from(if config.is_alpha {
+            " alpha is complete. "
+        } else {
+            " beta is complete. "
+        }));
+        detail.push_str(&JsString::from(if distribution == Distribution::WpiLib {
+            "Please update to the latest stable release of WPILib.".to_owned()
+        } else {
+            format!("Please download the latest stable release of {app_name} from GitHub.")
+        }));
+        return Ok(BetaStartup::Expired(MessageBox {
+            kind: "info",
+            title: "Alert",
+            message: JsString::from(if config.is_alpha {
+                "Alpha is complete"
+            } else {
+                "Beta is complete"
+            }),
+            detail,
+            buttons: Some(vec!["Quit", "Ignore"]),
+            default_id: Some(0.0),
+            cancel_id: None,
+            icon: false,
+            modal: true,
+        }));
+    }
+    if !ops::to_boolean(&is_beta_welcome_complete(fs, beta_file)?) {
+        return Ok(BetaStartup::Welcome);
+    }
+    if should_prompt_beta_survey(fs, beta_file, Some(config), clock)? {
+        let mut detail =
+            JsString::from("Please take 30 seconds to share your experience using the ");
+        detail.push_str(&JsString::from(app_name));
+        detail.push_str(&JsString::from(if config.is_alpha {
+            " alpha. We'll keep this quick."
+        } else {
+            " beta. We'll keep this quick."
+        }));
+        return Ok(BetaStartup::Survey(MessageBox {
+            kind: "info",
+            title: "Alert",
+            message: JsString::from("Share feedback?"),
+            detail,
+            buttons: Some(vec!["Open", "Not Now"]),
+            default_id: Some(0.0),
+            cancel_id: None,
+            icon: false,
+            modal: true,
+        }));
+    }
+    Ok(BetaStartup::Nothing)
+}
+
+/// The expired alert resolved with `response`: whether main calls `app.quit()`.
+pub fn beta_expired_response(response: usize) -> bool {
+    response == 0
+}
+
+/// The survey prompt resolved with `response`: `openBetaSurvey()` or `delayBetaSurvey()`.
+pub fn beta_survey_response(
+    fs: &dyn Fs,
+    beta_file: Option<&str>,
+    config: Option<&BetaConfig>,
+    clock: &dyn Clock,
+    response: usize,
+    open: impl FnOnce(&str),
+) -> Result<(), JsError> {
+    if response == 0 {
+        open_beta_survey(fs, beta_file, config, open)
+    } else {
+        delay_beta_survey(fs, beta_file, clock)
+    }
+}
+
+/// The `BrowserWindow` options `openBetaWelcome` passes (it is always modal to the hub and
+/// created hidden).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WelcomeWindow {
+    pub width: f64,
+    pub height: f64,
+    pub use_content_size: bool,
+    pub resizable: bool,
+    pub modal: bool,
+    pub show: bool,
+}
+
+/// `openBetaWelcome`'s window options on `platform` (`process.platform`).
+pub fn beta_welcome_window(platform: &str) -> WelcomeWindow {
+    WelcomeWindow {
+        width: 450.0,
+        height: if platform == "win32" { 530.0 } else { 490.0 },
+        use_content_size: true,
+        resizable: false,
+        modal: true,
+        show: false,
+    }
+}
+
+/// The welcome page's dom-ready: the value main posts on the new port (`isAlpha()`).
+pub fn beta_welcome_ready(config: Option<&BetaConfig>) -> bool {
+    config.is_some_and(|c| c.is_alpha)
+}
+
+/// Any message from the welcome page: `saveBetaWelcomeComplete()`, then
+/// `shouldPromptBetaSurvey()` for its side effect of scheduling the survey.
+pub fn beta_welcome_done(
+    fs: &dyn Fs,
+    beta_file: Option<&str>,
+    config: Option<&BetaConfig>,
+    clock: &dyn Clock,
+) -> Result<(), JsError> {
+    save_beta_welcome_complete(fs, beta_file)?;
+    should_prompt_beta_survey(fs, beta_file, config, clock)?;
+    Ok(())
+}
+
+/// The welcome window's "close" event: whether main calls `app.quit()`.
+pub fn beta_welcome_closed() -> bool {
+    true
 }
