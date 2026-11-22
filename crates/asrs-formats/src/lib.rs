@@ -5,6 +5,7 @@ pub mod export;
 pub mod historical;
 pub mod mcap;
 pub mod mcap_export;
+pub mod revlog;
 pub mod rlog;
 pub mod roadrunner;
 pub mod spark;
