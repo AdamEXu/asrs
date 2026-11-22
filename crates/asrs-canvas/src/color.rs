@@ -392,4 +392,34 @@ mod tests {
         assert_eq!(u8s("#12345"), None);
         assert_eq!(u8s("rgb(1, 2)"), None);
     }
+
+    #[test]
+    fn closes_a_function_left_open_like_blink() {
+        let black = Some(([0, 0, 0], 1.0));
+        assert_eq!(u8s("rgb(0 0 0 / 10%"), Some(([0, 0, 0], 0.1)));
+        assert_eq!(u8s("rgb(0 0 0 / 10%\t"), Some(([0, 0, 0], 0.1)));
+        assert_eq!(u8s("rgb(0,0,0"), black);
+        assert_eq!(u8s("rgb(0 0 0 "), black);
+        assert_eq!(u8s(" RGB(1 2 3"), Some(([1, 2, 3], 1.0)));
+        assert_eq!(u8s("rgb(1 2 3 / 50"), Some(([1, 2, 3], 1.0)));
+        assert_eq!(u8s("rgb(1 2 3 / .5"), Some(([1, 2, 3], 0.5)));
+        assert_eq!(u8s("rgba(1,2,3,0.5"), Some(([1, 2, 3], 0.5)));
+        assert_eq!(u8s("rgb(10% 20% 30%"), Some(([26, 51, 77], 1.0)));
+        assert_eq!(u8s("hsl(120, 50%, 50%"), Some(([64, 191, 64], 1.0)));
+        assert_eq!(u8s("hsl(120 50% 50% / 0.5"), Some(([64, 191, 64], 0.5)));
+        assert_eq!(u8s("hsla(120,50%,50%,0.5"), Some(([64, 191, 64], 0.5)));
+        for invalid in [
+            "rgb(0 0 0 /",
+            "rgb(0,0,0,",
+            "rgb(",
+            "rgb(0 0",
+            "rgb(0 0 0)x",
+            "rgb(0 0 0))",
+            "#fff(",
+            "red(",
+            "undefined",
+        ] {
+            assert_eq!(u8s(invalid), None, "{invalid}");
+        }
+    }
 }
