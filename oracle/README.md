@@ -881,8 +881,17 @@ and the type and clear prompt callbacks. A hooked call that throws carries `thre
 recorded: `{"slTypeMemory": ...}` whenever `window.typeMemory` is replaced, `{"sl": id,
 "dragStart": {...}}` for `startDrag` from a list, and `{"slLog": ops}` for each `log` step. The
 fixture's `window.__oracleTheme` overrides `window.theme` for `matchMedia`, so a step can switch
-the colour scheme. jsdom's `:nth-child` goes stale after DOM moves, so source-list fixtures tag
-items with a `data-i` attribute before each event and lay them out by it.
+the colour scheme. Source-list fixtures tag items with a `data-i` attribute before each event,
+which event targets name.
+
+`dom/source-list/*` run on Blink with `"geometry": "real"`, so the lists' layout reads are
+`read` records (the rects in `itemDrag` and `fieldDrag` ops are a quiet snapshot the replay does
+not use). Their first step defines `window.__slMouse(type, target, root, anchor, dx, dy)`, which
+dispatches a `MouseEvent` on `target` (or `window`) at `dx` right of the list root `root` and `dy`
+below the top of item `anchor`, scaled to the item's height and rounded (`"root"` measures from
+the root's top; an anchor past the last item counts 30 px items below it). It reads the layout
+inside `__oracleQuiet`. Every `sourceLists` capture also evaluates `/*sl:widths*/`: each list
+root's class and, per item, its type name and `--type-width`.
 
 ### LineGraph controller
 
