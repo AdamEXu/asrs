@@ -10,7 +10,9 @@
 //! checked against upstream's `write` record. Each assignment's resulting offset, which the
 //! app's tab bar computes with `assign_scroll_offset`, must equal the next recorded read. The
 //! scroll overlay's own reads and writes are the DOM field `ScrollSensor` replaces: overlay
-//! scrolls in the fixtures (`/*tabs:scroll dx dy*/`) reach the port as precise wheel input.
+//! scrolls in the fixtures (`/*tabs:scroll dx dy*/`, `scrollLeft += dx; scrollTop += dy`) are
+//! assignments to the port's sensor; wheel input is calibrated separately
+//! (`asrs-model/tests/wheel_calibration.rs`).
 //! Geometry records of the sidebar, timeline and tab renderers belong to other models.
 //!
 //! Controllers and renderers are ported by other units, so every tab here gets stub halves.
@@ -40,7 +42,7 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_js::{math, number};
 use asrs_log::log::Log;
 use asrs_model::messages::NamedMessage;
-use asrs_model::scroll_sensor::{Wheel, assign_scroll_offset};
+use asrs_model::scroll_sensor::assign_scroll_offset;
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
@@ -1016,14 +1018,9 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Replayed, String> {
                 let [dx, dy] = deltas[..] else {
                     return Err(where_(format!("bad scroll tag {expr}")));
                 };
-                let now = runner.start_time + runner.now;
-                runner.tabs.tab_bar_wheel(
-                    Wheel {
-                        delta: [-dx, -dy],
-                        precise: true,
-                    },
-                    now,
-                );
+                let sensor = runner.tabs.tab_bar_sensor_mut();
+                let [left, top] = sensor.position();
+                sensor.assign([left + dx, top + dy]);
             } else if !expr.starts_with("/*tabs:recorder*/") && !expr.starts_with("/*tabs:tag*/") {
                 return Err(where_(format!("unsupported eval {expr}")));
             }

@@ -4,12 +4,14 @@
 //! `WebMouseWheelEvent` pixels, from the platform wheel mapping) move it the way Chromium
 //! moves a scroller, and the frame's scroll step reports the movement to the callback.
 //!
-//! What follows Chromium, measured on Electron 39 (macOS): positions snap to the device pixel
-//! grid and clamp to the overlay's range on every change; precise (trackpad) deltas move the
+//! What follows Chromium, measured on Electron 39 (macOS): the offset accumulates unsnapped
+//! and clamps to the overlay's range, and `scrollLeft`/`scrollTop` read it snapped to the
+//! device pixel grid; precise (trackpad) deltas move the
 //! position at once, and every change within one frame reaches the page as one `scroll`
-//! event; notched wheel ticks animate to their target with an ease-in-out curve. The
-//! animation's per-frame steps depend on real compositor timing upstream, so only where it
-//! settles is reproducible.
+//! event; a notched wheel tick moves at most the overlay's client size along each axis and
+//! animates to its target with an ease-in-out curve. The animation's per-frame steps depend on
+//! real compositor timing upstream, so only where it settles is reproducible
+//! (`oracle/tools/wheelCalibration.cjs`, `tests/wheel_calibration.rs`).
 //!
 //! The drag pan (`mouseControl`) is not here: it needs no overlay, and each owner (the
 //! timeline, line graph and 2D field) handles it with its own pointer events.
@@ -96,6 +98,7 @@ fn ease_in_out(t: f64) -> f64 {
 
 #[derive(Clone, Debug)]
 pub struct ScrollSensor {
+    raw: [f64; 2],
     position: [f64; 2],
     client_size: [f64; 2],
     device_pixel_ratio: f64,
@@ -109,6 +112,7 @@ pub struct ScrollSensor {
 impl Default for ScrollSensor {
     fn default() -> Self {
         ScrollSensor {
+            raw: [0.0, 0.0],
             position: [0.0, 0.0],
             client_size: [0.0, 0.0],
             device_pixel_ratio: 1.0,
@@ -143,11 +147,9 @@ impl ScrollSensor {
     fn scroll_to(&mut self, target: [f64; 2]) {
         let mut next = self.position;
         for axis in 0..2 {
-            next[axis] = assign_scroll_offset(
-                target[axis],
-                SIZE_PX - self.client_size[axis],
-                self.device_pixel_ratio,
-            );
+            let max = math::max2(SIZE_PX - self.client_size[axis], 0.0);
+            self.raw[axis] = math::min2(math::max2(target[axis], 0.0), max);
+            next[axis] = assign_scroll_offset(self.raw[axis], max, self.device_pixel_ratio);
         }
         if next != self.position {
             self.position = next;
@@ -155,17 +157,27 @@ impl ScrollSensor {
         }
     }
 
+    /// Assigns the overlay's `scrollLeft` and `scrollTop`, which stops any wheel animation.
+    pub fn assign(&mut self, position: [f64; 2]) {
+        self.animation = None;
+        self.scroll_to(position);
+    }
+
     /// A wheel event over the overlay at `now` (ms).
     pub fn wheel(&mut self, wheel: Wheel, now: f64) {
         let delta = [-wheel.delta[0], -wheel.delta[1]];
         if wheel.precise {
             self.animation = None;
-            self.scroll_to([self.position[0] + delta[0], self.position[1] + delta[1]]);
+            self.scroll_to([self.raw[0] + delta[0], self.raw[1] + delta[1]]);
             return;
         }
-        let base = self.animation.map_or(self.position, |a| a.to);
-        let to = [base[0] + delta[0], base[1] + delta[1]];
-        let from = self.position;
+        let capped = [0, 1].map(|axis| {
+            let size = self.client_size[axis];
+            math::min2(math::max2(delta[axis], -size), size)
+        });
+        let base = self.animation.map_or(self.raw, |a| a.to);
+        let to = [base[0] + capped[0], base[1] + capped[1]];
+        let from = self.raw;
         self.animation = Some(Animation {
             from,
             to,
