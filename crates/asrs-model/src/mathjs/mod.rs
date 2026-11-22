@@ -2,9 +2,10 @@
 //! `evaluate(EXTRA_FACTOR.value)`: the whole expression parser, and evaluation over numbers,
 //! booleans, strings, null, undefined, functions and result sets with the operator functions,
 //! the named functions in [`FUNCTIONS`] and the constants in [`CONSTANTS`]. A Complex is
-//! produced only as a whole result. Matrices, ranges, objects, accessors, indexes, units,
-//! BigNumber, Fraction and every other mathjs name are not ported: evaluating one returns a
-//! [`MathError`] named [`UNSUPPORTED`], which the dialog treats like any other failure.
+//! produced only as a whole result. Matrices, ranges, objects, accessors, indexes, units and
+//! BigNumber, Fraction or Complex arguments are not ported: evaluating one returns a
+//! [`MathError`] named [`UNSUPPORTED`]. Other mathjs names are not known, so they are undefined
+//! symbols. Either way the dialog shows its failure alert; the deferred part is issue #246.
 
 pub mod node;
 
