@@ -816,6 +816,42 @@
         "label": "glow-0.123456789"
       },
       {
+        "eval": "/*frame:glow*/ document.documentElement.style.setProperty(\"--show-loading-glow\", \"1\"), document.documentElement.style.setProperty(\"--loading-glow-progress\", \"0.435234321\")"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "glow-0.435234321"
+      },
+      {
+        "eval": "/*frame:glow*/ document.documentElement.style.setProperty(\"--show-loading-glow\", \"1\"), document.documentElement.style.setProperty(\"--loading-glow-progress\", \"0.7160742\")"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "glow-0.7160742"
+      },
+      {
+        "eval": "/*frame:glow*/ document.documentElement.style.setProperty(\"--show-loading-glow\", \"1\"), document.documentElement.style.setProperty(\"--loading-glow-progress\", \"0.982753847\")"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "glow-0.982753847"
+      },
+      {
         "eval": "/*frame:glow*/ document.documentElement.style.setProperty(\"--show-loading-glow\", \"0\"), document.documentElement.style.setProperty(\"--loading-glow-progress\", \"1\")"
       }
     ]

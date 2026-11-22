@@ -609,8 +609,12 @@ impl FrameLayout {
             .loading_glow_progress
             .as_ref()
             .map_or(1.0, |p| number::to_number(p.units()));
+        // Blink's calc simplification distributes the product over the sum, so this evaluates
+        // as `p * 100% - p * sw`: a float pixels and percent pair, not `(W - sw) * p`.
         let glow_width = if progress.is_finite() {
-            let device = (m.device(inputs.width) - m.device(sw)) * progress as f32;
+            let pixels = (-(sw * progress) * m.zoom) as f32;
+            let percent = (progress * 100.0) as f32;
+            let device = pixels + percent / 100.0 * (viewport.w as f32 / 64.0);
             Some(layout_unit(device).max(0))
         } else {
             None
