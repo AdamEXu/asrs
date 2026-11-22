@@ -9,8 +9,9 @@ use asrs_ui::menu::{CloseHandler, MenuView};
 use asrs_ui::platform::{self, MenuPath, PopupEntry, PopupMenu};
 
 use super::accelerator::Accelerator;
+use super::context::{ContextMenu, Effect};
 use super::model::{Command, ItemType, MenuItem};
-use super::roles::{BuiltItem, build_from_template};
+use super::roles::{BuiltItem, build_appended, build_from_template};
 
 /// `app.name` of the packaged upstream app (`productName` in its package.json), which Electron
 /// puts into role labels such as "Hide AdvantageScope".
@@ -25,6 +26,9 @@ pub enum MenuAction {
 }
 
 pub type ActionHandler = Rc<dyn Fn(MenuAction, &mut App)>;
+
+/// Receives the effects of the context menu item that was chosen.
+pub type EffectHandler = Rc<dyn Fn(Vec<Effect>, &mut App)>;
 
 /// The native menu for built items. Key equivalents are filled in on macOS only, from the
 /// item's accelerator or, with `use_default_accelerator`, its role's default.
@@ -46,6 +50,9 @@ pub fn to_popup(
             .works_when_hidden(item.accelerator_works_when_hidden);
         if let Some(role) = &item.role {
             entry = entry.role(role.clone());
+        }
+        if let Some(rgb) = item.icon {
+            entry = entry.swatch(rgb);
         }
         if platform == Platform::Mac
             && item.submenu.is_none()
@@ -162,11 +169,54 @@ pub fn popup_context_menu(
             on_action(action, cx);
         }
     };
+    show_popup(window, cx, menu, x, y, choose);
+}
+
+/// Pops up a menu `main.ts` built with `new Menu()` and `append`, at its position or, without
+/// one, at the mouse. The chosen item's effects go to `on_effects`.
+pub fn popup_context(
+    window: &mut Window,
+    cx: &mut App,
+    platform: Platform,
+    menu: &ContextMenu,
+    on_effects: EffectHandler,
+) {
+    let built = build_appended(&menu.items, platform, APP_NAME);
+    let popup = to_popup(&built, platform, false);
+    let (x, y) = menu
+        .position
+        .map_or((-1, -1), |(x, y)| (x as i32, y as i32));
+    let menu = menu.clone();
+    let choose = move |path: Option<MenuPath>, cx: &mut App| {
+        if let Some(command) = path
+            .and_then(|path| item_at(&built, &path))
+            .and_then(|item| item.command)
+            && let Some(effects) = menu.effects(command)
+        {
+            on_effects(effects.to_vec(), cx);
+        }
+    };
+    show_popup(window, cx, popup, x, y, choose);
+}
+
+fn show_popup(
+    window: &mut Window,
+    cx: &mut App,
+    menu: PopupMenu,
+    x: i32,
+    y: i32,
+    choose: impl FnOnce(Option<MenuPath>, &mut App) + 'static,
+) {
     if cfg!(target_os = "macos") {
         platform::popup_menu(window, cx, menu, x, y, choose);
     } else {
         let origin = window.bounds().origin + point(px(x as f32), px(y as f32));
-        let on_close: CloseHandler = Rc::new(move |path, _, cx| choose(path, cx));
+        let choose = std::cell::Cell::new(Some(choose));
+        let on_close: CloseHandler = Rc::new(move |path, _, cx| {
+            if let Some(choose) = choose.take() {
+                choose(path, cx);
+            }
+        });
         MenuView::open_window(menu, origin, window.scale_factor(), cx, on_close);
     }
 }
