@@ -25,6 +25,7 @@ use asrs_services::constants;
 use asrs_services::ds_layout;
 use asrs_services::fs::{Failure, Fs, MemFs};
 use asrs_services::layout;
+use asrs_services::path::PathStyle;
 use asrs_services::recent_units;
 use asrs_services::state_tracker::{self, StateTracker};
 use asrs_services::type_memory;
@@ -136,9 +137,6 @@ struct Env {
 const USER_DATA: &str = "/fake/userData";
 
 /// The oracle's fake fs sees POSIX `path.join` results.
-fn posix(path: String) -> String {
-    path.replace(std::path::MAIN_SEPARATOR, "/")
-}
 const TEMP: &str = "/fake/temp";
 
 impl Env {
@@ -162,11 +160,11 @@ impl Env {
             zone,
             packaged: false,
             app_version: String::new(),
-            beta_file: posix(constants::beta_filename(USER_DATA, "2027")),
-            prefs_file: posix(constants::prefs_filename(USER_DATA)),
+            beta_file: constants::beta_filename(PathStyle::Posix, USER_DATA, "2027"),
+            prefs_file: constants::prefs_filename(PathStyle::Posix, USER_DATA),
             state_file: String::new(),
-            tm_file: posix(constants::type_memory_filename(USER_DATA)),
-            recents_file: posix(constants::recent_units_filename(USER_DATA)),
+            tm_file: constants::type_memory_filename(PathStyle::Posix, USER_DATA),
+            recents_file: constants::recent_units_filename(PathStyle::Posix, USER_DATA),
         }
     }
 
@@ -175,7 +173,7 @@ impl Env {
     fn configure(&mut self, app_version: &str, packaged: bool) {
         self.app_version = app_version.to_owned();
         self.packaged = packaged;
-        self.state_file = posix(constants::state_filename(USER_DATA, app_version));
+        self.state_file = constants::state_filename(PathStyle::Posix, USER_DATA, app_version);
         self.trackers.insert(
             0,
             StateTracker::new(&self.fs, &self.ws, &self.state_file).expect("main tracker"),

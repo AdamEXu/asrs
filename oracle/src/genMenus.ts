@@ -2,6 +2,7 @@ import { install as installGlobals } from "./fakes/globals";
 import * as fakeFs from "./fakes/mainFs";
 import * as electronFake from "./fakes/mainElectron";
 import { toTree } from "./cve1";
+import { runContext } from "./menus/context";
 import { UPSTREAM_DIR } from "./shims";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -16,13 +17,16 @@ import { fileURLToPath } from "node:url";
 //   genMenus template <darwin|win32|linux> <fresh|prefs>
 //     fresh   no preferences file; then three `update-preferences` hub messages
 //     prefs   a preferences file that sets the live mode and Systemcore address before startup
+//   genMenus context <light|dark>
+//     every context menu main.ts's message handlers pop up, and what each item's click does
+//     (menus/context.ts), with nativeTheme dark or light
 //   genMenus electron
 //     the darwin `fresh` template handed to Electron's real Menu.buildFromTemplate in an Electron
 //     main process (genMenusMain.mjs), which fills in role defaults; records Electron's items
 
 const [mode, ...rest] = process.argv.slice(2);
 const usage = () => {
-  console.error("usage: genMenus template <darwin|win32|linux> <fresh|prefs> | genMenus electron");
+  console.error("usage: genMenus template <darwin|win32|linux> <fresh|prefs> | genMenus context <light|dark> | genMenus electron");
   process.exit(2);
 };
 let platform: string;
@@ -30,6 +34,9 @@ let scenario: string;
 if (mode === "template") {
   [platform, scenario] = rest;
   if (!["darwin", "win32", "linux"].includes(platform) || !["fresh", "prefs"].includes(scenario)) usage();
+} else if (mode === "context") {
+  [platform, scenario] = ["darwin", rest[0]];
+  if (!["light", "dark"].includes(scenario)) usage();
 } else if (mode === "electron") {
   [platform, scenario] = ["darwin", "fresh"];
 } else {
@@ -71,6 +78,11 @@ function hubPort(): electronFake.FakePort {
     }
   }
   throw new Error("no hub window port");
+}
+
+if (mode === "context") {
+  await runContext(scenario!, out, flush, hubPort);
+  process.exit(0);
 }
 
 if (mode === "template") {

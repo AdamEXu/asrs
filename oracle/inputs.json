@@ -343,6 +343,7 @@
     "src/fakes/mainFs.ts",
     "src/genMenus.ts",
     "src/genMenusMain.ts",
+    "src/menus/context.ts",
     "src/shims.ts"
   ],
   "genMenusMain": [
