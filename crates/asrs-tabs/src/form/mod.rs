@@ -4,11 +4,13 @@
 
 pub mod css;
 pub mod decimal;
+mod select;
 
 use asrs_js::number;
 use asrs_js::string::JsString;
 
 use decimal::Decimal;
+pub use select::{OptGroup, Select, SelectItem, SelectOption, TypeAhead, is_printable_char};
 
 const HTML_SPACES: [u16; 5] = [0x09, 0x0A, 0x0C, 0x0D, 0x20];
 
@@ -340,166 +342,5 @@ impl RangeInput {
         let range = self.step_range();
         let value = parse_to_decimal_for_number_type(proposed.units(), range.default_value());
         serialize_for_number_type(&range.clamp_value(&value))
-    }
-}
-
-/// An `<option>`: its `value` attribute, if any, and its text content.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SelectOption {
-    value: Option<JsString>,
-    text_content: JsString,
-}
-
-impl SelectOption {
-    /// `<option value="...">text</option>` from markup.
-    pub fn new(value: Option<&str>, text: &str) -> SelectOption {
-        SelectOption {
-            value: value.map(JsString::from),
-            text_content: JsString::from(text),
-        }
-    }
-
-    /// `document.createElement("option")` with `innerText = text`: each line break (CR LF, CR
-    /// or LF) becomes a `<br>`, which adds nothing to the text content.
-    pub fn from_inner_text(text: &JsString) -> SelectOption {
-        SelectOption {
-            value: None,
-            text_content: JsString::from_units(
-                text.units()
-                    .iter()
-                    .copied()
-                    .filter(|&u| u != 0x0A && u != 0x0D)
-                    .collect(),
-            ),
-        }
-    }
-
-    /// `value`: the attribute, else the text.
-    pub fn value(&self) -> JsString {
-        self.value.clone().unwrap_or_else(|| self.text())
-    }
-
-    /// `text` (and `label`, as no option has a `label` attribute): the text content with HTML
-    /// whitespace stripped and each run of it collapsed to one space.
-    pub fn text(&self) -> JsString {
-        let mut out: Vec<u16> = Vec::new();
-        let mut pending_space = false;
-        for &u in self.text_content.units() {
-            if HTML_SPACES.contains(&u) {
-                pending_space = !out.is_empty();
-            } else {
-                if std::mem::take(&mut pending_space) {
-                    out.push(0x20);
-                }
-                out.push(u);
-            }
-        }
-        JsString::from_units(out)
-    }
-
-    /// `textContent`, which is also what `innerText` reads while the option is not rendered.
-    pub fn text_content(&self) -> &JsString {
-        &self.text_content
-    }
-}
-
-/// A drop-down `<select>`: its options and `selectedIndex`. Inserting or removing options runs
-/// the selectedness algorithm, which selects the first option when none is selected; assigning
-/// `value` or `selectedIndex` does not, so a value no option has leaves nothing selected.
-#[derive(Clone, Debug, Default)]
-pub struct Select {
-    options: Vec<SelectOption>,
-    selected: Option<usize>,
-}
-
-impl Select {
-    /// An empty `<select>`: `selectedIndex === -1`.
-    pub fn new() -> Select {
-        Select::default()
-    }
-
-    /// Options in markup order.
-    pub fn with_options(options: Vec<SelectOption>) -> Select {
-        let mut select = Select {
-            options,
-            selected: None,
-        };
-        select.run_selectedness();
-        select
-    }
-
-    /// `<option value="v">` per value, all with the same text as their value.
-    pub fn with_values(values: &[&str]) -> Select {
-        Select::with_options(
-            values
-                .iter()
-                .map(|v| SelectOption::new(Some(v), v))
-                .collect(),
-        )
-    }
-
-    /// `value`: the selected option's, or `""` when nothing is selected.
-    pub fn value(&self) -> JsString {
-        self.selected
-            .and_then(|i| self.options.get(i))
-            .map(SelectOption::value)
-            .unwrap_or_default()
-    }
-
-    /// `selectedIndex`.
-    pub fn selected_index(&self) -> i32 {
-        self.selected.map_or(-1, |i| i as i32)
-    }
-
-    /// `select.value = value`: the first option with that value, else nothing.
-    pub fn set_value(&mut self, value: &JsString) {
-        self.selected = self.options.iter().position(|o| o.value() == *value);
-    }
-
-    /// `select.selectedIndex = index`; out of range selects nothing.
-    pub fn set_selected_index(&mut self, index: i32) {
-        self.selected = usize::try_from(index)
-            .ok()
-            .filter(|&i| i < self.options.len());
-    }
-
-    pub fn options(&self) -> &[SelectOption] {
-        &self.options
-    }
-
-    /// `select.appendChild(option)`.
-    pub fn append(&mut self, option: SelectOption) {
-        self.options.push(option);
-        self.run_selectedness();
-    }
-
-    /// `select.remove(index)`; out of range removes nothing.
-    pub fn remove(&mut self, index: usize) {
-        if index >= self.options.len() {
-            return;
-        }
-        self.options.remove(index);
-        self.selected = match self.selected {
-            Some(s) if s == index => None,
-            Some(s) if s > index => Some(s - 1),
-            other => other,
-        };
-        self.run_selectedness();
-    }
-
-    /// Removing every option, then appending each of `options`.
-    pub fn replace_options(&mut self, options: Vec<SelectOption>) {
-        while !self.options.is_empty() {
-            self.remove(self.options.len() - 1);
-        }
-        for option in options {
-            self.append(option);
-        }
-    }
-
-    fn run_selectedness(&mut self) {
-        if self.selected.is_none() && !self.options.is_empty() {
-            self.selected = Some(0);
-        }
     }
 }

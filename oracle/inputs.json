@@ -662,6 +662,14 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "selectKeys": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/selectKeys.ts"
+  ],
+  "selectKeysMain": [
+    "src/selectKeysMain.ts"
+  ],
   "selftest": [
     "src/cve1.ts",
     "src/environment.ts",
