@@ -10,7 +10,7 @@ use asrs_js::number;
 use asrs_js::string::JsString;
 
 use decimal::Decimal;
-pub use select::{OptGroup, Select, SelectItem, SelectOption, TypeAhead, is_printable_char};
+pub use select::{OptGroup, Select, SelectItem, SelectOption, TypeAhead};
 
 const HTML_SPACES: [u16; 5] = [0x09, 0x0A, 0x0C, 0x0D, 0x20];
 

@@ -590,8 +590,3 @@ fn is_trail_surrogate(u: u16) -> bool {
     (0xDC00..0xE000).contains(&u)
 }
 
-/// `WTF::unicode::IsPrintableChar` (`u_isprint`) for the characters a `keypress` carries: not
-/// a C0 or C1 control.
-pub fn is_printable_char(char_code: u16) -> bool {
-    !(char_code < 0x20 || (0x7F..=0x9F).contains(&char_code))
-}
