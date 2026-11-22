@@ -124,6 +124,66 @@ pub fn write_rect(pixmap: &mut Pixmap, image: &ImageData, x: i64, y: i64) {
     }
 }
 
+/// `src` as a compositor draws a transformed layer into a `width` x `height` device-pixel
+/// target: each target pixel centre is mapped back through `inverse` (`[a, b, c, d, e, f]`,
+/// `x' = a*x + c*y + e`, `y' = b*x + d*y + f`) and `src` is sampled bilinearly there, transparent
+/// outside it. A pixel centre that lands on a source pixel centre copies that pixel exactly.
+pub fn transform_bilinear(
+    src: &Pixmap,
+    width: u32,
+    height: u32,
+    inverse: [f64; 6],
+) -> Option<Pixmap> {
+    let mut out = Pixmap::new(width, height)?;
+    let [a, b, c, d, e, f] = inverse;
+    let (sw, sh) = (i64::from(src.width()), i64::from(src.height()));
+    let data = src.data();
+    let texel = |x: i64, y: i64| -> [f32; 4] {
+        if x < 0 || y < 0 || x >= sw || y >= sh {
+            return [0.0; 4];
+        }
+        let i = ((y * sw + x) * 4) as usize;
+        [0, 1, 2, 3].map(|k| f32::from(data[i + k]))
+    };
+    let split = |v: f64| {
+        let i = v.floor();
+        let t = v - i;
+        if t < 1e-6 {
+            (i as i64, 0.0)
+        } else if t > 1.0 - 1e-6 {
+            (i as i64 + 1, 0.0)
+        } else {
+            (i as i64, t as f32)
+        }
+    };
+    let row = width as usize * 4;
+    let pixels = out.data_mut();
+    for y in 0..height {
+        let py = f64::from(y) + 0.5;
+        for x in 0..width {
+            let px = f64::from(x) + 0.5;
+            let (x0, tx) = split(a * px + c * py + e - 0.5);
+            let (y0, ty) = split(b * px + d * py + f - 0.5);
+            let p = if tx == 0.0 && ty == 0.0 {
+                texel(x0, y0)
+            } else {
+                let (p00, p10) = (texel(x0, y0), texel(x0 + 1, y0));
+                let (p01, p11) = (texel(x0, y0 + 1), texel(x0 + 1, y0 + 1));
+                std::array::from_fn(|k| {
+                    let top = p00[k] + (p10[k] - p00[k]) * tx;
+                    let bottom = p01[k] + (p11[k] - p01[k]) * tx;
+                    top + (bottom - top) * ty
+                })
+            };
+            let i = y as usize * row + x as usize * 4;
+            for k in 0..4 {
+                pixels[i + k] = p[k].round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,5 +214,16 @@ mod tests {
         let pixmap = pixmap_from_straight_rgba(1, 1, &[9, 9, 9, 255]).unwrap();
         let data = read_rect(&pixmap, -1, 0, 2, 1).unwrap();
         assert_eq!(data.data, [0, 0, 0, 0, 9, 9, 9, 255]);
+    }
+
+    #[test]
+    fn quarter_turn_copies_pixels_exactly() {
+        let mut src = Pixmap::new(3, 2).expect("pixmap");
+        for (i, p) in src.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            *p = [i as u8 * 10, 0, 0, 255];
+        }
+        let out = transform_bilinear(&src, 2, 3, [0.0, 1.0, -1.0, 0.0, 3.0, 0.0]).expect("out");
+        let reds: Vec<u8> = out.data().as_chunks::<4>().0.iter().map(|p| p[0]).collect();
+        assert_eq!(reds, [20, 50, 10, 40, 0, 30]);
     }
 }

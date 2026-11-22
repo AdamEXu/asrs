@@ -14,7 +14,7 @@ name = "asrs"
 path = "src/main.rs"
 
 [features]
-parity = ["asrs-ui/parity", "dep:png"]
+parity = ["asrs-ui/parity"]
 
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
@@ -27,7 +27,7 @@ asrs-services = { path = "../asrs-services" }
 asrs-tabs = { path = "../asrs-tabs" }
 asrs-ui.workspace = true
 async-channel = "=2.5.0"
-png = { version = "=0.18.1", optional = true }
+png = "=0.18.1"
 
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }

@@ -53,7 +53,7 @@ fn title_style(align: &str) -> TextStyle {
 
 /// Where `div.title`'s centred line starts in a box `available` wide: Blink halves the free
 /// space in `LayoutUnit`s, so the offset is truncated to 1/64 px rather than snapped with the box.
-fn centred_offset(available: f64, text_width: f64) -> Option<f64> {
+pub(super) fn centred_offset(available: f64, text_width: f64) -> Option<f64> {
     let free = math::floor(available * 64.0) - math::ceil(text_width * 64.0);
     (free >= 0.0).then(|| math::floor(free / 2.0) / 64.0)
 }
@@ -207,7 +207,7 @@ fn length(l: Length, of: f64) -> f32 {
 /// A box `rel` CSS px right of a parent whose exact CSS position is `parent` and whose GPUI box
 /// sits there snapped to the device pixel grid: the offset to author, which GPUI keeps whole,
 /// and the fraction of the exact position that snapping drops.
-fn place_in(parent: f64, rel: f64, scale: f64) -> (f32, f64) {
+pub(super) fn place_in(parent: f64, rel: f64, scale: f64) -> (f32, f64) {
     let snap = |v: f64| math::floor(v * scale + 0.5) / scale;
     let exact = parent + rel;
     ((snap(exact) - snap(parent)) as f32, exact - snap(exact))

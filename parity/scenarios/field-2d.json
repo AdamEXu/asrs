@@ -1,11 +1,302 @@
 {
-  "about": "Generated drive log on a new 2D Field tab with the robot pose at a selected time",
+  "about": "Interaction (U15): the generated drive log, in wall-blue coordinates, on a restored 2D field with a full-log heatmap of /Odometry/Robot3d at a selected time; /Odometry/Robot dragged from the sidebar into the source list with the pointer (a robot), the small robot size and a clockwise rotation clicked in the settings, the rotation undone, trackpad zoom and a drag pan over the field, then the robot camera through main's set-2d-camera reply (what the camera menu's item sends; the native menu itself cannot be clicked on either side). Saved HubState (sources, field settings, zoom, pan, camera) is compared at each capture; nothing is masked",
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
   "actions": [
-    { "open": ["app:drive"] },
-    { "idle": true },
-    { "main": "new-tab", "data": 2 },
-    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Robot\")" },
-    { "selection": ["setSelectedTime", 3.25] },
-    { "capture": "robot", "probes": [".tab-bar", ".renderer-content", ".controls-content", ".timeline"] }
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "heatmap",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 182
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 182
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 186
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 548,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 550,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 550,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "robot",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1071,
+      "y": 575
+    },
+    {
+      "mouse": "click",
+      "x": 1071,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 937,
+      "y": 575
+    },
+    {
+      "mouse": "click",
+      "x": 937,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "rotated",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 887,
+      "y": 575
+    },
+    {
+      "mouse": "click",
+      "x": 887,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "wheel": {
+        "x": 600,
+        "y": 300,
+        "deltaY": 40,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 600,
+        "y": 300,
+        "deltaY": 35,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 600,
+        "y": 300,
+        "deltaY": 45,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 580,
+      "y": 290
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 280
+    },
+    {
+      "mouse": "up",
+      "x": 560,
+      "y": 280
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "zoomed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "main": "set-2d-camera",
+      "data": 1
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "camera",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "main": "set-2d-camera",
+      "data": 2
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "rotation",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    }
   ]
 }
