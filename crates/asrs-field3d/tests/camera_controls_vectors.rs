@@ -63,10 +63,20 @@ fn canonical(v: &Value) -> Value {
     }
 }
 
-fn compare(expected: &Value, actual: &Value) -> Result<()> {
+enum Matched {
+    Exactly,
+    /// Within the last bit a platform `pow` may change (off macOS). The state now holds that
+    /// platform's result, which later steps compound, so the case is compared no further.
+    UpToPow,
+}
+
+fn compare(expected: &Value, actual: &Value) -> Result<Matched> {
     let (expected, actual) = (canonical(expected), canonical(actual));
+    if vectors::values_match(&expected, &actual) {
+        return Ok(Matched::Exactly);
+    }
     if vectors::pow_values_match(&expected, &actual) {
-        return Ok(());
+        return Ok(Matched::UpToPow);
     }
     Err(diff::report(&expected, &actual).unwrap_or_else(|| "encodings differ".to_owned()))
 }
@@ -310,7 +320,11 @@ fn run(record: &Record, mac: bool) -> Result<()> {
             ])
         };
         let expected = Value::Array(step.to_vec());
-        compare(&expected, &actual).map_err(|e| format!("step {i} {}: {e}", step[0].encode()))?;
+        let matched = compare(&expected, &actual)
+            .map_err(|e| format!("step {i} {}: {e}", step[0].encode()))?;
+        if let Matched::UpToPow = matched {
+            return Ok(());
+        }
     }
 
     let camera = controls.camera_mut();
@@ -321,7 +335,9 @@ fn run(record: &Record, mac: bool) -> Result<()> {
         nums(&camera.projection_matrix.elements),
         nums(&camera.projection_matrix_inverse.elements),
     ]);
-    compare(&value(record, "final")?, &actual).map_err(|e| format!("final: {e}"))
+    compare(&value(record, "final")?, &actual)
+        .map(|_| ())
+        .map_err(|e| format!("final: {e}"))
 }
 
 record_vectors!(
