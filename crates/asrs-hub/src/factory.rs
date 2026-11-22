@@ -6,8 +6,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use asrs_canvas::text::TextBackend;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::create_uuid;
+use asrs_js::time::{Clock, create_uuid};
 use asrs_js::value::JsValue;
 use asrs_model::tab_controller::{
     NoopController, NoopRenderer, TabCommand, TabController, TabRenderer,
@@ -18,7 +19,7 @@ use asrs_tabs::documentation::DocumentationRenderer;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
-use asrs_tabs::line_graph::LineGraphController;
+use asrs_tabs::line_graph::{LineGraphController, LineGraphDom, LineGraphRenderer};
 use asrs_tabs::list_cx::SourceListCx;
 use asrs_tabs::mechanism::MechanismController;
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
@@ -34,6 +35,13 @@ use crate::tabs::{TabFactory, TabParts, TabsHost};
 pub trait HubTabCx: SourceListCx + StatisticsCx + VideoCx + TabsHost {}
 
 impl<T: SourceListCx + StatisticsCx + VideoCx + TabsHost + ?Sized> HubTabCx for T {}
+
+/// The page's `Date` and the canvas text stack a renderer measures its labels with.
+#[derive(Clone)]
+pub struct CanvasEnv {
+    pub clock: Rc<dyn Clock>,
+    pub text: Rc<RefCell<dyn TextBackend>>,
+}
 
 /// The renderer of a tab type whose renderer unit has not landed. Upstream's `saveState()`
 /// returns `null` for every one of them (`Field3dRenderer` until its implementation exists),
@@ -108,10 +116,19 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
                 Box::new(NoopController),
                 Box::new(DocumentationRenderer::new()),
             ),
-            Some(TabType::LineGraph) => (
-                Box::new(LineGraphController::new(cx.tab_rng())),
-                pending(TabType::LineGraph),
-            ),
+            Some(TabType::LineGraph) => {
+                let controller = LineGraphController::new(cx.tab_rng());
+                let renderer: Box<dyn TabRenderer<Cx>> = match cx.canvas_env() {
+                    Some(env) => Box::new(LineGraphRenderer::new(
+                        true,
+                        env.clock,
+                        Rc::new(RefCell::new(LineGraphDom::default())),
+                        env.text,
+                    )),
+                    None => pending(TabType::LineGraph),
+                };
+                (Box::new(controller), renderer)
+            }
             Some(TabType::Field2d) => (
                 Box::new(Field2dController::new(cx)),
                 Box::new(Field2dRenderer::new(Rc::new(RefCell::new(

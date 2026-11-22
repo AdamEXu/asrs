@@ -73,7 +73,9 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Preferences, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::Undisplayed;
-use asrs_model::source_list::{Env, ItemView, Length, Rect, SourceList};
+use asrs_model::source_list::{
+    Env, ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList, SourceListDom,
+};
 use asrs_model::source_list_config::{
     SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
 };
@@ -384,6 +386,36 @@ struct Host {
     dark: bool,
     rng: NoRandom,
     sent: Vec<NamedMessage<HubToMain>>,
+    edit_rect: Rect,
+}
+
+/// No list is laid out, except that `button.edit` answers the rect upstream recorded for the
+/// click being replayed.
+struct EditDom(Rect);
+
+impl SourceListDom for EditDom {
+    fn root_rect(&mut self, _list: &str) -> Rect {
+        Rect::default()
+    }
+    fn list_rect(&mut self, _list: &str) -> Rect {
+        Rect::default()
+    }
+    fn item_rect(&mut self, _list: &str, _index: usize) -> Rect {
+        Rect::default()
+    }
+    fn item_client_width(&mut self, _list: &str, _index: usize) -> f64 {
+        0.0
+    }
+    fn button_rect(&mut self, _list: &str, button: ListButton) -> Rect {
+        if button == ListButton::Edit {
+            self.0
+        } else {
+            Rect::default()
+        }
+    }
+    fn type_name_width(&mut self, _text: &str) -> f64 {
+        0.0
+    }
 }
 
 impl TabCx for Host {
@@ -426,7 +458,7 @@ impl SourceListCx for Host {
             type_memory: &mut self.memory,
             selection: &mut self.selection,
             dark: self.dark,
-            dom: Undisplayed::dom(),
+            dom: Box::leak(Box::new(EditDom(self.edit_rect))),
         }
     }
 }
@@ -633,6 +665,7 @@ impl Harness {
                 dark: false,
                 rng: NoRandom,
                 sent: Vec::new(),
+                edit_rect: Rect::default(),
             },
             realm: JsRealm::new(Box::new(NoRandom)),
             controllers: Vec::new(),
@@ -1287,9 +1320,24 @@ impl Harness {
                     width: num(at(r, 2))?,
                     height: num(at(r, 3))?,
                 };
-                self.controllers[id]
-                    .ask_edit_axis(&mut self.host, list, rect)
-                    .map_err(|e| format!("ask_edit_axis threw {}", error_text(&e)))?;
+                self.host.edit_rect = rect;
+                let uuid = self.controllers[id].list(list).uuid().to_owned();
+                let mut errors = Vec::new();
+                let out = TabController::source_list_input(
+                    &mut self.controllers[id],
+                    &mut self.host,
+                    ListInput::Pointer {
+                        uuid: &uuid,
+                        event: ListPointer::EditClick,
+                    },
+                    &mut errors,
+                );
+                if let Some(e) = errors.first() {
+                    return Err(format!("the edit button threw {}", error_text(e)));
+                }
+                if out.edit != Some(rect) {
+                    return Err(format!("the edit button read {:?}", out.edit));
+                }
                 match std::mem::take(&mut self.host.sent).as_slice() {
                     [
                         NamedMessage {

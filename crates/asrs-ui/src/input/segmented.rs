@@ -202,6 +202,7 @@ impl RenderOnce for SegmentedControl {
                                 scale: 1.0,
                                 centered: true,
                                 zoom: dpr,
+                                translate: [0.0, 0.0],
                             };
                             let origin = [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];
                             paint_icon(&source, chain, &placement, origin, window, cx);

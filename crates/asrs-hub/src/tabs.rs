@@ -25,6 +25,8 @@ use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::source_list::Rect;
 use asrs_model::source_list::{ListInput, ListOutput};
 use asrs_model::tab_controller::{Command, TabController, TabRenderer};
+
+pub use crate::factory::CanvasEnv;
 use asrs_model::tab_type::TabType;
 use indexmap::IndexSet;
 
@@ -177,6 +179,11 @@ pub trait TabsHost {
     }
     fn tab_bar_client_width(&self) -> f64 {
         0.0
+    }
+    /// What canvas renderers are built with; `None` on a page without canvases, whose line
+    /// graphs then draw nothing.
+    fn canvas_env(&self) -> Option<CanvasEnv> {
+        None
     }
 }
 
