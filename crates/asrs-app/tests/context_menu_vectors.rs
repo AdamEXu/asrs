@@ -25,6 +25,7 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_services::constants::recent_units_filename;
 use asrs_services::fs::{Fs, MemFs};
+use asrs_services::path::PathStyle;
 use asrs_services::recent_units;
 use asrs_services::window_manager::{Platform, WindowKind, WindowManager};
 use asrs_services::windows::Rect;
@@ -209,8 +210,12 @@ impl Fakes<'_> {
                 }
                 Effect::WriteClipboard(text) => self.observed.clipboard.push(cve(text)),
                 Effect::UpdateRecentUnits(preset) => {
-                    recent_units::update(&self.fs, &recent_units_filename(USER_DATA), preset)
-                        .expect("updateRecents");
+                    recent_units::update(
+                        &self.fs,
+                        &recent_units_filename(PathStyle::Posix, USER_DATA),
+                        preset,
+                    )
+                    .expect("updateRecents");
                 }
                 Effect::OpenSourceListHelp(config) => {
                     let mut manager = WindowManager::for_platform(Platform::Mac);
@@ -422,7 +427,7 @@ fn replay(id: &str, expect_clicks: bool) -> Tally {
                     observed: Observed::default(),
                     broadcasts: 0,
                 };
-                let recents_file = recent_units_filename(USER_DATA);
+                let recents_file = recent_units_filename(PathStyle::Posix, USER_DATA);
                 if let Some(recent) = &recents {
                     let text = json::stringify(&js(recent))
                         .expect("stringify")
