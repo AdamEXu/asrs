@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainRequest, WorkerName};
@@ -30,6 +30,14 @@ fn interval_period(period_ms: f64) -> Duration {
         1.0
     };
     Duration::from_millis(ms as u64)
+}
+
+/// Blink's `TimerBase::RunInternal`: a repeating timer's next fire time is set before its
+/// callback runs and stays on the original period grid, skipping beats it missed, so the
+/// callback's own duration and late wakeups never make it drift.
+fn next_fire(scheduled: Instant, now: Instant, period: Duration) -> Instant {
+    let late = now.saturating_duration_since(scheduled).as_nanos() % period.as_nanos();
+    now + period - Duration::from_nanos(late as u64)
 }
 
 struct WorkerSlot {
@@ -303,8 +311,13 @@ impl HubHost for GpuiHost<'_, '_> {
         let period = interval_period(period_ms);
         let key = interval.clone();
         let task = self.cx.spawn(async move |this, cx| {
+            let executor = cx.background_executor().clone();
+            let mut next = executor.now() + period;
             loop {
-                cx.background_executor().timer(period).await;
+                executor
+                    .timer(next.saturating_duration_since(executor.now()))
+                    .await;
+                next = next_fire(next, executor.now(), period);
                 if this
                     .update(cx, |hub, cx| hub.fire_interval(&key, cx))
                     .is_err()
@@ -429,4 +442,20 @@ impl HubHost for GpuiHost<'_, '_> {
     }
 
     fn stop_publisher(&mut self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intervals_stay_on_their_period_grid() {
+        let period = interval_period(250.0);
+        let t0 = Instant::now();
+        let ms = |n| t0 + Duration::from_millis(n);
+        assert_eq!(next_fire(ms(250), ms(250), period), ms(500));
+        assert_eq!(next_fire(ms(250), ms(280), period), ms(500));
+        assert_eq!(next_fire(ms(250), ms(790), period), ms(1000));
+        assert_eq!(interval_period(1000.0 / 60.0), Duration::from_millis(16));
+    }
 }
