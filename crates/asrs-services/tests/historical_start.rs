@@ -12,7 +12,7 @@ use asrs_js::time::Rng;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
-use asrs_services::fs::{Failure, Fs, MemFs, ReadError};
+use asrs_services::fs::{DirEntry, Failure, Fs, MemFs, ReadError};
 use asrs_services::historical_start::FileOpen;
 use sha2::{Digest, Sha256};
 
@@ -45,6 +45,12 @@ impl Fs for Slashed<'_> {
     }
     fn remove(&self, path: &str) {
         Fs::remove(self.0, &slashed(path))
+    }
+    fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>, asrs_js::string::JsError> {
+        self.0.read_dir(&slashed(path))
+    }
+    fn mkdir(&self, path: &str) -> Result<(), asrs_js::string::JsError> {
+        self.0.mkdir(&slashed(path))
     }
 }
 

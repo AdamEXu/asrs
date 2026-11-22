@@ -243,6 +243,24 @@ pub fn measure(cx: &mut App, style: &TextStyle, text: &str, scale: f32) -> (f64,
     (l.width_px(), l.height_px())
 }
 
+/// Measures text outside a render, with its own backend: for layout reads a model makes
+/// while no `App` is at hand.
+pub struct Measurer(Box<dyn TextBackend>);
+
+impl Default for Measurer {
+    fn default() -> Self {
+        Measurer(platform_backend().unwrap_or_else(|| Box::new(FixedAdvance)))
+    }
+}
+
+impl Measurer {
+    /// [`measure`]'s border-box size.
+    pub fn measure(&mut self, style: &TextStyle, text: &str, scale: f32) -> (f64, f64) {
+        let l = dom::layout(self.0.as_mut(), style, text, None, scale);
+        (l.width_px(), l.height_px())
+    }
+}
+
 /// `v` less its value snapped to the device pixel grid the way GPUI snaps layout: what a
 /// fractional CSS position loses to snapping, for [`Text::subpixel`].
 pub fn snap_remainder(v: f32, scale: f32) -> f32 {

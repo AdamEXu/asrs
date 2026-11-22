@@ -869,6 +869,18 @@ pub enum DragContent {
     Tab(TabDragStart),
 }
 
+impl From<DragPayload> for DragData {
+    fn from(payload: DragPayload) -> Self {
+        DragData::Fields(payload)
+    }
+}
+
+impl From<DragItem> for DragContent {
+    fn from(item: DragItem) -> Self {
+        DragContent::Field(item)
+    }
+}
+
 /// Which resize handle a pointer event targets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Handle {
@@ -957,8 +969,8 @@ impl HubShell {
         }
     }
 
-    /// The window's `mousemove` listeners up to `dragMove`, in registration order: the
-    /// sidebar handle's, the controls handle's, then hub.ts's. `sync` runs between them so
+    /// The window's `mousemove` listeners in registration order: the sidebar handle's, the
+    /// controls handle's, hub.ts's `dragMove`, then the field labels'. `sync` runs between them so
     /// the page's geometry reads see what the previous listener changed.
     pub fn window_mouse_move(
         &mut self,
@@ -973,7 +985,14 @@ impl HubShell {
         let result = tabs.window_mouse_move(page, y);
         sync(hub);
         self.drag.move_to(x, y);
-        result.and(self.dispatch_tab_drag(hub))
+        let result = result.and(self.dispatch_tab_drag(hub));
+        let was_active = self.drag.active();
+        let drag = &mut self.drag;
+        hub.with_sidebar(|sidebar, _| sidebar.fields_mouse_move(drag, x, y));
+        if self.drag.active() && !was_active {
+            self.cursor = BodyCursor::Grabbing;
+        }
+        result
     }
 
     /// The `drag-update` events of a tab drag, which `Tabs` handles.

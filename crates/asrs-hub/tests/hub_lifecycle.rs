@@ -23,7 +23,7 @@ use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerTh
 use asrs_hub::hub::{
     ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView, LiveSourceKind,
 };
-use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SetClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
@@ -78,7 +78,9 @@ impl Clock for PageClock {
 }
 
 /// jsdom with oracle/src/dom/layout.json: no rule reaches sidebar rows, so each is 0x0.
-struct View;
+struct View {
+    sidebar: NoLayout,
+}
 
 impl HubView for View {
     fn inner_height(&self) -> f64 {
@@ -93,16 +95,8 @@ impl HubView for View {
         false
     }
 
-    fn can_scroll_into_view(&self) -> bool {
-        false
-    }
-
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
-        vec![RowRect::default(); sidebar.rows().len()]
-    }
-
-    fn measure_value(&self, _value: &RowValue) -> f64 {
-        0.0
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
+        &mut self.sidebar
     }
 }
 
@@ -693,7 +687,12 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
     // UUID (the same draw dom_tabs.rs makes).
     rng.next_f64();
     let realm = JsRealm::new(Box::new(rng));
-    let hub = HubModel::new(realm, Rc::new(PageClock(clock)), Box::new(View), &mut host);
+    let hub = HubModel::new(
+        realm,
+        Rc::new(PageClock(clock)),
+        Box::new(View { sidebar: NoLayout }),
+        &mut host,
+    );
     let mut runner = Runner { host, hub };
 
     let version = asrs_js::ops::object([
