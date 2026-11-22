@@ -24,11 +24,11 @@ use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
 use asrs_services::window_manager::{Opened, OptionValue, WindowManager};
-use asrs_ui::platform::probe;
-use gpui_kit::{
+use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, AsyncApp, Bounds, Context, IntoElement, Render, Styled,
     Window, WindowBounds, WindowOptions, div, point, px, size,
 };
+use asrs_ui::platform::probe;
 
 const ELECTRON_MAIN: &str = r#"
 const { app, BrowserWindow, dialog } = require("electron");
@@ -489,7 +489,7 @@ async fn floating(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
                         point(px(900.0), px(500.0)),
                         size(px(200.0), px(100.0)),
                     ))),
-                    kind: gpui_kit::WindowKind::Floating,
+                    kind: asrs_ui::gpui::WindowKind::Floating,
                     ..Default::default()
                 },
                 |_, cx| cx.new(|_| Blank),
@@ -758,7 +758,7 @@ fn main() {
         println!("window sizes: skipped on this platform");
         return;
     }
-    gpui_kit::application().run(|cx: &mut App| {
+    asrs_ui::gpui::application().run(|cx: &mut App| {
         asrs_ui::init(cx);
         windows::init(cx);
         cx.activate(true);

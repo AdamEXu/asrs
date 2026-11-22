@@ -2,11 +2,11 @@
 //! a 38 px drag strip across the window top, under a transparent native title bar, with the
 //! window title drawn beside the sidebar.
 
-use asrs_ui::text::{Text, TextStyle};
-use asrs_ui::theme::FONT_FAMILY;
-use gpui_kit::{
+use asrs_ui::gpui::{
     InteractiveElement, IntoElement, MouseButton, ParentElement, SharedString, Styled, div, px,
 };
+use asrs_ui::text::{Text, TextStyle};
+use asrs_ui::theme::FONT_FAMILY;
 
 pub const TITLE_BAR_HEIGHT: f32 = 38.0;
 

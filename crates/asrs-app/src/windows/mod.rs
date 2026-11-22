@@ -13,7 +13,7 @@ pub use asrs_ui::platform::dialog::{
 };
 
 use asrs_services::window_manager::{Opened, WindowManager};
-use gpui_kit::{AnyWindowHandle, App, Entity, Global, Render, Window};
+use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, Render, Window};
 
 #[derive(Default)]
 pub struct Windows {
@@ -93,7 +93,7 @@ pub fn close(cx: &mut App, id: WindowId) {
     .detach();
 }
 
-pub type Opening<V> = gpui_kit::Result<(WindowId, Entity<V>)>;
+pub type Opening<V> = asrs_ui::gpui::Result<(WindowId, Entity<V>)>;
 
 fn open_new<V: Render>(
     cx: &mut App,
@@ -166,7 +166,7 @@ pub fn open_source_list_help<V: Render>(
 }
 
 /// What opening a singleton window did: `None` when it already existed and was focused.
-pub type SingletonOpening<V> = gpui_kit::Result<Option<(WindowId, Entity<V>)>>;
+pub type SingletonOpening<V> = asrs_ui::gpui::Result<Option<(WindowId, Entity<V>)>>;
 
 fn singleton<V: Render>(
     cx: &mut App,

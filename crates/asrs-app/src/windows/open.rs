@@ -1,8 +1,8 @@
-use asrs_ui::platform::{self, NativeWindow};
-use gpui_kit::{
+use asrs_ui::gpui::{
     AnyWindowHandle, App, Bounds, Entity, Render, TitlebarOptions, Window,
     WindowBackgroundAppearance, WindowBounds, point, px, size,
 };
+use asrs_ui::platform::{self, NativeWindow};
 
 use super::{Rect, WindowId, WindowKind, WindowOptions, Windows};
 
@@ -11,14 +11,14 @@ type Size = (f64, f64);
 /// `INT_MAX`, which Electron puts in for a maximum size dimension that is not given.
 const UNBOUNDED: f64 = i32::MAX as f64;
 
-fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> gpui_kit::WindowOptions {
+fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui::WindowOptions {
     let content = size(px(options.width as f32), px(options.height as f32));
     let bounds = match options.x.zip(options.y) {
         Some((x, y)) => Bounds::new(point(px(x.trunc() as f32), px(y.trunc() as f32)), content),
         None => Bounds::centered(None, content, cx),
     };
     let fancy = options.kind == WindowKind::Hub && cfg!(target_os = "macos");
-    gpui_kit::WindowOptions {
+    asrs_ui::gpui::WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: None,
@@ -32,13 +32,13 @@ fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> gpui_kit::Wind
             WindowBackgroundAppearance::Opaque
         },
         kind: if options.modal && !cfg!(target_os = "macos") {
-            gpui_kit::WindowKind::Dialog
+            asrs_ui::gpui::WindowKind::Dialog
         } else if options.modal {
-            gpui_kit::WindowKind::Normal
+            asrs_ui::gpui::WindowKind::Normal
         } else if options.always_on_top {
-            gpui_kit::WindowKind::Floating
+            asrs_ui::gpui::WindowKind::Floating
         } else {
-            gpui_kit::WindowKind::Normal
+            asrs_ui::gpui::WindowKind::Normal
         },
         is_resizable: options.resizable.unwrap_or(true),
         focus: true,
@@ -47,7 +47,7 @@ fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> gpui_kit::Wind
     }
 }
 
-fn rect(bounds: Bounds<gpui_kit::Pixels>) -> Rect {
+fn rect(bounds: Bounds<asrs_ui::gpui::Pixels>) -> Rect {
     Rect {
         x: f64::from(f32::from(bounds.origin.x)),
         y: f64::from(f32::from(bounds.origin.y)),
@@ -130,7 +130,7 @@ pub(super) fn open<V: Render>(
     id: WindowId,
     options: WindowOptions,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
-) -> gpui_kit::Result<(AnyWindowHandle, Entity<V>)> {
+) -> asrs_ui::gpui::Result<(AnyWindowHandle, Entity<V>)> {
     let deferred = cfg!(target_os = "macos");
     let parent = options
         .parent

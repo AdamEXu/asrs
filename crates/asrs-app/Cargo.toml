@@ -20,7 +20,6 @@ parity = ["asrs-ui/parity"]
 asrs-js = { path = "../asrs-js" }
 asrs-services = { path = "../asrs-services" }
 asrs-ui.workspace = true
-gpui-kit.workspace = true
 
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }
