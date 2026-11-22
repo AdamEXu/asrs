@@ -3,7 +3,7 @@
 
 use asrs_js::json;
 use asrs_js::ops;
-use asrs_js::string::{JsString, TextDecoder};
+use asrs_js::string::{JsString, response_text};
 use asrs_js::time::{LocalZone, date_from_value, format_date};
 use asrs_js::value::JsValue;
 
@@ -159,12 +159,7 @@ impl UpdateChecker {
             headers: vec![("pragma", "no-cache"), ("cache-control", "no-cache")],
         };
         let data = match fetch(&request) {
-            FetchReply::Response { body, .. } => {
-                // `response.json()`: lossy UTF-8 decode (one BOM stripped), then JSON.parse.
-                let decoder = TextDecoder::new(None, false, false).expect("utf-8 is supported");
-                let text = decoder.decode(&body).expect("lossy decoding cannot fail");
-                json::parse(&text).ok()
-            }
+            FetchReply::Response { body, .. } => json::parse(&response_text(&body)).ok(),
             FetchReply::Rejected => None,
         };
         let Some(data) = data else {
@@ -233,7 +228,7 @@ impl UpdateChecker {
         };
         self.latest_version = tag.slice(1.0, None);
         let published = ops::get(latest, "published_at").ok()?;
-        let date_text = format_date(date_from_value(&published, zone), zone);
+        let date_text = format_date(date_from_value(&published, zone).ok()?, zone);
         let translated = env.arch != "arm64" && env.running_under_arm64_translation;
 
         self.should_prompt = true;

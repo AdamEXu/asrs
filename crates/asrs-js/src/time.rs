@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::math;
 use crate::number;
 use crate::ops;
-use crate::string::JsString;
+use crate::string::{JsError, JsString};
 use crate::value::JsValue;
 
 /// `msPerDay`.
@@ -721,17 +721,22 @@ pub fn parse_date(text: &JsString, zone: &impl LocalZone) -> f64 {
     time_clip(date)
 }
 
-/// `new Date(value)` with one argument that is not a `Date`: `ToPrimitive`, then
-/// [`parse_date`] for a string and `TimeClip(ToNumber(value))` otherwise.
-pub fn date_from_value(value: &JsValue, zone: &impl LocalZone) -> f64 {
-    match value {
+/// `new Date(value)` with one argument: `ToPrimitive`, then [`parse_date`] for a string and
+/// `TimeClip(ToNumber(value))` otherwise. `Err` is the `TypeError` a BigInt throws.
+pub fn date_from_value(value: &JsValue, zone: &impl LocalZone) -> Result<f64, JsError> {
+    Ok(match value {
         JsValue::String(text) => parse_date(text, zone),
         JsValue::Array(_) | JsValue::Object(_) | JsValue::Bytes(_) | JsValue::ExtData(..) => {
             parse_date(&ops::to_string(value), zone)
         }
         JsValue::Date(t) => time_clip(*t),
-        other => time_clip(ops::value_to_number(other).unwrap_or(f64::NAN)),
-    }
+        JsValue::BigInt(_) => {
+            return Err(JsError::type_error(
+                "Cannot convert a BigInt value to a number",
+            ));
+        }
+        other => time_clip(ops::value_to_number(other)?),
+    })
 }
 
 fn make_day(year: f64, month: f64, date: f64) -> f64 {
@@ -1657,6 +1662,16 @@ mod date_parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn date_from_bigint_throws() {
+        let error = date_from_value(&JsValue::BigInt(math::BigInt::from_i64(1)), &FixedZone::UTC)
+            .unwrap_err();
+        assert_eq!(
+            (error.name, error.message.as_str()),
+            ("TypeError", "Cannot convert a BigInt value to a number")
+        );
+    }
 
     #[test]
     fn v8_math_random_matches_electron_seed_42() {

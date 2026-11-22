@@ -1,8 +1,9 @@
 #![allow(clippy::disallowed_methods)]
 
-//! Replays `js/date-parse/*`: `new Date(value).getTime()` in Electron's V8 for the hand list and
-//! generated strings in `oracle/src/update/cases.ts`, in each oracle zone. Strings go through
-//! both `parse_date` and `date_from_value`; other values through `date_from_value`.
+//! Replays `js/date-parse/*` and `js/date-parse-fuzz/*`: `new Date(value).getTime()` in
+//! Electron's V8 for the hand list and both generators in `oracle/src/update/cases.ts`, in each
+//! oracle zone. Strings go through both `parse_date` and `date_from_value`; other values through
+//! `date_from_value`.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
@@ -18,8 +19,8 @@ fn same(expected: f64, actual: f64) -> bool {
     (expected.is_nan() && actual.is_nan()) || expected.to_bits() == actual.to_bits()
 }
 
-fn check(zone_name: &str) {
-    let id = format!("js/date-parse/{zone_name}");
+fn check(spec: &str, zone_name: &str) {
+    let id = format!("{spec}/{zone_name}");
     let zone = NamedZone::get(zone_name).expect("zone resolves");
     let records = vectors::load(&id).unwrap_or_else(|e| panic!("{e}"));
     let (mut recorded, mut compared) = (0usize, 0usize);
@@ -48,7 +49,9 @@ fn check(zone_name: &str) {
         };
         let expected = f64::from_bits(bits);
         let value = js_json::to_js(&input).expect("input converts");
-        let mut actuals = vec![("date_from_value", date_from_value(&value, &zone))];
+        let from_value = date_from_value(&value, &zone)
+            .unwrap_or_else(|e| panic!("{id} line {}: {e:?}", record.line));
+        let mut actuals = vec![("date_from_value", from_value)];
         if let JsValue::String(text) = &value {
             actuals.push(("parse_date", parse_date(text, &zone)));
         }
@@ -75,20 +78,40 @@ fn check(zone_name: &str) {
 
 #[test]
 fn date_parse_utc() {
-    check("UTC");
+    check("js/date-parse", "UTC");
 }
 
 #[test]
 fn date_parse_los_angeles() {
-    check("America/Los_Angeles");
+    check("js/date-parse", "America/Los_Angeles");
 }
 
 #[test]
 fn date_parse_kolkata() {
-    check("Asia/Kolkata");
+    check("js/date-parse", "Asia/Kolkata");
 }
 
 #[test]
 fn date_parse_auckland() {
-    check("Pacific/Auckland");
+    check("js/date-parse", "Pacific/Auckland");
+}
+
+#[test]
+fn date_parse_fuzz_utc() {
+    check("js/date-parse-fuzz", "UTC");
+}
+
+#[test]
+fn date_parse_fuzz_los_angeles() {
+    check("js/date-parse-fuzz", "America/Los_Angeles");
+}
+
+#[test]
+fn date_parse_fuzz_kolkata() {
+    check("js/date-parse-fuzz", "Asia/Kolkata");
+}
+
+#[test]
+fn date_parse_fuzz_auckland() {
+    check("js/date-parse-fuzz", "Pacific/Auckland");
 }

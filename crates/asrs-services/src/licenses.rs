@@ -5,7 +5,7 @@ use asrs_js::collation;
 use asrs_js::json;
 use asrs_js::ops;
 use asrs_js::sort::{self, array_sort};
-use asrs_js::string::{JsString, TextDecoder, encode_uri_component};
+use asrs_js::string::{JsError, JsString, TextDecoder, encode_uri_component, response_text};
 use asrs_js::value::JsValue;
 
 /// How one SPDX `fetch` settled.
@@ -52,23 +52,23 @@ fn join(a: &str, b: &str) -> String {
     }
 }
 
-/// Runs the script once against `host`. Anything that would throw out of the script (an
-/// unparseable package-lock, a missing `packages` object, a `null` package.json) ends the run
-/// where upstream's process would have died; everything logged or written before that stays.
-pub fn generate(host: &mut dyn LicenseHost) {
+fn thrown(error: json::JsonError) -> JsError {
+    JsError::new(error.name, error.message.to_string_lossy())
+}
+
+/// Runs the script once against `host`. `Err` is the exception that ends upstream's script (an
+/// unparseable or missing package-lock, a missing `packages` object, a `null` package.json), at
+/// the point it is thrown; everything logged or written before it stays.
+pub fn generate(host: &mut dyn LicenseHost) -> Result<(), JsError> {
     if !host.exists("package-lock.json") {
-        return;
+        return Err(JsError::new(
+            "Error",
+            "ENOENT: no such file or directory, open 'package-lock.json'",
+        ));
     }
-    let Ok(package_lock) = json::parse(&decode(&host.read("package-lock.json"))) else {
-        return;
-    };
-    let packages = match ops::get(&package_lock, "packages") {
-        Ok(packages) => packages,
-        Err(_) => return,
-    };
-    let Ok(module_paths) = ops::object_keys(&packages) else {
-        return;
-    };
+    let package_lock = json::parse(&decode(&host.read("package-lock.json"))).map_err(thrown)?;
+    let packages = ops::get(&package_lock, "packages")?;
+    let module_paths = ops::object_keys(&packages)?;
 
     let advantage_scope = JsString::from("AdvantageScope");
     let mut licenses: Vec<(JsString, JsValue)> = Vec::new();
@@ -77,10 +77,7 @@ pub fn generate(host: &mut dyn LicenseHost) {
         let module_name = if is_root {
             advantage_scope.clone()
         } else {
-            match module_path.replace_all(&JsString::from("node_modules/"), &JsString::new()) {
-                Ok(name) => name,
-                Err(_) => return,
-            }
+            module_path.replace_all(&JsString::from("node_modules/"), &JsString::new())?
         };
         let path = module_path.to_string_lossy();
         let dir = if is_root { "." } else { path.as_str() };
@@ -113,24 +110,18 @@ pub fn generate(host: &mut dyn LicenseHost) {
             }
             license_text = JsValue::String(text);
         } else if host.exists(&join(&path, "package.json")) {
-            let Ok(package) = json::parse(&decode(&host.read(&join(&path, "package.json")))) else {
-                return;
-            };
-            let mut spdx_id = match ops::get(&package, "license") {
-                Ok(id) => id,
-                Err(_) => return,
-            };
+            let package =
+                json::parse(&decode(&host.read(&join(&path, "package.json")))).map_err(thrown)?;
+            let mut spdx_id = ops::get(&package, "license")?;
             if let JsValue::String(id) = &spdx_id {
                 let mut id = id
-                    .replace_all(&JsString::from("("), &JsString::new())
-                    .and_then(|id| id.replace_all(&JsString::from(")"), &JsString::new()))
-                    .map(|id| id.trim());
-                if let Ok(ref mut id) = id {
-                    if id.includes(&JsString::from(" OR "), None) {
-                        *id = id.split(Some(&JsString::from(" OR ")), None)[0].trim();
-                    }
-                    spdx_id = JsValue::String(id.clone());
+                    .replace_all(&JsString::from("("), &JsString::new())?
+                    .replace_all(&JsString::from(")"), &JsString::new())?
+                    .trim();
+                if id.includes(&JsString::from(" OR "), None) {
+                    id = id.split(Some(&JsString::from(" OR ")), None)[0].trim();
                 }
+                spdx_id = JsValue::String(id);
             }
             let encoded = encode_uri_component(&ops::to_string(&spdx_id));
             let reply = match encoded {
@@ -154,7 +145,7 @@ pub fn generate(host: &mut dyn LicenseHost) {
                 ));
                 continue;
             }
-            let spdx_license = json::parse(&decode(&body))
+            let spdx_license = json::parse(&response_text(&body))
                 .ok()
                 .and_then(|value| ops::get(&value, "licenseText").ok());
             match spdx_license {
@@ -214,9 +205,10 @@ pub fn generate(host: &mut dyn LicenseHost) {
             ])
         })
         .collect();
-    if let Ok(Some(text)) = json::stringify(&JsValue::Array(array)) {
-        host.write("src/licenses.json", &JsString::from(text));
-    }
+    let Some(text) = json::stringify(&JsValue::Array(array)).map_err(thrown)? else {
+        unreachable!("an array always stringifies")
+    };
+    host.write("src/licenses.json", &JsString::from(text));
 
     let mut full_text = JsString::new();
     for (index, (module, text)) in licenses.iter().enumerate() {
@@ -234,4 +226,5 @@ pub fn generate(host: &mut dyn LicenseHost) {
     host.write("ThirdPartyLicenses.txt", &full_text);
 
     host.log(&format!("Saved {} licenses", licenses.len()));
+    Ok(())
 }

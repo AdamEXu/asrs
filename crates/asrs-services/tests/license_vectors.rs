@@ -2,7 +2,8 @@
 
 //! Replays `update/licenses`: upstream's getLicenses.mjs run in scripted working directories.
 //! The port runs against the same directory; every SPDX fetch it makes must be the next recorded
-//! one (and gets the recorded reply), and every log line and written file must match in order.
+//! one (and gets the recorded reply), every log line and written file must match in order, and
+//! the port must throw exactly when and what the script threw.
 
 mod p07_support;
 
@@ -170,7 +171,17 @@ fn licenses() {
             effects: f.array("effects").into(),
             tally: Tally::default(),
         };
-        generate(&mut host);
+        let threw = f.has("threw").then(|| {
+            host.tally.record("threw");
+            f.string("threw")
+        });
+        let outcome = generate(&mut host)
+            .err()
+            .map(|e| format!("{}: {}", e.name, e.message));
+        assert_eq!(outcome, threw, "{ctx}: thrown error");
+        if threw.is_some() {
+            host.tally.compare("threw");
+        }
         assert!(
             host.effects.is_empty(),
             "{ctx}: port stopped before {} recorded effects, first {}",

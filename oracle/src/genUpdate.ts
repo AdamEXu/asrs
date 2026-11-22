@@ -6,6 +6,7 @@ import {
   Fetch,
   LicenseCase,
   dateInputs,
+  fuzzDateInputs,
   handCheckerCases,
   handLicenseCases,
   randomCheckerCases,
@@ -28,11 +29,14 @@ import {
 //   genUpdate dates <count> <seed>
 //     {case, input, time}: `new Date(input).getTime()` for the hand list and <count> generated
 //     strings, in the zone the vector names.
+//   genUpdate datefuzz <count> <seed>
+//     The same records for <count> strings from the independent fuzz generator.
 //   genUpdate dialogs
 //     main.ts's About, beta, feedback and update flows (see update/dialogs.ts).
 //   genUpdate licenses <count> <seed>
 //     getLicenses.mjs run in a fake working directory: {case, name, files, effects} with
-//     effects {k: "fetch", url, reply}, {k: "error" | "log", text}, {k: "write", path, data}.
+//     effects {k: "fetch", url, reply}, {k: "error" | "log", text}, {k: "write", path, data},
+//     and `threw` (`String(error)`) when the script throws.
 
 const [mode, countArg, seedArg] = process.argv.slice(2);
 const count = Number(countArg) || 0;
@@ -167,8 +171,8 @@ async function checkerMode() {
   }
 }
 
-function datesMode() {
-  dateInputs(count, seed).forEach((input, index) => {
+function datesMode(inputs: unknown[]) {
+  inputs.forEach((input, index) => {
     out({ case: index, input: toTree(input), time: toTree(new Date(input as any).getTime()) });
   });
 }
@@ -257,20 +261,27 @@ async function licensesMode() {
     const c = cases[index];
     const world = new LicenseWorld(c);
     (globalThis as any).__asrsLicenses = world.glue;
-    await import(bundle + "?instance=" + index);
+    let threw: string | undefined;
+    try {
+      await import(bundle + "?instance=" + index);
+    } catch (error) {
+      threw = String(error);
+    }
     await settle();
     assertNoFailure(c.name);
     out({
       case: index,
       name: c.name,
       files: c.files.map((f) => (f.kind === "dir" ? { dir: f.path } : { file: f.path, data: toTree(f.data) })),
-      effects: world.effects
+      effects: world.effects,
+      ...(threw === undefined ? {} : { threw })
     });
   }
 }
 
 if (mode === "checker") await checkerMode();
-else if (mode === "dates") datesMode();
+else if (mode === "dates") datesMode(dateInputs(count, seed));
+else if (mode === "datefuzz") datesMode(fuzzDateInputs(count, seed));
 else if (mode === "licenses") await licensesMode();
 else if (mode === "dialogs") await (await import("./update/dialogs")).run();
 else throw new Error(`genUpdate: unknown mode ${mode}`);

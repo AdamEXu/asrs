@@ -137,6 +137,8 @@ export function handCheckerCases(): CheckerCase[] {
     hand("invalid json", LINUX_X64, all({ status: 200, body: utf8("<!doctype html><title>Unicorn!</title>") }, [0])),
     hand("empty body", LINUX_X64, all({ status: 200, body: new Uint8Array(0) }, [0])),
     hand("bom before array", DARWIN_ARM, all({ status: 200, body: utf8("﻿" + JSON.stringify([ALPHA7])) }, [0])),
+    hand("two boms before array", DARWIN_ARM, all({ status: 200, body: utf8("\ufeff\ufeff" + JSON.stringify([ALPHA7])) }, [0])),
+    hand("three boms before array", DARWIN_ARM, all({ status: 200, body: utf8("\ufeff\ufeff\ufeff" + JSON.stringify([ALPHA7])) }, [0])),
     hand("invalid utf-8 in a field", DARWIN_ARM, all({ status: 200, body: new Uint8Array([...json([ALPHA7]).slice(0, 40), 0xff, ...json([ALPHA7]).slice(40)]) }, [0])),
     hand("rate limited object", DARWIN_ARM, [...all({ status: 403, body: json({ message: "API rate limit exceeded", documentation_url: "https://docs.github.com" }) }, [0]), ...all(newer, [1]), ...all({ status: 403, body: json({ message: "API rate limit exceeded" }) }, [0])]),
     hand("json null", DARWIN_ARM, all(ok(null), [0])),
@@ -666,6 +668,113 @@ export function dateInputs(count: number, seed: number): unknown[] {
   return [...HAND_DATES, ...randomDateInputs(count, seed)];
 }
 
+const FUZZ_WORDS = [
+  "Jan", "feb", "MAR", "April", "May", "june", "JULY", "Aug", "Sept", "October", "nov", "December", "Ja", "Mo", "Monday", "tue",
+  "Wednesday", "Thu", "Fri", "sat", "Sun", "am", "AM", "pm", "P.M.", "a.m.", "UT", "UTC", "GMT", "Z", "z", "EST", "edt", "CST",
+  "cdt", "MST", "mdt", "PST", "pdt", "PDT", "T", "t", "foo", "x", "GMTx", "UTCx", "utc+", "Zz", "ZZ", "janx", "mayday", "Tt", "TZ"
+];
+const FUZZ_SYMBOLS = [
+  ":", "-", "+", ".", ")", "(", " ", "  ", "\t", ",", "/", "\n", "\r", "\u000b", "\u000c", "\u0085", "\u00a0", "\u180e", "\u200b",
+  "\u2028", "\u3000", "\ufeff", "\u0000", "\uff11", "\u0661", "_", "#", "@", "[", "`", "{", "~", "\u00e9", "\u0130", "\ud800",
+  "(x(y)z)", "(("
+];
+const FUZZ_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const FUZZ_YEARS = [275760, 275759, -271821, -271820, 1970, 1969, 2024, 2025, 1883, 1900, 0, 49, 50, 99, 100, 1000000, 999999, 1073741823, 1073741824, 2147483647, 999999999];
+const FUZZ_LOCAL = [
+  "2024-03-10T02:30", "2024-11-03T01:30", "2024-09-29T02:30", "2024-04-07T02:30", "2025-03-09T02:00", "2025-11-02T01:00",
+  "1942-02-09T02:30", "1900-01-01T00:00", "1970-01-01T00:00", "2024-04-07T03:30", "2024-04-07T02:59:59.999"
+];
+
+// Independent of the generator above: token soup, mutated ES date-time strings, legacy forms,
+// and fields at the parser's and TimeClip's limits and at DST transitions in the vector zones.
+export function fuzzDateInputs(count: number, seed: number): string[] {
+  const rng = new Rng(seed);
+  const pad = (v: number, n: number) => String(v).padStart(n, "0");
+  const digits = (n: number) => Array.from({ length: n }, () => String(rng.below(10))).join("");
+  const soup = () => {
+    let t = "";
+    for (let i = 1 + rng.below(9); i > 0; i--) {
+      const r = rng.below(100);
+      if (r < 40) t += digits(1 + rng.below(r < 5 ? 12 : 5));
+      else if (r < 65) t += rng.pick(FUZZ_WORDS);
+      else t += rng.pick(FUZZ_SYMBOLS);
+    }
+    return t;
+  };
+  const iso = () => {
+    let t = rng.pick([pad(rng.below(10000), 4), (rng.chance(0.5) ? "+" : "-") + pad(rng.below(300000), 6), "-000000", "+000000", digits(1 + rng.below(6))]);
+    if (rng.chance(0.8)) t += "-" + rng.pick([pad(rng.below(14), 2), pad(1 + rng.below(12), 2), digits(1 + rng.below(3))]);
+    if (rng.chance(0.7)) t += "-" + rng.pick([pad(rng.below(33), 2), pad(1 + rng.below(28), 2), digits(1 + rng.below(3))]);
+    if (rng.chance(0.7)) {
+      t += rng.pick(["T", "t", " ", "T", "TT"]);
+      t += rng.pick([pad(rng.below(26), 2), "24", digits(1 + rng.below(3))]) + rng.pick([":", ":", ""]);
+      t += rng.pick([pad(rng.below(61), 2), "00", digits(1 + rng.below(3))]);
+      if (rng.chance(0.6)) t += ":" + rng.pick([pad(rng.below(61), 2), "00", digits(1 + rng.below(3))]);
+      if (rng.chance(0.5)) t += rng.pick([".", ","]) + digits(rng.below(12));
+      const z = rng.below(10);
+      if (z < 3) t += rng.pick(["Z", "z", "UTC", " Z", "GMT"]);
+      else if (z < 6) {
+        t += rng.pick(["+", "-"]);
+        t += rng.pick([pad(rng.below(25), 2) + ":" + pad(rng.below(61), 2), pad(rng.below(2500), 4), digits(1 + rng.below(5)), pad(rng.below(25), 2)]);
+      }
+    }
+    if (rng.chance(0.2)) t += soup();
+    return t;
+  };
+  const legacyParts: (() => string)[] = [
+    () => rng.pick(FUZZ_WORDS),
+    () => String(rng.below(32)),
+    () => String(rng.below(3000)),
+    () => pad(rng.below(100), 2),
+    () => `${rng.below(30)}:${pad(rng.below(70), 2)}`,
+    () => `${rng.below(30)}:${pad(rng.below(70), 2)}:${pad(rng.below(70), 2)}`,
+    () => `${rng.below(30)}:${pad(rng.below(70), 2)}:${pad(rng.below(70), 2)}.${digits(1 + rng.below(10))}`,
+    () => `${rng.below(13)}/${rng.below(33)}/${rng.below(3000)}`,
+    () => rng.pick(["+", "-"]) + digits(1 + rng.below(5)),
+    () => rng.pick(["GMT", "UTC", "UT", "Z"]) + rng.pick(["+", "-"]) + digits(1 + rng.below(4)),
+    () => `(${soup()})`,
+    () => rng.pick(FUZZ_SYMBOLS),
+    () => `${rng.below(13)}-${rng.below(33)}-${rng.below(3000)}`,
+    () => `${rng.below(13)}.${rng.below(33)}.${rng.below(3000)}`,
+    () => `${rng.below(25)}::${rng.below(60)}`
+  ];
+  const legacy = () => {
+    const parts: string[] = [];
+    for (let i = 1 + rng.below(7); i > 0; i--) parts.push(rng.pick(legacyParts)());
+    return parts.join(rng.pick([" ", " ", ", ", "", "-", "\t"]));
+  };
+  const edge = () => {
+    const y = rng.chance(0.85) ? rng.pick(FUZZ_YEARS) : rng.below(3000);
+    const [mo, d, h, mi, s, ms] = [1 + rng.below(12), 1 + rng.below(31), rng.below(25), rng.below(60), rng.below(60), rng.below(1000)];
+    const r = rng.below(4);
+    if (r === 0) {
+      const tz = rng.pick(["Z", "", "+14:00", "-12:00", "+23:59", "-23:59"]);
+      return `${y < 0 ? "-" : "+"}${pad(Math.abs(y) % 1000000, 6)}-${pad(mo, 2)}-${pad(d, 2)}T${pad(h, 2)}:${pad(mi, 2)}:${pad(s, 2)}.${pad(ms, 3)}${tz}`;
+    }
+    if (r === 1) {
+      const tz = rng.pick(["", " GMT", " UTC", " PST", " EDT", " GMT+1400", " +0530", " -1259", " GMT-99", " UTC+12345", " am", " pm", " AM GMT+0100"]);
+      return `${FUZZ_MONTHS[mo - 1]} ${d} ${y} ${h}:${pad(mi, 2)}:${pad(s, 2)}${tz}`;
+    }
+    if (r === 2) {
+      const time = rng.pick([
+        `${rng.below(14)}:${pad(mi, 2)} ${rng.pick(["am", "pm", "AM", "PM"])}`,
+        `${h}:${pad(mi, 2)}`,
+        `${h}:${pad(mi, 2)}:${pad(s, 2)}.${rng.below(10 ** (1 + rng.below(9)))}`,
+        ""
+      ]);
+      return `${mo}/${d}/${y} ${time}`;
+    }
+    const local = rng.pick(FUZZ_LOCAL);
+    return rng.pick([local, local + ":00", local.replace("T", " "), local.slice(0, 10), local + "Z", local.replace(/-/g, "/")]);
+  };
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const r = rng.below(100);
+    out.push(r < 25 ? iso() : r < 50 ? legacy() : r < 70 ? soup() : edge());
+  }
+  return out;
+}
+
 export interface LicenseEntry {
   kind: "file" | "dir";
   path: string;
@@ -811,6 +920,64 @@ export function handLicenseCases(): LicenseCase[] {
       name: "nothing installed",
       files: [lock(["", "node_modules/a"])],
       spdx: { "BSD-3-Clause": spdxOk("unused\n") }
+    },
+    {
+      name: "spdx replies with byte order marks",
+      files: [
+        lock(["", "node_modules/a", "node_modules/b", "node_modules/c"]),
+        file("LICENSE", BSD),
+        ...["a", "b", "c"].map((m) => dir("node_modules/" + m)),
+        file("node_modules/a/package.json", '{"license":"MIT"}'),
+        file("node_modules/b/package.json", '{"license":"ISC"}'),
+        file("node_modules/c/package.json", '{"license":"Zlib"}')
+      ],
+      spdx: {
+        MIT: { status: 200, body: utf8("\ufeff" + JSON.stringify({ licenseText: "one\n" })) },
+        ISC: { status: 200, body: utf8("\ufeff\ufeff" + JSON.stringify({ licenseText: "two\n" })) },
+        Zlib: { status: 200, body: utf8("\ufeff\ufeff\ufeff" + JSON.stringify({ licenseText: "three\n" })) }
+      }
+    },
+    {
+      name: "throws: no package-lock",
+      files: [file("LICENSE", BSD)],
+      spdx: {}
+    },
+    {
+      name: "throws: package-lock is not json",
+      files: [file("package-lock.json", '{"packages": {'), file("LICENSE", BSD)],
+      spdx: {}
+    },
+    {
+      name: "throws: package-lock with a byte order mark",
+      files: [file("package-lock.json", "\ufeff" + JSON.stringify({ packages: { "": {} } })), file("LICENSE", BSD)],
+      spdx: {}
+    },
+    {
+      name: "throws: package-lock is null",
+      files: [file("package-lock.json", "null")],
+      spdx: {}
+    },
+    {
+      name: "throws: package-lock without packages",
+      files: [file("package-lock.json", '{"name":"advantagescope"}')],
+      spdx: {}
+    },
+    {
+      name: "throws: package.json is not json, after a fetch",
+      files: [
+        lock(["", "node_modules/a", "node_modules/b"]),
+        file("LICENSE", BSD),
+        dir("node_modules/a"),
+        file("node_modules/a/package.json", '{"license":"MIT"}'),
+        dir("node_modules/b"),
+        file("node_modules/b/package.json", "{license: MIT}")
+      ],
+      spdx: { MIT: spdxOk("MIT text\n") }
+    },
+    {
+      name: "throws: package.json is null",
+      files: [lock(["", "node_modules/a"]), dir("node_modules/a"), file("node_modules/a/package.json", "null")],
+      spdx: {}
     }
   ];
 }
