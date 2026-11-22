@@ -484,6 +484,18 @@ fn sub_fragment(
     }
 }
 
+/// Where the first character's cluster ends: the line's first character is clipped, never
+/// replaced by the ellipsis (`LineTruncator::TruncateChild`).
+fn first_cluster_end(fragment: &Fragment, len: usize) -> usize {
+    fragment
+        .glyphs
+        .iter()
+        .map(|g| g.cluster as usize)
+        .filter(|&c| c > 0)
+        .min()
+        .unwrap_or(len)
+}
+
 fn boundaries_of(fragment: &Fragment, width: f32, len: usize) -> Vec<f32> {
     boundaries(
         &Shaped {
@@ -505,7 +517,7 @@ fn truncate(
     available: Lu,
     scale: f32,
 ) -> Vec<Fragment> {
-    let ellipsis = backend.shape(&style.font, ELLIPSIS);
+    let ellipsis = backend.shape(&style.font, ELLIPSIS, scale);
     let ellipsis_width = lu_ceil(ellipsis.width * scale);
     let ellipsis_at = |x: Lu| Fragment {
         text: ELLIPSIS.to_owned(),
@@ -517,20 +529,24 @@ fn truncate(
     if style.direction == Direction::Ltr {
         let limit = available - ellipsis_width;
         let mut end = 0;
-        for (f, width) in fragments {
+        for (i, (f, width)) in fragments.into_iter().enumerate() {
             if f.x + f.width <= limit {
                 end = f.x + f.width;
                 out.push(f);
                 continue;
             }
-            if f.x < limit {
+            let first = i == 0;
+            if f.x < limit || (first && f.x < available) {
                 let len = utf16_len(&f.text);
                 let at = boundaries_of(&f, width, len);
                 let room = (limit - f.x) as f32 / 64.0;
-                let fit = (0..=len)
+                let mut fit = (0..=len)
                     .rev()
                     .find(|&k| at[k] * scale <= room)
                     .unwrap_or(0);
+                if fit == 0 && first {
+                    fit = first_cluster_end(&f, len);
+                }
                 end = f.x;
                 if fit > 0 {
                     let kept = lu_ceil(at[fit] * scale);
@@ -544,20 +560,29 @@ fn truncate(
     } else {
         let limit = ellipsis_width;
         let mut start = available;
-        for (f, width) in fragments.into_iter().rev() {
+        for (i, (f, width)) in fragments.into_iter().rev().enumerate() {
             if f.x >= limit {
                 start = f.x;
                 out.push(f);
                 continue;
             }
+            let first = i == 0;
             let right = f.x + f.width;
-            if right > limit {
+            if right > limit || (first && right > 0) {
                 let len = utf16_len(&f.text);
                 let at = boundaries_of(&f, width, len);
                 let room = (right - limit) as f32 / 64.0;
-                let fit = (0..=len)
+                let mut fit = (0..=len)
                     .find(|&k| (width - at[k]) * scale <= room)
                     .unwrap_or(len);
+                if fit == len && first {
+                    fit = f
+                        .glyphs
+                        .iter()
+                        .map(|g| g.cluster as usize)
+                        .max()
+                        .unwrap_or(0);
+                }
                 start = right;
                 if fit < len {
                     let kept = lu_ceil((width - at[fit]) * scale);
@@ -582,7 +607,7 @@ fn wrap(
     available: Lu,
     scale: f32,
 ) -> Vec<String> {
-    let shaped = backend.shape(&style.font, &normalize_space(text));
+    let shaped = backend.shape(&style.font, &normalize_space(text), scale);
     let at = boundaries(&shaped, utf16_len(text));
     let mut units = vec![0usize; text.len() + 1];
     let mut count = 0;
@@ -629,6 +654,7 @@ pub fn layout(
 ) -> Layout {
     let (ascent, descent, line_height) = line_metrics(backend, style, scale);
     let leading = lu_floor_px((line_height - (ascent + descent)) / 2);
+    let strut = (leading + ascent, line_height - leading - ascent);
     let mut texts = Vec::new();
     for paragraph in collapse(text, style.white_space) {
         match available {
@@ -643,11 +669,12 @@ pub fn layout(
     }
     let mut lines = Vec::with_capacity(texts.len());
     let mut max_width = 0;
-    for (i, line_text) in texts.into_iter().enumerate() {
+    let mut top = 0;
+    for line_text in texts {
         let mut runs = Vec::new();
         let mut width = 0;
         for run in visual_runs(&line_text, style.direction) {
-            let shaped = backend.shape(&style.font, &normalize_space(&run));
+            let shaped = backend.shape(&style.font, &normalize_space(&run), scale);
             let run_width = lu_ceil(shaped.width * scale);
             runs.push((
                 Fragment {
@@ -671,23 +698,47 @@ pub fn layout(
         } else {
             runs.into_iter().map(|(f, _)| f).collect()
         };
-        let top = i as Lu * line_height;
+        let (above, below) = if style.line_height == LineHeight::Normal {
+            used_fonts(backend, &fragments, scale, strut)
+        } else {
+            strut
+        };
         lines.push(Line {
             top,
-            height: line_height,
-            baseline: top + leading + ascent,
+            height: above + below,
+            baseline: top + above,
             width,
             fragments,
         });
+        top += above + below;
     }
     Layout {
         scale,
         ascent,
         descent,
-        height: lines.len() as Lu * line_height,
+        height: top,
         lines,
         width: max_width,
     }
+}
+
+/// `InlineBoxState::AccumulateUsedFonts`: under `line-height: normal` a line box also holds the
+/// ascent and descent, with half the line gap each side, of every fallback font its glyphs use.
+fn used_fonts(
+    backend: &mut dyn TextBackend,
+    fragments: &[Fragment],
+    scale: f32,
+    (mut above, mut below): (Lu, Lu),
+) -> (Lu, Lu) {
+    for glyph in fragments.iter().flat_map(|f| &f.glyphs) {
+        if let Some(m) = backend.fallback_metrics(glyph.glyph, scale) {
+            let (a, d) = (m.ascent as Lu * LU_PER_PX, m.descent as Lu * LU_PER_PX);
+            let gap = m.line_gap as Lu * LU_PER_PX;
+            above = above.max(a + gap / 2);
+            below = below.max(d + gap - gap / 2);
+        }
+    }
+    (above, below)
 }
 
 /// A fragment's coverage in device pixels after mask gamma, relative to the pixel its origin
@@ -699,6 +750,9 @@ pub struct RunImage {
     pub width: u32,
     pub height: u32,
     pub alpha: Vec<u8>,
+    /// Straight RGBA of the whole run when it holds a colour glyph, which `alpha` then only
+    /// approximates.
+    pub rgba: Option<Vec<u8>>,
 }
 
 /// Paints `glyphs` from an origin `fraction` `LayoutUnit`s right of a device pixel boundary, as
@@ -733,6 +787,15 @@ pub fn rasterize(
     let top = placed.iter().map(|(_, m)| m.top).min()?;
     let bottom = placed.iter().map(|(_, m)| m.top + m.height as i32).max()?;
     let (width, height) = ((right - left) as u32, (bottom - top) as u32);
+    if placed.iter().any(|(_, m)| m.color) {
+        return Some(composite_color(
+            lut,
+            &placed,
+            [left, top],
+            [width, height],
+            color,
+        ));
+    }
     let mut alpha = vec![0u8; width as usize * height as usize];
     for (x, mask) in &placed {
         for row in 0..mask.height as usize {
@@ -755,7 +818,76 @@ pub fn rasterize(
         width,
         height,
         alpha,
+        rgba: None,
     })
+}
+
+/// A run with colour glyphs, composited source-over in premultiplied RGBA as Skia draws its
+/// glyphs in order: masks in `color` through the mask-gamma row, colour glyphs as they are.
+fn composite_color(
+    lut: &MaskGammaLut,
+    placed: &[(i32, Arc<Mask>)],
+    [left, top]: [i32; 2],
+    [width, height]: [u32; 2],
+    color: [u8; 3],
+) -> RunImage {
+    let mut premul = vec![[0f32; 4]; width as usize * height as usize];
+    for (x, mask) in placed {
+        let bpp = if mask.color { 4 } else { 1 };
+        for row in 0..mask.height as usize {
+            let y = (mask.top - top) as usize + row;
+            let dst_start = y * width as usize + (x + mask.left - left) as usize;
+            for col in 0..mask.width as usize {
+                let i = (row * mask.width as usize + col) * bpp;
+                let src = if mask.color {
+                    let p = &mask.data[i..i + 4];
+                    [p[0], p[1], p[2], p[3]].map(f32::from)
+                } else {
+                    let raw = mask.data[i];
+                    if raw == 0 {
+                        continue;
+                    }
+                    let a = f32::from(lut.apply(color, raw));
+                    [
+                        f32::from(color[0]) * a / 255.0,
+                        f32::from(color[1]) * a / 255.0,
+                        f32::from(color[2]) * a / 255.0,
+                        a,
+                    ]
+                };
+                if src[3] == 0.0 {
+                    continue;
+                }
+                let d = &mut premul[dst_start + col];
+                let keep = 1.0 - src[3] / 255.0;
+                for k in 0..4 {
+                    d[k] = src[k] + d[k] * keep;
+                }
+            }
+        }
+    }
+    let mut alpha = Vec::with_capacity(premul.len());
+    let mut rgba = Vec::with_capacity(premul.len() * 4);
+    for p in premul {
+        let a = p[3].round().clamp(0.0, 255.0);
+        alpha.push(a as u8);
+        let straight = |v: f32| {
+            if a == 0.0 {
+                0
+            } else {
+                (v * 255.0 / p[3]).round().clamp(0.0, 255.0) as u8
+            }
+        };
+        rgba.extend_from_slice(&[straight(p[0]), straight(p[1]), straight(p[2]), a as u8]);
+    }
+    RunImage {
+        left,
+        top,
+        width,
+        height,
+        alpha,
+        rgba: Some(rgba),
+    }
 }
 
 #[cfg(test)]

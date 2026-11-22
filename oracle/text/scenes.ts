@@ -126,8 +126,53 @@ function layoutScene(dark: boolean): TextScene {
   add({ id: "center-odd", x: 510, y: 170, width: 101, height: 20, font: `12px ${SYSTEM}`, align: "center", text: "Center me" });
   add({ id: "tab-centered", x: 10, y: 220, width: 260, height: null, font: `italic 16px ${SYSTEM}`, align: "center", whiteSpace: "normal", text: "Drag a field here to begin, or open the documentation for this tab type." });
   add({ id: "paragraph", x: 290, y: 220, width: 330, height: null, font: `14px ${SYSTEM}`, whiteSpace: "normal", text: "This field contains values that were logged as a sub-key of a struct-encoded value. Values are read-only and match the robot-side representation exactly." });
+  add({ id: "first-char-clip", x: 650, y: 130, width: 8, height: 20, font: `16px ${SYSTEM}`, lineHeight: "20px", overflow: "ellipsis", text: "Wide" });
+  add({ id: "first-char-clip-rtl", x: 650, y: 170, width: 8, height: 20, font: `14px ${SYSTEM}`, lineHeight: "20px", align: "right", direction: "rtl", overflow: "ellipsis", text: "Drive/Pose" });
   add({ id: "pre-lines", x: 640, y: 50, width: null, height: null, font: `12px ${COURIER}`, whiteSpace: "pre", text: "Line one\n  indented line\nLast" });
   return finish(`text-layout-${dark ? "dark" : "light"}`, dark, 760, 330, boxes);
+}
+
+/** Upstream's tab titles (TabType.ts): each tab type's emoji, then its name. */
+const TAB_TITLES = [
+  "📖 ",
+  "📉 Line Graph",
+  "🗺 2D Field",
+  "👀 3D Field",
+  "🔢 Table",
+  "💬 Console",
+  "📊 Statistics",
+  "🎬 Video",
+  "🎮 Joysticks",
+  "🦀 Swerve",
+  "⚙️ Mechanism",
+  "📍 Points",
+  "🔍 Metadata"
+];
+
+function emojiScene(dark: boolean): TextScene {
+  const color = dark ? "#eeeeee" : "#222222";
+  const boxes: TextBox[] = [];
+  const fonts: [string, string][] = [
+    ["16px", `16px ${SYSTEM}`],
+    ["12px", `12px ${SYSTEM}`],
+    ["14px-bold", `bold 14px ${SYSTEM}`],
+    ["16px-italic", `italic 16px ${SYSTEM}`],
+    ["15px-courier", `15px ${COURIER}`]
+  ];
+  fonts.forEach(([id, font], i) => {
+    TAB_TITLES.forEach((text, j) => {
+      const x = 10 + (j % 4) * 190 + (i % 4) * 0.25 + (j % 3) * 0.125;
+      const y = 8 + i * 110 + Math.floor(j / 4) * 26;
+      boxes.push(box({ id: `${id}/${j}`, x, y, font, text, color }));
+    });
+  });
+  const y = 8 + fonts.length * 110;
+  boxes.push(box({ id: "ellipsis", x: 10, y, width: 70, height: 20, font: `16px ${SYSTEM}`, overflow: "ellipsis", text: "📉 Line Graph" }));
+  boxes.push(box({ id: "ellipsis-emoji", x: 100, y, width: 12, height: 20, font: `16px ${SYSTEM}`, overflow: "ellipsis", text: "📖📉🗺" }));
+  boxes.push(box({ id: "wrap", x: 200, y, width: 160, height: null, font: `14px ${SYSTEM}`, whiteSpace: "normal", text: "Drag 📉 here, or 🗺 and 👀 tabs 🎮🦀 too" }));
+  boxes.push(box({ id: "centered", x: 400, y, width: 150, height: 20, font: `16px ${SYSTEM}`, align: "center", text: "🔢🔢 Table" }));
+  boxes.push(box({ id: "opacity", x: 580, y, font: `16px ${SYSTEM}`, opacity: 0.5, text: "💬 Console" }));
+  return finish(`text-emoji-${dark ? "dark" : "light"}`, dark, 780, y + 70, boxes.map((b) => ({ ...b, color })));
 }
 
 function finish(name: string, dark: boolean, width: number, height: number, boxes: TextBox[]): TextScene {
@@ -144,7 +189,14 @@ function finish(name: string, dark: boolean, width: number, height: number, boxe
 }
 
 export function textScenes(): TextScene[] {
-  return [styleScene(false), styleScene(true), layoutScene(false), layoutScene(true)];
+  return [
+    styleScene(false),
+    styleScene(true),
+    layoutScene(false),
+    layoutScene(true),
+    emojiScene(false),
+    emojiScene(true)
+  ];
 }
 
 function escape(text: string): string {
