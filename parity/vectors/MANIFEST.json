@@ -355,6 +355,9 @@
     "urcl/urcl": {"cases":59,"content":"a1a6377a142d71f7","generator":"86988d457bc23266","spec":"parity/specs/urcl/urcl.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "windows/fresh-darwin": {"cases":47,"content":"71d671c955572bbd","generator":"585e2941a1d3d10a","spec":"parity/specs/windows/fresh-darwin.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "windows/saved-darwin": {"cases":11,"content":"680e02f586856896","generator":"b3c638a96f5fca23","spec":"parity/specs/windows/saved-darwin.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "wpilog/corpus": {"cases":237,"content":"4a7bc113666b02bc","generator":"472e4ac3f9f26a7c","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"}
+    "wpilog/corpus": {"cases":237,"content":"4a7bc113666b02bc","generator":"472e4ac3f9f26a7c","spec":"parity/specs/wpilog/corpus.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "dom/hub-frame/mac": {"cases":85,"content":"60ee984943580fc1","generator":"696d894971a573b9","spec":"parity/specs/dom/hub-frame/mac.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/hub-frame/odd-window": {"cases":77,"content":"6e3773efad9dc3ad","generator":"1048786ce0353b76","spec":"parity/specs/dom/hub-frame/odd-window.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/hub-frame/platforms": {"cases":35,"content":"3d94a11fb20514ed","generator":"c1f06af2a05e113f","spec":"parity/specs/dom/hub-frame/platforms.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"}
   }
 }

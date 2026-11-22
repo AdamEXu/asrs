@@ -10,7 +10,8 @@ use asrs_ui::gpui::{
 use asrs_ui::theme::ThemeSource;
 
 use super::{Action, COLUMNS, PATCH, Page, Scenario, Theme, patch_colours};
-use crate::hub::EmptyHub;
+use crate::views::frame::{HubFrame, probe_rects};
+use crate::views::standalone::StandaloneHub;
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]...";
@@ -122,10 +123,16 @@ fn run_variant(
         });
     });
     let content = size(px(scenario.width as f32), px(scenario.height as f32));
+    let mut hub_window = None;
     let window: AnyWindowHandle = match scenario.page {
         Page::App => headless
-            .open_window(content, scale as f32, |_, cx| cx.new(|_| EmptyHub))
-            .map(Into::into),
+            .open_window(content, scale as f32, |_, cx| {
+                cx.new(|_| HubFrame::new(StandaloneHub::new(theme == Theme::Dark, true)))
+            })
+            .map(|w| {
+                hub_window = Some(w);
+                w.into()
+            }),
         Page::ColourPatch => headless
             .open_window(content, scale as f32, |_, cx| {
                 cx.new(|_| ColourPatches(patch_colours()))
@@ -165,7 +172,28 @@ fn run_variant(
             ));
         }
         write_png(&captures.join(format!("{name}.png")), &shot)?;
-        let record = capture_record(name, scenario, scale, theme, &shot, probes);
+        let mut rects = Vec::new();
+        for probe in probes {
+            let found = match hub_window {
+                Some(w) => headless
+                    .context()
+                    .update_window(w.into(), |root, _, cx| {
+                        let frame = root.downcast::<HubFrame<StandaloneHub>>().ok()?;
+                        let layout = frame.read(cx).layout(
+                            scenario.width,
+                            scenario.height,
+                            f64::from(scale),
+                        );
+                        probe_rects(&layout, probe)
+                    })
+                    .map_err(|e| e.to_string())?,
+                None => None,
+            };
+            rects.push(found.ok_or_else(|| {
+                format!("capture {name}: no element answers probe {probe} (H10b)")
+            })?);
+        }
+        let record = capture_record(name, scenario, scale, theme, &shot, probes, &rects);
         write(&captures.join(format!("{name}.json")), &record)?;
     }
     headless
@@ -224,6 +252,7 @@ fn capture_record(
     theme: Theme,
     shot: &Capture,
     probes: &[String],
+    rects: &[Vec<[f64; 4]>],
 ) -> String {
     let mut out = String::new();
     let _ = write!(
@@ -237,7 +266,17 @@ fn capture_record(
         scenario.width,
         scenario.height,
     );
-    let probes: Vec<String> = probes.iter().map(|p| format!("{}: []", quote(p))).collect();
+    let probes: Vec<String> = probes
+        .iter()
+        .zip(rects)
+        .map(|(p, rects)| {
+            let rects: Vec<String> = rects
+                .iter()
+                .map(|r| format!("[{}, {}, {}, {}]", r[0], r[1], r[2], r[3]))
+                .collect();
+            format!("{}: [{}]", quote(p), rects.join(", "))
+        })
+        .collect();
     let _ = writeln!(out, " \"probes\": {{{}}},", probes.join(", "));
     out.push_str(" \"texts\": [],\n \"masks\": [],\n \"canvases\": [],\n \"gl\": []");
     if scenario.page == Page::ColourPatch {
