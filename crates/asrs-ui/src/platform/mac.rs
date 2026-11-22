@@ -388,6 +388,7 @@ fn build_menu(
 ) -> Retained<NSMenu> {
     let ns_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::new());
     ns_menu.setAutoenablesItems(false);
+    retain_target(&ns_menu, target);
     for (index, item) in menu.items.iter().enumerate() {
         let ns_item = match item {
             PopupItem::Separator => NSMenuItem::separatorItem(mtm),
@@ -401,6 +402,22 @@ fn build_menu(
         ns_menu.addItem(&ns_item);
     }
     ns_menu
+}
+
+static TARGET_KEY: u8 = 0;
+
+/// `setTarget:` does not retain, and AppKit can keep a menu (or one of its submenus) past our
+/// last reference, such as a menu bar replaced while it is being tracked.
+fn retain_target(menu: &NSMenu, target: &PopupTarget) {
+    // SAFETY: both are live objects; the key is a static's address, unique to this association.
+    unsafe {
+        ffi::objc_setAssociatedObject(
+            ptr::from_ref(menu).cast_mut().cast(),
+            (&raw const TARGET_KEY).cast(),
+            ptr::from_ref(target).cast_mut().cast(),
+            ffi::OBJC_ASSOCIATION_RETAIN_NONATOMIC,
+        );
+    }
 }
 
 const BUILT_MARKER: &str = "asrs.menu";
@@ -498,8 +515,7 @@ fn build_item(
                     item.setTarget(None);
                     item.setAction(Some(selector));
                 },
-                // SAFETY: the target is kept alive as long as the menu is, which is the only
-                // time AppKit sends it `itemSelected:`.
+                // SAFETY: `build_menu` ties the target's lifetime to this item's menu.
                 None => unsafe { item.setTarget(Some(target)) },
             }
         }
@@ -573,8 +589,6 @@ fn swatch_image(rgb: [u8; 3]) -> Option<Retained<NSImage>> {
 }
 
 thread_local! {
-    static APPLICATION_MENU: RefCell<Option<(Retained<NSMenu>, Retained<PopupTarget>)>> =
-        const { RefCell::new(None) };
     static OPEN_POPUPS: RefCell<Vec<(usize, Retained<NSMenu>)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -617,7 +631,6 @@ pub(super) fn set_application_menu(
     );
     let ns_menu = build_menu(mtm, menu, &target, &[]);
     NSApplication::sharedApplication(mtm).setMainMenu(Some(&ns_menu));
-    APPLICATION_MENU.with_borrow_mut(|current| *current = Some((ns_menu, target)));
     true
 }
 
