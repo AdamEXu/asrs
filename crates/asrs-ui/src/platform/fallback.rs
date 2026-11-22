@@ -215,6 +215,10 @@ pub(super) mod probe {
         None
     }
 
+    pub fn choose_open_popup_item(_window: &Window, _index: usize) -> bool {
+        false
+    }
+
     pub fn select_menu_roundtrip(
         _menu: &super::super::SelectMenu,
     ) -> Option<super::super::probe::SelectMenuReading> {

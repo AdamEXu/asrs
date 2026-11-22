@@ -998,6 +998,24 @@ pub(super) mod probe {
         ns_window, select_cell,
     };
 
+    pub fn choose_open_popup_item(window: &Window, index: usize) -> bool {
+        let Some(window) = ns_window(window) else {
+            return false;
+        };
+        let key = Retained::as_ptr(&window) as usize;
+        let menus: Vec<Retained<NSMenu>> = super::OPEN_POPUPS.with_borrow(|open| {
+            open.iter()
+                .filter(|(k, _)| *k == key)
+                .map(|(_, m)| m.clone())
+                .collect()
+        });
+        for menu in &menus {
+            menu.performActionForItemAtIndex(index as isize);
+            menu.cancelTracking();
+        }
+        !menus.is_empty()
+    }
+
     pub fn select_menu_roundtrip(menu: &SelectMenu) -> Option<SelectMenuReading> {
         let mtm = MainThreadMarker::new()?;
         let target = PopupTarget::new(mtm);

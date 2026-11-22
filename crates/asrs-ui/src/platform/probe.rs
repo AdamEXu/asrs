@@ -134,6 +134,12 @@ pub struct SelectMenuItemReading {
     pub tag: isize,
 }
 
+/// Chooses item `index` of the popup open over `window`, as a click on it would, and closes the
+/// menu. Returns whether a popup was open.
+pub fn choose_open_popup_item(window: &Window, index: usize) -> bool {
+    imp::probe::choose_open_popup_item(window, index)
+}
+
 /// Builds the native popup for a `<select>` and reads its menu and cell back from the OS,
 /// without running it.
 pub fn select_menu_roundtrip(menu: &super::SelectMenu) -> Option<SelectMenuReading> {

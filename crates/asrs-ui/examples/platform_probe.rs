@@ -13,7 +13,9 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use asrs_ui::platform::probe::{self, MouseAction, WheelSample, WindowImage};
-use asrs_ui::platform::{self, PopupEntry, PopupMenu, WheelDelta};
+use asrs_ui::platform::{
+    self, PopupEntry, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind, WheelDelta,
+};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, AsyncApp, Bounds, Context, InteractiveElement, IntoElement,
     ParentElement, Render, ScrollDelta, Styled, TitlebarOptions, Window,
@@ -189,6 +191,7 @@ async fn checks(
 
     floating(cx, report).await;
     popup(cx, hub, report).await;
+    select_popup(cx, hub, report).await;
 
     let electron = electron.and_then(|path| match Electron::start(&path) {
         Ok(e) => Some(e),
@@ -279,6 +282,63 @@ async fn popup(cx: &mut AsyncApp, hub: AnyWindowHandle, report: &mut Report) {
                 menu_frame.map(|m| m.x),
                 window.x
             ),
+        );
+    }
+}
+
+/// A `<select>` popup over a control at (300, 200): `NSPopUpButtonCell` puts the selected row
+/// over the control, a chosen row comes back as its index, and a cancelled menu as none.
+async fn select_popup(cx: &mut AsyncApp, hub: AnyWindowHandle, report: &mut Report) {
+    let row = |label: &str, kind| SelectMenuItem {
+        label: label.to_owned(),
+        kind,
+        enabled: true,
+        tool_tip: String::new(),
+    };
+    let menu = SelectMenu {
+        items: vec![
+            row("FRC Fields", SelectMenuItemKind::Group),
+            row("    2025 Field", SelectMenuItemKind::Option),
+            row("    2024 Field", SelectMenuItemKind::Option),
+            row("FTC Fields", SelectMenuItemKind::Group),
+            row("    Into the Deep", SelectMenuItemKind::Option),
+        ],
+        font_size: 13.0,
+        selected: Some(2),
+        right_aligned: false,
+    };
+    let control = [300.0, 200.0, 170.0, 24.0];
+    for choose in [Some(4), None] {
+        let closed = Rc::new(RefCell::new(None));
+        let closed_in = closed.clone();
+        cx.update(|cx| {
+            hub.update(cx, |_, window, cx| {
+                platform::select_popup(window, cx, menu.clone(), control, move |row, _| {
+                    *closed_in.borrow_mut() = Some(row);
+                });
+            })
+        })
+        .expect("hub window");
+        sleep(cx, 700).await;
+        let frames = probe::menu_window_frames();
+        let window = with_window(cx, hub, |w| probe::window_frame(w)).expect("frame");
+        match choose {
+            Some(i) => {
+                with_window(cx, hub, |w| probe::choose_open_popup_item(w, i));
+            }
+            None => with_window(cx, hub, |w| platform::close_popup_menu(w)),
+        }
+        sleep(cx, 400).await;
+        let selection = closed.borrow().clone();
+        let menu_frame = frames.first().copied();
+        let control_mid = window.y + window.height - (control[1] + control[3] / 2.0);
+        let over = menu_frame.is_some_and(|m| {
+            m.y < control_mid && control_mid < m.y + m.height && m.x <= window.x + control[0]
+        });
+        report.check(
+            &format!("select popup, choosing {choose:?}"),
+            frames.len() == 1 && over && selection == Some(choose),
+            format!("menu {menu_frame:?} over the control's middle {control_mid}; closed with {selection:?}"),
         );
     }
 }
