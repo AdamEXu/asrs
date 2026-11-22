@@ -66,6 +66,7 @@ fn key_style() -> TextStyle {
         ("line-height", "30px"),
         ("text-align", "right"),
         ("direction", "rtl"),
+        ("unicode-bidi", "plaintext"),
         ("white-space", "nowrap"),
         ("text-overflow", "ellipsis"),
     ])
