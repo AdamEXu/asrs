@@ -1,6 +1,5 @@
-//! The hub window's root: a [`HubFrame`] over the [`Hub`] entity, which it observes. Until
-//! main (P) exists, the window is booted with the messages `main.ts` sends a new hub window,
-//! and what the hub sends main is dropped.
+//! The hub window's root: a [`HubFrame`] over the [`Hub`] entity, which it observes, booted
+//! with the messages `main.ts` sends a new hub window.
 
 use std::rc::Rc;
 
