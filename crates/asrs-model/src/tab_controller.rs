@@ -15,6 +15,8 @@ use std::rc::Rc;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsValue, ToJs};
 
+use crate::source_list::{ListInput, ListOutput, SourceList};
+
 /// The concrete type behind a tab trait object. Use the `downcast_ref` and `downcast_mut`
 /// methods on the trait objects: called on a `Box` or `Rc`, `as_any` would see the pointer.
 pub trait AsAny {
@@ -67,6 +69,22 @@ pub trait TabController<Cx: ?Sized>: AsAny {
     /// `getCommand()`, once per frame while the tab is shown anywhere. `uuid` is the tab's
     /// `controller.UUID`, which `Tabs` owns because a restore may set it to any value.
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError>;
+
+    /// The controller's `SourceList`s in construction order.
+    fn source_lists(&self) -> Vec<&SourceList> {
+        Vec::new()
+    }
+
+    /// An event for the controller's `SourceList`s, which handle it in construction order.
+    /// Each exception a list's listener throws is pushed to `errors`.
+    fn source_list_input(
+        &mut self,
+        _cx: &mut Cx,
+        _input: ListInput<'_>,
+        _errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        ListOutput::default()
+    }
 
     /// `TableController.addRendererRange`. `Tabs` calls it only on Table tabs.
     fn add_renderer_range(

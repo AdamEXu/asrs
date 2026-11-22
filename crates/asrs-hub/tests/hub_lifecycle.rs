@@ -98,6 +98,10 @@ impl HubView for View {
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
         &mut self.sidebar
     }
+
+    fn source_list_dom(&mut self) -> &mut dyn asrs_model::source_list::SourceListDom {
+        asrs_model::source_list::Undisplayed::dom()
+    }
 }
 
 struct Emit(Vec<(&'static str, Value)>);
