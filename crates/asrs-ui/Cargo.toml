@@ -161,3 +161,7 @@ required-features = ["parity"]
 [[example]]
 name = "canvas_frames"
 required-features = ["parity"]
+
+[[test]]
+name = "menu_view"
+harness = false

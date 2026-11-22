@@ -17,6 +17,7 @@ pub mod capture;
 pub mod filter;
 pub mod icon;
 pub mod input;
+pub mod menu;
 pub mod platform;
 pub mod svg;
 pub mod symbols;

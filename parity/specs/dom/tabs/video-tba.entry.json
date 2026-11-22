@@ -1,6 +1,5 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
   "inputs": [
     "../assets/minimal.json",
     "../logs/robot.json",

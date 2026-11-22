@@ -58,11 +58,13 @@ mod tabs_console {
     pub const CALLS: &[(&str, crate::functions::Function)] = &[];
 }
 
-use std::cell::{Ref, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::{HashMap, VecDeque};
+use std::rc::Rc;
 
+use asrs_canvas::text::FixedAdvance;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::Rng;
+use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::realm::JsRealm;
@@ -78,7 +80,10 @@ use asrs_model::tab_controller::TabController;
 use asrs_parity::Value;
 use asrs_parity::vectors::{Record, load, vectors_dir};
 use asrs_tabs::cx::TabCx;
-use asrs_tabs::line_graph::{LineGraphController, ListId};
+use asrs_tabs::line_graph::{
+    LineGraphCommand, LineGraphController, LineGraphDom, LineGraphFrame, LineGraphRenderer, ListId,
+    OverlayStyle, Pointer,
+};
 use asrs_tabs::list_cx::{ListParts, SourceListCx};
 
 const CASES: &str = "dom/line-graph";
@@ -239,6 +244,135 @@ impl Selection for ScriptedSelection {
     fn apply_timeline_scroll(&mut self, _: f64, _: f64, _: f64) {
         self.unexpected("applyTimelineScroll")
     }
+}
+
+/// The selection the renderer sees: it only writes, so every write is logged in order and
+/// any read fails the case.
+#[derive(Default)]
+struct WriteLog {
+    writes: Vec<JsValue>,
+    error: Option<String>,
+}
+
+impl WriteLog {
+    fn write(&mut self, name: &str, args: Vec<JsValue>) {
+        self.writes
+            .push(JsValue::Array(vec![name.to_js(), JsValue::Array(args)]));
+    }
+
+    fn unexpected(&mut self, name: &str) {
+        self.error
+            .get_or_insert(format!("the renderer called selection.{name}"));
+    }
+}
+
+fn opt_num(v: Option<f64>) -> JsValue {
+    v.map_or(JsValue::Null, JsValue::Number)
+}
+
+impl Selection for WriteLog {
+    fn get_mode(&self) -> SelectionMode {
+        panic!("the renderer read selection.getMode")
+    }
+    fn get_hovered_time(&self) -> Option<f64> {
+        panic!("the renderer read selection.getHoveredTime")
+    }
+    fn set_hovered_time(&mut self, t: Option<f64>) {
+        self.write("setHoveredTime", vec![opt_num(t)])
+    }
+    fn get_selected_time(&mut self) -> Option<f64> {
+        self.unexpected("getSelectedTime");
+        None
+    }
+    fn set_selected_time(&mut self, t: f64) {
+        self.write("setSelectedTime", vec![t.to_js()])
+    }
+    fn go_idle(&mut self) {
+        self.write("goIdle", vec![])
+    }
+    fn play(&mut self) {
+        self.unexpected("play")
+    }
+    fn pause(&mut self) {
+        self.unexpected("pause")
+    }
+    fn toggle_playback(&mut self) {
+        self.unexpected("togglePlayback")
+    }
+    fn lock(&mut self) {
+        self.unexpected("lock")
+    }
+    fn unlock(&mut self) {
+        self.unexpected("unlock")
+    }
+    fn toggle_lock(&mut self) {
+        self.unexpected("toggleLock")
+    }
+    fn step_cycle(&mut self, _: bool) {
+        self.unexpected("stepCycle")
+    }
+    fn set_live_connected(&mut self, _: TimeSupplier) {
+        self.unexpected("setLiveConnected")
+    }
+    fn set_live_disconnected(&mut self) {
+        self.unexpected("setLiveDisconnected")
+    }
+    fn get_current_live_time(&self) -> Option<f64> {
+        panic!("the renderer read selection.getCurrentLiveTime")
+    }
+    fn get_render_time(&mut self) -> Option<f64> {
+        self.unexpected("getRenderTime");
+        None
+    }
+    fn set_playback_speed(&mut self, _: f64) {
+        self.unexpected("setPlaybackSpeed")
+    }
+    fn set_playback_looping(&mut self, _: bool) {
+        self.unexpected("setPlaybackLooping")
+    }
+    fn set_grab_zoom_range(&mut self, range: Option<[f64; 2]>) {
+        self.write(
+            "setGrabZoomRange",
+            vec![range.map_or(JsValue::Null, |r| r.to_js())],
+        )
+    }
+    fn get_grab_zoom_range(&self) -> Option<[f64; 2]> {
+        panic!("the renderer read selection.getGrabZoomRange")
+    }
+    fn finish_grab_zoom(&mut self) {
+        self.write("finishGrabZoom", vec![])
+    }
+    fn get_timeline_range(&mut self) -> [f64; 2] {
+        self.unexpected("getTimelineRange");
+        [f64::NAN; 2]
+    }
+    fn get_timeline_is_max_zoom(&self) -> bool {
+        panic!("the renderer read selection.getTimelineIsMaxZoom")
+    }
+    fn set_timeline_range(&mut self, _: [f64; 2], _: bool) {
+        self.unexpected("setTimelineRange")
+    }
+    fn apply_timeline_scroll(&mut self, dx: f64, dy: f64, width: f64) {
+        self.write(
+            "applyTimelineScroll",
+            vec![dx.to_js(), dy.to_js(), width.to_js()],
+        )
+    }
+}
+
+/// The harness only knows the order of the help overlay's timers, not their clock times, so
+/// a timer is due exactly when upstream's `update-preferences` message arrives.
+struct StepClock(Rc<Cell<f64>>);
+
+impl Clock for StepClock {
+    fn now(&self) -> f64 {
+        self.0.get()
+    }
+}
+
+struct Painter {
+    renderer: LineGraphRenderer,
+    command: Option<LineGraphCommand>,
 }
 
 struct Host {
@@ -450,6 +584,9 @@ struct Stats {
     prompts: usize,
     dumps: usize,
     ops: usize,
+    renders: usize,
+    frames: usize,
+    events: usize,
 }
 
 struct Harness {
@@ -461,6 +598,9 @@ struct Harness {
     bound: HashMap<String, (usize, ListId)>,
     pending_prompt: Option<JsValue>,
     pending_errors: VecDeque<String>,
+    painters: Vec<Painter>,
+    clock: Rc<Cell<f64>>,
+    text: Rc<RefCell<FixedAdvance>>,
     stats: Stats,
 }
 
@@ -499,6 +639,9 @@ impl Harness {
             bound: HashMap::new(),
             pending_prompt: None,
             pending_errors: VecDeque::new(),
+            painters: Vec::new(),
+            clock: Rc::new(Cell::new(0.0)),
+            text: Rc::new(RefCell::new(FixedAdvance)),
             stats: Stats::default(),
         }
     }
@@ -545,6 +688,9 @@ impl Harness {
                 let actual = encode(&command.to_js());
                 if expected != actual {
                     return Err(format!("command\n upstream {expected}\n port     {actual}"));
+                }
+                if let Some(painter) = self.painters.get_mut(id) {
+                    painter.command = Some(command);
                 }
                 Ok(())
             }
@@ -858,6 +1004,178 @@ impl Harness {
         Ok(())
     }
 
+    fn render(&mut self, record: &Record) -> Result<(), String> {
+        let id = lg_id(record)?;
+        self.stats.renders += 1;
+        let preferences = record_preferences(record)?;
+        let frame = LineGraphFrame {
+            width: num(&js(record, "width")?)?,
+            height: num(&js(record, "height")?)?,
+            device_pixel_ratio: num(&js(record, "dpr")?)?,
+            light: !matches!(record.value("dark"), Ok(Value::Bool(true))),
+            preferences: preferences.as_ref(),
+        };
+        let painter = self.painters.get_mut(id).ok_or("render before create")?;
+        let command = painter
+            .command
+            .clone()
+            .ok_or("upstream rendered a command the port never built")?;
+        let mut log = WriteLog::default();
+        let result =
+            painter
+                .renderer
+                .render_frame(&frame, &command, &mut log, &mut *self.text.borrow_mut());
+        let (canvas, error) = match result {
+            Ok(canvas) => (canvas, None),
+            Err(e) => (Some(e.canvas), Some(error_text(&e.error))),
+        };
+        same_error("render", threw(record), error)?;
+        match (record.field("calls"), canvas) {
+            (None, None) => {}
+            (Some(_), None) => {
+                return Err("upstream painted a frame, the port kept the last".to_owned());
+            }
+            (None, Some(_)) => {
+                return Err("the port painted a frame, upstream kept the last".to_owned());
+            }
+            (Some(_), Some(canvas)) => {
+                self.stats.frames += 1;
+                let size = encode(&JsValue::Array(vec![
+                    (canvas.width as f64).to_js(),
+                    (canvas.height as f64).to_js(),
+                ]));
+                let expected_size = encode(&js(record, "size")?);
+                if size != expected_size {
+                    return Err(format!(
+                        "canvas size: upstream {expected_size}, port {size}"
+                    ));
+                }
+                compare_calls(&record.value("calls").map_err(|e| e.0)?, &canvas)?;
+            }
+        }
+        writes_match(record, log)?;
+        style_match(record, painter.renderer.style())
+    }
+
+    fn event(&mut self, record: &Record) -> Result<(), String> {
+        self.stats.events += 1;
+        let kind = record.string("type").ok_or("event type")?;
+        let client_x = num(&js(record, "x")?)?;
+        let shift_key = matches!(record.value("shift"), Ok(Value::Bool(true)));
+        let mut targets = Vec::new();
+        for target in js(record, "targets")?.as_array().ok_or("targets")? {
+            let t = target.as_array().ok_or("a target is an array")?;
+            let flag = |i: usize| matches!(at(t, i), JsValue::Bool(true));
+            targets.push((
+                index(at(t, 0))?,
+                flag(2),
+                Pointer {
+                    client_x,
+                    shift_key,
+                    root_hidden: flag(1),
+                    root_x: num(at(t, 3))?,
+                    overlay_x: num(at(t, 4))?,
+                    overlay_client_width: num(at(t, 5))?,
+                },
+            ));
+        }
+        if targets.len() != self.painters.len() {
+            return Err(format!(
+                "upstream has {} renderers, the port {}",
+                targets.len(),
+                self.painters.len()
+            ));
+        }
+        let preferences = Some(&self.host.preferences);
+        let mut log = WriteLog::default();
+        for &(id, on_overlay, pointer) in &targets {
+            if !on_overlay {
+                continue;
+            }
+            let r = &mut self.painters[id].renderer;
+            match kind.as_str() {
+                "mousemove" => r.overlay_mouse_move(pointer, preferences, &mut log),
+                "mousedown" => r.mouse_down(pointer),
+                "mouseup" => r.overlay_mouse_up(),
+                "click" => r.click(pointer, &mut log),
+                "contextmenu" => r.context_menu(&mut log),
+                "mouseleave" => r.mouse_leave(&mut log),
+                other => return Err(format!("unknown pointer event {other}")),
+            }
+        }
+        for &(id, _, pointer) in &targets {
+            let r = &mut self.painters[id].renderer;
+            match kind.as_str() {
+                "mousemove" => r.window_mouse_move(pointer, &mut log),
+                "mouseup" => r.window_mouse_up(pointer, &mut log),
+                _ => {}
+            }
+        }
+        writes_match(record, log)
+    }
+
+    fn scroll(&mut self, record: &Record) -> Result<(), String> {
+        let id = lg_id(record)?;
+        self.stats.events += 1;
+        let args = js(record, "args")?;
+        let args = args.as_array().ok_or("scroll args")?;
+        let p = js(record, "pointer")?;
+        let p = p.as_array().ok_or("scroll pointer")?;
+        let pointer = Pointer {
+            client_x: 0.0,
+            shift_key: false,
+            root_hidden: matches!(at(p, 0), JsValue::Bool(true)),
+            root_x: num(at(p, 2))?,
+            overlay_x: num(at(p, 3))?,
+            overlay_client_width: num(at(p, 4))?,
+        };
+        let preferences = record_preferences(record)?;
+        let mut log = WriteLog::default();
+        let painter = self.painters.get_mut(id).ok_or("scroll before create")?;
+        painter.renderer.scroll(
+            num(at(args, 0))?,
+            num(at(args, 1))?,
+            matches!(at(args, 2), JsValue::Bool(true)),
+            pointer,
+            preferences.as_ref(),
+            &mut log,
+        );
+        writes_match(record, log)?;
+        style_match(record, painter.renderer.style())
+    }
+
+    /// Upstream's help overlay timer fired: exactly one port timer must be pending, and it
+    /// sends the same message.
+    fn help_timer(&mut self, record: &Record) -> Result<(), String> {
+        let expected = encode(&js(record, "data")?);
+        let due = self
+            .painters
+            .iter()
+            .filter_map(|p| p.renderer.next_timer())
+            .fold(f64::INFINITY, f64::min);
+        if !due.is_finite() {
+            return Err("upstream's help overlay timer fired, the port has none".to_owned());
+        }
+        self.clock.set(due);
+        let mut sent = Vec::new();
+        for p in &mut self.painters {
+            sent.extend(p.renderer.run_timers());
+        }
+        match sent.as_slice() {
+            [message] if message.name == HubToMain::UpdatePreferences => {
+                let actual = encode(&message.data);
+                if actual != expected {
+                    return Err(format!(
+                        "update-preferences\n upstream {expected}\n port     {actual}"
+                    ));
+                }
+                self.stats.events += 1;
+                Ok(())
+            }
+            other => Err(format!("the port's due timers sent {other:?}")),
+        }
+    }
+
     fn handle_lg(
         &mut self,
         record: &Record,
@@ -889,9 +1207,21 @@ impl Harness {
                 self.controllers
                     .push(LineGraphController::with_uuids([left, right, discrete]));
                 self.previews.push(VecDeque::new());
+                self.painters.push(Painter {
+                    renderer: LineGraphRenderer::new(
+                        true,
+                        Rc::new(StepClock(Rc::clone(&self.clock))),
+                        Rc::new(RefCell::new(LineGraphDom::default())),
+                        self.text.clone(),
+                    ),
+                    command: None,
+                });
                 Ok(())
             }
             "command" => self.command(record),
+            "render" => self.render(record),
+            "event" => self.event(record),
+            "scroll" => self.scroll(record),
             "preview" => {
                 let id = lg_id(record)?;
                 let args = js(record, "args")?;
@@ -1029,6 +1359,9 @@ impl Harness {
             }
             return Ok(());
         }
+        if record.string("main").as_deref() == Some("update-preferences") {
+            return self.help_timer(record);
+        }
         if record.string("exception").as_deref() == Some("event") {
             let error = record.string("error").unwrap_or_default();
             return match self.pending_errors.pop_front() {
@@ -1089,6 +1422,93 @@ impl Harness {
     }
 }
 
+fn record_preferences(record: &Record) -> Result<Option<Preferences>, String> {
+    let prefs = js(record, "prefs")?;
+    let Some(p) = prefs.as_array() else {
+        return Ok(None);
+    };
+    Ok(Some(Preferences {
+        timestamps: match at(p, 0).as_str() {
+            Some(s) if s.to_string_lossy() == "original" => Timestamps::Original,
+            _ => Timestamps::StartZero,
+        },
+        has_scrolled_line_graph: matches!(at(p, 1), JsValue::Bool(true)),
+        ..Preferences::default()
+    }))
+}
+
+fn compare_calls(expected: &Value, canvas: &asrs_canvas::Canvas2d) -> Result<(), String> {
+    let actual = asrs_canvas::trace::encode(&canvas.calls)
+        .lines()
+        .map(|line| {
+            asrs_parity::json::parse(line)
+                .map_err(|e| format!("port trace line {line}: {e:?}"))
+                .and_then(|json| Value::from_json(&json).map_err(|e| e.0))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let Value::Array(expected) = expected else {
+        return Err("calls is not a list".to_owned());
+    };
+    for (i, (e, a)) in expected.iter().zip(actual.iter()).enumerate() {
+        if !asrs_parity::vectors::values_match(e, a) {
+            return Err(format!(
+                "canvas call {i}:\n upstream {}\n port     {}",
+                e.encode(),
+                a.encode()
+            ));
+        }
+    }
+    if expected.len() != actual.len() {
+        return Err(format!(
+            "upstream made {} canvas calls, the port {}",
+            expected.len(),
+            actual.len()
+        ));
+    }
+    Ok(())
+}
+
+fn writes_match(record: &Record, log: WriteLog) -> Result<(), String> {
+    if let Some(e) = log.error {
+        return Err(e);
+    }
+    let expected = encode(&js(record, "writes")?);
+    let actual = encode(&JsValue::Array(log.writes));
+    if expected != actual {
+        return Err(format!(
+            "selection writes\n upstream {expected}\n port     {actual}"
+        ));
+    }
+    Ok(())
+}
+
+fn style_match(record: &Record, style: &OverlayStyle) -> Result<(), String> {
+    let length = |v: Option<f64>| match v {
+        None => String::new(),
+        Some(v) => format!("{}px", asrs_js::number::to_string(v)),
+    };
+    let actual = JsValue::Array(vec![
+        length(style.scroll_top).to_js(),
+        length(style.scroll_left).to_js(),
+        length(style.scroll_right).to_js(),
+        match style.help_visible {
+            None => "",
+            Some(true) => "flex",
+            Some(false) => "none",
+        }
+        .to_js(),
+        style.help_fading_out.to_js(),
+    ]);
+    let expected = encode(&js(record, "style")?);
+    let actual = encode(&actual);
+    if expected != actual {
+        return Err(format!(
+            "overlay style\n upstream {expected}\n port     {actual}"
+        ));
+    }
+    Ok(())
+}
+
 fn case_ids() -> Vec<String> {
     let dir = vectors_dir().join(CASES);
     let mut ids: Vec<String> = std::fs::read_dir(&dir)
@@ -1131,9 +1551,19 @@ fn line_graph_fixtures() {
         match run_case(id) {
             Ok(s) => {
                 eprintln!(
-                    "{id}: {} commands, {} previews, {} saves, {} calls, {} prompts, {} dumps, {} list ops",
-                    s.commands, s.previews, s.saves, s.calls, s.prompts, s.dumps, s.ops
+                    "{id}: {} commands, {} previews, {} saves, {} calls, {} prompts, {} dumps, {} list ops, {} renders, {} painted frames, {} pointer inputs",
+                    s.commands,
+                    s.previews,
+                    s.saves,
+                    s.calls,
+                    s.prompts,
+                    s.dumps,
+                    s.ops,
+                    s.renders,
+                    s.frames,
+                    s.events
                 );
+                assert!(s.renders > 0, "{id}: upstream never rendered");
                 total.commands += s.commands;
                 total.previews += s.previews;
                 total.saves += s.saves;
@@ -1141,12 +1571,15 @@ fn line_graph_fixtures() {
                 total.prompts += s.prompts;
                 total.dumps += s.dumps;
                 total.ops += s.ops;
+                total.renders += s.renders;
+                total.frames += s.frames;
+                total.events += s.events;
             }
             Err(e) => failures.push(e),
         }
     }
     eprintln!(
-        "{} fixtures: {} commands, {} previews, {} saves, {} calls, {} prompts, {} dumps, {} list ops, {} failing",
+        "{} fixtures: {} commands, {} previews, {} saves, {} calls, {} prompts, {} dumps, {} list ops, {} renders, {} painted frames, {} pointer inputs, {} failing",
         ids.len(),
         total.commands,
         total.previews,
@@ -1155,6 +1588,9 @@ fn line_graph_fixtures() {
         total.prompts,
         total.dumps,
         total.ops,
+        total.renders,
+        total.frames,
+        total.events,
         failures.len()
     );
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));

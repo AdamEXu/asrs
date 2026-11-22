@@ -10,7 +10,7 @@ use asrs_log::util::check_array_type;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::form::{Select, option_value_from_inner_text};
+use crate::form::{Select, SelectOption};
 
 /// Six `<select>`s in `table.joystick-selector`.
 const SELECT_COUNT: usize = 6;
@@ -36,10 +36,10 @@ impl JoysticksController {
         if let Some(assets) = cx.tab_assets() {
             titles.extend(assets.joysticks.iter().map(|j| j.name.clone()));
         }
-        let values: Vec<JsString> = titles.iter().map(option_value_from_inner_text).collect();
+        let options: Vec<SelectOption> = titles.iter().map(SelectOption::from_inner_text).collect();
         for select in &mut self.selects {
             let value = select.value();
-            select.replace_options(values.clone());
+            select.replace_options(options.clone());
             select.set_value(if titles.contains(&value) {
                 &value
             } else {

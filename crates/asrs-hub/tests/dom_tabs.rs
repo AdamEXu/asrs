@@ -1113,7 +1113,7 @@ fn video_view(r: &Runner) -> JsValue {
                         bool_(b.controls_disabled),
                     ]),
                 ),
-                ("progress", JsValue::String(video.progress_width().clone())),
+                ("progress", JsValue::String(video.progress_width())),
                 (
                     "animating",
                     JsValue::Array(vec![
@@ -2284,7 +2284,7 @@ impl Runner {
             .and_then(|v| js_json::to_js(&Value::from_json_lenient(v)).ok())
             .and_then(JsValue::into_string);
         if let (Some(value), Some(dom)) = (value, self.selected_table_dom()) {
-            dom.borrow_mut().jump_value = value;
+            dom.borrow_mut().jump_input.set_value(value);
         }
     }
 
