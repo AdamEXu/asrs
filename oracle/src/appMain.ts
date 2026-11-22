@@ -194,9 +194,12 @@ function placeWindow(win: BrowserWindow) {
 
 app.on("browser-window-created", (_event, win) => {
   windows.push(win);
-  // Unpackaged upstream opens DevTools docked, which halves the hub page; windows stay inactive.
+  // Unpackaged upstream opens DevTools docked, which halves the hub page. Windows stay inactive
+  // and ignore the real pointer, which would otherwise move the hover state when it passes over
+  // them; sendInputEvent goes straight to the renderer and is unaffected.
   win.webContents.openDevTools = () => {};
   win.show = () => win.showInactive();
+  win.setIgnoreMouseEvents(true);
   win.webContents.on("did-start-navigation", (event: any) => {
     if (target === null && event.isMainFrame && /\/www\/hub\.html$/.test(new URL(event.url).pathname)) {
       target = win;
