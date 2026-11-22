@@ -331,7 +331,7 @@
     "msgpack/decode": {"cases":7131,"content":"6ef775b5fdf738d5","generator":"594c04e1b29241a5","spec":"parity/specs/msgpack/decode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/encode": {"cases":100193,"content":"b4c663a4660606e0","generator":"5982488417fec89e","spec":"parity/specs/msgpack/encode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/multi": {"cases":766,"content":"d1cae0b634ef8bf3","generator":"f3bb18cbbf5dcaf3","spec":"parity/specs/msgpack/multi.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "node/path-join": {"cases":3058,"content":"0a588a0221cf5154","generator":"d9759c72fb76054d","spec":"parity/specs/node/path-join.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "node/path-join": {"cases":3079,"content":"46163267da176e35","generator":"b732e28173485a99","spec":"parity/specs/node/path-join.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/numberformat": {"cases":182,"content":"44a96cd7bef54d21","generator":"3585cac42035e382","spec":"parity/specs/number/numberformat.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/parse": {"cases":569,"content":"495136adba4d37f3","generator":"24ce2db263ae4160","spec":"parity/specs/number/parse.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/toexponential": {"cases":880,"content":"2ab4522ddb392cc2","generator":"cb1783a12a72ba31","spec":"parity/specs/number/toexponential.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},

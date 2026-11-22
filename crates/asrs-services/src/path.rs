@@ -7,6 +7,38 @@ const SLASH: u16 = b'/' as u16;
 const BACKSLASH: u16 = b'\\' as u16;
 const DOT: u16 = b'.' as u16;
 const COLON: u16 = b':' as u16;
+const QUESTION: u16 = b'?' as u16;
+
+const WINDOWS_RESERVED_NAMES: [&str; 28] = [
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
+    "COM\u{b9}",
+    "COM\u{b2}",
+    "COM\u{b3}",
+    "LPT\u{b9}",
+    "LPT\u{b2}",
+    "LPT\u{b3}",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathStyle {
@@ -81,6 +113,21 @@ impl PathStyle {
                 }
             }
         }
+        if self == PathStyle::Win32
+            && joined
+                .split(|&u| u == BACKSLASH)
+                .filter(|part| !part.is_empty())
+                .any(|part| {
+                    index_of(part, COLON).is_some_and(|c| is_windows_reserved_name(part, c))
+                })
+        {
+            return JsString::from_units(
+                joined
+                    .iter()
+                    .map(|&u| if u == SLASH { BACKSLASH } else { u })
+                    .collect(),
+            );
+        }
         self.normalize(&JsString::from_units(joined))
     }
 
@@ -117,13 +164,13 @@ fn normalize_string(path: &[u16], allow_above_root: bool, sep: u16, style: PathS
                     || res[res.len() - 2] != DOT
                 {
                     if res.len() > 2 {
-                        match res.iter().rposition(|&u| u == sep) {
+                        match res.len().checked_sub(last_segment_length + 1) {
                             None => {
                                 res.clear();
                                 last_segment_length = 0;
                             }
-                            Some(index) => {
-                                res.truncate(index);
+                            Some(last_slash_index) => {
+                                res.truncate(last_slash_index);
                                 last_segment_length = match res.iter().rposition(|&u| u == sep) {
                                     Some(p) => res.len() - 1 - p,
                                     None => res.len(),
@@ -195,6 +242,26 @@ fn is_device_root(unit: u16) -> bool {
         || (u16::from(b'a')..=u16::from(b'z')).contains(&unit)
 }
 
+fn index_of(units: &[u16], unit: u16) -> Option<usize> {
+    units.iter().position(|&u| u == unit)
+}
+
+fn is_windows_reserved_name(path: &[u16], colon_index: usize) -> bool {
+    let device = JsString::from_units(path[..colon_index].to_vec()).to_upper_case();
+    WINDOWS_RESERVED_NAMES
+        .iter()
+        .any(|name| device == JsString::from(*name))
+}
+
+/// `isWindowsReservedName(path, path.indexOf(":"))`: without a colon node slices to `-1`, so
+/// a path that is a reserved name plus any one unit, like `CONx`, also counts.
+fn has_reserved_device(path: &[u16]) -> bool {
+    match index_of(path, COLON) {
+        Some(colon_index) => is_windows_reserved_name(path, colon_index),
+        None => !path.is_empty() && is_windows_reserved_name(path, path.len() - 1),
+    }
+}
+
 fn normalize_win32(path: &[u16]) -> JsString {
     let style = PathStyle::Win32;
     let len = path.len();
@@ -231,15 +298,31 @@ fn normalize_win32(path: &[u16]) -> JsString {
                     while j < len && !style.is_sep(path[j]) {
                         j += 1;
                     }
-                    if j == len {
+                    if first_part == [DOT] || first_part == [QUESTION] {
+                        let mut d = vec![BACKSLASH, BACKSLASH];
+                        d.extend_from_slice(first_part);
+                        device = Some(d);
+                        root_end = 4;
+                        let possible = match index_of(path, COLON) {
+                            Some(colon_index) if colon_index >= 4 => &path[4..=colon_index],
+                            _ => &[][..],
+                        };
+                        if !possible.is_empty()
+                            && is_windows_reserved_name(possible, possible.len() - 1)
+                        {
+                            let mut d = vec![BACKSLASH, BACKSLASH, QUESTION, BACKSLASH];
+                            d.extend_from_slice(possible);
+                            device = Some(d);
+                            root_end = 4 + possible.len();
+                        }
+                    } else if j == len {
                         let mut out = vec![BACKSLASH, BACKSLASH];
                         out.extend_from_slice(first_part);
                         out.push(BACKSLASH);
                         out.extend_from_slice(&path[last..]);
                         out.push(BACKSLASH);
                         return JsString::from_units(out);
-                    }
-                    if j != last {
+                    } else {
                         let mut d = vec![BACKSLASH, BACKSLASH];
                         d.extend_from_slice(first_part);
                         d.push(BACKSLASH);
@@ -252,12 +335,17 @@ fn normalize_win32(path: &[u16]) -> JsString {
         } else {
             root_end = 1;
         }
-    } else if is_device_root(code) && path[1] == COLON {
-        device = Some(path[..2].to_vec());
-        root_end = 2;
-        if len > 2 && style.is_sep(path[2]) {
-            is_absolute = true;
-            root_end = 3;
+    } else if let Some(colon_index) = index_of(path, COLON).filter(|&c| c > 0) {
+        if is_device_root(code) && colon_index == 1 {
+            device = Some(path[..2].to_vec());
+            root_end = 2;
+            if len > 2 && style.is_sep(path[2]) {
+                is_absolute = true;
+                root_end = 3;
+            }
+        } else if is_windows_reserved_name(path, colon_index) {
+            device = Some(path[..=colon_index].to_vec());
+            root_end = colon_index + 1;
         }
     }
     let mut tail = if root_end < len {
@@ -271,34 +359,31 @@ fn normalize_win32(path: &[u16]) -> JsString {
     if !tail.is_empty() && style.is_sep(path[len - 1]) {
         tail.push(BACKSLASH);
     }
+    let dotted = |device: Option<&[u16]>, tail: &[u16]| {
+        let mut out = vec![DOT, BACKSLASH];
+        out.extend_from_slice(device.unwrap_or(&[]));
+        out.extend_from_slice(tail);
+        JsString::from_units(out)
+    };
     if !is_absolute && device.is_none() && path.contains(&COLON) {
-        let dotted = |tail: &[u16]| {
-            let mut out = vec![DOT, BACKSLASH];
-            out.extend_from_slice(tail);
-            JsString::from_units(out)
-        };
         if tail.len() >= 2 && is_device_root(tail[0]) && tail[1] == COLON {
-            return dotted(&tail);
+            return dotted(None, &tail);
         }
         for (index, &unit) in path.iter().enumerate() {
             if unit == COLON && (index == len - 1 || style.is_sep(path[index + 1])) {
-                return dotted(&tail);
+                return dotted(None, &tail);
             }
         }
     }
+    if has_reserved_device(path) {
+        return dotted(device.as_deref(), &tail);
+    }
     let mut out = Vec::new();
-    match device {
-        None => {
-            if is_absolute {
-                out.push(BACKSLASH);
-            }
-        }
-        Some(d) => {
-            out.extend_from_slice(&d);
-            if is_absolute {
-                out.push(BACKSLASH);
-            }
-        }
+    if let Some(d) = device {
+        out.extend_from_slice(&d);
+    }
+    if is_absolute {
+        out.push(BACKSLASH);
     }
     out.extend_from_slice(&tail);
     JsString::from_units(out)
