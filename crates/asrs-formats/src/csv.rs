@@ -137,6 +137,9 @@ pub fn decode(log: &mut Log, data: &JsString, post: &mut dyn FnMut(Response)) ->
     let rows = data.split(Some(&js("\n")), None);
     if rows[0] == js("Timestamp,Key,Value") {
         for (row_index, row) in rows.iter().enumerate().skip(1) {
+            if crate::worker::stop_requested() {
+                return Err(Abort::Threw);
+            }
             if row.is_empty() {
                 continue;
             }
@@ -151,6 +154,9 @@ pub fn decode(log: &mut Log, data: &JsString, post: &mut dyn FnMut(Response)) ->
     } else if rows[0].starts_with(&js("Timestamp"), None) {
         let keys = rows[0].split(Some(&js(",")), None);
         for (row_index, row) in rows.iter().enumerate().skip(1) {
+            if crate::worker::stop_requested() {
+                return Err(Abort::Threw);
+            }
             if row.is_empty() {
                 continue;
             }

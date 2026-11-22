@@ -669,15 +669,23 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    match traces(&text) {
+        Ok(out) => {
+            print!("{out}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{file}: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// The trace of every session in `text`, one JSON session spec per line.
+pub(crate) fn traces(text: &str) -> Result<String, String> {
     let mut out = String::new();
     for line in text.lines().filter(|l| !l.trim().is_empty()) {
-        let spec = match json::parse(line) {
-            Ok(spec) => spec,
-            Err(error) => {
-                eprintln!("{file}: {error}");
-                return ExitCode::FAILURE;
-            }
-        };
+        let spec = json::parse(line).map_err(|e| e.to_string())?;
         let name = spec
             .get("name")
             .and_then(Json::as_str)
@@ -715,6 +723,5 @@ pub fn run(args: &[String]) -> ExitCode {
             out.push('\n');
         }
     }
-    print!("{out}");
-    ExitCode::SUCCESS
+    Ok(out)
 }

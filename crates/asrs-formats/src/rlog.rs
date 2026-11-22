@@ -206,6 +206,9 @@ impl RlogDecoder {
             if offset >= data.len() as i64 {
                 break 'main;
             }
+            if crate::worker::stop_requested() {
+                return Err(Fail::Abort(Abort::Threw));
+            }
             let mut timestamp = f64_at(data, shift(&mut offset, 8))?;
             if timestamp < 0.0 {
                 timestamp = 0.0;

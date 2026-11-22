@@ -1,2 +1,2 @@
 pub mod frame;
-pub mod standalone;
+pub mod hub_host;

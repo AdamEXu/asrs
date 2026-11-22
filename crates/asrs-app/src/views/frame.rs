@@ -57,12 +57,10 @@ pub enum FrameSlot {
 pub trait FrameHost: 'static {
     /// The geometry the hub model's `HubView` answers from.
     fn geometry(&self) -> FrameGeometry;
-    fn hub(&self) -> &HubModel;
-    fn hub_mut(&mut self) -> &mut HubModel;
-    fn send_main_message(&mut self, message: NamedMessage<HubToMain>);
-    /// Called after the frame changed the model from an input event, so queued main messages
-    /// can be sent.
-    fn after_input(&mut self) {}
+    fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel;
+    /// Runs `f`, the frame's handler for an input event, as one page task.
+    fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R;
+    fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
     /// The contents of `slot`, laid out in a box of the slot's size.
     fn slot(
         &mut self,
@@ -161,9 +159,9 @@ fn place(rect: [f64; 4], origin: (f64, f64)) -> asrs_ui::gpui::Div {
 }
 
 impl<H: FrameHost> HubFrame<H> {
-    pub fn new(host: H) -> Self {
+    pub fn new(host: H, cx: &App) -> Self {
         let geometry = host.geometry();
-        geometry.sync(host.hub());
+        geometry.sync(host.hub(cx));
         HubFrame {
             host,
             shell: HubShell::default(),
@@ -185,13 +183,20 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     /// The frame's layout for a `width` x `height` viewport at `scale`.
-    pub fn layout(&self, width: f64, height: f64, scale: f64) -> FrameLayout {
-        FrameLayout::compute(&self.inputs(width, height, scale, (0.0, 0.0)))
+    pub fn layout(&self, cx: &App, width: f64, height: f64, scale: f64) -> FrameLayout {
+        FrameLayout::compute(&self.inputs(cx, width, height, scale, (0.0, 0.0)))
     }
 
-    fn inputs(&self, width: f64, height: f64, scale: f64, fps_size: (f64, f64)) -> FrameInputs {
+    fn inputs(
+        &self,
+        cx: &App,
+        width: f64,
+        height: f64,
+        scale: f64,
+        fps_size: (f64, f64),
+    ) -> FrameInputs {
         FrameInputs::from_hub(
-            self.host.hub(),
+            self.host.hub(cx),
             width,
             height,
             scale,
@@ -205,54 +210,57 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     fn handle_down(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
-        self.geometry.sync(self.host.hub());
-        self.shell.handle_mouse_down(self.host.hub_mut(), handle);
-        self.host.after_input();
+        let (shell, geometry) = (&mut self.shell, &self.geometry);
+        self.host.input(cx, |hub| {
+            geometry.sync(hub);
+            shell.handle_mouse_down(hub, handle);
+        });
         cx.notify();
     }
 
     fn handle_click(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
         let now = self.now();
-        self.geometry.sync(self.host.hub());
-        if let Err(e) = self.shell.handle_click(self.host.hub_mut(), handle, now) {
+        let (shell, geometry) = (&mut self.shell, &self.geometry);
+        let result = self.host.input(cx, |hub| {
+            geometry.sync(hub);
+            shell.handle_click(hub, handle, now)
+        });
+        if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
-        self.host.after_input();
         cx.notify();
     }
 
     fn mouse_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
         let x = client_coordinate(f64::from(f32::from(event.position.x)));
         let y = client_coordinate(f64::from(f32::from(event.position.y)));
-        let geometry = self.geometry.clone();
-        geometry.sync(self.host.hub());
-        let host = &mut self.host;
-        let result = self
-            .shell
-            .window_mouse_move(host.hub_mut(), x, y, &mut |hub| geometry.sync(hub));
+        let (shell, geometry) = (&mut self.shell, &self.geometry);
+        let result = self.host.input(cx, |hub| {
+            geometry.sync(hub);
+            shell.window_mouse_move(hub, x, y, &mut |hub| geometry.sync(hub))
+        });
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
-        self.host.after_input();
         if !matches!(self.shell.cursor(), BodyCursor::Unset | BodyCursor::Initial) {
             cx.notify();
         }
     }
 
     fn mouse_up(&mut self, cx: &mut Context<'_, Self>) {
-        self.shell.window_mouse_up(self.host.hub_mut());
-        self.host.after_input();
+        let shell = &mut self.shell;
+        self.host.input(cx, |hub| shell.window_mouse_up(hub));
         cx.notify();
     }
 
-    fn drop_files(&mut self, paths: &ExternalPaths) {
+    fn drop_files(&mut self, paths: &ExternalPaths, cx: &mut App) {
         let files = paths
             .paths()
             .iter()
             .map(|p| JsString::from(p.to_string_lossy().as_ref()))
             .collect();
         if let Some(message) = HubShell::drop_files(files) {
-            self.host.send_main_message(message);
+            self.host.send_main_message(message, cx);
         }
     }
 
@@ -260,6 +268,7 @@ impl<H: FrameHost> HubFrame<H> {
         &mut self,
         layout: &FrameLayout,
         element: FrameElement,
+        blurred: bool,
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let rect = layout.rect(element)?;
@@ -283,7 +292,6 @@ impl<H: FrameHost> HubFrame<H> {
             _ => return None,
         };
         let symbol = Symbol::named(symbol)?;
-        let blurred = !self.host.hub().is_focused();
         let entity = cx.entity().downgrade();
         let button = IconButton::new(element.selector(), symbol)
             .tint(tint)
@@ -291,14 +299,14 @@ impl<H: FrameHost> HubFrame<H> {
             .blurred(blurred)
             .on_click(move |_, _, cx| {
                 let _ = entity.update(cx, |frame, cx| {
-                    frame.tab_control_click(element, rect);
+                    frame.tab_control_click(element, rect, cx);
                     cx.notify();
                 });
             });
         Some(place(rect, (0.0, 0.0)).child(button).into_any_element())
     }
 
-    fn tab_control_click(&mut self, element: FrameElement, rect: [f64; 4]) {
+    fn tab_control_click(&mut self, element: FrameElement, rect: [f64; 4], cx: &mut App) {
         let button = match element {
             FrameElement::Play => Some(ControlButton::Play),
             FrameElement::Pause => Some(ControlButton::Pause),
@@ -307,34 +315,36 @@ impl<H: FrameHost> HubFrame<H> {
             _ => None,
         };
         let undefined = asrs_js::value::JsValue::Undefined;
-        let hub = self.host.hub_mut();
         let result = match (element, button) {
             (_, Some(button)) => {
-                hub.page_mut().selection_mut().click(button);
+                self.host
+                    .input(cx, |hub| hub.page_mut().selection_mut().click(button));
                 Ok(())
             }
-            (FrameElement::Close, _) => {
+            (FrameElement::Close, _) => self.host.input(cx, |hub| {
                 let (tabs, page) = hub.tabs_mut();
                 tabs.close_button(page)
-            }
-            (FrameElement::Popup, _) => hub.tabs_mut().0.popup_button(),
+            }),
+            (FrameElement::Popup, _) => self.host.input(cx, |hub| hub.tabs_mut().0.popup_button()),
             (FrameElement::AddTab, _) => {
-                hub.tabs_mut().0.add_button(&Rect {
-                    x: rect[0],
-                    y: rect[1],
-                    width: rect[2],
-                    height: rect[3],
+                self.host.input(cx, |hub| {
+                    hub.tabs_mut().0.add_button(&Rect {
+                        x: rect[0],
+                        y: rect[1],
+                        width: rect[2],
+                        height: rect[3],
+                    })
                 });
                 Ok(())
             }
             (FrameElement::Update, _) => {
                 self.host
-                    .send_main_message(NamedMessage::new(HubToMain::PromptUpdate, undefined));
+                    .send_main_message(NamedMessage::new(HubToMain::PromptUpdate, undefined), cx);
                 Ok(())
             }
             (FrameElement::Feedback, _) => {
                 self.host
-                    .send_main_message(NamedMessage::new(HubToMain::OpenFeedback, undefined));
+                    .send_main_message(NamedMessage::new(HubToMain::OpenFeedback, undefined), cx);
                 Ok(())
             }
             _ => Ok(()),
@@ -342,7 +352,6 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
-        self.host.after_input();
     }
 }
 
@@ -358,7 +367,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
         );
         let scale = window.scale_factor();
 
-        let show_fps = self.host.hub().show_fps();
+        let hub = self.host.hub(cx);
+        let show_fps = hub.show_fps();
+        let shadow_shown = hub.sidebar().shadow_shown();
+        let title = SharedString::from(hub.title().to_string_lossy());
+        let blurred = !hub.is_focused();
         let now = self.started.elapsed().as_secs_f64() * 1000.0;
         self.shell.fps_mut().frame(now, show_fps);
         if show_fps {
@@ -373,10 +386,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let fps_size = fps_text
             .as_ref()
             .map_or((0.0, 0.0), |t| text::measure(cx, &fps_style(), t, scale));
-        let inputs = self.inputs(width, height, f64::from(scale), fps_size);
+        let inputs = self.inputs(cx, width, height, f64::from(scale), fps_size);
         let layout = FrameLayout::compute(&inputs);
         self.geometry.set_inner_height(height);
-        self.geometry.sync(self.host.hub());
+        self.geometry.sync(self.host.hub(cx));
         let classes = inputs.classes;
 
         let entity = cx.entity().downgrade();
@@ -405,7 +418,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
             .relative()
             .size_full()
             .child(window_listeners)
-            .on_drop(cx.listener(|frame, paths: &ExternalPaths, _, _| frame.drop_files(paths)));
+            .on_drop(
+                cx.listener(|frame, paths: &ExternalPaths, _, cx| frame.drop_files(paths, cx)),
+            );
         root = match self.shell.cursor() {
             BodyCursor::ColResize => root.cursor(CursorStyle::ResizeColumn),
             BodyCursor::RowResize => root.cursor(CursorStyle::ResizeRow),
@@ -421,7 +436,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             root = root.child(bg);
         }
         if let Some(rect) = layout.rect(FrameElement::SideBarShadow)
-            && self.host.hub().sidebar().shadow_shown()
+            && shadow_shown
         {
             let shadow = if dark {
                 box_shadow(0x000000ff, 0.0, 0.7)
@@ -509,7 +524,6 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 },
             );
             if let Some(text_rect) = layout.rect(FrameElement::TitleBarText) {
-                let title = SharedString::from(self.host.hub().title().to_string_lossy());
                 bar = bar.child(
                     Text::new(title, title_style())
                         .color(theme.text)
@@ -534,7 +548,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             FrameElement::Popup,
             FrameElement::AddTab,
         ] {
-            if let Some(button) = self.tab_control(&layout, element, cx) {
+            if let Some(button) = self.tab_control(&layout, element, blurred, cx) {
                 root = root.child(button);
             }
         }
