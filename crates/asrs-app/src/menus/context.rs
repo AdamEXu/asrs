@@ -42,7 +42,7 @@ pub enum Effect {
     /// `openSourceListHelp(window, config)`.
     OpenSourceListHelp(JsValue),
     /// A modal prompt window whose reply has further effects.
-    Prompt(Prompt),
+    Prompt(Box<Prompt>),
 }
 
 impl Effect {
@@ -376,10 +376,10 @@ pub fn rename_tab(data: &JsValue) -> Result<ContextMenu, JsError> {
     let mut menu = ContextMenu::default();
     menu.append_click(
         MenuItem::new("Rename..."),
-        vec![Effect::Prompt(Prompt::RenameTab {
+        vec![Effect::Prompt(Box::new(Prompt::RenameTab {
             index: get(data, "index")?,
             name: get(data, "name")?,
-        })],
+        }))],
     );
     Ok(menu)
 }
@@ -451,7 +451,7 @@ pub fn camera_3d(data: &JsValue) -> Result<ContextMenu, JsError> {
     );
     menu.append_click(
         MenuItem::new("Set FOV..."),
-        vec![Effect::Prompt(Prompt::EditFov { fov })],
+        vec![Effect::Prompt(Box::new(Prompt::EditFov { fov }))],
     );
     let length = num(&get(&options, "length")?)?;
     if length > 0.0 {
@@ -512,7 +512,9 @@ pub fn edit_axis(data: &JsValue, recent_units: Option<&JsValue>) -> Result<Conte
         );
         menu.append_click(
             MenuItem::new("Edit Range...").enabled(locked),
-            vec![Effect::Prompt(Prompt::EditRange { axis: axis.clone() })],
+            vec![Effect::Prompt(Box::new(Prompt::EditRange {
+                axis: axis.clone(),
+            }))],
         );
         menu.append(MenuItem::separator());
         unit_items(&mut menu, &axis, &group, &selected, &default)?;
@@ -604,14 +606,14 @@ fn manual_units(
     let noop = noop_unit_conversion();
     let edit = menu.click(
         MenuItem::new("Edit Conversion..."),
-        vec![Effect::Prompt(Prompt::UnitConversion {
+        vec![Effect::Prompt(Box::new(Prompt::UnitConversion {
             initial: if preset.is_null() || preset.is_undefined() {
                 noop.clone()
             } else {
                 preset.clone()
             },
             axis: axis.clone(),
-        })],
+        }))],
     );
     let enabled = num(&get(recents, "length")?)? > 0.0;
     let presets = recents

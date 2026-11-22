@@ -27,7 +27,6 @@ pub enum MenuAction {
 
 pub type ActionHandler = Rc<dyn Fn(MenuAction, &mut App)>;
 
-/// Receives the effects of the context menu item that was chosen.
 pub type EffectHandler = Rc<dyn Fn(Vec<Effect>, &mut App)>;
 
 /// The native menu for built items. Key equivalents are filled in on macOS only, from the

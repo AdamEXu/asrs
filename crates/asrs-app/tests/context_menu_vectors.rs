@@ -167,7 +167,6 @@ fn page(kind: WindowKind) -> &'static str {
     }
 }
 
-/// What the fakes observe of a click: everything the generator records for it.
 #[derive(Debug, Default, PartialEq)]
 struct Observed {
     sent: Vec<(String, Value)>,
