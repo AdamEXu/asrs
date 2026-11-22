@@ -425,6 +425,8 @@ async function genConvert(): Promise<void> {
   await run("NUL and every quote in path", "none", undefined, "`\"'\u0000.revlog");
   await run("long path with NUL", "none", undefined, "x".repeat(140) + "\u0000\u0001\u007fé\u{1f600}.revlog");
   await run("control characters with NUL", "none", undefined, "\b\f\r\u000b\u001b\u0000.revlog");
+  await run("lone surrogates and C1 controls with NUL", "none", undefined, "\ud800a\udc00😀\u0085\u009f '\u0000.revlog");
+  await run("long path, lone surrogates and C1 controls with NUL", "none", undefined, "y".repeat(90) + "\ud800a\udc00\u0085\u009f\\'\u0000\u007f" + "z".repeat(40) + ".revlog");
 
   // Nothing to convert.
   await file("empty file", bytes([]));
