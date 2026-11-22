@@ -272,7 +272,8 @@ export const MEASURE_STRINGS = [
 
 const EXTRA_MEASURE_STRINGS = [
   "", "Drag to zoom", "Click to add a field", "µs 45° ±", "café naïve", "日本語",
-  "\u{1f916} robot", "Á", "\t tab", "fi fl ffi", "1.23e+21", "-0"
+  "\u{1f916} robot", "Á", "\t tab", "fi fl ffi", "1.23e+21", "-0",
+  "📖", "📉 Line Graph", "🗺 2D Field", "⚙️ Mechanism", "👀🔢"
 ];
 
 export function measureFonts(): string[] {
@@ -893,6 +894,34 @@ function textStyles(dpr: number, dark: boolean): Scene {
   return scene(`textstyles-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [520, 270], dpr, dark ? DARK : LIGHT, r.cmds);
 }
 
+function textEmoji(dpr: number, dark: boolean): Scene {
+  const r = new Rec();
+  const fg = dark ? "#eee" : "#222";
+  r.call("scale", dpr, dpr);
+  r.set("fillStyle", fg);
+  const fonts = [`16px ${SYSTEM_FONT}`, `12px ${SYSTEM_FONT}`, `bold 14px ${SYSTEM_FONT}`, "italic 16px sans-serif", "13.5px sans-serif"];
+  const titles = ["📖", "📉 Line Graph", "🗺 2D Field", "👀 3D Field", "🔢 Table", "⚙️ Mechanism", "🦀 Swerve"];
+  fonts.forEach((font, i) => {
+    r.set("font", font);
+    titles.forEach((title, j) => {
+      r.call("fillText", title, 10 + (j % 4) * 130 + i * 0.25 + j * 0.1, 24 + i * 50 + Math.floor(j / 4) * 24);
+    });
+  });
+  r.set("font", `16px ${SYSTEM_FONT}`);
+  ["left", "center", "right"].forEach((align, i) => {
+    r.set("textAlign", align);
+    r.call("fillText", "👀🔢 align", 80 + i * 160, 280);
+  });
+  r.set("textAlign", "left");
+  r.call("fillText", "📉 Line Graph compressed", 10, 310, 90);
+  r.set("globalAlpha", 0.5);
+  r.call("fillText", "💬 half alpha", 200, 310);
+  r.set("globalAlpha", 1);
+  r.set("fillStyle", "rgba(43, 102, 162, 0.6)");
+  r.call("fillText", "🎮 translucent fill", 360, 310);
+  return scene(`textemoji-${dark ? "dark" : "light"}-${dpr}x`, "text", "text", [540, 330], dpr, dark ? DARK : LIGHT, r.cmds);
+}
+
 function offCanvas(dpr: number): Scene {
   const r = new Rec();
   r.call("scale", dpr, dpr);
@@ -1377,6 +1406,7 @@ export function allScenes(): Scene[] {
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));
     out.push(gradients(dpr), images(dpr), imageData(dpr), heatmap(dpr), textStyles(dpr, false), textStyles(dpr, true));
+    out.push(textEmoji(dpr, false), textEmoji(dpr, true));
     out.push(offCanvas(dpr), gradientText(dpr, false), gradientText(dpr, true));
     out.push(curves(dpr), hugeCoords(dpr), strokeRects(dpr), multiFrame(dpr, ""), multiFrame(dpr, "-single"), multiFrame(dpr, "-resized"));
   }

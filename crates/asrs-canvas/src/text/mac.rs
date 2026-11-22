@@ -14,12 +14,14 @@ use core_graphics::font::CGGlyph;
 use core_graphics::geometry::{CGAffineTransform, CGPoint, CGRect, CGSize};
 use core_text::font::{CTFont, new_from_descriptor, new_from_name, new_ui_font_for_language};
 use core_text::font_descriptor::{
-    kCTFontBoldTrait, kCTFontItalicTrait, kCTFontOrientationHorizontal, kCTFontVariationAttribute,
-    new_from_attributes,
+    kCTFontBoldTrait, kCTFontColorGlyphsTrait, kCTFontItalicTrait, kCTFontOrientationHorizontal,
+    kCTFontVariationAttribute, new_from_attributes,
 };
 use core_text::line::CTLine;
 use core_text::run::CTRun;
 use core_text::string_attributes::kCTFontAttributeName;
+use icu_properties::CodePointSetData;
+use icu_properties::props::EmojiPresentation;
 
 use super::font::FontKey;
 use super::{
@@ -28,9 +30,11 @@ use super::{
 
 const K_CT_FONT_UI_FONT_SYSTEM: u32 = 2;
 const K_CG_IMAGE_ALPHA_ONLY: u32 = 7;
+const K_CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST: u32 = 2;
+const K_CG_BITMAP_BYTE_ORDER_32_HOST: u32 = 2 << 12;
 const WGHT: i64 = 0x7767_6874;
 const OS2: u32 = 0x4f53_2f32;
-const EMOJI_UI: &str = ".AppleColorEmojiUI";
+const EMOJI: [&str; 2] = [".AppleColorEmojiUI", "AppleColorEmoji"];
 
 /// Direct CoreText, configured like Skia's `SkScalerContext_Mac` in Chromium.
 pub(crate) struct CoreText {
@@ -61,6 +65,13 @@ struct Face {
     /// rounds HVAR deltas to whole font units, and its ink bounds from the varied outlines, where
     /// CoreText's bounding rects describe the default instance.
     varied: bool,
+    /// Skia draws the glyphs of a font with colour glyphs as ARGB images, never as masks.
+    color: bool,
+    /// Blink's synthetic italic: an upright fallback for an italic font, drawn under Skia's
+    /// fake-italic skew.
+    skew: bool,
+    /// A font CoreText fell back to for characters the primary font lacks.
+    fallback: bool,
 }
 
 unsafe extern "C" {
@@ -164,7 +175,114 @@ fn create_font(spec: &FontSpec) -> Face {
         font.clone_with_symbolic_traits(traits, traits)
             .unwrap_or(font)
     };
-    Face { font, varied }
+    Face {
+        font,
+        varied,
+        color: false,
+        skew: false,
+        fallback: false,
+    }
+}
+
+/// Skia's fake-italic skew, `SkFont::setSkewX(-1/4)`, in CoreGraphics' y-up space.
+const FAKE_ITALIC: CGAffineTransform = CGAffineTransform {
+    a: 1.0,
+    b: 0.0,
+    c: 0.25,
+    d: 1.0,
+    tx: 0.0,
+    ty: 0.0,
+};
+
+impl Face {
+    fn skew_matrix(&self) -> CGAffineTransform {
+        if self.skew {
+            FAKE_ITALIC
+        } else {
+            CGAffineTransform::new(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+        }
+    }
+}
+
+/// `CGRectApplyAffineTransform` as `[left, bottom, right, top]`.
+fn transformed_rect(r: CGRect, m: CGAffineTransform) -> [f64; 4] {
+    let corners = [
+        (r.origin.x, r.origin.y),
+        (r.origin.x + r.size.width, r.origin.y),
+        (r.origin.x, r.origin.y + r.size.height),
+        (r.origin.x + r.size.width, r.origin.y + r.size.height),
+    ]
+    .map(|(x, y)| (m.a * x + m.c * y + m.tx, m.b * x + m.d * y + m.ty));
+    let fold = |f: fn(&(f64, f64)) -> f64, init: f64, pick: fn(f64, f64) -> f64| {
+        corners.iter().map(f).fold(init, pick)
+    };
+    [
+        fold(|p| p.0, f64::INFINITY, f64::min),
+        fold(|p| p.1, f64::INFINITY, f64::min),
+        fold(|p| p.0, f64::NEG_INFINITY, f64::max),
+        fold(|p| p.1, f64::NEG_INFINITY, f64::max),
+    ]
+}
+
+/// Blink's `FontMetrics::AscentDescentWithHacks` on macOS, with the line gap and typo extents.
+fn vertical_metrics(font: &CTFont) -> FontMetrics {
+    let mut ascent = round(font.ascent() as f32);
+    let descent = round(font.descent() as f32);
+    if matches!(
+        font.family_name().as_str(),
+        "Times" | "Helvetica" | "Courier"
+    ) {
+        ascent += ((ascent + descent) * 0.15 + 0.5).floor();
+    }
+    let typo = font.get_font_table(OS2).and_then(|table| {
+        let bytes = table.bytes();
+        let ascender = i16::from_be_bytes([*bytes.get(68)?, *bytes.get(69)?]);
+        let descender = i16::from_be_bytes([*bytes.get(70)?, *bytes.get(71)?]);
+        Some((f32::from(ascender), -f32::from(descender)))
+    });
+    FontMetrics {
+        ascent,
+        descent,
+        line_gap: round(font.leading() as f32),
+        typo,
+    }
+}
+
+/// The clusters of `text` in UTF-16 `[from, to)`, each with whether Blink's
+/// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
+/// sequence with VS16, a skin tone modifier, a keycap or a ZWJ; VS15 forces text.
+fn emoji_clusters(text: &str, from: isize, to: isize) -> Vec<(isize, isize, bool)> {
+    let presentation = CodePointSetData::new::<EmojiPresentation>();
+    let mut clusters: Vec<(isize, isize, bool)> = Vec::new();
+    let mut at = 0isize;
+    let mut joined = false;
+    for c in text.chars() {
+        let units = c.len_utf16() as isize;
+        if at >= from && at < to {
+            let extends = matches!(c, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
+                || ('\u{1f3fb}'..='\u{1f3ff}').contains(&c)
+                || ('\u{e0020}'..='\u{e007f}').contains(&c);
+            match clusters.last_mut() {
+                Some(last) if last.1 == at && (extends || joined) => {
+                    last.1 = at + units;
+                    match c {
+                        '\u{fe0e}' => last.2 = false,
+                        '\u{fe0f}' | '\u{200d}' | '\u{20e3}' => last.2 = true,
+                        _ if extends => last.2 = true,
+                        _ => {}
+                    }
+                }
+                _ => clusters.push((at, at + units, presentation.contains(c))),
+            }
+            joined = c == '\u{200d}';
+        }
+        at += units;
+    }
+    clusters
+}
+
+fn has_color_glyphs(font: &CTFont) -> bool {
+    font.symbolic_traits() & kCTFontColorGlyphsTrait != 0
 }
 
 fn run_font(run: &CTRun) -> Option<CTFont> {
@@ -240,6 +358,57 @@ fn read_mask(mut cx: CGContext, x0: i32, y1: i32, w: usize, h: usize) -> Arc<Mas
         width: w as u32,
         height: h as u32,
         data: bytes,
+        color: false,
+    })
+}
+
+/// `SkScalerContext_Mac`'s offscreen for colour glyphs: premultiplied ARGB in host order on
+/// a device RGB context, cleared to transparent, with CoreGraphics left to pick and scale the
+/// bitmap strike.
+fn color_context(width: usize, height: usize) -> CGContext {
+    let mut cx = CGContext::create_bitmap_context(
+        None,
+        width,
+        height,
+        8,
+        width * 4,
+        &CGColorSpace::create_device_rgb(),
+        K_CG_IMAGE_ALPHA_PREMULTIPLIED_FIRST | K_CG_BITMAP_BYTE_ORDER_32_HOST,
+    );
+    cx.data().fill(0);
+    cx.set_allows_font_subpixel_quantization(false);
+    cx.set_should_subpixel_quantize_fonts(false);
+    cx.set_allows_font_subpixel_positioning(true);
+    cx.set_should_subpixel_position_fonts(true);
+    cx.set_text_drawing_mode(CGTextDrawingMode::CGTextFill);
+    cx.set_rgb_fill_color(0.0, 0.0, 0.0, 1.0);
+    cx.set_should_antialias(true);
+    cx.set_should_smooth_fonts(false);
+    cx
+}
+
+fn read_color(mut cx: CGContext, left: i32, top: i32, w: usize, h: usize) -> Arc<Mask> {
+    let stride = cx.bytes_per_row();
+    let data = cx.data();
+    let mut bytes = Vec::with_capacity(w * h * 4);
+    for row in 0..h {
+        for px in data[row * stride..row * stride + w * 4].as_chunks::<4>().0 {
+            let argb = u32::from_ne_bytes([px[0], px[1], px[2], px[3]]);
+            bytes.extend_from_slice(&[
+                (argb >> 16) as u8,
+                (argb >> 8) as u8,
+                argb as u8,
+                (argb >> 24) as u8,
+            ]);
+        }
+    }
+    Arc::new(Mask {
+        left,
+        top,
+        width: w as u32,
+        height: h as u32,
+        data: bytes,
+        color: true,
     })
 }
 
@@ -277,9 +446,14 @@ impl CoreText {
             return primary;
         }
         *self.fallback.entry((spec.key(), name)).or_insert_with(|| {
+            let color = has_color_glyphs(&font);
+            let skew = spec.italic && font.symbolic_traits() & kCTFontItalicTrait == 0;
             self.faces.push(Face {
                 font,
                 varied: false,
+                color,
+                skew,
+                fallback: true,
             });
             (self.faces.len() - 1) as u32
         })
@@ -299,24 +473,37 @@ impl CoreText {
         CTLine::new_with_attributed_string(string.as_concrete_TypeRef())
     }
 
-    /// Chromium picks `Apple Color Emoji` for emoji, where CoreText falls back to the UI variant
-    /// of it next to the system font, which has other advances.
-    fn emoji_overrides(line: &CTLine, len: isize, size: f64) -> Vec<(CFRange, CTFont)> {
-        let runs: Vec<(isize, bool)> = line
+    /// Blink's font fallback for the emoji CoreText found: an emoji-presentation cluster gets
+    /// `Apple Color Emoji` by name, where CoreText falls back to its UI variant next to the
+    /// system font, which has the system font's line metrics; any other keeps the system
+    /// fallback. Skia sizes either with tracking off, where the font's `trak` table would widen
+    /// small sizes by up to a pixel.
+    fn emoji_overrides(line: &CTLine, word: &str, size: f64) -> Vec<(CFRange, CTFont)> {
+        let len = word.encode_utf16().count() as isize;
+        let runs: Vec<(isize, Option<CTFont>)> = line
             .glyph_runs()
             .iter()
             .map(|run| {
                 let start = run.string_indices().first().copied().unwrap_or(len);
-                let emoji = run_font(&run).is_some_and(|f| f.postscript_name() == EMOJI_UI);
-                (start, emoji)
+                let font = run_font(&run).filter(|f| EMOJI.contains(&f.postscript_name().as_str()));
+                (start, font)
             })
             .collect();
         let mut overrides = Vec::new();
-        for (k, &(start, emoji)) in runs.iter().enumerate() {
-            if emoji {
-                let end = runs.get(k + 1).map_or(len, |r| r.0);
-                let font = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
-                overrides.push((CFRange::init(start, end - start), font));
+        for (k, (start, font)) in runs.iter().enumerate() {
+            let Some(font) = font else {
+                continue;
+            };
+            let end = runs.get(k + 1).map_or(len, |r| r.0);
+            let fallback = exact_copy(font, size);
+            for (from, to, emoji) in emoji_clusters(word, *start, end) {
+                let font = if emoji {
+                    let named = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
+                    exact_copy(&named, size)
+                } else {
+                    fallback.clone()
+                };
+                overrides.push((CFRange::init(from, to - from), font));
             }
         }
         overrides
@@ -324,19 +511,20 @@ impl CoreText {
 
     /// One word as HarfBuzz shapes it in Chromium: CoreText's glyphs and kerning, with each
     /// advance taken from the scaler and truncated to 16.16, accumulated in `f32`.
+    #[allow(clippy::too_many_arguments)]
     fn shape_word(
         &mut self,
         spec: &FontSpec,
         primary: u32,
         word: &str,
+        zoom: f32,
         origin: f32,
         start: u32,
         out: &mut Vec<ShapedGlyph>,
     ) -> f32 {
         let font = self.faces[primary as usize].font.clone();
         let mut line = Self::line(&font, word, &[]);
-        let len = word.encode_utf16().count() as isize;
-        let overrides = Self::emoji_overrides(&line, len, f64::from(spec.size));
+        let overrides = Self::emoji_overrides(&line, word, f64::from(spec.size));
         if !overrides.is_empty() {
             line = Self::line(&font, word, &overrides);
         }
@@ -360,8 +548,22 @@ impl CoreText {
                     ids.len() as isize,
                 );
             }
-            let face = self.run_face(spec, primary, run_font);
+            let face = self.run_face(spec, primary, run_font.clone());
             let varied = self.faces[face as usize].varied;
+            let zoomed = (self.faces[face as usize].color && zoom != 1.0).then(|| {
+                let device = self.device_font(face, &run_font, spec.size * zoom);
+                let mut zoomed = vec![CGSize::new(0.0, 0.0); ids.len()];
+                // SAFETY: `ids` and `zoomed` both hold `ids.len()` elements.
+                unsafe {
+                    device.get_advances_for_glyphs(
+                        kCTFontOrientationHorizontal,
+                        ids.as_ptr(),
+                        zoomed.as_mut_ptr(),
+                        ids.len() as isize,
+                    );
+                }
+                zoomed
+            });
             let upem = self.faces[face as usize].font.units_per_em();
             let units_per_px = f64::from(upem) / f64::from(spec.size);
             for (i, (&id, p)) in ids.iter().zip(positions.iter()).enumerate() {
@@ -376,7 +578,10 @@ impl CoreText {
                 let next = positions.get(i + 1).map_or(run_end, |q| q.x);
                 let raw = advances[i].width;
                 let kern = ((next - p.x - raw) * 65536.0).round() as i32;
-                let advance = if varied {
+                let advance = if let Some(zoomed) = &zoomed {
+                    let device = ((zoomed[i].width as f32) * 65536.0) as i32;
+                    (device as f32 / zoom) as i32
+                } else if varied {
                     hb_scale((raw * units_per_px).round() as i64, upem, spec.size)
                 } else {
                     ((raw as f32) * 65536.0) as i32
@@ -385,6 +590,56 @@ impl CoreText {
             }
         }
         pen
+    }
+
+    /// `SkScalerContext_Mac::generateMetrics` and `generateImage` for a colour glyph: the face
+    /// at the device text size, the rest of the device matrix as the text matrix, bounds rounded
+    /// out with a pixel of margin, and the glyph drawn from the inverse-mapped corner.
+    fn color_image(
+        &mut self,
+        glyph: Glyph,
+        scale: f64,
+        x_scale: f64,
+        phase: u8,
+    ) -> Option<Arc<Mask>> {
+        let face = &self.faces[glyph.face as usize];
+        let font = face.font.clone();
+        let skew = face.skew;
+        let id = glyph.id as CGGlyph;
+        let size = font.pt_size() as f32;
+        let text_size = size * relax(scale as f32);
+        let a = f64::from(size * relax((scale * x_scale) as f32) / text_size);
+        let c = if skew { 0.25 * a } else { 0.0 };
+        let m = CGAffineTransform::new(a, 0.0, c, 1.0, 0.0, 0.0);
+        let device = self.device_font(glyph.face, &font, text_size);
+        let advance = {
+            let mut advance = CGSize::new(0.0, 0.0);
+            // SAFETY: one glyph in, one advance out.
+            unsafe {
+                device.get_advances_for_glyphs(kCTFontOrientationHorizontal, &id, &mut advance, 1)
+            };
+            advance
+        };
+        let rect = device.get_bounding_rects_for_glyphs(kCTFontOrientationHorizontal, &[id]);
+        if (advance.width == 0.0 && advance.height == 0.0)
+            || rect.size.width <= 0.0
+            || rect.size.height <= 0.0
+        {
+            return None;
+        }
+        let [l, b, r, t] = transformed_rect(rect, m).map(|v| v as f32);
+        let sub_x = f32::from(phase) / 4.0;
+        let left = l.floor() as i32 - 1;
+        let top = (-t).floor() as i32 - 1;
+        let right = (r + sub_x).ceil() as i32 + 1;
+        let bottom = (-b).ceil() as i32 + 1;
+        let (w, h) = ((right - left) as usize, (bottom - top) as usize);
+        let cx = color_context(w, h);
+        cx.set_text_matrix(&m);
+        let point = CGPoint::new(f64::from(sub_x) - f64::from(left), f64::from(bottom));
+        let point = CGPoint::new((point.x - c * point.y) / a, point.y);
+        device.draw_glyphs(&[id], &[point], cx.clone());
+        Some(read_color(cx, left, top, w, h))
     }
 
     fn glyph_rect(&self, glyph: Glyph) -> Option<(CTFont, CGGlyph, [f64; 4])> {
@@ -399,6 +654,16 @@ impl CoreText {
         if r.size.width <= 0.0 || r.size.height <= 0.0 {
             return None;
         }
+        if face.color {
+            let [l, b, r, t] = transformed_rect(r, face.skew_matrix());
+            let rect = [
+                l.floor() - 1.0,
+                b.floor() - 1.0,
+                r.ceil() + 1.0,
+                t.ceil() + 1.0,
+            ];
+            return Some((font, id, rect));
+        }
         let rect = [
             r.origin.x,
             r.origin.y,
@@ -410,7 +675,7 @@ impl CoreText {
 }
 
 impl TextBackend for CoreText {
-    fn shape(&mut self, spec: &FontSpec, text: &str) -> Shaped {
+    fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
         if spec.size <= 0.0 {
             return Shaped {
                 glyphs: Vec::new(),
@@ -422,7 +687,7 @@ impl TextBackend for CoreText {
         let mut width = 0.0f32;
         let mut start = 0;
         for word in words(text) {
-            width += self.shape_word(spec, primary, word, width, start, &mut glyphs);
+            width += self.shape_word(spec, primary, word, zoom, width, start, &mut glyphs);
             start += word.encode_utf16().count() as u32;
         }
         Shaped { glyphs, width }
@@ -438,27 +703,17 @@ impl TextBackend for CoreText {
             };
         }
         let primary = self.primary(spec);
-        let font = &self.faces[primary as usize].font;
-        let mut ascent = round(font.ascent() as f32);
-        let descent = round(font.descent() as f32);
-        if matches!(
-            font.family_name().as_str(),
-            "Times" | "Helvetica" | "Courier"
-        ) {
-            ascent += ((ascent + descent) * 0.15 + 0.5).floor();
+        vertical_metrics(&self.faces[primary as usize].font)
+    }
+
+    fn fallback_metrics(&mut self, glyph: Glyph, zoom: f32) -> Option<FontMetrics> {
+        let face = self.faces.get(glyph.face as usize)?;
+        if !face.fallback {
+            return None;
         }
-        let typo = font.get_font_table(OS2).and_then(|table| {
-            let bytes = table.bytes();
-            let ascender = i16::from_be_bytes([*bytes.get(68)?, *bytes.get(69)?]);
-            let descender = i16::from_be_bytes([*bytes.get(70)?, *bytes.get(71)?]);
-            Some((f32::from(ascender), -f32::from(descender)))
-        });
-        FontMetrics {
-            ascent,
-            descent,
-            line_gap: round(font.leading() as f32),
-            typo,
-        }
+        let font = face.font.clone();
+        let device = self.device_font(glyph.face, &font, font.pt_size() as f32 * zoom);
+        Some(vertical_metrics(&device))
     }
 
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
@@ -472,6 +727,9 @@ impl TextBackend for CoreText {
     }
 
     fn raw_mask(&mut self, glyph: Glyph, scale: f64, x_scale: f64, phase: u8) -> Option<Arc<Mask>> {
+        if self.faces.get(glyph.face as usize)?.color {
+            return self.color_image(glyph, scale, x_scale, phase);
+        }
         let (font, id, [l, b, r, t]) = self.glyph_rect(glyph)?;
         let size = font.pt_size() as f32;
         let text_size = size * relax(scale as f32);
