@@ -17,7 +17,7 @@ use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SystemClock, V8MathRandom};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_ui::gpui::{Context, EventEmitter, Window};
+use asrs_ui::gpui::{Context, EventEmitter, IntoElement, Render, Styled, Window, div};
 
 use host::{GpuiHost, HostState};
 
@@ -169,5 +169,14 @@ impl Hub {
             cx.emit(HubEvent::Loading);
         }
         cx.notify();
+    }
+}
+
+/// The hub window's root view until the hub frame (U06) replaces it.
+pub struct EmptyHub;
+
+impl Render for EmptyHub {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        div().size_full()
     }
 }

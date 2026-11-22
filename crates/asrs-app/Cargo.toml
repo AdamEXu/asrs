@@ -14,7 +14,7 @@ name = "asrs"
 path = "src/main.rs"
 
 [features]
-parity = ["asrs-ui/parity"]
+parity = ["asrs-ui/parity", "dep:png"]
 
 [dependencies]
 asrs-formats = { path = "../asrs-formats" }
@@ -25,6 +25,7 @@ asrs-model = { path = "../asrs-model" }
 asrs-services = { path = "../asrs-services" }
 asrs-ui.workspace = true
 async-channel = "=2.5.0"
+png = { version = "=0.18.1", optional = true }
 
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }
@@ -40,6 +41,11 @@ harness = false
 
 [[test]]
 name = "hub_entity"
+required-features = ["parity"]
+
+[[test]]
+name = "parity_scenario"
+harness = false
 required-features = ["parity"]
 
 [[test]]

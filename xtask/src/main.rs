@@ -18,6 +18,7 @@ mod licenses;
 mod oracle;
 mod pack;
 mod parity;
+mod pixel;
 mod public;
 mod sessions;
 mod tables;
@@ -45,6 +46,8 @@ commands:
   host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
+  pixel     section 2.5 pixel gates between upstream and port runs, port scenarios, selftest
+            (see `cargo xtask pixel`)
   canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
   ui        UI theme scenes: icon tints, buttons, gates against Electron (see `cargo xtask ui`)
   field3d   3D reference scenes against the wgpu renderer, gate 4 (see `cargo xtask field3d`)
@@ -65,6 +68,7 @@ fn main() -> ExitCode {
         Some("corpus") => corpus::run(&args[1..]),
         Some("gpui") => gpui::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
+        Some("pixel") => pixel::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
         Some("ui") => ui::run(&args[1..]),
         Some("field3d") => field3d::run(&args[1..]),
