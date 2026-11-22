@@ -10,6 +10,7 @@
 mod host;
 
 use std::rc::Rc;
+use std::time::Instant;
 
 use asrs_formats::historical::Status;
 use asrs_hub::hub::{HubHost, HubModel, HubView, LoadingGlow};
@@ -17,12 +18,22 @@ use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SystemClock, V8MathRandom};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_ui::gpui::{Context, EventEmitter, Window};
+use asrs_ui::gpui::{App, Context, EventEmitter, Window};
 
 use host::{GpuiHost, HostState};
 
 /// `(Math.random, Date)` for a new decode worker's realm.
 pub type WorkerRealm = Box<dyn FnMut() -> (Box<dyn Rng + Send>, Box<dyn Clock + Send>)>;
+
+/// Milliseconds on the frame clock since `origin`: the executor's clock, which is simulated
+/// under a test dispatcher, so animations stepped by it do not depend on how long frames take.
+fn frame_time(origin: Instant, cx: &App) -> f64 {
+    cx.background_executor()
+        .now()
+        .saturating_duration_since(origin)
+        .as_secs_f64()
+        * 1000.0
+}
 
 pub struct HubConfig {
     /// What the page reads from its layout.
@@ -96,6 +107,7 @@ impl Hub {
         let mut host = HostState::new(
             window.map(Window::window_handle),
             config.clock.clone(),
+            cx.background_executor().now(),
             config.worker_realm,
             config.temp_dir,
         );
@@ -117,6 +129,12 @@ impl Hub {
 
     pub fn model(&self) -> &HubModel {
         &self.model
+    }
+
+    /// [`HubHost::frame_time`] now: what wheel events over the page's scroll sensors are
+    /// stamped with.
+    pub fn frame_time(&self, cx: &App) -> f64 {
+        frame_time(self.host.frame_origin, cx)
     }
 
     /// `handleMainMessage`. `historical-data` is the hub's own business and is ignored here.

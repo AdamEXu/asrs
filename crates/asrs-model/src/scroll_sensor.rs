@@ -13,6 +13,10 @@
 //! real compositor timing upstream, so only where it settles is reproducible
 //! (`oracle/tools/wheelCalibration.cjs`, `tests/wheel_calibration.rs`).
 //!
+//! Every `now` here is on one monotonic frame clock (ms), a wheel event's arrival and each
+//! frame's step alike: cc runs the animation on frame time, and the idle reset, which upstream
+//! times with `Date`, reads the same clock so an animation and the reset cannot disagree.
+//!
 //! The drag pan (`mouseControl`) is not here: it needs no overlay, and each owner (the
 //! timeline, line graph and 2D field) handles it with its own pointer events.
 

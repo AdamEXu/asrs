@@ -55,6 +55,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hub_wheel"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "bundled_assets"
 required-features = ["parity"]
 

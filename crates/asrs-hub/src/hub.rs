@@ -129,6 +129,11 @@ pub enum ExportReply {
 pub trait HubHost {
     /// `new Date().getTime()`.
     fn now(&self) -> f64;
+    /// The current animation frame's timestamp (ms, monotonic): the clock the tab bar's scroll
+    /// sensor runs on, as Chromium's compositor runs scroll animations on frame time.
+    fn frame_time(&self) -> f64 {
+        self.now()
+    }
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>);
     /// `historical-start` and `historical-start-raw`, whose payloads hold bytes.
     fn send_historical_request(&mut self, request: MainRequest);
@@ -1224,7 +1229,7 @@ impl HubModel {
                 host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {
-                let now = self.page.clock.now();
+                let now = host.frame_time();
                 self.tabs.scroll_step(&self.page, now);
                 let out = self.tabs.periodic(&mut self.page, now);
                 for update in out.satellite_updates {

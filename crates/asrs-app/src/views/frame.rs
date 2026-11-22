@@ -66,6 +66,8 @@ pub trait FrameHost: 'static {
     /// The geometry the hub model's `HubView` answers from.
     fn geometry(&self) -> FrameGeometry;
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel;
+    /// The hub's frame clock (ms), which its scroll sensors animate on.
+    fn frame_time(&self, cx: &App) -> f64;
     /// Runs `f`, the frame's handler for an input event, as one page task.
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R;
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
@@ -140,10 +142,6 @@ struct TimelinePointer {
     on_overlay: bool,
     hidden: bool,
     target: ScrollTarget,
-}
-
-fn now_ms() -> f64 {
-    asrs_js::math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock))
 }
 
 fn wheel_of(event: &ScrollEvent) -> Wheel {
@@ -403,13 +401,14 @@ impl<H: FrameHost> HubFrame<H> {
         let wheel = wheel_of(event);
         let bar = self.geometry.tab_bar().borrow().bar;
         let scale = f64::from(window.scale_factor());
+        let now = self.host.frame_time(cx);
         self.host.input(cx, |hub| {
             let tabs = hub.tabs_mut().0;
             tabs.tab_bar_sensor_mut()
                 .set_layout([bar[2], bar[3]], scale);
-            tabs.tab_bar_wheel(wheel, now_ms());
+            tabs.tab_bar_wheel(wheel, now);
         });
-        window.request_animation_frame();
+        cx.notify();
     }
 
     fn timeline_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
@@ -454,8 +453,8 @@ impl<H: FrameHost> HubFrame<H> {
         };
         self.timeline_sensor
             .set_layout([rect[2], rect[3]], f64::from(window.scale_factor()));
-        self.timeline_sensor.wheel(wheel_of(event), now_ms());
-        window.request_animation_frame();
+        let now = self.host.frame_time(cx);
+        self.timeline_sensor.wheel(wheel_of(event), now);
         cx.notify();
     }
 
@@ -466,7 +465,7 @@ impl<H: FrameHost> HubFrame<H> {
         dark: bool,
         cx: &mut App,
     ) -> Option<Canvas2d> {
-        let now = now_ms();
+        let now = self.host.frame_time(cx);
         let width = f64::from(metrics.client_width);
         let height = f64::from(metrics.client_height);
         let (timeline, sensor) = (&mut self.timeline, &mut self.timeline_sensor);

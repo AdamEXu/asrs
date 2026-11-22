@@ -212,6 +212,10 @@ impl FrameHost for HubEntityHost {
         self.geometry.clone()
     }
 
+    fn frame_time(&self, cx: &App) -> f64 {
+        self.hub.read(cx).frame_time(cx)
+    }
+
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {
         self.hub.read(cx).model()
     }
