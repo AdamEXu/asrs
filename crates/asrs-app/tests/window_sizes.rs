@@ -23,7 +23,7 @@ use asrs_app::windows::{
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
-use asrs_services::window_manager::{Opened, OptionValue, WindowManager};
+use asrs_services::window_manager::{Opened, OptionValue, Platform, WindowManager};
 use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, AsyncApp, Bounds, Context, IntoElement, Render, Styled,
     Window, WindowBounds, WindowOptions, div, point, px, size,
@@ -451,7 +451,7 @@ fn case_rect(case: &Case, origin: Option<(f64, f64)>) -> Rect {
 
 /// The options the port's model gives the window `open_case` opens.
 fn model_options(case: &Case, origin: Option<(f64, f64)>) -> windows::WindowOptions {
-    let mut manager = WindowManager::new();
+    let mut manager = WindowManager::for_platform(Platform::Mac);
     let (parent, _) = manager.create_hub(None);
     let rect = case_rect(case, origin);
     let opened = |opened: Opened| match opened {

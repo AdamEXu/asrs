@@ -15,7 +15,7 @@ use asrs_services::constants;
 use asrs_services::fs::MemFs;
 use asrs_services::state_tracker;
 use asrs_services::window_manager::{
-    OptionValue, SatellitePlacement, WindowId, WindowKind, WindowManager, WindowOptions,
+    OptionValue, Platform, SatellitePlacement, WindowId, WindowKind, WindowManager, WindowOptions,
 };
 use asrs_services::windows::{Rect, WindowSystem};
 
@@ -114,7 +114,7 @@ fn port_pairs(options: &WindowOptions) -> Vec<(String, Value)> {
 impl Replay {
     fn new() -> Self {
         Self {
-            windows: WindowManager::new(),
+            windows: WindowManager::for_platform(Platform::Mac),
             fs: MemFs::new(),
             state_file: String::new(),
             created: Vec::new(),

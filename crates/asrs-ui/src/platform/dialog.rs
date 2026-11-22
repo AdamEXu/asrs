@@ -93,7 +93,7 @@ pub struct SaveDialogOptions {
 
 /// Shows a message box, as a sheet on `window` when given. `on_done` runs once it closes.
 pub fn message_box(
-    window: Option<&Window>,
+    window: Option<&mut Window>,
     cx: &mut App,
     options: MessageBoxOptions,
     on_done: impl FnOnce(MessageBoxResult, &mut App) + 'static,
@@ -104,7 +104,7 @@ pub fn message_box(
 /// Shows an open panel, as a sheet on `window` when given. `on_done` gets the chosen paths,
 /// empty when cancelled.
 pub fn open_dialog(
-    window: Option<&Window>,
+    window: Option<&mut Window>,
     cx: &mut App,
     options: OpenDialogOptions,
     on_done: impl FnOnce(Vec<PathBuf>, &mut App) + 'static,
@@ -115,7 +115,7 @@ pub fn open_dialog(
 /// Shows a save panel, as a sheet on `window` when given. `on_done` gets the chosen path, `None`
 /// when cancelled.
 pub fn save_dialog(
-    window: Option<&Window>,
+    window: Option<&mut Window>,
     cx: &mut App,
     options: SaveDialogOptions,
     on_done: impl FnOnce(Option<PathBuf>, &mut App) + 'static,

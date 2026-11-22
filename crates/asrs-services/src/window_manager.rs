@@ -2,8 +2,9 @@
 //! where it is placed relative to its parent or the focused window, the singleton windows, the
 //! satellite lists and the hub list in most-recently-focused order (`hubWindows`).
 //!
-//! The options are macOS's (`process.platform === "darwin"`): the hub's `vibrancy` and
-//! `titleBarStyle`, and no `icon` (`WINDOW_ICON` is undefined there).
+//! Options are built for one `process.platform`. Only macOS's are complete: the hub's
+//! `vibrancy` and `titleBarStyle`, and no `icon` (`WINDOW_ICON` is undefined there). The Windows
+//! and Linux hub chrome and window icon belong to X04 and X05.
 
 use asrs_js::value::JsObject;
 
@@ -13,6 +14,26 @@ use crate::constants::{
 use crate::windows::Rect;
 
 pub type WindowId = u64;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Platform {
+    #[default]
+    Mac,
+    Windows,
+    Linux,
+}
+
+impl Platform {
+    pub fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Platform::Mac
+        } else if cfg!(windows) {
+            Platform::Windows
+        } else {
+            Platform::Linux
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WindowKind {
@@ -173,6 +194,7 @@ struct Entry {
 
 #[derive(Debug, Default)]
 pub struct WindowManager {
+    platform: Platform,
     next_id: WindowId,
     windows: Vec<Entry>,
     hubs: Vec<WindowId>,
@@ -186,8 +208,6 @@ pub struct WindowManager {
 /// `optionRows * 27 + titleRows * 34 + 54` in `openPreferences`.
 pub const PREFERENCES_HEIGHT: f64 = 13.0 * 27.0 + 2.0 * 34.0 + 54.0;
 
-pub const BETA_WELCOME_HEIGHT: f64 = if cfg!(windows) { 530.0 } else { 490.0 };
-
 fn centered(parent: Rect, width: f64, height: f64) -> (f64, f64) {
     (
         (parent.x + parent.width / 2.0 - width / 2.0).floor(),
@@ -196,8 +216,16 @@ fn centered(parent: Rect, width: f64, height: f64) -> (f64, f64) {
 }
 
 impl WindowManager {
+    /// A manager for the platform this runs on.
     pub fn new() -> Self {
-        Self::default()
+        Self::for_platform(Platform::current())
+    }
+
+    pub fn for_platform(platform: Platform) -> Self {
+        Self {
+            platform,
+            ..Self::default()
+        }
     }
 
     fn add(&mut self, kind: WindowKind) -> WindowId {
@@ -307,11 +335,12 @@ impl WindowManager {
     /// `createHubWindow(state)`: saved bounds if given, else the focused window's bounds moved
     /// by 30 px, else the default size with Electron's placement.
     pub fn create_hub(&mut self, state: Option<Rect>) -> (WindowId, WindowOptions) {
+        let mac = self.platform == Platform::Mac;
         let mut options = WindowOptions {
             min_width: Some(800.0),
             min_height: Some(400.0),
-            vibrancy: Some("sidebar"),
-            title_bar_style: Some("hiddenInset"),
+            vibrancy: mac.then_some("sidebar"),
+            title_bar_style: mac.then_some("hiddenInset"),
             ..WindowOptions::new(WindowKind::Hub, HUB_DEFAULT_WIDTH, HUB_DEFAULT_HEIGHT)
         };
         let focused = self.focused.and_then(|id| self.bounds(id));
@@ -378,7 +407,14 @@ impl WindowManager {
             WindowKind::UnitConversion => (300.0, 162.0),
             WindowKind::RenameTab | WindowKind::EditFov => (300.0, 81.0),
             WindowKind::Export => (300.0, 189.0),
-            WindowKind::BetaWelcome => (450.0, BETA_WELCOME_HEIGHT),
+            WindowKind::BetaWelcome => (
+                450.0,
+                if self.platform == Platform::Windows {
+                    530.0
+                } else {
+                    490.0
+                },
+            ),
             _ => panic!("{kind:?} is not a modal prompt"),
         };
         let options = WindowOptions::modal(kind, parent, width, height);

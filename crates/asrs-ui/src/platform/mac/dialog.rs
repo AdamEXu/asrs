@@ -53,7 +53,7 @@ fn present(
 }
 
 pub(in super::super) fn message_box(
-    window: Option<&Window>,
+    window: Option<&mut Window>,
     cx: &mut App,
     options: MessageBoxOptions,
     on_done: impl FnOnce(MessageBoxResult, &mut App) + 'static,
@@ -118,7 +118,7 @@ pub(in super::super) fn message_box(
     let sheet_alert = alert.clone();
     let sheet_handler = handler.clone();
     present(
-        window.and_then(ns_window),
+        window.and_then(|w| ns_window(w)),
         move |parent| {
             sheet_alert.beginSheetModalForWindow_completionHandler(parent, Some(&sheet_handler));
         },
@@ -201,7 +201,7 @@ fn set_allowed_file_types(panel: &NSSavePanel, filters: &[FileFilter]) {
 }
 
 pub(in super::super) fn open_dialog(
-    window: Option<&Window>,
+    window: Option<&mut Window>,
     cx: &mut App,
     options: OpenDialogOptions,
     on_done: impl FnOnce(Vec<PathBuf>, &mut App) + 'static,
@@ -244,14 +244,14 @@ pub(in super::super) fn open_dialog(
         on_done,
     );
     begin(
-        window.and_then(ns_window),
+        window.and_then(|w| ns_window(w)),
         Retained::into_super(panel),
         handler,
     );
 }
 
 pub(in super::super) fn save_dialog(
-    window: Option<&Window>,
+    window: Option<&mut Window>,
     cx: &mut App,
     options: SaveDialogOptions,
     on_done: impl FnOnce(Option<PathBuf>, &mut App) + 'static,
@@ -282,7 +282,7 @@ pub(in super::super) fn save_dialog(
         },
         on_done,
     );
-    begin(window.and_then(ns_window), panel, handler);
+    begin(window.and_then(|w| ns_window(w)), panel, handler);
 }
 
 fn begin(

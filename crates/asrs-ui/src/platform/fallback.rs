@@ -101,7 +101,7 @@ pub(super) mod dialog {
     };
 
     pub fn message_box(
-        window: Option<&Window>,
+        window: Option<&mut Window>,
         cx: &mut App,
         options: MessageBoxOptions,
         on_done: impl FnOnce(MessageBoxResult, &mut App) + 'static,
@@ -143,7 +143,7 @@ pub(super) mod dialog {
     }
 
     pub fn open_dialog(
-        _window: Option<&Window>,
+        _window: Option<&mut Window>,
         cx: &mut App,
         options: OpenDialogOptions,
         on_done: impl FnOnce(Vec<PathBuf>, &mut App) + 'static,
@@ -162,7 +162,7 @@ pub(super) mod dialog {
     }
 
     pub fn save_dialog(
-        _window: Option<&Window>,
+        _window: Option<&mut Window>,
         cx: &mut App,
         options: SaveDialogOptions,
         on_done: impl FnOnce(Option<PathBuf>, &mut App) + 'static,

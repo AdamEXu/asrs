@@ -15,10 +15,18 @@ pub use asrs_ui::platform::dialog::{
 use asrs_services::window_manager::{Opened, WindowManager};
 use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, Render, Window};
 
-#[derive(Default)]
 pub struct Windows {
     manager: WindowManager,
     handles: Vec<(WindowId, AnyWindowHandle)>,
+}
+
+impl Default for Windows {
+    fn default() -> Self {
+        Self {
+            manager: WindowManager::new(),
+            handles: Vec::new(),
+        }
+    }
 }
 
 impl Global for Windows {}
