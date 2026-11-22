@@ -80,8 +80,8 @@ fn parse(markup: &str) -> Result<Element, String> {
     }
 }
 
-fn range_input(value: &str, min: &str, max: &str, _step: &str) -> RangeInput {
-    RangeInput::new(value, min, max)
+fn range_input(value: &str, min: &str, max: &str, step: &str) -> RangeInput {
+    RangeInput::new(value, min, max, step)
 }
 
 fn arg(op: &[Json], i: usize) -> Result<String, String> {
@@ -100,6 +100,12 @@ fn apply(element: &mut Element, op: &[Json]) -> Result<(), String> {
         (Element::Range(range), "set", "value") => range.set_value(&value),
         (Element::Range(range), "set", "min") => range.0.set_min(JsString::from(value.as_str())),
         (Element::Range(range), "set", "max") => range.0.set_max(JsString::from(value.as_str())),
+        (Element::Range(range), "setAttribute", "step") => {
+            range.0.set_step(JsString::from(value.as_str()))
+        }
+        (Element::Range(range), "setAttribute", "value") => {
+            range.0.set_value_attribute(JsString::from(value.as_str()))
+        }
         (_, kind, path) => return Err(format!("unsupported op {kind} {path}")),
     }
     Ok(())
@@ -197,13 +203,11 @@ fn run(id: &str) {
 }
 
 #[test]
-#[ignore = "main's asrs_tabs::form is jsdom; runs once C08 (#157) lands, see #165"]
 fn number_fields_follow_blink() {
     run("form/number-input");
 }
 
 #[test]
-#[ignore = "main's asrs_tabs::form is jsdom; runs once C08 (#157) lands, see #165"]
 fn sliders_follow_blink() {
     run("form/range-input");
 }
