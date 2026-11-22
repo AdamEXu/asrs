@@ -114,8 +114,14 @@ fn number_arg(op: &[Json], i: usize) -> Result<f64, String> {
 }
 
 fn apply(element: &mut Element, op: &[Json]) -> Result<(), String> {
-    let kind = op.first().and_then(Json::as_str).map(|s| s.to_string_lossy());
-    let target = op.get(1).and_then(Json::as_str).map(|s| s.to_string_lossy());
+    let kind = op
+        .first()
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy());
+    let target = op
+        .get(1)
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy());
     match (element, kind.as_deref(), target.as_deref()) {
         (Element::Number(n), Some("set"), Some("value")) => n.set_value(string_arg(op, 2)?),
         (Element::Range(r), Some("set"), Some("value")) => r.set_value(string_arg(op, 2)?),
@@ -131,7 +137,10 @@ fn apply(element: &mut Element, op: &[Json]) -> Result<(), String> {
         }
         (Element::Select(s), Some("remove"), _) => s.remove(number_arg(op, 1)? as usize),
         (Element::Select(s), Some("appendElement"), Some("option")) => {
-            let props = op.get(2).and_then(Json::as_array).ok_or("no option props")?;
+            let props = op
+                .get(2)
+                .and_then(Json::as_array)
+                .ok_or("no option props")?;
             let [prop] = props else {
                 return Err("an option with other than one property".to_owned());
             };
@@ -264,7 +273,10 @@ fn replay(element: &mut Option<Element>, record: &Record) -> Result<(), String> 
     } else {
         Err(format!(
             "{markup} after {}:\n{}",
-            record.field("op").map(|j| format!("{j:?}")).unwrap_or_default(),
+            record
+                .field("op")
+                .map(|j| format!("{j:?}"))
+                .unwrap_or_default(),
             failures.join("\n")
         ))
     }
@@ -283,4 +295,3 @@ form_vectors!(number_input, "form/number-input");
 form_vectors!(range_input, "form/range-input");
 form_vectors!(select, "form/select");
 form_vectors!(css_value, "form/css-value");
-

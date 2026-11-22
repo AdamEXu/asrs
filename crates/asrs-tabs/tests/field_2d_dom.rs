@@ -494,6 +494,10 @@ struct Harness {
     pending_errors: VecDeque<String>,
     /// Scroll callbacks the port dispatched, per renderer, awaiting upstream's `scroll`.
     scrolls: Vec<VecDeque<ScrollArgs>>,
+    /// Animation frames the port's scroll callbacks requested and no render has used yet.
+    frame_requests: Vec<u32>,
+    /// The tab loop asked this renderer for a command, so its next render is the tab's own.
+    tab_render_due: Vec<bool>,
     /// What the last replayed controller or renderer call threw, for an `eval` exception.
     last_threw: Option<String>,
     stats: Stats,
@@ -537,6 +541,8 @@ impl Harness {
             upstream_main: VecDeque::new(),
             pending_errors: VecDeque::new(),
             scrolls: Vec::new(),
+            frame_requests: Vec::new(),
+            tab_render_due: Vec::new(),
             last_threw: None,
             stats: Stats::default(),
         }
@@ -658,6 +664,12 @@ impl Harness {
 
     fn command(&mut self, record: &Record) -> Result<(), String> {
         let id = record_id(record)?;
+        // The tab loop runs once per animation frame, after the timers that deliver the
+        // `IMAGE` load events queued by the previous frame's renders.
+        if let Some((renderer, _)) = self.renderers.get_mut(id) {
+            renderer.flush_image_loads();
+            self.tab_render_due[id] = true;
+        }
         self.apply_context(record)?;
         self.host.selection.load(reads(record)?);
         let uuid = js(record, "uuid")?;
@@ -858,14 +870,19 @@ impl Harness {
         Ok(())
     }
 
-    fn render(&mut self, record: &Record, in_frame: bool) -> Result<(), String> {
+    fn render(&mut self, record: &Record) -> Result<(), String> {
         let id = record_id(record)?;
+        if !std::mem::take(&mut self.tab_render_due[id]) {
+            self.frame_requests[id] += self.renderers[id].0.take_frame_requests();
+            if self.frame_requests[id] == 0 {
+                return Err(
+                    "upstream rendered in an animation frame the port did not request".to_owned(),
+                );
+            }
+            self.frame_requests[id] -= 1;
+        }
         self.apply_context(record)?;
         self.apply_dom(id, &js(record, "dom")?)?;
-        if in_frame {
-            // setTimeout image "load" events land between frames.
-            self.renderers[id].0.flush_image_loads();
-        }
         let recorded = js(record, "command")?;
         let command = Field2dCommand::from_js(&recorded).ok_or("render command does not parse")?;
         if encode(&command.to_js()) != encode(&recorded) {
@@ -979,9 +996,11 @@ impl Harness {
                     .push((Field2dRenderer::new(dom.clone()), dom));
                 self.had_last_command.push(false);
                 self.scrolls.push(VecDeque::new());
+                self.frame_requests.push(0);
+                self.tab_render_due.push(false);
                 Ok(())
             }
-            "render" => self.render(record, true),
+            "render" => self.render(record),
             "save" => {
                 let id = record_id(record)?;
                 self.apply_context(record)?;

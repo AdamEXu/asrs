@@ -129,7 +129,6 @@ impl StatisticsController {
         }
     }
 
-
     pub fn should_update(&self) -> bool {
         self.should_update
     }
@@ -214,24 +213,21 @@ impl StatisticsController {
 
     fn update_histogram_inputs(&mut self) {
         if self.step_size.number() <= 0.0 {
-            self.step_size.set_value(JsString::from(number::to_string(clean_float(
-                value_to_number(&self.step_size_step) * 0.9,
-            ))));
+            self.step_size
+                .set_value(JsString::from(number::to_string(clean_float(
+                    value_to_number(&self.step_size_step) * 0.9,
+                ))));
         }
         let range = math::abs(self.range_max.number() - self.range_min.number());
         if range / self.step_size.number() > MAX_BINS {
             self.step_size
-                .set_value(JsString::from(number::to_string(clean_float(range / MAX_BINS))));
+                .set_value(JsString::from(number::to_string(clean_float(
+                    range / MAX_BINS,
+                ))));
         }
-        let step = math::pow(
-            10.0,
-            math::floor(math::log10(self.step_size.number())),
-        );
+        let step = math::pow(10.0, math::floor(math::log10(self.step_size.number())));
         self.step_size_step = JsString::from(number::to_string(step));
-        let min_max_step = math::pow(
-            10.0,
-            math::ceil(math::log10(self.step_size.number())),
-        );
+        let min_max_step = math::pow(10.0, math::ceil(math::log10(self.step_size.number())));
         self.range_min_step = JsString::from(number::to_string(min_max_step));
         self.range_max_step = JsString::from(number::to_string(min_max_step));
     }
@@ -761,17 +757,20 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
         if ops::has(state, "rangeMin")?
             && let JsValue::Number(v) = ops::get(state, "rangeMin")?
         {
-            self.range_min.set_value(JsString::from(number::to_string(v)));
+            self.range_min
+                .set_value(JsString::from(number::to_string(v)));
         }
         if ops::has(state, "rangeMax")?
             && let JsValue::Number(v) = ops::get(state, "rangeMax")?
         {
-            self.range_max.set_value(JsString::from(number::to_string(v)));
+            self.range_max
+                .set_value(JsString::from(number::to_string(v)));
         }
         if ops::has(state, "stepSize")?
             && let JsValue::Number(v) = ops::get(state, "stepSize")?
         {
-            self.step_size.set_value(JsString::from(number::to_string(v)));
+            self.step_size
+                .set_value(JsString::from(number::to_string(v)));
         }
         self.update_histogram_inputs();
         Ok(())

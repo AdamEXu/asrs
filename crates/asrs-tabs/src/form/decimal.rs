@@ -545,10 +545,7 @@ impl Decimal {
     }
 
     pub fn at_least(&self, rhs: &Decimal) -> bool {
-        matches!(
-            self.compare(rhs),
-            Some(Ordering::Greater | Ordering::Equal)
-        )
+        matches!(self.compare(rhs), Some(Ordering::Greater | Ordering::Equal))
     }
 
     pub fn round(&self) -> Decimal {

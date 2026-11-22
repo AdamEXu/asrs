@@ -4,8 +4,8 @@
 //! declaration, and reads return the serialized specified value.
 
 use asrs_canvas::color;
-use asrs_js::{math, number};
 use asrs_js::string::JsString;
+use asrs_js::{math, number};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Property {
@@ -78,9 +78,7 @@ impl Property {
                     _ => None,
                 }
             }
-            Property::Display => DISPLAY_KEYWORDS
-                .contains(&lower.as_str())
-                .then_some(lower),
+            Property::Display => DISPLAY_KEYWORDS.contains(&lower.as_str()).then_some(lower),
         }
     }
 }
