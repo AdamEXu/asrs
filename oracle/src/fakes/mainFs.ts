@@ -1,10 +1,13 @@
 // The `fs`/`graceful-fs` replacement main-process modules see in the `files` harness: an
 // in-memory Map plus a log of write destinations, matching what the asrs-services `Fs` trait
-// exposes to the port.
+// exposes to the port. Directories exist only when put or made, keyed by their normalized path.
+
+import path from "node:path";
 
 const files = new Map<string, Buffer>();
 const failures = new Map<string, "read" | "write" | "readOpened">();
 const missingDirs = new Set<string>();
+const dirs = new Set<string>();
 const openFds = new Map<number, string>();
 let nextFd = 100;
 export const writes: string[] = [];
@@ -24,6 +27,7 @@ export function reset(): void {
   files.clear();
   failures.clear();
   missingDirs.clear();
+  dirs.clear();
   openFds.clear();
   writes.splice(0, writes.length);
 }
@@ -34,6 +38,22 @@ export function putFile(name: string, data: Uint8Array): void {
 
 export function removeFile(name: string): void {
   files.delete(name);
+}
+
+function dirKey(name: unknown): string {
+  let key = path.posix.normalize(String(name));
+  while (key.length > 1 && key.endsWith("/")) key = key.slice(0, -1);
+  return key;
+}
+
+const isRoot = (key: string): boolean => key === "/" || key === ".";
+
+export function putDir(name: string): void {
+  dirs.add(dirKey(name));
+}
+
+export function dumpDirs(): string[] {
+  return [...dirs].sort();
 }
 
 export function dumpFiles(): Record<string, Uint8Array> {
@@ -69,7 +89,7 @@ function eacces(syscall: string, name: unknown): NodeJS.ErrnoException {
 const asBuffer = (data: unknown): Buffer => (Buffer.isBuffer(data) ? data : Buffer.from(data as any));
 
 export function existsSync(name: unknown): boolean {
-  return files.has(String(name));
+  return files.has(String(name)) || dirs.has(dirKey(name));
 }
 
 export function readFileSync(name: unknown): Buffer {
@@ -123,10 +143,38 @@ export function unlinkSync(name: unknown): void {
   if (!files.delete(String(name))) throw enoent("unlink", name);
 }
 
-export function mkdirSync(): void {}
+function fsError(code: string, errno: number, text: string, syscall: string, name: unknown): NodeJS.ErrnoException {
+  const error = new Error(`${code}: ${text}, ${syscall} '${name}'`) as NodeJS.ErrnoException;
+  error.code = code;
+  error.errno = errno;
+  error.syscall = syscall;
+  error.path = String(name);
+  return error;
+}
 
-export function readdirSync(): string[] {
-  return [];
+export function mkdirSync(name: unknown): void {
+  const key = dirKey(name);
+  if (files.has(String(name)) || dirs.has(key)) throw fsError("EEXIST", -17, "file already exists", "mkdir", name);
+  const parent = path.posix.dirname(key);
+  if (!isRoot(parent) && !dirs.has(parent)) throw enoent("mkdir", name);
+  dirs.add(key);
+}
+
+export function readdirSync(name: unknown, options?: { withFileTypes?: boolean }): unknown[] {
+  const key = dirKey(name);
+  if (!dirs.has(key)) {
+    if (files.has(String(name))) throw fsError("ENOTDIR", -20, "not a directory", "scandir", name);
+    throw enoent("scandir", name);
+  }
+  const children = new Map<string, boolean>();
+  const visit = (entry: string, isDir: boolean) => {
+    if (path.posix.dirname(entry) === key && entry !== key) children.set(path.posix.basename(entry), isDir);
+  };
+  files.forEach((_, entry) => visit(entry, false));
+  dirs.forEach((entry) => visit(entry, true));
+  const names = [...children.keys()].sort();
+  if (options?.withFileTypes !== true) return names;
+  return names.map((child) => ({ name: child, isDirectory: () => children.get(child) === true }));
 }
 
 const last = (args: unknown[]): ((...a: any[]) => void) | undefined => {
