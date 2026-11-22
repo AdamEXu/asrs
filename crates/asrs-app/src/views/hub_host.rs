@@ -3,7 +3,7 @@
 //! and what the hub sends main is dropped.
 
 use asrs_hub::hub::{HubModel, HubView};
-use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_ui::gpui::{App, AppContext, Entity, Window};
@@ -14,6 +14,7 @@ use crate::hub::{Hub, HubConfig, HubEvent};
 struct FrameView {
     geometry: FrameGeometry,
     dark: bool,
+    sidebar: NoLayout,
 }
 
 impl HubView for FrameView {
@@ -29,16 +30,8 @@ impl HubView for FrameView {
         self.dark
     }
 
-    fn can_scroll_into_view(&self) -> bool {
-        true
-    }
-
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
-        vec![RowRect::default(); sidebar.rows().len()]
-    }
-
-    fn measure_value(&self, _value: &RowValue) -> f64 {
-        0.0
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
+        &mut self.sidebar
     }
 }
 
@@ -132,6 +125,7 @@ impl HubEntityHost {
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
             dark,
+            sidebar: NoLayout,
         });
         let hub = cx.new(|cx| Hub::new(Some(window), HubConfig::new(view), cx));
         cx.subscribe(&hub, |_, event, _| match event {

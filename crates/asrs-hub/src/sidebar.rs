@@ -1,11 +1,11 @@
 //! `src/hub/Sidebar.ts`: the headless sidebar model. Rows live in an arena in creation order;
-//! `roots`/`children` give display order. Geometry-dependent behavior (on-screen checks, drag
-//! offsets, handle widths) takes the rects and coordinates a DOM would produce, so the model is
-//! byte-identical to upstream while staying renderable by any view.
+//! `roots`/`children` give display order. Every layout read and scroll write upstream makes goes
+//! through [`SidebarGeometry`] at the same point and in the same order, so a view answers them
+//! from its own layout and a replay answers them from Blink's records.
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use asrs_js::collation::locale_compare_numeric;
 use asrs_js::json;
@@ -98,6 +98,144 @@ impl RowRect {
     }
 }
 
+/// One row as [`SidebarGeometry`] sees it.
+#[derive(Clone, Copy)]
+pub struct RowRef<'a> {
+    nodes: &'a [Node],
+    id: usize,
+    display_index: Option<usize>,
+}
+
+impl RowRef<'_> {
+    /// The row's index in [`Sidebar::rows`]; `None` while a collapsed ancestor hides it or it
+    /// is out of the DOM.
+    pub fn display_index(&self) -> Option<usize> {
+        self.display_index
+    }
+
+    /// The oracle's `elementPath` of the row's `.field-item-container`: from `#fieldList`
+    /// (`span:3` of `.side-bar`) while attached, from the removed root once a rebuild took it
+    /// out of the DOM.
+    pub fn container_path(&self) -> String {
+        let nodes = self.nodes;
+        let node = &nodes[self.id];
+        if node.parent.is_none() && node.detached {
+            return "div.field-item-container:0".to_owned();
+        }
+        let mut segments = vec![format!(
+            "div.field-item-container:{}",
+            element_index(nodes, self.id)
+        )];
+        let mut current = self.id;
+        loop {
+            match nodes[current].parent {
+                None => {
+                    segments.push("span:3".to_owned());
+                    break;
+                }
+                Some(parent) if nodes[parent].parent.is_none() && nodes[parent].detached => {
+                    segments.push("span:0".to_owned());
+                    break;
+                }
+                Some(parent) => {
+                    segments.push(format!("span:{}", element_index(nodes, parent) + 1));
+                    current = parent;
+                }
+            }
+        }
+        segments.reverse();
+        segments.join(">")
+    }
+}
+
+/// The index of `id`'s container among its parent element's children: each earlier sibling
+/// row is its container followed by its child span, if it got one.
+fn element_index(nodes: &[Node], id: usize) -> usize {
+    let siblings: Vec<usize> = match nodes[id].parent {
+        Some(parent) => nodes[parent].children.clone(),
+        None => (0..nodes.len())
+            .filter(|&i| {
+                nodes[i].parent.is_none()
+                    && nodes[i].generation == nodes[id].generation
+                    && nodes[i].detached == nodes[id].detached
+            })
+            .collect(),
+    };
+    siblings
+        .iter()
+        .take_while(|&&sibling| sibling != id)
+        .map(|&sibling| 1 + usize::from(nodes[sibling].child_span))
+        .sum()
+}
+
+/// The sidebar's layout reads and scroll writes, in the order upstream makes them.
+pub trait SidebarGeometry {
+    /// `fieldElement.getBoundingClientRect()`.
+    fn field_item_rect(&mut self, row: RowRef<'_>) -> RowRect;
+    /// `valueElement.clientWidth` while it shows `value`; `hidden` is its `hidden` attribute.
+    fn value_client_width(&mut self, row: RowRef<'_>, value: &RowValue, hidden: bool) -> f64;
+    /// `label.getBoundingClientRect()`.
+    fn label_rect(&mut self, row: RowRef<'_>) -> RowRect;
+    /// `fieldElement.scrollIntoViewIfNeeded()`.
+    fn scroll_into_view_if_needed(&mut self, row: RowRef<'_>);
+    /// `SEARCH_INPUT.getBoundingClientRect()`.
+    fn search_input_rect(&mut self) -> RowRect;
+    /// `.search-results-item` number `index`: `scrollIntoView({ block: "nearest" })`.
+    fn scroll_search_item_into_view(&mut self, index: usize);
+    /// `SEARCH_RESULTS.scrollTop = 0`.
+    fn reset_search_results_scroll(&mut self);
+    /// `SIDEBAR.scrollTop`.
+    fn scroll_top(&mut self) -> f64;
+    /// `SIDEBAR.scrollTop = value`.
+    fn set_scroll_top(&mut self, value: f64);
+    /// `.title-bar-menu` button `index`: `getBoundingClientRect()`.
+    fn menu_button_rect(&mut self, index: usize) -> RowRect;
+    /// `SEARCH_INPUT.blur()`: whether it had focus, so that a `blur` event fired.
+    fn blur_search_input(&mut self) -> bool;
+}
+
+/// A page without layout, as jsdom gives one with no layout rule for the sidebar: every rect
+/// and size is 0 and scroll writes do nothing.
+pub struct NoLayout;
+
+impl SidebarGeometry for NoLayout {
+    fn field_item_rect(&mut self, _row: RowRef<'_>) -> RowRect {
+        RowRect::default()
+    }
+
+    fn value_client_width(&mut self, _row: RowRef<'_>, _value: &RowValue, _hidden: bool) -> f64 {
+        0.0
+    }
+
+    fn label_rect(&mut self, _row: RowRef<'_>) -> RowRect {
+        RowRect::default()
+    }
+
+    fn scroll_into_view_if_needed(&mut self, _row: RowRef<'_>) {}
+
+    fn search_input_rect(&mut self) -> RowRect {
+        RowRect::default()
+    }
+
+    fn scroll_search_item_into_view(&mut self, _index: usize) {}
+
+    fn reset_search_results_scroll(&mut self) {}
+
+    fn scroll_top(&mut self) -> f64 {
+        0.0
+    }
+
+    fn set_scroll_top(&mut self, _value: f64) {}
+
+    fn menu_button_rect(&mut self, _index: usize) -> RowRect {
+        RowRect::default()
+    }
+
+    fn blur_search_input(&mut self) -> bool {
+        false
+    }
+}
+
 /// `window.tuner`.
 pub trait Tuner {
     fn has_tunable_fields(&self) -> bool;
@@ -113,20 +251,14 @@ pub struct SidebarEnv<'a> {
     pub tuner: Option<&'a dyn Tuner>,
     pub dark_theme: bool,
     pub inner_height: f64,
-    /// Whether the view can scroll a row into view (jsdom lacks
-    /// `scrollIntoViewIfNeeded`, so search highlights abort there).
-    pub can_scroll_into_view: bool,
     pub loading_fields: &'a HashSet<JsString>,
-    /// `clientWidth` of a displayed, unhidden `.field-value` showing `value`.
-    pub measure_value: &'a dyn Fn(&RowValue) -> f64,
+    pub geometry: &'a mut dyn SidebarGeometry,
 }
 
 /// Whether the upstream listener or `refresh` threw part-way, leaving rows half built.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EventOutcome {
     Ok,
-    /// `scrollIntoViewIfNeeded` is missing (jsdom), so any highlight-for-search throws.
-    HighlightAborted,
     /// A merged-log root such as `Log-1` or `Log0.5` indexes past the filenames, and
     /// `htmlEncode(undefined)` throws.
     MergedFilenameMissing,
@@ -270,6 +402,8 @@ struct Node {
 /// One row in display order, everything the view needs to render it.
 #[derive(Clone, Debug)]
 pub struct SidebarRow {
+    /// The row's index in [`Sidebar::rows`], which the row handlers take.
+    pub index: usize,
     pub title: JsString,
     pub full_title: JsString,
     pub full_key: Option<JsString>,
@@ -339,10 +473,10 @@ pub struct Sidebar {
     search_value: JsString,
     search_focused: bool,
     search_results_hidden: bool,
-    search_results_scroll_top: f64,
+    search_results_top: Option<f64>,
+    search_results_min_width: Option<f64>,
     tuning_button_hidden: bool,
     tuning_button_active: bool,
-    scroll_top: f64,
     shadow_shown: bool,
     last_handle_click: f64,
     menu_active: Vec<bool>,
@@ -377,10 +511,10 @@ impl Sidebar {
             search_value: JsString::new(),
             search_focused: false,
             search_results_hidden: true,
-            search_results_scroll_top: 0.0,
+            search_results_top: None,
+            search_results_min_width: None,
             tuning_button_hidden: true,
             tuning_button_active: false,
-            scroll_top: 0.0,
             shadow_shown: false,
             last_handle_click: 0.0,
             menu_active: Vec::new(),
@@ -561,16 +695,23 @@ impl Sidebar {
         }
     }
 
-    /// `side-bar` scroll.
-    pub fn sidebar_scroll(&mut self, scroll_top: f64) {
-        self.scroll_top = scroll_top;
-        self.shadow_shown = scroll_top != 0.0;
-        if scroll_top > SCROLL_BLUR_THRESHOLD && self.search_focused {
-            self.search_focused = false;
+    /// `side-bar` scroll: the shadow listener, then the search-blur listener, each reading
+    /// `scrollTop`.
+    pub fn sidebar_scroll(&mut self, geometry: &mut dyn SidebarGeometry) {
+        self.shadow_shown = geometry.scroll_top() != 0.0;
+        if geometry.scroll_top() > SCROLL_BLUR_THRESHOLD && self.search_focused {
+            self.blur_search_input(geometry);
         }
     }
 
-    pub fn menu_button_click(&mut self, index: usize, rect: RowRect) {
+    /// `SEARCH_INPUT.blur()`, whose `blur` event only fires when the input had focus.
+    fn blur_search_input(&mut self, geometry: &mut dyn SidebarGeometry) {
+        if geometry.blur_search_input() {
+            self.search_blur();
+        }
+    }
+
+    pub fn menu_button_click(&mut self, geometry: &mut dyn SidebarGeometry, index: usize) {
         if self.menu_active.len() <= index {
             self.menu_active.resize(index + 1, false);
         }
@@ -581,6 +722,7 @@ impl Sidebar {
             self.send_main("close-app-menu", JsValue::Object(data));
         } else {
             self.menu_active[index] = true;
+            let rect = geometry.menu_button_rect(index);
             let mut rect_obj = JsObject::new();
             rect_obj.insert("x", JsValue::Number(rect.x));
             rect_obj.insert("y", JsValue::Number(rect.y));
@@ -613,9 +755,14 @@ impl Sidebar {
         self.update_search_results(env);
     }
 
-    fn update_search_hovered(&mut self) {
+    fn update_search_hovered(&mut self, scroll: Option<&mut dyn SidebarGeometry>) {
         for (index, hovered) in self.search_items_hovered.iter_mut().enumerate() {
             *hovered = Some(index) == self.search_hovered_index;
+        }
+        if let (Some(geometry), Some(index)) = (scroll, self.search_hovered_index)
+            && index < self.search_items_hovered.len()
+        {
+            geometry.scroll_search_item_into_view(index);
         }
     }
 
@@ -659,14 +806,22 @@ impl Sidebar {
         self.search_items_hovered = vec![false; self.search_results.len()];
     }
 
-    fn search_periodic(&mut self) {
+    fn search_periodic(&mut self, geometry: &mut dyn SidebarGeometry) {
+        let input = geometry.search_input_rect();
+        let bottom = input.y + input.height;
+        if Some(bottom) != self.search_results_top {
+            self.search_results_top = Some(bottom);
+        }
+        if Some(input.width) != self.search_results_min_width {
+            self.search_results_min_width = Some(input.width);
+        }
         let hidden =
             !self.search_focused || self.search_value.is_empty() || self.search_results.is_empty();
         if hidden != self.search_results_hidden {
             if hidden && !self.search_results_hidden {
-                self.search_results_scroll_top = 0.0;
+                geometry.reset_search_results_scroll();
                 self.search_hovered_index = None;
-                self.update_search_hovered();
+                self.update_search_hovered(None);
             }
             self.search_results_hidden = hidden;
         }
@@ -689,7 +844,7 @@ impl Sidebar {
                 }
                 _ => {}
             }
-            self.update_search_hovered();
+            self.update_search_hovered(Some(&mut *env.geometry));
             EventOutcome::Ok
         } else if code == "ArrowUp" {
             match self.search_hovered_index {
@@ -698,7 +853,7 @@ impl Sidebar {
                 Some(i) if i > 0 => self.search_hovered_index = Some(i - 1),
                 _ => {}
             }
-            self.update_search_hovered();
+            self.update_search_hovered(Some(&mut *env.geometry));
             EventOutcome::Ok
         } else if code == "Enter" {
             self.run_search(env, now)
@@ -713,7 +868,7 @@ impl Sidebar {
             return;
         }
         self.search_hovered_index = Some(index);
-        self.update_search_hovered();
+        self.update_search_hovered(None);
     }
 
     /// `.search-results-item` mousedown and touchdown.
@@ -730,8 +885,8 @@ impl Sidebar {
         self.run_search(env, now)
     }
 
-    /// `runSearch`. On `HighlightAborted` the upstream listener threw: `searchKey` stays set,
-    /// remaining callbacks never ran, and the input is not blurred.
+    /// `runSearch`. On a throw `searchKey` stays set, the remaining callbacks never run, and
+    /// the input is not blurred.
     fn run_search(&mut self, env: &mut SidebarEnv<'_>, now: f64) -> EventOutcome {
         let Some(hovered) = self.search_hovered_index else {
             return EventOutcome::Ok;
@@ -746,7 +901,8 @@ impl Sidebar {
         for i in 0..len {
             let outcome = match self.search_callbacks[i] {
                 SearchCallback::Highlight(id) => {
-                    self.highlight_for_search(id, now, env.can_scroll_into_view)
+                    self.highlight_for_search(env, id, now);
+                    Ok(())
                 }
                 SearchCallback::Expand(id) => self.expand_for_search(env, id, now),
             };
@@ -755,22 +911,19 @@ impl Sidebar {
             }
         }
         self.search_key = None;
-        self.search_focused = false;
+        self.blur_search_input(env.geometry);
         EventOutcome::Ok
     }
 
-    /// `highlightForSearch`. The throw is `scrollIntoViewIfNeeded`, which runs before the
-    /// `highlight` class and timeout.
-    fn highlight_for_search(&mut self, id: usize, now: f64, can_scroll: bool) -> Attempt<()> {
+    /// `highlightForSearch`.
+    fn highlight_for_search(&mut self, env: &mut SidebarEnv<'_>, id: usize, now: f64) {
         let (Some(key), Some(full_key)) = (&self.search_key, &self.nodes[id].full_key) else {
-            return Ok(());
+            return;
         };
         if full_key != key {
-            return Ok(());
+            return;
         }
-        if !can_scroll {
-            return Err(EventOutcome::HighlightAborted);
-        }
+        env.geometry.scroll_into_view_if_needed(self.row_ref(id));
         self.nodes[id].highlighted = true;
         let node_id = self.nodes[id].id;
         self.schedule_timeout(
@@ -778,7 +931,6 @@ impl Sidebar {
             HIGHLIGHT_TIMEOUT_MS,
             TimerKind::ClearHighlight(node_id),
         );
-        Ok(())
     }
 
     /// `expandForSearch` + `setExpanded` machinery.
@@ -942,17 +1094,19 @@ impl Sidebar {
         self.send_main("ask-open-sidebar-context-menu", JsValue::Object(data));
     }
 
-    /// `field-item-label` touchstart. `rect` is the label's `getBoundingClientRect`.
+    /// `field-item-label` touchstart, which reads the label's rect once per coordinate.
     pub fn label_touch_start(
         &mut self,
+        geometry: &mut dyn SidebarGeometry,
         drag: &mut Drag,
         flat_index: usize,
         x: f64,
         y: f64,
-        rect: RowRect,
     ) {
         if let Some(id) = self.flat_id(flat_index) {
-            self.drag_event(drag, id, x, y, x - rect.x, y - rect.y);
+            let offset_x = x - geometry.label_rect(self.row_ref(id)).x;
+            let offset_y = y - geometry.label_rect(self.row_ref(id)).y;
+            self.drag_event(drag, id, x, y, offset_x, offset_y);
         }
     }
 
@@ -1025,7 +1179,7 @@ impl Sidebar {
     }
 
     /// `tuning-button` click.
-    pub fn tuning_button_click(&mut self, env: &SidebarEnv<'_>) {
+    pub fn tuning_button_click(&mut self, env: &mut SidebarEnv<'_>) {
         self.set_tuning_mode_active(env, !self.is_tuning_mode);
     }
 
@@ -1052,7 +1206,7 @@ impl Sidebar {
         self.send_main("ask-open-tuning-context-menu", JsValue::Object(data));
     }
 
-    fn set_tuning_mode_active(&mut self, env: &SidebarEnv<'_>, active: bool) {
+    fn set_tuning_mode_active(&mut self, env: &mut SidebarEnv<'_>, active: bool) {
         self.is_tuning_mode = active;
         for id in 0..self.nodes.len() {
             if self.nodes[id].generation != self.generation {
@@ -1083,7 +1237,7 @@ impl Sidebar {
         self.tuning_button_active = active;
     }
 
-    fn update_tuning_button(&mut self, env: &SidebarEnv<'_>) {
+    fn update_tuning_button(&mut self, env: &mut SidebarEnv<'_>) {
         let tuner_available = env.tuner.is_some_and(|t| t.has_tunable_fields());
         if self.tuning_button_hidden == tuner_available {
             self.tuning_button_hidden = !tuner_available;
@@ -1182,11 +1336,10 @@ impl Sidebar {
     }
 
     /// `periodic`: `searchPeriodic`, `updateTitle`, `updateValues`, `updateTuningButton`.
-    /// `rects` are `.field-item` rects in display order (one per materialized row).
-    pub fn periodic(&mut self, env: &mut SidebarEnv<'_>, rects: &[RowRect]) {
-        self.search_periodic();
+    pub fn periodic(&mut self, env: &mut SidebarEnv<'_>) {
+        self.search_periodic(env.geometry);
         self.update_title(env);
-        self.update_values(env, rects);
+        self.update_values(env);
         self.update_tuning_button(env);
     }
 
@@ -1224,7 +1377,9 @@ impl Sidebar {
         }
     }
 
-    fn update_values(&mut self, env: &mut SidebarEnv<'_>, rects: &[RowRect]) {
+    /// `updateValueCallbacks` run in registration order: the value rows of the current
+    /// rebuild, rows built since under removed parents included.
+    fn update_values(&mut self, env: &mut SidebarEnv<'_>) {
         let mode = env.selection.get_mode();
         let hovered = env.selection.get_hovered_time();
         let selected = env.selection.get_selected_time();
@@ -1235,10 +1390,15 @@ impl Sidebar {
         } else {
             selected
         };
-        for (flat, (id, _)) in self.dfs_ids().into_iter().enumerate() {
-            let Some(rect) = rects.get(flat).copied() else {
-                break;
-            };
+        let display = self.dfs_index_map();
+        for id in 0..self.nodes.len() {
+            if self.nodes[id].generation != self.generation
+                || matches!(self.nodes[id].value, ValueState::None)
+            {
+                continue;
+            }
+            let row = self.row_ref_in(&display, id);
+            let rect = env.geometry.field_item_rect(row);
             self.update_value(env, id, time, rect);
         }
     }
@@ -1347,57 +1507,35 @@ impl Sidebar {
         }
     }
 
-    fn displayed(&self, id: usize) -> bool {
-        let mut node = &self.nodes[id];
-        if node.detached {
-            return false;
-        }
-        while let Some(parent) = node.parent {
-            node = &self.nodes[parent];
-            if !node.expanded {
-                return false;
-            }
-        }
-        true
-    }
-
     /// `--value-width`, which upstream re-measures only when the value element's visibility,
     /// character count or tuning mode changes, so a same-length value keeps the old width.
-    fn measure_value_width(&mut self, env: &SidebarEnv<'_>, id: usize) {
+    fn measure_value_width(&mut self, env: &mut SidebarEnv<'_>, id: usize) {
         let node = &self.nodes[id];
-        let client_width = if node.value_element_hidden || !self.displayed(id) {
+        let value = node.value.to_row();
+        let hidden = node.value_element_hidden;
+        let display = self.dfs_index_map();
+        let row = self.row_ref_in(&display, id);
+        // `clientWidth === 0 ? 0 : clientWidth + margin` reads a nonzero width twice.
+        let value_width = if env.geometry.value_client_width(row, &value, hidden) == 0.0 {
             0.0
         } else {
-            (env.measure_value)(&node.value.to_row())
+            env.geometry.value_client_width(row, &value, hidden) + VALUE_WIDTH_MARGIN_PX
         };
-        self.nodes[id].value_width = if client_width == 0.0 {
-            0.0
-        } else {
-            client_width + VALUE_WIDTH_MARGIN_PX
-        };
+        self.nodes[id].value_width = value_width;
     }
 
-    /// `getActiveFields`. `rects` are `.field-item` rects in display order.
-    pub fn get_active_fields(
-        &mut self,
-        env: &SidebarEnv<'_>,
-        rects: &[RowRect],
-    ) -> IndexSet<JsString> {
+    /// `getActiveFields`: `activeFieldCallbacks` in registration order, each reading its row's
+    /// rect.
+    pub fn get_active_fields(&mut self, env: &mut SidebarEnv<'_>) -> IndexSet<JsString> {
         if self.sidebar_width <= 0.0 {
             return IndexSet::new();
         }
-        let dfs_index = self.dfs_index_map();
+        let display = self.dfs_index_map();
         for id in 0..self.nodes.len() {
             if self.nodes[id].generation != self.generation {
                 continue;
             }
-            let rect = match dfs_index.get(&id) {
-                Some(&flat) => match rects.get(flat) {
-                    Some(rect) => *rect,
-                    None => continue,
-                },
-                None => RowRect::default(),
-            };
+            let rect = env.geometry.field_item_rect(self.row_ref_in(&display, id));
             let expanded = rect.height > 0.0;
             let on_screen = rect.on_screen(env.inner_height);
             let node = &self.nodes[id];
@@ -1472,6 +1610,7 @@ impl Sidebar {
             return Ok(());
         }
         self.field_count = env.log.borrow().get_field_count();
+        let original_scroll = env.geometry.scroll_top();
         self.generation += 1;
         for node in &mut self.nodes {
             node.detached = true;
@@ -1521,6 +1660,7 @@ impl Sidebar {
                 0.0,
             )?;
         }
+        env.geometry.set_scroll_top(original_scroll);
         self.update_search_results(env);
         Ok(())
     }
@@ -1693,7 +1833,7 @@ impl Sidebar {
                 }
             }
             self.search_callbacks.push(SearchCallback::Highlight(id));
-            self.highlight_for_search(id, now, env.can_scroll_into_view)?;
+            self.highlight_for_search(env, id, now);
             match env.log.borrow().get_type(&full_key) {
                 Some(LoggableType::Boolean) => {
                     let mut state = BoolState {
@@ -1783,48 +1923,82 @@ impl Sidebar {
         order
     }
 
-    fn dfs_index_map(&self) -> std::collections::HashMap<usize, usize> {
-        self.dfs_ids()
-            .into_iter()
-            .enumerate()
-            .map(|(flat, (id, _))| (id, flat))
-            .collect()
+    /// Arena id to display index, for the rows a view shows: the attached rows under expanded
+    /// parents.
+    fn dfs_index_map(&self) -> HashMap<usize, usize> {
+        let mut map = HashMap::new();
+        let mut stack: Vec<usize> = self.roots.iter().rev().copied().collect();
+        while let Some(id) = stack.pop() {
+            map.insert(id, map.len());
+            if self.nodes[id].expanded {
+                stack.extend(self.nodes[id].children.iter().rev());
+            }
+        }
+        map
+    }
+
+    fn row_ref(&self, id: usize) -> RowRef<'_> {
+        let display = self.dfs_index_map();
+        self.row_ref_in(&display, id)
+    }
+
+    fn row_ref_in(&self, display: &HashMap<usize, usize>, id: usize) -> RowRef<'_> {
+        RowRef {
+            nodes: &self.nodes,
+            id,
+            display_index: display.get(&id).copied(),
+        }
     }
 
     fn flat_id(&self, flat_index: usize) -> Option<usize> {
         self.dfs_ids().get(flat_index).map(|(id, _)| *id)
     }
 
-    /// Rows in display order.
+    /// Every row in the DOM, in document order, collapsed subtrees included.
     pub fn rows(&self) -> Vec<SidebarRow> {
         self.dfs_ids()
             .into_iter()
-            .map(|(id, position)| {
-                let node = &self.nodes[id];
-                SidebarRow {
-                    title: node.title.clone(),
-                    position,
-                    full_title: node.full_title.clone(),
-                    full_key: node.full_key.clone(),
-                    indent: node.indent,
-                    generated: node.generated,
-                    known_label: node.known_label,
-                    expanded: node.expanded,
-                    has_children: node.has_children,
-                    child_span: node.child_span,
-                    label_loading: node.label_loading,
-                    label_bold: node.label_bold,
-                    label_title: node.label_title.clone(),
-                    type_label: node.type_label.clone(),
-                    warning_hidden: node.warning_hidden,
-                    warning_title: js(TYPE_WARNING_TEXT),
-                    highlighted: node.highlighted,
-                    value_hidden: node.value_element_hidden,
-                    value_width: node.value_width,
-                    value: node.value.to_row(),
-                }
-            })
+            .enumerate()
+            .map(|(index, (id, position))| self.row(index, id, position))
             .collect()
+    }
+
+    /// The rows a view lays out, one per display index: those under expanded parents.
+    pub fn displayed_rows(&self) -> Vec<SidebarRow> {
+        let display = self.dfs_index_map();
+        self.dfs_ids()
+            .into_iter()
+            .enumerate()
+            .filter(|(_, (id, _))| display.contains_key(id))
+            .map(|(index, (id, position))| self.row(index, id, position))
+            .collect()
+    }
+
+    fn row(&self, index: usize, id: usize, position: usize) -> SidebarRow {
+        let node = &self.nodes[id];
+        SidebarRow {
+            index,
+            title: node.title.clone(),
+            position,
+            full_title: node.full_title.clone(),
+            full_key: node.full_key.clone(),
+            indent: node.indent,
+            generated: node.generated,
+            known_label: node.known_label,
+            expanded: node.expanded,
+            has_children: node.has_children,
+            child_span: node.child_span,
+            label_loading: node.label_loading,
+            label_bold: node.label_bold,
+            label_title: node.label_title.clone(),
+            type_label: node.type_label.clone(),
+            warning_hidden: node.warning_hidden,
+            warning_title: js(TYPE_WARNING_TEXT),
+            highlighted: node.highlighted,
+            value_hidden: node.value_element_hidden,
+            value_width: node.value_width,
+            value: node.value.to_row(),
+        }
     }
 
     pub fn title_text(&self) -> &JsString {
@@ -1833,6 +2007,11 @@ impl Sidebar {
 
     pub fn search_results_hidden(&self) -> bool {
         self.search_results_hidden
+    }
+
+    /// `.search-results`' inline `top` and `min-width` in px, unset before the first frame.
+    pub fn search_results_position(&self) -> (Option<f64>, Option<f64>) {
+        (self.search_results_top, self.search_results_min_width)
     }
 
     /// `.search-results-item` rows: `(key, hovered)`.

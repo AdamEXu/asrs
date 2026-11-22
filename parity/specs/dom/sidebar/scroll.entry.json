@@ -1,0 +1,241 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/huge.json"
+  ],
+  "fixture": {
+    "seed": 11,
+    "geometry": "real",
+    "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
+      {
+        "log": "../logs/huge.json"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 63,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          1.0
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "top"
+      },
+      {
+        "eval": "window.__oracleQuiet(() => { document.getElementsByClassName(\"side-bar\")[0].scrollTop = 400; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "scrolled-400"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "focus",
+          "kind": "FocusEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "input",
+          "props": {
+            "value": "Group15/Field1"
+          },
+          "kind": "InputEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          },
+          {
+            "kind": "dom",
+            "selector": "input.side-bar-search"
+          }
+        ],
+        "label": "search-while-scrolled"
+      },
+      {
+        "eval": "window.__oracleQuiet(() => { document.getElementsByClassName(\"side-bar\")[0].scrollTop = 20; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "scrolled-20"
+      },
+      {
+        "eval": "window.__oracleQuiet(() => { document.getElementsByClassName(\"side-bar\")[0].scrollTop = 60; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": ".search-results"
+          }
+        ],
+        "label": "scrolled-60-blurred"
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "focus",
+          "kind": "FocusEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "ArrowUp"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "input.side-bar-search",
+          "type": "keydown",
+          "init": {
+            "code": "Enter"
+          },
+          "kind": "KeyboardEvent"
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "after-search-scroll"
+      },
+      {
+        "advance": 3100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          }
+        ],
+        "label": "highlight-cleared"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/Group00/Extra",
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[...window.sidebar.getActiveFields()]"
+          },
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "placeholder",
+              "style"
+            ]
+          }
+        ],
+        "label": "rebuilt-keeps-scroll"
+      }
+    ]
+  }
+}
