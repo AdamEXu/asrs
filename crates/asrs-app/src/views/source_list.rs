@@ -22,7 +22,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Measurer, Text, TextStyle};
+use asrs_ui::text::{Measurer, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 
 use super::frame::{FrameHost, HubFrame};
@@ -270,6 +270,17 @@ fn on(
     }
 }
 
+/// `img.hand-icon`: `width: 60px` and an auto height, so the SVG scales from its 24 px
+/// intrinsic size by its aspect ratio.
+fn hand_icon() -> IconSource {
+    let svg = std::str::from_utf8(symbol("trackpadinput.svg").svg()).unwrap_or_default();
+    IconSource::Svg(
+        svg.replacen(r#" height="24px""#, "", 1)
+            .replacen(r#" width="24px""#, "", 1)
+            .into(),
+    )
+}
+
 fn symbol(name: &str) -> Symbol {
     Symbol::named(name).unwrap_or_else(|| panic!("bundled symbol {name}"))
 }
@@ -283,7 +294,10 @@ fn item_body(
     borders: (f64, f64),
     appearance: Appearance,
     dispatch: &Option<Dispatch>,
+    origin_x: f64,
+    scale: f32,
 ) -> Stateful<Div> {
+    let text_dx = |x: f64| snap_remainder((origin_x + x) as f32, scale);
     let theme = appearance.theme();
     let dark = appearance == Appearance::Dark;
     let height = if item.preview_shown == Some(true) {
@@ -362,7 +376,11 @@ fn item_body(
                 .h(px(30.0))
                 .max_w(px((width - 30.0 - 55.0).max(0.0) as f32))
                 .overflow_hidden()
-                .child(Text::new(type_name, type_name_style()).color(theme.text)),
+                .child(
+                    Text::new(type_name, type_name_style())
+                        .color(theme.text)
+                        .subpixel(text_dx(NAME_LEFT + indent), 0.0),
+                ),
             hidden,
         ));
     }
@@ -379,7 +397,11 @@ fn item_body(
             .h(px(30.0))
             .max_w(px(max as f32))
             .overflow_hidden()
-            .child(Text::new(key, key_style()).color(theme.text));
+            .child(
+                Text::new(key, key_style())
+                    .color(theme.text)
+                    .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0),
+            );
         if !r.available {
             key_box = key_box.child(
                 div()
@@ -418,7 +440,11 @@ fn item_body(
                     .pl(px(2.0))
                     .pr(px(4.0))
                     .overflow_hidden()
-                    .child(Text::new(item.preview_text.clone(), value_style()).color(VALUE_COLOR)),
+                    .child(
+                        Text::new(item.preview_text.clone(), value_style())
+                            .color(VALUE_COLOR)
+                            .subpixel(text_dx(47.0 + indent), 0.0),
+                    ),
                 hidden,
             ));
     }
@@ -460,7 +486,16 @@ pub fn drag_item(item: &ItemView, width: f64, appearance: Appearance) -> AnyElem
         .w(px(width as f32))
         .h(px(30.0))
         .overflow_hidden()
-        .child(item_body(item, 0, width, (0.0, 0.0), appearance, &None))
+        .child(item_body(
+            item,
+            0,
+            width,
+            (0.0, 0.0),
+            appearance,
+            &None,
+            0.0,
+            1.0,
+        ))
         .into_any_element()
 }
 
@@ -541,7 +576,30 @@ impl<H: FrameHost> HubFrame<H> {
                     g.scroll.get(&uuid).cloned().unwrap_or_default(),
                 )
             };
-            out.push(self.list_element(&list, &layout, scroll, root, controls, appearance, cx));
+            if root.border_x > 0.0 {
+                let scale = f64::from(geometry.0.borrow().scale);
+                let color = rgb(if appearance == Appearance::Dark {
+                    0x000000
+                } else {
+                    0xdddddd
+                });
+                for edge in border_edges(root.rect, scale) {
+                    out.push(
+                        div()
+                            .absolute()
+                            .left(px((edge - controls[0]) as f32))
+                            .top(px((root.rect.y - controls[1]) as f32))
+                            .w(px(1.0))
+                            .h(px(root.rect.height as f32))
+                            .bg(color)
+                            .into_any_element(),
+                    );
+                }
+            }
+            let scale = f64::from(geometry.0.borrow().scale);
+            out.push(self.list_element(
+                &list, &layout, scroll, root, controls, scale, appearance, cx,
+            ));
         }
         out
     }
@@ -554,6 +612,7 @@ impl<H: FrameHost> HubFrame<H> {
         scroll: ScrollHandle,
         root: ListRoot,
         controls: [f64; 4],
+        scale: f64,
         appearance: Appearance,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
@@ -562,19 +621,14 @@ impl<H: FrameHost> HubFrame<H> {
         let uuid: Rc<str> = list.uuid.as_str().into();
         let r = root.rect;
         let inner = r.width - 2.0 * root.border_x;
+        let left = r.x + root.border_x;
+        let snap = |v: f64| math::floor(v * scale + 0.5) / scale;
         let mut element = div()
             .absolute()
-            .left(px((r.x - controls[0]) as f32))
+            .left(px((r.x + root.border_x - controls[0]) as f32))
             .top(px((r.y - controls[1]) as f32))
-            .w(px(r.width as f32))
+            .w(px(inner as f32))
             .h(px(r.height as f32));
-        if root.border_x > 0.0 {
-            element = element.border_l_1().border_r_1().border_color(rgb(if dark {
-                0x000000
-            } else {
-                0xdddddd
-            }));
-        }
 
         let inset = if list.edit_button { 30.0 } else { 55.0 };
         element = element.child(
@@ -585,7 +639,11 @@ impl<H: FrameHost> HubFrame<H> {
                 .w(px((inner - 2.0 * inset).max(0.0) as f32))
                 .h(px(TITLE_HEIGHT as f32))
                 .overflow_hidden()
-                .child(Text::new(list.title.clone(), title_style()).color(theme.text)),
+                .child(
+                    Text::new(list.title.clone(), title_style())
+                        .color(theme.text)
+                        .subpixel(snap_remainder((left + inset) as f32, scale as f32), 0.0),
+                ),
         );
         let dispatch: Option<Dispatch> = {
             let frame = cx.entity().downgrade();
@@ -597,7 +655,9 @@ impl<H: FrameHost> HubFrame<H> {
         let corner = |right: f64, id: &'static str, icon: Symbol, fit: IconFit, event| {
             div()
                 .absolute()
-                .left(px((inner - right - f64::from(BUTTON) / 2.0) as f32))
+                .left(px(
+                    (snap(left + inner - right - f64::from(BUTTON) / 2.0) - left) as f32,
+                ))
                 .top(px(2.5))
                 .child(
                     IconButton::new((id, uuid_hash(&uuid)), icon)
@@ -666,33 +726,41 @@ impl<H: FrameHost> HubFrame<H> {
                 layout.item_border_top(index),
                 if index + 1 == count { 1.0 } else { 0.0 },
             );
-            let row = item_body(item, index, inner, borders, appearance, &dispatch).on_mouse_down(
-                MouseButton::Right,
-                {
-                    let uuid = uuid.clone();
-                    cx.listener(move |frame, e: &MouseDownEvent, _, cx| {
-                        let (x, y) = client_point(e.position);
-                        frame.list_input(&uuid, ListPointer::ContextMenu { index, x, y }, cx)
-                    })
-                },
-            );
+            let row = item_body(
+                item,
+                index,
+                inner,
+                borders,
+                appearance,
+                &dispatch,
+                left,
+                scale as f32,
+            )
+            .on_mouse_down(MouseButton::Right, {
+                let uuid = uuid.clone();
+                cx.listener(move |frame, e: &MouseDownEvent, _, cx| {
+                    let (x, y) = client_point(e.position);
+                    frame.list_input(&uuid, ListPointer::ContextMenu { index, x, y }, cx)
+                })
+            });
             items = items.child(row);
         }
         element = element.child(items);
 
         if list.hand_icon {
-            let hand = div()
-                .absolute()
-                .left(px((inner / 2.0 - 30.0) as f32))
-                .top(px((r.height / 2.0 + 15.0 - 30.0) as f32))
-                .w(px(60.0))
-                .h(px(60.0))
-                .opacity(0.15)
-                .child(Icon::new(
-                    symbol("trackpadinput.svg"),
-                    if dark { chains::INVERT } else { "" },
-                ));
-            element = element.child(hand);
+            element = element.child(
+                div()
+                    .absolute()
+                    .left(px((snap(left + inner / 2.0 - 30.0) - left) as f32))
+                    .top(px((snap(r.y + r.height / 2.0 + 15.0 - 30.0) - r.y) as f32))
+                    .w(px(60.0))
+                    .h(px(60.0))
+                    .opacity(0.15)
+                    .child(
+                        Icon::new(hand_icon(), if dark { chains::INVERT } else { "" })
+                            .fit(IconFit::Natural),
+                    ),
+            );
         }
         let highlight = list.highlight;
         if !highlight.hidden
@@ -711,6 +779,13 @@ impl<H: FrameHost> HubFrame<H> {
         }
         element.into_any_element()
     }
+}
+
+/// Where Blink paints a 1 px left and right border of the box `r`: it snaps the box's edges to
+/// device pixels, where GPUI would snap its origin and width apart.
+fn border_edges(r: Rect, scale: f64) -> [f64; 2] {
+    let snap = |v: f64| math::floor(v * scale + 0.5) / scale;
+    [snap(r.x), snap(r.x + r.width) - 1.0]
 }
 
 fn client_point(position: Point<Pixels>) -> (f64, f64) {
