@@ -897,3 +897,33 @@ The recorder eval hooks every Field2d tab:
 Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
 workers and historical or live sources (logs are built with `log` steps), drag sessions other
 than through dispatched events, the documentation iframe's content, and 3D rendering.
+
+## Hub sessions
+
+`hubSession` (`src/hubSession.ts`, page bundle `src/hub/page.ts`) runs a fixture against the
+real hub the way `dom` does: hub.html in jsdom, `src/dom/env.ts` installed first (fake clock,
+timers, frames, seeded `Math.random`, layout table), then `src/hub/hub.ts`. What the DOM
+harness leaves out, it adds:
+
+- Workers. The page's `Worker` is a thin class over an `OracleWorker` on a real thread, with the
+  worker realm's `Date` pinned to 1,000,000,000,000 as in `historicalSession`. Messages are
+  copied into the page realm. After every page task, worker messages are handed to the page one
+  at a time from the oldest worker that has one or is still busy, until no worker is busy;
+  worker work takes no page time. Decode workers and `exportWorker.js` both run this way.
+- Main's `historical-start`: the file named in the fixture (relative to it, and listed in
+  `inputs` under a spec) is read and `historical-data` arrives as a zero-delay page timeout.
+- Live sources and the NT4 publisher are not connected; fixtures only reach their refusals.
+
+Steps: `{"main", "data"}` delivers a main message, `{"advance": ms}` and `{"frames": n}` run
+timers and frames, `{"capture": [kind, ...], "label"}` records the page. Records, in order:
+
+| Record | Written |
+|---|---|
+| `{"main", "data"}` | every `sendMainMessage` except `ignoreMain` (default `save-state`, `save-type-memory`, `update-touch-bar-slider`); `historical-start` keeps `uuid` and `path` |
+| `{"worker", "script"}`, `{"post", "type", "files" \| "key"}`, `{"terminate"}` | worker creation, each posted request, `terminate()` |
+| `{"console": "warn", "text"}` | the `set-assets` load-failure warning |
+| `{"exception": where}` | a throw out of a page task |
+| `{"capture": label}` then `title`, `loading`, `selection`, `log`, `state`, `window` | the title element's text, the loading-glow properties, the selection, log keys with the timestamp range and loading fields, `HubState`, and the `fancy-*` body classes with the update and feedback button properties |
+
+`crates/asrs-hub/tests/hub_lifecycle.rs` replays `parity/specs/hub/lifecycle-*.entry.json`
+through `asrs_hub::hub::HubModel` with the same scheduling and compares every record.

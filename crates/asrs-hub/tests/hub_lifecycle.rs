@@ -148,6 +148,7 @@ struct Host {
     slots: Vec<Slot>,
     emitted: Vec<Emit>,
     unmodeled: Vec<String>,
+    ignored: Vec<String>,
 }
 
 impl Host {
@@ -163,9 +164,9 @@ impl Host {
     }
 
     fn decode_slot(&mut self, source: &str) -> Option<usize> {
-        self.slots.iter().rposition(
-            |s| matches!(&s.work, Work::Decode { source: owner, .. } if owner == source),
-        )
+        self.slots
+            .iter()
+            .rposition(|s| matches!(&s.work, Work::Decode { source: owner, .. } if owner == source))
     }
 }
 
@@ -174,7 +175,12 @@ fn number(n: f64) -> Value {
 }
 
 fn export_options(options: &JsValue) -> Option<ExportOptions> {
-    let text = |key: &str| options.get(key).and_then(JsValue::as_str).map(|s| s.to_string_lossy());
+    let text = |key: &str| {
+        options
+            .get(key)
+            .and_then(JsValue::as_str)
+            .map(|s| s.to_string_lossy())
+    };
     Some(ExportOptions {
         format: match text("format")?.as_str() {
             "csv-table" => Format::CsvTable,
@@ -202,7 +208,7 @@ impl HubHost for Host {
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
         let name = message.name.name();
-        if !IGNORED_MAIN.contains(&name) {
+        if !self.ignored.iter().any(|i| i == name) {
             self.emit(vec![("main", cve_str(name)), ("data", cve(&message.data))]);
         }
     }
@@ -339,7 +345,10 @@ impl HubHost for Host {
             ("type", cve_str("request")),
         ]);
         let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
-        let output = match (Log::from_serialized(log, &mut realm), export_options(&options)) {
+        let output = match (
+            Log::from_serialized(log, &mut realm),
+            export_options(&options),
+        ) {
             (Ok(log), Some(options)) => export(&log, &options).ok(),
             _ => None,
         };
@@ -435,8 +444,7 @@ impl Runner {
                     if !matches!(reply, ExportReply::Progress(_)) {
                         replies.clear();
                         slot.terminated = true;
-                        self.host
-                            .emit(vec![("terminate", number(index as f64))]);
+                        self.host.emit(vec![("terminate", number(index as f64))]);
                     }
                     self.hub.export_reply(id, reply, &mut self.host);
                 }
@@ -496,7 +504,8 @@ impl Runner {
     }
 
     fn main(&mut self, name: &str, data: JsValue) -> Result<(), String> {
-        let name = MainToHub::from_name(name).ok_or_else(|| err(format!("unknown message {name}")))?;
+        let name =
+            MainToHub::from_name(name).ok_or_else(|| err(format!("unknown message {name}")))?;
         self.hub
             .handle_main_message(&NamedMessage::new(name, data), &mut self.host);
         self.settle()
@@ -579,7 +588,9 @@ impl Runner {
                     Value::object([
                         (
                             "classes",
-                            Value::Array(self.hub.body_classes().iter().map(|c| cve_str(c)).collect()),
+                            Value::Array(
+                                self.hub.body_classes().iter().map(|c| cve_str(c)).collect(),
+                            ),
                         ),
                         ("updateButton", cve_str(flag(self.hub.update_button()))),
                         ("feedbackButton", cve_str(flag(self.hub.feedback_button()))),
@@ -600,8 +611,17 @@ fn to_js(json: &Json) -> Result<JsValue, String> {
 fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
     let text = std::fs::read_to_string(spec).map_err(|e| e.to_string())?;
     let spec_json = json::parse(&text).map_err(|e| e.to_string())?;
-    let fixture = spec_json.get("fixture").ok_or_else(|| err("spec has no fixture"))?;
-    for key in ["boot", "preferences", "assets", "version", "window", "startTime", "ignoreMain"] {
+    let fixture = spec_json
+        .get("fixture")
+        .ok_or_else(|| err("spec has no fixture"))?;
+    for key in [
+        "boot",
+        "preferences",
+        "assets",
+        "version",
+        "window",
+        "startTime",
+    ] {
         if fixture.get(key).is_some() {
             return Err(format!("fixture key {key} is not modeled"));
         }
@@ -618,6 +638,14 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         slots: Vec::new(),
         emitted: Vec::new(),
         unmodeled: Vec::new(),
+        ignored: match fixture.get("ignoreMain").and_then(Json::as_array) {
+            Some(names) => names
+                .iter()
+                .map(|n| n.as_str().map(|s| s.to_string_lossy()))
+                .collect::<Option<_>>()
+                .ok_or_else(|| err("ignoreMain lists names"))?,
+            None => IGNORED_MAIN.map(str::to_owned).into(),
+        },
     };
     let mut rng = DomRng(seed);
     // One `Math.random()` happens while hub.ts's imports evaluate, before the hub draws any
@@ -631,7 +659,10 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         ("platform", JsValue::string("darwin")),
         ("platformRelease", JsValue::string("25.0.0")),
         ("platformArch", JsValue::string("arm64")),
-        ("appVersion", JsValue::string(asrs_model::build_constants::LITE_VERSION)),
+        (
+            "appVersion",
+            JsValue::string(asrs_model::build_constants::LITE_VERSION),
+        ),
     ]);
     let boot: Vec<(&str, JsValue)> = vec![
         ("set-assets", JsValue::Null),
@@ -641,7 +672,10 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         ("show-update-button", JsValue::Bool(false)),
         ("show-feedback-button", JsValue::Bool(false)),
         ("show-when-ready", JsValue::Undefined),
-        ("set-preferences", asrs_model::preferences::Preferences::default().to_js()),
+        (
+            "set-preferences",
+            asrs_model::preferences::Preferences::default().to_js(),
+        ),
         ("set-active-satellites", JsValue::Array(Vec::new())),
     ];
     for (name, data) in boot {
@@ -670,7 +704,9 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
             };
             runner.host.emit(vec![("capture", label)]);
             for kind in kinds {
-                let kind = kind.as_str().ok_or_else(|| err("capture kinds are strings"))?;
+                let kind = kind
+                    .as_str()
+                    .ok_or_else(|| err("capture kinds are strings"))?;
                 runner.capture(&kind.to_string_lossy())?;
             }
         } else {
@@ -691,12 +727,17 @@ fn record_keys(record: &Record) -> Vec<String> {
 fn compare(spec: &Path, id: &str) -> Result<usize, String> {
     let (emitted, unmodeled) = replay(spec)?;
     if !unmodeled.is_empty() {
-        return Err(format!("the fixture reaches unmodeled host work: {unmodeled:?}"));
+        return Err(format!(
+            "the fixture reaches unmodeled host work: {unmodeled:?}"
+        ));
     }
     let records = vectors::load(id)?;
     for (i, record) in records.iter().enumerate() {
         let emit = emitted.get(i).ok_or_else(|| {
-            format!("line {}: the port emitted nothing for {}", record.line, record.text)
+            format!(
+                "line {}: the port emitted nothing for {}",
+                record.line, record.text
+            )
         })?;
         let keys: Vec<String> = emit.0.iter().map(|(k, _)| (*k).to_owned()).collect();
         if keys != record_keys(record) {
@@ -752,6 +793,9 @@ fn hub_lifecycle_sessions() {
             Err(e) => failures.push(format!("hub/{name}: {e}")),
         }
     }
-    eprintln!("hub lifecycle: {} sessions, {compared} records compared", specs.len());
+    eprintln!(
+        "hub lifecycle: {} sessions, {compared} records compared",
+        specs.len()
+    );
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }

@@ -143,8 +143,10 @@ pub trait HubHost {
     fn console(&mut self, warn: bool, text: String);
     /// A throw out of a task the page goes on from, as the browser reports it.
     fn exception(&mut self, task: &'static str, error: String);
-    /// Stops the live source, if any, and starts `kind` connected to `address`. Its status and
-    /// output come back through [`HubModel::live_status`] and [`HubModel::live_output`].
+    /// Starts `kind` connected to `address` in place of the stopped previous source. Its
+    /// status and output come back through [`HubModel::live_status`] and
+    /// [`HubModel::live_output`]; the host also sets `window.tuner` from it with
+    /// [`HubModel::set_tuner`].
     fn start_live_source(&mut self, kind: LiveSourceKind, address: &JsString);
     fn stop_live_source(&mut self);
     fn live_data(&mut self, data: &JsValue);
@@ -446,6 +448,8 @@ pub struct HubModel {
     live_active: bool,
     live_connected: bool,
     live_address: JsString,
+    /// Whether `liveSource` is set; upstream never clears it, so a stopped source still gets
+    /// `live-data` and `stop()` calls.
     has_live_source: bool,
     tuner: Option<Box<dyn Tuner>>,
     next_mock: u64,
@@ -716,7 +720,10 @@ impl HubModel {
         self.toggle_class("fancy-title-bar-lite", is("lite"));
         if is("darwin") {
             self.toggle_class("fancy-side-bar-mac", true);
-            self.toggle_class("fancy-side-bar-mac-27", release_number(split.first()) >= 27.0);
+            self.toggle_class(
+                "fancy-side-bar-mac-27",
+                release_number(split.first()) >= 27.0,
+            );
         } else {
             self.toggle_class("fancy-side-bar-mac", false);
         }
@@ -733,7 +740,7 @@ impl HubModel {
         host: &mut dyn HubHost,
     ) {
         if let Err(e) = result {
-            host.exception(task, e.to_string());
+            host.exception(task, format!("{e}"));
         }
     }
 
@@ -990,8 +997,9 @@ impl HubModel {
             self.tabs_refresh(host);
         }
 
-        host.stop_live_source();
-        self.has_live_source = false;
+        if self.has_live_source {
+            host.stop_live_source();
+        }
         self.tuner = None;
         self.live_active = false;
         self.live_connected = false;
@@ -1095,7 +1103,7 @@ impl HubModel {
                     host.send_main_message(update.to_message());
                 }
                 match out.error {
-                    Some(e) => host.exception("requestAnimationFrame", e.to_string()),
+                    Some(e) => host.exception("requestAnimationFrame", format!("{e}")),
                     None => host.request_animation_frame(HubFrame::Tabs),
                 }
             }
@@ -1275,8 +1283,9 @@ impl HubModel {
     /// `startLive(sourceType)`.
     fn start_live(&mut self, source_type: &JsValue, host: &mut dyn HubHost) {
         self.stop_historical(host);
-        host.stop_live_source();
-        self.has_live_source = false;
+        if self.has_live_source {
+            host.stop_live_source();
+        }
         host.stop_publisher();
         self.live_active = true;
         self.set_loading(None);
@@ -1452,7 +1461,7 @@ impl HubModel {
     ) {
         let result = self.dispatch(message, host);
         if let Err(e) = result {
-            host.exception("unhandledRejection", e.to_string());
+            host.exception("unhandledRejection", format!("{e}"));
         }
         self.microtasks(host);
         self.flush(host);
