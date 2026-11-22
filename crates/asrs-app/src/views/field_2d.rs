@@ -639,7 +639,8 @@ impl<H: FrameHost> HubFrame<H> {
                 text::measure(cx, &select_style, &label, scale).0
             })
             .fold(0.0, math::max2);
-        let select_width = math::ceil(options_width) + SELECT_CHROME;
+        let zoom = f64::from(scale);
+        let select_width = math::ceil(options_width * zoom) / zoom + SELECT_CHROME;
         let source_width =
             source_shown.then(|| text::measure(cx, &source_style(), "Source", scale).0);
         let layout = SettingsLayout::new(controls, select_width, source_width);
