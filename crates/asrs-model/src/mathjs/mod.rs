@@ -4,16 +4,16 @@
 //! the named functions in [`FUNCTIONS`] and the constants in [`CONSTANTS`]. A Complex is
 //! produced only as a whole result. Matrices, ranges, objects, accessors, indexes, units and
 //! BigNumber, Fraction or Complex arguments are not ported: evaluating one returns a
-//! [`MathError`] named [`UNSUPPORTED`]. Other mathjs names are not known, so they are undefined
-//! symbols. Either way the dialog shows its failure alert; the deferred part is issue #246.
+//! [`MathError`] named [`UNSUPPORTED`], and so does calling anything but a symbol. Other mathjs
+//! names, units among them, are not known, so they are undefined symbols. Either way the dialog
+//! shows its failure alert; the deferred part is issue #246.
 
 mod eval;
 mod fns;
 pub mod node;
 mod parse;
 mod sigs;
-
-use std::rc::Rc;
+mod stack;
 
 use asrs_js::string::JsString;
 
@@ -85,8 +85,9 @@ pub struct MathError {
 pub struct Function {
     /// The JS function's `name`.
     pub name: JsString,
-    /// The body when a `FunctionAssignmentNode` created it.
-    pub(crate) def: Option<Rc<eval::FunctionDef>>,
+    /// The body when a `FunctionAssignmentNode` created it: an index into the evaluation's
+    /// function table, which lives as long as that `evaluate` call.
+    pub(crate) def: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -133,12 +134,12 @@ pub struct ParamType {
 
 /// `parse(expr)`.
 pub fn parse(expr: &JsString) -> Result<Node, MathError> {
-    parse::parse(expr)
+    stack::run(|| parse::parse(expr))
 }
 
 /// `evaluate(expr)` with a fresh scope.
 pub fn evaluate(expr: &JsString) -> Result<Value, MathError> {
-    eval::evaluate(expr)
+    stack::run(|| eval::evaluate(expr))
 }
 
 /// `math[name](...args)` for a name in [`OPERATOR_FUNCTIONS`], [`FUNCTIONS`] or

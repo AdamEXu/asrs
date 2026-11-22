@@ -1,11 +1,11 @@
 use asrs_js::json::parse_units;
-use asrs_js::math::pow;
-use asrs_js::number::{parse_int, to_number};
 use asrs_js::string::JsString;
 use asrs_js::value::JsObject;
 
 use super::MathError;
+use super::fns::number_from_string;
 use super::node::{Constant, Node, NodeKind};
+use super::stack;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TokenType {
@@ -478,7 +478,8 @@ fn parse_block(s: &mut State<'_>) -> Result<Node, MathError> {
 }
 
 fn parse_assignment(s: &mut State<'_>) -> Result<Node, MathError> {
-    let node = parse_conditional(s)?;
+    stack::check()?;
+    let mut node = parse_conditional(s)?;
     if tok(s, "=") {
         if is_symbol(&node) {
             let NodeKind::Symbol { name } = &node.kind else {
@@ -501,7 +502,9 @@ fn parse_assignment(s: &mut State<'_>) -> Result<Node, MathError> {
         } else if is_accessor(&node) {
             get_token_skip_newline(s)?;
             let value = parse_assignment(s)?;
-            let NodeKind::Accessor { object, index } = node.kind else {
+            let NodeKind::Accessor { object, index } =
+                std::mem::replace(&mut node.kind, NodeKind::Constant(Constant::Undefined))
+            else {
                 unreachable!()
             };
             // The AssignmentNode constructor validates object and the reserved name "end".
@@ -881,6 +884,7 @@ fn parse_percentage(s: &mut State<'_>) -> Result<Node, MathError> {
 }
 
 fn parse_unary(s: &mut State<'_>) -> Result<Node, MathError> {
+    stack::check()?;
     if let Some(&(name, fn_name)) = [
         ("-", "unaryMinus"),
         ("+", "unaryPlus"),
@@ -1193,7 +1197,7 @@ fn parse_number(s: &mut State<'_>) -> Result<Node, MathError> {
     if s.token_type == TokenType::Number {
         let number_str = s.token.clone();
         get_token(s)?;
-        return Ok(constant(Constant::Number(numeric(&number_str)?)));
+        return Ok(constant(Constant::Number(number_from_string(&number_str)?)));
     }
     parse_parentheses(s)
 }
@@ -1222,91 +1226,4 @@ fn parse_end(s: &mut State<'_>) -> Result<Node, MathError> {
     } else {
         Err(syntax_error(s, "Value expected"))
     }
-}
-
-/// mathjs's `numeric(str, 'number')` for a NUMBER token: the `number` function's
-/// `string` signature, including radix literals with fraction and the `i<size>` suffix.
-fn numeric(token: &[u16]) -> Result<f64, MathError> {
-    if token == units("NaN") {
-        return Ok(f64::NAN);
-    }
-    if let Some((radix, int_part, frac_part)) = non_decimal_parts(token) {
-        let n = parse_int(int_part, f64::from(radix));
-        let mut f = 0.0;
-        for (i, &d) in frac_part.iter().enumerate() {
-            let digit_value = parse_int(&[d], f64::from(radix));
-            f += digit_value / pow(f64::from(radix), (i + 1) as f64);
-        }
-        let result = n + f;
-        if result.is_nan() {
-            return Err(no_valid_number(token));
-        }
-        return Ok(result);
-    }
-    let stripped;
-    let mut x: &[u16] = token;
-    let mut size: Option<f64> = None;
-    if let Some((body, digits)) = word_size_suffix(token) {
-        size = Some(to_number(digits));
-        stripped = body.to_vec();
-        x = &stripped;
-    }
-    let mut num = to_number(x);
-    if num.is_nan() {
-        return Err(no_valid_number(x));
-    }
-    if let Some(size) = size {
-        if num > pow(2.0, size) - 1.0 {
-            let mut m = units("String \"");
-            m.extend_from_slice(x);
-            m.extend(units("\" is out of range"));
-            return Err(err("SyntaxError", JsString::from_units(m)));
-        }
-        if num >= pow(2.0, size - 1.0) {
-            num -= pow(2.0, size);
-        }
-    }
-    Ok(num)
-}
-
-fn no_valid_number(x: &[u16]) -> MathError {
-    let mut m = units("String \"");
-    m.extend_from_slice(x);
-    m.extend(units("\" is no valid number"));
-    err("SyntaxError", JsString::from_units(m))
-}
-
-/// `input.match(/(0[box])([0-9a-fA-F]*)\.([0-9a-fA-F]*)/)`: for the token shapes the
-/// tokenizer emits this is equivalent to matching at position 0.
-fn non_decimal_parts(t: &[u16]) -> Option<(u32, &[u16], &[u16])> {
-    if t.len() < 3 || t[0] != 0x30 {
-        return None;
-    }
-    let radix = match t[1] {
-        0x62 => 2,
-        0x6f => 8,
-        0x78 => 16,
-        _ => return None,
-    };
-    let dot = t.iter().position(|&c| c == 0x2e)?;
-    if !t[2..dot].iter().all(|&c| is_hex_digit(Some(c)))
-        || !t[dot + 1..].iter().all(|&c| is_hex_digit(Some(c)))
-    {
-        return None;
-    }
-    Some((radix, &t[2..dot], &t[dot + 1..]))
-}
-
-/// `x.match(/(0[box][0-9a-fA-F]*)i([0-9]*)/)`: radix literal plus `i<digits>` suffix.
-fn word_size_suffix(t: &[u16]) -> Option<(&[u16], &[u16])> {
-    if t.len() < 3 || t[0] != 0x30 || !matches!(t[1], 0x62 | 0x6f | 0x78) {
-        return None;
-    }
-    let i = t.iter().position(|&c| c == 0x69)?;
-    if !t[2..i].iter().all(|&c| is_hex_digit(Some(c)))
-        || !t[i + 1..].iter().all(|&c| is_digit(Some(c)))
-    {
-        return None;
-    }
-    Some((&t[..i], &t[i + 1..]))
 }

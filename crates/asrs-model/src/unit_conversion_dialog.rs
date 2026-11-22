@@ -5,9 +5,8 @@
 //! `updateRecents`) is `asrs_app::menus::context::Prompt::UnitConversion` and
 //! `asrs_services::recent_units`.
 
-use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::{NamedZone, date_to_string};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::units::UNIT_GROUPS;
 
@@ -148,16 +147,16 @@ impl UnitConversionDialog {
         if preset_type.is_null() {
             dialog.unit_type.set_value(&none);
         } else {
-            dialog.unit_type.set_value(&to_string(&preset_type));
+            dialog.unit_type.set_value(&ops::to_string(&preset_type));
         }
         if let Err(e) = dialog.update_unit_options() {
             events.push(DialogEvent::Error(e));
             return (dialog, events);
         }
         if !preset_type.is_null() {
-            let from = to_string(&get_property(preset, "from"));
+            let from = ops::to_string(&get_property(preset, "from"));
             dialog.from_unit.set_value(&from);
-            let to = to_string(&get_property(preset, "to"));
+            let to = ops::to_string(&get_property(preset, "to"));
             dialog.to_unit.set_value(&to);
         }
         match to_string_method(&get_property(preset, "factor")) {
@@ -305,12 +304,10 @@ fn eq_str(s: &JsString, t: &str) -> bool {
     s.units().iter().copied().eq(t.encode_utf16())
 }
 
-/// `preset[key]`: `undefined` for primitives and absent properties.
+/// `preset[key]` for a preset from the hub state's JSON: `undefined` unless an object has it.
 fn get_property(preset: &JsValue, key: &str) -> JsValue {
     match preset {
         JsValue::Object(object) => object.get(key).cloned().unwrap_or(JsValue::Undefined),
-        // ExtData is a `{type, data}` object for property reads.
-        JsValue::ExtData(kind, _) if key == "type" => JsValue::Number(f64::from(*kind)),
         _ => JsValue::Undefined,
     }
 }
@@ -324,43 +321,7 @@ fn to_string_method(value: &JsValue) -> Result<JsString, JsError> {
         JsValue::Undefined => Err(JsError::type_error(
             "Cannot read properties of undefined (reading 'toString')",
         )),
-        _ => Ok(to_string(value)),
-    }
-}
-
-/// ECMAScript `ToString`: array elements and typed array elements join with `,`.
-fn to_string(value: &JsValue) -> JsString {
-    match value {
-        JsValue::Undefined => JsString::from("undefined"),
-        JsValue::Null => JsString::from("null"),
-        JsValue::Bool(b) => JsString::from(if *b { "true" } else { "false" }),
-        JsValue::Number(x) => JsString::from(number::to_string(*x)),
-        JsValue::String(s) => s.clone(),
-        JsValue::Array(items) => {
-            let mut out = JsString::new();
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(&JsString::from(","));
-                }
-                if !matches!(item, JsValue::Null | JsValue::Undefined) {
-                    out.push_str(&to_string(item));
-                }
-            }
-            out
-        }
-        JsValue::Bytes(bytes) => {
-            let mut out = JsString::new();
-            for (i, byte) in bytes.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(&JsString::from(","));
-                }
-                out.push_str(&JsString::from(number::to_string(f64::from(*byte))));
-            }
-            out
-        }
-        JsValue::BigInt(b) => JsString::from(format!("{b}")),
-        JsValue::Date(t) => JsString::from(date_to_string(*t, &NamedZone::system())),
-        JsValue::Object(_) | JsValue::ExtData(..) => JsString::from("[object Object]"),
+        _ => Ok(ops::to_string(value)),
     }
 }
 
