@@ -30,6 +30,7 @@ pub struct FileOpen<'a> {
 }
 
 /// What main did for one request.
+#[derive(Default)]
 pub struct Outcome {
     /// The `historical-data` reply. `None` where upstream never answers: a path holding a NUL
     /// makes node's `fs` throw inside the async handler, and main swallows the rejection.
@@ -49,6 +50,11 @@ fn join(dir: &str, name: &str) -> String {
 /// `path.join(app.getPath("temp"), "akit-log-path.txt")`.
 pub fn akit_path_output(temp_dir: &str) -> String {
     join(temp_dir, "akit-log-path.txt")
+}
+
+/// `p.slice(0, p.length - 5) + "dsevents"` for a path ending in `.dslog`.
+fn dsevents_path(dslog: &str) -> String {
+    format!("{}dsevents", &dslog[..dslog.len() - "dslog".len()])
 }
 
 fn has_nul(path: &JsString) -> bool {
@@ -88,8 +94,7 @@ impl FileOpen<'_> {
     ) -> Outcome {
         let answered = |reply| Outcome {
             reply: Some(reply),
-            recent_document: None,
-            uncaught_error: false,
+            ..Outcome::default()
         };
         if ["/", "\\", ".."]
             .iter()
@@ -101,11 +106,7 @@ impl FileOpen<'_> {
         name.push_str(extension);
         let temp_path = JsString::from(join(self.temp_dir, &name.to_string_lossy()).as_str());
         if has_nul(&temp_path) {
-            return Outcome {
-                reply: None,
-                recent_document: None,
-                uncaught_error: false,
-            };
+            return Outcome::default();
         }
         match self.fs.write(&temp_path.to_string_lossy(), data) {
             Ok(()) => self.start(uuid, &temp_path, true),
@@ -115,11 +116,7 @@ impl FileOpen<'_> {
 
     fn start(&self, uuid: &str, path: &JsString, delete_after_read: bool) -> Outcome {
         let fs_path = path.to_string_lossy();
-        let mut outcome = Outcome {
-            reply: None,
-            recent_document: None,
-            uncaught_error: false,
-        };
+        let mut outcome = Outcome::default();
         if !delete_after_read {
             outcome.recent_document = Some(path.clone());
             let _ = self
@@ -133,8 +130,7 @@ impl FileOpen<'_> {
             if has_nul(path) {
                 return outcome;
             }
-            let events = format!("{}dsevents", &fs_path[..fs_path.len() - "dslog".len()]);
-            vec![read(&fs_path), read(&events)]
+            vec![read(&fs_path), read(&dsevents_path(&fs_path))]
         } else if ends_with(path, ".hoot") {
             error = Some(HOOT_UNSUPPORTED);
             vec![None]
@@ -167,7 +163,7 @@ impl FileOpen<'_> {
         if delete_after_read {
             let mut remove = vec![fs_path.clone()];
             if ends_with(path, ".dslog") {
-                let events = format!("{}dsevents", &fs_path[..fs_path.len() - "dslog".len()]);
+                let events = dsevents_path(&fs_path);
                 if self.fs.exists(&events) {
                     remove.push(events);
                 }
