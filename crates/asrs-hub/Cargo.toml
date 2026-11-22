@@ -17,7 +17,6 @@ indexmap = "=2.14.2"
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
-asrs-services = { path = "../asrs-services" }
 
 [lints]
 workspace = true

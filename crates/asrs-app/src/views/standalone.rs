@@ -197,6 +197,15 @@ impl StandaloneHub {
         standalone.host.outbox.clear();
         standalone
     }
+
+    /// Delivers one message from main, such as a `set-assets` reload, and returns what the hub
+    /// sent main in reply.
+    pub fn main_message(&mut self, name: MainToHub, data: JsValue) -> Vec<NamedMessage<HubToMain>> {
+        self.geometry.sync(&self.hub);
+        self.hub
+            .handle_main_message(&NamedMessage::new(name, data), &mut self.host);
+        std::mem::take(&mut self.host.outbox)
+    }
 }
 
 impl FrameHost for StandaloneHub {
