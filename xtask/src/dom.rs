@@ -13,7 +13,8 @@ use crate::vectors::{self, Backend, DOM_ENTRY};
 pub(crate) const DOM_USAGE: &str = "usage: cargo xtask oracle dom [--backend jsdom|blink] <spec or fixture file>
 
 Runs one DOM fixture and prints its records. The backend defaults to the spec's \"backend\"
-(Blink when it names none); a bare fixture file runs on Blink.";
+(Blink when it names none); a bare fixture file runs on Blink. Like `oracle run`, it uses the
+built harness: run `cargo xtask oracle build` after editing oracle/src.";
 
 pub(crate) const AB_USAGE: &str = "usage: cargo xtask oracle dom-ab [<spec id prefix>...] [--jobs N] [--out <file>]
 
@@ -38,7 +39,6 @@ pub(crate) fn run(paths: &Paths, args: &[String]) -> Result {
         Some(backend) => backend,
         None => spec_backend(Path::new(file))?.unwrap_or(Backend::Blink),
     };
-    oracle::build_harness(paths)?;
     let text = run_backend(paths, backend, Path::new(file))?;
     print!("{text}");
     Ok(())

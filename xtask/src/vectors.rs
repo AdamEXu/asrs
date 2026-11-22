@@ -75,6 +75,9 @@ impl Backend {
 
 pub(crate) const DOM_ENTRY: &str = "dom";
 const DOM_BLINK_ENTRY: &str = "domBlink";
+/// What `domBlink` loads at runtime: the `dom` entry's inputs cover the page bundle, and
+/// `domBlinkMain` is the Electron main process.
+const DOM_BLINK_RUNTIME: &[&str] = &[DOM_ENTRY, "domBlinkMain"];
 
 struct Spec {
     id: String,
@@ -567,6 +570,16 @@ fn generator_hash(entry_hashes: &[(String, String)], vector: &Vector<'_>) -> Res
             )
         })?;
     let mut parts = vec![entry_hash.clone()];
+    if entry == DOM_BLINK_ENTRY {
+        for runtime in DOM_BLINK_RUNTIME {
+            let hash = entry_hashes
+                .iter()
+                .find(|(name, _)| name == runtime)
+                .map(|(_, hash)| hash.clone())
+                .ok_or_else(|| format!("{}: no harness entry {runtime:?}", vector.id))?;
+            parts.push(hash);
+        }
+    }
     let mut spec_text = String::new();
     for input in vector.spec.inputs() {
         let text = oracle::read(input)?;

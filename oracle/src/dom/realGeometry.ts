@@ -1,9 +1,6 @@
 import { toTree } from "../cve1";
 
-// `real` geometry: Blink lays the page out, and each geometry read upstream makes is written as
-// a `read` record (and each scroll position write as a `write` record) at the moment it
-// happens, so a port's headless model can be answered in the same order. Harness code reads
-// inside `quiet` so its own reads are not recorded.
+// `"geometry": "real"`; oracle/README.md, "Blink backend", documents the records.
 
 let quietDepth = 0;
 
@@ -16,8 +13,6 @@ export function quiet<T>(fn: () => T): T {
   }
 }
 
-/** `tag.class.class:i` for each element from `<body>` down, `i` being its index among its
- * parent's element children. */
 export function elementPath(el: Element): string {
   const parts: string[] = [];
   for (let e: Element | null = el; e !== null && e !== document.documentElement; e = e.parentElement) {

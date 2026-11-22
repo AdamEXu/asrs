@@ -1,3 +1,4 @@
+import "./blinkBoot";
 import { advance, canvasId, clock, contexts, fixture, framePeriod, setExceptionHandler, settle, windowMessageListeners } from "./env";
 import "@upstream/hub/hub";
 import { DEFAULT_PREFS, mergePreferences } from "@upstream/shared/Preferences";

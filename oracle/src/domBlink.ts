@@ -9,7 +9,9 @@ import { readFixture } from "./dom/fixtureFile";
 // domBlink [<spec or fixture file>]
 //   The `dom` harness with Blink as the DOM: the same fixture and page bundle (domPage.js) run in
 //   an offscreen Electron BrowserWindow at the fixture's window size and device scale, driven by
-//   domBlinkMain.mjs in a real Electron main process. Prints the same records as `dom`. See
+//   domBlinkMain.mjs in a real Electron main process. Prints the same records as `dom`. Neither
+//   runtime bundle is an input of this entry, so `oracle gen` adds the inputs of `dom` (which
+//   cover domPage.js) and `domBlinkMain` to a Blink vector's generator hash. See
 //   oracle/README.md, "Blink backend".
 
 const { fixture } = readFixture("domBlink", process.argv[2]);
@@ -36,7 +38,6 @@ try {
       fixture,
       upstream: UPSTREAM_DIR,
       page: path.join(here, "domPage.js"),
-      boot: path.join(here, "domBlinkBoot.js"),
       zone: process.env.ASRS_ORACLE_ZONE,
       userData: path.join(scratch, "userData")
     })

@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Electron main process for `domBlink`. Loads upstream's www/hub.html in an offscreen window and
-// serves the harness in place of bundles/hub.js: the request's fixture, domBlinkBoot.js, then
-// domPage.js. Stylesheets load from upstream. Every other request (images, <object> icons,
+// Electron main process for `domBlink` (not run under ELECTRON_RUN_AS_NODE). Loads upstream's
+// www/hub.html in an offscreen window and serves the harness in place of bundles/hub.js: the
+// request's fixture, then domPage.js, whose first module (dom/blinkBoot.ts) sets up Blink. Stylesheets load from upstream. Every other request (images, <object> icons,
 // iframes, workers, fetches, http and https) gets a response whose body never arrives: a request
 // left unanswered fails after Electron's 30 s timeout, and one answered at once fails or loads
 // at a time no step controls. Page load therefore never completes, so the page is driven over
@@ -29,10 +29,9 @@ const hubHtml = path.join(www, "hub.html");
 const hubJs = real(path.join(request.upstream, "bundles", "hub.js"));
 
 const script =
+  `window.__oracleBackend = "blink";\n` +
   `window.__oracleFixture = JSON.parse(${JSON.stringify(JSON.stringify(fixture))});\n` +
   `window.__oracleZone = ${JSON.stringify(request.zone ?? "")};\n` +
-  fs.readFileSync(request.boot, "utf8") +
-  "\n" +
   fs.readFileSync(request.page, "utf8");
 
 function fail(message: string): never {

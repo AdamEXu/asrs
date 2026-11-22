@@ -30,7 +30,6 @@ impl Access {
 #[derive(Clone, Debug)]
 pub struct GeometryRecord {
     pub access: Access,
-    /// The property or method: `getBoundingClientRect`, `clientHeight`, `scrollTop`, ...
     pub name: String,
     /// `tag.class:index` per element from `<body>` down, joined by `>`.
     pub el: String,
@@ -40,7 +39,6 @@ pub struct GeometryRecord {
 }
 
 impl GeometryRecord {
-    /// The record's geometry access, `None` for any other kind of record.
     pub fn parse(record: &Record) -> Result<Option<GeometryRecord>, String> {
         let access = match (record.field("read"), record.field("write")) {
             (Some(_), None) => Access::Read,
@@ -96,7 +94,6 @@ fn segment_matches(recorded: &str, wanted: &str) -> bool {
     }
 }
 
-/// The geometry records of one span of a vector, answered in order.
 #[derive(Debug, Default)]
 pub struct ScriptedReads {
     queue: VecDeque<GeometryRecord>,
@@ -105,7 +102,6 @@ pub struct ScriptedReads {
 }
 
 impl ScriptedReads {
-    /// The `read` and `write` records among `records`, in order; other records are ignored.
     pub fn from_records(records: &[Record]) -> Result<ScriptedReads, String> {
         let mut queue = VecDeque::new();
         for record in records {
@@ -161,7 +157,6 @@ impl ScriptedReads {
             .map_or(Value::Undefined, |g| g.value)
     }
 
-    /// A scalar read; NaN after a mismatch.
     pub fn read_f64(&mut self, name: &str, target: &str) -> f64 {
         let value = self.read(name, target);
         value.as_f64().unwrap_or_else(|| {
@@ -204,7 +199,6 @@ impl ScriptedReads {
         }
     }
 
-    /// A numeric write, compared bit for bit.
     pub fn write_f64(&mut self, name: &str, target: &str, value: f64) {
         self.write(name, target, &Value::Number(value.to_bits()));
     }

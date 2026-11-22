@@ -1,14 +1,6 @@
 import { toTree } from "../cve1";
 
-// A `form` step: parses `markup` into a connected container, then applies `ops` one at a time,
-// writing the `read` paths after the parse and after each op. Paths are dotted property paths
-// from the parsed element, with numeric segments indexing collections (`options.1.value`,
-// `style.width`); each is written as {path, value} or, when reading throws, {path, threw}. Ops:
-//   ["set", path, value]                  assigns the property
-//   ["setAttribute", name, value]         sets an attribute
-//   ["appendElement", tag, [[path, value], ...]]
-//                                         creates an element, assigns the pairs on it, appends it
-//   ["remove", index]                     removes the element child at index
+// The `form` step; oracle/README.md, "Form vectors", documents ops, paths and records.
 
 export interface FormProbe {
   markup: string;

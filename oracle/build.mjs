@@ -299,31 +299,6 @@ recordInputs(
     })
   ).metafile
 );
-// The Blink backend of the DOM harness: an Electron main process and the page bootstrap it
-// serves ahead of domPage.js.
-recordInputs(
-  (
-    await esbuild.build({
-      ...common,
-      entryPoints: [path.join(here, "src/dom/blinkMain.ts")],
-      outfile: path.join(args.out, "domBlinkMain.mjs"),
-      format: "esm",
-      platform: "node",
-      external: ["electron"]
-    })
-  ).metafile
-);
-recordInputs(
-  (
-    await esbuild.build({
-      ...common,
-      entryPoints: [path.join(here, "src/dom/blinkBoot.ts")],
-      outfile: path.join(args.out, "domBlinkBoot.js"),
-      format: "iife",
-      platform: "browser"
-    })
-  ).metafile
-);
 fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
 fs.writeFileSync(
   path.join(args.out, "canvasPage.html"),
@@ -341,8 +316,7 @@ fs.writeFileSync(
 const runtimeLoads = {
   protoRenderer: ["rendererMain", "rendererPage", "src/renderer/renderer.html"],
   canvasMain: ["canvasPage", "heatmapPage"],
-  dom: ["domPage"],
-  domBlink: ["domBlinkMain", "domBlinkBoot", "domPage"]
+  dom: ["domPage"]
 };
 const inputs = {};
 for (const name of entries) {

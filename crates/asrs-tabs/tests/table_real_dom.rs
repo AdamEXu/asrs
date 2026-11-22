@@ -65,7 +65,6 @@ impl TableGeometry for ScriptedTable {
     }
 }
 
-/// Records the selection calls a render makes; the table renderer makes no selection reads.
 #[derive(Default)]
 struct RecordingSelection {
     calls: Vec<Value>,
