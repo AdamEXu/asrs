@@ -1246,6 +1246,13 @@ impl HubModel {
         }
     }
 
+    /// The end of a task that ran input handlers directly on the model (the frame's handles
+    /// and buttons): the microtask checkpoint, then what the handlers queued for main.
+    pub fn end_input_task(&mut self, host: &mut dyn HubHost) {
+        self.microtasks(host);
+        self.flush(host);
+    }
+
     /// The microtask checkpoint after a task: `async` handlers whose `await` resolved go on.
     fn microtasks(&mut self, host: &mut dyn HubHost) {
         while let Some(i) = self.pending.iter().position(|p| match p {

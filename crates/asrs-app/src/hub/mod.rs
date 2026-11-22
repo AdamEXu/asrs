@@ -132,13 +132,17 @@ impl Hub {
     }
 
     /// Runs `f` as one page task, such as an input handler a view dispatches into the
-    /// sidebar or tabs, and then publishes what it changed.
+    /// sidebar or tabs, then sends what it queued for main and publishes what it changed.
     pub fn update<R>(
         &mut self,
         cx: &mut Context<'_, Self>,
         f: impl FnOnce(&mut HubModel, &mut dyn HubHost) -> R,
     ) -> R {
-        self.task(cx, f)
+        self.task(cx, |model, host| {
+            let result = f(model, host);
+            model.end_input_task(host);
+            result
+        })
     }
 
     /// Decode threads still running, terminated workers included until their thread exits.
