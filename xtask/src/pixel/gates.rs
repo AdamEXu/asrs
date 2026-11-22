@@ -543,8 +543,6 @@ fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
     }
 }
 
-/// The worst channel difference between `rgb` and the device pixels of `rect`, `None` when the
-/// rect leaves the image.
 fn patch_delta(image: &Rgba, scale: f64, rect: Rect, rgb: [u8; 3]) -> Option<u8> {
     let (w, h) = (image.width as usize, image.height as usize);
     let span = device_span(rect, 0.0, scale, usize::MAX, usize::MAX);

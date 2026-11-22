@@ -176,9 +176,11 @@ pub(crate) fn variant_dirs(root: &Path) -> Result<Vec<PathBuf>> {
         return Ok(vec![root.to_path_buf()]);
     }
     let mut dirs = Vec::new();
-    for scenario in sorted_entries(root)? {
-        if scenario.is_dir() {
-            for variant in sorted_entries(&scenario)? {
+    for child in sorted_entries(root)? {
+        if child.join("run.json").exists() {
+            dirs.push(child);
+        } else if child.is_dir() {
+            for variant in sorted_entries(&child)? {
                 if variant.join("run.json").exists() {
                     dirs.push(variant);
                 }
@@ -209,6 +211,17 @@ pub(crate) fn capture_names(variant: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Whether an upstream run kept the display's colour space (`--colour display`), from the
+/// profile source the Electron driver records.
+fn display_colour_run(variant: &Path) -> Result<bool> {
+    let run = read_json(&variant.join("run.json"))?;
+    let source = run
+        .get("displayProfile")
+        .and_then(|p| string(p, "source"))
+        .ok_or_else(|| format!("{}: run.json records no display profile", variant.display()))?;
+    Ok(!matches!(source.as_str(), "none" | "forced-srgb"))
+}
+
 fn image_of(variant: &Path, record: &Json, name: &str, port: bool) -> Result<Rgba> {
     let captures = variant.join("captures");
     let file = string(record, "image").unwrap_or_else(|| format!("{name}.png"));
@@ -222,6 +235,11 @@ fn image_of(variant: &Path, record: &Json, name: &str, port: bool) -> Result<Rgb
             return Err(format!(
                 "{}: the PNG carries an ICC profile but the record says srgb",
                 path.display()
+            ));
+        }
+        ("srgb", false) if display_colour_run(variant)? => {
+            return Err(format!(
+                "{name}: the run captured in the display's colour space but the record says srgb"
             ));
         }
         ("srgb", _) => image,
@@ -526,7 +544,6 @@ impl PortOptions {
 fn port_binary() -> Result<PathBuf> {
     cargo(&[
         "build",
-        "--release",
         "--locked",
         "-p",
         "asrs-app",
@@ -539,7 +556,7 @@ fn port_binary() -> Result<PathBuf> {
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace_root().join("target"));
     Ok(target
-        .join("release")
+        .join("debug")
         .join(format!("asrs{}", std::env::consts::EXE_SUFFIX)))
 }
 
@@ -622,7 +639,11 @@ fn check() -> Result {
             scales_seen.push(capture.scale);
             if let Some(patches) = &capture.patches {
                 let outcome = gates::compare(&capture, &capture, &[]);
-                for c in outcome.checks.iter().filter(|c| c.gate == "colour patch") {
+                for c in outcome
+                    .checks
+                    .iter()
+                    .filter(|c| c.gate == "colour patch" && c.what != "upstream")
+                {
                     eprintln!("    {} {}: {}", c.gate, c.what, c.detail);
                 }
                 if patches.len() != 512 || !outcome.pass() {

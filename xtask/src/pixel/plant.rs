@@ -15,8 +15,8 @@ use super::gates::Rect;
 use super::{CaptureResult, capture_names, compare_variant, parity_dir, read_json, variant_dirs};
 use crate::Result;
 
-/// Only within this many levels does a mesh pixel count as interior to its neighbours, so the
-/// synthetic gradient stays interior and its silhouette becomes an edge.
+/// Neighbours further apart than this are an edge: the synthetic mesh's shading gradient stays
+/// interior while its silhouette does not.
 const EDGE_STEP: u8 = 8;
 const SHADING_DELTA: u8 = 3;
 
@@ -486,11 +486,20 @@ fn plant_all(
 
     let p3 = display_p3()?;
     let p3_bytes = p3.icc().map_err(|e| format!("P3 profile bytes: {e}"))?;
-    for (plant, tagged) in [
-        ("P3 capture normalized", true),
-        ("P3 capture left unnormalized", false),
+    for (plant, tagged, display_run) in [
+        ("P3 capture normalized", true, true),
+        (
+            "P3 capture of a display-colour run left unnormalized",
+            false,
+            true,
+        ),
+        ("P3 pixels with no colour metadata", false, false),
     ] {
-        let base = if tagged { "p3-tagged" } else { "p3-untagged" };
+        let base = match (tagged, display_run) {
+            (true, _) => "p3-tagged",
+            (false, true) => "p3-untagged",
+            (false, false) => "p3-bare",
+        };
         let dir = work.join(base);
         make_port(upstream, &dir)?;
         let reference = work.join(format!("{base}-upstream"));
@@ -505,14 +514,28 @@ fn plant_all(
                 write_json(&path, &record)?;
             }
         }
-        if tagged {
+        if display_run {
             io(
                 &reference,
                 fs::write(reference.join("display.icc"), &p3_bytes),
             )?;
+            let path = reference.join("run.json");
+            let mut run = read_json(&path)?;
+            set(&mut run, "colour", Json::string("display"));
+            set(
+                &mut run,
+                "displayProfile",
+                Json::object([("source", Json::string("macos-nsscreen"))]),
+            );
+            write_json(&path, &run)?;
         }
         let results = compare_variant(label, &reference, &dir)?;
-        let enforced = synthetic || (!tagged && has_patches) || (tagged && !has_patches);
+        let enforced = synthetic
+            || match (tagged, display_run) {
+                (true, _) => !has_patches,
+                (false, true) => true,
+                (false, false) => has_patches,
+            };
         out.push(judge(label, plant, tagged, enforced, &results));
     }
     {
@@ -706,7 +729,6 @@ mod synthetic {
         )
     }
 
-    /// Writes an upstream variant and returns the capture and rect of its icon.
     pub fn write(dir: &Path, scale: u32) -> Result<(String, Rect)> {
         let s = scale as usize;
         let mut ui = Canvas::new(WIDTH, HEIGHT, s, BACKGROUND);
@@ -744,6 +766,11 @@ mod synthetic {
             &Json::object([
                 ("scenario", Json::string("synthetic")),
                 ("platform", Json::string("darwin")),
+                ("colour", Json::string("srgb")),
+                (
+                    "displayProfile",
+                    Json::object([("source", Json::string("forced-srgb"))]),
+                ),
                 ("scale", num(f64::from(scale))),
                 (
                     "window",
