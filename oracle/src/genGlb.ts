@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as THREE from "three";
-import { OracleWorker, UPSTREAM_DIR, resolveWorkerScript, terminatedWorkersExited } from "./shims";
+import { UPSTREAM_DIR } from "./shims";
 import { toTree } from "./cve1";
 import { parseField3d, parseRobot } from "@upstream/main/assetUtil";
 import optimizeGeometries from "@upstream/shared/renderers/field3d/OptimizeGeometries";
@@ -12,6 +12,7 @@ import makeAxesField from "@upstream/shared/renderers/field3d/AxesField";
 import makeAxesTemplate from "@upstream/shared/renderers/field3d/AxesTemplate";
 import makeEvergreenField from "@upstream/shared/renderers/field3d/EvergreenField";
 import { syntheticCases } from "./glb/synthetic";
+import { encodePath, runWorker } from "./glb/worker";
 
 // Ground truth for asrs-field3d's GLB pipeline. Robot and field cases run upstream's real
 // `bundles/loadRobot.js` and `bundles/loadField.js` workers (GLTFLoader + optimizeGeometries +
@@ -123,66 +124,6 @@ function fieldOut(result: any): object {
 
 function robotOut(result: any[][]): object {
   return result.map((scene) => scene.map(serializedOut));
-}
-
-type WorkerResult = { ok: any } | { never: string };
-
-async function runWorker(bundle: string, payload: unknown, timeoutMs = 120000): Promise<WorkerResult> {
-  const script = resolveWorkerScript("../bundles/" + bundle);
-  // A worker's relative URLs resolve against its own script URL, and Chromium fetches file:
-  // URLs; Node's Request and fetch do neither, so the worker realm gets both.
-  const loader =
-    "data:text/javascript," +
-    encodeURIComponent(`
-import fs from "node:fs";
-import { fileURLToPath } from "node:url";
-const BASE = ${JSON.stringify(script)};
-globalThis.ProgressEvent ??= class ProgressEvent extends Event {
-  constructor(type, init = {}) {
-    super(type);
-    this.lengthComputable = init.lengthComputable ?? false;
-    this.loaded = init.loaded ?? 0;
-    this.total = init.total ?? 0;
-  }
-};
-const RealRequest = globalThis.Request;
-const realFetch = globalThis.fetch;
-globalThis.Request = class extends RealRequest {
-  constructor(input, init) { super(typeof input === "string" ? new URL(input, BASE).href : input, init); }
-};
-globalThis.fetch = async (input) => {
-  const url = new URL(typeof input === "string" ? input : input.url, BASE);
-  if (url.protocol === "data:") return realFetch(url.href);
-  if (url.protocol !== "file:") throw new TypeError("Failed to fetch");
-  let bytes;
-  try { bytes = fs.readFileSync(fileURLToPath(url)); } catch { throw new TypeError("Failed to fetch"); }
-  return new Response(bytes);
-};
-await import(BASE);
-`);
-  const worker = new OracleWorker(loader, { type: "module" });
-  const result = await new Promise<WorkerResult>((resolve) => {
-    const timer = setTimeout(() => resolve({ never: "timeout" }), timeoutMs);
-    worker.onmessage = (event) => {
-      clearTimeout(timer);
-      resolve({ ok: event.data.payload });
-    };
-    worker.onerror = (event) => {
-      clearTimeout(timer);
-      resolve({ never: String(event.message) });
-    };
-    worker.postMessage({ id: 1, payload });
-  });
-  worker.terminate();
-  await terminatedWorkersExited();
-  return result;
-}
-
-function encodePath(pathStr: string): string {
-  return pathStr
-    .split(path.sep)
-    .map((component, index) => (index === 0 && component.endsWith(":") ? component : encodeURIComponent(component)))
-    .join(path.sep);
 }
 
 export type FileSource = { bundled: string } | { hex: string } | { abs: string };
