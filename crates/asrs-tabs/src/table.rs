@@ -549,11 +549,60 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for TableController {
     }
 }
 
+/// The layout reads `TableRenderer` makes and the scroll position it writes, one call per
+/// upstream access and in upstream's order. `TableDom` answers from its fields; a replay of a
+/// Blink run with real geometry answers from the recorded reads.
+pub trait TableGeometry {
+    /// `TABLE_CONTAINER.scrollTop`.
+    fn scroll_top(&mut self) -> f64;
+    fn set_scroll_top(&mut self, value: f64);
+    /// `TABLE_CONTAINER.clientHeight`.
+    fn container_client_height(&mut self) -> f64;
+    /// `TABLE_BODY.firstElementChild.clientHeight`, the header row.
+    fn header_client_height(&mut self) -> f64;
+    /// `TABLE_BODY.firstElementChild.getBoundingClientRect()`.
+    fn header_rect(&mut self) -> Rect;
+    /// `dataRows[index].getBoundingClientRect()`; `hidden` is the row's `hidden` flag.
+    fn data_row_rect(&mut self, index: usize, hidden: bool) -> Rect;
+}
+
+impl TableGeometry for TableDom {
+    fn scroll_top(&mut self) -> f64 {
+        self.scroll_top
+    }
+
+    fn set_scroll_top(&mut self, value: f64) {
+        self.scroll_top = value;
+    }
+
+    fn container_client_height(&mut self) -> f64 {
+        math::round(self.container.height)
+    }
+
+    fn header_client_height(&mut self) -> f64 {
+        math::round(self.header_row.height)
+    }
+
+    fn header_rect(&mut self) -> Rect {
+        self.header_row
+    }
+
+    fn data_row_rect(&mut self, _index: usize, hidden: bool) -> Rect {
+        if hidden {
+            Rect::default()
+        } else {
+            self.data_row
+        }
+    }
+}
+
 pub struct TableRenderer {
     uuid: JsString,
     dom: Rc<RefCell<TableDom>>,
+    geometry: Option<Box<dyn TableGeometry>>,
     row_height_px: f64,
     data_rows: usize,
+    row_hidden: Vec<bool>,
     data_row_timestamps: Vec<f64>,
     timestamps: Vec<f64>,
     last_fields: Vec<JsString>,
@@ -575,8 +624,10 @@ impl TableRenderer {
         Self {
             uuid,
             dom,
+            geometry: None,
             row_height_px: DEFAULT_ROW_HEIGHT_PX,
             data_rows: 0,
+            row_hidden: Vec::new(),
             data_row_timestamps: Vec::new(),
             timestamps: Vec::new(),
             last_fields: Vec::new(),
@@ -593,6 +644,18 @@ impl TableRenderer {
 
     pub fn dom(&self) -> &Rc<RefCell<TableDom>> {
         &self.dom
+    }
+
+    /// Answers the renderer's layout reads from `geometry` instead of the shared `TableDom`.
+    pub fn set_geometry(&mut self, geometry: Box<dyn TableGeometry>) {
+        self.geometry = Some(geometry);
+    }
+
+    fn geometry<R>(&mut self, f: impl FnOnce(&mut dyn TableGeometry) -> R) -> R {
+        match self.geometry.as_deref_mut() {
+            Some(geometry) => f(geometry),
+            None => f(&mut *self.dom.borrow_mut()),
+        }
     }
 
     /// `TABLE_BODY`'s `mousemove`.
@@ -645,17 +708,18 @@ impl TableRenderer {
         if target_row == -1.0 {
             target_row = 0.0;
         }
-        let mut dom = self.dom.borrow_mut();
-        let client_height = math::round(dom.container.height);
-        let visible_height = client_height - math::round(dom.header_row.height);
-        let first_visible = math::ceil(dom.scroll_top / self.row_height_px);
-        let last_visible =
-            math::ceil((dom.scroll_top + visible_height - self.row_height_px) / self.row_height_px);
-        if target_row < first_visible {
-            dom.scroll_top = target_row * self.row_height_px;
-        } else if target_row > last_visible {
-            dom.scroll_top = target_row * self.row_height_px - visible_height + self.row_height_px;
-        }
+        let row_height = self.row_height_px;
+        self.geometry(|g| {
+            let visible_height = g.container_client_height() - g.header_client_height();
+            let first_visible = math::ceil(g.scroll_top() / row_height);
+            let last_visible =
+                math::ceil((g.scroll_top() + visible_height - row_height) / row_height);
+            if target_row < first_visible {
+                g.set_scroll_top(target_row * row_height);
+            } else if target_row > last_visible {
+                g.set_scroll_top(target_row * row_height - visible_height + row_height);
+            }
+        });
     }
 }
 
@@ -686,7 +750,7 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
                 "Cannot read properties of undefined (reading 'timestamps')",
             ));
         };
-        let initial_scroll = self.dom.borrow().scroll_top;
+        let initial_scroll = self.geometry(|g| g.scroll_top());
         self.display_offset = command.display_offset;
         self.selection_mode = command.selection_mode;
         self.selected_time = command.selected_time;
@@ -709,12 +773,14 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             self.last_fields_available = fields_available;
         }
 
-        let client_height = math::round(self.dom.borrow().container.height);
+        let client_height = self.geometry(|g| g.container_client_height());
         let data_row_count =
             math::ceil(client_height / self.row_height_px) as usize + DATA_ROW_BUFFER * 2;
         self.data_rows = data_row_count;
+        self.row_hidden.resize(data_row_count, false);
         if self.data_rows > 0 {
-            let row_height = self.dom.borrow().data_row.height;
+            let hidden = self.row_hidden[0];
+            let row_height = self.geometry(|g| g.data_row_rect(0, hidden)).height;
             if row_height > 0.0 && row_height != self.row_height_px {
                 self.row_height_px = row_height;
             }
@@ -733,16 +799,21 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             -2.0
         };
         if removed_rows > 0.0 {
-            self.dom.borrow_mut().scroll_top = initial_scroll - removed_rows * self.row_height_px;
+            let value = initial_scroll - removed_rows * self.row_height_px;
+            self.geometry(|g| g.set_scroll_top(value));
         }
         self.timestamps = command.timestamps.clone();
 
         let (data_row_start, data_row_end);
         if self.timestamps.len() < data_row_count {
+            let shown = self.timestamps.len();
+            for (index, hidden) in self.row_hidden.iter_mut().enumerate() {
+                *hidden = index >= shown;
+            }
             data_row_start = 0;
             data_row_end = self.timestamps.len();
         } else {
-            let scroll_row = math::floor(self.dom.borrow().scroll_top / self.row_height_px);
+            let scroll_row = math::floor(self.geometry(|g| g.scroll_top()) / self.row_height_px);
             let mut filler_upper = 0.0;
             if scroll_row > DATA_ROW_BUFFER as f64 {
                 filler_upper = scroll_row - DATA_ROW_BUFFER as f64;
@@ -750,6 +821,9 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             if filler_upper + data_row_count as f64 > self.timestamps.len() as f64 {
                 filler_upper = self.timestamps.len() as f64 - data_row_count as f64;
             }
+            let scroll_top = self.geometry(|g| g.scroll_top());
+            self.row_hidden.fill(false);
+            self.geometry(|g| g.set_scroll_top(scroll_top));
             data_row_start = filler_upper as usize;
             data_row_end = data_row_start + data_row_count;
         }
@@ -774,16 +848,21 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             }
             _ => {}
         }
-        self.last_scroll_position = Some(self.dom.borrow().scroll_top);
+        self.last_scroll_position = Some(self.geometry(|g| g.scroll_top()));
 
-        let header_bottom = self.dom.borrow().header_row.bottom();
         let hover_y = self.dom.borrow().hover_cursor_y;
+        let header_bottom = match hover_y {
+            Some(_) => self.geometry(|g| g.header_rect()).bottom(),
+            None => f64::NAN,
+        };
         match hover_y {
             Some(y) if y > header_bottom => {
-                let rect = self.dom.borrow().data_row;
-                for &time in &self.data_row_timestamps {
+                for index in 0..self.data_rows {
+                    let hidden = self.row_hidden[index];
+                    let rect = self.geometry(|g| g.data_row_rect(index, hidden));
                     if y >= rect.top() && y < rect.bottom() {
-                        cx.tab_selection().set_hovered_time(Some(time));
+                        let time = self.data_row_timestamps.get(index).copied();
+                        cx.tab_selection().set_hovered_time(time);
                         self.did_clear_hovered_time = false;
                     }
                 }

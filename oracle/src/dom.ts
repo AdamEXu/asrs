@@ -1,4 +1,5 @@
 import { UPSTREAM_DIR } from "./shims";
+import { readFixture } from "./dom/fixtureFile";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -8,34 +9,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 //   Loads upstream's www/hub.html in jsdom, evaluates the hub (src/hub/hub.ts with
 //   src/dom/env.ts installed first) inside that window and runs one fixture. Without an
 //   argument the fixture is the "fixture" key of the spec named by $ASRS_ORACLE_SPEC, which
-//   `oracle gen` sets. See oracle/README.md, "DOM harness".
+//   `oracle gen` sets. See oracle/README.md, "DOM harness". domBlink.ts runs the same page
+//   in Blink.
 
 declare const __HARNESS_DIR__: string;
 
-const file = process.argv[2] ?? process.env.ASRS_ORACLE_SPEC;
-if (file === undefined) {
-  process.stderr.write("usage: dom <spec or fixture file>\n");
+const { fixture } = readFixture("dom", process.argv[2]);
+if (fixture.geometry !== undefined && fixture.geometry !== "scripted") {
+  process.stderr.write(`dom: jsdom has no layout; geometry ${JSON.stringify(fixture.geometry)} needs the blink backend\n`);
   process.exit(2);
 }
-const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-const isSpec = "fixture" in parsed && "entry" in parsed;
-const fixture = isSpec ? parsed.fixture : parsed;
-
-// "assets", "preferences", "state" and "typeMemory", and the operations of a "log" step, may
-// name a JSON file relative to the fixture instead. Under a spec every such file must be listed
-// in "inputs", so the vector's generator hash covers it.
-const declared: string[] = isSpec ? (parsed.inputs ?? []).map((p: string) => path.resolve(path.dirname(file), p)) : [];
-function load(holder: any, key: string) {
-  if (typeof holder?.[key] !== "string") return;
-  const target = path.resolve(path.dirname(file!), holder[key]);
-  if (isSpec && !declared.includes(target)) {
-    process.stderr.write(`dom: ${file}: ${holder[key]} is not listed in "inputs"\n`);
-    process.exit(2);
-  }
-  holder[key] = JSON.parse(fs.readFileSync(target, "utf8"));
-}
-for (const key of ["assets", "preferences", "state", "typeMemory"]) load(fixture, key);
-for (const step of fixture.steps ?? []) load(step, "log");
 
 const { JSDOM, VirtualConsole } = createRequire(path.join(__HARNESS_DIR__, "package.json"))("jsdom");
 const log = (text: string) => process.stderr.write(text + "\n");

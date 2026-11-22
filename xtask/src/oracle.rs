@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use asrs_parity::json::{self, Json};
 
-use crate::{Result, canvas, historical, pack, vectors, workspace_root};
+use crate::{Result, canvas, dom, historical, pack, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 pub(crate) const EMSDK_VERSION: &str = "4.0.12";
@@ -63,6 +63,12 @@ commands:
                       (`cargo xtask oracle historical --help`)
   run [--zone <zone>] <entry> [args]
                       run target/oracle/dist/<entry>.mjs under the oracle runtime
+  dom [--backend jsdom|blink] <spec or fixture>
+                      run one DOM fixture on jsdom or in a Blink window and print its records
+                      (default: the backend its spec names, else Blink)
+  dom-ab [<id prefix>...] [--jobs N] [--out <file>]
+                      run every dom/* and form/* spec on jsdom and on Blink with scripted
+                      geometry and report the differing records per family
   canvas [<scene>...] Chromium canvas references (same as `cargo xtask canvas ref`)
   canvas-lut [--check]
                       mask-gamma LUT for this platform (same as `cargo xtask canvas lut`)
@@ -208,6 +214,8 @@ pub fn run(args: &[String]) -> Result {
                 None => Err(USAGE.to_owned()),
             }
         }
+        Some("dom") => dom::run(&paths, rest),
+        Some("dom-ab") => dom::ab(&paths, rest),
         Some("canvas") => canvas::reference(&paths, &canvas::reference_dir(&paths), rest),
         Some("canvas-lut") => canvas::lut(&paths, rest.iter().any(|a| a == "--check")),
         Some("selftest") => run_entry(&paths, "selftest", DEFAULT_ZONE, &[]),
@@ -598,7 +606,8 @@ pub(crate) fn build_harness(paths: &Paths) -> Result {
             .arg("--harness")
             .arg(&paths.harness)
             .arg("--out")
-            .arg(&paths.dist),
+            .arg(&paths.dist)
+            .stdout(std::io::stderr()),
     )
 }
 

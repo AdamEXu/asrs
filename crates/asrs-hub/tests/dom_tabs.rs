@@ -2802,9 +2802,21 @@ fn spec_files() -> Vec<(PathBuf, String)> {
                 .to_owned();
             (p, format!("dom/tabs/{name}"))
         })
+        .filter(|(p, _)| !real_geometry(p))
         .collect();
     out.sort();
     out
+}
+
+/// Real-geometry fixtures answer layout from recorded reads, which this harness's scripted
+/// layout cannot; `asrs-tabs/tests/table_real_dom.rs` replays `dom/tabs/table-real`.
+fn real_geometry(spec: &Path) -> bool {
+    let text = std::fs::read_to_string(spec).unwrap_or_else(|e| panic!("{}: {e}", spec.display()));
+    let json = json::parse(&text).unwrap_or_else(|e| panic!("{}: {e}", spec.display()));
+    json.get("fixture")
+        .and_then(|f| f.get("geometry"))
+        .and_then(Json::as_str)
+        .is_some_and(|g| g.to_string_lossy() == "real")
 }
 
 #[test]
