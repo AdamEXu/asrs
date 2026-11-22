@@ -4,7 +4,7 @@
 //! asks for, the alert, the loading spinner, camera-controls and keyboard input, and the settings
 //! block beside the source list.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -395,6 +395,7 @@ fn button_number(button: MouseButton) -> f64 {
     }
 }
 
+#[cfg(feature = "parity")]
 fn mode_name(mode: Field3dMode) -> &'static str {
     match mode {
         Field3dMode::Cinematic => "cinematic",
@@ -430,6 +431,8 @@ fn paint_frame(image: &Arc<RenderImage>, origin: [f32; 2], window: &mut Window) 
 
 #[cfg(feature = "parity")]
 fn gl_dump(frame: &Frame, rect: [f64; 4], mode: Field3dMode) -> asrs_ui::parity::GlDump {
+    use std::cell::RefCell;
+
     use asrs_field3d::render::{Renderer, edge_mask, swap_red_blue};
     thread_local! {
         // Leaked: dropping a wgpu device in a thread-local destructor at exit panics.
@@ -478,6 +481,7 @@ const FACES: [([f64; 2], [Op; 2]); 6] = [
 ];
 
 type V3 = [f64; 3];
+type Quad = [[f64; 2]; 4];
 
 fn apply(op: Op, p: V3) -> V3 {
     let [x, y, z] = p;
@@ -520,7 +524,7 @@ fn spinner_angles(ms: f64) -> [f64; 3] {
 
 /// The cube flattened onto the page (no perspective): each face's outer and inner (border)
 /// quads in the 44 px box, back to front.
-fn spinner_faces(angles: Option<[f64; 3]>) -> Vec<([[f64; 2]; 4], [[f64; 2]; 4])> {
+fn spinner_faces(angles: Option<[f64; 3]>) -> Vec<(Quad, Quad)> {
     let cube = |p: V3| -> V3 {
         let Some([z, x, y]) = angles else {
             return p;
@@ -529,7 +533,7 @@ fn spinner_faces(angles: Option<[f64; 3]>) -> Vec<([[f64; 2]; 4], [[f64; 2]; 4])
         let r = rotate_z(z, apply(Op::RotateX(x), apply(Op::RotateY(y), centred)));
         [r[0] + 22.0, r[1] + 22.0, r[2]]
     };
-    let mut faces: Vec<(f64, [[f64; 2]; 4], [[f64; 2]; 4])> = FACES
+    let mut faces: Vec<(f64, Quad, Quad)> = FACES
         .iter()
         .map(|(origin, ops)| {
             let place = |x: f64, y: f64| {
@@ -791,17 +795,11 @@ impl<H: FrameHost> HubFrame<H> {
         };
         if let Some(rendered) = thread.take()
             && let Some((key, frame)) = views.in_flight.take()
+            && let Some(view) = views.tabs.get_mut(&key)
         {
-            if let Some(view) = views.tabs.get_mut(&key) {
-                view.presenter.present_bgra(
-                    rendered.width,
-                    rendered.height,
-                    rendered.bgra,
-                    window,
-                    cx,
-                );
-                view.presented = Some(frame);
-            }
+            view.presenter
+                .present_bgra(rendered.width, rendered.height, rendered.bgra, window, cx);
+            view.presented = Some(frame);
         }
         if views.in_flight.is_none()
             && let Some((key, frame)) = views.queued.take()
@@ -1011,9 +1009,12 @@ impl<H: FrameHost> HubFrame<H> {
         let mut y = ALERT_PADDING;
         for (line, lw, lh) in lines {
             let x = ALERT_PADDING + layout_unit((inner_w - lw) / 2.0);
-            alert = alert.child(div().absolute().left(px(x as f32)).top(px(y as f32)).child(
-                Text::new(line, style.clone()).color(if dark { 0xffffff } else { 0x000000 }),
-            ));
+            alert =
+                alert.child(
+                    div().absolute().left(px(x as f32)).top(px(y as f32)).child(
+                        Text::new(line, style).color(if dark { 0xffffff } else { 0x000000 }),
+                    ),
+                );
             y += lh;
         }
         probed("div.field-3d-alert", alert).into_any_element()
