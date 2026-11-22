@@ -241,7 +241,8 @@ fn drift(root: &Path, name: &str) -> Result<Option<String>> {
     let dir = output_dir(root, name);
     if !dir.is_dir() {
         let rel = dir.strip_prefix(root).unwrap_or(&dir);
-        return Ok(Some(format!("{} is missing", rel.display())));
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        return Ok(Some(format!("{rel} is missing")));
     }
     let mut listed = Vec::new();
     for case in manifest

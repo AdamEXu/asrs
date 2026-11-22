@@ -5,6 +5,8 @@
 //! `socket.destroyed` does: nothing but the `Close` is dispatched for that socket afterwards.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::io;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -117,6 +119,48 @@ impl Drop for TokioRlogTransport {
     }
 }
 
+const AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(250);
+
+/// Node's `autoSelectFamily` (on by default since Node 20): addresses alternate between
+/// families starting with the first one resolved, each attempt but the last is abandoned after
+/// 250 ms, and a failed attempt moves straight on. Without it, `localhost` on Windows waits
+/// about two seconds for `::1` to be refused before trying `127.0.0.1`.
+async fn connect_auto_select_family(host: &str, port: u16) -> io::Result<TcpStream> {
+    let mut families: [Vec<SocketAddr>; 2] = [Vec::new(), Vec::new()];
+    let mut first_is_v6 = None;
+    for addr in tokio::net::lookup_host((host, port)).await? {
+        let first_is_v6 = *first_is_v6.get_or_insert(addr.is_ipv6());
+        let group = &mut families[usize::from(addr.is_ipv6() != first_is_v6)];
+        if !group.contains(&addr) {
+            group.push(addr);
+        }
+    }
+    let [preferred, other] = families;
+    let mut attempts: Vec<SocketAddr> = Vec::with_capacity(preferred.len() + other.len());
+    for i in 0..preferred.len().max(other.len()) {
+        attempts.extend(preferred.get(i).copied());
+        attempts.extend(other.get(i).copied());
+    }
+    let mut last_error = io::Error::new(io::ErrorKind::NotFound, "no addresses resolved");
+    let count = attempts.len();
+    for (i, addr) in attempts.into_iter().enumerate() {
+        let attempt = TcpStream::connect(addr);
+        let result = if i + 1 < count {
+            match tokio::time::timeout(AUTO_SELECT_FAMILY_ATTEMPT_TIMEOUT, attempt).await {
+                Ok(result) => result,
+                Err(_) => Err(io::ErrorKind::TimedOut.into()),
+            }
+        } else {
+            attempt.await
+        };
+        match result {
+            Ok(stream) => return Ok(stream),
+            Err(error) => last_error = error,
+        }
+    }
+    Err(last_error)
+}
+
 impl RlogTransport for TokioRlogTransport {
     fn tcp_connect(&mut self, host: &str, port: f64) -> TcpId {
         let id = TcpId(self.next_id);
@@ -211,7 +255,7 @@ async fn run_socket(
         pending_report: false,
     };
     let mut held: Vec<Vec<u8>> = Vec::new();
-    let connect = TcpStream::connect((host.as_str(), port));
+    let connect = connect_auto_select_family(&host, port);
     tokio::pin!(connect);
     let mut stream = loop {
         tokio::select! {

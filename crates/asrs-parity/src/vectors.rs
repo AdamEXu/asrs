@@ -56,6 +56,69 @@ pub fn values_match(expected: &Value, actual: &Value) -> bool {
     expected == actual || encoded_match(&expected.encode(), &actual.encode())
 }
 
+/// Every vector is generated on macOS arm64. V8 takes `Math.pow` from the C library, and so
+/// does `asrs_js::math::pow`, but glibc and the UCRT round some powers one ulp away from
+/// macOS's libm, so V8 itself gives other bits there. Off macOS, tests of values derived from
+/// `pow` therefore accept a one-ulp difference until those platforms have their own vectors.
+const LOOSE_POW_BITS: bool = !cfg!(all(target_os = "macos", target_arch = "aarch64"));
+static LOOSE_POW_NOTICE: Once = Once::new();
+
+/// Whether the bits of number `actual` match `expected`, allowing off macOS the one-ulp
+/// difference of a platform `pow`.
+pub fn pow_bits_match(expected: u64, actual: u64) -> bool {
+    expected == actual || (LOOSE_POW_BITS && one_ulp_apart(expected, actual) && pow_notice())
+}
+
+/// [`values_match`], allowing off macOS a one-ulp difference in any number, as a value derived
+/// from a platform `pow` may have.
+pub fn pow_values_match(expected: &Value, actual: &Value) -> bool {
+    values_match(expected, actual)
+        || (LOOSE_POW_BITS && values_near(expected, actual) && pow_notice())
+}
+
+fn pow_notice() -> bool {
+    LOOSE_POW_NOTICE.call_once(|| {
+        skip_notice(
+            "the last bit of pow results",
+            "V8 and asrs use this platform's C library pow, and the vectors come from macOS",
+        );
+    });
+    true
+}
+
+fn one_ulp_apart(a: u64, b: u64) -> bool {
+    let finite = |bits: u64| f64::from_bits(bits).is_finite();
+    finite(a) && finite(b) && a >> 63 == b >> 63 && a.abs_diff(b) == 1
+}
+
+fn values_near(expected: &Value, actual: &Value) -> bool {
+    let all_near = |a: &[Value], b: &[Value]| {
+        a.len() == b.len() && a.iter().zip(b).all(|(x, y)| values_near(x, y))
+    };
+    let fields_near = |a: &[(_, Value)], b: &[(_, Value)]| {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|((ka, va), (kb, vb))| ka == kb && values_near(va, vb))
+    };
+    match (expected, actual) {
+        (Value::Number(a), Value::Number(b)) => {
+            one_ulp_apart(*a, *b) || values_match(expected, actual)
+        }
+        (Value::Array(a), Value::Array(b)) | (Value::Set(a), Value::Set(b)) => all_near(a, b),
+        (Value::TypedArray(ta, a), Value::TypedArray(tb, b)) => ta == tb && all_near(a, b),
+        (Value::Object(a), Value::Object(b)) => fields_near(a, b),
+        (Value::Instance(ca, a), Value::Instance(cb, b)) => ca == cb && fields_near(a, b),
+        (Value::Map(a), Value::Map(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b)
+                    .all(|((ka, va), (kb, vb))| values_near(ka, kb) && values_near(va, vb))
+        }
+        _ => values_match(expected, actual),
+    }
+}
+
 fn canonical_nans(text: &str) -> String {
     const NUMBER: &str = "\"n\":\"";
     let mut out = String::with_capacity(text.len());
@@ -356,6 +419,21 @@ macro_rules! record_vectors {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn values_near_allows_one_ulp_in_numbers_only() {
+        let one = 1.0f64.to_bits();
+        let arr = |bits: &[u64]| Value::Array(bits.iter().map(|&b| Value::Number(b)).collect());
+        assert!(values_near(&arr(&[one, 2]), &arr(&[one + 1, 2])));
+        assert!(values_near(&arr(&[one]), &arr(&[one - 1])));
+        assert!(!values_near(&arr(&[one]), &arr(&[one + 2])));
+        assert!(!values_near(&arr(&[one]), &arr(&[one, one])));
+        assert!(!one_ulp_apart(0, 1 << 63));
+        assert!(!one_ulp_apart(
+            f64::INFINITY.to_bits(),
+            f64::INFINITY.to_bits() - 1
+        ));
+    }
 
     #[test]
     fn canonical_nans_rewrites_only_nan_numbers() {

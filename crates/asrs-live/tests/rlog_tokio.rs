@@ -1,5 +1,6 @@
 //! The RLOG transport over real sockets: held writes, `Connect`/`Data`, the idle timeout's one
-//! report, `destroy` dropping already-queued data, and a refused connection.
+//! report, `destroy` dropping already-queued data, `localhost` across address families, and a
+//! refused connection.
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -54,7 +55,7 @@ fn follows_node_socket_rules_over_real_sockets() {
     });
 
     let mut net = TokioRlogTransport::new(runtime.handle().clone());
-    let id = net.tcp_connect("", f64::from(port));
+    let id = net.tcp_connect("127.0.0.1", f64::from(port));
     net.tcp_write(id, &[6, 3, 2, 8]);
     net.tcp_set_timeout(id, 200.0);
     let mut events = Vec::new();
@@ -84,6 +85,21 @@ fn follows_node_socket_rules_over_real_sockets() {
     let (held, rest) = server.join().unwrap();
     assert_eq!(held, [6, 3, 2, 8]);
     assert!(rest.is_empty(), "{rest:?}");
+}
+
+#[test]
+fn an_empty_host_falls_back_across_families_like_node() {
+    let runtime = LiveRuntime::new().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || listener.accept().map(|_| ()));
+    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let id = net.tcp_connect("", f64::from(port));
+    net.tcp_set_timeout(id, 1000.0);
+    let mut events = Vec::new();
+    collect(&mut net, &mut events, |e| !e.is_empty());
+    assert_eq!(events[0], RlogNetEvent::Connect(id));
+    server.join().unwrap().unwrap();
 }
 
 #[test]
