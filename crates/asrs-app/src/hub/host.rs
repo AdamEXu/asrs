@@ -16,7 +16,7 @@ use asrs_services::fs::RealFs;
 use asrs_services::historical_start::{FileOpen, Outcome, UPSTREAM_HAS_LZMA};
 use asrs_ui::gpui::{AnyWindowHandle, AppContext, Context, Task};
 
-use super::{Hub, HubEvent, WorkerRealm};
+use super::{Hub, HubEvent, WorkerRealm, frame_time};
 
 /// `requestAnimationFrame` without a window.
 const FRAME_PERIOD: Duration = Duration::from_micros(16_667);
@@ -55,6 +55,7 @@ enum ExportMessage {
 pub(super) struct HostState {
     window: Option<AnyWindowHandle>,
     clock: Rc<dyn Clock>,
+    pub(super) frame_origin: Instant,
     worker_realm: WorkerRealm,
     temp_dir: String,
     intervals: HashMap<HubInterval, Task<()>>,
@@ -71,12 +72,14 @@ impl HostState {
     pub(super) fn new(
         window: Option<AnyWindowHandle>,
         clock: Rc<dyn Clock>,
+        frame_origin: Instant,
         worker_realm: WorkerRealm,
         temp_dir: String,
     ) -> Self {
         HostState {
             window,
             clock,
+            frame_origin,
             worker_realm,
             temp_dir,
             intervals: HashMap::new(),
@@ -274,6 +277,10 @@ fn run_export(log: SerializedLog, options: &JsValue) -> Vec<ExportMessage> {
 impl HubHost for GpuiHost<'_, '_> {
     fn now(&self) -> f64 {
         self.state.clock.now()
+    }
+
+    fn frame_time(&self) -> f64 {
+        frame_time(self.state.frame_origin, &*self.cx)
     }
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
