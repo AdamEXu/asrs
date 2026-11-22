@@ -10,5 +10,6 @@ pub mod path;
 pub mod recent_units;
 pub mod state_tracker;
 pub mod type_memory;
+pub mod video;
 pub mod window_manager;
 pub mod windows;

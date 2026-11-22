@@ -444,6 +444,7 @@ version = "0.1.0"
 dependencies = [
  "asrs-formats",
  "asrs-js",
+ "asrs-log",
  "asrs-model",
  "asrs-parity",
  "sha2 0.10.9",
