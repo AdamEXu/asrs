@@ -4,11 +4,11 @@ use std::sync::Arc;
 use asrs_js::math;
 
 use super::scene::{
-    Geometry, LineBasicMaterial, LineMaterial, LineSegmentsGeometry, Mesh, NodeKind, PhongMaterial,
-    Scene, Side, SpotLight, matrix_to_f32, sphere_apply_matrix4,
+    Geometry, LineBasicMaterial, LineMaterial, LineSegmentsGeometry, Materials, Mesh, NodeKind,
+    PhongMaterial, Scene, Side, SpotLight, matrix_to_f32, sphere_apply_matrix4,
 };
 use crate::three::math_utils::RAD2DEG;
-use crate::three::{Color, Matrix3, Matrix4, ObjectId, PerspectiveCamera, Sphere, Vector3};
+use crate::three::{Color, Group, Matrix3, Matrix4, ObjectId, PerspectiveCamera, Sphere, Vector3};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FrameOptions {
@@ -88,10 +88,12 @@ pub struct Lights {
 /// What one draw renders, with the material it renders with.
 #[derive(Clone, Debug)]
 pub enum DrawKind {
+    /// `group` is the geometry group a material-array mesh draws, which limits the vertex range.
     Mesh {
         geometry: Arc<Geometry>,
         material: Arc<PhongMaterial>,
         instances: Option<Arc<Vec<[f32; 16]>>>,
+        group: Option<Group>,
     },
     FatLine {
         geometry: Arc<LineSegmentsGeometry>,
@@ -174,6 +176,7 @@ struct RenderItem {
     render_order: f64,
     material_id: u64,
     z: f64,
+    group: Option<Group>,
 }
 
 fn compare(a: f64, b: f64) -> Ordering {
@@ -280,9 +283,15 @@ struct Collected {
     lights: Vec<ObjectId>,
 }
 
-/// The bounding sphere `projectObject` culls and sorts by: an `InstancedMesh`'s own (computed
-/// once), otherwise its geometry's.
-fn object_sphere(kind: &mut NodeKind) -> Option<(Sphere, u64, bool)> {
+/// One render-list entry `projectObject` pushes: material id, transparency and geometry group.
+type ItemMaterial = (u64, bool, Option<Group>);
+
+/// The bounding sphere `projectObject` culls and sorts by (an `InstancedMesh`'s own, computed
+/// once, otherwise its geometry's) and the entries it pushes: one per visible material.
+fn object_items(kind: &mut NodeKind) -> Option<(Sphere, Vec<ItemMaterial>)> {
+    let visible = |id: u64, visible: bool, transparent: bool, group: Option<Group>| {
+        visible.then_some((id, transparent, group))
+    };
     match kind {
         NodeKind::Mesh(mesh) => {
             let sphere = match &mut mesh.instances {
@@ -294,17 +303,34 @@ fn object_sphere(kind: &mut NodeKind) -> Option<(Sphere, u64, bool)> {
                 }
                 None => mesh.geometry.bounding_sphere(),
             };
-            Some((sphere, mesh.material.id, mesh.material.visible))
+            let items = mesh
+                .material_groups()
+                .into_iter()
+                .filter_map(|(m, group)| visible(m.id, m.visible, m.transparent, group))
+                .collect();
+            Some((sphere, items))
         }
         NodeKind::FatLine(line) => Some((
             line.geometry.bounding_sphere(),
-            line.material.id,
-            line.material.visible,
+            visible(
+                line.material.id,
+                line.material.visible,
+                line.material.transparent,
+                None,
+            )
+            .into_iter()
+            .collect(),
         )),
         NodeKind::Line(line) => Some((
             line.geometry.bounding_sphere(),
-            line.material.id,
-            line.material.visible,
+            visible(
+                line.material.id,
+                line.material.visible,
+                line.material.transparent,
+                None,
+            )
+            .into_iter()
+            .collect(),
         )),
         _ => None,
     }
@@ -337,21 +363,25 @@ fn project(
             out.lights.push(id);
         }
         kind => {
-            if let Some((sphere, material_id, material_visible)) = object_sphere(kind) {
+            if let Some((sphere, items)) = object_items(kind) {
                 let in_view = !frustum_culled
                     || frustum.intersects_sphere(sphere_apply_matrix4(sphere, &world));
-                if in_view && material_visible {
-                    let item = RenderItem {
-                        object: id,
-                        group_order,
-                        render_order,
-                        material_id,
-                        z: sort_z(sphere.center, &world, proj_screen),
-                    };
-                    if kind_transparent(kind) {
-                        out.transparent.push(item);
-                    } else {
-                        out.opaque.push(item);
+                if in_view {
+                    let z = sort_z(sphere.center, &world, proj_screen);
+                    for (material_id, transparent, group) in items {
+                        let item = RenderItem {
+                            object: id,
+                            group_order,
+                            render_order,
+                            material_id,
+                            z,
+                            group,
+                        };
+                        if transparent {
+                            out.transparent.push(item);
+                        } else {
+                            out.opaque.push(item);
+                        }
                     }
                 }
             }
@@ -359,15 +389,6 @@ fn project(
     }
     for child in scene.graph.node(id).children().to_vec() {
         project(scene, child, group_order, proj_screen, frustum, out);
-    }
-}
-
-fn kind_transparent(kind: &NodeKind) -> bool {
-    match kind {
-        NodeKind::Mesh(mesh) => mesh.material.transparent,
-        NodeKind::FatLine(line) => line.material.transparent,
-        NodeKind::Line(line) => line.material.transparent,
-        _ => false,
     }
 }
 
@@ -475,9 +496,15 @@ fn light_uniforms(
     (out, cameras)
 }
 
+struct MeshPart<'a> {
+    mesh: &'a Mesh,
+    material: &'a Arc<PhongMaterial>,
+    group: Option<Group>,
+}
+
 fn mesh_draw(
     id: ObjectId,
-    mesh: &Mesh,
+    part: &MeshPart<'_>,
     side: Side,
     world: &Matrix4,
     view: &Matrix4,
@@ -487,9 +514,10 @@ fn mesh_draw(
     Draw {
         object: id,
         kind: DrawKind::Mesh {
-            geometry: mesh.geometry.clone(),
-            material: mesh.material.clone(),
-            instances: mesh.instances.as_ref().map(|i| i.matrices.clone()),
+            geometry: part.mesh.geometry.clone(),
+            material: part.material.clone(),
+            instances: part.mesh.instances.as_ref().map(|i| i.matrices.clone()),
+            group: part.group,
         },
         side,
         front_face_cw: world.determinant() < 0.0,
@@ -511,15 +539,24 @@ fn shadow_draws(scene: &Scene, id: ObjectId, view: &Matrix4, out: &mut Vec<Draw>
     }
     if let NodeKind::Mesh(mesh) = &node.kind
         && mesh.cast_shadow
-        && mesh.material.visible
     {
-        let side = match mesh.material.side {
-            Side::Front => Side::Back,
-            Side::Back => Side::Front,
-            Side::Double => Side::Double,
-        };
         let world = scene.graph.object(id).matrix_world;
-        out.push(mesh_draw(id, mesh, side, &world, view, false));
+        for (material, group) in mesh.material_groups() {
+            if !material.visible {
+                continue;
+            }
+            let side = match material.side {
+                Side::Front => Side::Back,
+                Side::Back => Side::Front,
+                Side::Double => Side::Double,
+            };
+            let part = MeshPart {
+                mesh,
+                material,
+                group,
+            };
+            out.push(mesh_draw(id, &part, side, &world, view, false));
+        }
     }
     for &child in scene.graph.node(id).children() {
         shadow_draws(scene, child, view, out);
@@ -571,16 +608,27 @@ pub fn build_frame(
         let world = scene.graph.object(item.object).matrix_world;
         match &scene.node(item.object).kind {
             NodeKind::Mesh(mesh) => {
-                let sides: &[Side] =
-                    if mesh.material.transparent && mesh.material.side == Side::Double {
-                        &[Side::Back, Side::Front]
-                    } else {
-                        std::slice::from_ref(&mesh.material.side)
-                    };
+                let material = match (&mesh.material, item.group) {
+                    (Materials::Single(material), _) => material,
+                    (Materials::Array(materials), Some(group)) => {
+                        &materials[group.material_index]
+                    }
+                    (Materials::Array(_), None) => continue,
+                };
+                let part = MeshPart {
+                    mesh,
+                    material,
+                    group: item.group,
+                };
+                let sides: &[Side] = if material.transparent && material.side == Side::Double {
+                    &[Side::Back, Side::Front]
+                } else {
+                    std::slice::from_ref(&material.side)
+                };
                 for &side in sides {
                     draws.push(mesh_draw(
                         item.object,
-                        mesh,
+                        &part,
                         side,
                         &world,
                         &view,

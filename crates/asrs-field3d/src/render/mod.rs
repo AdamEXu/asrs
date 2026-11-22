@@ -20,7 +20,7 @@ pub use frame::{
 pub use gpu::{AuxBuffers, COLOR_FORMAT, RenderError, Renderer, Timings};
 pub use scene::{
     FatLine, Filter, Geometry, HemisphereLight, Instances, LightShadow, Line, LineBasicMaterial,
-    LineMaterial, LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, PointLight,
+    LineMaterial, LineSegmentsGeometry, Materials, Mesh, MinFilter, NodeKind, PhongMaterial, PointLight,
     Scene, SceneNode, Side, SpotLight, Texture,
 };
 pub use thread::{RenderThread, RenderedFrame};

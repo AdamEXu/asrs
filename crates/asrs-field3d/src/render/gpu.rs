@@ -6,7 +6,7 @@ use wgpu::util::DeviceExt;
 
 use super::frame::{Draw, DrawKind, Frame};
 use super::scene::{Filter, Geometry, LineSegmentsGeometry, MinFilter, Side, Texture};
-use crate::three::{ArrayData, BufferAttribute};
+use crate::three::{ArrayData, BufferAttribute, Group};
 
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -1018,6 +1018,7 @@ impl Renderer {
                     geometry,
                     material,
                     instances,
+                    group,
                 } => {
                     if instances.as_ref().is_some_and(|m| m.is_empty()) {
                         continue;
@@ -1040,11 +1041,11 @@ impl Renderer {
                         );
                         instance_count = matrices.len() as u32;
                     }
-                    draw_geometry(&mut pass, geometry, instance_count);
+                    draw_geometry(&mut pass, geometry, *group, instance_count);
                 }
                 DrawKind::Line { geometry, .. } => {
                     pass.set_bind_group(2, &self.blank_texture, &[]);
-                    draw_geometry(&mut pass, &self.geometries[&geometry.key()], 1);
+                    draw_geometry(&mut pass, &self.geometries[&geometry.key()], None, 1);
                 }
                 DrawKind::FatLine { geometry, .. } => {
                     let (segments, count) = &self.line_geometries[&geometry.key()];
@@ -1524,17 +1525,38 @@ fn make_frame_group(
     })
 }
 
-fn draw_geometry(pass: &mut wgpu::RenderPass<'_>, geometry: &GpuGeometry, instance_count: u32) {
+/// `renderBufferDirect`'s range: the whole index or position count, narrowed to the group.
+fn draw_range(group: Option<Group>, count: u32) -> Option<std::ops::Range<u32>> {
+    let (start, end) = match group {
+        Some(g) => (g.start, g.start.saturating_add(g.count)),
+        None => (0, usize::MAX),
+    };
+    let end = end.min(count as usize);
+    (start <= end).then(|| start as u32..end as u32)
+}
+
+fn draw_geometry(
+    pass: &mut wgpu::RenderPass<'_>,
+    geometry: &GpuGeometry,
+    group: Option<Group>,
+    instance_count: u32,
+) {
     pass.set_vertex_buffer(0, geometry.position.slice(..));
     pass.set_vertex_buffer(1, geometry.normal.slice(..));
     pass.set_vertex_buffer(2, geometry.color.slice(..));
     pass.set_vertex_buffer(3, geometry.uv.slice(..));
     match &geometry.index {
         Some((buffer, format, count)) => {
-            pass.set_index_buffer(buffer.slice(..), *format);
-            pass.draw_indexed(0..*count, 0, 0..instance_count);
+            if let Some(range) = draw_range(group, *count) {
+                pass.set_index_buffer(buffer.slice(..), *format);
+                pass.draw_indexed(range, 0, 0..instance_count);
+            }
         }
-        None => pass.draw(0..geometry.vertex_count, 0..instance_count),
+        None => {
+            if let Some(range) = draw_range(group, geometry.vertex_count) {
+                pass.draw(range, 0..instance_count);
+            }
+        }
     }
 }
 
