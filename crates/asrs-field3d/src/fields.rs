@@ -25,7 +25,6 @@ use crate::three::primitives::{cylinder_geometry, plane_geometry, sphere_geometr
 use crate::three::{BufferGeometry, Color, ObjectId, Vector3};
 
 /// `makeEvergreenField(materialSpecular, materialShininess, isFTC)`.
-#[allow(clippy::float_cmp)]
 pub fn make_evergreen_field(
     scene: &mut Scene,
     material_specular: Color,
