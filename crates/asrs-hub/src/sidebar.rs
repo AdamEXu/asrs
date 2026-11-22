@@ -113,6 +113,16 @@ impl RowRef<'_> {
         self.display_index
     }
 
+    /// The container's `--value-width`.
+    pub fn value_width(&self) -> f64 {
+        self.nodes[self.id].value_width
+    }
+
+    /// The row's `--indent`.
+    pub fn indent(&self) -> f64 {
+        self.nodes[self.id].indent
+    }
+
     /// The oracle's `elementPath` of the row's `.field-item-container`: from `#fieldList`
     /// (`span:3` of `.side-bar`) while attached, from the removed root once a rebuild took it
     /// out of the DOM.
@@ -671,7 +681,11 @@ impl Sidebar {
     /// The field labels' `window` `mousemove` listeners, which run after hub.ts's `dragMove`,
     /// so the move that starts a drag dispatches no `drag-update`. `offset` is the pressed
     /// label's `[offsetX, offsetY]` at mousedown.
-    pub fn fields_mouse_move(&mut self, drag: &mut Drag, client_x: f64, client_y: f64) {
+    pub fn fields_mouse_move<P, I>(&mut self, drag: &mut Drag<P, I>, client_x: f64, client_y: f64)
+    where
+        P: Clone + From<DragPayload>,
+        I: From<DragItem>,
+    {
         for id in 0..self.nodes.len() {
             let Some(down) = self.nodes[id].mouse_down else {
                 continue;
@@ -1095,14 +1109,17 @@ impl Sidebar {
     }
 
     /// `field-item-label` touchstart, which reads the label's rect once per coordinate.
-    pub fn label_touch_start(
+    pub fn label_touch_start<P, I>(
         &mut self,
         geometry: &mut dyn SidebarGeometry,
-        drag: &mut Drag,
+        drag: &mut Drag<P, I>,
         flat_index: usize,
         x: f64,
         y: f64,
-    ) {
+    ) where
+        P: Clone + From<DragPayload>,
+        I: From<DragItem>,
+    {
         if let Some(id) = self.flat_id(flat_index) {
             let offset_x = x - geometry.label_rect(self.row_ref(id)).x;
             let offset_y = y - geometry.label_rect(self.row_ref(id)).y;
@@ -1111,15 +1128,18 @@ impl Sidebar {
     }
 
     /// The label `dragEvent`: fills `#dragItem` and calls `window.startDrag`.
-    fn drag_event(
+    fn drag_event<P, I>(
         &mut self,
-        drag: &mut Drag,
+        drag: &mut Drag<P, I>,
         id: usize,
         x: f64,
         y: f64,
         offset_x: f64,
         offset_y: f64,
-    ) {
+    ) where
+        P: Clone + From<DragPayload>,
+        I: From<DragItem>,
+    {
         let node = &self.nodes[id];
         let Some(full_key) = node.full_key.clone() else {
             return;
@@ -1154,8 +1174,9 @@ impl Sidebar {
             DragItem {
                 text,
                 bold: is_group,
-            },
-            payload,
+            }
+            .into(),
+            payload.into(),
         );
         if is_group {
             self.select_group.clear();

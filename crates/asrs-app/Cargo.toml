@@ -23,6 +23,7 @@ asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-services = { path = "../asrs-services" }
+asrs-tabs = { path = "../asrs-tabs" }
 asrs-ui.workspace = true
 async-channel = "=2.5.0"
 png = { version = "=0.18.1", optional = true }
@@ -30,7 +31,6 @@ png = { version = "=0.18.1", optional = true }
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }
 asrs-parity = { path = "../asrs-parity" }
-asrs-tabs = { path = "../asrs-tabs" }
 image = { version = "=0.25.10", default-features = false }
 
 [lints]
@@ -42,6 +42,11 @@ harness = false
 
 [[test]]
 name = "hub_entity"
+required-features = ["parity"]
+
+[[test]]
+name = "sidebar_view"
+harness = false
 required-features = ["parity"]
 
 [[test]]
