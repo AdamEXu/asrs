@@ -155,7 +155,8 @@ fn select_menu() {
     let read = select_menu_roundtrip(&menu).expect("select menu");
     assert!(!read.pulls_down);
     assert_eq!(read.selected_tag, Some(5));
-    let rows: Vec<(bool, &str, Option<&str>, Option<f64>, bool, isize)> = read
+    type Row<'a> = (bool, &'a str, Option<&'a str>, Option<f64>, bool, isize);
+    let rows: Vec<Row<'_>> = read
         .items
         .iter()
         .map(|i| {

@@ -589,4 +589,3 @@ fn is_lead_surrogate(u: u16) -> bool {
 fn is_trail_surrogate(u: u16) -> bool {
     (0xDC00..0xE000).contains(&u)
 }
-

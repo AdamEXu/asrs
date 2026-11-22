@@ -14,7 +14,7 @@ pub mod gpui {
         px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
-    pub use gpui_kit::{HeadlessAppContext, Modifiers, NoopTextSystem};
+    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};
 }
 
 pub mod button;

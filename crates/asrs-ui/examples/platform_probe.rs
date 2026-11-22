@@ -329,7 +329,7 @@ async fn select_popup(cx: &mut AsyncApp, hub: AnyWindowHandle, report: &mut Repo
             None => with_window(cx, hub, |w| platform::close_popup_menu(w)),
         }
         sleep(cx, 400).await;
-        let selection = closed.borrow().clone();
+        let selection = *closed.borrow();
         let menu_frame = frames.first().copied();
         let control_mid = window.y + window.height - (control[1] + control[3] / 2.0);
         let over = menu_frame.is_some_and(|m| {

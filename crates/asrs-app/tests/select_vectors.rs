@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 //! Replays Blink's `form/select-keys` vector through the real [`Select`] component over
 //! [`FormSelect`] in a headless window: each key goes through the component's key routing and
 //! its model, and after every op the select's `value`, `selectedIndex`, focus and the `input`
