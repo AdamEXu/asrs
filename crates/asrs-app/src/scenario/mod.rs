@@ -476,8 +476,9 @@ mod tests {
 
     #[test]
     fn electron_only_actions_are_refused() {
-        let e = Scenario::parse("line-graph", &scenario_file("line-graph")).unwrap_err();
-        assert!(e.contains("action 2: eval"), "{e}");
+        let e =
+            Scenario::parse("e", r#"{"actions": [{"idle": true}, {"eval": "1"}]}"#).unwrap_err();
+        assert!(e.contains("action 1: eval"), "{e}");
         let e =
             Scenario::parse("d", r#"{"actions": [{"dialog": 0}, {"capture": "c"}]}"#).unwrap_err();
         assert!(e.contains("dialog"), "{e}");

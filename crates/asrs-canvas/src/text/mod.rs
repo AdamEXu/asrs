@@ -101,6 +101,37 @@ pub trait TextBackend {
     ) -> Option<Arc<Mask>>;
 }
 
+impl<T: TextBackend + ?Sized> TextBackend for Box<T> {
+    fn shape(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        (**self).shape(font, text, zoom)
+    }
+
+    fn metrics(&mut self, font: &FontSpec) -> FontMetrics {
+        (**self).metrics(font)
+    }
+
+    fn fallback_metrics(&mut self, glyph: Glyph, zoom: f32) -> Option<FontMetrics> {
+        (**self).fallback_metrics(glyph, zoom)
+    }
+
+    fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
+        (**self).glyph_bounds(glyph)
+    }
+
+    fn raw_mask(&mut self, glyph: Glyph, scale: f64, x_scale: f64, phase: u8) -> Option<Arc<Mask>> {
+        (**self).raw_mask(glyph, scale, x_scale, phase)
+    }
+
+    fn raw_mask_transformed(
+        &mut self,
+        glyph: Glyph,
+        matrix: [f64; 4],
+        phase: (u8, u8),
+    ) -> Option<Arc<Mask>> {
+        (**self).raw_mask_transformed(glyph, matrix, phase)
+    }
+}
+
 /// The platform backend behind a glyph and shaping cache.
 pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
     #[cfg(target_os = "macos")]

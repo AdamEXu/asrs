@@ -1,5 +1,5 @@
 {
-  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph. Masked on both sides: .renderer-content and .controls-content until U11's line graph and controls land; each mask is deleted when its gap closes",
+  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph, compared unmasked",
   "actions": [
     {
       "capture": "launch",
@@ -10,10 +10,6 @@
         ".renderer-content",
         ".controls-content",
         ".timeline"
-      ],
-      "masks": [
-        ".renderer-content",
-        ".controls-content"
       ]
     }
   ]

@@ -74,6 +74,19 @@ fn value_style() -> TextStyle {
     ])
 }
 
+/// `div.field-value`'s text, `right: 12px`: its box ends there at its exact width, which GPUI
+/// rounds, so the text is painted from where the exact width starts.
+fn value_text(text: String, color: u32, window: &Window, cx: &mut App) -> AnyElement {
+    let scale = window.scale_factor();
+    let (width, _) = asrs_ui::text::measure(cx, &value_style(), &text, scale);
+    let device = width * f64::from(scale);
+    let dx = ((device + 0.5).floor() - device) / f64::from(scale);
+    Text::new(text, value_style())
+        .color(color)
+        .subpixel(dx as f32, 0.0)
+        .into_any_element()
+}
+
 fn results_style() -> TextStyle {
     style(&[
         ("font", &font("12px")),
@@ -659,11 +672,9 @@ impl SidebarView {
         let flat = row.index;
         match &row.value {
             RowValue::None => None,
-            RowValue::Text { text } if !text.is_empty() => Some(
-                Text::new(text.to_string_lossy(), value_style())
-                    .color(theme.text)
-                    .into_any_element(),
-            ),
+            RowValue::Text { text } if !text.is_empty() => {
+                Some(value_text(text.to_string_lossy(), theme.text, window, cx))
+            }
             RowValue::Text { .. } => None,
             RowValue::Number {
                 input_hidden: false,
@@ -678,11 +689,12 @@ impl SidebarView {
                         .into_any_element(),
                 )
             }
-            RowValue::Number { span_text, .. } if !span_text.is_empty() => Some(
-                Text::new(span_text.to_string_lossy(), value_style())
-                    .color(theme.text)
-                    .into_any_element(),
-            ),
+            RowValue::Number { span_text, .. } if !span_text.is_empty() => Some(value_text(
+                span_text.to_string_lossy(),
+                theme.text,
+                window,
+                cx,
+            )),
             RowValue::Number { .. } => None,
             RowValue::Bool {
                 fill,

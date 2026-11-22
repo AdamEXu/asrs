@@ -35,6 +35,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
 
@@ -131,6 +132,7 @@ pub struct HubFrame<H: FrameHost> {
     timeline_canvas: Option<Entity<CanvasState>>,
     timeline_rect: Option<[f64; 4]>,
     timeline_hovered: bool,
+    pub(super) line_graph: LineGraphViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -142,7 +144,7 @@ struct TimelinePointer {
     target: ScrollTarget,
 }
 
-fn wheel_of(event: &ScrollEvent) -> Wheel {
+pub(super) fn wheel_of(event: &ScrollEvent) -> Wheel {
     let delta = platform::wheel_delta(event);
     Wheel {
         delta: [f64::from(delta.x), f64::from(delta.y)],
@@ -212,6 +214,7 @@ impl<H: FrameHost> HubFrame<H> {
             timeline_canvas: None,
             timeline_rect: None,
             timeline_hovered: false,
+            line_graph: LineGraphViews::default(),
         }
     }
 
@@ -304,6 +307,13 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
+        self.line_graph_mouse_move(
+            x,
+            y,
+            event.modifiers.shift,
+            event.pressed_button.is_some(),
+            cx,
+        );
         if let Some(p) = self.timeline_pointer(x, y, cx) {
             let (timeline, was_hovered) = (&mut self.timeline, self.timeline_hovered);
             self.host.input(cx, |hub| {
@@ -328,6 +338,7 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
             eprintln!("asrs: {e}");
         }
+        self.line_graph_mouse_up(x, event.modifiers.shift, cx);
         if let Some(p) = self.timeline_pointer(x, y, cx) {
             let timeline = &mut self.timeline;
             self.host.input(cx, |hub| {
@@ -648,6 +659,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let blurred = !hub.is_focused();
         let now = self.started.elapsed().as_secs_f64() * 1000.0;
         self.shell.fps_mut().frame(now, show_fps);
+        self.line_graph_timers(cx);
         if show_fps {
             window.request_animation_frame();
         }
@@ -814,6 +826,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 let mut renderer = place(rect, origin);
                 if let Some(content) = self.host.slot(FrameSlot::RendererContent, window, cx) {
                     renderer = renderer.child(content);
+                }
+                if let Some(graph) = self.line_graph_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(graph);
                 }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
