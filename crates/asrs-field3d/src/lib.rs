@@ -5,4 +5,5 @@ pub mod fields;
 pub mod glb;
 pub mod managers;
 pub mod render;
+pub mod renderer;
 pub mod three;

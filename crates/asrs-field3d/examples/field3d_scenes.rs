@@ -9,23 +9,26 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use asrs_field3d::glb;
 use asrs_field3d::managers::{
     AprilTagManager, AprilTagObj, AprilTagVariant, AxesManager, AxesObj, ConeManager, ConeObj,
-    HeatmapField, HeatmapManager, HeatmapObj, ManagerContext, ObjectManager, TrajectoryManager,
-    TrajectoryObj,
+    HeatmapField, HeatmapManager, HeatmapObj, ManagerContext, ObjectManager, RobotManager,
+    RobotObj, TrajectoryManager, TrajectoryObj, april_tag_texture_path, decode_png_texture,
 };
 use asrs_field3d::render::{
     FatLine, Filter, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial,
     LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, Renderer, Scene, Side, Texture,
     build_frame, edge_mask, swap_red_blue,
 };
+use asrs_field3d::renderer::{AnyObj, any_obj};
 use asrs_field3d::three::{
     ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, Object3D, ObjectId,
     PerspectiveCamera, Vector3, primitives,
 };
 use asrs_js::string::JsString;
+use asrs_js::value::{JsObject, JsValue};
 use asrs_log::geometry::{AnnotatedPose3d, Pose3d, PoseAnnotations};
-use asrs_model::assets::CoordinateSystem;
+use asrs_model::assets::{AdvantageScopeAssets, CoordinateSystem, Parsed, parse_robot};
 use asrs_model::preferences::Field3dMode;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
@@ -218,10 +221,73 @@ fn poses(command: &Json) -> Vec<AnnotatedPose3d> {
         .collect()
 }
 
+fn to_js(j: &Json) -> JsValue {
+    match j {
+        Json::Null => JsValue::Null,
+        Json::Bool(b) => JsValue::Bool(*b),
+        Json::Number(x) => JsValue::Number(*x),
+        Json::String(s) => JsValue::String(JsString::from_units(s.units().to_vec())),
+        Json::Array(items) => JsValue::Array(items.iter().map(to_js).collect()),
+        Json::Object(pairs) => {
+            let mut o = JsObject::new();
+            for (k, v) in pairs {
+                o.insert(JsString::from_units(k.units().to_vec()), to_js(v));
+            }
+            JsValue::Object(o)
+        }
+    }
+}
+
+/// A `robot` manager node: `robot` is the parsed config of upstream's `model`, loaded through the
+/// port's `loadRobot` once the first command asks for it, then every command applies in turn.
+fn run_robot(scene: &mut Scene, ctx: ManagerContext, node: &Json, reference: &Path) {
+    let Ok(Parsed::Config(mut config)) = parse_robot(&to_js(node.get("robot").expect("robot")))
+    else {
+        panic!("robot config does not parse");
+    };
+    let model = reference.join(text(node, "model").expect("model"));
+    config.path = JsString::from(model.to_str().expect("UTF-8 model path"));
+    let assets = Arc::new(AdvantageScopeAssets {
+        robots: vec![config],
+        ..AdvantageScopeAssets::default()
+    });
+    let mut manager = RobotManager::new(
+        ctx,
+        Box::new(move || Some(assets.clone())),
+        Box::new(|| {}),
+        Box::new(|| {}),
+    );
+    let commands: Vec<RobotObj> = node
+        .get("commands")
+        .and_then(Json::as_array)
+        .expect("commands")
+        .iter()
+        .map(|c| match any_obj(&to_js(c)).expect("robot command") {
+            AnyObj::Robot(robot) => robot,
+            other => panic!("not a robot command: {other:?}"),
+        })
+        .collect();
+    manager
+        .set_object_data(scene, &commands[0])
+        .expect("first robot command applies");
+    let request = manager.take_load_request().expect("a loadRobot request");
+    let fetch = |url: &JsString| glb::read_file_url(url);
+    let meshes = glb::with_load_stack(|| {
+        glb::load_robot(&request.config, request.is_ftc, &request.options, &fetch)
+    })
+    .expect("the robot loads");
+    manager.load_finished(&request, &meshes);
+    for command in &commands {
+        manager
+            .set_object_data(scene, command)
+            .expect("robot command applies");
+    }
+}
+
 /// A `manager` node (see `oracle/field3d/page.ts`): the group `root`, filled by one of the
-/// port's object managers from the node's commands. AprilTag textures are never delivered, as
-/// the reference captures before they load.
-fn run_manager(scene: &mut Scene, root: ObjectId, node: &Json) {
+/// port's object managers from the node's commands. AprilTag textures are delivered only when
+/// the node sets `loadTextures`, as the reference otherwise captures before they load.
+fn run_manager(scene: &mut Scene, root: ObjectId, node: &Json, reference: &Path) {
     let ctx = ManagerContext {
         root,
         material_specular: Color::hex(num(node, "specular").unwrap_or(0.0)),
@@ -236,7 +302,7 @@ fn run_manager(scene: &mut Scene, root: ObjectId, node: &Json) {
     let result = match text(node, "manager").as_deref() {
         Some("aprilTag") => {
             let mut manager = AprilTagManager::new(ctx);
-            commands.iter().try_for_each(|c| {
+            let result = commands.iter().try_for_each(|c| {
                 let variant = c.get("variant").expect("variant");
                 let object = AprilTagObj {
                     poses: poses(c),
@@ -246,7 +312,21 @@ fn run_manager(scene: &mut Scene, root: ObjectId, node: &Json) {
                     },
                 };
                 manager.set_object_data(scene, &object)
-            })
+            });
+            if flag(node, "loadTextures") == Some(true) {
+                for request in manager.take_texture_requests() {
+                    let path = april_tag_texture_path(reference, &request.url)
+                        .expect("a texture inside upstream");
+                    let bytes = std::fs::read(&path).expect("the texture file");
+                    let texture = decode_png_texture(&bytes).expect("the texture decodes");
+                    manager.texture_loaded(scene, &request, texture);
+                }
+            }
+            result
+        }
+        Some("robot") => {
+            run_robot(scene, ctx, node, reference);
+            Ok(())
         }
         Some("axes") => {
             let mut manager = AxesManager::new(ctx);
@@ -297,7 +377,7 @@ fn run_manager(scene: &mut Scene, root: ObjectId, node: &Json) {
     result.expect("manager commands apply");
 }
 
-fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
+fn build(spec: &Json, reference: &Path) -> (Scene, PerspectiveCamera) {
     let mut scene = Scene::new();
     let mut named: HashMap<String, ObjectId> = HashMap::new();
     for node in spec.get("nodes").and_then(Json::as_array).expect("nodes") {
@@ -411,7 +491,7 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
             }
             Some("manager") => {
                 let id = scene.create(NodeKind::Group);
-                run_manager(&mut scene, id, node);
+                run_manager(&mut scene, id, node, reference);
                 id
             }
             other => panic!("unknown node type {other:?}"),
@@ -451,6 +531,9 @@ fn main() -> Result<(), String> {
         return Err("usage: field3d_scenes <scenes dir> <out dir> [<scene>...]".into());
     };
     let only = &args[2..];
+    let reference = std::fs::canonicalize(scenes_dir)
+        .map_err(|e| format!("{scenes_dir}: {e}"))?
+        .join("../../../reference/AdvantageScope");
     let mut names: Vec<String> = std::fs::read_dir(scenes_dir)
         .map_err(|e| format!("{scenes_dir}: {e}"))?
         .filter_map(|e| e.ok()?.file_name().into_string().ok())
@@ -476,7 +559,7 @@ fn main() -> Result<(), String> {
         );
         let antialias = flag(&spec, "antialias").unwrap_or(false);
         for scale in [1.0, 2.0] {
-            let (mut scene, mut camera) = build(&spec);
+            let (mut scene, mut camera) = build(&spec, &reference);
             camera.aspect = w / h;
             camera.update_projection_matrix();
             let options = FrameOptions {
