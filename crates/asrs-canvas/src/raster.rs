@@ -967,11 +967,6 @@ impl<'a> Raster<'a> {
         Some(out)
     }
 
-    fn paint(&mut self, coverage: &Coverage, source: &Source) {
-        let spans = coverage.to_spans(self.pixmap.width(), self.pixmap.height());
-        self.paint_spans(&spans, source);
-    }
-
     /// Blends `source` through `spans` in blit order. Shaders are evaluated over the bounds of
     /// the spans into a scratch pixmap first, then blended with the same 8-bit arithmetic as
     /// solid colours.
@@ -1124,8 +1119,8 @@ impl<'a> Raster<'a> {
             };
             let (w, h) = (self.pixmap.width(), self.pixmap.height());
             for (a, b) in hairline::segments(&device, self.state.line_cap) {
-                if let Some(coverage) = hairline::coverage(a, b, w, h) {
-                    self.paint(&coverage, &paint);
+                if let Some(spans) = hairline::spans(a, b, w, h) {
+                    self.paint_spans(&spans, &paint);
                 }
             }
             return;
@@ -1501,7 +1496,6 @@ impl<'a> Raster<'a> {
                 width: cw,
                 height: ch,
                 alpha: vec![255; cw * ch],
-                pair: false,
             });
         }
         let ctm = self.state.transform;

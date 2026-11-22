@@ -1053,8 +1053,8 @@ fn stroke_raster(geometry: &Geometry, m: &Affine, style: &Style, pixmap: &Pixmap
         let mut spans = Spans::new(w, h);
         if let Some(device) = as_path(geometry).transformed(m).to_tiny() {
             for (a, b) in hairline::segments(&device, style.cap) {
-                if let Some(c) = hairline::coverage(a, b, w, h) {
-                    for (x, y, alphas) in c.to_spans(w, h).iter() {
+                if let Some(c) = hairline::spans(a, b, w, h) {
+                    for (x, y, alphas) in c.iter() {
                         spans.anti_h(x, y, alphas);
                     }
                 }

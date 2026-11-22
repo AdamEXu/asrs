@@ -10,7 +10,7 @@ use std::f32::consts::PI;
 use tiny_skia::{LineCap, PathSegment};
 
 use crate::clip::{self, ClipRect};
-use crate::scan::Coverage;
+use crate::blit::Spans;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct P {
@@ -315,34 +315,28 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
         .collect()
 }
 
-/// Coverage of one segment, clipped to the canvas; one segment never touches a pixel twice.
-struct Plot {
-    x0: i32,
-    y0: i32,
-    width: usize,
-    height: usize,
-    alpha: Vec<u8>,
-    pair: bool,
-}
-
-impl Plot {
-    fn put(&mut self, x: i32, y: i32, a: u32) {
-        let (cx, cy) = (x - self.x0, y - self.y0);
-        if a == 0 || cx < 0 || cy < 0 || cx as usize >= self.width || cy as usize >= self.height {
-            return;
-        }
-        self.alpha[cy as usize * self.width + cx as usize] = a.min(255) as u8;
-    }
+#[derive(Clone, Copy, PartialEq)]
+enum Hair {
+    HLine,
+    Horish,
+    VLine,
+    Vertish,
 }
 
 const FIXED_HALF: i32 = 1 << 15;
 
-/// `do_anti_hairline` from `SkScan_Antihair.cpp`, in 26.6 and 16.16 fixed point.
-fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, plot: &mut Plot) {
+fn dot6_scale(value: u32, mod64: i32) -> u8 {
+    ((value * mod64 as u32) >> 6) as u8
+}
+
+/// `do_anti_hairline` from `SkScan_Antihair.cpp`, in 26.6 and 16.16 fixed point. Segments
+/// longer than 511 px are halved, and the halves meet in one pixel that both blit into, so the
+/// blits are kept in Skia's order and blended one after another.
+fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, out: &mut Spans) {
     if (x1 - x0).abs() > 511 * 64 || (y1 - y0).abs() > 511 * 64 {
         let (hx, hy) = ((x0 >> 1) + (x1 >> 1), (y0 >> 1) + (y1 >> 1));
-        anti_hairline(x0, y0, hx, hy, plot);
-        anti_hairline(hx, hy, x1, y1, plot);
+        anti_hairline(x0, y0, hx, hy, out);
+        anti_hairline(hx, hy, x1, y1, out);
         return;
     }
     let horizontal = (x1 - x0).abs() > (y1 - y0).abs();
@@ -363,56 +357,84 @@ fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, plot: &mut Plot) {
     let istart = major0 >> 6;
     let istop = (major1 + 63) >> 6;
     let mut fstart = minor0 << 10;
-    let slope = if minor0 == minor1 {
-        0
+    let (hair, slope) = if minor0 == minor1 {
+        (if horizontal { Hair::HLine } else { Hair::VLine }, 0)
     } else {
         let s = ((i64::from(minor1 - minor0) << 16) / i64::from(major1 - major0)) as i32;
         fstart += ((i64::from(s) * i64::from(32 - (major0 & 63)) + 32) >> 6) as i32;
-        s
+        (if horizontal { Hair::Horish } else { Hair::Vertish }, s)
     };
     let (scale_start, scale_stop) = if istop - istart == 1 {
         (major1 - major0, 0)
     } else {
         (64 - (major0 & 63), major1 & 63)
     };
-    plot.pair |= slope != 0;
-    let mut f = cap(plot, horizontal, istart, fstart, scale_start) + slope;
+    let mut f = draw_cap(out, hair, istart, fstart, slope, scale_start);
     let full = istop - istart - 1 - i32::from(scale_stop > 0);
-    for major in istart + 1..istart + 1 + full.max(0) {
-        cap(plot, horizontal, major, f, 64);
-        f += slope;
+    if full > 0 {
+        f = draw_line(out, hair, istart + 1, istart + 1 + full, f, slope);
     }
     if scale_stop > 0 {
-        cap(plot, horizontal, istop - 1, f, scale_stop);
+        draw_cap(out, hair, istop - 1, f, slope, scale_stop);
     }
 }
 
-/// One step along the major axis: the two pixels straddling `f` (16.16, the line's minor
-/// coordinate at the centre of `major`) share its coverage, scaled by `mod64 / 64`.
-fn cap(plot: &mut Plot, horizontal: bool, major: i32, f: i32, mod64: i32) -> i32 {
+/// `SkAntiHairBlitter::drawCap`: one step along the major axis, the two pixels straddling `f`
+/// (16.16, the minor coordinate at the centre of `major`) sharing its coverage scaled by
+/// `mod64 / 64`.
+fn draw_cap(out: &mut Spans, hair: Hair, major: i32, f: i32, slope: i32, mod64: i32) -> i32 {
     let f = f + FIXED_HALF;
     let lower = f >> 16;
     let a = ((f >> 8) & 0xff) as u32;
-    let scale = |v: u32| {
-        if mod64 == 64 {
-            v
-        } else {
-            (v * mod64 as u32) >> 6
+    let (lo, up) = (dot6_scale(a, mod64), dot6_scale(255 - a, mod64));
+    match hair {
+        Hair::HLine => {
+            out.anti_h(major, lower, &[lo]);
+            out.anti_h(major, lower - 1, &[up]);
         }
-    };
-    let (lo, up) = (scale(a), scale(255 - a));
-    if horizontal {
-        plot.put(major, lower, lo);
-        plot.put(major, lower - 1, up);
-    } else {
-        plot.put(lower, major, lo);
-        plot.put(lower - 1, major, up);
+        Hair::VLine => {
+            out.v(lower, major, 1, lo);
+            out.v(lower - 1, major, 1, up);
+        }
+        Hair::Horish => out.anti_v2(major, lower - 1, up, lo),
+        Hair::Vertish => out.anti_h2(lower - 1, major, up, lo),
+    }
+    f + slope - FIXED_HALF
+}
+
+/// `SkAntiHairBlitter::drawLine` over `start..stop` on the major axis.
+fn draw_line(out: &mut Spans, hair: Hair, start: i32, stop: i32, f: i32, slope: i32) -> i32 {
+    let mut f = f + FIXED_HALF;
+    let count = stop - start;
+    let lower = f >> 16;
+    let a = ((f >> 8) & 0xff) as u8;
+    match hair {
+        Hair::HLine => {
+            out.anti_h(start, lower, &vec![a; count as usize]);
+            out.anti_h(start, lower - 1, &vec![255 - a; count as usize]);
+        }
+        Hair::VLine => {
+            out.v(lower, start, count, a);
+            out.v(lower - 1, start, count, 255 - a);
+        }
+        Hair::Horish | Hair::Vertish => {
+            for major in start..stop {
+                let lower = f >> 16;
+                let a = ((f >> 8) & 0xff) as u8;
+                if hair == Hair::Horish {
+                    out.anti_v2(major, lower - 1, 255 - a, a);
+                } else {
+                    out.anti_h2(lower - 1, major, 255 - a, a);
+                }
+                f += slope;
+            }
+        }
     }
     f - FIXED_HALF
 }
 
-/// The coverage Skia's antihair blitter gives one segment, clipped to the canvas.
-pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
+/// The blits Skia's antihair blitter makes for one segment, in order, clipped to the canvas.
+pub fn spans(a: P, b: P, width: u32, height: u32) -> Option<Spans> {
     let fixed = ClipRect {
         left: -32767.0,
         top: -32767.0,
@@ -428,31 +450,9 @@ pub fn coverage(a: P, b: P, width: u32, height: u32) -> Option<Coverage> {
     let [a, b] = clip::intersect_line([a, b], fixed)?;
     let [a, b] = clip::intersect_line([a, b], canvas)?;
     let dot6 = |v: f32| (v * 64.0) as i32;
-    let x0 = (a.x.min(b.x).floor() as i32 - 1).max(0);
-    let y0 = (a.y.min(b.y).floor() as i32 - 1).max(0);
-    let x1 = (a.x.max(b.x).ceil() as i32 + 2).min(width as i32);
-    let y1 = (a.y.max(b.y).ceil() as i32 + 2).min(height as i32);
-    if x0 >= x1 || y0 >= y1 {
-        return None;
-    }
-    let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
-    let mut plot = Plot {
-        x0,
-        y0,
-        width: w,
-        height: h,
-        alpha: vec![0; w * h],
-        pair: false,
-    };
-    anti_hairline(dot6(a.x), dot6(a.y), dot6(b.x), dot6(b.y), &mut plot);
-    Some(Coverage {
-        x: x0,
-        y: y0,
-        width: w,
-        height: h,
-        alpha: plot.alpha,
-        pair: plot.pair,
-    })
+    let mut out = Spans::new(width, height);
+    anti_hairline(dot6(a.x), dot6(a.y), dot6(b.x), dot6(b.y), &mut out);
+    (!out.is_empty()).then_some(out)
 }
 
 #[cfg(test)]
@@ -516,15 +516,7 @@ mod tests {
     }
 
     fn alphas(a: P, b: P, w: u32, h: u32) -> Vec<u8> {
-        let c = coverage(a, b, w, h).unwrap();
-        let mut out = vec![0; (w * h) as usize];
-        for row in 0..c.height {
-            for col in 0..c.width {
-                out[(c.y as usize + row) * w as usize + c.x as usize + col] =
-                    c.alpha[row * c.width + col];
-            }
-        }
-        out
+        spans(a, b, w, h).unwrap().flatten(w as usize, h as usize)
     }
 
     #[test]
