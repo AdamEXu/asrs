@@ -177,6 +177,7 @@
     "dom/timeline/zoom-help-dark-2x": {"cases":43,"content":"853b06a6e135103f","generator":"9c22253923dd131d","spec":"parity/specs/dom/timeline/zoom-help-dark-2x.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/camera-controls-mac": {"cases":125,"content":"c7d8fe04bfba0a08","generator":"6f03f87232fdfb89","spec":"parity/specs/field3d/camera-controls-mac.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/camera-controls-other": {"cases":45,"content":"21e8591091fed7ce","generator":"85c1a69029e03d29","spec":"parity/specs/field3d/camera-controls-other.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "field3d/fields": {"cases":22,"content":"0f06c84756b3f950","generator":"77067cbc593ce956","spec":"parity/specs/field3d/fields.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/glb-bundled": {"cases":24,"content":"e5e79194bf430f80","generator":"99477e7297afa036","spec":"parity/specs/field3d/glb-bundled.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/glb-procedural": {"cases":114,"content":"53a360a8bc967de3","generator":"52c3a18d5a015797","spec":"parity/specs/field3d/glb-procedural.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "field3d/glb-synthetic": {"cases":177,"content":"ade15095ccf20c08","generator":"bfa591ddccb48a3c","spec":"parity/specs/field3d/glb-synthetic.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
