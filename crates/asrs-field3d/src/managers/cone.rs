@@ -1,63 +1,15 @@
 use std::sync::Arc;
 
-use asrs_canvas::{Canvas2d, Raster};
 use asrs_js::math;
 use asrs_js::string::JsString;
 
 use super::{
-    ConeObj, InstanceSource, ManagerContext, ManagerError, ObjectManager, ResizableInstancedMesh,
-    poses,
+    CanvasTexture, ConeObj, InstanceSource, ManagerContext, ManagerError, ObjectManager,
+    ResizableInstancedMesh, poses,
 };
 use crate::render::{Geometry, Materials, PhongMaterial, Scene, Texture};
 use crate::three::BufferGeometry;
 use crate::three::primitives::cone_geometry;
-
-/// A 2D canvas wrapped in a `CanvasTexture`. `canvas` keeps every call made since the canvas was
-/// created; `update` (`needsUpdate = true`) rasterizes the new ones and makes the texture the GPU
-/// re-uploads.
-pub struct CanvasTexture {
-    canvas: Canvas2d,
-    raster: Raster<'static>,
-    applied: usize,
-    texture: Arc<Texture>,
-}
-
-impl CanvasTexture {
-    fn new(width: u32, height: u32) -> Self {
-        let raster = Raster::new(width, height).expect("canvas size is valid");
-        let texture = Arc::new(Texture::new(width, height, read_pixels(&raster).into()));
-        CanvasTexture {
-            canvas: Canvas2d::new(width, height),
-            raster,
-            applied: 0,
-            texture,
-        }
-    }
-
-    pub fn canvas(&self) -> &Canvas2d {
-        &self.canvas
-    }
-
-    pub fn texture(&self) -> &Arc<Texture> {
-        &self.texture
-    }
-
-    fn update(&mut self) {
-        for call in &self.canvas.calls[self.applied..] {
-            self.raster.apply(call);
-        }
-        self.applied = self.canvas.calls.len();
-        self.texture = Arc::new(self.texture.with_pixels(read_pixels(&self.raster).into()));
-    }
-}
-
-/// The canvas as WebGL uploads it with `UNPACK_PREMULTIPLY_ALPHA_WEBGL` off: straight alpha.
-fn read_pixels(raster: &Raster<'_>) -> Vec<u8> {
-    let pixmap = raster.pixmap();
-    asrs_canvas::pixels::read_rect(pixmap, 0, 0, pixmap.width(), pixmap.height())
-        .expect("whole-canvas read")
-        .data
-}
 
 fn offset(position: &JsString) -> f64 {
     match position.as_string().as_deref() {
@@ -98,9 +50,9 @@ impl ConeManager {
                 ..PhongMaterial::new()
             })
         };
-        let main_material = phong(Some(main.texture.clone()));
+        let main_material = phong(Some(main.texture().clone()));
         let second_material = phong(None);
-        let base_material = phong(Some(base.texture.clone()));
+        let base_material = phong(Some(base.texture().clone()));
 
         let instances = ResizableInstancedMesh::new(
             ctx.root,
@@ -150,8 +102,8 @@ impl ConeManager {
                 ..(**material).clone()
             })
         };
-        self.main_material = with_map(&self.main_material, &self.main.texture);
-        self.base_material = with_map(&self.base_material, &self.base.texture);
+        self.main_material = with_map(&self.main_material, self.main.texture());
+        self.base_material = with_map(&self.base_material, self.base.texture());
         let materials = Materials::Array(vec![
             self.main_material.clone(),
             self.second_material.clone(),
@@ -179,12 +131,12 @@ impl ObjectManager for ConeManager {
 
         if object.color != self.last_color {
             let color = object.color.to_string_lossy();
-            self.main.canvas.set_fill_style(color.as_str());
-            self.base.canvas.set_fill_style(color.as_str());
-            self.main.canvas.fill_rect(0.0, 0.0, 100.0, 100.0);
-            self.base.canvas.fill_rect(0.0, 0.0, 100.0, 100.0);
-            self.main.canvas.set_fill_style("black");
-            self.main.canvas.fill_rect(20.0, 0.0, 10.0, 100.0);
+            self.main.canvas_mut().set_fill_style(color.as_str());
+            self.base.canvas_mut().set_fill_style(color.as_str());
+            self.main.canvas_mut().fill_rect(0.0, 0.0, 100.0, 100.0);
+            self.base.canvas_mut().fill_rect(0.0, 0.0, 100.0, 100.0);
+            self.main.canvas_mut().set_fill_style("black");
+            self.main.canvas_mut().fill_rect(20.0, 0.0, 10.0, 100.0);
             self.update_textures(scene);
             self.last_color = object.color.clone();
         }
