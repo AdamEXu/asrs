@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use asrs_hub::factory::{HubTabFactory, RendererHook};
+use asrs_hub::hub::assets_alert;
 use asrs_hub::tabs::{Tabs, TabsHost};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
@@ -554,8 +555,7 @@ impl SourceListCx for Host {
 }
 
 /// `window.assets = message.data`, parsed into the typed assets controllers read. An entry
-/// the config parsers drop, and load failures (whose alert belongs to D07's hub lifecycle),
-/// fail the run.
+/// the config parsers drop fails the run.
 fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String> {
     let JsValue::Object(o) = data else {
         return match data {
@@ -567,9 +567,7 @@ fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String
         Some(JsValue::Array(items)) => Ok(items.len()),
         _ => Err(format!("set-assets without a {key} array is not modeled")),
     };
-    if list("loadFailures")? > 0 {
-        return Err("set-assets with load failures is not modeled".to_owned());
-    }
+    list("loadFailures")?;
     let assets = AdvantageScopeAssets::from_js(data);
     for (key, parsed) in [
         ("field2ds", assets.field2ds.len()),
@@ -1992,9 +1990,15 @@ impl Runner {
             "set-assets" => {
                 if asrs_js::json::stringify(&self.host.assets_raw) != asrs_js::json::stringify(data)
                 {
+                    let alert = assets_alert(&self.host.assets_raw, data);
                     self.host.assets = assets_from_js(data).map_err(unmodeled)?;
                     self.host.assets_raw = data.clone();
                     self.tabs.new_assets(&mut self.host)?;
+                    if let Some(error) = alert.error {
+                        self.host
+                            .messages
+                            .push(NamedMessage::new(error.name.name(), error.data));
+                    }
                 }
             }
             "restore-type-memory" => {

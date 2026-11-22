@@ -129,6 +129,8 @@ pub trait HubHost {
     /// `historical-start` and `historical-start-raw`, whose payloads hold bytes.
     fn send_historical_request(&mut self, request: MainRequest);
     fn set_timeout(&mut self, timeout: HubTimeout);
+    /// `period_ms` is what upstream passes; Blink converts it to a whole `long` number of
+    /// milliseconds (16 for `1000 / 60`) and the oracle's fake timers do not.
     fn set_interval(&mut self, interval: HubInterval, period_ms: f64);
     fn clear_interval(&mut self, interval: &HubInterval);
     fn request_animation_frame(&mut self, frame: HubFrame);
@@ -810,7 +812,9 @@ impl HubModel {
     }
 
     /// Runs `f` on historical source `index` and then handles the events it raised, as the
-    /// callbacks upstream passes to `openFile` would have.
+    /// callbacks upstream passes to `openFile` would have. Upstream runs them synchronously
+    /// inside the source; they are deferred to its return because they borrow the `Log` the
+    /// source is writing, so a callback that throws no longer cuts the source's work short.
     fn with_source<R>(
         &mut self,
         index: usize,
@@ -1414,11 +1418,8 @@ impl HubModel {
         if let Some(warning) = alert.warning {
             host.console(true, warning);
         }
-        if alert.error {
-            host.send_main_message(error_message(
-                "Failed to load assets",
-                "Some asset files failed to load. Check the developer console for details.",
-            ));
+        if let Some(error) = alert.error {
+            host.send_main_message(error);
         }
         if alert.recovered {
             host.console(false, "All assets loaded successfully".to_owned());
@@ -1830,12 +1831,12 @@ impl HubModel {
 }
 
 /// What `set-assets` reports about load failures.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AssetsAlert {
     /// The `console.warn` listing the failures.
     pub warning: Option<String>,
-    /// Whether the "Failed to load assets" error goes to main.
-    pub error: bool,
+    /// The "Failed to load assets" error for main.
+    pub error: Option<NamedMessage<HubToMain>>,
     /// Whether "All assets loaded successfully" is logged.
     pub recovered: bool,
 }
@@ -1873,7 +1874,12 @@ pub fn assets_alert(old: &JsValue, new: &JsValue) -> AssetsAlert {
     });
     AssetsAlert {
         warning,
-        error: new_failed && !old_failed,
+        error: (new_failed && !old_failed).then(|| {
+            error_message(
+                "Failed to load assets",
+                "Some asset files failed to load. Check the developer console for details.",
+            )
+        }),
         recovered: !new_failed && old_failed,
     }
 }
@@ -1924,7 +1930,7 @@ mod tests {
     #[test]
     fn the_assets_alert_fires_once_per_failing_run() {
         let first = assets_alert(&JsValue::Null, &assets(&["a", "b"]));
-        assert!(first.error);
+        assert!(first.error.is_some());
         assert_eq!(
             first.warning.as_deref(),
             Some(
@@ -1932,13 +1938,13 @@ mod tests {
             )
         );
         let again = assets_alert(&assets(&["a"]), &assets(&["c"]));
-        assert!(!again.error && again.warning.is_some() && !again.recovered);
+        assert!(again.error.is_none() && again.warning.is_some() && !again.recovered);
         let fixed = assets_alert(&assets(&["a"]), &assets(&[]));
         assert_eq!(
             fixed,
             AssetsAlert {
                 warning: None,
-                error: false,
+                error: None,
                 recovered: true
             }
         );
