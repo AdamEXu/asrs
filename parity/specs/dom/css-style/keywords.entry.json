@@ -1,0 +1,16 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "steps": [
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "(() => {\n  const html = (tag) => document.createElement(tag);\n  const svg = (tag) => document.createElementNS(\"http://www.w3.org/2000/svg\", tag);\n  const camel = (p) => p.replace(/-([a-z])/g, (m, c) => c.toUpperCase());\n  const one = (make, prop, value) => {\n    const el = make();\n    el.style[camel(prop)] = value;\n    return [el.style.getPropertyValue(prop), el.hasAttribute(\"style\") ? el.getAttribute(\"style\") : null];\n  };\n  return [[\"display\", \"svg\", \"svg\", [\"none\",\"initial\",\"block\",\"\",\"garbage\"].map((v) => [v, ...one(() => svg(\"svg\"), \"display\", v)])], [\"transform\", \"svg\", \"svg\", [\"translate(-50%,-50%) scale(1, 1)\",\"translate(-50%,-50%) scale(0.5, 0.5)\",\"translate(-50%,-50%) scale(0.25, 0.25)\"].map((v) => [v, ...one(() => svg(\"svg\"), \"transform\", v)])]];\n})()"
+     }
+    ],
+    "label": "keywords"
+   }
+  ]
+ }
+}

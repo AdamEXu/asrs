@@ -1,0 +1,63 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../logs/c05.json",
+  "../logs/r08.json"
+ ],
+ "fixture": {
+  "seed": 808,
+  "steps": [
+   {
+    "log": "../logs/c05.json"
+   },
+   {
+    "log": "../logs/r08.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 10
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/R08/NanWeight\")"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Mech/Elevator\")"
+   },
+   {
+    "eval": "window.selection.setSelectedTime(1)"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "drawn"
+   },
+   {
+    "eval": "window.selection.setSelectedTime(2.5)"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "threw"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands"
+    ],
+    "label": "stopped"
+   }
+  ]
+ }
+}

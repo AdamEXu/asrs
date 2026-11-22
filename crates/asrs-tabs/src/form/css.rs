@@ -155,7 +155,7 @@ fn length_percentage(s: &str, negative: bool) -> Option<String> {
 }
 
 /// Blink's `FormatNumber`: `%.6g`, with `-0` written as `0`.
-fn format_number(n: f64) -> String {
+pub(crate) fn format_number(n: f64) -> String {
     if n == 0.0 {
         return "0".to_owned();
     }
