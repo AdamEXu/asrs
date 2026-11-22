@@ -891,7 +891,9 @@ dispatches a `MouseEvent` on `target` (or `window`) at `dx` right of the list ro
 below the top of item `anchor`, scaled to the item's height and rounded (`"root"` measures from
 the root's top; an anchor past the last item counts 30 px items below it). It reads the layout
 inside `__oracleQuiet`. Every `sourceLists` capture also evaluates `/*sl:widths*/`: each list
-root's class and, per item, its type name and `--type-width`.
+root's class and, per item, its type name and `--type-width`. A capture evaluating `/*sl:scroll*/ [rootClass,
+list.scrollTop = n]` scrolls a list mid-drag, as a user would to reach an item below the box; its
+`scrollTop` write is a `write` record the replay consumes.
 
 ### LineGraph controller
 

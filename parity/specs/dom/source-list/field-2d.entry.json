@@ -265,6 +265,15 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*sl:scroll*/ ['field-2d-sources', document.querySelector('div.field-2d-sources > div.list').scrollTop = 200]"
+          }
+        ],
+        "label": "drag-scrolled"
+      },
+      {
         "eval": "__slMouse(\"mousemove\", \"window\", \"div.field-2d-sources\", 5, 10, 0)"
       },
       {
@@ -276,6 +285,15 @@
           "type": "mouseup",
           "kind": "MouseEvent"
         }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*sl:scroll*/ ['field-2d-sources', document.querySelector('div.field-2d-sources > div.list').scrollTop = 0]"
+          }
+        ],
+        "label": "drag-unscrolled"
       },
       {
         "capture": [

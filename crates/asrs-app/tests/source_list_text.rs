@@ -12,7 +12,7 @@ use asrs_parity::Value;
 use asrs_parity::vectors;
 use asrs_ui::text::Measurer;
 
-const CASES: [&str; 8] = [
+const CASES: [&str; 9] = [
     "field-2d",
     "field-3d",
     "field-3d-no-assets",
@@ -21,6 +21,7 @@ const CASES: [&str; 8] = [
     "points",
     "statistics",
     "swerve",
+    "view-drag",
 ];
 const BODY_WIDTH: f64 = 1100.0;
 

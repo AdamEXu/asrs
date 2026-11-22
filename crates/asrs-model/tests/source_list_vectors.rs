@@ -110,12 +110,15 @@ struct ScriptedDom {
     reads: ScriptedReads,
     /// uuid, the class of the list's root in hub.html, and its element path once seen.
     roots: Vec<(String, &'static str, Option<String>)>,
-    /// Per list: the items when the current op began, and whether its root was laid out when
-    /// last read (until then, whether the read itself found a box).
+    /// Per list: the items when the current op began, whether its root was laid out when last
+    /// read (until then, whether the read itself found a box), and the `scrollTop` a
+    /// `/*sl:scroll*/` capture gave its `div.list`.
     views: Vec<Vec<ItemView>>,
     shown: Vec<Option<bool>>,
+    scroll: Vec<f64>,
     checked: usize,
     type_names: usize,
+    scroll_writes: usize,
     error: Option<String>,
 }
 
@@ -211,7 +214,7 @@ impl ScriptedDom {
         } else {
             ListRoot::default()
         };
-        ListLayout::new(root, &self.views[slot], 0.0)
+        ListLayout::new(root, &self.views[slot], self.scroll[slot])
     }
 
     fn check(
@@ -550,8 +553,10 @@ impl Harness {
                 roots: Vec::new(),
                 views: Vec::new(),
                 shown: Vec::new(),
+                scroll: Vec::new(),
                 checked: 0,
                 type_names: 0,
+                scroll_writes: 0,
                 error: None,
             },
             lists: Vec::new(),
@@ -623,6 +628,7 @@ impl Harness {
             .push((list.uuid().to_owned(), root_class(name, &title)?, None));
         self.dom.views.push(Vec::new());
         self.dom.shown.push(None);
+        self.dom.scroll.push(0.0);
         self.lists.push(Slot {
             list,
             number_preview: boolean(get(&create, "numberPreview"))?,
@@ -966,6 +972,12 @@ impl Harness {
         {
             return self.type_widths(record);
         }
+        if record
+            .string("eval")
+            .is_some_and(|e| e.starts_with("/*sl:scroll*/"))
+        {
+            return self.scroll(record);
+        }
         if record.field("capture").is_some() {
             if !self.pending_errors.is_empty() {
                 return Err(format!(
@@ -1050,6 +1062,28 @@ impl Harness {
 }
 
 impl Harness {
+    /// A fixture set the `scrollTop` of the one displayed list with this root class.
+    fn scroll(&mut self, record: &Record) -> Result<(), String> {
+        let value = js(record, "value")?;
+        let class = text(at(value.as_array().ok_or("sl:scroll is a pair")?, 0))?;
+        let top = num(at(value.as_array().ok_or("sl:scroll is a pair")?, 1))?;
+        let mut slots = (0..self.dom.roots.len())
+            .filter(|&i| self.dom.roots[i].1 == class && self.dom.shown[i] == Some(true));
+        let (Some(slot), None) = (slots.next(), slots.next()) else {
+            return Err(format!("sl:scroll: not one displayed {class} list"));
+        };
+        let root = self.dom.roots[slot]
+            .2
+            .clone()
+            .ok_or_else(|| format!("sl:scroll: list {slot} was never read"))?;
+        self.dom
+            .reads
+            .write_f64("scrollTop", &format!("{root}>{LIST}"), top);
+        self.dom.scroll[slot] = top;
+        self.dom.scroll_writes += 1;
+        Ok(())
+    }
+
     /// Each item's type name and `--type-width`, per list root in document order. A root
     /// class names the lists created with it, which hub.html lays out in creation order.
     fn type_widths(&mut self, record: &Record) -> Result<(), String> {
@@ -1153,15 +1187,16 @@ fn run_case(id: &str) -> Result<Stats, String> {
         }
     }
     harness.stats.checked = harness.dom.checked;
-    let type_names = harness.dom.type_names;
+    let (type_names, scroll_writes) = (harness.dom.type_names, harness.dom.scroll_writes);
     harness.stats.reads = harness
         .dom
         .reads
         .finish()
         .map_err(|e| format!("{id}: {e}"))?;
-    if harness.stats.checked + type_names != harness.stats.reads {
+    if harness.stats.checked + type_names + scroll_writes != harness.stats.reads {
         return Err(format!(
-            "{id}: {} layout reads, {} checked against ListLayout, {type_names} type names",
+            "{id}: {} layout reads, {} checked against ListLayout, {type_names} type names, \
+             {scroll_writes} scroll writes",
             harness.stats.reads, harness.stats.checked
         ));
     }
