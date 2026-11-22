@@ -139,7 +139,89 @@ fn platform() -> &'static str {
     }
 }
 
-pub fn run_record(scenario: &Scenario, scale: u32, theme: Theme, exceptions: &[String]) -> String {
+/// A file the run left in `userData/`, as the Electron driver's `collectFiles` lists it.
+pub struct WrittenFile {
+    pub file: String,
+    pub bytes: usize,
+    pub seeded: bool,
+    pub changed: bool,
+}
+
+/// Copies what the port's main wrote to `<dir>/userData` into `<dir>/files`, with the driver's
+/// filter: top-level JSON files and the asset folders. `seeds` are the files the run seeded,
+/// with the bytes it seeded them with.
+pub fn collect_files(dir: &Path, seeds: &[(&str, Vec<u8>)]) -> Result<Vec<WrittenFile>, String> {
+    fn visit(
+        root: &Path,
+        rel: &Path,
+        out_root: &Path,
+        seeds: &[(&str, Vec<u8>)],
+        written: &mut Vec<WrittenFile>,
+    ) -> Result<(), String> {
+        let full = root.join(rel);
+        let mut entries: Vec<_> = std::fs::read_dir(&full)
+            .map_err(|e| format!("{}: {e}", full.display()))?
+            .filter_map(Result::ok)
+            .collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let child = rel.join(&name);
+            let top = rel.as_os_str().is_empty();
+            let is_dir = entry.file_type().map_err(|e| e.to_string())?.is_dir();
+            if top && is_dir && !["userAssets", "autoAssets"].contains(&name.as_str()) {
+                continue;
+            }
+            if top && !is_dir && !name.ends_with(".json") {
+                continue;
+            }
+            if is_dir {
+                visit(root, &child, out_root, seeds, written)?;
+                continue;
+            }
+            let bytes =
+                std::fs::read(entry.path()).map_err(|e| format!("{}: {e}", child.display()))?;
+            let dest = out_root.join(&child);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&dest, &bytes).map_err(|e| format!("{}: {e}", dest.display()))?;
+            let file = child
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
+            let seed = seeds.iter().find(|(name, _)| *name == file);
+            written.push(WrittenFile {
+                changed: seed.is_none_or(|(_, seed)| *seed != bytes),
+                bytes: bytes.len(),
+                seeded: seed.is_some(),
+                file,
+            });
+        }
+        Ok(())
+    }
+    let user_data = dir.join("userData");
+    let mut written = Vec::new();
+    if user_data.is_dir() {
+        visit(
+            &user_data,
+            Path::new(""),
+            &dir.join("files"),
+            seeds,
+            &mut written,
+        )?;
+    }
+    Ok(written)
+}
+
+pub fn run_record(
+    scenario: &Scenario,
+    scale: u32,
+    theme: Theme,
+    exceptions: &[String],
+    files: &[WrittenFile],
+) -> String {
     let record = asrs_js::ops::object([
         ("scenario", JsValue::string(&scenario.name)),
         ("scale", num(f64::from(scale))),
@@ -154,7 +236,22 @@ pub fn run_record(scenario: &Scenario, scale: u32, theme: Theme, exceptions: &[S
         ("platform", JsValue::string(platform())),
         ("arch", JsValue::string(std::env::consts::ARCH)),
         ("capture", JsValue::string("headless")),
-        ("files", JsValue::Array(Vec::new())),
+        (
+            "files",
+            JsValue::Array(
+                files
+                    .iter()
+                    .map(|f| {
+                        asrs_js::ops::object([
+                            ("file", JsValue::string(&f.file)),
+                            ("bytes", num(f.bytes as f64)),
+                            ("seeded", JsValue::Bool(f.seeded)),
+                            ("changed", JsValue::Bool(f.changed)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
         (
             "exceptions",
             JsValue::Array(exceptions.iter().map(|e| JsValue::string(e)).collect()),

@@ -1127,7 +1127,13 @@ the hub's model APIs (`main` and `open` as main messages, `selection` on the mod
 `SelectionImpl`) and the window's input dispatch (`mouse`, `wheel`, `key`; a notched wheel event
 becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); `eval`,
 `dialog` and a non-empty `userData` are refused because the port has no page script and no main
-yet. Its page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle
+yet. Before the window opens it does what main does with the variant's own `userData/`: seeds
+`prefs.json` as the driver does, then `createAssetFolders()` and `loadAssets()` over upstream's
+`bundledAssets` (`--bundled-assets`), and boots the hub with those assets. What lands in
+`userData/` is copied to `files/` and listed in `run.json` with the driver's filter, and `xtask
+pixel compare` requires every file the port wrote to equal upstream's; files only upstream wrote
+(the state file, the rewritten preferences) are listed until the port has a main process. Its
+page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle
 makes while its imports evaluate, so restored and default controller UUIDs match. Idle means the
 same busy reasons, read from the model. Probes and mask selectors resolve through
 `parity/probes.json` to the parity ids of painted elements (`asrs_ui::parity`), text runs come

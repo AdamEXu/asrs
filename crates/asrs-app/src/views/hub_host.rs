@@ -78,10 +78,11 @@ fn platform() -> &'static str {
     }
 }
 
-/// What `main.ts` sends a new hub window with no saved state: `is_beta` shows the feedback
-/// button, `preferences` are main's merged preferences, and `files` (`firstOpenPath`) are opened
-/// once the page is up.
+/// What `main.ts` sends a new hub window with no saved state: `assets` are main's loaded
+/// assets (`null` before the first load), `is_beta` shows the feedback button, `preferences` are
+/// main's merged preferences, and `files` (`firstOpenPath`) are opened once the page is up.
 pub fn boot_messages(
+    assets: JsValue,
     is_beta: bool,
     preferences: JsValue,
     files: Vec<String>,
@@ -101,7 +102,7 @@ pub fn boot_messages(
         ),
     ]);
     let mut messages = vec![
-        (MainToHub::SetAssets, JsValue::Null),
+        (MainToHub::SetAssets, assets),
         (MainToHub::SetFullscreen, JsValue::Bool(false)),
         (MainToHub::SetBattery, JsValue::Bool(false)),
         (MainToHub::SetVersion, version),
@@ -141,7 +142,7 @@ impl HubEntityHost {
         Self::open_with(
             window,
             dark,
-            boot_messages(is_beta, preferences, files),
+            boot_messages(JsValue::Null, is_beta, preferences, files),
             None,
             cx,
         )

@@ -8,6 +8,9 @@ use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
+use asrs_services::asset_loader::{AssetFolders, AssetService};
+use asrs_services::fs::RealFs;
+use asrs_services::path::PathStyle;
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
@@ -27,10 +30,13 @@ use crate::views::frame::FrameHost;
 use crate::views::hub_host::{HubEntityHost, boot_messages};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
-[--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>]
+[--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
+[--bundled-assets <dir>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
-under inputs/); --probes defaults to probes.json beside the scenario directory.";
+under inputs/); --probes defaults to probes.json beside the scenario directory;
+--bundled-assets is upstream's bundledAssets folder, which main loads with the user and
+automatic folders of each variant's userData/ (without it the hub gets no assets).";
 
 /// A tick of the page: one animation frame and this much executor time. `wait` also lets this
 /// much real time pass per tick, for what the page times with `Date`.
@@ -63,10 +69,12 @@ struct Options {
     themes: Vec<String>,
     inputs: Option<PathBuf>,
     probes: Option<PathBuf>,
+    bundled_assets: Option<PathBuf>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
+    let mut bundled_assets = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -78,6 +86,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--theme" => themes.push(value()?),
             "--inputs" => inputs = Some(PathBuf::from(value()?)),
             "--probes" => probes = Some(PathBuf::from(value()?)),
+            "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             other => return Err(format!("unknown argument {other}\n{USAGE}")),
         }
     }
@@ -88,6 +97,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         themes,
         inputs,
         probes,
+        bundled_assets,
     })
 }
 
@@ -146,6 +156,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 scenario: &scenario,
                 probes: &probes,
                 inputs: options.inputs.as_deref(),
+                bundled_assets: options.bundled_assets.as_deref(),
                 scale,
                 theme,
                 dir: &dir,
@@ -175,6 +186,7 @@ struct Variant<'a> {
     scenario: &'a Scenario,
     probes: &'a Probes,
     inputs: Option<&'a Path>,
+    bundled_assets: Option<&'a Path>,
     scale: u32,
     theme: Theme,
     dir: &'a Path,
@@ -189,15 +201,20 @@ struct Variant<'a> {
 /// Main's preferences for the run: the defaults with the scenario's `prefs.json` merged in, as
 /// the Electron driver seeds it (`{...prefs, theme}`).
 fn preferences(scenario: &Scenario, theme: Theme) -> Result<JsValue, String> {
+    let mut prefs = asrs_model::preferences::Preferences::default().to_js();
+    asrs_model::preferences::merge_preferences(&mut prefs, &seeded_prefs(scenario, theme)?)
+        .map_err(|e| format!("prefs: {e:?}"))?;
+    Ok(prefs)
+}
+
+/// `{...scenario.prefs, theme}`, the `prefs.json` the Electron driver seeds.
+fn seeded_prefs(scenario: &Scenario, theme: Theme) -> Result<JsValue, String> {
     let mut seeded = scenario.prefs.clone();
     seeded
         .as_object_mut()
         .ok_or("prefs is not an object")?
         .insert("theme", JsValue::string(theme.name()));
-    let mut prefs = asrs_model::preferences::Preferences::default().to_js();
-    asrs_model::preferences::merge_preferences(&mut prefs, &seeded)
-        .map_err(|e| format!("prefs: {e:?}"))?;
-    Ok(prefs)
+    Ok(seeded)
 }
 
 fn number(args: &[JsValue], i: usize, method: &str) -> Result<f64, String> {
@@ -573,6 +590,34 @@ impl Variant<'_> {
         Ok(())
     }
 
+    /// What main does with userData before the window opens: the Electron driver's seeded
+    /// `prefs.json`, then `createAssetFolders()` and `loadAssets()`. Returns the `set-assets` data.
+    fn start_main(&self) -> Result<JsValue, String> {
+        let user_data = self.dir.join("userData");
+        std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
+        capture::write(&user_data.join("prefs.json"), &self.prefs_seed()?)?;
+        let Some(bundled) = self.bundled_assets else {
+            return Ok(JsValue::Null);
+        };
+        let user_data = std::path::absolute(&user_data).map_err(|e| e.to_string())?;
+        let bundled = std::path::absolute(bundled).map_err(|e| e.to_string())?;
+        let mut service = AssetService::new(AssetFolders::new(
+            PathStyle::host(),
+            &user_data.to_string_lossy(),
+            &bundled.to_string_lossy(),
+        ));
+        service
+            .start(&RealFs)
+            .map_err(|e| format!("loading assets: {e:?}"))?;
+        Ok(service.set_assets_data())
+    }
+
+    fn prefs_seed(&self) -> Result<String, String> {
+        asrs_js::json::stringify(&seeded_prefs(self.scenario, self.theme)?)
+            .map_err(|e| format!("prefs: {e:?}"))
+            .map(Option::unwrap_or_default)
+    }
+
     fn open(&mut self) -> Result<(), String> {
         let theme = self.theme;
         self.headless.context().update(|cx| {
@@ -591,7 +636,9 @@ impl Variant<'_> {
                 // `windows::open` makes the hub window transparent on macOS, for the vibrancy.
                 self.headless
                     .set_transparent_windows(cfg!(target_os = "macos"));
-                let boot = boot_messages(true, preferences(self.scenario, theme)?, Vec::new());
+                let preferences = preferences(self.scenario, theme)?;
+                let assets = self.start_main()?;
+                let boot = boot_messages(assets, true, preferences, Vec::new());
                 let window = self
                     .headless
                     .open_window(content, scale, |window, cx| {
@@ -663,7 +710,16 @@ impl Variant<'_> {
         let exceptions = self.exceptions.borrow().clone();
         capture::write(
             &self.dir.join("run.json"),
-            &capture::run_record(self.scenario, self.scale, self.theme, &exceptions),
+            &capture::run_record(
+                self.scenario,
+                self.scale,
+                self.theme,
+                &exceptions,
+                &capture::collect_files(
+                    self.dir,
+                    &[("prefs.json", self.prefs_seed()?.into_bytes())],
+                )?,
+            ),
         )
     }
 

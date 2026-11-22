@@ -105,7 +105,13 @@ impl Outcome {
         self.checks.iter().filter(|c| !c.pass)
     }
 
-    fn push(&mut self, gate: &'static str, what: impl Into<String>, pass: bool, detail: String) {
+    pub fn push(
+        &mut self,
+        gate: &'static str,
+        what: impl Into<String>,
+        pass: bool,
+        detail: String,
+    ) {
         self.checks.push(Check {
             gate,
             what: what.into(),

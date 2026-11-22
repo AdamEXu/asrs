@@ -472,7 +472,7 @@ pub(crate) fn compare_variant(
     }
     let masks = platform_masks(&platform)?;
     let names = capture_names(reference)?;
-    let mut results = Vec::new();
+    let mut results = vec![compare_files(label, reference, port)?];
     for extra in capture_names(port)?
         .into_iter()
         .filter(|n| !names.contains(n))
@@ -504,6 +504,78 @@ pub(crate) fn compare_variant(
         });
     }
     Ok(results)
+}
+
+/// `run.json`'s `files`: (path under files/, changed from its seed).
+fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
+    let run = read_json(&variant.join("run.json"))?;
+    Ok(list(&run, "files")
+        .iter()
+        .filter_map(|f| {
+            let changed = f.get("changed") != Some(&Json::Bool(false));
+            Some((string(f, "file")?, changed))
+        })
+        .collect())
+}
+
+/// Every file the port wrote equals the file upstream wrote at the same path. Files upstream
+/// wrote and the port did not are listed without failing: the port has no main process yet to
+/// write them (state, rewritten preferences, type memory).
+fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureResult> {
+    let ours = written_files(port)?;
+    let theirs = written_files(reference)?;
+    let mut outcome = Outcome::default();
+    for (file, _) in ours.iter().filter(|(_, changed)| *changed) {
+        let read = |side: &Path| fs::read(side.join("files").join(file)).ok();
+        let upstream_wrote = theirs.iter().any(|(f, changed)| f == file && *changed);
+        let (pass, detail) = match (upstream_wrote, read(reference), read(port)) {
+            (true, Some(expected), Some(actual)) if actual == expected => {
+                (true, format!("{} bytes equal", actual.len()))
+            }
+            (true, Some(expected), Some(actual)) => (
+                false,
+                format!(
+                    "{} bytes upstream, {} on the port, contents differ",
+                    expected.len(),
+                    actual.len()
+                ),
+            ),
+            (true, _, _) => (false, "listed but not copied into files/".to_owned()),
+            (false, _, _) => (false, "written by the port only".to_owned()),
+        };
+        outcome.push("files", file, pass, detail);
+    }
+    let missing: Vec<&str> = theirs
+        .iter()
+        .filter(|(f, changed)| *changed && !ours.iter().any(|(o, c)| o == f && *c))
+        .map(|(f, _)| f.as_str())
+        .collect();
+    if !missing.is_empty() {
+        outcome.push(
+            "files",
+            "upstream only",
+            true,
+            format!(
+                "not written by the port, which has no main process yet: {}",
+                missing.join(", ")
+            ),
+        );
+    }
+    if outcome.checks.is_empty() {
+        outcome.push(
+            "files",
+            "written files",
+            true,
+            "neither side wrote a file".into(),
+        );
+    }
+    Ok(CaptureResult {
+        label: format!("{label} files"),
+        outcome,
+        error: None,
+        reference: None,
+        port: None,
+    })
 }
 
 fn colour_key(variant: &Path) -> Result<String> {
@@ -717,6 +789,8 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
                     .iter()
                     .flat_map(|i| [std::ffi::OsStr::new("--inputs"), i.as_os_str()]),
             )
+            .arg("--bundled-assets")
+            .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
             .args(&options.flags)
             .current_dir(workspace_root())
             .status()
