@@ -294,6 +294,8 @@ version = "0.1.0"
 dependencies = [
  "asrs-field3d",
  "asrs-js",
+ "asrs-parity",
+ "asrs-services",
  "asrs-ui",
  "async-channel",
  "image",

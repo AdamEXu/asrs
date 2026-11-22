@@ -1,0 +1,98 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/minimal.json",
+    "../logs/table-real.json"
+  ],
+  "fixture": {
+    "geometry": "real",
+    "seed": 1007,
+    "assets": "../assets/minimal.json",
+    "steps": [
+      {
+        "log": "../logs/table-real.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 4
+      },
+      {
+        "eval": "/*table-real:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const renderer = w.tabs.tabList[w.tabs.selectedTab].renderer;\n  const sel = w.selection;\n  const watched = [\"setHoveredTime\", \"setSelectedTime\", \"goIdle\", \"play\", \"pause\", \"lock\", \"unlock\"];\n  const render = renderer.render;\n  renderer.render = function (command) {\n    write({ tr: \"render\", command: tree(command) });\n    const saved = watched.map((name) => sel[name]);\n    watched.forEach((name, i) => {\n      sel[name] = (...args) => {\n        write({ tr: \"selection\", call: tree([name, ...args]) });\n        return saved[i].apply(sel, args);\n      };\n    });\n    try {\n      render.call(this, command);\n      write({ tr: \"rendered\", range: tree(this.getTimestampRange()) });\n    } catch (error) {\n      write({ tr: \"rendered\", threw: tree(String(error)) });\n    } finally {\n      watched.forEach((name, i) => (sel[name] = saved[i]));\n    }\n  };\n  renderer.TABLE_BODY.addEventListener(\"mousemove\", (event) => write({ tr: \"mousemove\", y: tree(event.clientY) }));\n  renderer.TABLE_BODY.addEventListener(\"mouseleave\", () => write({ tr: \"mouseleave\" }));\n})()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"/Table/Value\"])"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "eval": "window.__oracleQuiet(() => { window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.scrollTop = 4000; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "eval": "window.__oracleQuiet(() => { window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.scrollTop = 333.3; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "eval": "window.selection.setSelectedTime(1)"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 2000
+      },
+      {
+        "selection": [
+          "pause"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_BODY.dispatchEvent(new MouseEvent(\"mousemove\", { clientY: 300, bubbles: true }))"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_BODY.dispatchEvent(new MouseEvent(\"mousemove\", { clientY: 120, bubbles: true }))"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_BODY.dispatchEvent(new MouseEvent(\"mouseleave\"))"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "window.selection.setSelectedTime(14.9)"
+      },
+      {
+        "selection": [
+          "play"
+        ]
+      },
+      {
+        "advance": 500
+      },
+      {
+        "capture": [
+          {
+            "kind": "selection"
+          }
+        ],
+        "label": "end"
+      }
+    ]
+  }
+}
