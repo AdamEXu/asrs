@@ -473,7 +473,10 @@ fn read_entry_inputs(dist: &Path) -> Result<Vec<(String, Vec<String>)>> {
     };
     let mut inputs = parse_entry_inputs(&path, pairs)?;
     for (entry, lender) in BORROWED_INPUTS {
-        let Some(borrowed) = inputs.iter().find(|(e, _)| e == lender).map(|(_, f)| f.clone())
+        let Some(borrowed) = inputs
+            .iter()
+            .find(|(e, _)| e == lender)
+            .map(|(_, f)| f.clone())
         else {
             continue;
         };
