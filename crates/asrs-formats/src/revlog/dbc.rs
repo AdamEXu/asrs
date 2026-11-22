@@ -4,6 +4,7 @@
 
 use std::sync::OnceLock;
 
+use asrs_js::math::BigInt;
 use asrs_js::number::{parse_float, parse_int};
 use asrs_js::regex::{Match, RegExp};
 use asrs_js::string::JsString;
@@ -212,13 +213,51 @@ impl Dbc {
 
 /// A decoded signal value: a JS number, or a BigInt where upstream keeps one (an unscaled
 /// integer outside the safe-integer range).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SignalValue {
     Number(f64),
-    BigInt(i128),
+    BigInt(BigInt),
 }
 
 const MAX_SAFE_INTEGER: i128 = 9007199254740991;
+
+/// A raw integer signal: `i128` holds every little-endian value and every big-endian one under
+/// 128 bits; longer big-endian signals grow without bound like upstream's BigInt.
+enum Raw {
+    Small(i128),
+    Big(BigInt),
+}
+
+impl Raw {
+    fn big(&self) -> BigInt {
+        match self {
+            Raw::Big(b) => b.clone(),
+            Raw::Small(i) => {
+                let magnitude = BigInt::from_u64((i.unsigned_abs() >> 64) as u64)
+                    .shl(64)
+                    .bitor(&BigInt::from_u64(i.unsigned_abs() as u64));
+                if *i < 0 { magnitude.neg() } else { magnitude }
+            }
+        }
+    }
+
+    fn number(&self) -> f64 {
+        match self {
+            Raw::Small(i) => *i as f64,
+            Raw::Big(b) => b.to_f64(),
+        }
+    }
+
+    fn is_safe(&self) -> bool {
+        match self {
+            Raw::Small(i) => (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(i),
+            Raw::Big(b) => {
+                let max = BigInt::from_i64(MAX_SAFE_INTEGER as i64);
+                *b <= max && *b >= max.neg()
+            }
+        }
+    }
+}
 
 /// `CanDecoder` with `database` set.
 pub struct CanDecoder<'a> {
@@ -292,9 +331,10 @@ impl<'a> CanDecoder<'a> {
                     {
                         raw -= 1i128 << (signal.length as u32);
                     }
-                    raw
+                    Raw::Small(raw)
                 } else {
                     let mut raw = 0i128;
+                    let mut wide: Option<BigInt> = None;
                     let mut bit = signal.start_bit;
                     let bits = if signal.length > 0.0 {
                         signal.length as u64
@@ -306,20 +346,27 @@ impl<'a> CanDecoder<'a> {
                         let b = bit % 8.0;
                         if byte_index >= 0.0 && byte_index < len as f64 {
                             let bit_val = ((byte(byte_index as usize) as i128) >> (b as u32)) & 1;
-                            raw = (raw << 1) | bit_val;
+                            if let Some(w) = &mut wide {
+                                *w = w.shl(1).bitor(&BigInt::from_u64(bit_val as u64));
+                            } else if raw >> 126 != 0 {
+                                let w = Raw::Small(raw).big();
+                                wide = Some(w.shl(1).bitor(&BigInt::from_u64(bit_val as u64)));
+                            } else {
+                                raw = (raw << 1) | bit_val;
+                            }
                         }
                         bit += if b == 0.0 { 15.0 } else { -1.0 };
                     }
-                    raw
+                    wide.map_or(Raw::Small(raw), Raw::Big)
                 };
                 value = if signal.factor == 1.0 && signal.offset == 0.0 {
-                    if (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&raw) {
-                        SignalValue::Number(raw as f64)
+                    if raw.is_safe() {
+                        SignalValue::Number(raw.number())
                     } else {
-                        SignalValue::BigInt(raw)
+                        SignalValue::BigInt(raw.big())
                     }
                 } else {
-                    SignalValue::Number(raw as f64 * signal.factor + signal.offset)
+                    SignalValue::Number(raw.number() * signal.factor + signal.offset)
                 };
             }
             if let SignalValue::Number(physical) = &mut value

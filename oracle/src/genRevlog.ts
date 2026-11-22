@@ -262,6 +262,19 @@ const SYNTHETIC_DBCS: string[] = [
     ' SG_ PRIMARY_HEARTBEAT_LOCK : 52|1@1+ (1,0) [0|0] "" Vector__XXX',
     'CM_ SG_ 2181412864 APPLIED_OUTPUT "Applied output";',
     ""
+  ].join("\n"),
+  // Motorola signals of 127 bits and more: the BigInt grows past 128 bits.
+  [
+    "BO_ 700 WIDEMOTOROLA: 40 Node",
+    ' SG_ B127 : 7|127@0+ (1,0) [0|0] "" Vector__XXX',
+    ' SG_ B128 : 7|128@0+ (1,0) [0|0] "" Vector__XXX',
+    ' SG_ B129 : 6|129@0- (1,0) [0|0] "" Vector__XXX',
+    ' SG_ B200 : 7|200@0+ (1,0) [0|0] "" Vector__XXX',
+    ' SG_ B300 : 63|300@0+ (1,0) [0|0] "" Vector__XXX',
+    ' SG_ B150S : 7|150@0+ (0.5,-1) [0|0] "" Vector__XXX',
+    ' SG_ B140C : 7|140@0+ (1,0.5) [-10|9999999999] "" Vector__XXX',
+    ' SG_ B330 : 7|330@0+ (1,0) [0|0] "" Vector__XXX',
+    ""
   ].join("\n")
 ];
 

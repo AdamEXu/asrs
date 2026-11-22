@@ -8,7 +8,7 @@ pub mod dbc;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use asrs_js::math;
+use asrs_js::math::{self, BigInt};
 use asrs_js::string::JsError;
 
 use dbc::{CanDecoder, DataType, Dbc, Message, Signal, SignalValue};
@@ -178,7 +178,7 @@ impl Ty {
 enum Entry {
     Bool(bool),
     Number(f64),
-    Big(i128),
+    Big(BigInt),
     Str(String),
 }
 
@@ -187,7 +187,7 @@ impl Entry {
         match self {
             Entry::Bool(b) => *b,
             Entry::Number(x) => *x != 0.0 && !x.is_nan(),
-            Entry::Big(i) => *i != 0,
+            Entry::Big(i) => !i.is_zero(),
             Entry::Str(s) => !s.is_empty(),
         }
     }
@@ -196,14 +196,17 @@ impl Entry {
         match self {
             Entry::Bool(b) => f64::from(*b as u8),
             Entry::Number(x) => *x,
-            Entry::Big(i) => *i as f64,
+            Entry::Big(i) => i.to_f64(),
             Entry::Str(_) => 0.0,
         }
     }
 
     fn int64(&self) -> i64 {
         let value = match self {
-            Entry::Big(i) => return i64::try_from(*i).unwrap_or(0),
+            Entry::Big(i) => {
+                let fits = *i >= BigInt::from_i64(i64::MIN) && *i <= BigInt::from_i64(i64::MAX);
+                return if fits { i.as_int64() } else { 0 };
+            }
             Entry::Bool(b) => return i64::from(*b as u8),
             Entry::Str(_) => return 0,
             Entry::Number(x) => math::round(*x),
@@ -286,7 +289,7 @@ struct State {
     fast_records: HashMap<u64, RecordInfo>,
     last_values: Vec<(String, Entry)>,
     bus_names: HashMap<u8, String>,
-    dropped_totals: HashMap<u8, i128>,
+    dropped_totals: HashMap<u8, BigInt>,
     last_timestamp_us: u128,
     format_version: u8,
     records_processed: bool,
@@ -445,7 +448,8 @@ impl State {
         let Some(spec) = device.periodic.get(&(message_id >> 6 & 0xf)) else {
             return;
         };
-        // Upstream pre-pads to messageSpec.dlc; CanDecoder.decode pads to max(dlc, 8) itself.
+        // Upstream pre-pads to messageSpec.dlc. Every periodic spec in the shipped DBCs is the
+        // message its own id maps to, so decode's pad to max(dlc, 8) already covers it.
         let _ = self.write_frame_inner(bus, message_id, device, spec, data, timestamp_us);
     }
 
@@ -494,7 +498,7 @@ impl State {
                     info
                 }
             };
-            self.write_record_fast(info, &Entry::from(*value), timestamp_us)?;
+            self.write_record_fast(info, &Entry::from(value.clone()), timestamp_us)?;
         }
         Ok(())
     }
@@ -658,13 +662,16 @@ impl State {
         self.write_if_changed(
             "DS:matchInfo/matchType",
             Ty::Int64,
-            Entry::Big(i128::from(payload[8])),
+            Entry::Big(BigInt::from_u64(u64::from(payload[8]))),
             timestamp_us,
         )?;
         self.write_if_changed(
             "DS:matchInfo/matchNumber",
             Ty::Int64,
-            Entry::Big(i128::from(u16::from_le_bytes([payload[9], payload[10]]))),
+            Entry::Big(BigInt::from_u64(u64::from(u16::from_le_bytes([
+                payload[9],
+                payload[10],
+            ])))),
             timestamp_us,
         )
     }
@@ -708,10 +715,13 @@ impl State {
         while pc + 6 <= payload.len() {
             let bus = payload[pc];
             let kind = payload[pc + 1];
-            let count = i128::from(Self::read_u32(payload, pc + 2));
+            let count = BigInt::from_u64(u64::from(Self::read_u32(payload, pc + 2)));
             if kind == 1 {
-                let total = self.dropped_totals.get(&bus).copied().unwrap_or(0) + count;
-                self.dropped_totals.insert(bus, total);
+                let total = self
+                    .dropped_totals
+                    .get(&bus)
+                    .map_or_else(|| count.clone(), |t| t.add(&count));
+                self.dropped_totals.insert(bus, total.clone());
                 let name = format!("REV/StatusLogger/{}/DroppedFrames", self.bus_name(bus));
                 self.write_record(&name, Ty::Int64, &Entry::Big(total), timestamp_us, "")?;
             }
