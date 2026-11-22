@@ -64,9 +64,6 @@
         "div.field-3d-settings",
         "select.field-select",
         "div.xr-button"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -117,9 +114,6 @@
         "div.field-3d-settings",
         "select.field-select",
         "div.xr-button"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -170,9 +164,6 @@
         "div.field-3d-settings",
         "select.field-select",
         "div.xr-button"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -196,9 +187,6 @@
         "div.field-3d-settings",
         "select.field-select",
         "div.xr-button"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -218,9 +206,6 @@
         "div.field-3d-settings",
         "select.field-select",
         "div.xr-button"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -240,9 +225,6 @@
         "div.field-3d-settings",
         "select.field-select",
         "div.xr-button"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     }
   ]
