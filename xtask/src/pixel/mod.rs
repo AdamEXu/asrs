@@ -25,8 +25,10 @@ with run.json and captures/<name>.{png,json} plus canvas and 3D dumps.
                   for the run's platform), gate 1 (probed boxes within 1 px), gate 2 (0.2 %
                   and no blob over 64 px outside text, window and canvas dumps), gate 3 (text
                   boxes dilated 2 px: at most 6 %, glyph runs within 1 px), gate 4 (3D dumps
-                  through asrs_parity::pixel3d) and the colour-patch rule. Writes report.html
-                  (default target/parity/pixel/report)
+                  through asrs_parity::pixel3d) and the colour-patch rule. Every upstream
+                  variant also needs a passing colour-patch capture from the same run at the
+                  same platform, scale and colour settings, and a variant on one side only
+                  fails. Writes report.html (default target/parity/pixel/report)
   port [<scenario>...] [--scale 1|2]... [--theme light|dark]... [--label <label>]
                   build asrs with the parity feature and run each scenario headless into
                   target/parity/port/<label> (default `run`)
@@ -222,7 +224,7 @@ fn display_colour_run(variant: &Path) -> Result<bool> {
     Ok(!matches!(source.as_str(), "none" | "forced-srgb"))
 }
 
-fn image_of(variant: &Path, record: &Json, name: &str, port: bool) -> Result<Rgba> {
+fn image_of(variant: &Path, record: &Json, name: &str, port: bool) -> Result<(Rgba, bool)> {
     let captures = variant.join("captures");
     let file = string(record, "image").unwrap_or_else(|| format!("{name}.png"));
     let path = captures.join(&file);
@@ -230,6 +232,7 @@ fn image_of(variant: &Path, record: &Json, name: &str, port: bool) -> Result<Rgb
     let image = pixel::decode_png(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     let embedded = pixel::png_icc_profile(&bytes)?;
     let space = string(record, "colourSpace").unwrap_or_default();
+    let normalized = space == "display.icc";
     let image = match (space.as_str(), port) {
         ("srgb", _) if embedded.is_some() => {
             return Err(format!(
@@ -270,7 +273,7 @@ fn image_of(variant: &Path, record: &Json, name: &str, port: bool) -> Result<Rgb
             image.width, image.height
         ));
     }
-    Ok(image)
+    Ok((image, normalized))
 }
 
 fn render_mode(value: Option<String>) -> Result<RenderMode> {
@@ -299,7 +302,7 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         .get("scale")
         .and_then(Json::as_f64)
         .ok_or_else(|| format!("{name}: no scale"))?;
-    let image = image_of(variant, &record, name, port)?;
+    let (image, normalized) = image_of(variant, &record, name, port)?;
     let probes = match record.get("probes") {
         Some(Json::Object(pairs)) => pairs
             .iter()
@@ -385,6 +388,7 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
     Ok(Capture {
         scale,
         image,
+        normalized,
         probes,
         texts,
         masks,
@@ -477,24 +481,91 @@ pub(crate) fn compare_variant(
     Ok(results)
 }
 
+fn colour_key(variant: &Path) -> Result<String> {
+    let run = read_json(&variant.join("run.json"))?;
+    let field = |v: Option<&Json>| match v {
+        Some(Json::String(s)) => s.to_string(),
+        Some(Json::Number(n)) => n.to_string(),
+        _ => "?".to_owned(),
+    };
+    Ok(format!(
+        "{} {}x colour {} profile {}",
+        field(run.get("platform")),
+        field(run.get("scale")),
+        field(run.get("colour")),
+        field(run.get("displayProfile").and_then(|p| p.get("source")))
+    ))
+}
+
+/// Upstream colour-patch results per colour key. A grey UI hides a capture that is still in the
+/// display's colour space (Display P3 leaves greys alone), so no capture counts unless the same
+/// run passed the colour-patch rule at the same settings.
+fn colour_patch_hosts(variants: &[PathBuf]) -> Result<Vec<(String, bool, String)>> {
+    let mut hosts = Vec::new();
+    for variant in variants {
+        for name in capture_names(variant)? {
+            let record = read_json(&variant.join("captures").join(format!("{name}.json")))?;
+            if !matches!(record.get("patches"), Some(Json::Array(_))) {
+                continue;
+            }
+            let key = colour_key(variant)?;
+            let (pass, detail) = match load_capture(variant, &name, false) {
+                Ok(capture) => {
+                    let patches = capture.patches.clone().unwrap_or_default();
+                    let check = gates::patch_check(
+                        "upstream",
+                        &capture,
+                        &patches,
+                        gates::reference_patch_limit(&capture),
+                    );
+                    (check.pass, check.detail)
+                }
+                Err(e) => (false, e),
+            };
+            hosts.push((key, pass, format!("{} {name}: {detail}", variant.display())));
+        }
+    }
+    Ok(hosts)
+}
+
 pub(crate) fn compare_roots(reference: &Path, port: &Path) -> Result<Vec<CaptureResult>> {
     let mut results = Vec::new();
     let variants = variant_dirs(reference)?;
     if variants.is_empty() {
         return Err(format!("{}: no upstream variants", reference.display()));
     }
-    for variant in variants {
-        let rel = variant
-            .strip_prefix(reference)
-            .expect("variant under its root");
-        let label = if rel.as_os_str().is_empty() {
+    let hosts = colour_patch_hosts(&variants)?;
+    let label_of = |root: &Path, variant: &Path| {
+        let rel = variant.strip_prefix(root).expect("variant under its root");
+        if rel.as_os_str().is_empty() {
             variant
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default()
         } else {
             rel.display().to_string()
-        };
+        }
+    };
+    let mut rels = Vec::new();
+    for variant in &variants {
+        let rel = variant
+            .strip_prefix(reference)
+            .expect("variant under its root");
+        rels.push(rel.to_path_buf());
+        let label = label_of(reference, variant);
+        let key = colour_key(variant)?;
+        let ours: Vec<&(String, bool, String)> = hosts.iter().filter(|h| h.0 == key).collect();
+        if ours.is_empty() {
+            results.push(CaptureResult::failed(
+                format!("{label} colour patch"),
+                format!("the upstream run has no colour-patch capture at {key}, so its colours are unverified"),
+            ));
+        } else if let Some(bad) = ours.iter().find(|h| !h.1) {
+            results.push(CaptureResult::failed(
+                format!("{label} colour patch"),
+                format!("the upstream colour patch at {key} fails: {}", bad.2),
+            ));
+        }
         let theirs = port.join(rel);
         if !theirs.join("run.json").exists() {
             results.push(CaptureResult::failed(
@@ -503,7 +574,18 @@ pub(crate) fn compare_roots(reference: &Path, port: &Path) -> Result<Vec<Capture
             ));
             continue;
         }
-        results.extend(compare_variant(&label, &variant, &theirs)?);
+        results.extend(compare_variant(&label, variant, &theirs)?);
+    }
+    if port.is_dir() {
+        for variant in variant_dirs(port)? {
+            let rel = variant.strip_prefix(port).expect("variant under its root");
+            if !rels.iter().any(|r| r == rel) {
+                results.push(CaptureResult::failed(
+                    label_of(port, &variant),
+                    "run by the port only".into(),
+                ));
+            }
+        }
     }
     Ok(results)
 }
