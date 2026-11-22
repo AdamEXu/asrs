@@ -292,6 +292,29 @@
       "masks": [
         ".tab-bar"
       ]
+    },
+    {
+      "main": "set-2d-camera",
+      "data": 2
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "rotation",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas",
+        ".field-2d-scroll",
+        ".field-2d-settings",
+        ".field-select"
+      ],
+      "masks": [
+        ".tab-bar"
+      ]
     }
   ]
 }
