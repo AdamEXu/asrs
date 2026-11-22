@@ -48,6 +48,40 @@ pub trait Fs {
 
     /// `fs.mkdirSync(path)`.
     fn mkdir(&self, path: &str) -> Result<(), JsError>;
+
+    /// `fs.mkdirSync(path, { recursive: true })`: every missing ancestor too.
+    fn mkdir_all(&self, path: &str) -> Result<(), JsError> {
+        Err(enosys("mkdir", path))
+    }
+
+    /// `fs.renameSync(from, to)` for a file or a whole directory tree.
+    fn rename(&self, from: &str, to: &str) -> Result<(), JsError> {
+        let _ = to;
+        Err(enosys("rename", from))
+    }
+
+    /// `fs.rmSync(path, { recursive: true })`: a file or a whole directory tree; a missing path
+    /// throws.
+    fn remove_all(&self, path: &str) -> Result<(), JsError> {
+        Err(enosys("rm", path))
+    }
+
+    /// `fs.realpathSync(path)`.
+    fn realpath(&self, path: &str) -> Result<String, JsError> {
+        Err(enosys("realpath", path))
+    }
+
+    /// `fs.readlinkSync(path)`: fails unless `path` is a symlink.
+    fn readlink(&self, path: &str) -> Result<String, JsError> {
+        Err(enosys("readlink", path))
+    }
+}
+
+fn enosys(syscall: &str, path: &str) -> JsError {
+    JsError::new(
+        "Error",
+        format!("ENOSYS: function not implemented, {syscall} '{path}'"),
+    )
 }
 
 /// libuv's code and description for the errors file opens and writes commonly hit.
@@ -142,6 +176,43 @@ impl Fs for RealFs {
 
     fn mkdir(&self, path: &str) -> Result<(), JsError> {
         std::fs::create_dir(path).map_err(|e| node_error("mkdir", path, &e))
+    }
+
+    fn mkdir_all(&self, path: &str) -> Result<(), JsError> {
+        std::fs::create_dir_all(path).map_err(|e| node_error("mkdir", path, &e))
+    }
+
+    fn rename(&self, from: &str, to: &str) -> Result<(), JsError> {
+        std::fs::rename(from, to)
+            .map_err(|e| node_error("rename", &format!("{from}' -> '{to}"), &e))
+    }
+
+    fn remove_all(&self, path: &str) -> Result<(), JsError> {
+        let meta = std::fs::symlink_metadata(path).map_err(|e| node_error("lstat", path, &e))?;
+        let removed = if meta.is_dir() {
+            std::fs::remove_dir_all(path)
+        } else {
+            std::fs::remove_file(path).or_else(|e| {
+                if cfg!(windows) && meta.file_type().is_symlink() {
+                    std::fs::remove_dir(path)
+                } else {
+                    Err(e)
+                }
+            })
+        };
+        removed.map_err(|e| node_error("rm", path, &e))
+    }
+
+    fn realpath(&self, path: &str) -> Result<String, JsError> {
+        std::fs::canonicalize(path)
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| node_error("realpath", path, &e))
+    }
+
+    fn readlink(&self, path: &str) -> Result<String, JsError> {
+        std::fs::read_link(path)
+            .map(|p| p.to_string_lossy().into_owned())
+            .map_err(|e| node_error("readlink", path, &e))
     }
 }
 
@@ -286,6 +357,25 @@ impl Fs for MemFs {
         if self.in_missing_dir(path) {
             return Err(enoent("open", path));
         }
+        if self.is_dir(path) || path.ends_with('/') {
+            return Err(JsError::new(
+                "Error",
+                format!("EISDIR: illegal operation on a directory, open '{path}'"),
+            ));
+        }
+        let mut ancestor = path;
+        while let Some(i) = ancestor.rfind('/') {
+            ancestor = &ancestor[..i];
+            if ancestor.is_empty() {
+                break;
+            }
+            if self.files.borrow().contains_key(ancestor) {
+                return Err(JsError::new(
+                    "Error",
+                    format!("ENOTDIR: not a directory, open '{path}'"),
+                ));
+            }
+        }
         self.files
             .borrow_mut()
             .insert(path.to_owned(), data.to_vec());
@@ -359,5 +449,212 @@ impl Fs for MemFs {
         }
         self.dirs.borrow_mut().insert(key);
         Ok(())
+    }
+
+    fn mkdir_all(&self, path: &str) -> Result<(), JsError> {
+        let key = dir_key(path);
+        if self.dirs.borrow().contains(&key) {
+            return Ok(());
+        }
+        if self.files.borrow().contains_key(&key) {
+            return Err(JsError::new(
+                "Error",
+                format!("EEXIST: file already exists, mkdir '{path}'"),
+            ));
+        }
+        let mut missing = Vec::new();
+        let mut current = key.as_str();
+        loop {
+            let parent = parent_key(current);
+            if parent == current {
+                break;
+            }
+            if self.dirs.borrow().contains(parent) {
+                break;
+            }
+            if self.files.borrow().contains_key(parent) {
+                return Err(JsError::new(
+                    "Error",
+                    format!("ENOTDIR: not a directory, mkdir '{path}'"),
+                ));
+            }
+            missing.push(parent.to_owned());
+            current = parent;
+        }
+        let mut dirs = self.dirs.borrow_mut();
+        for ancestor in missing.into_iter().rev() {
+            dirs.insert(ancestor);
+        }
+        dirs.insert(key);
+        Ok(())
+    }
+
+    fn rename(&self, from: &str, to: &str) -> Result<(), JsError> {
+        let from_key = dir_key(from);
+        let to_key = dir_key(to);
+        let from_prefix = format!("{from_key}/");
+        let to_prefix = format!("{to_key}/");
+        let from_file_key = if self.files.borrow().contains_key(from) {
+            from.to_owned()
+        } else if self.files.borrow().contains_key(&from_key) {
+            from_key.clone()
+        } else {
+            String::new()
+        };
+        let from_is_file = !from_file_key.is_empty();
+        let from_is_dir = self.dirs.borrow().contains(&from_key);
+        if !from_is_file && !from_is_dir {
+            return Err(enoent("rename", from));
+        }
+        if from_key == to_key {
+            return Ok(());
+        }
+        if from_is_dir && to_key.starts_with(&from_prefix) {
+            return Err(JsError::new(
+                "Error",
+                format!("EINVAL: invalid argument, rename '{from}' -> '{to}'"),
+            ));
+        }
+        let parent = parent_key(&to_key);
+        if parent != "/" && parent != "." {
+            if self.files.borrow().contains_key(parent) {
+                return Err(JsError::new(
+                    "Error",
+                    format!("ENOTDIR: not a directory, rename '{from}' -> '{to}'"),
+                ));
+            }
+            if !self.dirs.borrow().contains(parent) {
+                return Err(enoent("rename", from));
+            }
+        }
+        if from_is_file {
+            if self.dirs.borrow().contains(&to_key) {
+                return Err(JsError::new(
+                    "Error",
+                    format!("EISDIR: illegal operation on a directory, rename '{from}' -> '{to}'"),
+                ));
+            }
+            let data = self
+                .files
+                .borrow_mut()
+                .remove(&from_file_key)
+                .unwrap_or_default();
+            self.files.borrow_mut().insert(to_key, data);
+            return Ok(());
+        }
+        if self.files.borrow().contains_key(to) || self.files.borrow().contains_key(&to_key) {
+            return Err(JsError::new(
+                "Error",
+                format!("ENOTDIR: not a directory, rename '{from}' -> '{to}'"),
+            ));
+        }
+        if self.dirs.borrow().contains(&to_key) {
+            let occupied = self.dirs.borrow().iter().any(|k| k.starts_with(&to_prefix))
+                || self
+                    .files
+                    .borrow()
+                    .keys()
+                    .any(|f| dir_key(f).starts_with(&to_prefix));
+            if occupied {
+                return Err(JsError::new(
+                    "Error",
+                    format!("ENOTEMPTY: directory not empty, rename '{from}' -> '{to}'"),
+                ));
+            }
+            self.dirs.borrow_mut().remove(&to_key);
+        }
+        let moved_dirs: Vec<String> = self
+            .dirs
+            .borrow()
+            .iter()
+            .filter(|k| k.as_str() == from_key.as_str() || k.starts_with(&from_prefix))
+            .cloned()
+            .collect();
+        let moved_files: Vec<(String, Vec<u8>)> = self
+            .files
+            .borrow()
+            .iter()
+            .filter(|(k, _)| dir_key(k).starts_with(&from_prefix))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        {
+            let mut dirs = self.dirs.borrow_mut();
+            for old in moved_dirs {
+                dirs.remove(&old);
+                dirs.insert(format!("{to_key}{}", &old[from_key.len()..]));
+            }
+        }
+        {
+            let mut files = self.files.borrow_mut();
+            for (old, data) in moved_files {
+                files.remove(&old);
+                let old_key = dir_key(&old);
+                files.insert(format!("{to_key}{}", &old_key[from_key.len()..]), data);
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_all(&self, path: &str) -> Result<(), JsError> {
+        let key = dir_key(path);
+        if self.files.borrow_mut().remove(&key).is_some() {
+            return Ok(());
+        }
+        if !self.dirs.borrow().contains(&key) {
+            return Err(enoent("lstat", path));
+        }
+        let prefix = format!("{key}/");
+        let gone_files: Vec<String> = self
+            .files
+            .borrow()
+            .keys()
+            .filter(|f| dir_key(f).starts_with(&prefix))
+            .cloned()
+            .collect();
+        {
+            let mut files = self.files.borrow_mut();
+            for f in gone_files {
+                files.remove(&f);
+            }
+        }
+        let mut dirs = self.dirs.borrow_mut();
+        let gone: Vec<String> = dirs
+            .iter()
+            .filter(|d| d.as_str() == key.as_str() || d.starts_with(&prefix))
+            .cloned()
+            .collect();
+        for d in gone {
+            dirs.remove(&d);
+        }
+        Ok(())
+    }
+
+    fn realpath(&self, path: &str) -> Result<String, JsError> {
+        let key = dir_key(path);
+        let prefix = format!("{key}/");
+        let exists = key == "/"
+            || self.files.borrow().contains_key(path)
+            || self.files.borrow().contains_key(&key)
+            || self
+                .dirs
+                .borrow()
+                .iter()
+                .any(|d| *d == key || d.starts_with(&prefix));
+        if exists {
+            Ok(key)
+        } else {
+            Err(enoent("realpath", path))
+        }
+    }
+
+    fn readlink(&self, path: &str) -> Result<String, JsError> {
+        if self.exists(path) {
+            Err(JsError::new(
+                "Error",
+                format!("EINVAL: invalid argument, readlink '{path}'"),
+            ))
+        } else {
+            Err(enoent("readlink", path))
+        }
     }
 }
