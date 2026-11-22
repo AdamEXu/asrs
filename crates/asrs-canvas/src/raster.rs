@@ -1118,8 +1118,8 @@ impl<'a> Raster<'a> {
                 return;
             };
             let (w, h) = (self.pixmap.width(), self.pixmap.height());
-            for (a, b) in hairline::segments(&device, self.state.line_cap) {
-                if let Some(spans) = hairline::spans(a, b, w, h) {
+            for seg in hairline::segments(&device, self.state.line_cap, w, h) {
+                if let Some(spans) = hairline::spans(seg, w, h) {
                     self.paint_spans(&spans, &paint);
                 }
             }

@@ -236,8 +236,60 @@ fn contour_closed(verbs: &[(Verb, Vec<P>)], i: usize) -> bool {
     false
 }
 
-/// `hair_path`: the line segments Skia's antialiased hairline blits for a device-space path.
-pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
+/// One line of a hairline path, and whether `hair_path` hands it the canvas clip: only then does
+/// Skia blit it through `SkRectClipBlitter`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Segment {
+    pub a: P,
+    pub b: P,
+    pub clipped: bool,
+}
+
+fn point_bounds(pts: &[P]) -> [f32; 4] {
+    pts.iter().fold(
+        [pts[0].x, pts[0].y, pts[0].x, pts[0].y],
+        |[l, t, r, b], q| [l.min(q.x), t.min(q.y), r.max(q.x), b.max(q.y)],
+    )
+}
+
+/// The per-curve test of `hairquad` and `haircubic`: `None` when the curve's control points
+/// miss the outset clip, otherwise whether it still needs the clip.
+fn curve_clip(clip: Option<([f32; 4], [f32; 4])>, pts: &[P]) -> Option<bool> {
+    let Some((inset, outset)) = clip else {
+        return Some(false);
+    };
+    let [l, t, r, b] = point_bounds(pts);
+    if !(outset[0] < r && l < outset[2] && outset[1] < b && t < outset[3]) {
+        return None;
+    }
+    Some(!(r <= inset[2] && l >= inset[0] && b <= inset[3] && t >= inset[1]))
+}
+
+/// `hair_path`: the line segments Skia's antialiased hairline blits for a device-space path
+/// on a `width` x `height` canvas.
+pub fn segments(path: &tiny_skia::Path, cap: LineCap, width: u32, height: u32) -> Vec<Segment> {
+    let (w, h) = (width as i32, height as i32);
+    let bounds = path.bounds();
+    let cap_out = if cap == LineCap::Butt { 1 } else { 2 };
+    let ib = [
+        (bounds.left().floor() as i32).saturating_sub(cap_out),
+        (bounds.top().floor() as i32).saturating_sub(cap_out),
+        (bounds.right().ceil() as i32).saturating_add(cap_out),
+        (bounds.bottom().ceil() as i32).saturating_add(cap_out),
+    ];
+    if !(ib[0] < w && 0 < ib[2] && ib[1] < h && 0 < ib[3]) {
+        return Vec::new();
+    }
+    let contained = 0 <= ib[0] && 0 <= ib[1] && ib[2] <= w && ib[3] <= h;
+    let clip = (!contained).then(|| {
+        let (fw, fh) = (width as f32, height as f32);
+        let inset = if 1.0 > fw - 1.0 || 1.0 > fh - 1.0 {
+            [0.0; 4]
+        } else {
+            [1.0, 1.0, fw - 1.0, fh - 1.0]
+        };
+        (inset, [-1.0, -1.0, fw + 1.0, fh + 1.0])
+    });
     let outset = match cap {
         LineCap::Butt => None,
         LineCap::Square => Some(0.5),
@@ -261,7 +313,7 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
         }
         verbs.push((verb, pts));
     }
-    let mut polylines: Vec<Vec<P>> = Vec::new();
+    let mut polylines: Vec<(Vec<P>, bool)> = Vec::new();
     let (mut first, mut last_pt) = (P::default(), P::default());
     let mut closed = false;
     let mut prev: Option<Verb> = None;
@@ -283,12 +335,20 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
                     extend(prev, next, &mut pts, outset);
                 }
                 match verb {
-                    Verb::Line => polylines.push(pts.clone()),
+                    Verb::Line => polylines.push((pts.clone(), clip.is_some())),
                     Verb::Quad => {
-                        let q = [pts[0], pts[1], pts[2]];
-                        polylines.push(quad_lines(&q, quad_level(&q)));
+                        if let Some(clipped) = curve_clip(clip, &pts) {
+                            let q = [pts[0], pts[1], pts[2]];
+                            polylines.push((quad_lines(&q, quad_level(&q)), clipped));
+                        }
                     }
-                    _ => hair_cubic(&[pts[0], pts[1], pts[2], pts[3]], &mut polylines),
+                    _ => {
+                        if let Some(clipped) = curve_clip(clip, &pts) {
+                            let mut lines = Vec::new();
+                            hair_cubic(&[pts[0], pts[1], pts[2], pts[3]], &mut lines);
+                            polylines.extend(lines.into_iter().map(|l| (l, clipped)));
+                        }
+                    }
                 }
                 last_pt = pts[pts.len() - 1];
             }
@@ -299,7 +359,7 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
                 {
                     extend(prev, next, &mut pts, outset);
                 }
-                polylines.push(pts.clone());
+                polylines.push((pts.clone(), clip.is_some()));
             }
         }
         if outset.is_some() {
@@ -311,7 +371,13 @@ pub fn segments(path: &tiny_skia::Path, cap: LineCap) -> Vec<(P, P)> {
     }
     polylines
         .iter()
-        .flat_map(|pts| pts.windows(2).map(|w| (w[0], w[1])))
+        .flat_map(|(pts, clipped)| {
+            pts.windows(2).map(|w| Segment {
+                a: w[0],
+                b: w[1],
+                clipped: *clipped,
+            })
+        })
         .collect()
 }
 
@@ -329,14 +395,39 @@ fn dot6_scale(value: u32, mod64: i32) -> u8 {
     ((value * mod64 as u32) >> 6) as u8
 }
 
-/// `do_anti_hairline` from `SkScan_Antihair.cpp`, in 26.6 and 16.16 fixed point. Segments
-/// longer than 511 px are halved, and the halves meet in one pixel that both blit into, so the
-/// blits are kept in Skia's order and blended one after another.
-fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, out: &mut Spans) {
+/// `contribution_64`: the fractional part of a 26.6 ordinate, with whole numbers giving 64.
+fn contribution_64(ordinate: i32) -> i32 {
+    ((ordinate - 1) & 63) + 1
+}
+
+/// `blitAntiV2`; through `SkRectClipBlitter` it is `SkBlitter`'s default, two `blitAntiH`s.
+fn anti_v2(out: &mut Spans, clipped: bool, x: i32, y: i32, a0: u8, a1: u8) {
+    if clipped {
+        out.anti_h(x, y, &[a0]);
+        out.anti_h(x, y + 1, &[a1]);
+    } else {
+        out.anti_v2(x, y, a0, a1);
+    }
+}
+
+/// `blitAntiH2`; through `SkRectClipBlitter` it is `SkBlitter`'s default, one `blitAntiH`.
+fn anti_h2(out: &mut Spans, clipped: bool, x: i32, y: i32, a0: u8, a1: u8) {
+    if clipped {
+        out.anti_h(x, y, &[a0, a1]);
+    } else {
+        out.anti_h2(x, y, a0, a1);
+    }
+}
+
+/// `do_anti_hairline` from `SkScan_Antihair.cpp`, in 26.6 and 16.16 fixed point, with `clip` as
+/// `[left, top, right, bottom]`. Segments longer than 511 px are halved, and the halves meet in
+/// one pixel that both blit into, so the blits are kept in Skia's order and blended one after
+/// another.
+fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, clip: Option<[i32; 4]>, out: &mut Spans) {
     if (x1 - x0).abs() > 511 * 64 || (y1 - y0).abs() > 511 * 64 {
         let (hx, hy) = ((x0 >> 1) + (x1 >> 1), (y0 >> 1) + (y1 >> 1));
-        anti_hairline(x0, y0, hx, hy, out);
-        anti_hairline(hx, hy, x1, y1, out);
+        anti_hairline(x0, y0, hx, hy, clip, out);
+        anti_hairline(hx, hy, x1, y1, clip, out);
         return;
     }
     let horizontal = (x1 - x0).abs() > (y1 - y0).abs();
@@ -354,8 +445,8 @@ fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, out: &mut Spans) {
     if major0 == major1 {
         return;
     }
-    let istart = major0 >> 6;
-    let istop = (major1 + 63) >> 6;
+    let mut istart = major0 >> 6;
+    let mut istop = (major1 + 63) >> 6;
     let mut fstart = minor0 << 10;
     let (hair, slope) = if minor0 == minor1 {
         (if horizontal { Hair::HLine } else { Hair::VLine }, 0)
@@ -364,25 +455,78 @@ fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, out: &mut Spans) {
         fstart += ((i64::from(s) * i64::from(32 - (major0 & 63)) + 32) >> 6) as i32;
         (if horizontal { Hair::Horish } else { Hair::Vertish }, s)
     };
-    let (scale_start, scale_stop) = if istop - istart == 1 {
+    let (mut scale_start, mut scale_stop) = if istop - istart == 1 {
         (major1 - major0, 0)
     } else {
         (64 - (major0 & 63), major1 & 63)
     };
-    let mut f = draw_cap(out, hair, istart, fstart, slope, scale_start);
+    let mut clipped = false;
+    if let Some([l, t, r, b]) = clip {
+        let (major_lo, major_hi, minor_lo, minor_hi) = if horizontal {
+            (l, r, t, b)
+        } else {
+            (t, b, l, r)
+        };
+        if istart >= major_hi || istop <= major_lo {
+            return;
+        }
+        if istart < major_lo {
+            fstart = fstart.wrapping_add(slope.wrapping_mul(major_lo - istart));
+            istart = major_lo;
+            scale_start = 64;
+            if istop - istart == 1 {
+                scale_start = contribution_64(major1);
+                scale_stop = 0;
+            }
+        }
+        if istop > major_hi {
+            istop = major_hi;
+            scale_stop = 0;
+        }
+        if istart == istop {
+            return;
+        }
+        let span = (istop - istart - 1).wrapping_mul(slope);
+        let (lo, hi) = if slope >= 0 {
+            (
+                fstart.wrapping_sub(FIXED_HALF) >> 16,
+                fstart.wrapping_add(span).wrapping_add(FIXED_HALF + 0xffff) >> 16,
+            )
+        } else {
+            (
+                fstart.wrapping_add(span).wrapping_sub(FIXED_HALF) >> 16,
+                fstart.wrapping_add(FIXED_HALF + 0xffff) >> 16,
+            )
+        };
+        // Skia builds with OUTSET_BEFORE_CLIP_TEST defined.
+        let (lo, hi) = (lo - 1, hi + 1);
+        if lo >= minor_hi || hi <= minor_lo {
+            return;
+        }
+        clipped = !(minor_lo <= lo && minor_hi >= hi);
+    }
+    let mut f = draw_cap(out, hair, clipped, istart, fstart, slope, scale_start);
     let full = istop - istart - 1 - i32::from(scale_stop > 0);
     if full > 0 {
-        f = draw_line(out, hair, istart + 1, istart + 1 + full, f, slope);
+        f = draw_line(out, hair, clipped, istart + 1, istart + 1 + full, f, slope);
     }
     if scale_stop > 0 {
-        draw_cap(out, hair, istop - 1, f, slope, scale_stop);
+        draw_cap(out, hair, clipped, istop - 1, f, slope, scale_stop);
     }
 }
 
 /// `SkAntiHairBlitter::drawCap`: one step along the major axis, the two pixels straddling `f`
 /// (16.16, the minor coordinate at the centre of `major`) sharing its coverage scaled by
 /// `mod64 / 64`.
-fn draw_cap(out: &mut Spans, hair: Hair, major: i32, f: i32, slope: i32, mod64: i32) -> i32 {
+fn draw_cap(
+    out: &mut Spans,
+    hair: Hair,
+    clipped: bool,
+    major: i32,
+    f: i32,
+    slope: i32,
+    mod64: i32,
+) -> i32 {
     let f = f + FIXED_HALF;
     let lower = f >> 16;
     let a = ((f >> 8) & 0xff) as u32;
@@ -396,14 +540,22 @@ fn draw_cap(out: &mut Spans, hair: Hair, major: i32, f: i32, slope: i32, mod64: 
             out.v(lower, major, 1, lo);
             out.v(lower - 1, major, 1, up);
         }
-        Hair::Horish => out.anti_v2(major, lower - 1, up, lo),
-        Hair::Vertish => out.anti_h2(lower - 1, major, up, lo),
+        Hair::Horish => anti_v2(out, clipped, major, lower - 1, up, lo),
+        Hair::Vertish => anti_h2(out, clipped, lower - 1, major, up, lo),
     }
     f + slope - FIXED_HALF
 }
 
 /// `SkAntiHairBlitter::drawLine` over `start..stop` on the major axis.
-fn draw_line(out: &mut Spans, hair: Hair, start: i32, stop: i32, f: i32, slope: i32) -> i32 {
+fn draw_line(
+    out: &mut Spans,
+    hair: Hair,
+    clipped: bool,
+    start: i32,
+    stop: i32,
+    f: i32,
+    slope: i32,
+) -> i32 {
     let mut f = f + FIXED_HALF;
     let count = stop - start;
     let lower = f >> 16;
@@ -422,9 +574,9 @@ fn draw_line(out: &mut Spans, hair: Hair, start: i32, stop: i32, f: i32, slope: 
                 let lower = f >> 16;
                 let a = ((f >> 8) & 0xff) as u8;
                 if hair == Hair::Horish {
-                    out.anti_v2(major, lower - 1, 255 - a, a);
+                    anti_v2(out, clipped, major, lower - 1, 255 - a, a);
                 } else {
-                    out.anti_h2(lower - 1, major, 255 - a, a);
+                    anti_h2(out, clipped, lower - 1, major, 255 - a, a);
                 }
                 f += slope;
             }
@@ -433,25 +585,46 @@ fn draw_line(out: &mut Spans, hair: Hair, start: i32, stop: i32, f: i32, slope: 
     f - FIXED_HALF
 }
 
-/// The blits Skia's antihair blitter makes for one segment, in order, clipped to the canvas.
-pub fn spans(a: P, b: P, width: u32, height: u32) -> Option<Spans> {
+/// `SkScan::AntiHairLineRgn` for one segment: the blits Skia's antihair blitter makes for it, in
+/// order, on a `width` x `height` canvas. A segment that is not inside the canvas gets the
+/// `SkRegion::Cliperator` rect, the canvas cut to the segment's own bounds, as its clip.
+pub fn spans(seg: Segment, width: u32, height: u32) -> Option<Spans> {
     let fixed = ClipRect {
         left: -32767.0,
         top: -32767.0,
         right: 32767.0,
         bottom: 32767.0,
     };
-    let canvas = ClipRect {
-        left: -1.0,
-        top: -1.0,
-        right: width as f32 + 1.0,
-        bottom: height as f32 + 1.0,
-    };
-    let [a, b] = clip::intersect_line([a, b], fixed)?;
-    let [a, b] = clip::intersect_line([a, b], canvas)?;
+    let mut pts = clip::intersect_line([seg.a, seg.b], fixed)?;
+    if seg.clipped {
+        let outset = ClipRect {
+            left: -1.0,
+            top: -1.0,
+            right: width as f32 + 1.0,
+            bottom: height as f32 + 1.0,
+        };
+        pts = clip::intersect_line(pts, outset)?;
+    }
     let dot6 = |v: f32| (v * 64.0) as i32;
+    let [x0, y0, x1, y1] = [pts[0].x, pts[0].y, pts[1].x, pts[1].y].map(dot6);
+    let mut clip = None;
+    if seg.clipped {
+        let (w, h) = (width as i32, height as i32);
+        let ir = [
+            (x0.min(x1) >> 6) - 1,
+            (y0.min(y1) >> 6) - 1,
+            ((x0.max(x1) + 63) >> 6) + 1,
+            ((y0.max(y1) + 63) >> 6) + 1,
+        ];
+        if !(ir[0] < w && 0 < ir[2] && ir[1] < h && 0 < ir[3]) {
+            return None;
+        }
+        if !(0 <= ir[0] && 0 <= ir[1] && ir[2] <= w && ir[3] <= h) {
+            clip = Some([ir[0].max(0), ir[1].max(0), ir[2].min(w), ir[3].min(h)]);
+        }
+    }
     let mut out = Spans::new(width, height);
-    anti_hairline(dot6(a.x), dot6(a.y), dot6(b.x), dot6(b.y), &mut out);
+    anti_hairline(x0, y0, x1, y1, clip, &mut out);
     (!out.is_empty()).then_some(out)
 }
 
@@ -484,13 +657,13 @@ mod tests {
         let mut b = PathBuilder::new();
         b.move_to(0.0, 0.0);
         b.cubic_to(10.0, 0.0, 20.0, 0.0, 30.0, 0.0);
-        assert_eq!(segments(&b.finish().unwrap(), LineCap::Butt).len(), 1);
+        assert_eq!(segments(&b.finish().unwrap(), LineCap::Butt, 100, 100).len(), 1);
         let mut b = PathBuilder::new();
         b.move_to(0.0, 0.0);
         b.cubic_to(10.0, 40.0, 20.0, 40.0, 30.0, 0.0);
-        let segs = segments(&b.finish().unwrap(), LineCap::Butt);
+        let segs = segments(&b.finish().unwrap(), LineCap::Butt, 100, 100);
         assert_eq!(segs.len(), 32);
-        assert_eq!(segs[31].1, P { x: 30.0, y: 0.0 });
+        assert_eq!(segs[31].b, P { x: 30.0, y: 0.0 });
     }
 
     #[test]
@@ -498,11 +671,13 @@ mod tests {
         let segs = segments(
             &path(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)], false),
             LineCap::Square,
+            100,
+            100,
         );
         assert_eq!(segs.len(), 2);
-        assert_eq!(segs[0].0, P { x: -0.5, y: 0.0 });
-        assert_eq!(segs[0].1, P { x: 10.0, y: 0.0 });
-        assert_eq!(segs[1].1, P { x: 10.0, y: 10.5 });
+        assert_eq!(segs[0].a, P { x: -0.5, y: 0.0 });
+        assert_eq!(segs[0].b, P { x: 10.0, y: 0.0 });
+        assert_eq!(segs[1].b, P { x: 10.0, y: 10.5 });
     }
 
     #[test]
@@ -510,13 +685,71 @@ mod tests {
         let segs = segments(
             &path(&[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0)], true),
             LineCap::Butt,
+            100,
+            100,
         );
         assert_eq!(segs.len(), 3);
-        assert_eq!(segs[2], (P { x: 4.0, y: 4.0 }, P { x: 0.0, y: 0.0 }));
+        assert_eq!(
+            (segs[2].a, segs[2].b),
+            (P { x: 4.0, y: 4.0 }, P { x: 0.0, y: 0.0 })
+        );
+        assert!(segs.iter().all(|s| s.clipped));
+    }
+
+    fn seg(a: (f32, f32), b: (f32, f32), clipped: bool) -> Segment {
+        Segment {
+            a: P { x: a.0, y: a.1 },
+            b: P { x: b.0, y: b.1 },
+            clipped,
+        }
     }
 
     fn alphas(a: P, b: P, w: u32, h: u32) -> Vec<u8> {
-        spans(a, b, w, h).unwrap().flatten(w as usize, h as usize)
+        let s = Segment { a, b, clipped: true };
+        spans(s, w, h).unwrap().flatten(w as usize, h as usize)
+    }
+
+    fn blits_at(spans: &Spans, x: i32, y: i32) -> Vec<(u8, bool)> {
+        spans
+            .iter_kinds()
+            .filter(|&(sx, sy, a, _)| sy == y && (sx..sx + a.len() as i32).contains(&x))
+            .map(|(sx, _, a, pair)| (a[(x - sx) as usize], pair))
+            .collect()
+    }
+
+    #[test]
+    fn halves_of_a_long_round_capped_line_both_blit_the_split_pixel() {
+        let path = path(&[(55.0, 22.5), (735.0, 22.5)], false);
+        let segs = segments(&path, LineCap::Round, 800, 60);
+        assert_eq!(segs.len(), 1);
+        assert!(!segs[0].clipped);
+        let out = spans(segs[0], 800, 60).unwrap();
+        assert_eq!(blits_at(&out, 394, 22), [(251, false), (3, false)]);
+        assert_eq!(blits_at(&out, 393, 22), [(255, false)]);
+        assert_eq!(blits_at(&out, 395, 22), [(255, false)]);
+    }
+
+    #[test]
+    fn slanted_lines_blit_pixel_pairs_only_without_the_clip() {
+        let inside = spans(seg((10.0, 10.5), (90.0, 30.5), true), 100, 100).unwrap();
+        assert!(inside.iter_kinds().all(|(.., pair)| pair));
+        let past_the_end = spans(seg((10.0, 10.5), (99.8, 30.5), true), 100, 100).unwrap();
+        assert!(past_the_end.iter_kinds().all(|(.., pair)| pair));
+        let edge = spans(seg((10.0, 0.3), (90.0, 20.5), true), 100, 100).unwrap();
+        assert!(edge.iter_kinds().all(|(.., pair)| !pair));
+        let unclipped = spans(seg((10.0, 0.3), (90.0, 20.5), false), 100, 100).unwrap();
+        assert!(unclipped.iter_kinds().all(|(.., pair)| pair));
+    }
+
+    #[test]
+    fn curves_inside_the_inset_canvas_drop_the_clip() {
+        let mut b = PathBuilder::new();
+        b.move_to(0.5, 50.0);
+        b.line_to(20.0, 50.0);
+        b.quad_to(50.0, 10.0, 80.0, 50.0);
+        let segs = segments(&b.finish().unwrap(), LineCap::Butt, 100, 100);
+        assert!(segs[0].clipped);
+        assert!(segs[1..].iter().all(|s| !s.clipped));
     }
 
     #[test]
