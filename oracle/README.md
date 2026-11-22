@@ -1028,6 +1028,25 @@ the parse and after each op the step writes `{"form": markup, "op": <op or null>
 the parsed element, with numeric segments indexing collections (`options.1.value`,
 `style.width`).
 
+### Select input vectors
+
+`form/select-keys` (`src/selectKeys.ts`, with `src/selectKeysMain.ts` as its Electron main
+process) records what trusted input does to a closed `<select>` in a real Chromium page. Each
+step of the spec's fixture is `{"markup", "focus"?, "ops"}`: the markup is loaded into an
+offscreen window, the first `<select>` is focused unless `focus` is `false`, and each op runs:
+`["char", text, ms, modifiers?]` types a character and `["key", name, ms, modifiers?]` presses a
+named key (`Enter`, `Escape`, `Home`, `End`, `PageUp`, `PageDown`, `ArrowLeft`, `ArrowRight`,
+`Backspace`), both through the DevTools protocol's `Input.dispatchKeyEvent` with the event
+timestamp `ms` after a fixed origin, since type-ahead compares event times; `["press", null, ms]`
+presses the mouse at the select's centre; `["set", property, value]`, `["blur"]` and
+`["focus"]` are script. After the markup and after each op it writes `{"step", "op", "value",
+"selectedIndex", "focused", "events"}`, where `events` lists the DOM events the select received
+since the previous record. Keys and presses that open the native popup on macOS (up, down, F4,
+space outside a type-ahead session, a press on an enabled select) would block in AppKit's menu
+loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift`; `meta` combinations
+can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
+`selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
