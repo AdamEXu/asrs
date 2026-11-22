@@ -383,6 +383,18 @@ impl<M: FieldModel> Render for TextField<M> {
             }))
             .child(frame.absolute().inset_0())
             .child(editor_box);
+        if focused {
+            root = root.child(
+                canvas(
+                    |bounds, _, cx| {
+                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds)
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            );
+        }
 
         let cancel_visible =
             (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();

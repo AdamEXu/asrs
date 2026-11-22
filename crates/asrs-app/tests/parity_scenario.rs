@@ -22,6 +22,10 @@ fn run(name: &str, out: &Path) {
     scenario::run(&args).unwrap_or_else(|e| panic!("{name}: {e}"));
 }
 
+/// `captures/resized.hub-state.json` from `cargo xtask app run hub-resize`: the HubState upstream
+/// saved after the scenario's drags, the same at every scale and theme.
+const UPSTREAM_RESIZED_STATE: &str = r#"{"sidebar":{"width":362,"expanded":[]},"tabs":{"selected":1,"tabs":[{"type":0,"title":"","controller":null,"controllerUUID":"documentation0000000000000000000","renderer":"","controlsHeight":0},{"type":1,"title":"Resized","controller":{"leftSources":[],"rightSources":[],"discreteSources":[],"leftLockedRange":null,"rightLockedRange":null,"leftUnitConversion":{"autoTarget":null,"preset":null},"rightUnitConversion":{"autoTarget":null,"preset":null},"leftFilter":0,"rightFilter":0,"showRobotMode":false},"controllerUUID":"linegraph00000000000000000000000","renderer":null,"controlsHeight":270}]}}"#;
+
 fn record(path: &Path) -> Json {
     json::parse(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
@@ -37,6 +41,7 @@ fn main() {
     let out = std::env::temp_dir().join(format!("asrs-parity-scenario-{}", std::process::id()));
     run("colour-patch", &out);
     run("hub-empty", &out);
+    run("hub-resize", &out);
 
     let colours = patch_colours();
     for scale in [1u32, 2] {
@@ -83,8 +88,26 @@ fn main() {
                 Some(f64::from(scale))
             );
             assert_eq!(r.get("colourSpace"), Some(&Json::string("srgb")));
+            let title = r.get("probes").and_then(|p| p.get(".title-bar")).unwrap();
+            assert_eq!(title.to_compact(), "[[0,0,1100,38]]");
+            let alpha = |x: u32, y: u32| {
+                image.data[((y * scale * image.width + x * scale) * 4 + 3) as usize]
+            };
+            assert_eq!(
+                alpha(150, 300),
+                0,
+                "the vibrancy area is transparent, as upstream's"
+            );
+            assert_eq!(alpha(10, 10), 0, "the title bar over the sidebar too");
+            assert_eq!(alpha(700, 300), 255);
+
+            let variant = out.join(format!("hub-resize/{scale}x-{theme}"));
+            let state =
+                std::fs::read_to_string(variant.join("captures/resized.hub-state.json")).unwrap();
+            assert_eq!(state, UPSTREAM_RESIZED_STATE, "hub-resize {scale}x {theme}");
         }
     }
     println!("parity scenario: hub-empty 1100x650 at 1x and 2200x1300 at 2x");
+    println!("parity scenario: hub-resize saves upstream's HubState bytes");
     let _ = std::fs::remove_dir_all(&out);
 }

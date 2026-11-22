@@ -978,4 +978,64 @@ mod tests {
         b.gl[0].edges = None;
         assert_eq!(failed(&compare(&a, &b, &[])), [("4 3D", "3D g.png".into())]);
     }
+
+    #[test]
+    fn a_dump_is_skipped_only_under_a_mask_both_sides_record() {
+        let mut a = capture(20, 20, 1.0);
+        a.canvases = vec![Dump {
+            file: "c.png".into(),
+            rect: [1.0, 1.0, 4.0, 4.0],
+            image: Rgba {
+                width: 4,
+                height: 4,
+                data: [10, 20, 30, 255].repeat(16),
+            },
+        }];
+        a.masks = vec![(".renderer-content".into(), [0.0, 0.0, 10.0, 10.0])];
+        let mut b = a.clone();
+        b.canvases.clear();
+        let o = compare(&a, &b, &[]);
+        assert!(o.pass(), "{:?}", o.checks);
+        assert!(
+            o.checks
+                .iter()
+                .any(|c| c.gate == "5 masks" && c.what == "canvas c.png")
+        );
+        b.masks[0].0 = ".tab-bar".into();
+        assert!(!compare(&a, &b, &[]).pass());
+        b.masks = vec![(".renderer-content".into(), [0.0, 0.0, 3.0, 3.0])];
+        assert!(!compare(&a, &b, &[]).pass());
+        b.masks.clear();
+        assert!(!compare(&a, &b, &[]).pass());
+    }
+
+    #[test]
+    fn hub_state_bytes_and_timeline_range_bits_must_match() {
+        let mut a = capture(8, 8, 1.0);
+        a.hub_state = Some(br#"{"sidebar":{"width":362}}"#.to_vec());
+        a.timeline_range = Some([0.25, 9.75]);
+        let mut b = a.clone();
+        assert!(compare(&a, &b, &[]).pass());
+        b.hub_state = Some(br#"{"sidebar":{"width":363}}"#.to_vec());
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "HubState".into())]
+        );
+        b.hub_state = None;
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "HubState".into())]
+        );
+        b.hub_state = a.hub_state.clone();
+        b.timeline_range = Some([0.25, f64::from_bits(9.75f64.to_bits() + 1)]);
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "timeline range".into())]
+        );
+        b.timeline_range = None;
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "timeline range".into())]
+        );
+    }
 }

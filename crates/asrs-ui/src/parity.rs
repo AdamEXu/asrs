@@ -71,6 +71,10 @@ pub fn record_box(cx: &mut App, id: &SharedString, bounds: Bounds<Pixels>) {
     with(cx, |r| r.boxes.push((id.clone(), rect_of(bounds))));
 }
 
+/// The reason the Electron driver gives the mask over `document.activeElement` when it is a
+/// text input.
+pub const FOCUSED_INPUT: &str = "focused text input";
+
 /// A region gate 5 masks on both sides, such as a focused text input and its caret.
 pub fn record_mask(cx: &mut App, reason: &str, bounds: Bounds<Pixels>) {
     with(cx, |r| r.masks.push((reason.to_owned(), rect_of(bounds))));
