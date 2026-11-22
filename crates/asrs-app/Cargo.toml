@@ -43,3 +43,7 @@ harness = false
 name = "parity_scenario"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "app_menu_mac"
+harness = false

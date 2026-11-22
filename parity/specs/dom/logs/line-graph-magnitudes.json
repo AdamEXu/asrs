@@ -1,0 +1,14 @@
+[
+  ["putNumber","/Big/Mid",0,200000000.1],
+  ["putNumber","/Big/Mid",3,200000000.35],
+  ["putNumber","/Big/Mid",6,200000000.6],
+  ["putNumber","/Big/Mid",9,200000000.85],
+  ["putNumber","/Big/Over",0,3000000000.1],
+  ["putNumber","/Big/Over",4,3000000040.4],
+  ["putNumber","/Big/Over",8,3000000080.7],
+  ["putNumber","/Big/Fine",0,3000000000.1],
+  ["putNumber","/Big/Fine",4,3000000000.4],
+  ["putNumber","/Big/Fine",8,3000000000.7],
+  ["putNumber","/Big/Flat",0,5],
+  ["putNumber","/Big/Flat",9,5]
+]

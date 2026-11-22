@@ -1,3 +1,4 @@
+import lineGraphTraces from "./lineGraphTraces.json";
 import timelineTraces from "./timelineTraces.json";
 
 export type Cmd = unknown[];
@@ -1275,6 +1276,14 @@ function timelineScenes(): Scene[] {
   );
 }
 
+// Frames recorded from upstream's LineGraphRenderer in dom/line-graph vectors, which
+// asrs-tabs's renderer reproduces call for call.
+function lineGraphScenes(): Scene[] {
+  return lineGraphTraces.map((t) =>
+    scene(t.name, "linegraph", "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, t.cmds as Cmd[])
+  );
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -1287,7 +1296,8 @@ export function allScenes(): Scene[] {
     textGrid("text-dark-1x", 1, true),
     shapes("shapes-2x", 2),
     shapes("shapes-1x", 1),
-    ...timelineScenes()
+    ...timelineScenes(),
+    ...lineGraphScenes()
   ];
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));
