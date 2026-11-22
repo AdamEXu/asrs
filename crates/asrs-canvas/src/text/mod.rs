@@ -68,7 +68,9 @@ pub struct Bounds {
 /// A glyph source that mirrors the scaler Skia uses in Chromium on one platform.
 pub trait TextBackend {
     /// Glyphs and advances of `text`, already space-normalized, with platform font fallback.
-    fn shape(&mut self, font: &FontSpec, text: &str) -> Shaped;
+    /// Advances are in CSS px of `font` laid out at zoom `zoom`, as Blink lays DOM text out at
+    /// the device scale; canvas text shapes at zoom 1.
+    fn shape(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped;
 
     fn metrics(&mut self, font: &FontSpec) -> FontMetrics;
 

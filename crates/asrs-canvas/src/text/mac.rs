@@ -14,8 +14,8 @@ use core_graphics::font::CGGlyph;
 use core_graphics::geometry::{CGAffineTransform, CGPoint, CGRect, CGSize};
 use core_text::font::{CTFont, new_from_descriptor, new_from_name, new_ui_font_for_language};
 use core_text::font_descriptor::{
-    kCTFontBoldTrait, kCTFontItalicTrait, kCTFontOrientationHorizontal, kCTFontVariationAttribute,
-    new_from_attributes,
+    kCTFontBoldTrait, kCTFontColorGlyphsTrait, kCTFontItalicTrait, kCTFontOrientationHorizontal,
+    kCTFontVariationAttribute, new_from_attributes,
 };
 use core_text::line::CTLine;
 use core_text::run::CTRun;
@@ -30,7 +30,7 @@ const K_CT_FONT_UI_FONT_SYSTEM: u32 = 2;
 const K_CG_IMAGE_ALPHA_ONLY: u32 = 7;
 const WGHT: i64 = 0x7767_6874;
 const OS2: u32 = 0x4f53_2f32;
-const EMOJI_UI: &str = ".AppleColorEmojiUI";
+const EMOJI: [&str; 2] = [".AppleColorEmojiUI", "AppleColorEmoji"];
 
 /// Direct CoreText, configured like Skia's `SkScalerContext_Mac` in Chromium.
 pub(crate) struct CoreText {
@@ -61,6 +61,11 @@ struct Face {
     /// rounds HVAR deltas to whole font units, and its ink bounds from the varied outlines, where
     /// CoreText's bounding rects describe the default instance.
     varied: bool,
+    /// Skia draws the glyphs of a font with colour glyphs as ARGB images, never as masks.
+    color: bool,
+    /// Blink's synthetic italic: an upright fallback for an italic font, drawn under Skia's
+    /// fake-italic skew.
+    skew: bool,
 }
 
 unsafe extern "C" {
@@ -164,7 +169,56 @@ fn create_font(spec: &FontSpec) -> Face {
         font.clone_with_symbolic_traits(traits, traits)
             .unwrap_or(font)
     };
-    Face { font, varied }
+    Face {
+        font,
+        varied,
+        color: false,
+        skew: false,
+    }
+}
+
+/// Skia's fake-italic skew, `SkFont::setSkewX(-1/4)`, in CoreGraphics' y-up space.
+const FAKE_ITALIC: CGAffineTransform = CGAffineTransform {
+    a: 1.0,
+    b: 0.0,
+    c: 0.25,
+    d: 1.0,
+    tx: 0.0,
+    ty: 0.0,
+};
+
+impl Face {
+    fn skew_matrix(&self) -> CGAffineTransform {
+        if self.skew {
+            FAKE_ITALIC
+        } else {
+            CGAffineTransform::new(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+        }
+    }
+}
+
+/// `CGRectApplyAffineTransform` as `[left, bottom, right, top]`.
+fn transformed_rect(r: CGRect, m: CGAffineTransform) -> [f64; 4] {
+    let corners = [
+        (r.origin.x, r.origin.y),
+        (r.origin.x + r.size.width, r.origin.y),
+        (r.origin.x, r.origin.y + r.size.height),
+        (r.origin.x + r.size.width, r.origin.y + r.size.height),
+    ]
+    .map(|(x, y)| (m.a * x + m.c * y + m.tx, m.b * x + m.d * y + m.ty));
+    let fold = |f: fn(&(f64, f64)) -> f64, init: f64, pick: fn(f64, f64) -> f64| {
+        corners.iter().map(f).fold(init, pick)
+    };
+    [
+        fold(|p| p.0, f64::INFINITY, f64::min),
+        fold(|p| p.1, f64::INFINITY, f64::min),
+        fold(|p| p.0, f64::NEG_INFINITY, f64::max),
+        fold(|p| p.1, f64::NEG_INFINITY, f64::max),
+    ]
+}
+
+fn has_color_glyphs(font: &CTFont) -> bool {
+    font.symbolic_traits() & kCTFontColorGlyphsTrait != 0
 }
 
 fn run_font(run: &CTRun) -> Option<CTFont> {
@@ -277,9 +331,13 @@ impl CoreText {
             return primary;
         }
         *self.fallback.entry((spec.key(), name)).or_insert_with(|| {
+            let color = has_color_glyphs(&font);
+            let skew = spec.italic && font.symbolic_traits() & kCTFontItalicTrait == 0;
             self.faces.push(Face {
                 font,
                 varied: false,
+                color,
+                skew,
             });
             (self.faces.len() - 1) as u32
         })
@@ -300,14 +358,16 @@ impl CoreText {
     }
 
     /// Chromium picks `Apple Color Emoji` for emoji, where CoreText falls back to the UI variant
-    /// of it next to the system font, which has other advances.
+    /// of it next to the system font, which has other advances. Skia sizes it with tracking off,
+    /// and the font's `trak` table would otherwise widen small sizes by up to a pixel.
     fn emoji_overrides(line: &CTLine, len: isize, size: f64) -> Vec<(CFRange, CTFont)> {
         let runs: Vec<(isize, bool)> = line
             .glyph_runs()
             .iter()
             .map(|run| {
                 let start = run.string_indices().first().copied().unwrap_or(len);
-                let emoji = run_font(&run).is_some_and(|f| f.postscript_name() == EMOJI_UI);
+                let emoji =
+                    run_font(&run).is_some_and(|f| EMOJI.contains(&f.postscript_name().as_str()));
                 (start, emoji)
             })
             .collect();
@@ -316,6 +376,7 @@ impl CoreText {
             if emoji {
                 let end = runs.get(k + 1).map_or(len, |r| r.0);
                 let font = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
+                let font = exact_copy(&font, size);
                 overrides.push((CFRange::init(start, end - start), font));
             }
         }
@@ -329,6 +390,7 @@ impl CoreText {
         spec: &FontSpec,
         primary: u32,
         word: &str,
+        zoom: f32,
         origin: f32,
         start: u32,
         out: &mut Vec<ShapedGlyph>,
@@ -360,8 +422,22 @@ impl CoreText {
                     ids.len() as isize,
                 );
             }
-            let face = self.run_face(spec, primary, run_font);
+            let face = self.run_face(spec, primary, run_font.clone());
             let varied = self.faces[face as usize].varied;
+            let zoomed = (self.faces[face as usize].color && zoom != 1.0).then(|| {
+                let device = self.device_font(face, &run_font, spec.size * zoom);
+                let mut zoomed = vec![CGSize::new(0.0, 0.0); ids.len()];
+                // SAFETY: `ids` and `zoomed` both hold `ids.len()` elements.
+                unsafe {
+                    device.get_advances_for_glyphs(
+                        kCTFontOrientationHorizontal,
+                        ids.as_ptr(),
+                        zoomed.as_mut_ptr(),
+                        ids.len() as isize,
+                    );
+                }
+                zoomed
+            });
             let upem = self.faces[face as usize].font.units_per_em();
             let units_per_px = f64::from(upem) / f64::from(spec.size);
             for (i, (&id, p)) in ids.iter().zip(positions.iter()).enumerate() {
@@ -376,7 +452,10 @@ impl CoreText {
                 let next = positions.get(i + 1).map_or(run_end, |q| q.x);
                 let raw = advances[i].width;
                 let kern = ((next - p.x - raw) * 65536.0).round() as i32;
-                let advance = if varied {
+                let advance = if let Some(zoomed) = &zoomed {
+                    let device = ((zoomed[i].width as f32) * 65536.0) as i32;
+                    (device as f32 / zoom) as i32
+                } else if varied {
                     hb_scale((raw * units_per_px).round() as i64, upem, spec.size)
                 } else {
                     ((raw as f32) * 65536.0) as i32
@@ -399,6 +478,16 @@ impl CoreText {
         if r.size.width <= 0.0 || r.size.height <= 0.0 {
             return None;
         }
+        if face.color {
+            let [l, b, r, t] = transformed_rect(r, face.skew_matrix());
+            let rect = [
+                l.floor() - 1.0,
+                b.floor() - 1.0,
+                r.ceil() + 1.0,
+                t.ceil() + 1.0,
+            ];
+            return Some((font, id, rect));
+        }
         let rect = [
             r.origin.x,
             r.origin.y,
@@ -410,7 +499,7 @@ impl CoreText {
 }
 
 impl TextBackend for CoreText {
-    fn shape(&mut self, spec: &FontSpec, text: &str) -> Shaped {
+    fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
         if spec.size <= 0.0 {
             return Shaped {
                 glyphs: Vec::new(),
@@ -422,7 +511,7 @@ impl TextBackend for CoreText {
         let mut width = 0.0f32;
         let mut start = 0;
         for word in words(text) {
-            width += self.shape_word(spec, primary, word, width, start, &mut glyphs);
+            width += self.shape_word(spec, primary, word, zoom, width, start, &mut glyphs);
             start += word.encode_utf16().count() as u32;
         }
         Shaped { glyphs, width }

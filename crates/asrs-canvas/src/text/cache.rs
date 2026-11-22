@@ -13,7 +13,7 @@ type MaskKey = (Glyph, [u64; 4], (u8, u8));
 /// wholesale when a table outgrows its cap, so memory stays bounded across long sessions.
 pub struct Cached<B> {
     backend: B,
-    shapes: HashMap<(FontKey, String), Shaped>,
+    shapes: HashMap<(FontKey, u32, String), Shaped>,
     metrics: HashMap<FontKey, FontMetrics>,
     bounds: HashMap<Glyph, Option<Bounds>>,
     masks: HashMap<MaskKey, Option<Arc<Mask>>>,
@@ -48,15 +48,15 @@ impl<B: TextBackend> Cached<B> {
 }
 
 impl<B: TextBackend> TextBackend for Cached<B> {
-    fn shape(&mut self, font: &FontSpec, text: &str) -> Shaped {
-        let key = (font.key(), text.to_owned());
+    fn shape(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let key = (font.key(), zoom.to_bits(), text.to_owned());
         if let Some(shaped) = self.shapes.get(&key) {
             return shaped.clone();
         }
         if self.shapes.len() >= MAX_SHAPES {
             self.shapes.clear();
         }
-        let shaped = self.backend.shape(font, text);
+        let shaped = self.backend.shape(font, text, zoom);
         self.shapes.insert(key, shaped.clone());
         shaped
     }

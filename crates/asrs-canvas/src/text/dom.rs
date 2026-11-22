@@ -505,7 +505,7 @@ fn truncate(
     available: Lu,
     scale: f32,
 ) -> Vec<Fragment> {
-    let ellipsis = backend.shape(&style.font, ELLIPSIS);
+    let ellipsis = backend.shape(&style.font, ELLIPSIS, scale);
     let ellipsis_width = lu_ceil(ellipsis.width * scale);
     let ellipsis_at = |x: Lu| Fragment {
         text: ELLIPSIS.to_owned(),
@@ -582,7 +582,7 @@ fn wrap(
     available: Lu,
     scale: f32,
 ) -> Vec<String> {
-    let shaped = backend.shape(&style.font, &normalize_space(text));
+    let shaped = backend.shape(&style.font, &normalize_space(text), scale);
     let at = boundaries(&shaped, utf16_len(text));
     let mut units = vec![0usize; text.len() + 1];
     let mut count = 0;
@@ -647,7 +647,7 @@ pub fn layout(
         let mut runs = Vec::new();
         let mut width = 0;
         for run in visual_runs(&line_text, style.direction) {
-            let shaped = backend.shape(&style.font, &normalize_space(&run));
+            let shaped = backend.shape(&style.font, &normalize_space(&run), scale);
             let run_width = lu_ceil(shaped.width * scale);
             runs.push((
                 Fragment {
