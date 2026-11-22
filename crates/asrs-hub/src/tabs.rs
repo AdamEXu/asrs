@@ -841,6 +841,18 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         })
     }
 
+    /// The selected tab's renderer when that tab is a `kind` tab, as `Tabs.set3DCamera` and
+    /// `Tabs.setFov` reach it.
+    pub fn selected_renderer(&mut self, kind: TabType) -> Result<Option<&mut dyn TabRenderer<Cx>>> {
+        let i = self.lookup_selected("type")?;
+        let tab = &mut self.tabs[i];
+        Ok(if tab.kind == Some(kind) {
+            Some(tab.renderer.as_mut())
+        } else {
+            None
+        })
+    }
+
     /// Every `kind` tab's `(controllerUUID, controller)` pair, in tab order
     /// (`processVideoData` filters on `data.uuid !== this.UUID`).
     pub fn controllers_with_uuid<T: 'static>(
