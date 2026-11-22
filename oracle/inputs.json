@@ -1,0 +1,671 @@
+{
+  "appMain": [
+    "src/app/display.ts",
+    "src/app/logs.ts",
+    "src/app/page.ts",
+    "src/app/patches.ts",
+    "src/app/scenario.ts",
+    "src/app/tap.ts",
+    "src/appMain.ts",
+    "src/canvas/png.ts",
+    "src/environment.ts"
+  ],
+  "canvasMain": [
+    "src/canvas/dom.ts",
+    "src/canvas/field2dTraces.json",
+    "src/canvas/lineGraphTraces.json",
+    "src/canvas/page.ts",
+    "src/canvas/png.ts",
+    "src/canvas/scenes.ts",
+    "src/canvas/timelineTraces.json",
+    "src/canvas/ui.ts",
+    "src/canvasMain.ts",
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/heatmap/fixtures.ts",
+    "src/heatmap/page.ts",
+    "src/heatmap/record.ts"
+  ],
+  "consoleExport": [
+    "src/consoleExport.ts"
+  ],
+  "corpusA": [
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/json.ts",
+    "src/corpus/matrices.ts",
+    "src/corpus/msgpack.ts",
+    "src/corpus/photon.ts",
+    "src/corpus/proto.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/struct.ts",
+    "src/corpus/wpilog.ts",
+    "src/corpus/wpilogMatrix.ts",
+    "src/corpusA.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/shims.ts"
+  ],
+  "corpusB": [
+    "src/corpus/bytes.ts",
+    "src/corpus/child.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/csv.ts",
+    "src/corpus/dslog.ts",
+    "src/corpus/emit.ts",
+    "src/corpus/exporter.ts",
+    "src/corpus/fuzz.ts",
+    "src/corpus/merge.ts",
+    "src/corpus/rlog.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/roadrunner.ts",
+    "src/corpus/urcl.ts",
+    "src/corpus/wpilog.ts",
+    "src/corpusB.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/shims.ts"
+  ],
+  "corpusFuzz": [
+    "src/corpus/bytes.ts",
+    "src/corpus/emit.ts",
+    "src/corpus/fuzz.ts",
+    "src/corpus/rng.ts",
+    "src/corpusFuzz.ts",
+    "src/environment.ts",
+    "src/shims.ts"
+  ],
+  "cve1": [
+    "src/cve1.ts"
+  ],
+  "cve1Torture": [
+    "src/cve1.ts",
+    "src/cve1Torture.ts",
+    "src/environment.ts",
+    "src/shims.ts"
+  ],
+  "decode": [
+    "src/cve1.ts",
+    "src/decode.ts",
+    "src/environment.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/shims.ts"
+  ],
+  "decodeWorker": [
+    "src/cve1.ts",
+    "src/decodeWorker.ts",
+    "src/environment.ts",
+    "src/historical/dump.ts",
+    "src/historical/timers.ts",
+    "src/shims.ts"
+  ],
+  "dom": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom.ts",
+    "src/dom/blinkBoot.ts",
+    "src/dom/env.ts",
+    "src/dom/field3dStub.ts",
+    "src/dom/fixtureFile.ts",
+    "src/dom/formProbe.ts",
+    "src/dom/layout.json",
+    "src/dom/page.ts",
+    "src/dom/realGeometry.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/dom/sourceLists.ts",
+    "src/environment.ts",
+    "src/shims.ts"
+  ],
+  "domBlink": [
+    "src/dom/fixtureFile.ts",
+    "src/domBlink.ts",
+    "src/environment.ts",
+    "src/shims.ts"
+  ],
+  "domBlinkMain": [
+    "src/domBlinkMain.ts"
+  ],
+  "environment": [
+    "src/environment.ts"
+  ],
+  "export": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/export.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/shims.ts"
+  ],
+  "fn": [
+    "src/consoleExport.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/fn.ts",
+    "src/geometryRun.ts",
+    "src/helpers.ts",
+    "src/logFieldRun.ts",
+    "src/logRun.ts",
+    "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "genAssets": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genAssets.ts",
+    "src/shims.ts"
+  ],
+  "genCameraControls": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genCameraControls.ts",
+    "src/shims.ts"
+  ],
+  "genCaseData": [
+    "src/environment.ts",
+    "src/genCaseData.ts",
+    "src/shims.ts"
+  ],
+  "genCollation": [
+    "src/environment.ts",
+    "src/genCollation.ts",
+    "src/shims.ts"
+  ],
+  "genCollationUnsafe": [
+    "src/environment.ts",
+    "src/genCollationUnsafe.ts",
+    "src/shims.ts"
+  ],
+  "genConsole": [
+    "src/consoleExport.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genConsole.ts",
+    "src/geometryRun.ts",
+    "src/helpers.ts",
+    "src/logFieldRun.ts",
+    "src/logRun.ts",
+    "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "genField3dFields": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genField3dFields.ts",
+    "src/lazyHelpers/field3dFieldsRun.ts",
+    "src/shims.ts"
+  ],
+  "genField3dManagers": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/environment.ts",
+    "src/genField3dManagers.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dManagersRun.ts",
+    "src/shims.ts"
+  ],
+  "genField3dRenderer": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/environment.ts",
+    "src/genField3dRenderer.ts",
+    "src/glb/worker.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dRendererRun.ts",
+    "src/shims.ts"
+  ],
+  "genField3dRobot": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/environment.ts",
+    "src/genField3dRobot.ts",
+    "src/glb/worker.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dManagersRun.ts",
+    "src/shims.ts"
+  ],
+  "genFieldSearch": [
+    "src/corpus/bytes.ts",
+    "src/corpus/publicLogs.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genFieldSearch.ts",
+    "src/shims.ts"
+  ],
+  "genFiles": [
+    "src/cve1.ts",
+    "src/fakes/globals.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/files/historicalStart.ts",
+    "src/genFiles.ts"
+  ],
+  "genGeometry": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genGeometry.ts",
+    "src/geometryRun.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genGlb": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genGlb.ts",
+    "src/glb/synthetic.ts",
+    "src/glb/worker.ts",
+    "src/shims.ts"
+  ],
+  "genHeatmap": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genHeatmap.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/heatmap/fixtures.ts",
+    "src/heatmap/record.ts",
+    "src/shims.ts"
+  ],
+  "genJson": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genJson.ts",
+    "src/shims.ts"
+  ],
+  "genLiveBase": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genLiveBase.ts",
+    "src/live/clock.ts",
+    "src/liveBaseRun.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genLog": [
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/json.ts",
+    "src/corpus/matrices.ts",
+    "src/corpus/msgpack.ts",
+    "src/corpus/photon.ts",
+    "src/corpus/proto.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/struct.ts",
+    "src/corpus/wpilog.ts",
+    "src/corpus/wpilogMatrix.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genLog.ts",
+    "src/logRun.ts",
+    "src/logScript.ts",
+    "src/shims.ts"
+  ],
+  "genLogField": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genLogField.ts",
+    "src/logFieldRun.ts",
+    "src/shims.ts"
+  ],
+  "genLogKeys": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genLogKeys.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genMenus": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/fakes/globals.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/genMenus.ts",
+    "src/genMenusMain.ts",
+    "src/menus/context.ts",
+    "src/shims.ts"
+  ],
+  "genMenusMain": [
+    "src/cve1.ts",
+    "src/genMenusMain.ts"
+  ],
+  "genMergeCalculator": [
+    "src/corpus/bytes.ts",
+    "src/corpus/generated.ts",
+    "src/corpus/publicLogs.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genMergeCalculator.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/lazyHelpers/mergeCalculatorRun.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genModel": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genModel.ts",
+    "src/shims.ts"
+  ],
+  "genMsgpack": [
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/msgpack.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genMsgpack.ts",
+    "src/shims.ts"
+  ],
+  "genPhoton": [
+    "src/consoleExport.ts",
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/photon.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/struct.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genPhoton.ts",
+    "src/geometryRun.ts",
+    "src/helpers.ts",
+    "src/logFieldRun.ts",
+    "src/logRun.ts",
+    "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "genProto": [
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/proto.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genProto.ts",
+    "src/shims.ts"
+  ],
+  "genRegex": [
+    "src/consoleExport.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genRegex.ts",
+    "src/geometryRun.ts",
+    "src/helpers.ts",
+    "src/logFieldRun.ts",
+    "src/logRun.ts",
+    "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "genRobotState": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genRobotState.ts",
+    "src/lazyHelpers/robotStateRun.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genSimpleStatistics": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genSimpleStatistics.ts",
+    "src/shims.ts"
+  ],
+  "genSort": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genSort.ts",
+    "src/shims.ts"
+  ],
+  "genSpark": [
+    "src/corpus/bytes.ts",
+    "src/corpus/emit.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genSpark.ts",
+    "src/shims.ts"
+  ],
+  "genState": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genState.ts",
+    "src/lazyHelpers/stateRun.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genStruct": [
+    "src/consoleExport.ts",
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/struct.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genStruct.ts",
+    "src/helpers.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genThree": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genThree.ts",
+    "src/shims.ts"
+  ],
+  "genUrcl": [
+    "src/corpus/bytes.ts",
+    "src/corpus/emit.ts",
+    "src/corpus/generated.ts",
+    "src/corpus/urcl.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genUrcl.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "genUtf8": [
+    "src/environment.ts",
+    "src/genUtf8.ts",
+    "src/shims.ts"
+  ],
+  "genWindows": [
+    "src/cve1.ts",
+    "src/fakes/globals.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/genWindows.ts"
+  ],
+  "genWpilog": [
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/json.ts",
+    "src/corpus/matrices.ts",
+    "src/corpus/msgpack.ts",
+    "src/corpus/photon.ts",
+    "src/corpus/proto.ts",
+    "src/corpus/publicLogs.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/struct.ts",
+    "src/corpus/wpilog.ts",
+    "src/corpus/wpilogMatrix.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genWpilog.ts",
+    "src/shims.ts"
+  ],
+  "geometryRun": [
+    "src/geometryRun.ts",
+    "src/logRun.ts"
+  ],
+  "helpers": [
+    "src/consoleExport.ts",
+    "src/environment.ts",
+    "src/geometryRun.ts",
+    "src/helpers.ts",
+    "src/logFieldRun.ts",
+    "src/logRun.ts",
+    "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "historicalRun": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/historicalRun.ts",
+    "src/shims.ts"
+  ],
+  "historicalSession": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/timers.ts",
+    "src/historicalSession.ts",
+    "src/shims.ts"
+  ],
+  "hubSession": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/historical/timers.ts",
+    "src/hubSession.ts",
+    "src/shims.ts"
+  ],
+  "lazyHelpers/field3dFieldsRun": [
+    "src/cve1.ts",
+    "src/lazyHelpers/field3dFieldsRun.ts"
+  ],
+  "lazyHelpers/field3dManagersRun": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dManagersRun.ts"
+  ],
+  "lazyHelpers/field3dRendererRun": [
+    "src/canvas/fixedAdvance.json",
+    "src/cve1.ts",
+    "src/dom/recordingCanvas.ts",
+    "src/heatmap/fakeDom.ts",
+    "src/lazyHelpers/field3dRendererRun.ts"
+  ],
+  "lazyHelpers/mergeCalculatorRun": [
+    "src/lazyHelpers/mergeCalculatorRun.ts"
+  ],
+  "lazyHelpers/robotStateRun": [
+    "src/lazyHelpers/robotStateRun.ts",
+    "src/logRun.ts"
+  ],
+  "lazyHelpers/stateRun": [
+    "src/lazyHelpers/stateRun.ts",
+    "src/logRun.ts"
+  ],
+  "liveBaseRun": [
+    "src/live/clock.ts",
+    "src/liveBaseRun.ts",
+    "src/logRun.ts"
+  ],
+  "liveSession": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/live/loop.ts",
+    "src/live/msgpack.ts",
+    "src/live/net.ts",
+    "src/live/nt4Server.ts",
+    "src/live/random.ts",
+    "src/live/rlogMain.ts",
+    "src/live/server.ts",
+    "src/live/simpleServers.ts",
+    "src/liveSession.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
+  "logFieldRun": [
+    "src/logFieldRun.ts"
+  ],
+  "logRun": [
+    "src/logRun.ts"
+  ],
+  "logScript": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/logRun.ts",
+    "src/logScript.ts"
+  ],
+  "protoRenderer": [
+    "src/corpus/bytes.ts",
+    "src/corpus/corpus.ts",
+    "src/corpus/proto.ts",
+    "src/corpus/rng.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/protoRenderer.ts",
+    "src/renderer/main.ts",
+    "src/renderer/page.ts",
+    "src/renderer/renderer.html",
+    "src/renderer/workerCheck.ts",
+    "src/shims.ts"
+  ],
+  "registry": [
+    "src/consoleExport.ts",
+    "src/environment.ts",
+    "src/geometryRun.ts",
+    "src/helpers.ts",
+    "src/logFieldRun.ts",
+    "src/logRun.ts",
+    "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "selftest": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/selftest.ts",
+    "src/shims.ts"
+  ],
+  "shims": [
+    "src/environment.ts",
+    "src/shims.ts"
+  ]
+}
