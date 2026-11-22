@@ -17,7 +17,10 @@ path = "src/main.rs"
 parity = ["asrs-ui/parity", "dep:png"]
 
 [dependencies]
+asrs-formats = { path = "../asrs-formats" }
+asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
+asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-services = { path = "../asrs-services" }
 asrs-ui.workspace = true
