@@ -45,7 +45,10 @@ pub fn parse(css: &str) -> Option<Rgba> {
     }
     if let Some(open) = s.find('(') {
         let name = &s[..open];
-        let body = s[open + 1..].strip_suffix(')')?;
+        // CSS closes a function left open at the end of input, so Blink takes
+        // `rgb(0 0 0 / 10%` (Field2dRenderer's FTC grid colour) as written.
+        let rest = &s[open + 1..];
+        let body = rest.strip_suffix(')').unwrap_or(rest);
         return match name {
             "rgb" | "rgba" => parse_rgb(body),
             "hsl" | "hsla" => parse_hsl(body),

@@ -910,11 +910,19 @@ The recorder eval hooks every Field2d tab:
 | `{"f2d": "create" \| "command" \| "save" \| "activeFields", "id", "dark", "prefs", "assets", "value" \| "threw", "reads"?}` | on construction and after `getCommand`, `saveState`, `getActiveFields`; `prefs` is `{cs, ftc, ts}` of `window.preferences` |
 | `{"f2d": <method>, "phase": "begin" \| "end", ...}` | around `restoreState`, `refresh`, `newAssets` |
 | `{"f2d": "select" \| "source" \| "orientation" \| "size", ...}` then `{"f2d": "controls", "controls"}` | before the control's handler runs, and the control DOM on the next timer turn |
-| `{"f2dr": "render", "command", "dom", "camera"}` | after `render`: the DOM it read and the private camera fields after it |
+| `{"f2dr": "render", "command", "dom", "camera", "threw"?, "size"?, "style"?, "calls"?, "heatmap"?}` | after `render`: the DOM it read and the private camera fields after it; when the render reset the canvas, its pixel size, the `width`, `height` and `transform` strings it assigned to `CANVAS.style` (captured by accessors on the style object, since Blink re-serializes lengths on read), its recorded calls with the heatmap canvas named `@heatmap`, and h337's `getData()` |
 | `{"f2dr": "camera", "id", "camera"}` | when a fixture calls `window.__f2dCamera(renderer)`, after dispatching mouse events: the drag pan calls a callback the recorder cannot wrap |
 | `{"f2dr": "scrollEvent"}` then `{"f2dr": "scroll", "args"}` | a `scroll` event on the sensor and the callback it dispatched, if any; the port takes the deltas through its wheel input and must produce the same cursor |
 | `{"f2dr": "mouse", "type", "button", "shiftKey", "x", "y"}` | before the sensor's and the camera menu's listeners |
 | `{"f2dr": "save" \| "aspectRatio" \| "restoreState" \| "set2DCamera", ...}` | renderer state calls |
+
+Each `render` runs the port's `Field2dRenderer` on the recorded command and compares the
+throw, the frame (or its absence), size, style strings, trace call for call and heatmap store;
+a `requestAnimationFrame` exception must match what the port's render or list frame threw.
+`node oracle/tools/field2dTraces.mjs` copies a few painted frames into
+`oracle/src/canvas/field2dTraces.json`, which `scenes.ts` turns into the `field2d-trace-*`
+canvas pixel scenes: each field image is a generated stand-in at its recorded natural size and
+the heatmap canvas is transparent (its pixels are gated by `cargo xtask canvas heatmap`).
 
 Not modelled on jsdom: CSS (so no computed styles or real text layout), scrolling (`scrollTop`
 stays 0). On either backend: workers and historical or live sources (logs are built with `log`
