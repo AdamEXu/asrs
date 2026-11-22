@@ -112,6 +112,15 @@ asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
 The generated `spark-frames` files carry no license header of their own; the MIT notice
 above is the one REV attached to the utilities shipped alongside them.
 
+## @rev-robotics/revlog-converter
+
+- License: BSD-3-Clause ([`licenses/revlog-converter.txt`](licenses/revlog-converter.txt))
+- Copyright (c) 2025, REV Robotics
+- Version: 2.0.0 (npm), source https://github.com/REVrobotics/node-revlog-converter
+- Used in: `crates/asrs-formats/src/revlog.rs` and `revlog/dbc.rs` (ports of
+  `revlogParser` and `revDBC`), and `crates/asrs-formats/src/revlog/*.public.dbc`, the
+  package's DBC files copied unmodified
+
 ## V8
 
 - License: BSD-3-Clause ([`licenses/V8.txt`](licenses/V8.txt))
@@ -241,6 +250,19 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Version: 5.2.5, built from the source bundled in the `lzma-sys` crate (`xz2`'s `static`
   feature) and linked into the app
 - Used in: `.wpilogxz` decompression (`crates/asrs-formats/src/wpilogxz.rs`)
+
+## npm packages behind the asset downloader
+
+- License: MIT ([`licenses/asset-download-npm.txt`](licenses/asset-download-npm.txt), one
+  copyright notice per package)
+- Packages and versions (from upstream's lockfile): download 8.0.0, got 8.3.2,
+  url-parse-lax 3.0.0, prepend-http 2.0.0, decompress 4.2.1, decompress-unzip 4.0.1,
+  yauzl 2.10.0, archive-type 4.0.0 (file-type 4.4.0), file-type 11.1.0, ext-name 5.0.0,
+  ext-list 2.2.2, mime-db 1.52.0, filenamify 3.0.0, filename-reserved-regex 2.0.0,
+  content-disposition 0.5.4
+- Used in: `crates/asrs-services/src/{asset_downloader,download_deps,file_type,zip}.rs`,
+  translated to Rust; `crates/asrs-services/src/ext_list.rs` is generated from ext-list over
+  mime-db, and `zip.rs` carries yauzl's CP437 table
 
 ## Not yet ported
 
