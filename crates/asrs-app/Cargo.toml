@@ -17,6 +17,7 @@ path = "src/main.rs"
 parity = ["asrs-ui/parity", "dep:png"]
 
 [dependencies]
+asrs-canvas = { path = "../asrs-canvas" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
@@ -39,6 +40,10 @@ workspace = true
 [[test]]
 name = "window_sizes"
 harness = false
+
+[[test]]
+name = "tab_bar_layout"
+required-features = ["parity"]
 
 [[test]]
 name = "hub_entity"

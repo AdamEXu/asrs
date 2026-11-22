@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 //! The wheel calibration: `parity/calibration/wheel-<platform>-<scale>x.json`, recorded from
 //! Electron by `oracle/tools/wheelCalibration.cjs`, holds the overlay position Chromium reached
 //! at each `scroll` event for a script of precise (trackpad) and notched wheel events. The same

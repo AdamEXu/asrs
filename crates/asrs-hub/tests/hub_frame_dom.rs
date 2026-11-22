@@ -353,7 +353,10 @@ impl Run {
                     .window_mouse_move(&mut self.hub, x, y, &mut |hub| Run::sync(&geometry, hub))
                     .map_err(|e| format!("{e}"))?
             }
-            (None, "mouseup") => self.shell.window_mouse_up(&mut self.hub),
+            (None, "mouseup") => self
+                .shell
+                .window_mouse_up(&mut self.hub)
+                .map_err(|e| format!("{e}"))?,
             (target, kind) => return Err(format!("{kind} on {target:?}")),
         }
         self.after_step(&kind)

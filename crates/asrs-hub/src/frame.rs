@@ -973,12 +973,26 @@ impl HubShell {
         let result = tabs.window_mouse_move(page, y);
         sync(hub);
         self.drag.move_to(x, y);
+        result.and(self.dispatch_tab_drag(hub))
+    }
+
+    /// The `drag-update` events of a tab drag, which `Tabs` handles.
+    fn dispatch_tab_drag(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
+        let updates = self.drag.take_updates_with(|data| match data {
+            DragData::Tab(tab) => Some(*tab),
+            DragData::Fields(_) => None,
+        });
+        let mut result = Ok(());
+        for update in updates {
+            let (tabs, page) = hub.tabs_mut();
+            result = result.and(tabs.drag_update(page, &update));
+        }
         result
     }
 
     /// The window's `mouseup` listeners: the sidebar handle's, the controls handle's, then
     /// hub.ts's `dragEnd`.
-    pub fn window_mouse_up(&mut self, hub: &mut HubModel) {
+    pub fn window_mouse_up(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
         hub.with_sidebar(|sidebar, _| sidebar.handle_mouse_up());
         self.cursor = BodyCursor::Initial;
         hub.tabs_mut().0.window_mouse_up();
@@ -987,6 +1001,7 @@ impl HubShell {
             self.drag.end();
             self.cursor = BodyCursor::Unset;
         }
+        self.dispatch_tab_drag(hub)
     }
 
     /// The document's `drop` listener: the dropped files' paths as `open-files-request`, or

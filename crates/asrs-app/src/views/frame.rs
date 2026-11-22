@@ -7,26 +7,34 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
+use asrs_canvas::Canvas2d;
 use asrs_hub::frame::{
-    BodyClasses, BodyCursor, DragContent, FrameElement, FrameInputs, FrameLayout, Handle, HubShell,
-    client_coordinate, renderer_top,
+    BodyClasses, BodyCursor, DragContent, DragData, FrameElement, FrameInputs, FrameLayout, Handle,
+    HubShell, renderer_top,
 };
 use asrs_hub::hub::HubModel;
+use asrs_hub::tabs::{TabDragData, TitleElement};
+use asrs_hub::timeline::{ScrollTarget, Timeline, TimelineFrame};
 use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
+use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::selection_impl::ControlButton;
-use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
+use asrs_ui::canvas_view::geometry::mouse_client;
+use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
 use asrs_ui::gpui::{
-    AnyElement, App, BoxShadow, Context, CursorStyle, DispatchPhase, ExternalPaths,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, canvas, div,
-    point, px, rgb, rgba,
+    AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
+    Entity, ExternalPaths, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollEvent, SharedString,
+    StatefulInteractiveElement, Styled, Window, canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
+use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
+
+use super::tab_bar::{self, TabBarGeometry};
 
 /// The boxes of the frame elements a scenario probe selector (`.title-bar`) names, as
 /// `getBoundingClientRect()` gives them for each rendered match; `None` when the selector names
@@ -75,15 +83,22 @@ pub trait FrameHost: 'static {
 /// What the page reads from its layout while the model runs: the frame keeps it current
 /// before every input it dispatches and every render.
 #[derive(Clone, Debug)]
-pub struct FrameGeometry(Rc<RefCell<(BodyClasses, f64)>>);
+pub struct FrameGeometry(Rc<RefCell<(BodyClasses, f64)>>, Rc<RefCell<TabBarGeometry>>);
 
 impl Default for FrameGeometry {
     fn default() -> Self {
-        FrameGeometry(Rc::new(RefCell::new((BodyClasses::default(), 0.0))))
+        FrameGeometry(
+            Rc::new(RefCell::new((BodyClasses::default(), 0.0))),
+            Rc::default(),
+        )
     }
 }
 
 impl FrameGeometry {
+    pub fn tab_bar(&self) -> &RefCell<TabBarGeometry> {
+        &self.1
+    }
+
     pub fn sync(&self, hub: &HubModel) {
         self.0.borrow_mut().0 = BodyClasses::from_names(hub.body_classes().iter().copied());
     }
@@ -108,6 +123,32 @@ pub struct HubFrame<H: FrameHost> {
     shell: HubShell,
     started: Instant,
     geometry: FrameGeometry,
+    timeline: Timeline,
+    timeline_sensor: ScrollSensor,
+    timeline_canvas: Option<Entity<CanvasState>>,
+    timeline_rect: Option<[f64; 4]>,
+    timeline_hovered: bool,
+}
+
+/// The timeline overlay's view of one pointer position: the client x relative to the overlay
+/// and whether the pointer is over it.
+struct TimelinePointer {
+    x: f64,
+    on_overlay: bool,
+    hidden: bool,
+    target: ScrollTarget,
+}
+
+fn now_ms() -> f64 {
+    asrs_js::math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock))
+}
+
+fn wheel_of(event: &ScrollEvent) -> Wheel {
+    let delta = platform::wheel_delta(event);
+    Wheel {
+        delta: [f64::from(delta.x), f64::from(delta.y)],
+        precise: matches!(event.delta, ScrollDelta::Pixels(_)),
+    }
 }
 
 const GLOW: u32 = 0x303dc9;
@@ -167,6 +208,11 @@ impl<H: FrameHost> HubFrame<H> {
             shell: HubShell::default(),
             started: Instant::now(),
             geometry,
+            timeline: Timeline::new(Rc::new(asrs_js::time::SystemClock)),
+            timeline_sensor: ScrollSensor::default(),
+            timeline_canvas: None,
+            timeline_rect: None,
+            timeline_hovered: false,
         }
     }
 
@@ -231,9 +277,25 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    fn timeline_pointer(&self, x: f64, y: f64, cx: &App) -> Option<TimelinePointer> {
+        let rect = self.timeline_rect?;
+        let hub = self.host.hub(cx);
+        let hidden = rect[3] == 0.0;
+        Some(TimelinePointer {
+            x: x - rect[0],
+            on_overlay: !hidden
+                && x >= rect[0]
+                && x < rect[0] + rect[2]
+                && y >= rect[1]
+                && y < rect[1] + rect[3],
+            hidden,
+            target: ScrollTarget::new(rect[2], rect[3], hub.page().preferences()),
+        })
+    }
+
     fn mouse_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
-        let x = client_coordinate(f64::from(f32::from(event.position.x)));
-        let y = client_coordinate(f64::from(f32::from(event.position.y)));
+        let x = mouse_client(f32::from(event.position.x));
+        let y = mouse_client(f32::from(event.position.y));
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -242,15 +304,199 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
+        if let Some(p) = self.timeline_pointer(x, y, cx) {
+            let (timeline, was_hovered) = (&mut self.timeline, self.timeline_hovered);
+            self.host.input(cx, |hub| {
+                let selection = hub.page_mut().selection_mut();
+                if was_hovered && !p.on_overlay {
+                    timeline.mouse_leave(selection);
+                }
+                timeline.mouse_move(p.x, p.on_overlay, p.hidden, p.target, selection);
+            });
+            self.timeline_hovered = p.on_overlay;
+            cx.notify();
+        }
         if !matches!(self.shell.cursor(), BodyCursor::Unset | BodyCursor::Initial) {
             cx.notify();
         }
     }
 
-    fn mouse_up(&mut self, cx: &mut Context<'_, Self>) {
+    fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
+        let x = mouse_client(f32::from(event.position.x));
+        let y = mouse_client(f32::from(event.position.y));
         let shell = &mut self.shell;
-        self.host.input(cx, |hub| shell.window_mouse_up(hub));
+        if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
+            eprintln!("asrs: {e}");
+        }
+        if let Some(p) = self.timeline_pointer(x, y, cx) {
+            let timeline = &mut self.timeline;
+            self.host.input(cx, |hub| {
+                timeline.mouse_up(p.on_overlay, p.hidden, hub.page_mut().selection_mut())
+            });
+        }
         cx.notify();
+    }
+
+    fn tab_bar_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
+        let x = mouse_client(f32::from(event.position.x));
+        let y = mouse_client(f32::from(event.position.y));
+        let geometry = &self.geometry;
+        self.host.input(cx, |hub| {
+            geometry.sync(hub);
+            let (tabs, page) = hub.tabs_mut();
+            tabs.overlay_mouse_down(x, y);
+            if event.button == MouseButton::Right {
+                tabs.overlay_context_menu(page, x, y);
+            }
+        });
+        cx.notify();
+    }
+
+    fn tab_bar_mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
+        let x = mouse_client(f32::from(event.position.x));
+        let y = mouse_client(f32::from(event.position.y));
+        let result = self.host.input(cx, |hub| {
+            let (tabs, page) = hub.tabs_mut();
+            tabs.overlay_mouse_up(page, x, y)
+        });
+        if let Err(e) = result {
+            eprintln!("asrs: {e}");
+        }
+        cx.notify();
+    }
+
+    fn tab_bar_mouse_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
+        let x = mouse_client(f32::from(event.position.x));
+        let y = mouse_client(f32::from(event.position.y));
+        let start = self.host.input(cx, |hub| {
+            let (tabs, page) = hub.tabs_mut();
+            tabs.overlay_mouse_move(page, x, y)
+        });
+        if let Some(start) = start {
+            let data = DragData::Tab(TabDragData {
+                tab_index: start.tab_index as f64,
+            });
+            let (sx, sy, ox, oy) = (start.x, start.y, start.offset_x, start.offset_y);
+            self.shell
+                .start_drag(sx, sy, ox, oy, DragContent::Tab(start), data);
+        }
+        cx.notify();
+    }
+
+    fn tab_bar_hover(&mut self, hovered: bool, cx: &mut Context<'_, Self>) {
+        if !hovered {
+            self.host
+                .input(cx, |hub| hub.tabs_mut().0.overlay_mouse_out());
+            cx.notify();
+        }
+    }
+
+    fn tab_bar_wheel(
+        &mut self,
+        event: &ScrollEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let wheel = wheel_of(event);
+        let bar = self.geometry.tab_bar().borrow().bar;
+        let scale = f64::from(window.scale_factor());
+        self.host.input(cx, |hub| {
+            let tabs = hub.tabs_mut().0;
+            tabs.tab_bar_sensor_mut()
+                .set_layout([bar[2], bar[3]], scale);
+            tabs.tab_bar_wheel(wheel, now_ms());
+        });
+        window.request_animation_frame();
+    }
+
+    fn timeline_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
+        let x = mouse_client(f32::from(event.position.x));
+        let y = mouse_client(f32::from(event.position.y));
+        let Some(p) = self.timeline_pointer(x, y, cx) else {
+            return;
+        };
+        let timeline = &mut self.timeline;
+        self.host.input(cx, |hub| {
+            let selection = hub.page_mut().selection_mut();
+            timeline.mouse_down(p.x, event.modifiers.shift, selection);
+            if event.button == MouseButton::Right {
+                timeline.context_menu(selection);
+            }
+        });
+        cx.notify();
+    }
+
+    fn timeline_click(&mut self, event: &ClickEvent, cx: &mut Context<'_, Self>) {
+        let position = event.position();
+        let x = mouse_client(f32::from(position.x));
+        let y = mouse_client(f32::from(position.y));
+        let Some(p) = self.timeline_pointer(x, y, cx) else {
+            return;
+        };
+        let timeline = &mut self.timeline;
+        self.host.input(cx, |hub| {
+            timeline.click(p.x, hub.page_mut().selection_mut())
+        });
+        cx.notify();
+    }
+
+    fn timeline_wheel(
+        &mut self,
+        event: &ScrollEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some(rect) = self.timeline_rect else {
+            return;
+        };
+        self.timeline_sensor
+            .set_layout([rect[2], rect[3]], f64::from(window.scale_factor()));
+        self.timeline_sensor.wheel(wheel_of(event), now_ms());
+        window.request_animation_frame();
+        cx.notify();
+    }
+
+    /// One `Timeline.periodic()`, after the frame's scroll step for the timeline's overlay.
+    fn paint_timeline(
+        &mut self,
+        metrics: &CanvasMetrics,
+        dark: bool,
+        cx: &mut App,
+    ) -> Option<Canvas2d> {
+        let now = now_ms();
+        let width = f64::from(metrics.client_width);
+        let height = f64::from(metrics.client_height);
+        let (timeline, sensor) = (&mut self.timeline, &mut self.timeline_sensor);
+        sensor.animate(now);
+        let scroll = sensor.scroll_step(now, height != 0.0);
+        if height != 0.0 {
+            sensor.periodic(now);
+        }
+        let host = &mut self.host;
+        let canvas = with_text_backend(cx, |text, cx| {
+            host.input(cx, |hub| {
+                let preferences = hub.page().preferences().cloned();
+                let target = ScrollTarget::new(width, height, preferences.as_ref());
+                let log = hub.page().shared_log().clone();
+                let selection = hub.page_mut().selection_mut();
+                if let Some(d) = scroll {
+                    timeline.scroll(d.dx, d.dy, target, selection);
+                }
+                let frame = TimelineFrame {
+                    width,
+                    height,
+                    device_pixel_ratio: metrics.device_pixel_ratio,
+                    light: !dark,
+                    preferences: preferences.as_ref(),
+                };
+                let log = log.borrow();
+                text.and_then(|text| timeline.periodic(&frame, selection, &log, text))
+            })
+        });
+        for message in self.timeline.run_timers() {
+            self.host.send_main_message(message, cx);
+        }
+        canvas
     }
 
     fn drop_files(&mut self, paths: &ExternalPaths, cx: &mut App) {
@@ -299,14 +545,14 @@ impl<H: FrameHost> HubFrame<H> {
             .blurred(blurred)
             .on_click(move |_, _, cx| {
                 let _ = entity.update(cx, |frame, cx| {
-                    frame.tab_control_click(element, rect, cx);
+                    frame.tab_control_click(element, cx);
                     cx.notify();
                 });
             });
         Some(place(rect, (0.0, 0.0)).child(button).into_any_element())
     }
 
-    fn tab_control_click(&mut self, element: FrameElement, rect: [f64; 4], cx: &mut App) {
+    fn tab_control_click(&mut self, element: FrameElement, cx: &mut App) {
         let button = match element {
             FrameElement::Play => Some(ControlButton::Play),
             FrameElement::Pause => Some(ControlButton::Pause),
@@ -328,12 +574,8 @@ impl<H: FrameHost> HubFrame<H> {
             (FrameElement::Popup, _) => self.host.input(cx, |hub| hub.tabs_mut().0.popup_button()),
             (FrameElement::AddTab, _) => {
                 self.host.input(cx, |hub| {
-                    hub.tabs_mut().0.add_button(&Rect {
-                        x: rect[0],
-                        y: rect[1],
-                        width: rect[2],
-                        height: rect[3],
-                    })
+                    let (tabs, page) = hub.tabs_mut();
+                    tabs.add_button(page);
                 });
                 Ok(())
             }
@@ -352,6 +594,36 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
+    }
+}
+
+impl<H: FrameHost> HubFrame<H> {
+    fn timeline_element(&mut self, dark: bool, cx: &mut Context<'_, Self>) -> AnyElement {
+        let state = self
+            .timeline_canvas
+            .get_or_insert_with(|| cx.new(CanvasState::new))
+            .clone();
+        let entity = cx.entity().downgrade();
+        let painter = move |metrics: &CanvasMetrics, cx: &mut App| {
+            entity
+                .update(cx, |frame, cx| frame.paint_timeline(metrics, dark, cx))
+                .ok()
+                .flatten()
+        };
+        div()
+            .id("timeline-scroll")
+            .size_full()
+            .child(canvas_view(state, painter).size_full())
+            .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
+                frame.timeline_mouse_down(event, cx)
+            }))
+            .on_click(
+                cx.listener(|frame, event: &ClickEvent, _, cx| frame.timeline_click(event, cx)),
+            )
+            .on_scroll(cx.listener(|frame, event: &ScrollEvent, window, cx| {
+                frame.timeline_wheel(event, window, cx)
+            }))
+            .into_any_element()
     }
 }
 
@@ -390,6 +662,25 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let layout = FrameLayout::compute(&inputs);
         self.geometry.set_inner_height(height);
         self.geometry.sync(self.host.hub(cx));
+        let titles: Vec<TitleElement> = self.host.hub(cx).tabs().bar().map(|e| e.clone()).collect();
+        if let Some(bar) = layout.rect(FrameElement::TabBar) {
+            let texts: Vec<String> = titles
+                .iter()
+                .map(|t| t.inner_text().to_string_lossy())
+                .collect();
+            let mut geometry = self.geometry.tab_bar().borrow_mut();
+            geometry.layout(cx, bar, &texts, scale);
+            if let Some(add) = layout.rect(FrameElement::AddTab) {
+                geometry.add_button = add;
+            }
+        }
+        self.timeline_rect = layout
+            .rect(FrameElement::Timeline)
+            .filter(|_| self.host.hub(cx).tabs().show_timeline() != Some(false));
+        if self.timeline_sensor.animating() || self.host.hub(cx).tabs().tab_bar_sensor().animating()
+        {
+            window.request_animation_frame();
+        }
         let classes = inputs.classes;
 
         let entity = cx.entity().downgrade();
@@ -404,9 +695,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let _ = frame.update(cx, |frame, cx| frame.mouse_move(event, cx));
                     }
                 });
-                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                     if phase == DispatchPhase::Bubble {
-                        let _ = entity.update(cx, |frame, cx| frame.mouse_up(cx));
+                        let _ = entity.update(cx, |frame, cx| frame.mouse_up(event, cx));
                     }
                 });
             },
@@ -466,10 +757,52 @@ impl<H: FrameHost> Render for HubFrame<H> {
         if let Some(viewer_rect) = layout.rect(FrameElement::Viewer) {
             let origin = (viewer_rect[0], viewer_rect[1]);
             let mut viewer = place(viewer_rect, (0.0, 0.0)).overflow_hidden();
-            if let Some(rect) = layout.rect(FrameElement::TabBar)
-                && let Some(content) = self.host.slot(FrameSlot::TabBar, window, cx)
-            {
+            if let Some(rect) = layout.rect(FrameElement::TabBar) {
+                let content = match self.host.slot(FrameSlot::TabBar, window, cx) {
+                    Some(content) => content,
+                    None => {
+                        let geometry = self.geometry.tab_bar().borrow();
+                        tab_bar::titles(&geometry, &titles, dark, theme.text)
+                    }
+                };
                 viewer = viewer.child(place(rect, origin).child(content));
+            }
+            let shadows = self.host.hub(cx).tabs().shadows();
+            for (element, left, opacity) in [
+                (FrameElement::TabBarShadowLeft, true, shadows[0]),
+                (FrameElement::TabBarShadowRight, false, shadows[1]),
+            ] {
+                if let Some(rect) = layout.rect(element) {
+                    viewer = viewer.child(tab_bar::shadow(rect, origin, left, opacity, dark));
+                }
+            }
+            let highlight = self.host.hub(cx).tabs().drag_highlight();
+            if let (false, Some(left)) = (highlight.hidden, highlight.left) {
+                viewer = viewer.child(tab_bar::drag_highlight(left, origin, origin));
+            }
+            if let Some(rect) = layout.rect(FrameElement::TabBarScroll) {
+                viewer = viewer.child(
+                    place(rect, origin)
+                        .id("tab-bar-scroll")
+                        .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
+                            frame.tab_bar_mouse_down(event, cx)
+                        }))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(|frame, event: &MouseUpEvent, _, cx| {
+                                frame.tab_bar_mouse_up(event, cx)
+                            }),
+                        )
+                        .on_mouse_move(cx.listener(|frame, event: &MouseMoveEvent, _, cx| {
+                            frame.tab_bar_mouse_move(event, cx)
+                        }))
+                        .on_hover(cx.listener(|frame, hovered: &bool, _, cx| {
+                            frame.tab_bar_hover(*hovered, cx)
+                        }))
+                        .on_scroll(cx.listener(|frame, event: &ScrollEvent, window, cx| {
+                            frame.tab_bar_wheel(event, window, cx)
+                        })),
+                );
             }
             if let Some(rect) = layout.rect(FrameElement::RendererContent) {
                 let mut renderer = place(rect, origin);
@@ -505,9 +838,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         ),
                 );
             }
-            if let Some(rect) = layout.rect(FrameElement::Timeline)
-                && let Some(content) = self.host.slot(FrameSlot::Timeline, window, cx)
-            {
+            if let Some(rect) = layout.rect(FrameElement::Timeline) {
+                let content = match self.host.slot(FrameSlot::Timeline, window, cx) {
+                    Some(content) => content,
+                    None => self.timeline_element(dark, cx),
+                };
                 viewer = viewer.child(place(rect, origin).child(content));
             }
             root = root.child(viewer);
@@ -596,10 +931,28 @@ impl<H: FrameHost> Render for HubFrame<H> {
                             .color(theme.text),
                     )
                     .into_any_element(),
-                DragContent::Tab(_) => match self.host.slot(FrameSlot::DragTab, window, cx) {
-                    Some(tab) => item.opacity(0.5).child(tab).into_any_element(),
-                    None => item.into_any_element(),
-                },
+                DragContent::Tab(start) => {
+                    let tab = match self.host.slot(FrameSlot::DragTab, window, cx) {
+                        Some(tab) => tab,
+                        None => {
+                            let classes = if start.selected {
+                                vec!["tab", "tab-selected"]
+                            } else {
+                                vec!["tab"]
+                            };
+                            let element = TitleElement {
+                                text: start.text.clone(),
+                                classes,
+                            };
+                            let label = element.inner_text().to_string_lossy();
+                            let width =
+                                text::measure(cx, &tab_bar::tab_style(), &label, scale).0 + 22.0;
+                            tab_bar::tab(&element, width, true, true, dark, theme.text)
+                                .into_any_element()
+                        }
+                    };
+                    item.opacity(0.5).child(tab).into_any_element()
+                }
             };
             root = root.child(item);
         }

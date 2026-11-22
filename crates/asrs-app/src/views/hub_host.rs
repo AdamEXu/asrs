@@ -6,6 +6,7 @@ use asrs_hub::hub::{HubModel, HubView};
 use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::source_list::Rect;
 use asrs_ui::gpui::{App, AppContext, Entity, Window};
 
 use super::frame::{FrameGeometry, FrameHost, HubFrame};
@@ -39,6 +40,37 @@ impl HubView for FrameView {
 
     fn measure_value(&self, _value: &RowValue) -> f64 {
         0.0
+    }
+
+    fn title_rect(&self, index: usize) -> Rect {
+        self.geometry.tab_bar().borrow().title_rect(index)
+    }
+
+    fn overlay_rect(&self) -> Rect {
+        self.geometry.tab_bar().borrow().overlay_rect()
+    }
+
+    fn add_button_rect(&self) -> Rect {
+        self.geometry.tab_bar().borrow().add_button_rect()
+    }
+
+    fn tab_bar_scroll_left(&self) -> f64 {
+        self.geometry.tab_bar().borrow().scroll_left
+    }
+
+    fn set_tab_bar_scroll_left(&self, value: f64) {
+        self.geometry
+            .tab_bar()
+            .borrow_mut()
+            .assign_scroll_left(value);
+    }
+
+    fn tab_bar_scroll_width(&self) -> f64 {
+        self.geometry.tab_bar().borrow().scroll_width()
+    }
+
+    fn tab_bar_client_width(&self) -> f64 {
+        self.geometry.tab_bar().borrow().client_width()
     }
 }
 
