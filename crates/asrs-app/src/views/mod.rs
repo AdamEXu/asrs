@@ -1,3 +1,4 @@
+pub mod field3d;
 pub mod frame;
 pub mod hub_host;
 pub mod line_graph;

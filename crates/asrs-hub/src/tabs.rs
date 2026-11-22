@@ -185,6 +185,10 @@ pub trait TabsHost {
     fn canvas_env(&self) -> Option<CanvasEnv> {
         None
     }
+    /// A renderer the page's view builds for a `kind` tab, in place of the pending one.
+    fn view_renderer(&mut self, _kind: TabType) -> Option<Box<dyn TabRenderer<Self>>> {
+        None
+    }
 }
 
 /// A new tab's halves, built in `addTab`'s constructor order: the controller's `UUID` field is

@@ -429,6 +429,7 @@ function resolveLog(spec: string): string {
   return file;
 }
 
+let pressedButton: string | null = null;
 const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"] } as const;
 
 async function perform(action: Action) {
@@ -447,8 +448,13 @@ async function perform(action: Action) {
   } else if ("idle" in action) {
     await waitIdle();
   } else if ("mouse" in action) {
+    const button = action.button ?? "left";
     for (const type of MOUSE_TYPES[action.mouse]) {
-      sendScripted(contents, { type, x: action.x, y: action.y, button: action.button ?? "left", clickCount: action.clickCount ?? 1 } as any);
+      // A real mouse reports the held button on its down and moves (PointerEvent.buttons).
+      if (type === "mouseDown") pressedButton = button;
+      if (type === "mouseUp") pressedButton = null;
+      const modifiers = pressedButton === null ? [] : [`${pressedButton}ButtonDown`];
+      sendScripted(contents, { type, x: action.x, y: action.y, button, clickCount: action.clickCount ?? 1, modifiers } as any);
     }
   } else if ("wheel" in action) {
     const w = action.wheel;

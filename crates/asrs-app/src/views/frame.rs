@@ -24,9 +24,9 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
-    Entity, ExternalPaths, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollEvent, SharedString,
-    StatefulInteractiveElement, Styled, Window, canvas, div, point, px, rgb, rgba,
+    Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollEvent,
+    SharedString, StatefulInteractiveElement, Styled, Window, canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::parity::{Probed, probed};
@@ -35,6 +35,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
@@ -70,6 +71,10 @@ pub trait FrameHost: 'static {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
     /// The layout the hub model's `HubView` answers source list reads from.
     fn source_list_geometry(&self) -> ListsGeometry;
+    /// Whether the focused element is a text input, which keyboard navigation leaves alone.
+    fn editable_focused(&self, _cx: &App) -> bool {
+        false
+    }
     /// The contents of `slot`, laid out in a box of the slot's size.
     fn slot(
         &mut self,
@@ -133,6 +138,7 @@ pub struct HubFrame<H: FrameHost> {
     timeline_rect: Option<[f64; 4]>,
     timeline_hovered: bool,
     pub(super) line_graph: LineGraphViews,
+    pub(super) field3d: Field3dViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -215,6 +221,7 @@ impl<H: FrameHost> HubFrame<H> {
             timeline_rect: None,
             timeline_hovered: false,
             line_graph: LineGraphViews::default(),
+            field3d: Field3dViews::default(),
         }
     }
 
@@ -307,6 +314,7 @@ impl<H: FrameHost> HubFrame<H> {
         if let Err(e) = result {
             eprintln!("asrs: {e}");
         }
+        self.field3d_window_move(event, cx);
         self.line_graph_mouse_move(
             x,
             y,
@@ -339,6 +347,7 @@ impl<H: FrameHost> HubFrame<H> {
             eprintln!("asrs: {e}");
         }
         self.line_graph_mouse_up(x, event.modifiers.shift, cx);
+        self.field3d_window_up(event, cx);
         if let Some(p) = self.timeline_pointer(x, y, cx) {
             let timeline = &mut self.timeline;
             self.host.input(cx, |hub| {
@@ -659,6 +668,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let now = self.started.elapsed().as_secs_f64() * 1000.0;
         self.shell.fps_mut().frame(now, show_fps);
         self.line_graph_timers(cx);
+        self.field3d_frame(window, cx);
         if show_fps {
             window.request_animation_frame();
         }
@@ -708,9 +718,21 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let _ = frame.update(cx, |frame, cx| frame.mouse_move(event, cx));
                     }
                 });
+                let frame = entity.clone();
                 window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                     if phase == DispatchPhase::Bubble {
-                        let _ = entity.update(cx, |frame, cx| frame.mouse_up(event, cx));
+                        let _ = frame.update(cx, |frame, cx| frame.mouse_up(event, cx));
+                    }
+                });
+                let frame = entity.clone();
+                window.on_key_event(move |event: &KeyDownEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        let _ = frame.update(cx, |frame, cx| frame.field3d_key_down(event, cx));
+                    }
+                });
+                window.on_key_event(move |event: &KeyUpEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        let _ = entity.update(cx, |frame, cx| frame.field3d_key_up(event, cx));
                     }
                 });
             },
@@ -829,6 +851,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(graph) = self.line_graph_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(graph);
                 }
+                if let Some(field) = self.field3d_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(field);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
@@ -845,6 +870,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 self.layout_source_lists(rect, width, scale, cx);
                 controls = controls.children(self.source_lists(rect, appearance, cx));
+                if let Some(settings) = self.field3d_settings(rect, appearance, scale, window, cx) {
+                    controls = controls.child(settings);
+                }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsHandle) {

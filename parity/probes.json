@@ -23,5 +23,11 @@
   "button.unlock": ["button.unlock"],
   "button.close": ["button.close"],
   "button.popup": ["button.popup"],
-  "button.add-tab": ["button.add-tab"]
+  "button.add-tab": ["button.add-tab"],
+  "canvas.field-3d-canvas": ["canvas.field-3d-canvas"],
+  "div.field-3d-canvas-container": ["div.field-3d-canvas-container"],
+  "div.field-3d-alert": ["div.field-3d-alert"],
+  "div.field-3d-settings": ["div.field-3d-settings"],
+  "select.field-select": ["select.field-select"],
+  "div.xr-button": ["div.xr-button"]
 }

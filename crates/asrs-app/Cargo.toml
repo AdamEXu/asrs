@@ -18,6 +18,7 @@ parity = ["asrs-ui/parity", "dep:png"]
 
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
+asrs-field3d = { path = "../asrs-field3d" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
@@ -30,7 +31,6 @@ async-channel = "=2.5.0"
 png = { version = "=0.18.1", optional = true }
 
 [dev-dependencies]
-asrs-field3d = { path = "../asrs-field3d" }
 asrs-parity = { path = "../asrs-parity" }
 image = { version = "=0.25.10", default-features = false }
 

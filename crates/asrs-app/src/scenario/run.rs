@@ -15,8 +15,8 @@ use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
     Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, div, point, px,
-    rgb, size,
+    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
+    point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::theme::ThemeSource;
@@ -26,7 +26,8 @@ use super::{
     Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Theme, Wheel, patch_colours,
 };
 use crate::hub::{Hub, HubEvent};
-use crate::views::frame::FrameHost;
+use crate::views::field3d::WwwRoot;
+use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
@@ -162,6 +163,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 dir: &dir,
                 window: None,
                 hub: None,
+                frame: None,
                 saves: Rc::default(),
                 exceptions: Rc::default(),
                 pressed: None,
@@ -192,6 +194,7 @@ struct Variant<'a> {
     dir: &'a Path,
     window: Option<AnyWindowHandle>,
     hub: Option<(Entity<Hub>, crate::views::frame::FrameGeometry)>,
+    frame: Option<WindowHandle<HubFrame<HubEntityHost>>>,
     saves: Rc<RefCell<Saves>>,
     exceptions: Rc<RefCell<Vec<String>>>,
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
@@ -396,6 +399,19 @@ impl Variant<'_> {
                 reasons.push("playback or live");
             }
             reasons
+        })
+        .and_then(|mut reasons| {
+            if let Some(frame) = self.frame {
+                let busy = self
+                    .headless
+                    .context()
+                    .update(|cx| frame.read_with(cx, |frame, _| frame.field3d_busy()))
+                    .map_err(|e| e.to_string())?;
+                if busy {
+                    reasons.push("3D loading or rendering");
+                }
+            }
+            Ok(reasons)
         })
     }
 
@@ -637,6 +653,12 @@ impl Variant<'_> {
                     .set_transparent_windows(cfg!(target_os = "macos"));
                 let preferences = preferences(self.scenario, theme)?;
                 let assets = self.start_main()?;
+                if let Some(root) = self.bundled_assets.and_then(Path::parent) {
+                    let root = std::path::absolute(root).map_err(|e| e.to_string())?;
+                    self.headless
+                        .context()
+                        .update(|cx| cx.set_global(WwwRoot(root)));
+                }
                 let boot = boot_messages(assets, true, preferences, Vec::new());
                 let window = self
                     .headless
@@ -676,6 +698,7 @@ impl Variant<'_> {
                 });
                 self.window = Some(window.into());
                 self.hub = Some((hub, geometry));
+                self.frame = Some(window);
             }
             Page::ColourPatch => {
                 self.headless.set_transparent_windows(false);
