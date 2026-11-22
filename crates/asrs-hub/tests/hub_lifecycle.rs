@@ -376,8 +376,11 @@ impl HubHost for Host {
         }
     }
 
-    fn exception(&mut self, task: &'static str, _error: String) {
-        self.emit(vec![("exception", cve_str(task))]);
+    fn exception(&mut self, task: &'static str, error: String) {
+        self.emit(vec![
+            ("exception", cve_str(task)),
+            ("error", cve_str(&error)),
+        ]);
     }
 
     fn start_live_source(&mut self, _kind: LiveSourceKind, _address: &JsString) {
@@ -511,97 +514,128 @@ impl Runner {
         self.settle()
     }
 
-    fn capture(&mut self, kind: &str) -> Result<(), String> {
-        let record = match kind {
-            "title" => ("title", cve(&JsValue::String(self.hub.title().clone()))),
-            "loading" => {
-                let loading = self.hub.loading();
-                let show = match loading.show {
-                    None => "",
-                    Some(true) => "1",
-                    Some(false) => "0",
-                };
-                let progress = loading.progress.clone().unwrap_or_default();
-                (
-                    "loading",
-                    Value::object([
-                        ("show", cve_str(show)),
-                        ("progress", cve(&JsValue::String(progress))),
-                    ]),
-                )
-            }
-            "selection" => {
-                let selection = self.hub.page_mut().selection_mut();
-                let opt = |v: Option<f64>| v.map_or(Value::Null, number);
-                let mode = selection.get_mode().number();
-                let selected = selection.get_selected_time();
-                let hovered = selection.get_hovered_time();
-                let [a, b] = selection.get_timeline_range();
-                let max_zoom = selection.get_timeline_is_max_zoom();
-                (
-                    "selection",
-                    Value::object([
-                        ("mode", number(mode)),
-                        ("selectedTime", opt(selected)),
-                        ("hoveredTime", opt(hovered)),
-                        ("timelineRange", Value::Array(vec![number(a), number(b)])),
-                        ("timelineIsMaxZoom", Value::Bool(max_zoom)),
-                    ]),
-                )
-            }
-            "log" => {
-                let mut loading: Vec<JsString> = self.hub.loading_fields().into_iter().collect();
-                loading.sort_by(|a, b| a.units().cmp(b.units()));
-                let log = self.hub.page().log();
-                let [a, b] = log.get_timestamp_range();
-                let keys = log
-                    .get_field_keys()
+    fn eval(&mut self, expr: &str) -> Result<Value, String> {
+        let flag = |v: Option<bool>| match v {
+            None => "",
+            Some(true) => "1",
+            Some(false) => "0",
+        };
+        let strings = |items: Vec<JsString>| {
+            Value::Array(
+                items
                     .into_iter()
                     .map(|k| cve(&JsValue::String(k)))
-                    .collect();
-                (
-                    "log",
-                    Value::object([
-                        ("keys", Value::Array(keys)),
-                        ("range", Value::Array(vec![number(a), number(b)])),
-                        (
-                            "loading",
-                            Value::Array(
-                                loading
-                                    .into_iter()
-                                    .map(|k| cve(&JsValue::String(k)))
-                                    .collect(),
-                            ),
-                        ),
-                    ]),
-                )
-            }
-            "state" => ("state", cve(&self.hub.save_state())),
-            "window" => {
-                let flag = |v: Option<bool>| match v {
-                    None => "",
-                    Some(true) => "1",
-                    Some(false) => "0",
-                };
-                (
-                    "window",
-                    Value::object([
-                        (
-                            "classes",
-                            Value::Array(
-                                self.hub.body_classes().iter().map(|c| cve_str(c)).collect(),
-                            ),
-                        ),
-                        ("updateButton", cve_str(flag(self.hub.update_button()))),
-                        ("feedbackButton", cve_str(flag(self.hub.feedback_button()))),
-                    ]),
-                )
-            }
-            other => return Err(err(format!("capture kind {other} is not modeled"))),
+                    .collect(),
+            )
         };
-        self.host.emit(vec![record]);
+        Ok(match expr {
+            "document.getElementsByTagName('title')[0].textContent" => {
+                cve(&JsValue::String(self.hub.title().clone()))
+            }
+            "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]" =>
+            {
+                let loading = self.hub.loading();
+                let progress = loading.progress.clone().unwrap_or_default();
+                Value::Array(vec![
+                    cve_str(flag(loading.show)),
+                    cve(&JsValue::String(progress)),
+                ])
+            }
+            "window.log.getFieldKeys()" => strings(self.hub.page().log().get_field_keys()),
+            "window.log.getTimestampRange()" => {
+                let [a, b] = self.hub.page().log().get_timestamp_range();
+                Value::Array(vec![number(a), number(b)])
+            }
+            "[...window.getLoadingFields()].sort()" => {
+                let mut loading: Vec<JsString> = self.hub.loading_fields().into_iter().collect();
+                loading.sort_by(|a, b| a.units().cmp(b.units()));
+                strings(loading)
+            }
+            "[...document.body.classList].filter((c) => c.startsWith('fancy-'))" => {
+                Value::Array(self.hub.body_classes().iter().map(|c| cve_str(c)).collect())
+            }
+            "[document.documentElement.style.getPropertyValue('--show-update-button'), document.documentElement.style.getPropertyValue('--show-feedback-button')]" => {
+                Value::Array(vec![
+                    cve_str(flag(self.hub.update_button())),
+                    cve_str(flag(self.hub.feedback_button())),
+                ])
+            }
+            other => return Err(format!("eval {other} is not modeled")),
+        })
+    }
+
+    fn capture(&mut self, kind: &Json) -> Result<(), String> {
+        let name = kind.as_str().map(|s| s.to_string_lossy());
+        let record = match name.as_deref() {
+            Some("selection") => vec![(
+                "selection",
+                selection_value(self.hub.page_mut().selection_mut()),
+            )],
+            Some("state") => vec![("state", cve(&self.hub.save_state()))],
+            Some(other) => return Err(format!("capture kind {other} is not modeled")),
+            None => {
+                let is_eval = kind
+                    .get("kind")
+                    .and_then(Json::as_str)
+                    .is_some_and(|k| k.to_string_lossy() == "eval");
+                let expr = kind.get("expr").and_then(Json::as_str);
+                match expr {
+                    Some(expr) if is_eval => {
+                        let expr = expr.to_string_lossy();
+                        let value = self.eval(&expr)?;
+                        vec![("eval", cve_str(&expr)), ("value", value)]
+                    }
+                    _ => return Err(format!("capture {kind:?} is not modeled")),
+                }
+            }
+        };
+        self.host.emit(record);
         Ok(())
     }
+}
+
+fn selection_value(sel: &mut asrs_model::selection_impl::SelectionImpl) -> Value {
+    let nullable = |t: Option<f64>| t.map_or(Value::Null, Value::number);
+    let pair = |p: Option<[f64; 2]>| {
+        p.map_or(Value::Null, |[a, b]| {
+            Value::Array(vec![number(a), number(b)])
+        })
+    };
+    let controls = sel.controls();
+    let range = sel.get_timeline_range();
+    Value::object([
+        ("mode", number(sel.get_mode().number())),
+        ("hoveredTime", nullable(sel.get_hovered_time())),
+        ("selectedTime", nullable(sel.get_selected_time())),
+        ("renderTime", nullable(sel.get_render_time())),
+        ("currentLiveTime", nullable(sel.get_current_live_time())),
+        ("grabZoomRange", pair(sel.get_grab_zoom_range())),
+        (
+            "timelineRange",
+            Value::Array(vec![number(range[0]), number(range[1])]),
+        ),
+        (
+            "timelineIsMaxZoom",
+            Value::Bool(sel.get_timeline_is_max_zoom()),
+        ),
+        (
+            "buttons",
+            Value::object([
+                ("play", Value::Bool(controls.play_hidden)),
+                ("pause", Value::Bool(controls.pause_hidden)),
+                ("lock", Value::Bool(controls.lock_hidden)),
+                ("unlock", Value::Bool(controls.unlock_hidden)),
+                (
+                    "showLockButtons",
+                    cve_str(match controls.show_lock_buttons {
+                        None => "",
+                        Some(true) => "1",
+                        Some(false) => "0",
+                    }),
+                ),
+            ]),
+        ),
+    ])
 }
 
 fn to_js(json: &Json) -> Result<JsValue, String> {
@@ -702,12 +736,10 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
                 Some(label) => Value::from_json_lenient(label),
                 None => number(index as f64),
             };
-            runner.host.emit(vec![("capture", label)]);
+            let time = number(runner.host.clock.get() - START_TIME);
+            runner.host.emit(vec![("capture", label), ("time", time)]);
             for kind in kinds {
-                let kind = kind
-                    .as_str()
-                    .ok_or_else(|| err("capture kinds are strings"))?;
-                runner.capture(&kind.to_string_lossy())?;
+                runner.capture(kind)?;
             }
         } else {
             return Err(format!("step {index} is not modeled"));

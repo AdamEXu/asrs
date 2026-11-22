@@ -9,11 +9,35 @@
     "steps": [
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log",
-          "window",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...document.body.classList].filter((c) => c.startsWith('fancy-'))"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-update-button'), document.documentElement.style.getPropertyValue('--show-feedback-button')]"
+          },
           "state"
         ],
         "label": "boot"
@@ -29,10 +53,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "opening"
       },
@@ -41,10 +82,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "opened"
       },
@@ -68,10 +126,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "merging"
       },
@@ -80,10 +155,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "merged"
       },
@@ -92,7 +184,10 @@
       },
       {
         "capture": [
-          "loading"
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
         ],
         "label": "export-prompted"
       },
@@ -114,7 +209,10 @@
       },
       {
         "capture": [
-          "loading"
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
         ],
         "label": "exported"
       },
@@ -123,7 +221,10 @@
       },
       {
         "capture": [
-          "loading"
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
         ],
         "label": "export-finished"
       },
@@ -142,7 +243,14 @@
       },
       {
         "capture": [
-          "window"
+          {
+            "kind": "eval",
+            "expr": "[...document.body.classList].filter((c) => c.startsWith('fancy-'))"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-update-button'), document.documentElement.style.getPropertyValue('--show-feedback-button')]"
+          }
         ],
         "label": "windows"
       },
@@ -161,10 +269,22 @@
       },
       {
         "capture": [
-          "window"
+          {
+            "kind": "eval",
+            "expr": "[...document.body.classList].filter((c) => c.startsWith('fancy-'))"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-update-button'), document.documentElement.style.getPropertyValue('--show-feedback-button')]"
+          }
         ],
         "label": "darwin-27"
       }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
     ]
   }
 }

@@ -23,10 +23,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "missing"
       },
@@ -44,10 +61,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "bad"
       },
@@ -65,10 +99,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "merged-onto-error"
       },
@@ -84,10 +135,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "two-opening"
       },
@@ -96,10 +164,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "two-opened"
       },
@@ -148,10 +233,27 @@
       },
       {
         "capture": [
-          "title",
-          "loading",
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
           "selection",
-          "log"
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
         ],
         "label": "enabled"
       },
@@ -221,6 +323,11 @@
           ]
         }
       }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
     ]
   }
 }

@@ -1,4 +1,5 @@
 import { EXITED, OracleWorker, UPSTREAM_DIR, resolveWorkerScript, setWorkerRouter, terminatedWorkersExited } from "./shims";
+import { fromTree, toTree } from "./cve1";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -6,10 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { realClearTimeout, realSetImmediate, realSetTimeout } from "./historical/timers";
 
 // hubSession [<spec or fixture file>]
-//   Loads upstream's www/hub.html in jsdom and evaluates the real hub (src/hub/hub.ts, with
-//   src/dom/env.ts installed first) inside it, as `dom` does, and adds what the hub lifecycle
-//   needs: decode and export workers on real worker threads, and main's side of
-//   `historical-start`. See oracle/README.md, "Hub sessions".
+//   Runs a `dom` fixture on the same page bundle (domPage.js: src/dom/env.ts, then the real
+//   src/hub/hub.ts) and adds what the hub lifecycle needs: decode and export workers on real
+//   worker threads, and main's side of `historical-start`. See oracle/README.md, "Hub
+//   sessions".
 
 declare const __HARNESS_DIR__: string;
 
@@ -53,12 +54,13 @@ for (const level of ["log", "info", "debug", "error"]) {
 virtualConsole.on("warn", (...args: unknown[]) => {
   const text = args.map(String).join(" ");
   log(`page warn: ${text}`);
-  if (text.startsWith("Failed to load: ")) write({ console: "warn", text });
+  if (text.startsWith("Failed to load: ")) write({ console: toTree("warn"), text: toTree(text) });
 });
 virtualConsole.on("jsdomError", (error: Error & { type?: string; cause?: unknown }) => {
   log(`jsdom: ${error.message}`);
   if (error.type === "not-implemented") return;
-  write({ exception: "event" });
+  const cause = (error.cause ?? error) as Error;
+  write({ exception: "event", error: toTree(`${cause?.name}: ${cause?.message}`) });
 });
 
 /** The worker realm's `Date` is pinned as in historicalSession.ts; asrs tests pin the same value. */
@@ -135,7 +137,8 @@ async function settle(): Promise<void> {
       slot.worker.deliver(raw);
     } catch (error) {
       log(`worker message: ${(error as Error)?.stack ?? String(error)}`);
-      write({ exception: "worker" });
+      const e = error as Error;
+      write({ exception: "worker", error: toTree(`${e?.name}: ${e?.message}`) });
     }
   }
 }
@@ -147,43 +150,91 @@ const dom = new JSDOM(fs.readFileSync(hubHtml, "utf8"), {
   virtualConsole
 });
 const page = dom.window;
+
+/** A copy built from the page realm's constructors, as a structured clone into the page gives. */
+const adopt: (value: unknown) => unknown = page.eval(`(function adopt(value) {
+  if (value === null || typeof value !== "object") return value;
+  const tag = Object.prototype.toString.call(value);
+  if (ArrayBuffer.isView(value)) return new globalThis[value.constructor.name](value);
+  if (tag === "[object ArrayBuffer]") return new Uint8Array(new Uint8Array(value)).buffer;
+  if (Array.isArray(value)) return Array.from(value, adopt);
+  if (tag === "[object Map]") return new Map(Array.from(value, ([k, v]) => [adopt(k), adopt(v)]));
+  if (tag === "[object Set]") return new Set(Array.from(value, adopt));
+  if (tag === "[object Date]") return new Date(value.getTime());
+  const out = {};
+  for (const key of Object.keys(value)) out[key] = adopt(value[key]);
+  return out;
+})`);
+
+/** The page's `Worker`: a real thread, reporting what the page does with it. */
+class PageWorker {
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  private index: number;
+  private worker: OracleWorker;
+
+  constructor(script: string) {
+    this.index = slots.length;
+    this.worker = new OracleWorker(pinnedLoader(script));
+    this.worker.onmessage = (event: { data: unknown }) => this.onmessage?.({ data: adopt(event.data) });
+    write({ worker: toTree(this.index), script: toTree(script.split("/").pop()) });
+  }
+
+  postMessage(data: any) {
+    if (data?.type === "start") {
+      const files = data.data.map((f: Uint8Array | null) => (f === null ? null : f.length));
+      write({ post: toTree(this.index), type: toTree("start"), files: toTree(files) });
+    } else if (data?.type === "parseField") {
+      write({ post: toTree(this.index), type: toTree("parseField"), key: toTree(data.key) });
+    } else {
+      write({ post: toTree(this.index), type: toTree("request") });
+    }
+    this.worker.postMessage(data);
+  }
+
+  terminate() {
+    write({ terminate: toTree(this.index) });
+    this.worker.terminate();
+  }
+}
+
+/** Main's reply to `historical-start` (src/main/electron/main.ts). */
+function historicalStart(uuid: string, logPath: string): unknown {
+  if (CONVERTED.some((ext) => logPath.endsWith(ext))) throw new Error(`${logPath}: the oracle cannot convert this format`);
+  if (logPath.endsWith(".dslog")) {
+    const events = logPath.slice(0, logPath.length - 5) + "dsevents";
+    return { uuid, files: [readLog(logPath), readLog(events)], error: null };
+  }
+  return { uuid, files: [readLog(logPath)], error: null };
+}
+
+/** Main answers the page's requests as later tasks; the page's port records them first. */
+function pageWrite(line: string) {
+  lines.push(line);
+  const record = JSON.parse(line);
+  if (record.main === "historical-start") {
+    const data = fromTree(record.data) as { uuid: string; path: string };
+    const reply = adopt(historicalStart(data.uuid, data.path));
+    page.setTimeout(() => page.messagePort.onmessage({ data: { name: "historical-data", data: reply } }), 0);
+  } else if (record.main === "historical-start-raw") {
+    throw new Error("historical-start-raw is not modelled");
+  }
+}
+
+page.Worker = PageWorker;
 page.__oracleFixture = page.JSON.parse(JSON.stringify(fixture));
 page.__oracleYield = settle;
-page.__oracleWrite = (line: string) => lines.push(line);
+page.__oracleWrite = pageWrite;
 page.__oracleLog = log;
 page.__oracleOuter = { TextEncoder, TextDecoder };
-page.__oracleHub = {
-  /** `new Worker(script)` on a real thread; `deliver` gets each message in page order. */
-  spawn(script: string, deliver: (data: unknown) => void): number {
-    const index = slots.length;
-    const worker = new OracleWorker(pinnedLoader(script));
-    worker.onmessage = (event: { data: unknown }) => deliver(event.data);
-    return index;
-  },
-  post(index: number, data: unknown): void {
-    slots[index].worker.postMessage(data);
-  },
-  terminate(index: number): void {
-    slots[index].worker.terminate();
-  },
-  /** Main's reply to `historical-start` (src/main/electron/main.ts), or null for another name. */
-  historicalStart(uuid: string, logPath: string): unknown {
-    if (CONVERTED.some((ext) => logPath.endsWith(ext))) throw new Error(`${logPath}: the oracle cannot convert this format`);
-    if (logPath.endsWith(".dslog")) {
-      const events = logPath.slice(0, logPath.length - 5) + "dsevents";
-      return { uuid, files: [readLog(logPath), readLog(events)], error: null };
-    }
-    return { uuid, files: [readLog(logPath)], error: null };
-  }
-};
 process.on("unhandledRejection", (reason) => {
   const error = reason as Error;
   log(`unhandled rejection: ${error?.stack ?? String(reason)}`);
-  write({ exception: "unhandledRejection" });
+  write({ exception: "unhandledRejection", error: toTree(`${error?.name}: ${error?.message}`) });
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-page.eval(fs.readFileSync(path.join(here, "hubPage.js"), "utf8"));
+page.eval(fs.readFileSync(path.join(here, "domPage.js"), "utf8"));
 await page.__oracleRun();
 for (const slot of slots) OracleWorker.prototype.terminate.call(slot.worker);
 setWorkerRouter(null);

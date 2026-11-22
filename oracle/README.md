@@ -900,30 +900,24 @@ than through dispatched events, the documentation iframe's content, and 3D rende
 
 ## Hub sessions
 
-`hubSession` (`src/hubSession.ts`, page bundle `src/hub/page.ts`) runs a fixture against the
-real hub the way `dom` does: hub.html in jsdom, `src/dom/env.ts` installed first (fake clock,
-timers, frames, seeded `Math.random`, layout table), then `src/hub/hub.ts`. What the DOM
-harness leaves out, it adds:
+`hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
+`src/dom/env.ts`, then the real `src/hub/hub.ts` in hub.html under jsdom) and adds what the hub
+lifecycle needs:
 
-- Workers. The page's `Worker` is a thin class over an `OracleWorker` on a real thread, with the
-  worker realm's `Date` pinned to 1,000,000,000,000 as in `historicalSession`. Messages are
-  copied into the page realm. After every page task, worker messages are handed to the page one
-  at a time from the oldest worker that has one or is still busy, until no worker is busy;
-  worker work takes no page time. Decode workers and `exportWorker.js` both run this way.
+- Workers. The page's `Worker` is a real worker thread, with the worker realm's `Date` pinned to
+  1,000,000,000,000 as in `historicalSession`; messages are copied into the page realm. After
+  every page task, worker messages go to the page one at a time from the oldest worker that has
+  one or is still busy, until no worker is busy, so worker work takes no page time. Decode
+  workers and `exportWorker.js` both run this way.
 - Main's `historical-start`: the file named in the fixture (relative to it, and listed in
-  `inputs` under a spec) is read and `historical-data` arrives as a zero-delay page timeout.
+  `inputs` under a spec) is read, and `historical-data` arrives as a zero-delay page timeout.
 - Live sources and the NT4 publisher are not connected; fixtures only reach their refusals.
 
-Steps: `{"main", "data"}` delivers a main message, `{"advance": ms}` and `{"frames": n}` run
-timers and frames, `{"capture": [kind, ...], "label"}` records the page. Records, in order:
-
-| Record | Written |
-|---|---|
-| `{"main", "data"}` | every `sendMainMessage` except `ignoreMain` (default `save-state`, `save-type-memory`, `update-touch-bar-slider`); `historical-start` keeps `uuid` and `path` |
-| `{"worker", "script"}`, `{"post", "type", "files" \| "key"}`, `{"terminate"}` | worker creation, each posted request, `terminate()` |
-| `{"console": "warn", "text"}` | the `set-assets` load-failure warning |
-| `{"exception": where}` | a throw out of a page task |
-| `{"capture": label}` then `title`, `loading`, `selection`, `log`, `state`, `window` | the title element's text, the loading-glow properties, the selection, log keys with the timestamp range and loading fields, `HubState`, and the `fancy-*` body classes with the update and feedback button properties |
+Besides the `dom` records, a session writes `{"worker", "script"}`, `{"post", "type", "files" |
+"key"}` and `{"terminate"}` for worker traffic, `{"console": "warn", "text"}` for the
+`set-assets` load-failure warning and `{"exception": "worker", "error"}` for a throw out of a
+worker message. Its generator hash also covers the `dom` entry's inputs
+(`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
 `crates/asrs-hub/tests/hub_lifecycle.rs` replays `parity/specs/hub/lifecycle-*.entry.json`
 through `asrs_hub::hub::HubModel` with the same scheduling and compares every record.

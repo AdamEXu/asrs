@@ -459,6 +459,10 @@ fn spec_rel(paths: &Paths, spec: &Spec) -> String {
 
 const SHARED_INPUTS: &[&str] = &["build.mjs", "package-lock.json"];
 const ENTRY_INPUTS: &str = "inputs.json";
+/// Entries that load another entry's page bundle at runtime, as build.mjs's `runtimeLoads`
+/// records for its own entries. Kept here because any edit to build.mjs changes every
+/// vector's generator hash.
+const BORROWED_INPUTS: &[(&str, &str)] = &[("hubSession", "dom")];
 const LAZY_HELPER_PREFIX: &str = "lazyHelpers/";
 
 fn read_entry_inputs(dist: &Path) -> Result<Vec<(String, Vec<String>)>> {
@@ -467,6 +471,28 @@ fn read_entry_inputs(dist: &Path) -> Result<Vec<(String, Vec<String>)>> {
     let Json::Object(pairs) = json else {
         return Err(format!("{}: not an object", path.display()));
     };
+    let mut inputs = parse_entry_inputs(&path, pairs)?;
+    for (entry, lender) in BORROWED_INPUTS {
+        let Some(borrowed) = inputs.iter().find(|(e, _)| e == lender).map(|(_, f)| f.clone())
+        else {
+            continue;
+        };
+        if let Some((_, files)) = inputs.iter_mut().find(|(e, _)| e == entry) {
+            for file in borrowed {
+                if !files.contains(&file) {
+                    files.push(file);
+                }
+            }
+            files.sort();
+        }
+    }
+    Ok(inputs)
+}
+
+fn parse_entry_inputs(
+    path: &Path,
+    pairs: Vec<(Utf16String, Json)>,
+) -> Result<Vec<(String, Vec<String>)>> {
     pairs
         .into_iter()
         .map(|(entry, files)| {
