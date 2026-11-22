@@ -130,7 +130,10 @@ impl WpilogWorker {
 
         let decoder = WpilogDecoder::new(&data);
         let mut last_progress = 0.0;
-        for &(entry, position) in &index.records {
+        for (i, &(entry, position)) in index.records.iter().enumerate() {
+            if i.is_multiple_of(4096) && crate::worker::stop_requested() {
+                return Err(Failed);
+            }
             if entry == CONTROL_ENTRY {
                 if let Some((record, _)) = decoder.record_at(position as usize) {
                     self.control_record(&record)?;
@@ -320,7 +323,10 @@ impl WpilogWorker {
             let type_ = self.entry_types[&key].clone();
             let data = Arc::clone(&self.data);
             let decoder = WpilogDecoder::new(&data);
-            for position in positions {
+            for (i, position) in positions.into_iter().enumerate() {
+                if i.is_multiple_of(4096) && crate::worker::stop_requested() {
+                    return Err(Abort::Threw);
+                }
                 if let Some((record, _)) = decoder.record_at(position as usize) {
                     self.put_record(&key, &type_, &record)?;
                 }

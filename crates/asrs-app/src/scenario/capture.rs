@@ -11,7 +11,7 @@ use asrs_ui::theme::ThemeSource;
 
 use super::{Action, COLUMNS, PATCH, Page, Scenario, Theme, patch_colours};
 use crate::views::frame::{HubFrame, probe_rects};
-use crate::views::standalone::StandaloneHub;
+use crate::views::hub_host::HubEntityHost;
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]...";
@@ -126,8 +126,8 @@ fn run_variant(
     let mut hub_window = None;
     let window: AnyWindowHandle = match scenario.page {
         Page::App => headless
-            .open_window(content, scale as f32, |_, cx| {
-                cx.new(|_| HubFrame::new(StandaloneHub::new(theme == Theme::Dark, true)))
+            .open_window(content, scale as f32, |window, cx| {
+                HubEntityHost::open(window, theme == Theme::Dark, true, Vec::new(), cx)
             })
             .map(|w| {
                 hub_window = Some(w);
@@ -178,8 +178,9 @@ fn run_variant(
                 Some(w) => headless
                     .context()
                     .update_window(w.into(), |root, _, cx| {
-                        let frame = root.downcast::<HubFrame<StandaloneHub>>().ok()?;
+                        let frame = root.downcast::<HubFrame<HubEntityHost>>().ok()?;
                         let layout = frame.read(cx).layout(
+                            cx,
                             scenario.width,
                             scenario.height,
                             f64::from(scale),
