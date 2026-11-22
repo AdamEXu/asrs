@@ -3,17 +3,24 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use asrs_js::string::JsString;
 use asrs_parity::json::{self, Json};
+use asrs_tabs::form;
 use asrs_parity::pixel::{self, Rgba};
 use asrs_ui::button::IconButton;
 use asrs_ui::capture::{Capture, HeadlessCapture};
 use asrs_ui::icon::{Icon, IconFit, IconSource};
+use asrs_ui::input::{
+    Checkbox, FieldKind, FieldModel, FieldStyle, PlainText, Progress, RangeModel, Segment,
+    SegmentedControl, Slider, SliderStyle, TextField, number_accepts,
+};
 use asrs_ui::symbols::Symbol;
+use asrs_ui::text::snap_remainder;
 use asrs_ui::theme::Appearance;
 use gpui_kit::{
-    AnyElement, AppContext, Context, IntoElement, Modifiers, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, PlatformInput, Render, Styled, Window, div, point, px, rgb,
-    size,
+    AnyElement, AnyView, AppContext, Context, IntoElement, Modifiers, MouseButton,
+    MouseDownEvent, MouseMoveEvent, ParentElement, PlatformInput, Render, Styled, Window, div,
+    point, px, rgb, size,
 };
 
 struct Button {
@@ -34,8 +41,21 @@ struct Probe {
     opacity: f64,
 }
 
+struct Control {
+    kind: String,
+    preset: String,
+    value: Option<String>,
+    placeholder: Option<String>,
+    checked: bool,
+    min: Option<String>,
+    max: Option<String>,
+    segments: Vec<Segment>,
+    selected: Option<usize>,
+}
+
 struct Scene {
     name: String,
+    controls: Vec<Control>,
     width: f32,
     height: f32,
     appearance: Appearance,
@@ -57,6 +77,34 @@ fn text(v: &Json, k: &str) -> String {
         .and_then(Json::as_str)
         .map(|s| s.to_string_lossy())
         .unwrap_or_else(|| panic!("no string {k}"))
+}
+
+fn opt_text(v: &Json, k: &str) -> Option<String> {
+    v.get(k)
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy())
+}
+
+fn control(c: &Json) -> Control {
+    Control {
+        kind: text(c, "kind"),
+        preset: text(c, "preset"),
+        value: opt_text(c, "value"),
+        placeholder: opt_text(c, "placeholder"),
+        checked: matches!(c.get("checked"), Some(Json::Bool(true))),
+        min: opt_text(c, "min"),
+        max: opt_text(c, "max"),
+        segments: list(c, "segments")
+            .iter()
+            .map(|s| match opt_text(s, "icon") {
+                Some(icon) => Segment::Icon(IconSource::Symbol(
+                    Symbol::named(&icon).expect("embedded symbol"),
+                )),
+                None => Segment::Badge(text(s, "label").into()),
+            })
+            .collect(),
+        selected: c.get("selected").and_then(Json::as_f64).map(|n| n as usize),
+    }
 }
 
 fn list<'a>(v: &'a Json, k: &str) -> &'a [Json] {
@@ -85,6 +133,7 @@ fn load(path: &Path) -> Scene {
         });
     Scene {
         name: text(&j, "name"),
+        controls: list(&j, "controls").iter().map(control).collect(),
         width: num(&j, "width") as f32,
         height: num(&j, "height") as f32,
         appearance: if matches!(j.get("dark"), Some(Json::Bool(true))) {
@@ -140,11 +189,168 @@ fn probe_svg(p: &Probe) -> String {
     )
 }
 
-struct View(Arc<Scene>);
+struct Number(form::NumberInput);
+
+impl FieldModel for Number {
+    fn value(&self) -> String {
+        self.0.value().to_string_lossy()
+    }
+
+    fn set_value(&mut self, value: &str) {
+        self.0.set_value(JsString::from(value));
+    }
+
+    fn accepts(&self, c: char) -> bool {
+        number_accepts(c)
+    }
+}
+
+struct Range {
+    input: form::RangeInput,
+    min: f64,
+    max: f64,
+}
+
+impl RangeModel for Range {
+    fn value(&self) -> String {
+        self.input.value().to_string_lossy()
+    }
+
+    fn set_value(&mut self, value: &str) {
+        self.input.set_value(JsString::from(value));
+    }
+
+    fn proportion(&self) -> f64 {
+        ((self.input.number() - self.min) / (self.max - self.min)).clamp(0.0, 1.0)
+    }
+
+    fn value_at(&self, proportion: f64) -> String {
+        asrs_js::number::to_string(self.min + proportion * (self.max - self.min))
+    }
+}
+
+fn field<M: FieldModel>(
+    model: M,
+    kind: FieldKind,
+    style: FieldStyle,
+    c: &Control,
+    rect: [f32; 4],
+    scale: f32,
+    window: &mut Window,
+    cx: &mut Context<'_, View>,
+) -> AnyView {
+    cx.new(|cx| {
+        let mut f = TextField::new(model, kind, style, window, cx);
+        f.set_size(rect[2], rect[3]);
+        f.set_subpixel(
+            snap_remainder(rect[0], scale),
+            snap_remainder(rect[1], scale),
+        );
+        if let Some(p) = &c.placeholder {
+            f.set_placeholder(p.clone());
+        }
+        f
+    })
+    .into()
+}
+
+fn number(c: &Control) -> Number {
+    Number(form::NumberInput::new(c.value.as_deref().unwrap_or("")))
+}
+
+enum Part {
+    View(AnyView),
+    Split(usize),
+    Progress(f64),
+    Checkbox(bool),
+}
+
+fn part(
+    c: &Control,
+    index: usize,
+    rect: [f32; 4],
+    appearance: Appearance,
+    scale: f32,
+    window: &mut Window,
+    cx: &mut Context<'_, View>,
+) -> Part {
+    let value = c.value.clone().unwrap_or_default();
+    let (model_kind, style) = match c.preset.as_str() {
+        "sidebar-search" => (FieldKind::Search, FieldStyle::sidebar_search(appearance)),
+        "console-filter" => (FieldKind::Search, FieldStyle::console_filter()),
+        "field-value" => (FieldKind::Number, FieldStyle::field_value()),
+        "setting-block" => (FieldKind::Number, FieldStyle::setting_block()),
+        "table-jump" => (FieldKind::Number, FieldStyle::native()),
+        "prompt" if c.kind == "number" => (FieldKind::Number, FieldStyle::native()),
+        "prompt" => (FieldKind::Text, FieldStyle::native()),
+        "video-timeline" => {
+            let (min, max) = (
+                c.min.clone().unwrap_or_default(),
+                c.max.clone().unwrap_or_default(),
+            );
+            let mut input = form::RangeInput::new(&value, &min, &max);
+            input.set_value(JsString::from(value.as_str()));
+            let model = Range {
+                input,
+                min: min.parse().expect("min"),
+                max: max.parse().expect("max"),
+            };
+            return Part::View(
+                cx.new(|_| Slider::new(model, SliderStyle::VIDEO_TIMELINE))
+                    .into(),
+            );
+        }
+        "split" => return Part::Split(index),
+        "download" => {
+            let v: f64 = value.parse().expect("progress value");
+            let max: f64 = c.max.as_deref().unwrap_or("1").parse().expect("progress max");
+            return Part::Progress(v / max);
+        }
+        "beta" => return Part::Checkbox(c.checked),
+        other => panic!("unknown control preset {other}"),
+    };
+    Part::View(match model_kind {
+        FieldKind::Number => field(number(c), model_kind, style, c, rect, scale, window, cx),
+        _ => field(
+            PlainText::new(&value),
+            model_kind,
+            style,
+            c,
+            rect,
+            scale,
+            window,
+            cx,
+        ),
+    })
+}
+
+struct View {
+    scene: Arc<Scene>,
+    parts: Vec<([f32; 4], Part)>,
+}
+
+impl View {
+    fn new(
+        scene: Arc<Scene>,
+        rects: Vec<[f32; 4]>,
+        window: &mut Window,
+        cx: &mut Context<'_, View>,
+    ) -> View {
+        let scale = window.scale_factor();
+        let parts = scene
+            .controls
+            .iter()
+            .zip(rects)
+            .enumerate()
+            .map(|(i, (c, rect))| (rect, part(c, i, rect, scene.appearance, scale, window, cx)))
+            .collect();
+        View { scene, parts }
+    }
+}
 
 impl Render for View {
     fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
-        let scene = &self.0;
+        let scene = self.scene.clone();
         let mut root = div().size_full().relative().bg(rgb(scene.background));
         for (i, b) in scene.buttons.iter().enumerate() {
             let button = IconButton::new(("button", i), b.icon)
@@ -185,6 +391,30 @@ impl Render for View {
                     .bg(rgb(color)),
             );
         }
+        for (rect, part) in &self.parts {
+            let element: AnyElement = match part {
+                Part::View(view) => view.clone().into_any_element(),
+                Part::Split(i) => {
+                    let c = &scene.controls[*i];
+                    SegmentedControl::new(("split", *i), c.segments.clone())
+                        .selected(c.selected)
+                        .size(rect[2], rect[3])
+                        .appearance(scene.appearance)
+                        .into_any_element()
+                }
+                Part::Progress(p) => Progress::new(*p).into_any_element(),
+                Part::Checkbox(checked) => Checkbox::new("checkbox", *checked).into_any_element(),
+            };
+            root = root.child(
+                div()
+                    .absolute()
+                    .left(px(rect[0]))
+                    .top(px(rect[1]))
+                    .w(px(rect[2]))
+                    .h(px(rect[3]))
+                    .child(element),
+            );
+        }
         root
     }
 }
@@ -194,12 +424,35 @@ fn at(shot: &Capture, scale: f32, x: f32, y: f32) -> Json {
     Json::Array(p.iter().map(|&c| Json::Number(f64::from(c))).collect())
 }
 
-fn render(scene: &Arc<Scene>, scale: f32, out: &Path) {
+/// The border boxes Blink gave the scene's controls, which the port takes as its layout.
+fn control_rects(reference: &Path, scene: &Scene, scale: f32) -> Vec<[f32; 4]> {
+    if scene.controls.is_empty() {
+        return Vec::new();
+    }
+    let file = reference.join(format!("{}@{}x.json", scene.name, scale));
+    let j = json::parse(&std::fs::read_to_string(&file).expect("reference capture"))
+        .expect("reference json");
+    list(&j, "controls")
+        .iter()
+        .map(|r| {
+            let v: Vec<f32> = r
+                .as_array()
+                .unwrap_or_default()
+                .iter()
+                .map(|n| n.as_f64().expect("rect") as f32)
+                .collect();
+            [v[0], v[1], v[2], v[3]]
+        })
+        .collect()
+}
+
+fn render(scene: &Arc<Scene>, scale: f32, reference: &Path, out: &Path) {
     let mut capture = HeadlessCapture::new(Arc::new(())).expect("headless context");
     let view = scene.clone();
+    let rects = control_rects(reference, scene, scale);
     let window = capture
-        .open_window(size(px(scene.width), px(scene.height)), scale, |_, cx| {
-            cx.new(|_| View(view))
+        .open_window(size(px(scene.width), px(scene.height)), scale, |window, cx| {
+            cx.new(|cx| View::new(view, rects, window, cx))
         })
         .expect("open window");
     let shot = capture.capture(window.into()).expect("first frame");
@@ -290,7 +543,7 @@ fn main() {
     for file in files {
         let scene = Arc::new(load(&file));
         for scale in [1.0, 2.0] {
-            render(&scene, scale, out);
+            render(&scene, scale, &scenes.with_file_name("ref"), out);
         }
     }
 }

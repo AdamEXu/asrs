@@ -453,7 +453,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "asrs-canvas",
+ "asrs-js",
  "asrs-parity",
+ "asrs-tabs",
  "block2 0.6.2",
  "gpui-kit",
  "gpui-pre",

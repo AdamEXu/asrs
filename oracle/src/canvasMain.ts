@@ -185,11 +185,16 @@ async function ui(out: string, scaleArg: string) {
       win.webContents.sendInputEvent({ type: "mouseMove", x, y });
       if (down) win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
       const pseudo = down ? ":active" : ":hover";
+      const selector = JSON.stringify(scene.pointer.selector + pseudo);
       const matched = await win.webContents.executeJavaScript(
-        `new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))).then(() => document.querySelector("button${pseudo}") !== null)`
+        `new Promise((r) => setTimeout(r, 400)).then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))).then(() => document.querySelector(${selector}) !== null)`
       );
-      if (!matched) throw new Error(`${scene.name}: no button matches ${pseudo} after the synthetic pointer event`);
+      if (!matched) throw new Error(`${scene.name}: nothing matches ${selector} after the synthetic pointer event`);
     }
+    const controls = await win.webContents.executeJavaScript(
+      "Array.from(document.querySelectorAll('[data-control]')).map((e) => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })"
+    );
+    if (controls.length !== scene.controls.length) throw new Error(`${scene.name}: ${controls.length} controls in the page, ${scene.controls.length} in the scene`);
     const shot = await captureRgba(win, scale);
     for (const p of scene.patches) {
       const got = "#" + shot.at(p.x + 10, p.y + 10).slice(0, 3).map((c) => c.toString(16).padStart(2, "0")).join("");
@@ -200,7 +205,7 @@ async function ui(out: string, scaleArg: string) {
     const base = path.join(out, "ref", `${scene.name}@${scale}x`);
     fs.mkdirSync(path.dirname(base), { recursive: true });
     fs.writeFileSync(`${base}.png`, encodePng(shot.size.width, shot.size.height, shot.rgba));
-    writeJson(`${base}.json`, { scene: scene.name, scale, width: shot.size.width, height: shot.size.height, probes, buttons });
+    writeJson(`${base}.json`, { scene: scene.name, scale, width: shot.size.width, height: shot.size.height, probes, buttons, controls });
     if (scene.pointer?.down) win.webContents.sendInputEvent({ type: "mouseUp", x: scene.pointer.x, y: scene.pointer.y, button: "left", clickCount: 1 });
     win.destroy();
     console.error(`  ${scene.name}@${scale}x`);
