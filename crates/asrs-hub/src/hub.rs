@@ -497,6 +497,7 @@ pub struct HubModel {
     pending: Vec<Pending>,
     next_request: u64,
     exports: Vec<ExportRequest>,
+    status_changes: Vec<(usize, Status)>,
 }
 
 fn num(n: f64) -> JsValue {
@@ -601,6 +602,7 @@ impl HubModel {
             pending: Vec::new(),
             next_request: 0,
             exports: Vec::new(),
+            status_changes: Vec::new(),
         };
         hub.flush(host);
         hub
@@ -700,6 +702,17 @@ impl HubModel {
 
     pub fn historical_paths(&self) -> impl Iterator<Item = &JsString> {
         self.historical.iter().map(|e| &e.path)
+    }
+
+    /// `historicalSources`, in the order they were opened.
+    pub fn historical_sources(&self) -> impl Iterator<Item = &HistoricalDataSource> {
+        self.historical.iter().map(|e| &e.source)
+    }
+
+    /// The status callbacks the historical sources ran since the last call, with each
+    /// source's index in [`Self::historical_sources`] at the time.
+    pub fn take_status_changes(&mut self) -> Vec<(usize, Status)> {
+        std::mem::take(&mut self.status_changes)
     }
 
     /// `window.tuner`, set by the host once a live source connects.
@@ -916,7 +929,10 @@ impl HubModel {
             SourceEvent::Status {
                 status,
                 custom_error,
-            } => self.source_status(index, status, custom_error, host),
+            } => {
+                self.status_changes.push((index, status));
+                self.source_status(index, status, custom_error, host);
+            }
             SourceEvent::Progress(progress) => {
                 if let Some(entry) = self.historical.get_mut(index) {
                     entry.progress = Some(progress);

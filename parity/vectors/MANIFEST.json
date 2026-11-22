@@ -198,6 +198,8 @@
     "form/number-input": {"cases":217,"content":"37ae5f43fb23c013","generator":"abc75b708f9d80f8","spec":"parity/specs/form/number-input.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "form/range-input": {"cases":92,"content":"57c8edf921b419a8","generator":"db954fc92e42ebcb","spec":"parity/specs/form/range-input.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "form/select": {"cases":29,"content":"c35d4de39dfe3e38","generator":"e700cb59cc1ed816","spec":"parity/specs/form/select.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "hub/entity-sessions": {"cases":3768,"content":"84c33dd9586529d0","generator":"0c7983ede5161843","spec":"parity/specs/hub/entity-sessions.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "hub/entity-titles": {"cases":55,"content":"5cd8c2b5a9b7f077","generator":"cccc135d18247e4f","spec":"parity/specs/hub/entity-titles.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-errors-and-files": {"cases":83,"content":"77b158a7ab32f5c3","generator":"9623087ed6ed7e64","spec":"parity/specs/hub/lifecycle-errors-and-files.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-export-outcomes": {"cases":49,"content":"ed44e9fb4b4aa98f","generator":"86d250ad79b24494","spec":"parity/specs/hub/lifecycle-export-outcomes.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-merge-without-logs": {"cases":12,"content":"a6d5568974af23a7","generator":"2a04ec5d50c6e0a9","spec":"parity/specs/hub/lifecycle-merge-without-logs.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

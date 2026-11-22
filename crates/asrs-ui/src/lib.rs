@@ -3,11 +3,13 @@
 pub mod gpui {
     pub use gpui_kit::{
         AnyWindowHandle, App, AppContext, Application, AsyncApp, Bounds, Context, Corners, Entity,
-        Global, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, Render,
-        RenderImage, Result, ScrollDelta, ScrollEvent, SharedString, Styled, TitlebarOptions,
-        Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, application,
-        canvas, div, point, px, rgb, size,
+        EventEmitter, Global, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels,
+        Render, RenderImage, Result, ScrollDelta, ScrollEvent, SharedString, Styled, Task,
+        TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowKind,
+        WindowOptions, application, canvas, div, point, px, rgb, size,
     };
+    #[cfg(feature = "parity")]
+    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};
 }
 
 pub mod button;

@@ -17,14 +17,18 @@ path = "src/main.rs"
 parity = ["asrs-ui/parity"]
 
 [dependencies]
+asrs-formats = { path = "../asrs-formats" }
+asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
+asrs-log = { path = "../asrs-log" }
+asrs-model = { path = "../asrs-model" }
 asrs-services = { path = "../asrs-services" }
 asrs-ui.workspace = true
+async-channel = "=2.5.0"
 
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }
 asrs-parity = { path = "../asrs-parity" }
-async-channel = "=2.5.0"
 image = { version = "=0.25.10", default-features = false }
 
 [lints]
@@ -33,3 +37,7 @@ workspace = true
 [[test]]
 name = "window_sizes"
 harness = false
+
+[[test]]
+name = "hub_entity"
+required-features = ["parity"]
