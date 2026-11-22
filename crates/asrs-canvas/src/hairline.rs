@@ -9,8 +9,8 @@ use std::f32::consts::PI;
 
 use tiny_skia::{LineCap, PathSegment};
 
-use crate::clip::{self, ClipRect};
 use crate::blit::Spans;
+use crate::clip::{self, ClipRect};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct P {
@@ -236,8 +236,8 @@ fn contour_closed(verbs: &[(Verb, Vec<P>)], i: usize) -> bool {
     false
 }
 
-/// One line of a hairline path, and whether `hair_path` hands it the canvas clip: only then does
-/// Skia blit it through `SkRectClipBlitter`.
+/// One line of a hairline path, and whether `hair_path` hands it the canvas clip, which [`spans`]
+/// then narrows to the line or drops.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Segment {
     pub a: P,
@@ -448,12 +448,18 @@ fn anti_hairline(x0: i32, y0: i32, x1: i32, y1: i32, clip: Option<[i32; 4]>, out
     let mut istart = major0 >> 6;
     let mut istop = (major1 + 63) >> 6;
     let mut fstart = minor0 << 10;
-    let (hair, slope) = if minor0 == minor1 {
-        (if horizontal { Hair::HLine } else { Hair::VLine }, 0)
+    let slope = if minor0 == minor1 {
+        0
     } else {
         let s = ((i64::from(minor1 - minor0) << 16) / i64::from(major1 - major0)) as i32;
         fstart += ((i64::from(s) * i64::from(32 - (major0 & 63)) + 32) >> 6) as i32;
-        (if horizontal { Hair::Horish } else { Hair::Vertish }, s)
+        s
+    };
+    let hair = match (horizontal, minor0 == minor1) {
+        (true, true) => Hair::HLine,
+        (true, false) => Hair::Horish,
+        (false, true) => Hair::VLine,
+        (false, false) => Hair::Vertish,
     };
     let (mut scale_start, mut scale_stop) = if istop - istart == 1 {
         (major1 - major0, 0)
@@ -657,7 +663,10 @@ mod tests {
         let mut b = PathBuilder::new();
         b.move_to(0.0, 0.0);
         b.cubic_to(10.0, 0.0, 20.0, 0.0, 30.0, 0.0);
-        assert_eq!(segments(&b.finish().unwrap(), LineCap::Butt, 100, 100).len(), 1);
+        assert_eq!(
+            segments(&b.finish().unwrap(), LineCap::Butt, 100, 100).len(),
+            1
+        );
         let mut b = PathBuilder::new();
         b.move_to(0.0, 0.0);
         b.cubic_to(10.0, 40.0, 20.0, 40.0, 30.0, 0.0);
@@ -705,7 +714,11 @@ mod tests {
     }
 
     fn alphas(a: P, b: P, w: u32, h: u32) -> Vec<u8> {
-        let s = Segment { a, b, clipped: true };
+        let s = Segment {
+            a,
+            b,
+            clipped: true,
+        };
         spans(s, w, h).unwrap().flatten(w as usize, h as usize)
     }
 
