@@ -333,6 +333,29 @@ fn mouse_button(button: MouseButton) -> f64 {
     }
 }
 
+/// A frame `render` painted, with the canvas style it set and the heatmap canvas it drew from.
+struct Painted {
+    frame: Canvas2d,
+    style: Option<CanvasStyle>,
+    heatmap: Option<Pixmap>,
+}
+
+/// What a settings control does to its controller.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SettingsInput {
+    Source,
+    Orientation(usize),
+    Size(usize),
+}
+
+fn tab_index(hub: &HubModel, key: usize) -> Option<usize> {
+    hub.tabs().tabs().position(|t| {
+        t.renderer()
+            .downcast_ref::<Field2dRenderer>()
+            .is_some_and(|r| renderer_key(r) == key)
+    })
+}
+
 /// The painted frame drawn through the field image and the heatmap canvas.
 fn rasterize(
     frame: &Canvas2d,
@@ -443,7 +466,7 @@ impl<H: FrameHost> HubFrame<H> {
         if tab.sensor.animating() {
             window.request_animation_frame();
         }
-        let (painted, heatmap) = self
+        let painted = self
             .host_mut()
             .input(cx, |hub| {
                 with_tab(hub, index, |renderer, _, page| {
@@ -463,28 +486,27 @@ impl<H: FrameHost> HubFrame<H> {
                     }
                     renderer.flush_image_loads();
                     renderer.take_frame_requests();
-                    let painted = renderer.dom().borrow_mut().painted.take();
-                    let heatmap = painted
-                        .as_ref()
-                        .and_then(|_| renderer.heatmap().pixmap().cloned());
+                    let frame = renderer.dom().borrow_mut().painted.take()?;
                     let style = renderer.dom().borrow().canvas_style;
-                    painted
-                        .map(|p| (p, style))
-                        .map_or((None, None), |(p, style)| (Some((p, style)), heatmap))
+                    Some(Painted {
+                        frame,
+                        style,
+                        heatmap: renderer.heatmap().pixmap().cloned(),
+                    })
                 })
             })
-            .unwrap_or((None, None));
+            .flatten();
         let tab = self.field_2d.tabs.get_mut(&key)?;
-        if let Some((frame, style)) = painted {
+        if let Some(painted) = painted {
             let mut images = Vec::new();
             if let (Some(path), Some(image)) = (&path, &field_image) {
                 images.push((path.to_string_lossy(), image.pixmap.clone()));
             }
-            if let Some(heatmap) = heatmap {
+            if let Some(heatmap) = painted.heatmap {
                 images.push((HEATMAP_IMAGE.to_owned(), Arc::new(heatmap)));
             }
-            tab.bitmap = rasterize(&frame, &images, &mut tab.raster).map(Arc::new);
-            tab.style = style;
+            tab.bitmap = rasterize(&painted.frame, &images, &mut tab.raster).map(Arc::new);
+            tab.style = painted.style;
             tab.presented = None;
         }
         let style = tab.style;
@@ -597,7 +619,7 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let hub = self.host().hub(cx);
-        let (index, renderer, controller) = displayed(hub)?;
+        let (_, renderer, controller) = displayed(hub)?;
         let key = renderer_key(renderer);
         let state = controller.controls.clone();
         let source_shown = !state.source_hidden;
@@ -631,7 +653,7 @@ impl<H: FrameHost> HubFrame<H> {
                 move |frame: &mut Self, select, event: &SelectEvent, cx| {
                     if *event == SelectEvent::Change {
                         let value = select.read(cx).model().select().value();
-                        frame.field_2d_select(index, value, cx);
+                        frame.field_2d_select(key, value, cx);
                     }
                 },
             );
@@ -717,8 +739,9 @@ impl<H: FrameHost> HubFrame<H> {
                 local(r)
                     .id("field-source")
                     .on_click(move |_, _, cx| {
-                        let _ =
-                            entity.update(cx, |frame, cx| frame.field_2d_open_source(index, cx));
+                        let _ = entity.update(cx, |frame, cx| {
+                            frame.field_2d_settings(key, SettingsInput::Source, cx)
+                        });
                     })
                     .child(
                         Text::new("Source", source_style())
@@ -736,32 +759,21 @@ impl<H: FrameHost> HubFrame<H> {
             .collect();
         let labels = SIZE_LABELS[usize::from(state.is_ftc)];
         let size = labels.iter().map(|l| Segment::Badge((*l).into())).collect();
-        let switchers: [(
-            _,
-            Vec<Segment>,
-            Option<usize>,
-            [f64; 4],
-            fn(&mut Self, usize, usize, &mut Context<'_, Self>),
-        ); 2] = [
+        let orientation_input: fn(usize) -> SettingsInput = SettingsInput::Orientation;
+        let size_input: fn(usize) -> SettingsInput = SettingsInput::Size;
+        let switchers = [
             (
                 "f2d-orientation",
                 orientation,
                 None,
                 layout.orientation,
-                Self::field_2d_orientation,
+                orientation_input,
             ),
-            (
-                "f2d-size",
-                size,
-                Some(state.size),
-                layout.size,
-                Self::field_2d_size,
-            ),
+            ("f2d-size", size, Some(state.size), layout.size, size_input),
         ];
-        for (id, segments, selected, r, on_click) in switchers {
+        for (id, segments, selected, r, input) in switchers {
             let snapped = |v: f64| math::round(v * f64::from(scale)) / f64::from(scale);
-            let x = snapped(r[0]);
-            let y = snapped(r[1]);
+            let (x, y) = (snapped(r[0]), snapped(r[1]));
             let entity = entity.clone();
             panel = panel.child(
                 local([x, y, r[2], r[3]]).child(
@@ -771,9 +783,9 @@ impl<H: FrameHost> HubFrame<H> {
                         .size(r[2] as f32, r[3] as f32)
                         .appearance(appearance)
                         .on_select(move |segment, _, cx| {
-                            let segment = *segment;
-                            let _ =
-                                entity.update(cx, |frame, cx| on_click(frame, index, segment, cx));
+                            let input = input(*segment);
+                            let _ = entity
+                                .update(cx, |frame, cx| frame.field_2d_settings(key, input, cx));
                         }),
                 ),
             );
@@ -781,37 +793,24 @@ impl<H: FrameHost> HubFrame<H> {
         Some(panel.into_any_element())
     }
 
-    fn field_2d_select(&mut self, index: usize, value: JsString, cx: &mut Context<'_, Self>) {
+    fn field_2d_select(&mut self, key: usize, value: JsString, cx: &mut Context<'_, Self>) {
         self.host_mut().input(cx, |hub| {
+            let index = tab_index(hub, key)?;
             with_tab(hub, index, |_, controller, page| {
                 controller.select_field(page, value)
-            });
+            })
         });
         cx.notify();
     }
 
-    fn field_2d_open_source(&mut self, index: usize, cx: &mut Context<'_, Self>) {
+    fn field_2d_settings(&mut self, key: usize, input: SettingsInput, cx: &mut Context<'_, Self>) {
         self.host_mut().input(cx, |hub| {
-            with_tab(hub, index, |_, controller, page| {
-                controller.open_source(page)
-            });
-        });
-    }
-
-    fn field_2d_orientation(&mut self, index: usize, segment: usize, cx: &mut Context<'_, Self>) {
-        self.host_mut().input(cx, |hub| {
-            with_tab(hub, index, |_, controller, _| {
-                controller.click_orientation(segment)
-            });
-        });
-        cx.notify();
-    }
-
-    fn field_2d_size(&mut self, index: usize, segment: usize, cx: &mut Context<'_, Self>) {
-        self.host_mut().input(cx, |hub| {
-            with_tab(hub, index, |_, controller, _| {
-                controller.click_size(segment)
-            });
+            let index = tab_index(hub, key)?;
+            with_tab(hub, index, |_, controller, page| match input {
+                SettingsInput::Source => controller.open_source(page),
+                SettingsInput::Orientation(i) => controller.click_orientation(i),
+                SettingsInput::Size(i) => controller.click_size(i),
+            })
         });
         cx.notify();
     }

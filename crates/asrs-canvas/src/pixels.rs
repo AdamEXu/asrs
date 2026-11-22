@@ -124,39 +124,6 @@ pub fn write_rect(pixmap: &mut Pixmap, image: &ImageData, x: i64, y: i64) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn opaque_and_clear_pixels_round_trip() {
-        for p in [[0, 0, 0, 255], [12, 200, 255, 255], [0, 0, 0, 0]] {
-            assert_eq!(unpremultiply(premultiply(p)), p);
-        }
-        assert_eq!(unpremultiply([10, 20, 30, 0]), [0, 0, 0, 0]);
-    }
-
-    #[test]
-    fn half_alpha_rounds_like_skia() {
-        assert_eq!(premultiply([255, 128, 1, 128]), [128, 64, 1, 128]);
-        assert_eq!(unpremultiply([64, 32, 1, 128]), [128, 64, 2, 128]);
-    }
-
-    #[test]
-    fn bgra_swaps_red_and_blue() {
-        let pixmap = pixmap_from_straight_rgba(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
-        assert_eq!(to_straight_bgra(&pixmap), [0, 0, 255, 255, 255, 0, 0, 128]);
-        assert_eq!(to_straight_rgba(&pixmap), [255, 0, 0, 255, 0, 0, 255, 128]);
-    }
-
-    #[test]
-    fn reads_outside_the_canvas_as_transparent() {
-        let pixmap = pixmap_from_straight_rgba(1, 1, &[9, 9, 9, 255]).unwrap();
-        let data = read_rect(&pixmap, -1, 0, 2, 1).unwrap();
-        assert_eq!(data.data, [0, 0, 0, 0, 9, 9, 9, 255]);
-    }
-}
-
 /// `src` as a compositor draws a transformed layer into a `width` x `height` device-pixel
 /// target: each target pixel centre is mapped back through `inverse` (`[a, b, c, d, e, f]`,
 /// `x' = a*x + c*y + e`, `y' = b*x + d*y + f`) and `src` is sampled bilinearly there, transparent
@@ -215,4 +182,48 @@ pub fn transform_bilinear(
         }
     }
     Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opaque_and_clear_pixels_round_trip() {
+        for p in [[0, 0, 0, 255], [12, 200, 255, 255], [0, 0, 0, 0]] {
+            assert_eq!(unpremultiply(premultiply(p)), p);
+        }
+        assert_eq!(unpremultiply([10, 20, 30, 0]), [0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn half_alpha_rounds_like_skia() {
+        assert_eq!(premultiply([255, 128, 1, 128]), [128, 64, 1, 128]);
+        assert_eq!(unpremultiply([64, 32, 1, 128]), [128, 64, 2, 128]);
+    }
+
+    #[test]
+    fn bgra_swaps_red_and_blue() {
+        let pixmap = pixmap_from_straight_rgba(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
+        assert_eq!(to_straight_bgra(&pixmap), [0, 0, 255, 255, 255, 0, 0, 128]);
+        assert_eq!(to_straight_rgba(&pixmap), [255, 0, 0, 255, 0, 0, 255, 128]);
+    }
+
+    #[test]
+    fn reads_outside_the_canvas_as_transparent() {
+        let pixmap = pixmap_from_straight_rgba(1, 1, &[9, 9, 9, 255]).unwrap();
+        let data = read_rect(&pixmap, -1, 0, 2, 1).unwrap();
+        assert_eq!(data.data, [0, 0, 0, 0, 9, 9, 9, 255]);
+    }
+
+    #[test]
+    fn quarter_turn_copies_pixels_exactly() {
+        let mut src = Pixmap::new(3, 2).expect("pixmap");
+        for (i, p) in src.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            *p = [i as u8 * 10, 0, 0, 255];
+        }
+        let out = transform_bilinear(&src, 2, 3, [0.0, 1.0, -1.0, 0.0, 3.0, 0.0]).expect("out");
+        let reds: Vec<u8> = out.data().as_chunks::<4>().0.iter().map(|p| p[0]).collect();
+        assert_eq!(reds, [20, 50, 10, 40, 0, 30]);
+    }
 }
