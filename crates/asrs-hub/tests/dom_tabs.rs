@@ -2020,7 +2020,7 @@ impl Runner {
                     .selected_renderer_as::<Recorder>(TabType::Field2d)?
                     .and_then(|r| r.inner.downcast_mut::<Field2dRenderer>())
                 {
-                    r.set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN));
+                    r.set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN))?;
                 }
             }
             "set-fullscreen"
