@@ -1,10 +1,11 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
+  "backend": "blink",
   "inputs": [
     "../logs/tabs.json"
   ],
   "fixture": {
+    "geometry": "real",
     "seed": 6,
     "ignoreMain": [
       "save-state",
@@ -2730,7 +2731,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 500,
-            "clientY": 400
+            "clientY": 438
           }
         }
       },

@@ -85,6 +85,22 @@ impl Default for CanvasText {
 
 impl Global for CanvasText {}
 
+/// Runs `f` with the app's canvas glyph backend, for painters whose upstream code measures text
+/// while building its display list; `None` where the platform has no backend. The backend is
+/// lent out for the call, so `f` may use `cx` but not rasterize through it.
+pub fn with_text_backend<R>(
+    cx: &mut App,
+    f: impl FnOnce(Option<&mut dyn TextBackend>, &mut App) -> R,
+) -> R {
+    let mut backend = cx.default_global::<CanvasText>().backend.take();
+    let result = match backend.as_deref_mut() {
+        Some(b) => f(Some(b), cx),
+        None => f(None, cx),
+    };
+    cx.default_global::<CanvasText>().backend = backend;
+    result
+}
+
 /// The pixmap a display list draws through the app's canvas text stack, or `None` for a canvas
 /// Chromium would leave blank (an invalid size or a failed allocation). `state` is what the
 /// canvas's earlier frames left and receives what this one leaves.
