@@ -500,7 +500,11 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     .detach();
     cx.on_app_quit(|cx| {
         if let Some(main) = cx.try_global::<MainProcess>() {
-            lifecycle::quit_cleanup(&RealFs, &main.state.paths.akit_path_output());
+            lifecycle::quit_cleanup(
+                &RealFs,
+                &main.state.paths.akit_path_output(),
+                main.state.akit_path_written.as_deref(),
+            );
         }
         async {}
     })

@@ -260,9 +260,18 @@ pub fn take_akit_input(fs: &dyn Fs, akit_path_input: &str) -> Option<String> {
     )
 }
 
-/// `app.on("quit")`: the log path handed to AdvantageKit is withdrawn.
-pub fn quit_cleanup(fs: &dyn Fs, akit_path_output: &str) {
-    fs.remove(akit_path_output);
+/// `app.on("quit")`: the log path handed to AdvantageKit is withdrawn. The official app writes
+/// the same temp file, so it is removed only while it still holds the path this process wrote.
+pub fn quit_cleanup(fs: &dyn Fs, akit_path_output: &str, written: Option<&str>) {
+    let Some(written) = written else {
+        return;
+    };
+    if fs
+        .read(akit_path_output)
+        .is_ok_and(|bytes| bytes == written.as_bytes())
+    {
+        fs.remove(akit_path_output);
+    }
 }
 
 /// What main keeps in files: the `StateTracker` made at module load, the assets `whenReady`
@@ -271,6 +280,8 @@ pub struct MainState {
     pub paths: AppPaths,
     pub tracker: StateTracker,
     pub assets: AssetService,
+    /// The log path this process last wrote to `akit-log-path.txt`.
+    pub akit_path_written: Option<String>,
 }
 
 impl MainState {
@@ -291,6 +302,7 @@ impl MainState {
             paths,
             tracker,
             assets,
+            akit_path_written: None,
         };
         Ok((main, prefs))
     }
@@ -430,8 +442,12 @@ mod tests {
         fs.put("/t/in", b"x");
         clear_akit_input(&fs, "/t/in");
         assert!(!fs.exists("/t/in"));
-        fs.put("/t/out", b"x");
-        quit_cleanup(&fs, "/t/out");
+        fs.put("/t/out", b"/logs/a.wpilog");
+        quit_cleanup(&fs, "/t/out", None);
+        assert!(fs.exists("/t/out"));
+        quit_cleanup(&fs, "/t/out", Some("/logs/b.wpilog"));
+        assert!(fs.exists("/t/out"));
+        quit_cleanup(&fs, "/t/out", Some("/logs/a.wpilog"));
         assert!(!fs.exists("/t/out"));
     }
 }
