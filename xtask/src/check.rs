@@ -34,6 +34,16 @@ pub fn run() -> Result {
     ])?;
     cargo(&["test", "--workspace", "--locked"])?;
     cargo(&["test", "-p", "asrs-ui", "--locked", "--features", "parity"])?;
+    cargo(&[
+        "test",
+        "-p",
+        "asrs-app",
+        "--locked",
+        "--features",
+        "parity",
+        "--test",
+        "parity_scenario",
+    ])?;
     eprintln!("check passed");
     Ok(())
 }
