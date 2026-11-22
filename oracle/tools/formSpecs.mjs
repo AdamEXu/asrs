@@ -127,6 +127,48 @@ const rangeProbes = [
       ["setAttribute", "value", "abc"]
     ],
     read: RANGE_READ
+  },
+  {
+    markup: '<input type="range" min="-1e21" max="1e21" step="0.001">',
+    ops: [
+      ["set", "value", "123456789012345678901234567890"],
+      ["set", "value", "0.1234567890123456789"],
+      ["set", "value", "-7.0005"],
+      ["set", "value", "1e20"],
+      ["set", "min", "0.1"],
+      ["set", "value", "12345678901234.56789"],
+      ["setAttribute", "step", "0.3"],
+      ["set", "value", "-5"],
+      ["set", "value", "1e21"],
+      ["set", "max", "1"],
+      ["setAttribute", "step", "1e-9"],
+      ["set", "value", "0.3333333333333333333"],
+      ["set", "min", "1e-7"],
+      ["set", "value", "0.0000012345678901234567"],
+      ["set", "min", "-1.7976931348623157e308"],
+      ["set", "max", "1.7976931348623157e308"],
+      ["setAttribute", "step", "1e300"],
+      ["set", "value", "abc"],
+      ["set", "value", "1.7976931348623159e308"],
+      ["setAttribute", "step", "any"],
+      ["set", "value", "1e308"],
+      ["set", "value", "-0.000001"]
+    ],
+    read: RANGE_READ
+  },
+  {
+    markup: '<input type="range" min="-10.25" max="3" step="0.7">',
+    ops: [
+      ["set", "value", "-10.6"],
+      ["set", "value", "2.9"],
+      ["set", "value", "-0"],
+      ["setAttribute", "step", "3e-1"],
+      ["set", "value", "-3.15"],
+      ["set", "min", "9.999999999999999999999"],
+      ["set", "min", "-1E2"],
+      ["set", "value", "-99.95"]
+    ],
+    read: RANGE_READ
   }
 ];
 
