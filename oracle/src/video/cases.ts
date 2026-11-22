@@ -405,6 +405,22 @@ export function flowCases(samples: Sample[]): Case[] {
   bad("frame-zero-completed", 45, [["stderr", "Duration: 00:00:04.00\nVideo: h264, 640x360, 30 fps,\n"], ["stderr", "frame= fps=0\r"], ["stderr", "frame=0x10 fps=1\r"]]);
   bad("dimension-leading-zero", 46, [["stderr", "Duration: 00:00:04.00\nVideo: h264, 0640x0360, 30 fps,\n"], ["stderr", "frame=  30 fps=30\r"]]);
   bad("data-after-close-code-1", 47, [["stderr", "garbage\n"]], 1);
+  const frames = (n: number[]) => n.map((f) => ["stderr", `frame=${String(f).padStart(5)} fps=40 q=2.0 size=N/A\r`] as ["stderr", string]);
+  bad("two-streams-one-chunk", 48, [
+    [
+      "stderr",
+      "  Duration: 00:01:00.00, start: 0.000000\n  Duration: 00:00:30.00, start: 0.000000\n  Stream #0:0: Video: h264, yuv420p, 3840x2160, 30 fps, 30 tbr\n  Stream #0:1: Video: mjpeg, yuvj420p, 1920x1080, 25 fps, 25 tbn\n"
+    ],
+    ...frames([100, 250])
+  ]);
+  bad("fps-at-chunk-start", 49, [["stderr", " fps, 640x360, x\n"], ["stderr", "Duration: 00:00:10.00\n"], ...frames([50])]);
+  bad("fps-near-start", 59, [["stderr", "5 fps, 640x360,\nDuration: 00:00:10.00\n"], ...frames([50, 75])]);
+  bad("fps-dims-separate-chunks", 58, [
+    ["stderr", "  Duration: 00:00:20.00, start: 0\n"],
+    ["stderr", "  Stream #0:0: Video: h264, 1280x720, 24 fps, 24 tbr\n"],
+    ["stderr", "Output #0: Stream #0:0: Video: mjpeg, 1920x1080, q=2-31, 48 fps, 48 tbn\n"],
+    ...frames([120, 480])
+  ]);
 
   // Timer search through scripted timer text.
   const timerCase = (name: string, seed: number, fps: string, frames: number[], text: (frame: number) => string, platform: Platform = "darwin") =>
