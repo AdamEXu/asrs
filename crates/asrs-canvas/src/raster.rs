@@ -1672,7 +1672,12 @@ impl<'a> Raster<'a> {
             [ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f],
         );
         let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
+        let mut color_glyphs = Vec::new();
         for Placed { x: ix, y: iy, mask } in glyphs {
+            if mask.color {
+                color_glyphs.push((ix, iy, mask));
+                continue;
+            }
             for row in 0..mask.height as i32 {
                 let start = (row * mask.width as i32) as usize;
                 let coverage: Vec<u8> = mask.data[start..start + mask.width as usize]
@@ -1683,6 +1688,30 @@ impl<'a> Raster<'a> {
             }
         }
         self.paint_spans(&spans, &source);
+        let paint_alpha = match &fill {
+            Fill::Color(color) => color.a * self.state.alpha as f32,
+            _ => self.state.alpha as f32,
+        };
+        let a8 = (paint_alpha * 255.0 + 0.5) as u8;
+        for (ix, iy, mask) in color_glyphs {
+            self.blit_color_glyph(ix + mask.left, iy + mask.top, &mask, a8);
+        }
+    }
+
+    /// An ARGB glyph image drawn as Skia draws colour glyphs: its own pixels, scaled by the
+    /// paint's alpha, source-over.
+    fn blit_color_glyph(&mut self, left: i32, top: i32, mask: &crate::text::Mask, alpha: u8) {
+        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
+        let row = vec![alpha; mask.width as usize];
+        for y in 0..mask.height as i32 {
+            spans.anti_h(left, top + y, &row);
+        }
+        let w = mask.width as usize;
+        scan::blit_spans(&mut self.pixmap, &spans, Blend::SourceOver, |x, y| {
+            let i = ((y as i32 - top) as usize * w + (x as i32 - left) as usize) * 4;
+            let p = &mask.data[i..i + 4];
+            [p[0], p[1], p[2], p[3]]
+        });
     }
 
     fn draw_image(&mut self, id: &str, args: &[f64]) {

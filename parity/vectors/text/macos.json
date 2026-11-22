@@ -4,8 +4,8 @@
   "platform": "darwin",
   "arch": "arm64",
   "osRelease": "27.3.0",
-  "generator": "aff568587c9c1192",
+  "generator": "cb8334f034390e1b",
   "file": "boxes-macos.jsonl.zst",
-  "cases": 194,
-  "content": "46fecaa831b9d627"
+  "cases": 338,
+  "content": "1a5492544f053fed"
 }

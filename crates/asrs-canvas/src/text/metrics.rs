@@ -217,7 +217,7 @@ impl FixedAdvance {
 }
 
 impl TextBackend for FixedAdvance {
-    fn shape(&mut self, font: &FontSpec, text: &str) -> Shaped {
+    fn shape(&mut self, font: &FontSpec, text: &str, _zoom: f32) -> Shaped {
         let mut glyphs = Vec::new();
         let mut x = 0.0f32;
         for (i, unit) in text.encode_utf16().enumerate() {

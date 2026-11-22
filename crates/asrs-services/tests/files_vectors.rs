@@ -15,7 +15,6 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{NamedZone, SetClock};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_model::json_file;
-use asrs_model::preferences::Preferences;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
@@ -25,6 +24,7 @@ use asrs_services::constants;
 use asrs_services::ds_layout;
 use asrs_services::fs::{Failure, Fs, MemFs};
 use asrs_services::layout;
+use asrs_services::lifecycle::{self, HubRestore, StartupWindow};
 use asrs_services::path::PathStyle;
 use asrs_services::recent_units;
 use asrs_services::state_tracker::{self, StateTracker};
@@ -273,40 +273,36 @@ impl Env {
 
     /// `app.whenReady`: prefs startup write, state load, window creation.
     fn ready(&mut self) -> Result<(), JsError> {
-        let prefs = if !self.fs.exists(&self.prefs_file) {
-            Preferences::default()
-        } else {
-            let file = json_file::parse(&self.fs.read(&self.prefs_file)?)?;
-            Preferences::startup("darwin", Some(&file), |folder| {
-                self.fs.exists(&folder.to_string_lossy())
-            })?
-        };
-        self.fs
-            .write(&self.prefs_file, &json_file::stringify(&prefs.to_js())?)?;
+        lifecycle::startup_preferences(&self.fs, &self.prefs_file, "darwin")?;
         let application_state =
             state_tracker::saved_application_state(&self.fs, &self.ws, &self.state_file, true)?;
-        if application_state.is_null() || array_len(&application_state, "hubs")? == 0 {
-            self.create_window(
-                WindowKind::Hub,
-                Rect {
-                    x: 0.0,
-                    y: 0.0,
-                    width: constants::HUB_DEFAULT_WIDTH,
-                    height: constants::HUB_DEFAULT_HEIGHT,
-                },
-                None,
-            );
-        } else {
-            for hub in array_items(&application_state, "hubs")? {
-                let rect = self.rect_from(&hub);
-                self.create_window(WindowKind::Hub, rect, Some(hub));
-            }
-            for satellite in array_items(&application_state, "satellites")? {
-                let rect = self.rect_from(&satellite);
-                self.create_window(WindowKind::Satellite, rect, Some(satellite));
+        let mut windows = Vec::new();
+        let result = lifecycle::startup_windows(&application_state, |w| windows.push(w));
+        for window in windows {
+            match window {
+                StartupWindow::DefaultHub => {
+                    self.create_window(
+                        WindowKind::Hub,
+                        Rect {
+                            x: 0.0,
+                            y: 0.0,
+                            width: constants::HUB_DEFAULT_WIDTH,
+                            height: constants::HUB_DEFAULT_HEIGHT,
+                        },
+                        None,
+                    );
+                }
+                StartupWindow::Hub(hub) => {
+                    let rect = self.rect_from(&hub);
+                    self.create_window(WindowKind::Hub, rect, Some(hub));
+                }
+                StartupWindow::Satellite(satellite) => {
+                    let rect = self.rect_from(&satellite);
+                    self.create_window(WindowKind::Satellite, rect, Some(satellite));
+                }
             }
         }
-        Ok(())
+        result
     }
 
     /// `webContents.emit("dom-ready")`: hubs get the restore sends plus the beta block; a
@@ -320,23 +316,17 @@ impl Env {
         if !self.hubs.contains(&id) {
             return Ok(());
         }
-        if self.fs.exists(&self.tm_file) {
-            let memory = json_file::parse(&self.fs.read(&self.tm_file)?)?;
-            self.sent
-                .push((JsString::from("restore-type-memory"), memory));
-        }
-        let first = self.first_load.contains(&id);
         let created_state = self.window_states.get(&window_key(id)).cloned();
-        let restore = match (first, &created_state) {
-            (true, Some(state)) => Some(ops::get(state, "state")?),
-            _ => match self.trackers[0].get_renderer_state(id) {
-                JsValue::Undefined => None,
-                cached => Some(cached),
-            },
+        let restore = HubRestore {
+            first_load: self.first_load.contains(&id),
+            layout_override: None,
+            saved: created_state.as_ref(),
+            cached: self.trackers[0].get_renderer_state(id),
         };
-        if let Some(state) = restore {
-            self.sent.push((JsString::from("restore-state"), state));
-        }
+        let sent = &mut self.sent;
+        lifecycle::dom_ready_restores(&self.fs, &self.tm_file, &restore, |name, data| {
+            sent.push((JsString::from(name.name()), data))
+        })?;
         self.first_load.retain(|w| *w != id);
         if self.beta.is_some() {
             if beta::is_beta_expired(self.beta.as_ref(), &self.clock) {
@@ -492,17 +482,6 @@ impl Env {
             ds_layout::default_ds_layout(true).to_js(),
         ));
         Ok(())
-    }
-}
-
-fn array_len(value: &JsValue, key: &str) -> Result<usize, JsError> {
-    let v = ops::get(value, key)?;
-    match v.as_array() {
-        Some(items) => Ok(items.len()),
-        None => Err(JsError::type_error(format!(
-            "Cannot read properties of {} (reading 'length')",
-            if v.is_null() { "null" } else { "undefined" }
-        ))),
     }
 }
 

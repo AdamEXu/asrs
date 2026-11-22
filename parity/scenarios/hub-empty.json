@@ -1,5 +1,5 @@
 {
-  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph. Masked on both sides: .tab-bar, whose emoji titles the port measures and draws unlike Blink (#214: advance does not scale with DPR, drawn monochrome); the mask is deleted when that gap closes",
+  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph, compared unmasked",
   "actions": [
     {
       "capture": "launch",
@@ -10,9 +10,6 @@
         ".renderer-content",
         ".controls-content",
         ".timeline"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     }
   ]

@@ -13,12 +13,12 @@ mod js_json;
 
 use std::collections::BTreeMap;
 
-use asrs_app::menus::bridge::APP_NAME;
 use asrs_app::menus::context::{self, ContextMenu, Effect, MenuEnv, Prompt};
 use asrs_app::menus::model::{ItemType, MenuItem};
 use asrs_app::menus::roles::build_appended;
 use asrs_js::json;
 use asrs_js::value::JsValue;
+use asrs_model::app_identity::AppIdentity;
 use asrs_model::messages::{HubToMain, NamedMessage, SatelliteToMain};
 use asrs_parity::cve1::Value;
 use asrs_parity::utf16::Utf16String;
@@ -344,7 +344,7 @@ fn replay(id: &str, expect_clicks: bool) -> Tally {
                 let built = built
                     .unwrap_or_else(|e| panic!("{at}: {e:?}"))
                     .unwrap_or_else(|| panic!("{at}: the port pops up no menu for {name}"));
-                build_appended(&built.items, Platform::Mac, APP_NAME);
+                build_appended(&built.items, Platform::Mac, AppIdentity::UPSTREAM.name);
                 pending.clear();
                 click_paths(&built.items, &mut Vec::new(), &mut pending);
                 pending.reverse();

@@ -519,24 +519,8 @@ fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
         .collect())
 }
 
-/// The userData files upstream's main process writes itself (`ElectronConstants.ts`,
-/// `betaUtil.ts`). Until the port has a main process (#207), these are the only files upstream
-/// may write without the port writing them too.
-fn written_by_main(file: &str) -> bool {
-    let versioned = |prefix: &str| {
-        file.strip_prefix(prefix)
-            .and_then(|rest| rest.strip_suffix(".json"))
-            .is_some_and(|version| !version.contains('/'))
-    };
-    matches!(
-        file,
-        "prefs.json" | "type-memory.json" | "recent-units.json"
-    ) || versioned("state-")
-        || versioned("beta-")
-}
-
 /// Every file the port wrote equals the file upstream wrote at the same path, and every file
-/// upstream wrote the port wrote too, except main's own files, which are listed without failing.
+/// upstream wrote the port wrote too.
 fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureResult> {
     let ours = written_files(port)?;
     let theirs = written_files(reference)?;
@@ -561,28 +545,16 @@ fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureRe
         };
         outcome.push("files", file, pass, detail);
     }
-    let (missing, unwritten): (Vec<&str>, Vec<&str>) = theirs
+    let unwritten = theirs
         .iter()
         .filter(|(f, changed)| *changed && !ours.iter().any(|(o, c)| o == f && *c))
-        .map(|(f, _)| f.as_str())
-        .partition(|f| written_by_main(f));
+        .map(|(f, _)| f.as_str());
     for file in unwritten {
         outcome.push(
             "files",
             file,
             false,
             "written by upstream, not by the port".into(),
-        );
-    }
-    if !missing.is_empty() {
-        outcome.push(
-            "files",
-            "upstream only",
-            true,
-            format!(
-                "not written by the port, which has no main process yet: {}",
-                missing.join(", ")
-            ),
         );
     }
     if outcome.checks.is_empty() {
@@ -767,6 +739,18 @@ fn port_binary() -> Result<PathBuf> {
         .join(format!("asrs{}", std::env::consts::EXE_SUFFIX)))
 }
 
+/// The work-area origin of the display at the global origin (Electron's primary) in an upstream
+/// run, where the driver placed its window.
+fn primary_work_area(run_json: &Path) -> Option<(f64, f64)> {
+    let run = read_json(run_json).ok()?;
+    list(&run, "displays").iter().find_map(|display| {
+        let bounds = display.get("bounds")?;
+        let origin = (bounds.get("x")?.as_f64()?, bounds.get("y")?.as_f64()?);
+        let area = display.get("workArea")?;
+        (origin == (0.0, 0.0)).then_some((area.get("x")?.as_f64()?, area.get("y")?.as_f64()?))
+    })
+}
+
 fn run_port(options: &PortOptions) -> Result<PathBuf> {
     let exe = port_binary()?;
     let scenarios = workspace_root().join("parity/scenarios");
@@ -796,13 +780,17 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             .join("app")
             .join(options.upstream.as_ref().unwrap_or(&options.label))
             .join(&name);
-        let inputs = match upstream.is_dir() {
-            true => variant_dirs(&upstream)?
-                .into_iter()
-                .map(|v| v.join("inputs"))
-                .find(|i| i.is_dir()),
-            false => None,
+        let variants = match upstream.is_dir() {
+            true => variant_dirs(&upstream)?,
+            false => Vec::new(),
         };
+        let inputs = variants
+            .iter()
+            .map(|v| v.join("inputs"))
+            .find(|i| i.is_dir());
+        let work_area = variants
+            .iter()
+            .find_map(|v| primary_work_area(&v.join("run.json")));
         let status = Command::new(&exe)
             .arg("--parity-scenario")
             .arg(scenarios.join(format!("{name}.json")))
@@ -815,6 +803,11 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             )
             .arg("--bundled-assets")
             .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
+            .args(
+                work_area
+                    .iter()
+                    .flat_map(|(x, y)| ["--work-area".to_owned(), format!("{x},{y}")]),
+            )
             .args(&options.flags)
             .current_dir(workspace_root())
             .status()
@@ -921,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    fn upstream_only_files_fail_unless_main_writes_them() {
+    fn every_upstream_file_must_be_written_and_equal() {
         let root = std::env::temp_dir().join(format!("asrs-compare-files-{}", std::process::id()));
         let readme = ("userAssets/README.txt", "readme");
         let upstream = variant(
@@ -929,33 +922,18 @@ mod tests {
             "upstream",
             &[readme, ("prefs.json", "{}"), ("state-dev.json", "{}")],
         );
-        let port = variant(&root, "port", &[readme]);
+        let port = variant(
+            &root,
+            "port",
+            &[readme, ("prefs.json", "{}"), ("state-dev.json", "{}")],
+        );
         let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
         assert!(outcome.pass(), "{:?}", outcome.checks);
 
-        let port = variant(&root, "bare", &[]);
+        let port = variant(&root, "partial", &[readme, ("prefs.json", "{ }")]);
         let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
         let failed: Vec<&str> = outcome.failures().map(|c| c.what.as_str()).collect();
-        assert_eq!(failed, ["userAssets/README.txt"]);
+        assert_eq!(failed, ["prefs.json", "state-dev.json"]);
         let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn main_writes_only_its_own_top_level_files() {
-        for file in [
-            "prefs.json",
-            "state-dev.json",
-            "state-4_1_0.json",
-            "beta-2027.json",
-        ] {
-            assert!(written_by_main(file), "{file}");
-        }
-        for file in [
-            "userAssets/README.txt",
-            "userAssets/state-x.json",
-            "layout.json",
-        ] {
-            assert!(!written_by_main(file), "{file}");
-        }
     }
 }
