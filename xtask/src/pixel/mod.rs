@@ -519,9 +519,24 @@ fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
         .collect())
 }
 
-/// Every file the port wrote equals the file upstream wrote at the same path. Files upstream
-/// wrote and the port did not are listed without failing: the port has no main process yet to
-/// write them (state, rewritten preferences, type memory).
+/// The userData files upstream's main process writes itself (`ElectronConstants.ts`,
+/// `betaUtil.ts`). Until the port has a main process (#207), these are the only files upstream
+/// may write without the port writing them too.
+fn written_by_main(file: &str) -> bool {
+    let versioned = |prefix: &str| {
+        file.strip_prefix(prefix)
+            .and_then(|rest| rest.strip_suffix(".json"))
+            .is_some_and(|version| !version.contains('/'))
+    };
+    matches!(
+        file,
+        "prefs.json" | "type-memory.json" | "recent-units.json"
+    ) || versioned("state-")
+        || versioned("beta-")
+}
+
+/// Every file the port wrote equals the file upstream wrote at the same path, and every file
+/// upstream wrote the port wrote too, except main's own files, which are listed without failing.
 fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureResult> {
     let ours = written_files(port)?;
     let theirs = written_files(reference)?;
@@ -546,11 +561,19 @@ fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureRe
         };
         outcome.push("files", file, pass, detail);
     }
-    let missing: Vec<&str> = theirs
+    let (missing, unwritten): (Vec<&str>, Vec<&str>) = theirs
         .iter()
         .filter(|(f, changed)| *changed && !ours.iter().any(|(o, c)| o == f && *c))
         .map(|(f, _)| f.as_str())
-        .collect();
+        .partition(|f| written_by_main(f));
+    for file in unwritten {
+        outcome.push(
+            "files",
+            file,
+            false,
+            "written by upstream, not by the port".into(),
+        );
+    }
     if !missing.is_empty() {
         outcome.push(
             "files",
@@ -867,5 +890,72 @@ fn check() -> Result {
         Ok(())
     } else {
         Err(failures.join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn variant(root: &Path, side: &str, files: &[(&str, &str)]) -> PathBuf {
+        let dir = root.join(side);
+        let listed: Vec<String> = files
+            .iter()
+            .map(|(file, bytes)| {
+                let path = dir.join("files").join(file);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, bytes).unwrap();
+                format!(
+                    r#"{{"file":"{file}","bytes":{},"changed":true}}"#,
+                    bytes.len()
+                )
+            })
+            .collect();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("run.json"),
+            format!(r#"{{"files":[{}]}}"#, listed.join(",")),
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn upstream_only_files_fail_unless_main_writes_them() {
+        let root = std::env::temp_dir().join(format!("asrs-compare-files-{}", std::process::id()));
+        let readme = ("userAssets/README.txt", "readme");
+        let upstream = variant(
+            &root,
+            "upstream",
+            &[readme, ("prefs.json", "{}"), ("state-dev.json", "{}")],
+        );
+        let port = variant(&root, "port", &[readme]);
+        let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
+        assert!(outcome.pass(), "{:?}", outcome.checks);
+
+        let port = variant(&root, "bare", &[]);
+        let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
+        let failed: Vec<&str> = outcome.failures().map(|c| c.what.as_str()).collect();
+        assert_eq!(failed, ["userAssets/README.txt"]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn main_writes_only_its_own_top_level_files() {
+        for file in [
+            "prefs.json",
+            "state-dev.json",
+            "state-4_1_0.json",
+            "beta-2027.json",
+        ] {
+            assert!(written_by_main(file), "{file}");
+        }
+        for file in [
+            "userAssets/README.txt",
+            "userAssets/state-x.json",
+            "layout.json",
+        ] {
+            assert!(!written_by_main(file), "{file}");
+        }
     }
 }

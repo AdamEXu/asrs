@@ -1132,8 +1132,9 @@ yet. Before the window opens it does what main does with the variant's own `user
 `prefs.json` as the driver does, then `createAssetFolders()` and `loadAssets()` over upstream's
 `bundledAssets` (`--bundled-assets`), and boots the hub with those assets. What lands in
 `userData/` is copied to `files/` and listed in `run.json` with the driver's filter, and `xtask
-pixel compare` requires every file the port wrote to equal upstream's; files only upstream wrote
-(the state file, the rewritten preferences) are listed until the port has a main process. Its
+pixel compare` requires every file the port wrote to equal upstream's and every file upstream
+wrote to be written by the port, except the files main itself writes (the state file, the
+rewritten preferences), which are listed until the port has a main process (#207). Its
 page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle
 makes while its imports evaluate, so restored and default controller UUIDs match. Idle means the
 same busy reasons, read from the model. Probes and mask selectors resolve through
