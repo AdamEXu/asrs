@@ -206,8 +206,8 @@ impl PointsRenderer {
 
         let [width, height] = layout.background_size();
         let background = &mut self.background;
-        background.set_style("width", &format!("{}px", number::to_string(width)));
-        background.set_style("height", &format!("{}px", number::to_string(height)));
+        background.set_style("width", &format!("{}px", number::to_string(width)))?;
+        background.set_style("height", &format!("{}px", number::to_string(height)))?;
 
         background.clear_children();
 
@@ -232,16 +232,16 @@ impl PointsRenderer {
                 if let Some(transform) =
                     string_member(set, "size")?.and_then(|s| size_transform(&s))
                 {
-                    point.set_style("transform", transform);
+                    point.set_style("transform", transform)?;
                 }
 
                 let group_size = ops::value_to_number(&ops::get(set, "groupSize")?)?;
                 let color = point_color(index, group_size, dark)?;
-                point.set_style("fill", color);
-                point.set_style("stroke", color);
+                point.set_style("fill", color)?;
+                point.set_style("stroke", color)?;
 
-                point.set_style("left", &format!("{}px", number::to_string(position[0])));
-                point.set_style("top", &format!("{}px", number::to_string(position[1])));
+                point.set_style("left", &format!("{}px", number::to_string(position[0])))?;
+                point.set_style("top", &format!("{}px", number::to_string(position[1])))?;
                 background.append_child(point);
             }
         }

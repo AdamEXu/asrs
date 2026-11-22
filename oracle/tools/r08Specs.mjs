@@ -654,6 +654,67 @@ const group = (ns, tag, property, values) =>
 const COLOR_VALUES = `[...${JSON.stringify([...COLORS, "white", "black", "#e5b31b", "#af2437", "#80588e", "#e48b32", "#c0b487", "#858584", "#3b875a", "#d993aa", "#5f4528", "#203040", "#101010", "not a color", "rgb(10, 200, 30)", "#00ffcc", "#204060", "blue", "Blue", "#FFFFFF"])}, 0, null]`;
 const LENGTH_VALUES = JSON.stringify(numberStrings.map((s) => s + "px"));
 
+// Colour strings a Mechanism log can carry, by syntax. Every keyword of Chromium m142's
+// css_value_keywords.json5 (r08ColorKeywords.json), the rgb()/hsl() forms Blink's fast path and
+// full parser take, hex, and an "open" set the port may report as unmodeled.
+const colorSyntaxRows = (() => {
+  const rand = mulberry32(4242);
+  const pick = (xs) => xs[Math.floor(rand() * xs.length)];
+  const rows = [];
+  const keywords = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "r08ColorKeywords.json"), "utf8"));
+  for (const k of keywords) rows.push(["keyword", k], ["keyword", k.toUpperCase()]);
+  const pcts = [];
+  for (let i = -20; i <= 1020; i += 3) pcts.push(String(i / 10));
+  for (let i = 0; i <= 255; i++) pcts.push(String(i / 2.55), String((i + 0.5) * 100 / 255), ((i + 0.5) * 100 / 255).toFixed(4));
+  for (const p of pcts) rows.push(["rgb", `rgb(${p}%, 0%, 0%)`], ["rgb", `rgb(0% ${p}% 0%)`]);
+  for (let i = 0; i <= 2560; i += 5) rows.push(["rgb", `rgb(${i / 10}, 0, 0)`]);
+  const num = () => { const r = rand(); if (r < 0.3) return String(Math.floor(rand() * 400) - 20); if (r < 0.6) return String(Math.round(rand() * 1e4) / 100); return String(rand() * 400 - 20); };
+  const pct = () => { const r = rand(); if (r < 0.3) return String(Math.floor(rand() * 120) - 5) + "%"; if (r < 0.6) return String(Math.round(rand() * 1e4) / 100) + "%"; return String(rand() * 110 - 2) + "%"; };
+  const alpha = () => { const r = rand(); if (r < 0.15) return pick(["0", "1", ".5", "0.5", "1.0", "0.0", "-0.5", "1.5", "2", "-1", "0.1", "0.9", ".3", "0.05", "0.95", "00.5", "1.00001"]); if (r < 0.45) return String(Math.round(rand() * 1000) / 1000); if (r < 0.7) return String(rand()); if (r < 0.85) return String(Math.round(rand() * 1000) / 10) + "%"; return String(rand() * 1.2 - 0.1); };
+  const numberAlpha = () => { let a; do a = alpha(); while (a.endsWith("%")); return a; };
+  for (let i = 0; i < 2500; i++) {
+    const comma = rand() < 0.6, withAlpha = rand() < 0.5, p = rand() < 0.5;
+    const ch = [0, 1, 2].map(() => (p ? pct() : num()));
+    const fn = pick(["rgb", "rgba"]);
+    rows.push(["rgb", comma ? `${fn}(${ch.join(", ")}${withAlpha ? ", " + alpha() : ""})` : `${fn}(${ch.join(" ")}${withAlpha ? " / " + alpha() : ""})`]);
+  }
+  const hue = (units) => { const r = rand(); const n = r < 0.4 ? String(Math.floor(rand() * 800) - 200) : r < 0.7 ? String(Math.round(rand() * 36000) / 100) : String(rand() * 720 - 180); return n + (units ? pick(["", "deg", "rad", "grad", "turn", "DEG", "Turn"]) : ""); };
+  for (let i = 0; i < 1500; i++) {
+    const comma = rand() < 0.6, withAlpha = rand() < 0.5;
+    const ch = [hue(true), pct(), pct()];
+    const fn = pick(["hsl", "hsla"]);
+    rows.push(["hsl", comma ? `${fn}(${ch.join(", ")}${withAlpha ? ", " + numberAlpha() : ""})` : `${fn}(${ch.join(" ")}${withAlpha ? " / " + numberAlpha() : ""})`]);
+  }
+  for (let i = 0; i < 300; i++) {
+    const ch = [hue(false), pct(), pct()];
+    rows.push(["open", `hsla(${ch.join(", ")}, ${Math.round(rand() * 1000) / 10}%)`]);
+  }
+  const hexDigits = (n) => Array.from({ length: n }, () => pick([..."0123456789abcdefABCDEF"])).join("");
+  for (let i = 0; i < 400; i++) {
+    const n = pick([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    rows.push(["hex", (rand() < 0.8 ? "#" : "") + hexDigits(n)]);
+  }
+  for (const c of [
+    "rgb(1, 2, 3, 4, 5)", "rgb(1)", "rgb()", "rgb(1, 2, 3", "rgb(1 2 3 4)", "rgb(1,2 3)", "rgb(1 2, 3)", "rgba(1,2,3,)",
+    "rgb(1,,2,3)", "rgb(1%,2,3)", "rgb(1,2%,3)", "rgb(1e2%, 0%, 0%)", "rgb(-0, -0.5, 0.49999999)", "rgb(255.4999999, 0.5000000, 254.50000001)",
+    "rgb(00000000000000000001, 0, 0)", "rgb(1.12345678901234567890, 0, 0)", "rgb(99999999999999999999, 0, 0)", "rgb(0.0000000001%, 0%, 0%)",
+    "rgb(1,2,3);", "rgb(1,2,3) ", " rgb(1,2,3)", "rgb(1,2,3)red", "RGB(1.5, 2.5, 3.5)", "rgb(1e400, 0, 0)", "rgb(-1e400, 0, 0)",
+    "rgb(5., 0, 0)", "rgb(.5, 0, 0)", "rgb(+5, 0, 0)", "rgb(1e1, 0, 0)", "rgb(1E1, 0, 0)", "rgb(10,0,0,)", "rgb(10 , 0 , 0)", "rgb(10,0,0) x",
+    "rgba(10,0,0)", "rgb(10,0,0,0.5)", "rgb(10 0 0 / 0.5)", "rgba(10 0 0 / 50%)", "rgb(255 50% 0)", "rgb(255, 50%, 0)", "rgb(10 0 0",
+    "rgb(1px, 2, 3)", "rgb(1-2 3)", "rgb(1 2 3 / 1e-1)", "rgb(0 0 0 / -50%)", "rgb(0, 0, 0, 150%)", "#ff000080", "red !important",
+    "red;", "#fff !important", "red red", "1px red", "#fff;", "#ffff", "#ffffff0", "#ff ff ff", "# fff", "#-ff", "#_ff", "inherit red",
+    "none red", "rgb (1,2,3)", "rgb(\n1,2,3)", "", " ", "garbage", "not a color", "12px", "1e3", "-1", "+5", "1.5", "1ab", "0001ff", "-abc", "--abc", "_abc"
+  ]) rows.push(["rgb", c]);
+  for (const c of [
+    "hsl(120deg, 50%, 50%)", "hsl(0.5turn 50% 50%)", "hsl(1rad, 50%, 50%)", "hsl(100grad 50% 50%)", "hsl(120 50 50)", "hwb(120 10% 10%)",
+    "lab(50% 40 59)", "lch(50% 40 59)", "oklab(0.5 0.1 0.1)", "oklch(0.5 0.1 120)", "color(srgb 1 0 0)", "color-mix(in srgb, red, blue)",
+    "light-dark(red, blue)", "rgb(none 0 0)", "rgb(calc(10), 0, 0)", "rgb(/**/10,0,0)", "rgb(infinity, 0, 0)", "rgb(calc(infinity), 0, 0)",
+    "hsl(120 50% 50% / 50%)", "hsl(120, 150%, 50%)", "hsl(1e2, 50%, 50%)", "red /**/", "/**/red", "r\\65 d", "'red'", "url(#a)", "url(#a) red",
+    "rgb(from red r g b)", "var(--x)", "rgb(var(--x), 0, 0)", " #ff0000", "réd", "context-fill red"
+  ]) rows.push(["open", c]);
+  return rows;
+})();
+
 // Each group is [property, namespace, tag, rows] on the element type the renderers assign it
 // to: Blink parses inline style on SVG elements with quirks behaviour.
 const cssSpecs = [
@@ -668,6 +729,18 @@ const cssSpecs = [
   {
     id: "colors",
     expr: CSS_PROBE(`return [${group("svg", "line", "stroke", COLOR_VALUES)}, ${group("svg", "circle", "fill", COLOR_VALUES)}, ${group("svg", "svg", "fill", COLOR_VALUES)}, ${group("svg", "svg", "background-color", COLOR_VALUES)}];`)
+  },
+  {
+    id: "color-syntax",
+    expr: CSS_PROBE(`const ctx = new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true });
+  const canvas = (value) => {
+    ctx.fillStyle = "#010203";
+    ctx.fillStyle = value;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillRect(0, 0, 1, 1);
+    return [ctx.fillStyle, Array.from(ctx.getImageData(0, 0, 1, 1).data)];
+  };
+  return ${JSON.stringify(colorSyntaxRows)}.map(([kind, value]) => [kind, value, one(() => svg("line"), "stroke", value)[0], one(() => svg("circle"), "fill", value)[0], one(() => svg("svg"), "background-color", value)[0], ...canvas(value)]);`)
   },
   {
     id: "keywords",

@@ -2,6 +2,8 @@
 //! style declaration list and children, kept the way Blink keeps them so the attribute strings
 //! a renderer leaves behind equal upstream's.
 
+use asrs_js::string::JsError;
+
 /// An element's inline style (`element.style`): declarations in insertion order, each holding
 /// Blink's serialized value.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -12,21 +14,21 @@ pub struct InlineStyle {
 impl InlineStyle {
     /// `style.setProperty(property, value)`, which is what `style.<camelCase> = value` does:
     /// an empty value removes the declaration, a value Blink rejects changes nothing, and an
-    /// accepted one replaces the declaration in place or appends it. `quirks` as in
-    /// [`crate::css_value::serialize`]. Returns whether the declaration list was mutated.
-    pub fn set(&mut self, property: &str, value: &str, quirks: bool) -> bool {
+    /// accepted one replaces the declaration in place or appends it. `quirks` and errors as
+    /// in [`crate::css_value::serialize`]. Returns whether the declaration list was mutated.
+    pub fn set(&mut self, property: &str, value: &str, quirks: bool) -> Result<bool, JsError> {
         let existing = self.declarations.iter().position(|(p, _)| p == property);
         if value.is_empty() {
-            return existing.map(|i| self.declarations.remove(i)).is_some();
+            return Ok(existing.map(|i| self.declarations.remove(i)).is_some());
         }
-        let Some(serialized) = crate::css_value::serialize(property, value, quirks) else {
-            return false;
+        let Some(serialized) = crate::css_value::serialize(property, value, quirks)? else {
+            return Ok(false);
         };
         match existing {
             Some(i) => self.declarations[i].1 = serialized,
             None => self.declarations.push((property.to_owned(), serialized)),
         }
-        true
+        Ok(true)
     }
 
     /// `style.getPropertyValue(property)`.
@@ -114,11 +116,12 @@ impl Element {
 
     /// `element.style.setProperty(property, value)`, parsed with quirks on SVG elements. The
     /// `style` attribute is not touched until the next [`Element::sync_style_attribute`].
-    pub fn set_style(&mut self, property: &str, value: &str) {
+    pub fn set_style(&mut self, property: &str, value: &str) -> Result<(), JsError> {
         let quirks = self.namespace == Namespace::Svg;
-        if self.style.set(property, value, quirks) {
+        if self.style.set(property, value, quirks)? {
             self.style_dirty = true;
         }
+        Ok(())
     }
 
     /// What Blink does before any attribute read: once the inline style was mutated, the

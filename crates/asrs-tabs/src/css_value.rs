@@ -3,39 +3,41 @@
 //! Blink's parse and serialization of the inline style values the Mechanism and Points
 //! renderers assign (`element.style.<property> = value`).
 
-use asrs_canvas::color::{self, Rgba};
+use asrs_canvas::color::{self, Parsed, Slow};
+use asrs_js::string::JsError;
 use asrs_js::{math, number};
 
 use crate::form::css::format_number;
 
 /// What `element.style.getPropertyValue(property)` returns after `element.style.<property> =
-/// value` on an element without that declaration; `None` when Blink rejects the value and the
-/// declaration is left as it was. `value` is never empty (an empty value removes the
+/// value` on an element without that declaration; `Ok(None)` when Blink rejects the value and
+/// the declaration is left as it was. `value` is never empty (an empty value removes the
 /// declaration instead of being parsed). `quirks` is true on SVG elements, whose inline style
-/// Blink parses with quirks-mode behaviour even in a standards-mode document.
-pub fn serialize(property: &str, value: &str, quirks: bool) -> Option<String> {
+/// Blink parses with quirks-mode behaviour even in a standards-mode document. A property or
+/// value outside what is ported here is an `Unmodeled` error rather than a guess.
+pub fn serialize(property: &str, value: &str, quirks: bool) -> Result<Option<String>, JsError> {
     let trimmed = trim(value);
     let lower = trimmed.to_ascii_lowercase();
     if matches!(
         lower.as_str(),
         "inherit" | "initial" | "unset" | "revert" | "revert-layer"
     ) {
-        return Some(lower);
+        return Ok(Some(lower));
     }
-    match property {
+    let unmodeled = || JsError::new("Unmodeled", format!("inline style {property}: {value:?}"));
+    Ok(match property {
         "left" | "top" => length(value, true, quirks),
         "width" | "height" => length(value, false, quirks),
         "stroke-width" => stroke_width(trimmed),
-        "stroke" | "fill" if lower == "none" => Some(lower),
-        "stroke" | "fill" => color_value(value, false),
-        "background-color" => color_value(value, quirks),
+        "stroke" | "fill" => return color_value(value, false, true).ok_or_else(unmodeled),
+        "background-color" => return color_value(value, quirks, false).ok_or_else(unmodeled),
         "display" => DISPLAY.contains(&lower.as_str()).then_some(lower),
         "transform" => TRANSFORMS
             .iter()
             .find(|(written, _)| *written == value)
             .map(|(_, serialized)| (*serialized).to_owned()),
-        _ => None,
-    }
+        _ => return Err(unmodeled()),
+    })
 }
 
 const DISPLAY: [&str; 22] = [
@@ -162,44 +164,10 @@ fn simple_length(value: &str) -> Option<(f64, Unit)> {
     Some((clamp_to_float(n), unit))
 }
 
-/// `FindLengthOfValidDouble` and `ParsePositiveDouble`, which must consume all of `chars`. Only
-/// the first seven decimals count; with seven, Blink's SIMD paths scale their integer by a
-/// constant slightly above 1e-7 instead of dividing.
+/// `ParsePositiveDouble`, which must consume all of `chars`.
 fn positive_double(chars: &[u8]) -> Option<f64> {
-    let mut seen_mark = false;
-    let valid = chars
-        .iter()
-        .take_while(|&&c| {
-            c.is_ascii_digit() || (c == b'.' && !std::mem::replace(&mut seen_mark, true))
-        })
-        .count();
-    if valid == 0 || valid != chars.len() || chars[valid - 1] == b'.' {
-        return None;
-    }
-    let mut value = 0.0;
-    let mut position = 0;
-    while position < chars.len() && chars[position] != b'.' {
-        value = value * 10.0 + f64::from(chars[position] - b'0');
-        position += 1;
-    }
-    position += 1;
-    if position >= chars.len() {
-        return Some(value);
-    }
-    let decimals = &chars[position..];
-    if decimals.len() >= 7 {
-        const DIV_1E7: f64 = f64::from_bits(1e-7_f64.to_bits() + 1);
-        let fraction = decimals[..7]
-            .iter()
-            .fold(0u32, |acc, d| acc * 10 + u32::from(d - b'0'));
-        return Some(value + f64::from(fraction) * DIV_1E7);
-    }
-    let (mut fraction, mut scale) = (0.0, 1.0);
-    for d in decimals {
-        fraction = fraction * 10.0 + f64::from(d - b'0');
-        scale *= 10.0;
-    }
-    Some(value + fraction / scale)
+    let (length, value) = color::parse_positive_double(chars);
+    (length != 0 && length == chars.len()).then_some(value)
 }
 
 /// A CSS `<number-token>` at the start of `s`: its value, whether it has integer type, and the
@@ -257,9 +225,9 @@ fn is_hex(s: &str) -> bool {
 
 /// The hashless hex colours quirks mode accepts (`FastParseColorInternal`, then the
 /// tokenizer's `ParseHexColor`).
-fn quirky_color(value: &str) -> Option<Rgba> {
+fn quirky_color(value: &str) -> Option<Parsed> {
     if matches!(value.len(), 3 | 6) && is_hex(value) {
-        return color::parse(&format!("#{value}"));
+        return color::parse_hex(value);
     }
     let trimmed = trim(value);
     let hex = if trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
@@ -272,33 +240,137 @@ fn quirky_color(value: &str) -> Option<Rgba> {
         format!("{:0>6}", format!("{}{unit}", n as i32))
     };
     (matches!(hex.len(), 3 | 6) && is_hex(&hex))
-        .then(|| color::parse(&format!("#{hex}")))
+        .then(|| color::parse_hex(&hex))
         .flatten()
 }
 
-fn color_value(value: &str, quirky: bool) -> Option<String> {
+/// The colour keywords Blink accepts in author style besides the named colours, probed over
+/// every keyword of Chromium m142's `css_value_keywords.json5`.
+const COLOR_KEYWORDS: [&str; 44] = [
+    "-webkit-activelink",
+    "-webkit-link",
+    "activeborder",
+    "activecaption",
+    "activetext",
+    "appworkspace",
+    "background",
+    "buttonborder",
+    "buttonface",
+    "buttonhighlight",
+    "buttonshadow",
+    "buttontext",
+    "canvas",
+    "canvastext",
+    "captiontext",
+    "currentcolor",
+    "field",
+    "fieldtext",
+    "graytext",
+    "highlight",
+    "highlighttext",
+    "inactiveborder",
+    "inactivecaption",
+    "inactivecaptiontext",
+    "infobackground",
+    "infotext",
+    "linktext",
+    "mark",
+    "marktext",
+    "menu",
+    "menutext",
+    "scrollbar",
+    "selecteditem",
+    "selecteditemtext",
+    "threeddarkshadow",
+    "threedface",
+    "threedhighlight",
+    "threedlightshadow",
+    "threedshadow",
+    "transparent",
+    "visitedtext",
+    "window",
+    "windowframe",
+    "windowtext",
+];
+
+const PAINT_KEYWORDS: [&str; 3] = ["context-fill", "context-stroke", "none"];
+
+fn is_name_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_') || b >= 0x80
+}
+
+/// A whole `<ident-token>` without escapes.
+fn is_ident(s: &str) -> bool {
+    let starts = match s.as_bytes() {
+        [b'-', b'-', ..] => true,
+        [b'-', c, ..] | [c, ..] => !c.is_ascii_digit() && *c != b'-',
+        [] => false,
+    };
+    starts && s.bytes().all(is_name_char)
+}
+
+/// A `stroke`/`fill` (`paint`) or colour value: `Some(Ok)` as Blink serializes it, `Some(None)`
+/// when Blink rejects it, `None` when it is outside the modelled subset: keywords, `#` hex,
+/// `rgb[a]()` and `hsl[a]()` in the fast path's syntax, `rgb[a]()` of plain number and
+/// percentage tokens, and quirky hashless hex.
+fn color_value(value: &str, quirky: bool, paint: bool) -> Option<Option<String>> {
     let trimmed = trim(value);
     let lower = trimmed.to_ascii_lowercase();
-    if lower == "currentcolor" {
-        return Some(lower);
+    if is_ident(trimmed) {
+        let keyword = color::named(&lower).is_some()
+            || COLOR_KEYWORDS.contains(&lower.as_str())
+            || (paint && PAINT_KEYWORDS.contains(&lower.as_str()));
+        if keyword {
+            return Some(Some(lower));
+        }
+        return Some(
+            quirky
+                .then(|| quirky_color(value))
+                .flatten()
+                .map(serialize_color),
+        );
     }
-    let rgba = match color::parse(trimmed) {
-        Some(_) if lower.bytes().all(|b| b.is_ascii_alphabetic()) => return Some(lower),
-        Some(rgba) => rgba,
-        None if quirky => quirky_color(value)?,
-        None => return None,
-    };
-    Some(serialize_rgba(rgba))
+    if let Some(parsed) = color::parse_fast(value) {
+        return Some(Some(serialize_color(parsed)));
+    }
+    if let Some(parsed) = quirky.then(|| quirky_color(value)).flatten() {
+        return Some(Some(serialize_color(parsed)));
+    }
+    if let Some(hex) = trimmed
+        .strip_prefix('#')
+        .filter(|hex| hex.bytes().all(is_name_char))
+    {
+        return Some(color::parse_hex(hex).map(serialize_color));
+    }
+    let blocks_or_escapes =
+        trimmed.contains(['(', ')', '[', ']', '{', '}', '"', '\'', '\\']) || trimmed.contains("/*");
+    if !blocks_or_escapes {
+        return Some(None);
+    }
+    let open = trimmed.find('(')?;
+    let name = &trimmed[..open];
+    if name.contains(is_space) && !name.contains("/*") {
+        return Some(None);
+    }
+    if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") {
+        return None;
+    }
+    match color::parse_rgb_tokens(&trimmed[open + 1..]) {
+        Slow::Valid(parsed) => Some(Some(serialize_color(parsed))),
+        Slow::Invalid => Some(None),
+        Slow::Unmodeled => None,
+    }
 }
 
 /// `Color::SerializeLegacyColorAsCSSColor`. Every value it rounds is non-negative, where C's
 /// `round` and `Math.round` agree.
-fn serialize_rgba(rgba: Rgba) -> String {
-    let [r, g, b] = rgba.to_u8();
-    if rgba.a >= 1.0 {
+fn serialize_color(parsed: Parsed) -> String {
+    let [r, g, b] = parsed.css_channels();
+    let a = parsed.alpha();
+    if a >= 1.0 {
         return format!("rgb({r}, {g}, {b})");
     }
-    let int_alpha = math::min2(math::round(f64::from(rgba.a + 1e-7) * 255.0), 255.0);
+    let int_alpha = math::min2(math::round(f64::from(a + 1e-7) * 255.0), 255.0);
     let hundredths = math::round(int_alpha * 100.0 / 255.0);
     let two_decimal = (hundredths / 100.0) as f32;
     let alpha = if math::round(f64::from(two_decimal * 255.0)) == int_alpha {

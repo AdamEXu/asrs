@@ -112,7 +112,7 @@ impl MechanismRenderer {
     ) -> Result<(), JsError> {
         let svg = &mut self.svg;
         let hidden = matches!(command, JsValue::Null);
-        svg.set_style("display", if hidden { "none" } else { "initial" });
+        svg.set_style("display", if hidden { "none" } else { "initial" })?;
         if hidden {
             return Ok(());
         }
@@ -122,7 +122,7 @@ impl MechanismRenderer {
         svg.set_attribute("width", &number::to_string(size[0]));
         svg.set_attribute("height", &number::to_string(size[1]));
         let background = style_string(&ops::get(command, "backgroundColor")?);
-        svg.set_style("background-color", &background);
+        svg.set_style("background-color", &background)?;
         self.aspect_ratio = dimensions[0] / dimensions[1];
 
         svg.clear_children();
@@ -146,10 +146,10 @@ impl MechanismRenderer {
             line.set_attribute("x2", &number::to_string(end[0]));
             line.set_attribute("y2", &number::to_string(end[1]));
             let color = style_string(&ops::get(line_data, "color")?);
-            line.set_style("stroke", &color);
+            line.set_style("stroke", &color)?;
             let weight = ops::get(line_data, "weight")?;
             ops::get(&weight, "toString")?;
-            line.set_style("stroke-width", &ops::to_string(&weight).to_string_lossy());
+            line.set_style("stroke-width", &ops::to_string(&weight).to_string_lossy())?;
 
             for coordinates in [start, end] {
                 let circle = svg.append_child(Element::new(Namespace::Svg, "circle"));
@@ -158,7 +158,7 @@ impl MechanismRenderer {
                 let radius = ops::value_to_number(&ops::get(line_data, "weight")?)? / 2.0;
                 circle.set_attribute("r", &number::to_string(radius));
                 let color = style_string(&ops::get(line_data, "color")?);
-                circle.set_style("fill", &color);
+                circle.set_style("fill", &color)?;
             }
         }
         Ok(())

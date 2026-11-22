@@ -17,6 +17,7 @@
 
 use std::collections::BTreeMap;
 
+use asrs_canvas::color;
 use asrs_js::number;
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
@@ -387,7 +388,7 @@ fn check_value(
     };
     let quirks = ns == Namespace::Svg;
     if !input_text.is_empty() {
-        let expected = (!out.is_empty()).then(|| out.clone());
+        let expected = Ok((!out.is_empty()).then(|| out.clone()));
         let actual = css_value::serialize(property, &input_text, quirks);
         if actual != expected {
             failures.push(format!(
@@ -396,7 +397,11 @@ fn check_value(
         }
     }
     let mut el = Element::new(ns, tag);
-    el.set_style(property, &input_text);
+    if let Err(e) = el.set_style(property, &input_text) {
+        failures.push(format!(
+            "{id}: <{tag}> style {property} = {input_text:?}: {e:?}"
+        ));
+    }
     let got = el.style().get(property).to_owned();
     let got_attr = el
         .attributes()
@@ -438,6 +443,95 @@ fn css_style_values() {
     report("css_style_values", &compared, &failures);
 }
 
+/// Every colour string of `dom/css-style/color-syntax` on `stroke`, `fill` and an SVG's
+/// `background-color`: the port equals Blink or, for the "open" rows only, reports the value as
+/// unmodeled. Where Blink computes a colour, `asrs_canvas::color` equals its canvas `fillStyle`
+/// and pixel too; where Blink rejects it, so does the canvas parser.
+#[test]
+fn css_color_syntax() {
+    let id = "dom/css-style/color-syntax";
+    let value = eval_value(id).unwrap();
+    let mut failures = Vec::new();
+    let mut compared = BTreeMap::new();
+    for row in value.as_array().expect("rows") {
+        let Some([kind, input, stroke, fill, background, fill_style, pixel]) = row.as_array()
+        else {
+            panic!(
+                "{id}: row is not [kind, value, stroke, fill, background-color, fillStyle, pixel]"
+            );
+        };
+        let kind = string_value(kind).unwrap();
+        let input = string_value(input).unwrap();
+        let mut stroke_ok = None;
+        for (property, recorded) in [
+            ("stroke", stroke),
+            ("fill", fill),
+            ("background-color", background),
+        ] {
+            let recorded = string_value(recorded).unwrap();
+            match css_value::serialize(property, &input, true) {
+                Ok(port) if port.as_deref().unwrap_or("") == recorded => {
+                    *compared.entry("style").or_insert(0) += 1;
+                    if property == "stroke" {
+                        stroke_ok = Some(recorded);
+                    }
+                }
+                Ok(port) => failures.push(format!(
+                    "{id}: {property} {input:?}: upstream {recorded:?}, port {port:?}"
+                )),
+                Err(_) if kind == "open" => *compared.entry("style unmodeled").or_insert(0) += 1,
+                Err(e) => failures.push(format!("{id}: {property} {input:?} ({kind}): {e:?}")),
+            }
+        }
+        let Some(stroke) = stroke_ok else {
+            continue;
+        };
+        let fill_style = string_value(fill_style).unwrap();
+        let pixel: Vec<u8> = pixel
+            .as_array()
+            .expect("pixel")
+            .iter()
+            .map(|v| v.as_f64().expect("pixel byte") as u8)
+            .collect();
+        let port = color::parse_color(&input);
+        if stroke.is_empty() {
+            *compared.entry("canvas rejected").or_insert(0) += 1;
+            if port.is_some() || fill_style != "#010203" {
+                failures.push(format!(
+                    "{id}: canvas {input:?}: upstream {fill_style:?}, port {port:?}"
+                ));
+            }
+        } else if stroke.starts_with("rgb") {
+            *compared.entry("canvas").or_insert(0) += 1;
+            let Some(port) = port else {
+                failures.push(format!(
+                    "{id}: canvas {input:?}: upstream {fill_style:?}, port None"
+                ));
+                continue;
+            };
+            let rgba = port.to_rgba();
+            let [r, g, b] = rgba.to_u8();
+            let alpha = (rgba.a * 255.0).round() as u8;
+            let matches = if rgba.a >= 1.0 {
+                fill_style == format!("#{r:02x}{g:02x}{b:02x}") && pixel == [r, g, b, 255]
+            } else {
+                pixel[3] == alpha
+            };
+            if !matches {
+                failures.push(format!(
+                    "{id}: canvas {input:?}: upstream {fill_style:?} {pixel:?}, port {:?} alpha {alpha}",
+                    [r, g, b]
+                ));
+            }
+        }
+    }
+    assert!(
+        compared.get("canvas").copied().unwrap_or(0) > 4000,
+        "too few canvas colours compared"
+    );
+    report("css_color_syntax", &compared, &failures);
+}
+
 #[test]
 fn css_style_declarations() {
     let id = "dom/css-style/declarations";
@@ -462,10 +556,12 @@ fn css_style_declarations() {
                     &string_value(&step[1]).unwrap(),
                     &string_value(&step[2]).unwrap(),
                 ),
-                "style" => el.set_style(
-                    &string_value(&step[1]).unwrap(),
-                    &string_value(&step[2]).unwrap(),
-                ),
+                "style" => el
+                    .set_style(
+                        &string_value(&step[1]).unwrap(),
+                        &string_value(&step[2]).unwrap(),
+                    )
+                    .unwrap(),
                 "sync" => {
                     let attr = el
                         .attributes()

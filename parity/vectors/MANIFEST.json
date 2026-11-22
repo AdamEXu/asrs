@@ -26,6 +26,7 @@
     "cve1/identity": {"cases":7,"content":"c50fd3a6eb87c9e4","generator":"9ddc9d76b019d017","spec":"parity/specs/cve1/identity.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "cve1/torture": {"cases":471,"content":"3bf51e863655d3d2","generator":"b92754947817bf7a","spec":"parity/specs/cve1/torture.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/canvas/fixed-advance": {"cases":361,"content":"087b4f943edbf74e","generator":"9e335f5dbf3452d1","spec":"parity/specs/dom/canvas/fixed-advance.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/css-style/color-syntax": {"cases":2,"content":"17448961db8ce74e","generator":"5e06559b97ac2cfc","spec":"parity/specs/dom/css-style/color-syntax.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/css-style/colors": {"cases":2,"content":"8ac0b2ec18e9be09","generator":"be0f4d06cb479cc9","spec":"parity/specs/dom/css-style/colors.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/css-style/declarations": {"cases":2,"content":"f98ce91385f63582","generator":"83abe32debcc7a01","spec":"parity/specs/dom/css-style/declarations.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/css-style/keywords": {"cases":2,"content":"694e5b06b8bc24c3","generator":"e39b262ed570ce2c","spec":"parity/specs/dom/css-style/keywords.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
