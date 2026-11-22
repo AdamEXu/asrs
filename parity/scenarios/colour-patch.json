@@ -1,0 +1,7 @@
+{
+  "about": "512 known sRGB patches (gamut corners, the app palette, a full grey ramp, a 6x6x6 cube); after normalization through the display profile every patch must be within 1 level of its source",
+  "page": "colour-patch",
+  "window": { "width": 512, "height": 256 },
+  "themes": ["light"],
+  "actions": [{ "capture": "patches" }]
+}

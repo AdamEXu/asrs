@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
+import { patchColours, PATCH, COLUMNS } from "../src/app/patches";
 import { encodePng } from "../src/canvas/png";
 
 declare const __UPSTREAM_DIR__: string;
@@ -17,8 +18,6 @@ modes:
   launch                  start the real upstream app with an isolated userData directory, wait
                           for the hub window to load, capture it and quit`;
 
-const PATCH = 16;
-const COLUMNS = 32;
 const LAUNCH_TIMEOUT_MS = 90_000;
 const SETTLE_MS = 3000;
 
@@ -62,30 +61,6 @@ async function info(out: string) {
     gpuFeatureStatus: app.getGPUFeatureStatus(),
     gpuInfo
   });
-}
-
-function patchColours(): [number, number, number][] {
-  const colours: [number, number, number][] = [];
-  const seen = new Set<string>();
-  const add = (c: [number, number, number]) => {
-    const key = c.join(",");
-    if (!seen.has(key)) {
-      seen.add(key);
-      colours.push(c);
-    }
-  };
-  for (let i = 0; i < 8; i++) add([i & 1 ? 255 : 0, i & 2 ? 255 : 0, i & 4 ? 255 : 0]);
-  for (const hex of ["2b66a2", "e5b31b", "af2437", "80588e", "e48b32", "c0b487", "858584", "3b875a", "d993aa", "5f4528", "ff8c00"]) {
-    add([0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]);
-  }
-  for (let v = 0; v < 256; v++) add([v, v, v]);
-  const steps = [0, 51, 102, 153, 204, 255];
-  for (const r of steps) for (const g of steps) for (const b of steps) add([r, g, b]);
-  for (let i = 0; colours.length < 512; i++) {
-    const v = (i * 37 + 11) % 256;
-    add([v, (v * 7 + 90) % 256, (v * 13 + 200) % 256]);
-  }
-  return colours;
 }
 
 function bgraToRgba(bitmap: Buffer): Buffer {

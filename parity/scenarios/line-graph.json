@@ -1,0 +1,14 @@
+{
+  "about": "Generated drive log on the default line graph: two left-axis fields, a discrete field, a selected time, then a hover over the plot",
+  "actions": [
+    { "open": ["app:drive"] },
+    { "idle": true },
+    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.addField(\"/Drive/LeftVelocity\")" },
+    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.addField(\"/Drive/RightVelocity\")" },
+    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.discreteSourceList.addField(\"/DriverStation/Enabled\")" },
+    { "selection": ["setSelectedTime", 4.5] },
+    { "capture": "selected", "probes": [".side-bar", ".tab-bar", ".renderer-content", ".controls-content", ".timeline", ".line-graph-canvas"] },
+    { "mouse": "move", "x": 760, "y": 240 },
+    { "capture": "hovered", "probes": [".timeline", ".line-graph-canvas"] }
+  ]
+}
