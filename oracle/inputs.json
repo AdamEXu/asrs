@@ -335,6 +335,14 @@
     "src/logRun.ts",
     "src/shims.ts"
   ],
+  "genMathjs": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genMathjs.ts",
+    "src/shims.ts"
+  ],
   "genMenus": [
     "src/cve1.ts",
     "src/environment.ts",
@@ -485,6 +493,12 @@
     "src/cve1.ts",
     "src/environment.ts",
     "src/genThree.ts",
+    "src/shims.ts"
+  ],
+  "genUnitDialog": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genUnitDialog.ts",
     "src/shims.ts"
   ],
   "genUrcl": [
