@@ -196,8 +196,13 @@ impl RenderOnce for SegmentedControl {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;
                     let iw = lu(cw * SPLIT_ICON_FRACTION);
                     let ih = lu(ch * SPLIT_ICON_FRACTION);
+                    let snap = |v: f64| (v + 0.5).floor();
                     let ix = f64::from(x - left) + lu((cw - iw as f32) / 2.0);
                     let top = lu(ch / 2.0);
+                    let side = iw.min(ih);
+                    let x0 = snap(ix - snap(ix) + lu(((iw - side) / 2.0) as f32));
+                    let y0 = snap(top - snap(top) + lu(((ih - side) / 2.0) as f32));
+                    let (left_px, top_px) = (snap(ix) + x0, snap(top) + y0);
                     let chain = if style.invert_icons {
                         chains::INVERT
                     } else {
@@ -208,12 +213,12 @@ impl RenderOnce for SegmentedControl {
                         move |bounds, _, window, cx| {
                             let dpr = f64::from(window.scale_factor());
                             let placement = Placement {
-                                anchor: [(ix + iw / 2.0) / dpr, top / dpr],
-                                size: [iw, ih],
+                                anchor: [left_px / dpr, top_px / dpr],
+                                size: [side, side],
                                 scale: 1.0,
-                                centered: true,
+                                centered: false,
                                 zoom: dpr,
-                                translate: [0.0, 0.0],
+                                translate: [0.0, -ih / 2.0 / dpr],
                             };
                             let origin = [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];
                             paint_icon(&source, chain, &placement, origin, window, cx);
