@@ -494,7 +494,8 @@ struct Harness {
     pending_errors: VecDeque<String>,
     /// Scroll callbacks the port dispatched, per renderer, awaiting upstream's `scroll`.
     scrolls: Vec<VecDeque<ScrollArgs>>,
-    /// Animation frames the port's scroll callbacks requested and no render has used yet.
+    /// Animation frames the port's scroll callbacks requested before this frame's tab loop;
+    /// upstream must render once in each before the next tab loop runs.
     frame_requests: Vec<u32>,
     /// The tab loop asked this renderer for a command, so its next render is the tab's own.
     tab_render_due: Vec<bool>,
@@ -668,6 +669,13 @@ impl Harness {
         // `IMAGE` load events queued by the previous frame's renders.
         if let Some((renderer, _)) = self.renderers.get_mut(id) {
             renderer.flush_image_loads();
+            if self.frame_requests[id] != 0 {
+                return Err(format!(
+                    "the port requested {} animation frames upstream did not render",
+                    self.frame_requests[id]
+                ));
+            }
+            self.frame_requests[id] = renderer.take_frame_requests();
             self.tab_render_due[id] = true;
         }
         self.apply_context(record)?;
@@ -873,7 +881,6 @@ impl Harness {
     fn render(&mut self, record: &Record) -> Result<(), String> {
         let id = record_id(record)?;
         if !std::mem::take(&mut self.tab_render_due[id]) {
-            self.frame_requests[id] += self.renderers[id].0.take_frame_requests();
             if self.frame_requests[id] == 0 {
                 return Err(
                     "upstream rendered in an animation frame the port did not request".to_owned(),
