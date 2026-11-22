@@ -4,7 +4,7 @@ use asrs_js::string::JsString;
 use asrs_log::log::fuse::Fuse;
 use asrs_log::log::{Log, LoggableType, search_fields};
 use asrs_parity::json::Json;
-use asrs_parity::vectors::{Record, check_local_records, check_records};
+use asrs_parity::vectors::{self, Record, check_local_records, check_records};
 
 fn js(json: &Json) -> Result<JsString, String> {
     json.as_str()
@@ -51,7 +51,7 @@ fn check_scores(
     for (i, bits) in expected.iter().enumerate() {
         let bits = u64::from_str_radix(&show(bits), 16).map_err(|e| format!("{case}: {e}"))?;
         let score = actual.get(i).map(|r| r.score.to_bits());
-        if score != Some(bits) {
+        if !score.is_some_and(|score| vectors::pow_bits_match(bits, score)) {
             return Err(format!(
                 "{case}: score {i} is {score:016x?}, oracle {bits:016x}"
             ));

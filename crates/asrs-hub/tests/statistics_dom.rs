@@ -1502,7 +1502,7 @@ fn compare(emitted: &[Emit], records: &[Record]) -> Result<(), String> {
             let expected = record
                 .value(key)
                 .map_err(|e| format!("line {}: missing {key}: {}", record.line, e.0))?;
-            if !vectors::values_match(&expected, value) {
+            if !vectors::pow_values_match(&expected, value) {
                 return Err(format!(
                     "line {} ({key}):\n  expected {}\n  actual   {}",
                     record.line,
@@ -1536,9 +1536,6 @@ fn specs() -> Vec<(PathBuf, String)> {
 
 #[test]
 fn statistics_dom_matches_upstream() {
-    if vectors::skip_on_x86_64("dom/statistics") {
-        return;
-    }
     let specs = specs();
     assert!(!specs.is_empty(), "no statistics specs");
     let mut failures = Vec::new();

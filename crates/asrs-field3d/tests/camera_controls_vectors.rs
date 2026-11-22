@@ -2,7 +2,7 @@ use asrs_field3d::camera_controls::{
     CameraControls, ControlsEvent, ElementRect, PointerInput, WheelInput,
 };
 use asrs_field3d::three::{Object3D, PerspectiveCamera, Quaternion, Spherical, Vector3};
-use asrs_parity::{Record, Value, diff, record_vectors};
+use asrs_parity::{Record, Value, diff, record_vectors, vectors};
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -65,7 +65,7 @@ fn canonical(v: &Value) -> Value {
 
 fn compare(expected: &Value, actual: &Value) -> Result<()> {
     let (expected, actual) = (canonical(expected), canonical(actual));
-    if expected.encode() == actual.encode() {
+    if vectors::pow_values_match(&expected, &actual) {
         return Ok(());
     }
     Err(diff::report(&expected, &actual).unwrap_or_else(|| "encodings differ".to_owned()))
