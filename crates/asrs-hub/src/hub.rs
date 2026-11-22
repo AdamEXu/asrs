@@ -13,6 +13,7 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use asrs_canvas::text::TextBackend;
 use asrs_formats::historical::{
     HistoricalDataSource, MainReply, MainRequest, PageContext, SourceEvent, SourceHost, Status,
     Timeout, WorkerName,
@@ -46,7 +47,7 @@ use asrs_tabs::list_cx::{ListParts, SourceListCx};
 use asrs_tabs::statistics::StatisticsCx;
 use asrs_tabs::video::{VideoController, VideoCx};
 
-use crate::factory::HubTabFactory;
+use crate::factory::{CanvasEnv, HubTabFactory};
 use crate::sidebar::{EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, Tuner};
 use crate::tabs::{Tabs, TabsError, TabsHost};
 
@@ -201,6 +202,11 @@ pub trait HubView {
     }
     fn tab_bar_client_width(&self) -> f64 {
         0.0
+    }
+    /// The glyph backend canvas renderers measure text with; `None` leaves line graphs
+    /// unrendered.
+    fn canvas_text(&self) -> Option<Rc<RefCell<dyn TextBackend>>> {
+        None
     }
 }
 
@@ -426,6 +432,13 @@ impl TabsHost for HubPage {
 
     fn tab_bar_client_width(&self) -> f64 {
         self.view.tab_bar_client_width()
+    }
+
+    fn canvas_env(&self) -> Option<CanvasEnv> {
+        self.view.canvas_text().map(|text| CanvasEnv {
+            clock: self.clock.clone(),
+            text,
+        })
     }
 }
 

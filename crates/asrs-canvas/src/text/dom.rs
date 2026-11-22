@@ -80,6 +80,12 @@ pub struct Style {
     pub direction: Direction,
     pub white_space: WhiteSpace,
     pub overflow: Overflow,
+    /// `letter-spacing` in CSS px.
+    pub letter_spacing: f32,
+    /// `unicode-bidi: plaintext` on the text's inline box: its bidi paragraph takes the
+    /// direction of its first strong character, while alignment and truncation keep the
+    /// block's `direction`.
+    pub bidi_plaintext: bool,
 }
 
 impl Style {
@@ -91,11 +97,14 @@ impl Style {
             direction: Direction::Ltr,
             white_space: WhiteSpace::Normal,
             overflow: Overflow::Visible,
+            letter_spacing: 0.0,
+            bidi_plaintext: false,
         }
     }
 
     /// A style from CSS declarations: `font` (required), `line-height`, `text-align`,
-    /// `direction`, `white-space` and `text-overflow` (which implies `overflow: hidden`).
+    /// `direction`, `white-space`, `text-overflow` (which implies `overflow: hidden`) and
+    /// `letter-spacing` and `unicode-bidi` (`normal` or `plaintext`).
     /// Unknown properties and values are `None`.
     pub fn from_css<'a>(
         declarations: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -137,6 +146,19 @@ impl Style {
                         "normal" => WhiteSpace::Normal,
                         "nowrap" => WhiteSpace::NoWrap,
                         "pre" => WhiteSpace::Pre,
+                        _ => return None,
+                    }
+                }
+                "letter-spacing" => {
+                    style.letter_spacing = match value {
+                        "normal" => 0.0,
+                        v => v.strip_suffix("px")?.parse().ok()?,
+                    }
+                }
+                "unicode-bidi" => {
+                    style.bidi_plaintext = match value {
+                        "normal" => false,
+                        "plaintext" => true,
                         _ => return None,
                     }
                 }
@@ -215,6 +237,34 @@ pub fn line_metrics(backend: &mut dyn TextBackend, style: &Style, scale: f32) ->
         LineHeight::Number(n) => lu_round(zoomed.size * n),
     };
     (ascent, descent, height)
+}
+
+/// `text` shaped in `style`'s font, with `letter-spacing` added after every character as
+/// Blink's `ShapeResultSpacing` does, the last one included.
+fn shape(backend: &mut dyn TextBackend, style: &Style, text: &str) -> Shaped {
+    let mut shaped = backend.shape(&style.font, text);
+    if style.letter_spacing != 0.0 {
+        let mut chars_before = vec![0u32; utf16_len(text) + 1];
+        let mut count = 0;
+        let mut unit = 0;
+        for c in text.chars() {
+            for _ in 0..c.len_utf16() {
+                chars_before[unit] = count;
+                unit += 1;
+            }
+            count += 1;
+        }
+        chars_before[unit] = count;
+        for g in &mut shaped.glyphs {
+            let k = chars_before
+                .get(g.cluster as usize)
+                .copied()
+                .unwrap_or(count);
+            g.x += style.letter_spacing * k as f32;
+        }
+        shaped.width += style.letter_spacing * count as f32;
+    }
+    shaped
 }
 
 fn is_collapsible(c: char) -> bool {
@@ -436,6 +486,18 @@ fn mirror(c: char) -> char {
     }
 }
 
+/// The paragraph direction `unicode-bidi: plaintext` gives `text`: that of its first strong
+/// character (rules P2 and P3), or `fallback` when it has none.
+fn first_strong(text: &str, fallback: Direction) -> Direction {
+    text.chars()
+        .find_map(|c| match class(c) {
+            Class::L => Some(Direction::Ltr),
+            Class::R => Some(Direction::Rtl),
+            _ => None,
+        })
+        .unwrap_or(fallback)
+}
+
 /// The line's bidi runs in visual order, each as the string it displays left to right.
 fn visual_runs(text: &str, direction: Direction) -> Vec<String> {
     if direction == Direction::Ltr {
@@ -505,7 +567,7 @@ fn truncate(
     available: Lu,
     scale: f32,
 ) -> Vec<Fragment> {
-    let ellipsis = backend.shape(&style.font, ELLIPSIS);
+    let ellipsis = shape(backend, style, ELLIPSIS);
     let ellipsis_width = lu_ceil(ellipsis.width * scale);
     let ellipsis_at = |x: Lu| Fragment {
         text: ELLIPSIS.to_owned(),
@@ -582,7 +644,7 @@ fn wrap(
     available: Lu,
     scale: f32,
 ) -> Vec<String> {
-    let shaped = backend.shape(&style.font, &normalize_space(text));
+    let shaped = shape(backend, style, &normalize_space(text));
     let at = boundaries(&shaped, utf16_len(text));
     let mut units = vec![0usize; text.len() + 1];
     let mut count = 0;
@@ -646,8 +708,13 @@ pub fn layout(
     for (i, line_text) in texts.into_iter().enumerate() {
         let mut runs = Vec::new();
         let mut width = 0;
-        for run in visual_runs(&line_text, style.direction) {
-            let shaped = backend.shape(&style.font, &normalize_space(&run));
+        let paragraph = if style.bidi_plaintext {
+            first_strong(&line_text, style.direction)
+        } else {
+            style.direction
+        };
+        for run in visual_runs(&line_text, paragraph) {
+            let shaped = shape(backend, style, &normalize_space(&run));
             let run_width = lu_ceil(shaped.width * scale);
             runs.push((
                 Fragment {
@@ -905,5 +972,37 @@ mod tests {
             texts,
             [(ELLIPSIS, kept - lu_ceil(6.0)), ("fgh", kept), ("/", slash)]
         );
+    }
+    #[test]
+    fn letter_spacing_follows_every_character() {
+        let mut backend = FixedAdvance;
+        let plain = layout(&mut backend, &style("16px system-ui"), "ab", None, 1.0);
+        let spaced_style =
+            Style::from_css([("font", "16px system-ui"), ("letter-spacing", "0.5px")]).unwrap();
+        let spaced = layout(&mut backend, &spaced_style, "ab", None, 1.0);
+        assert!((spaced.width - plain.width - 64).abs() <= 1);
+        let x = |l: &Layout| l.lines[0].fragments[0].glyphs[1].x;
+        assert_eq!(x(&spaced) - x(&plain), 0.5);
+    }
+
+    #[test]
+    fn plaintext_takes_the_first_strong_direction() {
+        let mut s = Style::from_css([
+            ("font", "14px system-ui"),
+            ("direction", "rtl"),
+            ("text-align", "right"),
+            ("unicode-bidi", "plaintext"),
+        ])
+        .unwrap();
+        let texts = |s: &Style| {
+            layout(&mut FixedAdvance, s, "/Drive/Left", None, 1.0).lines[0]
+                .fragments
+                .iter()
+                .map(|f| f.text.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(texts(&s), ["/Drive/Left"]);
+        s.bidi_plaintext = false;
+        assert_eq!(texts(&s), ["Drive/Left", "/"]);
     }
 }

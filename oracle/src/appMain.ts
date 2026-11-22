@@ -185,6 +185,16 @@ async function until<T>(what: string, timeoutMs: number, probe: () => Promise<T 
 }
 
 let target: BrowserWindow | null = null;
+let scriptedInput = false;
+
+function sendScripted(contents: Electron.WebContents, input: Parameters<Electron.WebContents["sendInputEvent"]>[0]) {
+  scriptedInput = true;
+  try {
+    contents.sendInputEvent(input);
+  } finally {
+    scriptedInput = false;
+  }
+}
 const windows: BrowserWindow[] = [];
 
 function placeWindow(win: BrowserWindow) {
@@ -201,6 +211,11 @@ app.on("browser-window-created", (_event, win) => {
   win.webContents.openDevTools = () => {};
   win.show = () => win.showInactive();
   win.setIgnoreMouseEvents(true);
+  // macOS still hands the page a move from the physical cursor when the window appears under
+  // it, so every mouse event the scenario did not send is dropped.
+  win.webContents.on("before-mouse-event", (event) => {
+    if (!scriptedInput) event.preventDefault();
+  });
   win.webContents.on("did-start-navigation", (event: any) => {
     if (target === null && event.isMainFrame && /\/www\/hub\.html$/.test(new URL(event.url).pathname)) {
       target = win;
@@ -433,11 +448,11 @@ async function perform(action: Action) {
     await waitIdle();
   } else if ("mouse" in action) {
     for (const type of MOUSE_TYPES[action.mouse]) {
-      contents.sendInputEvent({ type, x: action.x, y: action.y, button: action.button ?? "left", clickCount: action.clickCount ?? 1 } as any);
+      sendScripted(contents, { type, x: action.x, y: action.y, button: action.button ?? "left", clickCount: action.clickCount ?? 1 } as any);
     }
   } else if ("wheel" in action) {
     const w = action.wheel;
-    contents.sendInputEvent({
+    sendScripted(contents, {
       type: "mouseWheel",
       x: w.x,
       y: w.y,

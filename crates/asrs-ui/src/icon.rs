@@ -62,6 +62,9 @@ pub struct Placement {
     pub scale: f64,
     pub centered: bool,
     pub zoom: f64,
+    /// A CSS `translate()` on an ancestor between the box's snapped layout position and the
+    /// image, in logical px: it moves the image by its exact amount, fractions included.
+    pub translate: [f64; 2],
 }
 
 /// A CSS length in LayoutUnits (1/64 px), truncated as `LayoutUnit(float)` truncates.
@@ -89,7 +92,8 @@ impl Placement {
     /// the translate and scale leave fractions: at 1x a box centre at x.5 lands on x + 1, while
     /// a 12.5 px wide image keeps its -6.25 px shift.
     pub fn device_image(&self, origin: [f64; 2], dpr: f64) -> DeviceImage {
-        let anchor = [0, 1].map(|i| ((origin[i] + self.anchor[i]) * dpr + 0.5).floor());
+        let anchor = [0, 1]
+            .map(|i| ((origin[i] + self.anchor[i]) * dpr + 0.5).floor() + self.translate[i] * dpr);
         let s = self.scale;
         let (e, f) = if self.centered {
             (
@@ -158,6 +162,7 @@ pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64, zoom: f64) -
                 scale: 1.0,
                 centered: false,
                 zoom,
+                translate: [0.0, 0.0],
             }
         }
         IconFit::Centered { max, scale } => {
@@ -177,6 +182,7 @@ pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64, zoom: f64) -
                 scale,
                 centered: true,
                 zoom,
+                translate: [0.0, 0.0],
             }
         }
     }
@@ -280,6 +286,8 @@ pub struct Icon {
     source: IconSource,
     chain: &'static str,
     fit: IconFit,
+    translate: [f64; 2],
+    subpixel: [f64; 2],
 }
 
 impl Icon {
@@ -288,6 +296,8 @@ impl Icon {
             source: source.into(),
             chain,
             fit: IconFit::BUTTON,
+            translate: [0.0, 0.0],
+            subpixel: [0.0, 0.0],
         }
     }
 
@@ -295,11 +305,30 @@ impl Icon {
         self.fit = fit;
         self
     }
+
+    /// The box sits `translate` from its layout position through a CSS `translate()` on it or
+    /// an ancestor; see [`Placement::translate`].
+    pub fn translate(mut self, x: f64, y: f64) -> Self {
+        self.translate = [x, y];
+        self
+    }
+
+    /// The box's CSS position less where GPUI's pixel snapping put it, in CSS px.
+    pub fn subpixel(mut self, dx: f64, dy: f64) -> Self {
+        self.subpixel = [dx, dy];
+        self
+    }
 }
 
 impl RenderOnce for Icon {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let Icon { source, chain, fit } = self;
+        let Icon {
+            source,
+            chain,
+            fit,
+            translate,
+            subpixel,
+        } = self;
         div().absolute().inset_0().child(
             canvas(
                 |_, _, _| {},
@@ -307,14 +336,20 @@ impl RenderOnce for Icon {
                     let Some(intrinsic) = symbols::intrinsic(source.bytes()) else {
                         return;
                     };
-                    let placement = layout(
-                        intrinsic,
-                        fit,
-                        f64::from(bounds.size.width),
-                        f64::from(bounds.size.height),
-                        f64::from(window.scale_factor()),
-                    );
-                    let origin = [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];
+                    let placement = Placement {
+                        translate,
+                        ..layout(
+                            intrinsic,
+                            fit,
+                            f64::from(bounds.size.width),
+                            f64::from(bounds.size.height),
+                            f64::from(window.scale_factor()),
+                        )
+                    };
+                    let origin = [
+                        f64::from(bounds.origin.x) + subpixel[0] - translate[0],
+                        f64::from(bounds.origin.y) + subpixel[1] - translate[1],
+                    ];
                     paint_icon(&source, chain, &placement, origin, window, cx);
                 },
             )
@@ -358,6 +393,21 @@ mod tests {
         };
         let r = rect(s24, feedback, 28.0, [0.0, 0.0], 1.0);
         assert!((r[2] - 21.6).abs() < 1e-9 && (r[0] - 3.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn translated_buttons_keep_the_fraction() {
+        let s24 = Intrinsic::Size(24.0, 24.0);
+        let at = |dpr: f64| {
+            let p = Placement {
+                translate: [12.5, -12.5],
+                ..layout(s24, IconFit::BUTTON, 25.0, 25.0, dpr)
+            };
+            let d = p.device_image([526.671875, 465.0], dpr);
+            [d.matrix.e, d.matrix.f]
+        };
+        assert_eq!(at(1.0), [539.5, 453.5]);
+        assert_eq!(at(2.0), [1079.0, 906.0]);
     }
 
     #[test]

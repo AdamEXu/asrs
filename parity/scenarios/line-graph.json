@@ -1,14 +1,318 @@
 {
-  "about": "Generated drive log on the default line graph: two left-axis fields, a discrete field, a selected time, then a hover over the plot",
+  "about": "Interaction (U11): the generated drive log on a restored empty line graph with the help overlay shown; three sidebar fields (two numbers and the Mode string) dragged into the left, right and discrete lists with the pointer, a selected time, a hover over the plot, a click that selects the hovered time, a drag pan, the left axis locked through main's edit-axis reply (what the axis menu's Lock Axis item sends), then trackpad zoom over the plot. Saved HubState (sources, locked range) and the timeline range are compared at each capture. Only .tab-bar is masked, until #214 (emoji titles)",
   "actions": [
-    { "open": ["app:drive"] },
-    { "idle": true },
-    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.addField(\"/Drive/LeftVelocity\")" },
-    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.addField(\"/Drive/RightVelocity\")" },
-    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.discreteSourceList.addField(\"/DriverStation/Enabled\")" },
-    { "selection": ["setSelectedTime", 4.5] },
-    { "capture": "selected", "probes": [".side-bar", ".tab-bar", ".renderer-content", ".controls-content", ".timeline", ".line-graph-canvas"] },
-    { "mouse": "move", "x": 760, "y": 240 },
-    { "capture": "hovered", "probes": [".timeline", ".line-graph-canvas"] }
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".line-graph-canvas"
+      ],
+      "masks": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 150
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 150
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 154
+    },
+    {
+      "mouse": "move",
+      "x": 260,
+      "y": 355
+    },
+    {
+      "mouse": "move",
+      "x": 428,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 430,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 430,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 240
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 240
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 244
+    },
+    {
+      "mouse": "move",
+      "x": 525,
+      "y": 400
+    },
+    {
+      "mouse": "move",
+      "x": 958,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 960,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 960,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 184
+    },
+    {
+      "mouse": "move",
+      "x": 395,
+      "y": 445
+    },
+    {
+      "mouse": "move",
+      "x": 698,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 560
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        4.5
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "fields",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".line-graph-canvas"
+      ],
+      "masks": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 760,
+      "y": 240
+    },
+    {
+      "capture": "hovered",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".line-graph-canvas"
+      ],
+      "masks": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 650,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 650,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 260
+    },
+    {
+      "mouse": "move",
+      "x": 680,
+      "y": 260
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 261
+    },
+    {
+      "mouse": "up",
+      "x": 640,
+      "y": 261
+    },
+    {
+      "main": "edit-axis",
+      "data": {
+        "legend": "left",
+        "lockedRange": [
+          null,
+          null
+        ],
+        "unitConversion": {
+          "autoTarget": null,
+          "preset": null
+        },
+        "filter": 0
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 250,
+        "deltaY": 40,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 250,
+        "deltaY": 35,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 250,
+        "deltaY": 45,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "zoomed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".line-graph-canvas"
+      ],
+      "masks": [
+        ".tab-bar"
+      ]
+    }
   ]
 }

@@ -2,7 +2,10 @@
 //! main (P) exists, the window is booted with the messages `main.ts` sends a new hub window,
 //! and what the hub sends main is dropped.
 
+use std::cell::RefCell;
 use std::rc::Rc;
+
+use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 
 use asrs_hub::hub::{HubModel, HubView};
 use asrs_hub::sidebar::SidebarGeometry;
@@ -26,6 +29,7 @@ use crate::menus::context::{self, Effect, MenuEnv};
 
 struct FrameView {
     geometry: FrameGeometry,
+    canvas_text: Rc<RefCell<dyn TextBackend>>,
     lists: ListsGeometry,
     dark: bool,
     sidebar: ViewGeometry,
@@ -81,6 +85,10 @@ impl HubView for FrameView {
 
     fn tab_bar_client_width(&self) -> f64 {
         self.geometry.tab_bar().borrow().client_width()
+    }
+
+    fn canvas_text(&self) -> Option<Rc<RefCell<dyn TextBackend>>> {
+        Some(self.canvas_text.clone())
     }
 }
 
@@ -204,8 +212,11 @@ impl HubEntityHost {
         let geometry = FrameGeometry::default();
         let sidebar_geometry = ViewGeometry::new();
         let lists = ListsGeometry::default();
+        let canvas_text: Box<dyn TextBackend> =
+            platform_backend().unwrap_or_else(|| Box::new(FixedAdvance));
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
+            canvas_text: Rc::new(RefCell::new(canvas_text)),
             lists: lists.clone(),
             dark,
             sidebar: sidebar_geometry.clone(),
