@@ -46,7 +46,7 @@
     "dom/field-2d/trail": {"cases":55,"content":"815943d9495338fb","generator":"371abd1b631fa0cf","spec":"parity/specs/dom/field-2d/trail.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"jsdom"},
     "dom/hub-frame/mac": {"cases":85,"content":"60ee984943580fc1","generator":"696d894971a573b9","spec":"parity/specs/dom/hub-frame/mac.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/hub-frame/odd-window": {"cases":77,"content":"6e3773efad9dc3ad","generator":"1048786ce0353b76","spec":"parity/specs/dom/hub-frame/odd-window.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
-    "dom/hub-frame/platforms": {"cases":35,"content":"3d94a11fb20514ed","generator":"83214f73b85a559a","spec":"parity/specs/dom/hub-frame/platforms.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/hub-frame/platforms": {"cases":35,"content":"3d94a11fb20514ed","generator":"c1f06af2a05e113f","spec":"parity/specs/dom/hub-frame/platforms.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/hub/selection-sidebar": {"cases":22,"content":"e3f86abecc21333b","generator":"db63db8308b47bfc","spec":"parity/specs/dom/hub/selection-sidebar.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/line-graph/akit": {"cases":394,"content":"dfbea25540c2d5c3","generator":"80310972b43fbb3e","spec":"parity/specs/dom/line-graph/akit.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/line-graph/akit-nt": {"cases":112,"content":"db6658297e31500f","generator":"f0d99c1c35f73cf2","spec":"parity/specs/dom/line-graph/akit-nt.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
