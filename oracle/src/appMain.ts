@@ -73,8 +73,8 @@ const switches: [string, string?][] = [
   ["disable-partial-raster"]
 ];
 if (colour === "srgb") switches.push(["force-color-profile", "srgb"]);
-// GPU-less hosts need SwiftShader for WebGL. It is only switched on for 3D launches, because it
-// also moves compositing and the 2D canvas onto the GPU path.
+// GPU-less hosts need SwiftShader for WebGL. 2D and DOM launches go without it, so their raster
+// path stays the one the canvas references were measured on.
 if (scenario.gl && glMode !== "native") switches.push(["enable-unsafe-swiftshader"]);
 if (scenario.gl && glMode === "d3d11-warp") switches.push(["use-angle", "d3d11-warp"]);
 const switchText = switches.map(([n, v]) => (v === undefined ? `--${n}` : `--${n}=${v}`));
@@ -97,9 +97,9 @@ const seeds: Record<string, unknown> = {
   ...scenario.userData
 };
 for (const [file, value] of Object.entries(seeds)) {
-  const target = path.join(userData, file);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, JSON.stringify(value));
+  const seedFile = path.join(userData, file);
+  fs.mkdirSync(path.dirname(seedFile), { recursive: true });
+  fs.writeFileSync(seedFile, JSON.stringify(value));
 }
 const seedBytes = new Map(Object.keys(seeds).map((file) => [file, fs.readFileSync(path.join(userData, file))]));
 
@@ -491,7 +491,11 @@ async function run() {
   return Date.now() - started;
 }
 
-async function finish(elapsedMs: number | null, error: unknown) {
+let finished = false;
+
+function finish(elapsedMs: number | null, error: unknown) {
+  if (finished) return;
+  finished = true;
   if (error !== null) errors.push(String((error as Error).stack ?? error));
   const files = fs.existsSync(userData) ? collectFiles() : [];
   const record = {
@@ -513,8 +517,13 @@ async function finish(elapsedMs: number | null, error: unknown) {
     displayId,
     displayProfile,
     gpuFeatureStatus: app.getGPUFeatureStatus(),
-    hubWindow: target === null || target.isDestroyed() ? null : { bounds: target.getBounds(), contentBounds: target.getContentBounds(), focused: target.isFocused(), title: target.getTitle() },
-    windows: windows.filter((w) => !w.isDestroyed()).map((w) => w.webContents.getURL().split("/").slice(-2).join("/")),
+    targetWindow: target === null || target.isDestroyed() ? null : { bounds: target.getBounds(), contentBounds: target.getContentBounds(), focused: target.isFocused(), title: target.getTitle() },
+    windows: windows
+      .filter((w) => !w.isDestroyed())
+      .map((w) => {
+        const url = w.webContents.getURL();
+        return url.startsWith("data:") ? "data:" : url.split("/").slice(-2).join("/");
+      }),
     elapsedMs,
     blockedRequests: [...new Set(blockedRequests)].sort(),
     dialogs,

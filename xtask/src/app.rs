@@ -14,26 +14,30 @@ const USAGE: &str = r"usage: cargo xtask app <command>
 
 The Electron scenario driver (oracle/src/appMain.ts) runs upstream's real app on scenarios from
 parity/scenarios/*.json with an isolated userData directory and drives it with executeJavaScript
-and sendInputEvent only. Each run directory holds run.json, display.icc (absent when the display
-is untagged sRGB), captures/<name>.png (capturePage, raw display colour space) with
-captures/<name>.json (probed boxes, text boxes, masks), per-canvas getImageData dumps
-(<name>.canvas-<i>.png), WebGL drawing-buffer dumps (<name>.gl-<i>.png), files/ (what the app wrote
-to userData) and inputs/ (generated logs).
+and sendInputEvent only. Each run directory holds run.json, captures/<name>.png (capturePage)
+with captures/<name>.json (probed boxes, text boxes, masks, colour space), per-canvas getImageData
+dumps (<name>.canvas-<i>.png), WebGL drawing-buffer dumps read right after the draw
+(<name>.gl-<i>.png), files/ (what the app wrote to userData) and inputs/ (generated logs).
 
-  run [<scenario>...] [--scale 1|2] [--theme light|dark] [--gl <mode>] [--label <label>]
+Captures are sRGB: Chromium composites with --force-color-profile=srgb. With --colour display it
+keeps the display's colour space instead and the driver stores the display's ICC profile as
+display.icc beside the captures; `normalize` converts those to sRGB.
+
+  run [<scenario>...] [--scale 1|2] [--theme light|dark] [--gl <mode>] [--colour srgb|display]
+      [--label <label>]
                   every variant (scales x themes) of each scenario (default: all), into
                   target/parity/app/<label>/<scenario>/<scale>x-<theme>/ (label default `run`).
                   --gl native|swiftshader|d3d11-warp picks the 3D switches (default native on
                   macOS, swiftshader elsewhere)
   compare <dir> <dir>
                   two run labels or directories: window captures equal outside the recorded
-                  masks, canvas and drawing-buffer dumps, DOM dumps and written files equal
+                  masks; canvas and drawing-buffer dumps, DOM dumps and written files equal
   normalize <dir> every window capture to sRGB through display.icc (lcms2, relative
                   colorimetric, 8 bit) as captures/<name>.srgb.png
-  check [--scale 1|2]...
+  check [--scale 1|2]... [--theme light|dark]... [--gl <mode>]
                   the driver's exit criteria on this host: every scenario run twice and compared,
-                  the colour-patch capture within 1 level per channel of its sRGB source after
-                  normalization, 3D drawing buffers byte-stable";
+                  the colour-patch capture within 1 level per channel of its source, and the
+                  colour patch with the display profile normalized and reported";
 
 const SCALES: [u32; 2] = [1, 2];
 const THEMES: [&str; 2] = ["light", "dark"];
@@ -124,8 +128,12 @@ impl RunOptions {
                     }
                 }
                 "--label" => options.label = value("--label")?,
-                flag if flag.starts_with("--") => return Err(format!("unknown option {flag}\n\n{USAGE}")),
-                name => options.scenarios.push(name.trim_end_matches(".json").to_owned()),
+                flag if flag.starts_with("--") => {
+                    return Err(format!("unknown option {flag}\n\n{USAGE}"));
+                }
+                name => options
+                    .scenarios
+                    .push(name.trim_end_matches(".json").to_owned()),
             }
         }
         Ok(options)
@@ -150,7 +158,12 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
     let mut names: Vec<String> = fs::read_dir(&dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .filter_map(|e| e.ok())
-        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_owned))
+        .filter_map(|e| {
+            e.file_name()
+                .to_str()?
+                .strip_suffix(".json")
+                .map(str::to_owned)
+        })
         .collect();
     names.sort();
     if let Some(missing) = only.iter().find(|n| !names.contains(n)) {
@@ -165,7 +178,12 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
             let numbers = |key: &str, default: &[u32]| -> Vec<u32> {
                 value.get(key).and_then(Json::as_array).map_or_else(
                     || default.to_vec(),
-                    |a| a.iter().filter_map(Json::as_f64).map(|n| n as u32).collect(),
+                    |a| {
+                        a.iter()
+                            .filter_map(Json::as_f64)
+                            .map(|n| n as u32)
+                            .collect()
+                    },
                 )
             };
             let strings = |key: &str, default: &[&str]| -> Vec<String> {
@@ -291,9 +309,7 @@ fn run_scenarios(paths: &Paths, options: &RunOptions) -> Result<PathBuf> {
                 if !options.themes.is_empty() && !options.themes.contains(theme) {
                     continue;
                 }
-                let out = root
-                    .join(&scenario.name)
-                    .join(format!("{scale}x-{theme}"));
+                let out = root.join(&scenario.name).join(format!("{scale}x-{theme}"));
                 let variant = Variant {
                     scale,
                     theme,
@@ -310,7 +326,11 @@ fn run_scenarios(paths: &Paths, options: &RunOptions) -> Result<PathBuf> {
     if failures.is_empty() {
         Ok(root)
     } else {
-        Err(format!("{} runs failed:\n{}", failures.len(), failures.join("\n")))
+        Err(format!(
+            "{} runs failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        ))
     }
 }
 
@@ -320,20 +340,22 @@ fn read_json(path: &Path) -> Result<Json> {
 }
 
 fn rects(value: Option<&Json>) -> Vec<[f64; 4]> {
-    value.and_then(Json::as_array).map_or_else(Vec::new, |items| {
-        items
-            .iter()
-            .filter_map(|m| {
-                let r: Vec<f64> = m
-                    .get("rect")
-                    .and_then(Json::as_array)?
-                    .iter()
-                    .filter_map(Json::as_f64)
-                    .collect();
-                r.try_into().ok()
-            })
-            .collect()
-    })
+    value
+        .and_then(Json::as_array)
+        .map_or_else(Vec::new, |items| {
+            items
+                .iter()
+                .filter_map(|m| {
+                    let r: Vec<f64> = m
+                        .get("rect")
+                        .and_then(Json::as_array)?
+                        .iter()
+                        .filter_map(Json::as_f64)
+                        .collect();
+                    r.try_into().ok()
+                })
+                .collect()
+        })
 }
 
 fn mask_image(width: u32, height: u32, scale: f64, masks: &[[f64; 4]]) -> Vec<bool> {
@@ -443,7 +465,9 @@ fn compare(a_root: &Path, b_root: &Path) -> Result<Report> {
         let label = rel.display().to_string();
         let b = b_root.join(rel);
         if !b.join("run.json").exists() {
-            report.failures.push(format!("{label}: missing in {}", b_root.display()));
+            report
+                .failures
+                .push(format!("{label}: missing in {}", b_root.display()));
             continue;
         }
         compare_variant(&label, &a, &b, &mut report)?;
@@ -455,16 +479,23 @@ fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Resu
     let captures = a.join("captures");
     let mut names = BTreeSet::new();
     for entry in sorted_entries(&captures)? {
-        let file = entry.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_owned();
+        let file = entry
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_owned();
         let Some(name) = file.strip_suffix(".json") else {
             continue;
         };
         names.insert(name.to_owned());
-        let (ja, jb) = (read_json(&entry)?, read_json(&b.join("captures").join(&file))?);
+        let (ja, jb) = (
+            read_json(&entry)?,
+            read_json(&b.join("captures").join(&file))?,
+        );
         if without_key(&ja, "timing") != without_key(&jb, "timing") {
-            report
-                .failures
-                .push(format!("{label} {name}: DOM dump or capture record differs"));
+            report.failures.push(format!(
+                "{label} {name}: DOM dump or capture record differs"
+            ));
         }
         let scale = ja.get("scale").and_then(Json::as_f64).unwrap_or(1.0);
         let image_a = pixel::read_png(&captures.join(format!("{name}.png")))?;
@@ -526,7 +557,10 @@ fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Resu
         report.compared.push(format!(
             "{label}: {} written files equal ({})",
             fa.len(),
-            fa.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
+            fa.iter()
+                .map(|(n, _)| n.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     } else {
         report
@@ -546,7 +580,10 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> R
                 .expect("file under its root")
                 .to_string_lossy()
                 .replace('\\', "/");
-            out.push((rel, fs::read(&entry).map_err(|e| format!("{}: {e}", entry.display()))?));
+            out.push((
+                rel,
+                fs::read(&entry).map_err(|e| format!("{}: {e}", entry.display()))?,
+            ));
         }
     }
     Ok(())
@@ -595,7 +632,10 @@ fn display_profile(variant: &Path) -> Result<Option<Vec<u8>>> {
         Some(_) => fs::read(variant.join("display.icc"))
             .map(Some)
             .map_err(|e| format!("{}: {e}", variant.display())),
-        None => Err(format!("{}: run.json records no display profile", variant.display())),
+        None => Err(format!(
+            "{}: run.json records no display profile",
+            variant.display()
+        )),
     }
 }
 
@@ -604,7 +644,10 @@ fn normalize_variant(variant: &Path) -> Result<Vec<(String, Rgba)>> {
     let captures = variant.join("captures");
     let mut out = Vec::new();
     for entry in sorted_entries(&captures)? {
-        let name = entry.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let name = entry
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
         let Some(name) = name.strip_suffix(".json") else {
             continue;
         };
@@ -641,7 +684,10 @@ fn check_patches(variant: &Path) -> Result<PatchResult> {
     for (name, image) in normalize_variant(variant)? {
         let record = read_json(&variant.join("captures").join(format!("{name}.json")))?;
         let scale = record.get("scale").and_then(Json::as_f64).unwrap_or(1.0);
-        let patches = record.get("patches").and_then(Json::as_array).unwrap_or_default();
+        let patches = record
+            .get("patches")
+            .and_then(Json::as_array)
+            .unwrap_or_default();
         for patch in patches {
             let rgb: Vec<u8> = patch
                 .get("rgb")
@@ -665,9 +711,10 @@ fn check_patches(variant: &Path) -> Result<PatchResult> {
             result.exact += usize::from(worst == 0);
             result.max_delta = result.max_delta.max(worst);
             if worst > 1 {
-                result
-                    .over
-                    .push(format!("{name} rgb({},{},{}) off by {worst}", rgb[0], rgb[1], rgb[2]));
+                result.over.push(format!(
+                    "{name} rgb({},{},{}) off by {worst}",
+                    rgb[0], rgb[1], rgb[2]
+                ));
             }
         }
     }
@@ -678,7 +725,11 @@ fn colour_patch_results(root: &Path, scenario: &Scenario) -> Result<Vec<(String,
     let mut results = Vec::new();
     for variant in sorted_entries(&root.join(&scenario.name))? {
         if variant.join("run.json").exists() {
-            let label = variant.strip_prefix(root).expect("under root").display().to_string();
+            let label = variant
+                .strip_prefix(root)
+                .expect("under root")
+                .display()
+                .to_string();
             results.push((label, check_patches(&variant)?));
         }
     }
