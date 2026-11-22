@@ -10,7 +10,8 @@ use asrs_ui::capture::{Capture, HeadlessCapture};
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{
     Checkbox, FieldKind, FieldModel, FieldStyle, PlainText, Progress, RangeModel, Segment,
-    SegmentedControl, Slider, SliderStyle, TextField, number_accepts,
+    SegmentedControl, Select, SelectItem, SelectModel, Slider, SliderStyle, TextField,
+    number_accepts,
 };
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::snap_remainder;
@@ -49,6 +50,15 @@ struct Control {
     max: Option<String>,
     segments: Vec<Segment>,
     selected: Option<usize>,
+    options: Vec<SceneOption>,
+    disabled: bool,
+}
+
+struct SceneOption {
+    label: String,
+    group: Option<String>,
+    selected: bool,
+    disabled: bool,
 }
 
 struct Scene {
@@ -100,6 +110,16 @@ fn control(c: &Json) -> Control {
             })
             .collect(),
         selected: c.get("selected").and_then(Json::as_f64).map(|n| n as usize),
+        options: list(c, "options")
+            .iter()
+            .map(|o| SceneOption {
+                label: text(o, "label"),
+                group: opt_text(o, "group"),
+                selected: matches!(o.get("selected"), Some(Json::Bool(true))),
+                disabled: matches!(o.get("disabled"), Some(Json::Bool(true))),
+            })
+            .collect(),
+        disabled: matches!(c.get("disabled"), Some(Json::Bool(true))),
     }
 }
 
@@ -232,6 +252,88 @@ impl RangeModel for Range {
     }
 }
 
+/// The select scenes are parsed markup: the option with `selected`, else the first enabled
+/// one. The selectedness algorithm itself is `asrs_tabs::form::Select`'s, replayed against Blink
+/// in asrs-app.
+struct Options {
+    items: Vec<SelectItem>,
+    selected: Option<usize>,
+}
+
+impl Options {
+    fn new(options: &[SceneOption]) -> Options {
+        let mut items = Vec::new();
+        let mut group: Option<&str> = None;
+        let mut selected = None;
+        let mut first_enabled = None;
+        for o in options {
+            if o.group.as_deref() != group {
+                group = o.group.as_deref();
+                if let Some(label) = group {
+                    items.push(SelectItem {
+                        label: label.to_owned(),
+                        group: true,
+                        enabled: true,
+                        hidden: false,
+                    });
+                }
+            }
+            let label = match group {
+                Some(_) => format!("    {}", o.label),
+                None => o.label.clone(),
+            };
+            if o.selected {
+                selected = Some(items.len());
+            }
+            if !o.disabled && first_enabled.is_none() {
+                first_enabled = Some(items.len());
+            }
+            items.push(SelectItem {
+                label,
+                group: false,
+                enabled: !o.disabled,
+                hidden: false,
+            });
+        }
+        Options {
+            items,
+            selected: selected.or(first_enabled),
+        }
+    }
+}
+
+impl SelectModel for Options {
+    fn items(&self) -> Vec<SelectItem> {
+        self.items.clone()
+    }
+
+    fn selected_item(&self) -> Option<usize> {
+        self.selected
+    }
+
+    fn shown_text(&self) -> String {
+        self.selected
+            .map(|i| self.items[i].label.trim().to_owned())
+            .unwrap_or_default()
+    }
+
+    fn select_by_popup(&mut self, item: usize) -> bool {
+        let changed = self.selected != Some(item);
+        self.selected = Some(item);
+        changed
+    }
+
+    fn type_ahead(&mut self, _: u16, _: f64) -> bool {
+        false
+    }
+
+    fn type_ahead_active(&self, _: f64) -> bool {
+        false
+    }
+
+    fn end_type_ahead(&mut self) {}
+}
+
 fn field<M: FieldModel>(
     model: M,
     (kind, style): (FieldKind, FieldStyle),
@@ -317,6 +419,23 @@ fn part(
             return Part::Progress(v / max);
         }
         "beta" => return Part::Checkbox(c.checked),
+        "field-select" | "setting-select" | "joystick-select" | "prompt-select" => {
+            let model = Options::new(&c.options);
+            let disabled = c.disabled;
+            return Part::View(
+                cx.new(|cx| {
+                    let mut select = Select::new(model, window, cx);
+                    select.set_size(rect[2], rect[3]);
+                    select.set_subpixel(
+                        snap_remainder(rect[0], scale),
+                        snap_remainder(rect[1], scale),
+                    );
+                    select.set_disabled(disabled, cx);
+                    select
+                })
+                .into(),
+            );
+        }
         other => panic!("unknown control preset {other}"),
     };
     let look = (model_kind, style);

@@ -12,21 +12,29 @@ use objc2::{
 };
 use objc2_app_kit::{
     NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSControlStateValueOff,
-    NSControlStateValueOn, NSEvent, NSEventMask, NSEventModifierFlags, NSImage, NSMenu, NSMenuItem,
-    NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
-    NSVisualEffectView, NSWindow, NSWindowOrderingMode,
+    NSControlStateValueOn, NSEvent, NSEventMask, NSEventModifierFlags, NSFont, NSFontAttributeName,
+    NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle,
+    NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
+    NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection,
 };
 use objc2_core_foundation::{CFData, CGRect};
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
     CGImageByteOrderInfo, kCGColorSpaceSRGB,
 };
-use objc2_foundation::{NSArray, NSNumber, NSPoint, NSRunLoopCommonModes, NSSize, NSString};
+use objc2_foundation::{
+    NSArray, NSAttributedString, NSCharacterSet, NSDictionary, NSNumber, NSPoint, NSRect,
+    NSRunLoopCommonModes, NSSize, NSString,
+};
 use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use super::probe::GpuiDelta;
-use super::{MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, WheelDelta};
+use super::{
+    MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu, SelectMenuItemKind,
+    WheelDelta,
+};
 
 pub(super) mod dialog;
 pub(super) mod window;
@@ -609,6 +617,131 @@ pub(super) fn popup_menu(
     });
 }
 
+pub(super) fn select_popup(
+    window: &Window,
+    cx: &mut App,
+    menu: SelectMenu,
+    bounds: [f64; 4],
+    on_close: impl FnOnce(Option<usize>, &mut App) + 'static,
+) {
+    let view = ns_view(window);
+    let cx = cx.to_async();
+    perform_on_run_loop(move || {
+        let selection = view.and_then(|view| run_select_menu(&view, &menu, bounds));
+        cx.spawn(async move |cx| cx.update(|cx| on_close(selection, cx)))
+            .detach();
+    });
+}
+
+/// `-[WebMenuRunner initWithItems:fontSize:rightAligned:]`.
+fn build_select_menu(
+    mtm: MainThreadMarker,
+    menu: &SelectMenu,
+    target: &PopupTarget,
+) -> Retained<NSMenu> {
+    let ns_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::new());
+    ns_menu.setAutoenablesItems(false);
+    retain_target(&ns_menu, target);
+    *target.ivars().paths.borrow_mut() = (0..menu.items.len()).map(|i| vec![i]).collect();
+    let font = NSFont::menuFontOfSize(menu.font_size);
+    for item in &menu.items {
+        if item.kind == SelectMenuItemKind::Separator {
+            ns_menu.addItem(&NSMenuItem::separatorItem(mtm));
+            continue;
+        }
+        let title = NSString::from_str(&item.label);
+        // SAFETY: `itemSelected:` is implemented by `PopupTarget`, the item's target.
+        let ns_item = unsafe {
+            ns_menu.addItemWithTitle_action_keyEquivalent(
+                &title,
+                Some(sel!(itemSelected:)),
+                &NSString::new(),
+            )
+        };
+        ns_item.setToolTip(Some(&NSString::from_str(&item.tool_tip)));
+        ns_item.setEnabled(item.enabled && item.kind != SelectMenuItemKind::Group);
+        // SAFETY: the target is retained by the menu through `retain_target`.
+        unsafe { ns_item.setTarget(Some(target)) };
+
+        let paragraph = NSMutableParagraphStyle::new();
+        paragraph.setAlignment(if menu.right_aligned {
+            NSTextAlignment::Right
+        } else {
+            NSTextAlignment::Left
+        });
+        paragraph.setBaseWritingDirection(NSWritingDirection::LeftToRight);
+        paragraph.setLineBreakMode(NSLineBreakMode::ByTruncatingTail);
+        // SAFETY: immutable NSString constants exported by AppKit.
+        let keys = unsafe { [NSParagraphStyleAttributeName, NSFontAttributeName] };
+        let values: [&AnyObject; 2] = [paragraph.as_ref(), font.as_ref()];
+        let attributes = NSDictionary::from_slices(&keys, &values);
+        // SAFETY: AppKit's attribute keys with values of the types they name.
+        let attributed = unsafe {
+            NSAttributedString::initWithString_attributes(
+                NSAttributedString::alloc(),
+                &title,
+                Some(&attributes),
+            )
+        };
+        ns_item.setAttributedTitle(Some(&attributed));
+        ns_item.setTitle(
+            &title.stringByTrimmingCharactersInSet(&NSCharacterSet::whitespaceCharacterSet()),
+        );
+        ns_item.setTag(ns_menu.numberOfItems() - 1);
+    }
+    ns_menu
+}
+
+/// The popup cell `-[WebMenuRunner runMenuInView:withBounds:initialIndex:]` sets up.
+fn select_cell(
+    mtm: MainThreadMarker,
+    ns_menu: &NSMenu,
+    menu: &SelectMenu,
+) -> Retained<NSPopUpButtonCell> {
+    let cell = NSPopUpButtonCell::initTextCell_pullsDown(
+        NSPopUpButtonCell::alloc(mtm),
+        &NSString::new(),
+        false,
+    );
+    cell.setMenu(Some(ns_menu));
+    cell.selectItemWithTag(menu.selected.map_or(-1, |i| i as isize));
+    if menu.right_aligned {
+        cell.setUserInterfaceLayoutDirection(NSUserInterfaceLayoutDirection::RightToLeft);
+        ns_menu.setUserInterfaceLayoutDirection(NSUserInterfaceLayoutDirection::RightToLeft);
+    }
+    cell
+}
+
+/// Runs the menu over a stand-in control view at the select's bounds, so a menu AppKit has to
+/// move stays next to the select rather than the whole content view. Blocks in AppKit's menu
+/// tracking loop.
+fn run_select_menu(view: &NSView, menu: &SelectMenu, bounds: [f64; 4]) -> Option<usize> {
+    let mtm = MainThreadMarker::new()?;
+    let target = PopupTarget::new(mtm);
+    let ns_menu = build_select_menu(mtm, menu, &target);
+    let cell = select_cell(mtm, &ns_menu, menu);
+    let [x, y, width, height] = bounds;
+    let y = if view.isFlipped() {
+        y
+    } else {
+        view.frame().size.height - y - height
+    };
+    let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
+    let control = NSView::initWithFrame(NSView::alloc(mtm), frame);
+    view.addSubview(&control);
+    let key = view.window().map_or(0, |w| Retained::as_ptr(&w) as usize);
+    OPEN_POPUPS.with_borrow_mut(|open| open.push((key, ns_menu.clone())));
+    cell.attachPopUpWithFrame_inView(control.bounds(), &control);
+    cell.performClickWithFrame_inView(control.bounds(), &control);
+    OPEN_POPUPS.with_borrow_mut(|open| {
+        if let Some(i) = open.iter().position(|(_, m)| *m == ns_menu) {
+            open.remove(i);
+        }
+    });
+    control.removeFromSuperview();
+    target.selection().and_then(|path| path.first().copied())
+}
+
 /// `Menu::SetApplicationMenu` with `useDefaultAccelerator:YES`; the caller has already resolved
 /// default accelerators into the entries' key equivalents.
 pub(super) fn set_application_menu(
@@ -857,9 +990,56 @@ pub(super) mod probe {
     };
     use objc2_foundation::NSSize;
 
+    use super::super::probe::SelectMenuReading;
     use super::super::probe::{Frame, MouseAction, WheelReading, WheelSample, WindowImage};
-    use super::super::{PopupEntry, PopupItem, PopupMenu};
-    use super::{PopupTarget, RawWheel, build_menu, find_vibrancy, metal_layer, ns_window};
+    use super::super::{PopupEntry, PopupItem, PopupMenu, SelectMenu};
+    use super::{
+        PopupTarget, RawWheel, build_menu, build_select_menu, find_vibrancy, metal_layer,
+        ns_window, select_cell,
+    };
+
+    pub fn select_menu_roundtrip(menu: &SelectMenu) -> Option<SelectMenuReading> {
+        let mtm = MainThreadMarker::new()?;
+        let target = PopupTarget::new(mtm);
+        let ns_menu = build_select_menu(mtm, menu, &target);
+        let cell = select_cell(mtm, &ns_menu, menu);
+        let items = ns_menu
+            .itemArray()
+            .iter()
+            .map(|item| {
+                let attributed = item.attributedTitle();
+                let font = attributed.as_ref().and_then(|a| {
+                    if a.length() == 0 {
+                        return None;
+                    }
+                    // SAFETY: an AppKit attribute key, read at an index inside the string.
+                    let value = unsafe {
+                        a.attribute_atIndex_effectiveRange(
+                            objc2_app_kit::NSFontAttributeName,
+                            0,
+                            ptr::null_mut(),
+                        )
+                    };
+                    value
+                        .and_then(|v| v.downcast::<objc2_app_kit::NSFont>().ok())
+                        .map(|f| f.pointSize())
+                });
+                super::super::probe::SelectMenuItemReading {
+                    separator: item.isSeparatorItem(),
+                    title: item.title().to_string(),
+                    attributed_title: attributed.map(|a| a.string().to_string()),
+                    font_size: font,
+                    enabled: item.isEnabled(),
+                    tag: item.tag(),
+                }
+            })
+            .collect();
+        Some(SelectMenuReading {
+            items,
+            selected_tag: cell.selectedItem().map(|i| i.tag()),
+            pulls_down: cell.pullsDown(),
+        })
+    }
 
     pub fn native_menu_roundtrip(menu: &PopupMenu) -> Option<PopupMenu> {
         let mtm = MainThreadMarker::new()?;
