@@ -6,7 +6,7 @@ use gpui_kit::{
 };
 
 use crate::icon::{Icon, IconFit};
-use crate::input::model::{FieldModel, number_accepts};
+use crate::input::model::{FieldModel, FieldValue, number_accepts};
 use crate::input::native::paint_text_field;
 use crate::input::style::{FieldStyle, Frame, device_border};
 use crate::symbols::Symbol;
@@ -106,7 +106,7 @@ fn split(v: f32, scale: f32) -> (f32, f32) {
 /// present and takes clicks; its glyphs show only while it has focus. Unfocused, the shown
 /// text or the placeholder is painted with [`Text`], as Chromium paints it.
 pub struct TextField<M: FieldModel> {
-    model: M,
+    value: FieldValue<M>,
     kind: FieldKind,
     style: FieldStyle,
     size: (f32, f32),
@@ -114,7 +114,6 @@ pub struct TextField<M: FieldModel> {
     placeholder: SharedString,
     disabled: bool,
     editor: Entity<InputState>,
-    shown: String,
     committed: String,
     hovered: bool,
     _subscription: Subscription,
@@ -146,7 +145,7 @@ impl<M: FieldModel> TextField<M> {
         });
         let subscription = cx.subscribe_in(&editor, window, Self::on_editor);
         TextField {
-            model,
+            value: FieldValue::new(model),
             kind,
             style,
             size: (0.0, 0.0),
@@ -154,8 +153,7 @@ impl<M: FieldModel> TextField<M> {
             placeholder: SharedString::default(),
             disabled: false,
             editor,
-            committed: shown.clone(),
-            shown,
+            committed: shown,
             hovered: false,
             _subscription: subscription,
         }
@@ -170,13 +168,10 @@ impl<M: FieldModel> TextField<M> {
     ) {
         match event {
             InputEvent::Change => {
-                let text = editor.read(cx).value().to_string();
-                if text == self.shown {
+                let text = editor.read(cx).value();
+                if !self.value.edit(&text) {
                     return;
                 }
-                let accepted: String = text.chars().filter(|&c| self.model.accepts(c)).collect();
-                self.model.set_value(&accepted);
-                self.shown = accepted;
                 cx.emit(FieldEvent::Input);
             }
             InputEvent::PressEnter { .. } => {
@@ -184,7 +179,7 @@ impl<M: FieldModel> TextField<M> {
                 self.commit(cx);
             }
             InputEvent::Focus => {
-                self.committed = self.model.value();
+                self.committed = self.value.value();
                 cx.emit(FieldEvent::Focus);
             }
             InputEvent::Blur => {
@@ -196,7 +191,7 @@ impl<M: FieldModel> TextField<M> {
     }
 
     fn commit(&mut self, cx: &mut Context<'_, Self>) {
-        let value = self.model.value();
+        let value = self.value.value();
         if value != self.committed {
             self.committed = value;
             cx.emit(FieldEvent::Change);
@@ -204,20 +199,19 @@ impl<M: FieldModel> TextField<M> {
     }
 
     pub fn model(&self) -> &M {
-        &self.model
+        self.value.model()
     }
 
     /// `input.value`.
     pub fn value(&self) -> String {
-        self.model.value()
+        self.value.value()
     }
 
     /// `input.value = value`: the model sanitizes it and the editor shows the result.
     pub fn set_value(&mut self, value: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.model.set_value(value);
-        self.shown = self.model.value();
-        self.committed = self.shown.clone();
-        let shown = self.shown.clone();
+        self.value.assign(value);
+        let shown = self.value.shown().to_owned();
+        self.committed = self.value.value();
         self.editor
             .update(cx, |editor, cx| editor.set_value(shown, window, cx));
         cx.notify();
@@ -225,7 +219,7 @@ impl<M: FieldModel> TextField<M> {
 
     /// The text the editor shows, which differs from `value` while it does not sanitize.
     pub fn shown(&self) -> &str {
-        &self.shown
+        self.value.shown()
     }
 
     pub fn set_placeholder(&mut self, placeholder: impl Into<SharedString>) {
@@ -279,8 +273,7 @@ impl<M: FieldModel> TextField<M> {
     }
 
     fn clear(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.model.set_value("");
-        self.shown.clear();
+        self.value.edit("");
         self.editor
             .update(cx, |editor, cx| editor.set_value("", window, cx));
         cx.emit(FieldEvent::Input);
@@ -360,7 +353,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 .w(px(right - left))
                 .h(px(bottom - top))
         };
-        if self.shown.is_empty() && !self.placeholder.is_empty() {
+        if self.value.shown().is_empty() && !self.placeholder.is_empty() {
             let alpha = (style.placeholder & 0xff) as f32 / 255.0 * style.placeholder_opacity;
             editor_box = editor_box.child(
                 div()
@@ -370,7 +363,7 @@ impl<M: FieldModel> Render for TextField<M> {
                     .opacity(alpha)
                     .child(paint(&self.placeholder, style.placeholder)),
             );
-        } else if !focused && !self.shown.is_empty() {
+        } else if !focused && !self.value.shown().is_empty() {
             let alpha = (style.color & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
                 div()
@@ -378,7 +371,7 @@ impl<M: FieldModel> Render for TextField<M> {
                     .left_0()
                     .top_0()
                     .opacity(alpha)
-                    .child(paint(&self.shown, style.color)),
+                    .child(paint(self.value.shown(), style.color)),
             );
         }
 
@@ -394,7 +387,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .child(frame.absolute().inset_0())
             .child(editor_box);
 
-        let cancel_visible = (focused || self.hovered) && !self.disabled && !self.shown.is_empty();
+        let cancel_visible = (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();
         if let (Some([cx0, cy0, cw, ch]), true) = (g.cancel, cancel_visible) {
             let (cl, _) = split(cx0, scale);
             let (ct, _) = split(cy0, scale);

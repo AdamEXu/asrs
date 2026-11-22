@@ -20,8 +20,54 @@ pub trait RangeModel: 'static {
     fn set_value(&mut self, value: &str);
     /// 0 at `min`, 1 at `max`.
     fn proportion(&self) -> f64;
-    /// The value a pointer at `proportion` along the track assigns.
+    /// The value a pointer at `proportion` along the track assigns (#160).
     fn value_at(&self, proportion: f64) -> String;
+}
+
+/// What a field holds: its model and the text its editor shows. A script's assignment shows the
+/// sanitized value; the user's text is shown as typed and only its sanitized form is the value.
+#[derive(Clone, Debug)]
+pub struct FieldValue<M: FieldModel> {
+    model: M,
+    shown: String,
+}
+
+impl<M: FieldModel> FieldValue<M> {
+    pub fn new(model: M) -> Self {
+        let shown = model.value();
+        FieldValue { model, shown }
+    }
+
+    /// `input.value = value`.
+    pub fn assign(&mut self, value: &str) {
+        self.model.set_value(value);
+        self.shown = self.model.value();
+    }
+
+    /// The editor's text after a user edit, less the characters the model refuses. Returns
+    /// whether the shown text changed, which is when the DOM fires `input`.
+    pub fn edit(&mut self, text: &str) -> bool {
+        let accepted: String = text.chars().filter(|&c| self.model.accepts(c)).collect();
+        if accepted == self.shown {
+            return false;
+        }
+        self.model.set_value(&accepted);
+        self.shown = accepted;
+        true
+    }
+
+    /// `input.value`.
+    pub fn value(&self) -> String {
+        self.model.value()
+    }
+
+    pub fn shown(&self) -> &str {
+        &self.shown
+    }
+
+    pub fn model(&self) -> &M {
+        &self.model
+    }
 }
 
 /// A text or search input's value until `asrs_tabs::form` models one (#158): the value
@@ -56,6 +102,16 @@ pub fn number_accepts(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edits_show_the_typed_text_and_assignments_the_value() {
+        let mut field = FieldValue::new(PlainText::new("a"));
+        assert!(field.edit("a\nb"));
+        assert_eq!((field.value().as_str(), field.shown()), ("ab", "ab"));
+        assert!(!field.edit("ab"));
+        field.assign("c\r");
+        assert_eq!((field.value().as_str(), field.shown()), ("c", "c"));
+    }
 
     #[test]
     fn plain_text_strips_line_breaks() {
