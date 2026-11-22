@@ -380,7 +380,7 @@ fn check(zone_name: &str) {
     let ctx = format!("{id} line {}", first.line);
     let mut f = Fields::new(&first.json, &ctx);
     assert_eq!(f.string("op"), "config", "{ctx}");
-    let mut c = Fields::new(&f.take("result"), &format!("{ctx}: config"));
+    let mut c = Fields::new(&cve_object(&f.take("result"), &ctx), &format!("{ctx}: config"));
     let user_data = c.string("userData");
     let beta_file = c.string("betaFile");
     let version = c.string("version");
