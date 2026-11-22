@@ -663,7 +663,8 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let hub = self.host.hub(cx);
         let show_fps = hub.show_fps();
         let shadow_shown = hub.sidebar().shadow_shown();
-        let title = SharedString::from(hub.title().to_string_lossy());
+        let title =
+            SharedString::from(crate::IDENTITY.window_title(&hub.title().to_string_lossy()));
         let blurred = !hub.is_focused();
         let now = self.started.elapsed().as_secs_f64() * 1000.0;
         self.shell.fps_mut().frame(now, show_fps);

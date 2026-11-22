@@ -4,13 +4,14 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use asrs_js::value::{JsValue, ToJs};
+use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
-use asrs_services::asset_loader::{AssetFolders, AssetService};
 use asrs_services::fs::RealFs;
+use asrs_services::lifecycle::{AppPaths, MainState};
 use asrs_services::path::PathStyle;
+use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
@@ -26,18 +27,20 @@ use super::{
     Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Theme, Wheel, patch_colours,
 };
 use crate::hub::{Hub, HubEvent};
+use crate::main_process::process_platform;
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>]
+[--bundled-assets <dir>] [--work-area <x>,<y>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
-automatic folders of each variant's userData/ (without it the hub gets no assets).";
+automatic folders of each variant's userData/; --work-area is the primary display's work area
+origin on the Electron driver's host, which places its window 16 px inside it (default 0,0).";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
@@ -47,6 +50,35 @@ const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
 const STABLE_ATTEMPTS: usize = 120;
 /// The Electron driver's `--js-flags=--random-seed`.
 const RANDOM_SEED: u64 = 1;
+/// The Electron driver's `WINDOW_ORIGIN`: its window's offset into the primary work area.
+const WINDOW_ORIGIN: f64 = 16.0;
+/// The id `StateTracker` keys the one hub window's renderer state by.
+const HUB_WINDOW_ID: f64 = 1.0;
+
+/// What `StateTracker` reads of the screen in a run: the hub window where the Electron driver
+/// places its own.
+struct Screen {
+    window: Rect,
+}
+
+impl WindowSystem for Screen {
+    fn window_bounds(&self, id: f64) -> Option<Rect> {
+        (id == HUB_WINDOW_ID).then_some(self.window)
+    }
+
+    fn displays(&self) -> Vec<Rect> {
+        vec![self.primary_display()]
+    }
+
+    fn primary_display(&self) -> Rect {
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: self.window.x + self.window.width + WINDOW_ORIGIN,
+            height: self.window.y + self.window.height + WINDOW_ORIGIN,
+        }
+    }
+}
 
 /// `Some(exit code)` when the command line asks for a scenario run.
 pub fn run_from_args() -> Option<i32> {
@@ -71,11 +103,13 @@ struct Options {
     inputs: Option<PathBuf>,
     probes: Option<PathBuf>,
     bundled_assets: Option<PathBuf>,
+    work_area: (f64, f64),
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
     let mut bundled_assets = None;
+    let mut work_area = (0.0, 0.0);
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -88,6 +122,13 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--inputs" => inputs = Some(PathBuf::from(value()?)),
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
+            "--work-area" => {
+                let text = value()?;
+                work_area = text
+                    .split_once(',')
+                    .and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?)))
+                    .ok_or(format!("--work-area {text}: expected <x>,<y>"))?;
+            }
             other => return Err(format!("unknown argument {other}\n{USAGE}")),
         }
     }
@@ -99,6 +140,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         inputs,
         probes,
         bundled_assets,
+        work_area,
     })
 }
 
@@ -158,6 +200,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 probes: &probes,
                 inputs: options.inputs.as_deref(),
                 bundled_assets: options.bundled_assets.as_deref(),
+                work_area: options.work_area,
+                main: Rc::default(),
                 scale,
                 theme,
                 dir: &dir,
@@ -189,6 +233,8 @@ struct Variant<'a> {
     probes: &'a Probes,
     inputs: Option<&'a Path>,
     bundled_assets: Option<&'a Path>,
+    work_area: (f64, f64),
+    main: Rc<RefCell<Option<(MainState, Screen)>>>,
     scale: u32,
     theme: Theme,
     dir: &'a Path,
@@ -199,15 +245,6 @@ struct Variant<'a> {
     exceptions: Rc<RefCell<Vec<String>>>,
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
     pressed: Option<MouseButton>,
-}
-
-/// Main's preferences for the run: the defaults with the scenario's `prefs.json` merged in, as
-/// the Electron driver seeds it (`{...prefs, theme}`).
-fn preferences(scenario: &Scenario, theme: Theme) -> Result<JsValue, String> {
-    let mut prefs = asrs_model::preferences::Preferences::default().to_js();
-    asrs_model::preferences::merge_preferences(&mut prefs, &seeded_prefs(scenario, theme)?)
-        .map_err(|e| format!("prefs: {e:?}"))?;
-    Ok(prefs)
 }
 
 /// `{...scenario.prefs, theme}`, the `prefs.json` the Electron driver seeds.
@@ -605,26 +642,45 @@ impl Variant<'_> {
         Ok(())
     }
 
-    /// What main does with userData before the window opens: the Electron driver's seeded
-    /// `prefs.json`, then `createAssetFolders()` and `loadAssets()`. Returns the `set-assets` data.
-    fn start_main(&self) -> Result<JsValue, String> {
+    /// Main's startup in the variant's `userData/`: the Electron driver's seeded `prefs.json`,
+    /// then module load and `whenReady` up to the windows. Returns the `set-assets` and
+    /// `set-preferences` data.
+    fn start_main(&self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
         std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
         capture::write(&user_data.join("prefs.json"), &self.prefs_seed()?)?;
-        let Some(bundled) = self.bundled_assets else {
-            return Ok(JsValue::Null);
+        let absolute = |p: &Path| {
+            std::path::absolute(p)
+                .map(|p| p.to_string_lossy().into_owned())
+                .map_err(|e| e.to_string())
         };
-        let user_data = std::path::absolute(&user_data).map_err(|e| e.to_string())?;
-        let bundled = std::path::absolute(bundled).map_err(|e| e.to_string())?;
-        let mut service = AssetService::new(AssetFolders::new(
-            PathStyle::host(),
-            &user_data.to_string_lossy(),
-            &bundled.to_string_lossy(),
-        ));
-        service
-            .start(&RealFs)
-            .map_err(|e| format!("loading assets: {e:?}"))?;
-        Ok(service.set_assets_data())
+        let bundled = match self.bundled_assets {
+            Some(dir) => absolute(dir)?,
+            None => absolute(&self.dir.join("bundledAssets"))?,
+        };
+        let paths = AppPaths {
+            style: PathStyle::host(),
+            user_data: absolute(&user_data)?,
+            temp: absolute(&self.dir.join("temp"))?,
+            bundled_assets: bundled,
+            packaged: false,
+        };
+        let screen = Screen {
+            window: Rect {
+                x: self.work_area.0 + WINDOW_ORIGIN,
+                y: self.work_area.1 + WINDOW_ORIGIN,
+                width: self.scenario.width,
+                height: self.scenario.height,
+            },
+        };
+        let (main, _) = MainState::start(&RealFs, &screen, paths, process_platform())
+            .map_err(|e| format!("main startup: {e:?}"))?;
+        let assets = main.assets.set_assets_data();
+        let preferences = main
+            .preferences(&RealFs)
+            .map_err(|e| format!("prefs.json: {e:?}"))?;
+        *self.main.borrow_mut() = Some((main, screen));
+        Ok((assets, preferences))
     }
 
     fn prefs_seed(&self) -> Result<String, String> {
@@ -651,8 +707,7 @@ impl Variant<'_> {
                 // `windows::open` makes the hub window transparent on macOS, for the vibrancy.
                 self.headless
                     .set_transparent_windows(cfg!(target_os = "macos"));
-                let preferences = preferences(self.scenario, theme)?;
-                let assets = self.start_main()?;
+                let (assets, preferences) = self.start_main()?;
                 if let Some(root) = self.bundled_assets.and_then(Path::parent) {
                     let root = std::path::absolute(root).map_err(|e| e.to_string())?;
                     self.headless
@@ -682,12 +737,31 @@ impl Variant<'_> {
                     })
                     .map_err(|e| e.to_string())?;
                 let (saves, exceptions) = (self.saves.clone(), self.exceptions.clone());
+                let main = self.main.clone();
                 self.headless.context().update(|cx| {
                     cx.subscribe(&hub, move |_, event, _| match event {
-                        HubEvent::Main(m) if m.name == HubToMain::SaveState => {
-                            let mut saves = saves.borrow_mut();
-                            saves.count += 1;
-                            saves.last = Some(m.data.clone());
+                        HubEvent::Main(m) => {
+                            if let Some((main, screen)) = main.borrow_mut().as_mut() {
+                                let saved =
+                                    main.hub_message(&RealFs, HUB_WINDOW_ID, m).and_then(|()| {
+                                        match m.name {
+                                            HubToMain::SaveState => {
+                                                main.tracker.tick(&RealFs, screen)
+                                            }
+                                            _ => Ok(()),
+                                        }
+                                    });
+                                if let Err(e) = saved {
+                                    exceptions
+                                        .borrow_mut()
+                                        .push(format!("main {}: {e:?}", m.name.name()));
+                                }
+                            }
+                            if m.name == HubToMain::SaveState {
+                                let mut saves = saves.borrow_mut();
+                                saves.count += 1;
+                                saves.last = Some(m.data.clone());
+                            }
                         }
                         HubEvent::Exception { task, error } => {
                             exceptions.borrow_mut().push(format!("{task}: {error}"));

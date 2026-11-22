@@ -317,6 +317,7 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
  "core-text",
+ "icu_properties 2.4.0",
  "tiny-skia",
 ]
 
@@ -444,6 +445,7 @@ version = "0.1.0"
 dependencies = [
  "asrs-formats",
  "asrs-js",
+ "asrs-log",
  "asrs-model",
  "asrs-parity",
  "sha2 0.10.9",

@@ -8,8 +8,10 @@ const USAGE: &str = "usage: cargo xtask bundle [--target <triple>]
 
 Builds a release directory in target/bundle/<triple or host>/: the asrs binary
 (built with ASRS_LIBM_LGPL_SHIP=1, so it only loads the library next to it or from
-ASRS_LIBM_LGPL), the asrs-libm-lgpl shared library, and the `cargo xtask licenses` bundle
-including the library's LGPL text and source. Needs cargo-about.";
+ASRS_LIBM_LGPL, and ASRS_PACKAGED=1, so it runs as a packaged app with bundledAssets/ beside
+it), the asrs-libm-lgpl shared library, upstream's bundledAssets/ (from assets/ or
+reference/AdvantageScope), and the `cargo xtask licenses` bundle including the library's LGPL
+text and source. Needs cargo-about.";
 
 pub fn run(args: &[String]) -> Result {
     let target = match args {
@@ -18,15 +20,26 @@ pub fn run(args: &[String]) -> Result {
         _ => return Err(USAGE.to_owned()),
     };
     let root = workspace_root();
+    let bundled_assets = [
+        root.join("assets/bundledAssets"),
+        root.join("reference/AdvantageScope/bundledAssets"),
+    ]
+    .into_iter()
+    .find(|dir| dir.is_dir())
+    .ok_or("upstream bundledAssets not found; link reference/AdvantageScope or run `cargo xtask assets`")?;
     let mut cargo_args = vec!["build", "--locked", "--release", "-p", "asrs-app"];
     if let Some(target) = target {
         cargo_args.extend(["--target", target]);
     }
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-    eprintln!("$ ASRS_LIBM_LGPL_SHIP=1 cargo {}", cargo_args.join(" "));
+    eprintln!(
+        "$ ASRS_LIBM_LGPL_SHIP=1 ASRS_PACKAGED=1 cargo {}",
+        cargo_args.join(" ")
+    );
     let status = Command::new(cargo)
         .args(&cargo_args)
         .env("ASRS_LIBM_LGPL_SHIP", "1")
+        .env("ASRS_PACKAGED", "1")
         .env_remove("ASRS_LIBM_LGPL_DEV")
         .current_dir(&root)
         .status()
@@ -54,6 +67,7 @@ pub fn run(args: &[String]) -> Result {
     copy_tree(&root.join("target/licenses"), &dest)?;
     copy(&release.join(exe), &dest.join(exe))?;
     copy(&library, &dest.join(libm::file_name(target)))?;
+    copy_tree(&bundled_assets, &dest.join("bundledAssets"))?;
     eprintln!("wrote {}", dest.display());
     Ok(())
 }
@@ -68,6 +82,9 @@ fn copy_tree(src: &Path, dst: &Path) -> Result {
     fs::create_dir_all(dst).map_err(|e| format!("{}: {e}", dst.display()))?;
     for entry in fs::read_dir(src).map_err(|e| format!("{}: {e}", src.display()))? {
         let path = entry.map_err(|e| e.to_string())?.path();
+        if path.file_name().is_some_and(|n| n == ".DS_Store") {
+            continue;
+        }
         let to = dst.join(path.file_name().unwrap_or_default());
         if path.is_dir() {
             copy_tree(&path, &to)?;
