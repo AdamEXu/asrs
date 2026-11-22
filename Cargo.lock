@@ -317,6 +317,7 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
  "core-text",
+ "icu_properties 2.4.0",
  "tiny-skia",
 ]
 

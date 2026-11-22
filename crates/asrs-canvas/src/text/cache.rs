@@ -15,6 +15,7 @@ pub struct Cached<B> {
     backend: B,
     shapes: HashMap<(FontKey, u32, String), Shaped>,
     metrics: HashMap<FontKey, FontMetrics>,
+    fallback_metrics: HashMap<(Glyph, u32), Option<FontMetrics>>,
     bounds: HashMap<Glyph, Option<Bounds>>,
     masks: HashMap<MaskKey, Option<Arc<Mask>>>,
 }
@@ -25,6 +26,7 @@ impl<B: TextBackend> Cached<B> {
             backend,
             shapes: HashMap::new(),
             metrics: HashMap::new(),
+            fallback_metrics: HashMap::new(),
             bounds: HashMap::new(),
             masks: HashMap::new(),
         }
@@ -66,6 +68,13 @@ impl<B: TextBackend> TextBackend for Cached<B> {
             .metrics
             .entry(font.key())
             .or_insert_with(|| self.backend.metrics(font))
+    }
+
+    fn fallback_metrics(&mut self, glyph: Glyph, zoom: f32) -> Option<FontMetrics> {
+        *self
+            .fallback_metrics
+            .entry((glyph, zoom.to_bits()))
+            .or_insert_with(|| self.backend.fallback_metrics(glyph, zoom))
     }
 
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {

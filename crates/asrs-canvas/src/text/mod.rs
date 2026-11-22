@@ -76,6 +76,13 @@ pub trait TextBackend {
 
     fn metrics(&mut self, font: &FontSpec) -> FontMetrics;
 
+    /// The metrics at zoom `zoom` of the fallback font `glyph` comes from, or `None` for a glyph
+    /// of a primary font.
+    fn fallback_metrics(&mut self, glyph: Glyph, zoom: f32) -> Option<FontMetrics> {
+        let _ = (glyph, zoom);
+        None
+    }
+
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds>;
 
     /// Raw coverage, before mask gamma, of `glyph` drawn at device scale `scale`, compressed

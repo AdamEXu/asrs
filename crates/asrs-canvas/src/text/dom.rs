@@ -629,6 +629,7 @@ pub fn layout(
 ) -> Layout {
     let (ascent, descent, line_height) = line_metrics(backend, style, scale);
     let leading = lu_floor_px((line_height - (ascent + descent)) / 2);
+    let strut = (leading + ascent, line_height - leading - ascent);
     let mut texts = Vec::new();
     for paragraph in collapse(text, style.white_space) {
         match available {
@@ -643,7 +644,8 @@ pub fn layout(
     }
     let mut lines = Vec::with_capacity(texts.len());
     let mut max_width = 0;
-    for (i, line_text) in texts.into_iter().enumerate() {
+    let mut top = 0;
+    for line_text in texts {
         let mut runs = Vec::new();
         let mut width = 0;
         for run in visual_runs(&line_text, style.direction) {
@@ -671,23 +673,47 @@ pub fn layout(
         } else {
             runs.into_iter().map(|(f, _)| f).collect()
         };
-        let top = i as Lu * line_height;
+        let (above, below) = if style.line_height == LineHeight::Normal {
+            used_fonts(backend, &fragments, scale, strut)
+        } else {
+            strut
+        };
         lines.push(Line {
             top,
-            height: line_height,
-            baseline: top + leading + ascent,
+            height: above + below,
+            baseline: top + above,
             width,
             fragments,
         });
+        top += above + below;
     }
     Layout {
         scale,
         ascent,
         descent,
-        height: lines.len() as Lu * line_height,
+        height: top,
         lines,
         width: max_width,
     }
+}
+
+/// `InlineBoxState::AccumulateUsedFonts`: under `line-height: normal` a line box also holds the
+/// ascent and descent, with half the line gap each side, of every fallback font its glyphs use.
+fn used_fonts(
+    backend: &mut dyn TextBackend,
+    fragments: &[Fragment],
+    scale: f32,
+    (mut above, mut below): (Lu, Lu),
+) -> (Lu, Lu) {
+    for glyph in fragments.iter().flat_map(|f| &f.glyphs) {
+        if let Some(m) = backend.fallback_metrics(glyph.glyph, scale) {
+            let (a, d) = (m.ascent as Lu * LU_PER_PX, m.descent as Lu * LU_PER_PX);
+            let gap = m.line_gap as Lu * LU_PER_PX;
+            above = above.max(a + gap / 2);
+            below = below.max(d + gap - gap / 2);
+        }
+    }
+    (above, below)
 }
 
 /// A fragment's coverage in device pixels after mask gamma, relative to the pixel its origin
