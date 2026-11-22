@@ -649,29 +649,12 @@ fn to_js(json: &Json) -> Result<JsValue, String> {
     js_json::to_js(&Value::from_json_lenient(json))
 }
 
-fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
-    let text = std::fs::read_to_string(spec).map_err(|e| e.to_string())?;
-    let spec_json = json::parse(&text).map_err(|e| e.to_string())?;
-    let fixture = spec_json
-        .get("fixture")
-        .ok_or_else(|| err("spec has no fixture"))?;
-    for key in [
-        "boot",
-        "preferences",
-        "assets",
-        "version",
-        "window",
-        "startTime",
-    ] {
-        if fixture.get(key).is_some() {
-            return Err(format!("fixture key {key} is not modeled"));
-        }
-    }
-    let seed = fixture.get("seed").and_then(Json::as_f64).unwrap_or(1.0) as u32;
+/// A hub after `hub.ts` module evaluation and main's `dom-ready` messages.
+fn boot(seed: u32, base: PathBuf, ignored: Vec<String>) -> Result<Runner, String> {
     let clock = Rc::new(Cell::new(START_TIME));
     let mut host = Host {
         clock: clock.clone(),
-        base: spec.parent().unwrap().to_path_buf(),
+        base,
         timers: Vec::new(),
         seq: 0,
         frames: Vec::new(),
@@ -679,14 +662,7 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         slots: Vec::new(),
         emitted: Vec::new(),
         unmodeled: Vec::new(),
-        ignored: match fixture.get("ignoreMain").and_then(Json::as_array) {
-            Some(names) => names
-                .iter()
-                .map(|n| n.as_str().map(|s| s.to_string_lossy()))
-                .collect::<Option<_>>()
-                .ok_or_else(|| err("ignoreMain lists names"))?,
-            None => IGNORED_MAIN.map(str::to_owned).into(),
-        },
+        ignored,
     };
     let mut rng = DomRng(seed);
     // One `Math.random()` happens while hub.ts's imports evaluate, before the hub draws any
@@ -722,6 +698,38 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
     for (name, data) in boot {
         runner.main(name, data)?;
     }
+
+    Ok(runner)
+}
+
+fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
+    let text = std::fs::read_to_string(spec).map_err(|e| e.to_string())?;
+    let spec_json = json::parse(&text).map_err(|e| e.to_string())?;
+    let fixture = spec_json
+        .get("fixture")
+        .ok_or_else(|| err("spec has no fixture"))?;
+    for key in [
+        "boot",
+        "preferences",
+        "assets",
+        "version",
+        "window",
+        "startTime",
+    ] {
+        if fixture.get(key).is_some() {
+            return Err(format!("fixture key {key} is not modeled"));
+        }
+    }
+    let seed = fixture.get("seed").and_then(Json::as_f64).unwrap_or(1.0) as u32;
+    let ignored = match fixture.get("ignoreMain").and_then(Json::as_array) {
+        Some(names) => names
+            .iter()
+            .map(|n| n.as_str().map(|s| s.to_string_lossy()))
+            .collect::<Option<_>>()
+            .ok_or_else(|| err("ignoreMain lists names"))?,
+        None => IGNORED_MAIN.map(str::to_owned).into(),
+    };
+    let mut runner = boot(seed, spec.parent().unwrap().to_path_buf(), ignored)?;
 
     let steps = fixture
         .get("steps")
@@ -837,4 +845,106 @@ fn hub_lifecycle_sessions() {
         specs.len()
     );
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+fn without_paths(value: &Value) -> Value {
+    match value {
+        Value::Object(pairs) => Value::Object(
+            pairs
+                .iter()
+                .filter(|(k, _)| k.to_string_lossy() != "path")
+                .map(|(k, v)| (k.clone(), without_paths(v)))
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(without_paths).collect()),
+        other => other.clone(),
+    }
+}
+
+fn asset_paths(value: &Value) -> Vec<String> {
+    ["field2ds", "field3ds", "robots", "joysticks"]
+        .iter()
+        .flat_map(|key| value.get(key).and_then(Value::as_array).unwrap_or(&[]))
+        .map(|asset| {
+            asset
+                .get("path")
+                .and_then(Value::as_str)
+                .expect("every asset has a path")
+                .to_string_lossy()
+        })
+        .collect()
+}
+
+/// The bundled fields and robots, loaded from upstream's real `bundledAssets` folder by the
+/// port's asset service on the real filesystem, equal what upstream's loader produced for the
+/// same files in `files/asset-loader` (apart from the folder prefix in `path`) and load into the
+/// hub through `set-assets` without a load-failure alert.
+#[test]
+fn bundled_assets_load_into_set_assets() {
+    use asrs_services::asset_loader::{AssetFolders, AssetService};
+    use asrs_services::fs::RealFs;
+    use asrs_services::path::PathStyle;
+
+    let bundled = vectors::workspace_root().join("reference/AdvantageScope/bundledAssets");
+    let user_data = std::env::temp_dir().join(format!("asrs-assets-{}", std::process::id()));
+    std::fs::create_dir_all(&user_data).unwrap();
+    std::fs::write(user_data.join("prefs.json"), "{\"userAssetsFolder\":null}").unwrap();
+    let folders = AssetFolders::new(
+        PathStyle::host(),
+        user_data.to_str().unwrap(),
+        bundled.to_str().unwrap(),
+    );
+    let mut service = AssetService::new(folders);
+    let started = service.start(&RealFs);
+    let readme = std::fs::read(user_data.join("userAssets").join("README.txt"));
+    std::fs::remove_dir_all(&user_data).unwrap();
+    started.unwrap();
+    assert_eq!(
+        readme.unwrap(),
+        asrs_services::asset_loader::USER_ASSETS_README.as_bytes()
+    );
+
+    let records = vectors::load("files/asset-loader").unwrap();
+    let oracle = records
+        .iter()
+        .find(|r| r.string("op").as_deref() == Some("loadAssets") && r.field("result").is_some())
+        .and_then(|r| r.value("result").ok())
+        .expect("the oracle loaded the bundled assets");
+    let data = service.set_assets_data();
+    let port = js_json::from_js(&data);
+    assert_eq!(
+        without_paths(&port).encode(),
+        without_paths(&oracle).encode()
+    );
+    let expected_paths = asset_paths(&oracle);
+    let port_paths = asset_paths(&port);
+    assert_eq!(port_paths.len(), expected_paths.len());
+    for (port_path, oracle_path) in port_paths.iter().zip(&expected_paths) {
+        let decoded = asrs_js::string::decode_uri_component(&JsString::from(port_path.as_str()))
+            .unwrap()
+            .to_string_lossy();
+        let suffix = oracle_path
+            .strip_prefix("/fake/bundledAssets/")
+            .expect("bundled path");
+        assert_eq!(
+            Path::new(&decoded),
+            bundled.join(suffix).as_path(),
+            "{port_path}"
+        );
+        assert!(Path::new(&decoded).is_file(), "{decoded}");
+    }
+    let assets = service.assets();
+    assert_eq!(assets.field2ds.len(), 2);
+    assert_eq!(assets.robots.len(), 2);
+    assert!(assets.load_failures.is_empty());
+
+    let mut runner = boot(1, bundled.clone(), IGNORED_MAIN.map(str::to_owned).into()).unwrap();
+    runner.host.emitted.clear();
+    runner.main("set-assets", data).unwrap();
+    assert!(
+        runner.host.emitted.is_empty(),
+        "set-assets reported {:?}",
+        runner.host.emitted.len()
+    );
+    assert_eq!(runner.hub.page().assets(), Some(assets));
 }

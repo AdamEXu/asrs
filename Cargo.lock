@@ -369,6 +369,7 @@ dependencies = [
  "asrs-log",
  "asrs-model",
  "asrs-parity",
+ "asrs-services",
  "asrs-tabs",
  "indexmap",
 ]
