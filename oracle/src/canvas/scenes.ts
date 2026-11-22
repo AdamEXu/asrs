@@ -1268,6 +1268,43 @@ function multiFrame(dpr: number, mode: "" | "-single" | "-resized"): Scene {
   return scene(`multiframe${mode}-${dpr}x`, "coverage", "pixel", [300, 100], dpr, LIGHT, r.cmds);
 }
 
+// Width-1 strokes at 1x are antialiased hairlines. Skia halves them while longer than 511 px, and
+// with round caps (outset pi/8) both halves blit the pixel where they meet. Lines leaving the
+// canvas go through its clip blitter, which turns slanted lines' paired blits into plain ones.
+function longHairlines(): Scene {
+  const r = new Rec();
+  r.set("lineWidth", 1);
+  const lines: [string, number, number, number, number][] = [
+    ["round", 55, 22.5, 735, 22.5],
+    ["round", 105, 42.5, 735, 42.5],
+    ["round", 0, 62.5, 790, 62.5],
+    ["round", 55, 82.5, 335, 82.5],
+    ["round", 20.3, 101.7, 780.6, 101.7],
+    ["square", 55, 122.5, 735, 122.5],
+    ["butt", 55.3, 142.5, 735.7, 142.5],
+    ["round", 12.5, 160, 12.5, 790],
+    ["round", 31.2, 158.6, 31.2, 797.3],
+    ["square", 50.5, 160, 50.5, 790],
+    ["round", 70, 170, 790, 260],
+    ["round", 70, 280, 790, 520.4],
+    ["round", 90, 300, 160, 790],
+    ["round", 120, 790, 330, 220],
+    ["round", 795, 540, 60, 560]
+  ];
+  for (const [color, from] of [["#222", 0], ["rgba(43, 102, 162, 0.6)", 7]] as [string, number][]) {
+    r.set("strokeStyle", color);
+    lines.forEach(([cap, x0, y0, x1, y1], i) => {
+      const [dx, dy] = i < 7 ? [0, from] : [from, 0];
+      r.set("lineCap", cap);
+      r.call("beginPath");
+      r.call("moveTo", x0 + dx, y0 + dy);
+      r.call("lineTo", x1 + dx, y1 + dy);
+      r.call("stroke");
+    });
+  }
+  return scene("hairlines-1x", "coverage", "pixel", [800, 800], 1, LIGHT, r.cmds);
+}
+
 // Frames recorded from upstream's Timeline in dom/timeline vectors (asrs-hub's timeline
 // traces equal them call for call), extracted to plain JSON numbers.
 function timelineScenes(): Scene[] {
@@ -1296,6 +1333,7 @@ export function allScenes(): Scene[] {
     textGrid("text-dark-1x", 1, true),
     shapes("shapes-2x", 2),
     shapes("shapes-1x", 1),
+    longHairlines(),
     ...timelineScenes(),
     ...lineGraphScenes()
   ];
