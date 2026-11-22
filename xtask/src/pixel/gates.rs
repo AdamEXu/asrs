@@ -14,6 +14,10 @@ pub const TEXT_DILATE: f64 = 2.0;
 pub const TEXT_BOX_TOLERANCE: f64 = 1.0;
 pub const TEXT_MAX_PCT: f64 = 6.0;
 pub const PATCH_REFERENCE_MAX: u8 = 1;
+/// Of the visible span. Chromium animates a notched wheel tick in compositor-timed steps, and
+/// `ScrollSensor` compounds the zoom per step, so upstream runs of the same input differ in the
+/// last bits (measured 9e-16 of the span); a wrong delta scale or cap is off by 1e-3 and more.
+pub const TIMELINE_TOLERANCE: f64 = 1e-9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderMode {
@@ -56,6 +60,10 @@ pub struct Capture {
     pub canvases: Vec<Dump>,
     pub gl: Vec<GlDump>,
     pub patches: Option<Vec<Patch>>,
+    /// The bytes of the `HubState` the hub last sent main with `save-state`.
+    pub hub_state: Option<Vec<u8>>,
+    /// `selection.getTimelineRange()` at the capture.
+    pub timeline_range: Option<[f64; 2]>,
 }
 
 /// A mask that applies to every capture on one platform (`parity/masks.json`).
@@ -97,7 +105,13 @@ impl Outcome {
         self.checks.iter().filter(|c| !c.pass)
     }
 
-    fn push(&mut self, gate: &'static str, what: impl Into<String>, pass: bool, detail: String) {
+    pub fn push(
+        &mut self,
+        gate: &'static str,
+        what: impl Into<String>,
+        pass: bool,
+        detail: String,
+    ) {
         self.checks.push(Check {
             gate,
             what: what.into(),
@@ -263,7 +277,70 @@ pub fn compare(reference: &Capture, port: &Capture, platform: &[PlatformMask]) -
     if let Some(patches) = &reference.patches {
         colour_patches(patches, reference, port, &mut out);
     }
+    state(reference, port, &mut out);
     out
+}
+
+fn state(reference: &Capture, port: &Capture, out: &mut Outcome) {
+    if let Some(expected) = &reference.hub_state {
+        let (pass, detail) = match &port.hub_state {
+            None => (false, "the port recorded no HubState".to_owned()),
+            Some(actual) if actual == expected => (true, format!("{} bytes equal", expected.len())),
+            Some(actual) => {
+                let at = expected
+                    .iter()
+                    .zip(actual)
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(expected.len().min(actual.len()));
+                let context = |bytes: &[u8]| {
+                    String::from_utf8_lossy(
+                        &bytes[at.saturating_sub(40)..(at + 40).min(bytes.len())],
+                    )
+                    .into_owned()
+                };
+                (
+                    false,
+                    format!(
+                        "differ at byte {at}: upstream ...{}..., port ...{}...",
+                        context(expected),
+                        context(actual)
+                    ),
+                )
+            }
+        };
+        out.push("state", "HubState", pass, detail);
+    }
+    if let Some(expected) = reference.timeline_range {
+        let limit = TIMELINE_TOLERANCE * (expected[1] - expected[0]);
+        let off = port
+            .timeline_range
+            .map(|r| (r[0] - expected[0]).abs().max((r[1] - expected[1]).abs()));
+        out.push(
+            "state",
+            "timeline range",
+            off.is_some_and(|d| d <= limit),
+            format!(
+                "upstream {expected:?}, port {:?}, off by {off:?} (max {limit:e})",
+                port.timeline_range
+            ),
+        );
+    }
+}
+
+/// The mask on both sides that covers a dumped canvas or 3D view, if any: such a view belongs
+/// to a unit whose region the scenario masks.
+fn covering_mask(rect: Rect, reference: &Capture, port: &Capture) -> Option<String> {
+    let inside = |m: &Rect| {
+        rect[0] >= m[0] - LAYOUT_TOLERANCE
+            && rect[1] >= m[1] - LAYOUT_TOLERANCE
+            && rect[0] + rect[2] <= m[0] + m[2] + LAYOUT_TOLERANCE
+            && rect[1] + rect[3] <= m[1] + m[3] + LAYOUT_TOLERANCE
+    };
+    reference
+        .masks
+        .iter()
+        .find(|(reason, m)| inside(m) && port.masks.iter().any(|(r, p)| r == reason && inside(p)))
+        .map(|(reason, m)| format!("{reason} {}", fmt_rect(*m)))
 }
 
 fn port_masks(reference: &Capture, port: &Capture, out: &mut Outcome) {
@@ -492,6 +569,10 @@ fn pair<T>(rect: Rect, candidates: &[T], rect_of: impl Fn(&T) -> Rect) -> Option
 fn canvases(reference: &Capture, port: &Capture, out: &mut Outcome) {
     for dump in &reference.canvases {
         let what = format!("canvas {}", dump.file);
+        if let Some(mask) = covering_mask(dump.rect, reference, port) {
+            out.push("5 masks", what, true, format!("masked by {mask}"));
+            continue;
+        }
         let Some(ours) = pair(dump.rect, &port.canvases, |d| d.rect) else {
             out.push(
                 "2 pixels",
@@ -529,6 +610,10 @@ fn canvases(reference: &Capture, port: &Capture, out: &mut Outcome) {
 fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
     for dump in &reference.gl {
         let what = format!("3D {}", dump.file);
+        if let Some(mask) = covering_mask(dump.rect, reference, port) {
+            out.push("5 masks", what, true, format!("masked by {mask}"));
+            continue;
+        }
         let Some(ours) = pair(dump.rect, &port.gl, |d| d.rect) else {
             out.push(
                 "4 3D",
@@ -703,6 +788,8 @@ mod tests {
             canvases: Vec::new(),
             gl: Vec::new(),
             patches: None,
+            hub_state: None,
+            timeline_range: None,
         }
     }
 
@@ -905,5 +992,67 @@ mod tests {
         b.gl[0].mode = RenderMode::Standard;
         b.gl[0].edges = None;
         assert_eq!(failed(&compare(&a, &b, &[])), [("4 3D", "3D g.png".into())]);
+    }
+
+    #[test]
+    fn a_dump_is_skipped_only_under_a_mask_both_sides_record() {
+        let mut a = capture(20, 20, 1.0);
+        a.canvases = vec![Dump {
+            file: "c.png".into(),
+            rect: [1.0, 1.0, 4.0, 4.0],
+            image: Rgba {
+                width: 4,
+                height: 4,
+                data: [10, 20, 30, 255].repeat(16),
+            },
+        }];
+        a.masks = vec![(".renderer-content".into(), [0.0, 0.0, 10.0, 10.0])];
+        let mut b = a.clone();
+        b.canvases.clear();
+        let o = compare(&a, &b, &[]);
+        assert!(o.pass(), "{:?}", o.checks);
+        assert!(
+            o.checks
+                .iter()
+                .any(|c| c.gate == "5 masks" && c.what == "canvas c.png")
+        );
+        b.masks[0].0 = ".tab-bar".into();
+        assert!(!compare(&a, &b, &[]).pass());
+        b.masks = vec![(".renderer-content".into(), [0.0, 0.0, 3.0, 3.0])];
+        assert!(!compare(&a, &b, &[]).pass());
+        b.masks.clear();
+        assert!(!compare(&a, &b, &[]).pass());
+    }
+
+    #[test]
+    fn hub_state_bytes_must_match_and_timeline_ranges_agree() {
+        let mut a = capture(8, 8, 1.0);
+        a.hub_state = Some(br#"{"sidebar":{"width":362}}"#.to_vec());
+        a.timeline_range = Some([0.25, 9.75]);
+        let mut b = a.clone();
+        assert!(compare(&a, &b, &[]).pass());
+        b.hub_state = Some(br#"{"sidebar":{"width":363}}"#.to_vec());
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "HubState".into())]
+        );
+        b.hub_state = None;
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "HubState".into())]
+        );
+        b.hub_state = a.hub_state.clone();
+        b.timeline_range = Some([0.25, f64::from_bits(9.75f64.to_bits() + 4)]);
+        assert!(compare(&a, &b, &[]).pass());
+        b.timeline_range = Some([0.25, 9.75 + 1e-8]);
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "timeline range".into())]
+        );
+        b.timeline_range = None;
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("state", "timeline range".into())]
+        );
     }
 }

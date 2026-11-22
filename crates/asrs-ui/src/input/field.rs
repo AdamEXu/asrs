@@ -345,6 +345,7 @@ impl<M: FieldModel> Render for TextField<M> {
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
         let paint = |s: &str, rgba_hex: u32| {
             Text::new(s.to_owned(), text_style)
+                .form_control()
                 .color(rgba_hex >> 8)
                 .subpixel(subpixel.0, subpixel.1)
                 .w(px(right - left))
@@ -383,6 +384,18 @@ impl<M: FieldModel> Render for TextField<M> {
             }))
             .child(frame.absolute().inset_0())
             .child(editor_box);
+        if focused {
+            root = root.child(
+                canvas(
+                    |bounds, _, cx| {
+                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds)
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            );
+        }
 
         let cancel_visible =
             (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();
