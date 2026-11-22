@@ -542,11 +542,21 @@ if (mode === "parse") {
   }
   for (const value of values) out({ kind: "format", value: toTree(value), text: format(value, { truncate: 78 }) });
 } else if (mode === "signatures") {
+  // typed-function keeps a conversion in its target type's conversionsTo list, not on the
+  // conversion, and a signature it expands for a conversion keeps only the source type.
+  const TYPE_NAMES = ["number", "Complex", "BigNumber", "Fraction", "Unit", "identifier", "string", "Chain", "Array", "Matrix", "DenseMatrix", "SparseMatrix", "Range", "Index", "boolean", "ResultSet", "Help", "function", "Date", "RegExp", "null", "undefined", "Object"];
+  const targets = new Map<number, string>();
+  for (const name of TYPE_NAMES) for (const c of math.typed._findType(name).conversionsTo) targets.set(c.index, name);
+  const conversionTarget = (_param: any, type: any): string => {
+    const target = targets.get(type.conversion.index);
+    if (target === undefined) fail(`no target for the conversion from ${type.name}`);
+    return target!;
+  };
   for (const fn of [...FUNCTIONS, ...HELPER_FUNCTIONS]) {
     const data = math[fn]._typedFunctionData;
     if (data === undefined) fail(`${fn} is not a typed function`);
     const signatures = data.signatures.map((s: any) => ({
-      params: s.params.map((p: any) => ({ types: p.types.map((t: any) => t.name), conversions: p.types.map((t: any) => (t.conversion ? [t.conversion.from, t.conversion.to] : null)), rest: p.restParam }))
+      params: s.params.map((p: any) => ({ types: p.types.map((t: any) => t.name), conversions: p.types.map((t: any) => (t.conversion ? [t.conversion.from, conversionTarget(p, t)] : null)), rest: p.restParam }))
     }));
     out({ kind: "signatures", fn, name: math[fn].name, signatures });
   }
