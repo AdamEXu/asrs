@@ -4,15 +4,15 @@
   "platform": "darwin",
   "arch": "arm64",
   "osRelease": "27.3.0",
-  "generator": "e6deeb4ad7e8bd72",
+  "generator": "a3a75d3b2d0edcaa",
   "lut": {
     "file": "lut-macos.bin",
     "content": "5f9da1f118d4cf3d"
   },
   "measure": {
     "file": "measure-macos.jsonl.zst",
-    "cases": 5724,
-    "content": "0ed1a841d0d2f61a"
+    "cases": 6264,
+    "content": "619b44c332a747b2"
   },
   "host": {
     "os": "macos",

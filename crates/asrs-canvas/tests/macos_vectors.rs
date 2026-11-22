@@ -63,7 +63,7 @@ struct Error {
 
 type Errors = BTreeMap<String, Error>;
 
-/// Every measured field of the macOS width vectors (9 fonts, 53 strings, 3 aligns, 4
+/// Every measured field of the macOS width vectors (9 fonts, 58 strings, 3 aligns, 4
 /// baselines) against `measure_text`, keyed by `font / field`, fallback strings apart.
 fn measure_errors() -> (Errors, Errors) {
     let records = vectors::load("canvas/measure-macos").unwrap();
@@ -122,7 +122,7 @@ fn text_metrics_are_bit_exact_against_chromium() {
     let report = report(&main);
     assert_eq!(main.len(), 9 * FIELDS.len(), "{report}");
     for (key, e) in &main {
-        assert_eq!(e.cases, 52 * 12, "{key}");
+        assert_eq!(e.cases, 57 * 12, "{key}");
         assert_eq!(e.inexact, 0, "{key}\n{report}");
     }
     let s2_fonts = ["12px ", "16px ", "200 12px ", "200 14px "];
