@@ -426,6 +426,7 @@ impl<M: FieldModel> Render for TextField<M> {
                                     centered: false,
                                     zoom: dpr,
                                     translate: [0.0, 0.0],
+                                    snapped: None,
                                 };
                                 let origin =
                                     [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];

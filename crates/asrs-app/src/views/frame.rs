@@ -35,6 +35,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
@@ -138,6 +139,7 @@ pub struct HubFrame<H: FrameHost> {
     timeline_rect: Option<[f64; 4]>,
     timeline_hovered: bool,
     pub(super) line_graph: LineGraphViews,
+    pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
 }
 
@@ -221,6 +223,7 @@ impl<H: FrameHost> HubFrame<H> {
             timeline_rect: None,
             timeline_hovered: false,
             line_graph: LineGraphViews::default(),
+            field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
         }
     }
@@ -316,6 +319,13 @@ impl<H: FrameHost> HubFrame<H> {
         }
         self.field3d_window_move(event, cx);
         self.line_graph_mouse_move(
+            x,
+            y,
+            event.modifiers.shift,
+            event.pressed_button.is_some(),
+            cx,
+        );
+        self.field_2d_mouse_move(
             x,
             y,
             event.modifiers.shift,
@@ -852,6 +862,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(graph) = self.line_graph_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(graph);
                 }
+                let covered = self.timeline_rect;
+                if let Some(field) = self.field_2d_element(rect, covered, scale, window, cx) {
+                    renderer = renderer.child(field);
+                }
                 if let Some(field) = self.field3d_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(field);
                 }
@@ -871,6 +885,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 self.layout_source_lists(rect, width, scale, cx);
                 controls = controls.children(self.source_lists(rect, appearance, cx));
+                if let Some(settings) = self.field_2d_controls(rect, appearance, scale, window, cx)
+                {
+                    controls = controls.child(settings);
+                }
                 if let Some(settings) = self.field3d_settings(rect, appearance, scale, window, cx) {
                     controls = controls.child(settings);
                 }

@@ -29,6 +29,7 @@ pub struct SegmentedControl {
     segments: Vec<Segment>,
     selected: Option<usize>,
     size: (f32, f32),
+    subpixel: f32,
     appearance: Appearance,
     on_select: Option<Select>,
 }
@@ -61,6 +62,7 @@ impl SegmentedControl {
             segments,
             selected: None,
             size: (0.0, 0.0),
+            subpixel: 0.0,
             appearance: Appearance::Light,
             on_select: None,
         }
@@ -74,6 +76,13 @@ impl SegmentedControl {
     /// The `div.split` box in CSS px.
     pub fn size(mut self, width: f32, height: f32) -> Self {
         self.size = (width, height);
+        self
+    }
+
+    /// What GPUI's pixel snapping dropped from the control's x position, in CSS px: Chromium
+    /// snaps each segment from its exact position.
+    pub fn subpixel(mut self, dx: f32) -> Self {
+        self.subpixel = dx;
         self
     }
 
@@ -112,9 +121,11 @@ impl RenderOnce for SegmentedControl {
             .relative()
             .w(px(self.size.0))
             .h(px(self.size.1));
+        let shift = self.subpixel * scale;
         for (i, (segment, [x, _, w, h])) in self.segments.into_iter().zip(boxes).enumerate() {
-            let left = x.round();
-            let right = (x + w).round();
+            let x = x + shift;
+            let left = (x + 0.5).floor();
+            let right = (x + w + 0.5).floor();
             let selected = self.selected == Some(i);
             let background = if selected {
                 style.selected
@@ -185,8 +196,23 @@ impl RenderOnce for SegmentedControl {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;
                     let iw = lu(cw * SPLIT_ICON_FRACTION);
                     let ih = lu(ch * SPLIT_ICON_FRACTION);
+                    let snap = |v: f64| (v + 0.5).floor();
+                    let snap_size = |size: f64, location: f64| {
+                        let fraction = location - location.trunc();
+                        let n = snap(fraction + size) - snap(fraction);
+                        if n == 0.0 && size.abs() > 4.0 / 64.0 {
+                            size.signum()
+                        } else {
+                            n
+                        }
+                    };
                     let ix = f64::from(x - left) + lu((cw - iw as f32) / 2.0);
                     let top = lu(ch / 2.0);
+                    let side = iw.min(ih);
+                    let lx = ix - snap(ix) + lu(((iw - side) / 2.0) as f32);
+                    let ly = top - snap(top) + lu(((ih - side) / 2.0) as f32);
+                    let (left_px, top_px) = (snap(ix) + snap(lx), snap(top) + snap(ly));
+                    let snapped = [snap_size(side, lx), snap_size(side, ly)];
                     let chain = if style.invert_icons {
                         chains::INVERT
                     } else {
@@ -197,12 +223,13 @@ impl RenderOnce for SegmentedControl {
                         move |bounds, _, window, cx| {
                             let dpr = f64::from(window.scale_factor());
                             let placement = Placement {
-                                anchor: [(ix + iw / 2.0) / dpr, top / dpr],
-                                size: [iw, ih],
+                                anchor: [left_px / dpr, top_px / dpr],
+                                size: [side, side],
                                 scale: 1.0,
-                                centered: true,
+                                centered: false,
                                 zoom: dpr,
-                                translate: [0.0, 0.0],
+                                translate: [0.0, -ih / 2.0 / dpr],
+                                snapped: Some(snapped),
                             };
                             let origin = [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];
                             paint_icon(&source, chain, &placement, origin, window, cx);

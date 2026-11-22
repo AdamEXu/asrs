@@ -65,6 +65,9 @@ pub struct Placement {
     /// A CSS `translate()` on an ancestor between the box's snapped layout position and the
     /// image, in logical px: it moves the image by its exact amount, fractions included.
     pub translate: [f64; 2],
+    /// The device size `ToPixelSnappedRect` gives when the box's location has a fraction
+    /// (`SnapSizeToPixel`); `None` rounds `size` as at a whole-pixel location.
+    pub snapped: Option<[f64; 2]>,
 }
 
 /// A CSS length in LayoutUnits (1/64 px), truncated as `LayoutUnit(float)` truncates.
@@ -112,7 +115,9 @@ impl Placement {
                 e,
                 f,
             },
-            dst: self.size.map(|v| snap(lu(v))),
+            dst: self
+                .snapped
+                .unwrap_or_else(|| self.size.map(|v| snap(lu(v)))),
             target: self.size.map(|v| v as f32),
             zoom: self.zoom as f32,
         }
@@ -163,6 +168,7 @@ pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64, zoom: f64) -
                 centered: false,
                 zoom,
                 translate: [0.0, 0.0],
+                snapped: None,
             }
         }
         IconFit::Centered { max, scale } => {
@@ -183,6 +189,7 @@ pub fn layout(intrinsic: Intrinsic, fit: IconFit, bw: f64, bh: f64, zoom: f64) -
                 centered: true,
                 zoom,
                 translate: [0.0, 0.0],
+                snapped: None,
             }
         }
     }
@@ -194,6 +201,7 @@ struct Key {
     chain: &'static str,
     matrix: [u64; 4],
     size: [u64; 2],
+    dst: [u64; 2],
     zoom: u32,
 }
 
@@ -234,6 +242,7 @@ fn cached_image(
         chain,
         matrix: [m.a, m.d, m.e, m.f].map(f64::to_bits),
         size: place.size.map(f64::to_bits),
+        dst: local.dst.map(f64::to_bits),
         zoom: local.zoom.to_bits(),
     };
     let cache = cx.default_global::<IconCache>();
