@@ -63,7 +63,7 @@ impl VideoController {
     pub fn new() -> VideoController {
         let mut controller = VideoController {
             buttons: Buttons::default(),
-            slider: RangeInput::new("0", "1", "1"),
+            slider: RangeInput::new("0", "1", "1", "1"),
             progress_width: JsString::new(),
             youtube_animating: false,
             tba_animating: false,

@@ -14,7 +14,7 @@ use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::form::{NumberInput, Select};
+use crate::form::{NumberInput, Select, SelectOption};
 use crate::list_cx::{SourceListCx, js_error, source_state, with_env};
 
 /// `WIDTH` and `HEIGHT`, in the order of upstream's `forEach` (`index` 0 and 1).
@@ -68,13 +68,30 @@ impl PointsController {
     /// The source list draws one `createUUID()` after the controller's own.
     pub fn new<Cx: TabCx + ?Sized>(cx: &mut Cx) -> PointsController {
         let uuid = asrs_js::time::create_uuid(cx.tab_rng());
-        let options = |values: &[&str]| values.iter().copied().map(JsString::from).collect();
+        let options = |pairs: &[(&str, &str)]| {
+            Select::with_options(
+                pairs
+                    .iter()
+                    .map(|(value, text)| SelectOption::new(Some(value), text))
+                    .collect(),
+            )
+        };
         PointsController {
             source_list: SourceList::new(configs::points(), uuid, false),
             width: NumberInput::new("960"),
             height: NumberInput::new("720"),
-            orientation: Select::with_options(options(&["xr,yd", "xr,yu", "xu,yl"])),
-            origin: Select::with_options(options(&["ul", "ur", "ll", "lr", "c"])),
+            orientation: options(&[
+                ("xr,yd", "+X right, +Y down"),
+                ("xr,yu", "+X right, +Y up"),
+                ("xu,yl", "+X up, +Y left"),
+            ]),
+            origin: options(&[
+                ("ul", "upper left"),
+                ("ur", "upper right"),
+                ("ll", "lower left"),
+                ("lr", "lower right"),
+                ("c", "center"),
+            ]),
         }
     }
 
