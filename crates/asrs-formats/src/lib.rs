@@ -13,3 +13,4 @@ pub mod worker;
 pub mod wpilog;
 pub mod wpilog_encoder;
 pub mod wpilog_worker;
+pub mod wpilogxz;
