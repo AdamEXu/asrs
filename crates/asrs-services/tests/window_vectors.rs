@@ -13,6 +13,7 @@ use asrs_parity::vectors::{self, Record};
 use asrs_services::beta;
 use asrs_services::constants;
 use asrs_services::fs::MemFs;
+use asrs_services::path::PathStyle;
 use asrs_services::state_tracker;
 use asrs_services::window_manager::{
     OptionValue, Platform, SatellitePlacement, WindowId, WindowKind, WindowManager, WindowOptions,
@@ -177,7 +178,11 @@ impl Replay {
             return;
         }
         let config = beta::beta_config(true, &FixedZone(0.0));
-        let beta_file = constants::beta_filename(USER_DATA, config.as_ref().expect("beta").year);
+        let beta_file = constants::beta_filename(
+            PathStyle::Posix,
+            USER_DATA,
+            config.as_ref().expect("beta").year,
+        );
         let complete = beta::is_beta_welcome_complete(&self.fs, Some(&beta_file)).expect("beta");
         if !beta::is_beta_expired(config.as_ref(), &SetClock(0.0)) && !ops::to_boolean(&complete) {
             let (id, options) = self.windows.create_modal(WindowKind::BetaWelcome, window);

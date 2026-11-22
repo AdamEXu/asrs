@@ -9,9 +9,9 @@ pub mod gpui {
         MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, PlatformInput, Point, Render,
         RenderImage, Result, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, Stateful,
         StatefulInteractiveElement, Styled, Subscription, Task, TitlebarOptions, TouchPhase,
-        Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions,
-        anchored, application, canvas, deferred, div, linear_color_stop, linear_gradient, point,
-        px, rgb, rgba, size,
+        WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
+        WindowOptions, anchored, application, canvas, deferred, div, linear_color_stop,
+        linear_gradient, point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
     pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};

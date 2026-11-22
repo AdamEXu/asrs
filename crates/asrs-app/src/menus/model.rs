@@ -77,6 +77,8 @@ pub enum Command {
     CloseTab,
     BringAllToFront,
     Help(HelpLink),
+    /// The item at this index of a [`super::context::ContextMenu`]'s actions.
+    ContextItem(usize),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,6 +101,8 @@ pub struct MenuItem {
     pub checked: Option<bool>,
     pub enabled: Option<bool>,
     pub visible: Option<bool>,
+    /// The colour of a `nativeImage.createFromBitmap` swatch icon.
+    pub icon: Option<[u8; 3]>,
     pub command: Option<Command>,
     pub submenu: Option<Vec<MenuItem>>,
 }
@@ -142,6 +146,16 @@ impl MenuItem {
 
     pub fn checked(mut self, checked: bool) -> Self {
         self.checked = Some(checked);
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = Some(enabled);
+        self
+    }
+
+    pub fn icon(mut self, rgb: Option<[u8; 3]>) -> Self {
+        self.icon = rgb;
         self
     }
 

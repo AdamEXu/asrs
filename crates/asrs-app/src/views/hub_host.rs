@@ -11,11 +11,17 @@ use asrs_js::value::{JsValue, ToJs};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::source_list::Rect;
-use asrs_ui::gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
+use asrs_services::window_manager::Platform;
+use asrs_ui::gpui::{
+    AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
+    Window,
+};
 
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::sidebar::{self, SidebarView, ViewGeometry};
 use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
+use crate::menus::bridge::{self, EffectHandler};
+use crate::menus::context::{self, Effect, MenuEnv};
 
 struct FrameView {
     geometry: FrameGeometry,
@@ -212,14 +218,11 @@ impl HubEntityHost {
         }
         let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
         let handle = window.window_handle();
+        let weak = hub.downgrade();
         cx.subscribe(&hub, move |_, event, cx| match event {
             HubEvent::Console { warn: true, text } => eprintln!("asrs: {text}"),
             HubEvent::Exception { task, error } => eprintln!("asrs: {task}: {error}"),
-            HubEvent::Main(message) => {
-                let _ = handle.update(cx, |_, window, cx| {
-                    crate::menus::context::handle(message, window, cx)
-                });
-            }
+            HubEvent::Main(message) => show_context_menu(handle, weak.clone(), dark, message, cx),
             _ => {}
         })
         .detach();
@@ -252,6 +255,51 @@ impl HubEntityHost {
     pub fn sidebar(&self) -> &Entity<SidebarView> {
         &self.sidebar
     }
+}
+
+/// The context menu `main.ts` pops up for `message`, if any, with each click's messages sent
+/// back to the hub. Prompt windows, the source list help window and the recent units file are
+/// not wired yet.
+fn show_context_menu(
+    handle: AnyWindowHandle,
+    hub: WeakEntity<Hub>,
+    dark: bool,
+    message: &NamedMessage<HubToMain>,
+    cx: &mut App,
+) {
+    let env = MenuEnv {
+        dark,
+        recent_units: None,
+    };
+    let menu = match context::for_hub_message(message, &env) {
+        Ok(Some(menu)) => menu,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("asrs: {}: {error:?}", message.name.name());
+            return;
+        }
+    };
+    let on_effects: EffectHandler = Rc::new(move |effects, cx| {
+        for effect in effects {
+            match (&effect, effect.to_hub()) {
+                (_, Some(message)) => {
+                    if let Some(hub) = hub.upgrade() {
+                        hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
+                    }
+                }
+                (Effect::WriteClipboard(JsValue::String(text)), None) => {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text.to_string_lossy()))
+                }
+                (other, None) => {
+                    eprintln!("asrs: context menu effect not available yet: {other:?}")
+                }
+            }
+        }
+    });
+    let platform = Platform::current();
+    let _ = handle.update(cx, |_, window, cx| {
+        bridge::popup_context(window, cx, platform, &menu, on_effects)
+    });
 }
 
 impl FrameHost for HubEntityHost {
