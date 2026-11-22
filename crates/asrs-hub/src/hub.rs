@@ -34,8 +34,10 @@ use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, TimeSupplier};
 use asrs_model::selection_impl::{SelectionContext, SelectionImpl, SharedLog};
-use asrs_model::source_list::Rect;
-use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
+use asrs_model::source_list::{ListInput, ListOutput, Rect, SourceListDom};
+use asrs_model::source_list_config::{
+    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
+};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::Field2dRenderer;
@@ -82,6 +84,8 @@ pub enum HubFrame {
     Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
+    /// Every source list's own loop (previews, and re-rendering on a theme change).
+    SourceLists,
     /// `show-when-ready`.
     Show,
     /// A historical source's mock progress.
@@ -176,6 +180,8 @@ pub trait HubView {
     fn dark(&self) -> bool;
     /// What the sidebar reads from its layout and scrolls.
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry;
+    /// The layout of every tab's source lists.
+    fn source_list_dom(&mut self) -> &mut dyn SourceListDom;
     /// The tab bar's geometry; see [`TabsHost`].
     fn title_rect(&self, _index: usize) -> Rect {
         Rect::default()
@@ -362,11 +368,13 @@ impl SourceListCx for HubPage {
     }
 
     fn list_parts(&mut self) -> ListParts<'_> {
+        let dark = self.view.dark();
         ListParts {
             log: self.log.borrow(),
             type_memory: &mut self.type_memory,
             selection: &mut self.selection,
-            dark: self.view.dark(),
+            dark,
+            dom: self.view.source_list_dom(),
         }
     }
 }
@@ -624,6 +632,7 @@ impl HubModel {
         };
         host.request_animation_frame(HubFrame::Sidebar);
         let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
+        host.request_animation_frame(HubFrame::SourceLists);
         host.request_animation_frame(HubFrame::Tabs);
         host.set_interval(HubInterval::SaveState, STATE_SAVE_PERIOD_MS);
         host.set_interval(HubInterval::SaveTypeMemory, TYPE_MEMORY_SAVE_PERIOD_MS);
@@ -672,6 +681,12 @@ impl HubModel {
 
     pub fn tabs(&self) -> &Tabs<HubPage> {
         &self.tabs
+    }
+
+    /// Input on a source list's elements, or a drag over them. Exceptions the lists' listeners
+    /// throw come back for the caller to report.
+    pub fn source_list_input(&mut self, input: ListInput<'_>) -> (ListOutput, Vec<JsError>) {
+        self.tabs.source_list_input(&mut self.page, input)
     }
 
     /// The tabs with the page they run against.
@@ -1240,6 +1255,15 @@ impl HubModel {
                     None => host.request_animation_frame(HubFrame::Tabs),
                 }
             }
+            HubFrame::SourceLists => {
+                let (_, errors) = self
+                    .tabs
+                    .source_list_input(&mut self.page, ListInput::Frame);
+                for e in errors {
+                    uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
+                }
+                host.request_animation_frame(HubFrame::SourceLists);
+            }
             HubFrame::Show => host.send_main_message(NamedMessage::without_data(HubToMain::Show)),
             HubFrame::Source(uuid) => {
                 if let Some(index) = self.route(uuid) {
@@ -1700,10 +1724,28 @@ impl HubModel {
                 self.tabs.close(&self.page, &index, data)?;
             }
             MainToHub::RenameTab => self.tabs.rename_tab(&field("index"), field("name"))?,
-            MainToHub::SourceListTypeResponse | MainToHub::SourceListClearResponse => {
-                return Err(TabsError::Unmodeled(
-                    "source-list prompt responses belong to the source-list view",
-                ));
+            MainToHub::SourceListTypeResponse => {
+                let uuid = field("uuid");
+                let state = SourceListItemState::from_js(&field("state"))
+                    .ok_or(TabsError::Unmodeled("a source-list-type-response state"))?;
+                if let JsValue::String(uuid) = &uuid {
+                    let uuid = uuid.to_string_lossy();
+                    let input = ListInput::TypeResponse {
+                        uuid: &uuid,
+                        state: &state,
+                    };
+                    let (_, errors) = self.tabs.source_list_input(&mut self.page, input);
+                    if let Some(e) = errors.into_iter().next() {
+                        return Err(e.into());
+                    }
+                }
+            }
+            MainToHub::SourceListClearResponse => {
+                if let JsValue::String(uuid) = &field("uuid") {
+                    let uuid = uuid.to_string_lossy();
+                    let input = ListInput::ClearResponse { uuid: &uuid };
+                    self.tabs.source_list_input(&mut self.page, input);
+                }
             }
             MainToHub::SetRobotModeVisible => {
                 if let Some(c) = self

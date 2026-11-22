@@ -1,8 +1,10 @@
 //! `src/hub/SourceList.ts` without the DOM: item states, type choice, type memory, reorder and
-//! drop rules, availability, colours and preview text. The view owns layout and feeds the item
-//! rectangles in; every rendered value the DOM would show is in [`ItemView`].
+//! drop rules, availability, colours and preview text. Every layout read upstream makes goes
+//! through [`SourceListDom`], in upstream's order; every rendered value the DOM would show is in
+//! [`ItemView`].
 
 pub mod configs;
+pub mod layout;
 mod preview;
 
 use std::fmt;
@@ -69,6 +71,140 @@ pub struct Env<'a> {
     pub type_memory: &'a mut SourceListTypeMemory,
     /// `prefers-color-scheme: dark`.
     pub dark: bool,
+    pub dom: &'a mut dyn SourceListDom,
+}
+
+/// A button whose `getBoundingClientRect()` a list reads when it is clicked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ListButton {
+    Edit,
+    Clear,
+    /// The type button of the item at this index.
+    Type(usize),
+}
+
+/// The layout reads a list makes, answered by the view that lays it out. `list` is the list's
+/// UUID.
+pub trait SourceListDom {
+    /// `ROOT.getBoundingClientRect()`.
+    fn root_rect(&mut self, list: &str) -> Rect;
+    /// `LIST.getBoundingClientRect()`.
+    fn list_rect(&mut self, list: &str) -> Rect;
+    /// `LIST.children[index].getBoundingClientRect()`.
+    fn item_rect(&mut self, list: &str, index: usize) -> Rect;
+    /// `LIST.children[index].clientWidth`.
+    fn item_client_width(&mut self, list: &str, index: usize) -> f64;
+    fn button_rect(&mut self, list: &str, button: ListButton) -> Rect;
+    /// `clientWidth` of a `div.type-name` showing `text` inside a bare `div.source-list`
+    /// appended to `<body>`, which `updateItem` measures for `--type-width`.
+    fn type_name_width(&mut self, text: &str) -> f64;
+}
+
+/// The reads of lists whose elements are not rendered (`display: none`, or no view at all):
+/// every rect and width is zero, as Blink reports for an element without a layout box.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Undisplayed;
+
+impl Undisplayed {
+    /// A borrow for an `Env` that lives as long as needed; `Undisplayed` is zero-sized, so
+    /// leaking it allocates nothing.
+    pub fn dom() -> &'static mut Undisplayed {
+        Box::leak(Box::new(Undisplayed))
+    }
+}
+
+impl SourceListDom for Undisplayed {
+    fn root_rect(&mut self, _list: &str) -> Rect {
+        Rect::default()
+    }
+    fn list_rect(&mut self, _list: &str) -> Rect {
+        Rect::default()
+    }
+    fn item_rect(&mut self, _list: &str, _index: usize) -> Rect {
+        Rect::default()
+    }
+    fn item_client_width(&mut self, _list: &str, _index: usize) -> f64 {
+        0.0
+    }
+    fn button_rect(&mut self, _list: &str, _button: ListButton) -> Rect {
+        Rect::default()
+    }
+    fn type_name_width(&mut self, _text: &str) -> f64 {
+        0.0
+    }
+}
+
+/// An event a controller's lists receive from the hub, in the order their listeners run.
+#[derive(Clone, Copy, Debug)]
+pub enum ListInput<'a> {
+    /// A `drag-update` of a sidebar field drag.
+    FieldDrag {
+        fields: &'a [JsString],
+        children: &'a [JsString],
+        x: f64,
+        y: f64,
+        end: bool,
+    },
+    /// A `drag-update` of a list item drag.
+    ItemDrag {
+        payload: &'a ItemDragPayload,
+        x: f64,
+        y: f64,
+        end: bool,
+    },
+    /// `source-list-type-response`.
+    TypeResponse {
+        uuid: &'a str,
+        state: &'a SourceListItemState,
+    },
+    /// `source-list-clear-response`.
+    ClearResponse { uuid: &'a str },
+    /// One run of every list's `requestAnimationFrame` loop.
+    Frame,
+    /// Input on the elements of the list `uuid`.
+    Pointer { uuid: &'a str, event: ListPointer },
+}
+
+/// Input on one list's elements; coordinates are `MouseEvent` client coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ListPointer {
+    /// `mousedown` in the item container.
+    Down {
+        x: f64,
+        y: f64,
+    },
+    /// `mouseup` in the item container.
+    Up,
+    /// `mousemove` in the item container.
+    Move {
+        x: f64,
+        y: f64,
+    },
+    ContextMenu {
+        index: usize,
+        x: f64,
+        y: f64,
+    },
+    TypeClick(usize),
+    HideClick(usize),
+    /// A click on an item's type name or key at `new Date().getTime()` = `now`.
+    NameClick {
+        index: usize,
+        now: f64,
+    },
+    RemoveClick(usize),
+    ClearClick,
+    HelpClick,
+    EditClick,
+}
+
+/// What a list asks of the hub after an input, besides the main messages it sends.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListOutput {
+    /// `window.startDrag` for an item drag.
+    pub drag: Option<ItemDragStart>,
+    /// The edit button's rect, for the controller's `editButtonCallback`.
+    pub edit: Option<Rect>,
 }
 
 /// A `DOMRect`, as `getBoundingClientRect` returns it.
@@ -92,20 +228,6 @@ impl Rect {
     }
     pub fn bottom(&self) -> f64 {
         math::max2(self.y, self.y + self.height)
-    }
-}
-
-/// Client rectangles of the list's root, its item container and each item, in item order.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ListGeometry {
-    pub root: Rect,
-    pub list: Rect,
-    pub items: Vec<Rect>,
-}
-
-impl ListGeometry {
-    fn item(&self, index: usize) -> Rect {
-        self.items.get(index).copied().unwrap_or_default()
     }
 }
 
@@ -179,6 +301,8 @@ pub struct ItemView {
     pub preview_shown: Option<bool>,
     /// The preview text last written. It is kept while the preview is hidden.
     pub preview_text: String,
+    /// The key container's `--type-width` in px, once set.
+    pub type_width: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -208,6 +332,8 @@ pub struct ItemDragStart {
     pub y: f64,
     pub offset_x: f64,
     pub offset_y: f64,
+    /// The dragged item's `clientWidth`, the width of its copy in `#dragItem`.
+    pub client_width: f64,
     pub payload: ItemDragPayload,
 }
 
@@ -217,6 +343,16 @@ pub struct TypePrompt {
     pub uuid: String,
     pub config: SourceListConfig,
     pub state: SourceListItemState,
+    /// The type button's rect, or the pointer as a zero-size rect for a right click.
+    pub rect: Rect,
+}
+
+/// The `source-list-clear-prompt` message.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClearPrompt {
+    pub uuid: String,
+    /// The clear button's rect.
+    pub rect: Rect,
 }
 
 #[derive(Clone, Debug)]
@@ -611,7 +747,6 @@ impl SourceList {
 
     /// A `drag-update` whose data came from a source list item. `source` is the list the item
     /// was dragged from when that is not this one.
-    #[allow(clippy::too_many_arguments)]
     pub fn handle_item_drag(
         &mut self,
         env: &mut Env<'_>,
@@ -620,12 +755,11 @@ impl SourceList {
         x: f64,
         y: f64,
         end: bool,
-        geometry: &ListGeometry,
     ) -> Result {
         if payload.config_str != self.config_str {
             return Ok(());
         }
-        let root = geometry.root;
+        let root = env.dom.root_rect(&self.uuid);
         if x < root.left() || x > root.right() || y < root.top() || y > root.bottom() {
             self.highlight.hidden = true;
             return Ok(());
@@ -649,14 +783,14 @@ impl SourceList {
             if !is_valid_target(self, index) {
                 continue;
             }
-            let dist = (y - geometry.item(index).top()).abs();
+            let dist = (y - env.dom.item_rect(&self.uuid, index).top()).abs();
             if dist < closest_dist {
                 closest_dist = dist;
                 closest_index = index;
             }
         }
         if count > 0 && is_valid_target(self, count) {
-            let dist = (y - geometry.item(count - 1).bottom()).abs();
+            let dist = (y - env.dom.item_rect(&self.uuid, count - 1).bottom()).abs();
             if dist < closest_dist {
                 closest_index = count;
             }
@@ -665,13 +799,13 @@ impl SourceList {
         if !end {
             self.highlight.hidden = false;
             let mut highlight_y = if count == 0 {
-                geometry.list.top()
+                env.dom.list_rect(&self.uuid).top()
             } else if closest_index < count {
-                geometry.item(closest_index).top()
+                env.dom.item_rect(&self.uuid, closest_index).top()
             } else {
-                geometry.item(count - 1).bottom()
+                env.dom.item_rect(&self.uuid, count - 1).bottom()
             };
-            highlight_y -= root.top();
+            highlight_y -= env.dom.root_rect(&self.uuid).top();
             highlight_y -= 6.0;
             self.highlight.placement = Some((Length::Px(highlight_y), Length::Px(12.0)));
             return Ok(());
@@ -743,14 +877,13 @@ impl SourceList {
         x: f64,
         y: f64,
         end: bool,
-        geometry: &ListGeometry,
     ) -> Result {
         let dragged: Vec<JsString> = if self.config.allow_children_from_drag {
             fields.iter().chain(children).cloned().collect()
         } else {
             fields.to_vec()
         };
-        let list_rect = geometry.root;
+        let list_rect = env.dom.root_rect(&self.uuid);
         if list_rect.width == 0.0
             || list_rect.height == 0.0
             || x < list_rect.left()
@@ -765,7 +898,7 @@ impl SourceList {
 
         let mut parent_index = None;
         for i in 0..self.items.len() {
-            let r = geometry.item(i);
+            let r = env.dom.item_rect(&self.uuid, i);
             let within = x > r.left() && x < r.right() && y > r.top() && y < r.bottom();
             if within && self.parent_key(&self.state[i].item_type).is_some() {
                 parent_index = Some(i);
@@ -822,9 +955,14 @@ impl SourceList {
             }
             self.clear_parent_highlights();
         } else if let Some(parent) = parent_index.filter(|_| valid_as_child) {
-            let item = geometry.item(parent);
-            let top = math::max2(item.top() - list_rect.top(), 0.0);
-            let bottom = math::min2(item.bottom() - list_rect.top(), list_rect.height);
+            let top = math::max2(
+                env.dom.item_rect(&self.uuid, parent).top() - list_rect.top(),
+                0.0,
+            );
+            let bottom = math::min2(
+                env.dom.item_rect(&self.uuid, parent).bottom() - list_rect.top(),
+                list_rect.height,
+            );
             self.highlight.placement = Some((Length::Px(top), Length::Px(bottom - top)));
             self.highlight.hidden = false;
         } else if valid_as_root {
@@ -896,22 +1034,37 @@ impl SourceList {
     }
 
     /// Mouse moved inside the item container. Returns the item drag to start, if any.
-    pub fn mouse_move(&mut self, x: f64, y: f64, items: &[Rect]) -> Option<ItemDragStart> {
+    pub fn mouse_move(
+        &mut self,
+        dom: &mut dyn SourceListDom,
+        x: f64,
+        y: f64,
+    ) -> Option<ItemDragStart> {
         let (down_x, down_y) = self.mouse_down?;
         if (x - down_x).abs() < DRAG_THRESHOLD_PX && (y - down_y).abs() < DRAG_THRESHOLD_PX {
             return None;
         }
-        let index = items.iter().rposition(|r| {
-            down_x >= r.left() && down_x <= r.right() && down_y >= r.top() && down_y <= r.bottom()
-        });
+        let mut index = None;
+        for i in 0..self.items.len() {
+            let r = dom.item_rect(&self.uuid, i);
+            if down_x >= r.left()
+                && down_x <= r.right()
+                && down_y >= r.top()
+                && down_y <= r.bottom()
+            {
+                index = Some(i);
+            }
+        }
         self.mouse_down = None;
         let index = index?;
-        let rect = items[index];
+        let client_width = dom.item_client_width(&self.uuid, index);
+        let rect = dom.item_rect(&self.uuid, index);
         Some(ItemDragStart {
             x,
             y,
             offset_x: x - rect.left(),
             offset_y: y - rect.top(),
+            client_width,
             payload: ItemDragPayload {
                 uuid: self.uuid.clone(),
                 config_str: self.config_str.clone(),
@@ -923,7 +1076,15 @@ impl SourceList {
 
     /// The type button of an item was clicked. Returns the prompt to send to main; its answer
     /// goes to [`SourceList::type_response`].
-    pub fn prompt_type(&mut self, index: usize) -> Option<TypePrompt> {
+    pub fn prompt_type(&mut self, dom: &mut dyn SourceListDom, index: usize) -> Option<TypePrompt> {
+        if !self.items.get(index).is_some_and(|item| item.interactive) {
+            return None;
+        }
+        let rect = dom.button_rect(&self.uuid, ListButton::Type(index));
+        self.prompt(index, rect)
+    }
+
+    fn prompt(&mut self, index: usize, rect: Rect) -> Option<TypePrompt> {
         let item = self.items.get(index).filter(|item| item.interactive)?;
         let state = self.state.get(index)?.clone();
         self.type_prompt = Some(PendingTypePrompt {
@@ -935,16 +1096,26 @@ impl SourceList {
             uuid: self.uuid.clone(),
             config: self.config.clone(),
             state,
+            rect,
         })
     }
 
-    /// Right click on an item: cancels a pending item drag and prompts for the type.
-    pub fn context_menu(&mut self, index: usize) -> Option<TypePrompt> {
+    /// Right click on an item at the pointer's client `x`, `y`: cancels a pending item drag
+    /// and prompts for the type.
+    pub fn context_menu(&mut self, index: usize, x: f64, y: f64) -> Option<TypePrompt> {
         if !self.items.get(index).is_some_and(|item| item.interactive) {
             return None;
         }
         self.mouse_down = None;
-        self.prompt_type(index)
+        self.prompt(
+            index,
+            Rect {
+                x,
+                y,
+                width: 0.0,
+                height: 0.0,
+            },
+        )
     }
 
     /// `source-list-type-response` for this list.
@@ -1052,8 +1223,18 @@ impl SourceList {
     }
 
     /// The clear button: main is asked to confirm with `source-list-clear-prompt`.
-    pub fn request_clear(&mut self) {
+    pub fn request_clear(&mut self, dom: &mut dyn SourceListDom) -> ClearPrompt {
+        let rect = dom.button_rect(&self.uuid, ListButton::Clear);
         self.clear_prompt = true;
+        ClearPrompt {
+            uuid: self.uuid.clone(),
+            rect,
+        }
+    }
+
+    /// The edit button: the rect upstream passes to the controller's `editButtonCallback`.
+    pub fn edit_click(&self, dom: &mut dyn SourceListDom) -> Rect {
+        dom.button_rect(&self.uuid, ListButton::Edit)
     }
 
     /// `source-list-clear-response` for this list.
@@ -1141,13 +1322,19 @@ impl SourceList {
     }
 
     fn update_item(&mut self, env: &mut Env<'_>, index: usize) -> Result {
-        let rendered = self.render(env, &self.state[index].clone())?;
-        self.items[index].view.rendered = Some(rendered);
+        let (rendered, type_width) = self.render(env, &self.state[index].clone())?;
+        let view = &mut self.items[index].view;
+        view.rendered = Some(rendered);
+        view.type_width = Some(type_width);
         Ok(())
     }
 
-    /// `updateItem`'s computation, including its type-memory write.
-    fn render(&self, env: &mut Env<'_>, state: &SourceListItemState) -> Result<RenderedItem> {
+    /// `updateItem`'s computation, including its type-memory write; also the `--type-width`.
+    fn render(
+        &self,
+        env: &mut Env<'_>,
+        state: &SourceListItemState,
+    ) -> Result<(RenderedItem, f64)> {
         let type_config = self
             .type_config(&state.item_type)
             .ok_or_else(|| SourceListError::UnknownType(state.item_type.clone()))?;
@@ -1194,6 +1381,11 @@ impl SourceList {
             if components.is_empty() { "" } else { ":" }
         );
 
+        let mut type_width = env.dom.type_name_width(&type_name);
+        if type_width > 0.0 {
+            type_width += 3.0;
+        }
+
         if let Some(id) = &self.config.type_memory_id {
             let entries = match env.type_memory.get_mut(id) {
                 Some(entries) => entries,
@@ -1211,14 +1403,15 @@ impl SourceList {
             );
         }
 
-        Ok(RenderedItem {
+        let rendered = RenderedItem {
             color,
             symbol_path: format!("symbols/sourceList/{}.svg", type_config.symbol),
             type_name,
             log_key: state.log_key.clone(),
             available: is_field_available(env.log, state),
             visible: state.visible,
-        })
+        };
+        Ok((rendered, type_width))
     }
 }
 
