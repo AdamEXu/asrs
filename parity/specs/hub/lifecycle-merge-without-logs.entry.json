@@ -1,0 +1,72 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv",
+    "logs/second.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/second.csv"
+          ],
+          "merge": true
+        }
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/second.csv",
+            "logs/match.csv"
+          ],
+          "merge": true
+        }
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "start-publish",
+        "data": true
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "nothing-open"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
+    ]
+  }
+}

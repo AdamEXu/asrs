@@ -1,0 +1,333 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv",
+    "logs/second.csv",
+    "logs/bad.csv",
+    "logs/enabled.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/missing.wpilog"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "missing"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/bad.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "bad"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/second.csv"
+          ],
+          "merge": true
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "merged-onto-error"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv",
+            "logs/second.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "two-opening"
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "two-opened"
+      },
+      {
+        "main": "zoom-enabled"
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoomed"
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "start-live",
+        "data": "sim"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/enabled.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "cancel-export"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/enabled.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "enabled"
+      },
+      {
+        "main": "zoom-enabled"
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoomed-enabled"
+      },
+      {
+        "main": "update-touch-bar-slider",
+        "data": 0.5
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "slider"
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [],
+          "loadFailures": [
+            "robot.glb",
+            "field.json"
+          ]
+        }
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [],
+          "loadFailures": [
+            "robot.glb"
+          ]
+        }
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [],
+          "loadFailures": []
+        }
+      },
+      {
+        "main": "set-assets",
+        "data": {
+          "field2ds": [],
+          "field3ds": [],
+          "robots": [],
+          "joysticks": [],
+          "loadFailures": [
+            "x"
+          ]
+        }
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
+    ]
+  }
+}

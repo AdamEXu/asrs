@@ -18,6 +18,7 @@ parity = ["asrs-ui/parity", "dep:png"]
 
 [dependencies]
 asrs-js = { path = "../asrs-js" }
+asrs-model = { path = "../asrs-model" }
 asrs-services = { path = "../asrs-services" }
 asrs-ui.workspace = true
 png = { version = "=0.18.1", optional = true }
@@ -39,3 +40,7 @@ harness = false
 name = "parity_scenario"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "app_menu_mac"
+harness = false

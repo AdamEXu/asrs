@@ -208,9 +208,9 @@ const nodeCommon = {
   logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
 };
 
-// genFiles and genWindows build apart from the shared entry graph: their fakes rewire jsonfile's
+// genFiles, genMenus and genWindows build apart from the shared entry graph: their fakes rewire jsonfile's
 // fs for every importer, and entries sharing the graph (genModel) must keep real fs.
-const FAKE_MAIN_ENTRIES = ["genFiles", "genWindows"];
+const FAKE_MAIN_ENTRIES = ["genFiles", "genMenus", "genWindows"];
 recordInputs(
   (
     await esbuild.build({
@@ -317,7 +317,8 @@ fs.writeFileSync(
 const runtimeLoads = {
   protoRenderer: ["rendererMain", "rendererPage", "src/renderer/renderer.html"],
   canvasMain: ["canvasPage", "heatmapPage"],
-  dom: ["domPage"]
+  dom: ["domPage"],
+  genMenus: ["genMenusMain"]
 };
 const inputs = {};
 for (const name of entries) {

@@ -5,6 +5,7 @@
 
 mod axis;
 mod command;
+mod renderer;
 
 use std::rc::Rc;
 
@@ -31,6 +32,9 @@ pub use axis::{
 pub use command::{
     Alert, AlertType, Axis, AxisUnits, DiscreteField, LineGraphCommand, NumericField,
     RobotModeColors,
+};
+pub use renderer::{
+    LineGraphDom, LineGraphFrame, LineGraphRenderer, OverlayStyle, Pointer, RenderError,
 };
 
 use crate::cx::{TabCx, display_offset};
@@ -83,7 +87,7 @@ enum AutoTarget {
     Manual,
 }
 
-fn str_is(s: &JsString, other: &str) -> bool {
+pub(super) fn str_is(s: &JsString, other: &str) -> bool {
     s.units().iter().copied().eq(other.encode_utf16())
 }
 
