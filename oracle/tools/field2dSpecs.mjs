@@ -215,9 +215,35 @@ const RECORDER = String.raw`(() => {
       };
     };
 
+    // The CANVAS style strings render assigns, as written (Blink re-serializes lengths on read).
+    const styleWrites = {};
+    // Blink serves these names from a named-property interceptor, so the shadowing accessors
+    // forward to the equivalent setProperty / getPropertyValue.
+    for (const name of ["width", "height", "transform"]) {
+      Object.defineProperty(r.CANVAS.style, name, {
+        configurable: true,
+        get() {
+          return this.getPropertyValue(name);
+        },
+        set(value) {
+          styleWrites[name] = value;
+          this.setProperty(name, value);
+        }
+      });
+    }
+    // The heatmap canvas is named by the recording canvas's creation counter; the trace
+    // calls it "@heatmap", the id the port draws it under.
+    const traceCalls = (ctx) => {
+      const heatmapCanvas = r.heatmap.getCanvas();
+      const heatmapId = heatmapCanvas === null ? null : ctx.argValue(heatmapCanvas);
+      return ctx.calls.map((call) => (call[0] === "drawImage" && call[1] === heatmapId ? ["drawImage", "@heatmap", ...call.slice(2)] : call));
+    };
+
     const originalRender = r.render;
     r.render = function (command) {
       const dom = domSnapshot();
+      const before = r.CANVAS.__oracleContext?.frames;
+      for (const name of Object.keys(styleWrites)) delete styleWrites[name];
       const record = Object.assign({ f2dr: "render", command: tree(command) }, base());
       try {
         const value = originalRender.apply(this, arguments);
@@ -233,6 +259,12 @@ const RECORDER = String.raw`(() => {
         dom.loads = r.imageLoadCount;
         record.dom = tree(dom);
         record.camera = camera(r);
+        const ctx = r.CANVAS.__oracleContext;
+        if (ctx !== undefined && ctx.frames !== before) {
+          record.size = tree([r.CANVAS.width, r.CANVAS.height]);
+          record.style = tree([styleWrites.width, styleWrites.height, styleWrites.transform]);
+          record.calls = tree(traceCalls(ctx));
+        }
         write(record);
       }
     };

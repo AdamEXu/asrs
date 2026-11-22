@@ -478,6 +478,7 @@ struct Stats {
     dumps: usize,
     ops: usize,
     cameras: usize,
+    frames: usize,
 }
 
 struct Harness {
@@ -899,10 +900,10 @@ impl Harness {
                 encode(&command.to_js())
             ));
         }
-        self.renderers[id].0.render_command(&self.host, &command);
+        let result = self.renderers[id].0.render_command(&self.host, &command);
         self.had_last_command[id] = true;
         self.stats.renders += 1;
-        same_error("render", threw(record), None)?;
+        self.frame_matches(id, record, result.err())?;
         self.camera(id, record)?;
         let dom = js(record, "dom")?;
         let o = dom.as_object().ok_or("dom")?;
@@ -914,6 +915,47 @@ impl Harness {
             ));
         }
         Ok(())
+    }
+
+    /// A `render` record's throw, and the frame it painted if it reset the canvas: pixel size,
+    /// the `CANVAS.style` strings and the call trace.
+    fn frame_matches(
+        &mut self,
+        id: usize,
+        record: &Record,
+        error: Option<JsError>,
+    ) -> Result<(), String> {
+        same_error("render", threw(record), error.as_ref().map(error_text))?;
+        let mut dom = self.renderers[id].1.borrow_mut();
+        match (record.field("calls"), dom.painted.take()) {
+            (None, None) => Ok(()),
+            (Some(_), None) => Err("upstream painted a frame, the port kept the last".to_owned()),
+            (None, Some(_)) => Err("the port painted a frame, upstream kept the last".to_owned()),
+            (Some(_), Some(canvas)) => {
+                self.stats.frames += 1;
+                let size = encode(&JsValue::Array(vec![
+                    (canvas.width as f64).to_js(),
+                    (canvas.height as f64).to_js(),
+                ]));
+                let expected_size = encode(&js(record, "size")?);
+                if size != expected_size {
+                    return Err(format!("canvas size: upstream {expected_size}, port {size}"));
+                }
+                let style = dom
+                    .canvas_style
+                    .ok_or("the port painted without setting the canvas style")?;
+                let style = encode(&JsValue::Array(
+                    style.css().iter().map(|s| s.as_str().to_js()).collect(),
+                ));
+                let expected_style = encode(&js(record, "style")?);
+                if style != expected_style {
+                    return Err(format!(
+                        "canvas style\n upstream {expected_style}\n port     {style}"
+                    ));
+                }
+                compare_calls(&record.value("calls").map_err(|e| e.0)?, &canvas)
+            }
+        }
     }
 
     fn camera(&self, id: usize, record: &Record) -> Result<(), String> {
@@ -969,12 +1011,13 @@ impl Harness {
                         "set2DCamera({index}): upstream rendered {expected_renders} times inside"
                     ));
                 }
-                self.renderers[id].0.set_2d_camera(&self.host, index);
+                let result = self.renderers[id].0.set_2d_camera(&self.host, index);
                 if let Some(render) = inner_renders.first() {
                     self.stats.renders += 1;
+                    self.frame_matches(id, render, result.clone().err())?;
                     self.camera(id, render)?;
                 }
-                Ok(())
+                result
             }
             other => return Err(format!("unknown renderer call {other}")),
         };
@@ -1398,6 +1441,37 @@ impl Harness {
     }
 }
 
+fn compare_calls(expected: &Value, canvas: &asrs_canvas::Canvas2d) -> Result<(), String> {
+    let actual = asrs_canvas::trace::encode(&canvas.calls)
+        .lines()
+        .map(|line| {
+            asrs_parity::json::parse(line)
+                .map_err(|e| format!("port trace line {line}: {e:?}"))
+                .and_then(|json| Value::from_json(&json).map_err(|e| e.0))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let Value::Array(expected) = expected else {
+        return Err("calls is not a list".to_owned());
+    };
+    for (i, (e, a)) in expected.iter().zip(actual.iter()).enumerate() {
+        if !asrs_parity::vectors::values_match(e, a) {
+            return Err(format!(
+                "canvas call {i}:\n upstream {}\n port     {}",
+                e.encode(),
+                a.encode()
+            ));
+        }
+    }
+    if expected.len() != actual.len() {
+        return Err(format!(
+            "upstream made {} canvas calls, the port {}",
+            expected.len(),
+            actual.len()
+        ));
+    }
+    Ok(())
+}
+
 fn case_ids() -> Vec<String> {
     let dir = vectors_dir().join(CASES);
     let mut ids: Vec<String> = std::fs::read_dir(&dir)
@@ -1440,6 +1514,16 @@ fn run_case(id: &str) -> Result<Stats, String> {
     if harness.controllers.is_empty() {
         return Err(format!("{id}: no field2d controller was recorded"));
     }
+    let recorded_frames = records
+        .iter()
+        .filter(|r| r.string("f2dr").as_deref() == Some("render") && r.field("calls").is_some())
+        .count();
+    if harness.stats.frames != recorded_frames {
+        return Err(format!(
+            "{id}: compared {} painted frames, upstream recorded {recorded_frames}",
+            harness.stats.frames
+        ));
+    }
     Ok(harness.stats)
 }
 
@@ -1453,9 +1537,10 @@ fn field_2d_fixtures() {
         match run_case(id) {
             Ok(s) => {
                 eprintln!(
-                    "{id}: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} cameras",
+                    "{id}: {} commands, {} renders, {} painted frames, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} cameras",
                     s.commands,
                     s.renders,
+                    s.frames,
                     s.saves,
                     s.calls,
                     s.mains,
@@ -1475,15 +1560,17 @@ fn field_2d_fixtures() {
                 total.dumps += s.dumps;
                 total.ops += s.ops;
                 total.cameras += s.cameras;
+                total.frames += s.frames;
             }
             Err(e) => failures.push(e),
         }
     }
     eprintln!(
-        "{} fixtures: {} commands, {} renders, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} cameras, {} failing",
+        "{} fixtures: {} commands, {} renders, {} painted frames, {} saves, {} calls, {} mains, {} controls, {} events, {} dumps, {} list ops, {} cameras, {} failing",
         ids.len(),
         total.commands,
         total.renders,
+        total.frames,
         total.saves,
         total.calls,
         total.mains,

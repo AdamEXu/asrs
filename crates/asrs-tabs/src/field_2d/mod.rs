@@ -1,14 +1,14 @@
 //! `src/hub/controllers/Field2dController.ts` on `configs::field_2d`: the field/size/orientation
-//! controls and the per-frame command built from the source list. The renderer's camera
-//! state is in [`renderer`].
+//! controls and the per-frame command built from the source list. The renderer is in
+//! [`renderer`].
 
 mod command;
 mod renderer;
 
 pub use command::{Field2dCommand, Object, Orientation, SwerveModules};
 pub use renderer::{
-    CAMERA_ROBOT, CAMERA_ROBOT_AND_ROTATION, CAMERA_UNLOCKED, CameraMode, Field2dDom,
-    Field2dRenderer, ScrollArgs,
+    CAMERA_ROBOT, CAMERA_ROBOT_AND_ROTATION, CAMERA_UNLOCKED, CameraMode, CanvasStyle, Field2dDom,
+    Field2dRenderer, HEATMAP_IMAGE, ScrollArgs,
 };
 
 use std::collections::HashMap;

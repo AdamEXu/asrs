@@ -36,6 +36,7 @@ enum Fill {
 fn resolve(style: &Style) -> Option<Fill> {
     match style {
         Style::Color(css) => color::parse(css).map(Fill::Color),
+        Style::Undefined => None,
         Style::Gradient(Gradient { shape, stops }) => {
             let mut resolved = Vec::new();
             for (offset, css) in stops {
