@@ -4,7 +4,7 @@
   "platform": "darwin",
   "arch": "arm64",
   "osRelease": "27.3.0",
-  "generator": "a3a75d3b2d0edcaa",
+  "generator": "9afc48f935c6fd78",
   "lut": {
     "file": "lut-macos.bin",
     "content": "5f9da1f118d4cf3d"

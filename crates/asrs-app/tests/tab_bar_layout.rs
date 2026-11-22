@@ -4,9 +4,8 @@
 //! the pointer handlers read the titles' rects in turn. Each title's width, measured from its
 //! `innerText` in the `tabs:view` read before or after it (a rename can land between reads of
 //! one step), must equal Blink's border box; laid out by `TabBarGeometry` from those widths,
-//! every title must land where Blink put it: contiguous
-//! from the bar's left edge (the sidebar's 300 px plus 10), 10 px below the 38 px title bar,
-//! 32 px tall.
+//! every title must land where Blink put it: contiguous from the bar's left edge (the sidebar's
+//! 300 px plus 10), 10 px below the 38 px title bar, 32 px tall.
 
 #![cfg(target_os = "macos")]
 

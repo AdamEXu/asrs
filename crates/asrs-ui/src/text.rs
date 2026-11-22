@@ -163,7 +163,7 @@ impl TextSystem {
             let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
             match &run.rgba {
                 Some(rgba) => {
-                    for p in rgba.chunks_exact(4) {
+                    for p in rgba.as_chunks::<4>().0 {
                         bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
                     }
                 }

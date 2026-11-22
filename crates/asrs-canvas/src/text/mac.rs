@@ -392,7 +392,7 @@ fn read_color(mut cx: CGContext, left: i32, top: i32, w: usize, h: usize) -> Arc
     let data = cx.data();
     let mut bytes = Vec::with_capacity(w * h * 4);
     for row in 0..h {
-        for px in data[row * stride..row * stride + w * 4].chunks_exact(4) {
+        for px in data[row * stride..row * stride + w * 4].as_chunks::<4>().0 {
             let argb = u32::from_ne_bytes([px[0], px[1], px[2], px[3]]);
             bytes.extend_from_slice(&[
                 (argb >> 16) as u8,
@@ -511,6 +511,7 @@ impl CoreText {
 
     /// One word as HarfBuzz shapes it in Chromium: CoreText's glyphs and kerning, with each
     /// advance taken from the scaler and truncated to 16.16, accumulated in `f32`.
+    #[allow(clippy::too_many_arguments)]
     fn shape_word(
         &mut self,
         spec: &FontSpec,
