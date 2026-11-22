@@ -121,18 +121,18 @@ fn tabs(page: &mut Page) -> Tabs<Page> {
 fn a_renderer_throw_ends_the_frame_loop() {
     let mut page = Page::default();
     let mut tabs = tabs(&mut page);
-    assert!(tabs.periodic(&mut page).error.is_none());
+    assert!(tabs.periodic(&mut page, 0.0).error.is_none());
     assert_eq!((page.commands, page.renders), (1, 1));
 
     page.fail_render = true;
-    let out = tabs.periodic(&mut page);
+    let out = tabs.periodic(&mut page, 0.0);
     assert!(matches!(out.error, Some(TabsError::Thrown(ref e)) if e.name == "TypeError"));
     assert!(!tabs.frame_loop_alive());
     assert_eq!((page.commands, page.renders), (2, 2));
 
     page.fail_render = false;
     for _ in 0..3 {
-        let out = tabs.periodic(&mut page);
+        let out = tabs.periodic(&mut page, 0.0);
         assert!(out.error.is_none() && out.satellite_updates.is_empty());
     }
     assert_eq!((page.commands, page.renders), (2, 2));
@@ -143,9 +143,9 @@ fn a_command_throw_ends_the_frame_loop_before_rendering() {
     let mut page = Page::default();
     let mut tabs = tabs(&mut page);
     page.fail_command = true;
-    assert!(tabs.periodic(&mut page).error.is_some());
+    assert!(tabs.periodic(&mut page, 0.0).error.is_some());
     assert_eq!((page.commands, page.renders), (1, 0));
     page.fail_command = false;
-    assert!(tabs.periodic(&mut page).error.is_none());
+    assert!(tabs.periodic(&mut page, 0.0).error.is_none());
     assert_eq!((page.commands, page.renders), (1, 0));
 }

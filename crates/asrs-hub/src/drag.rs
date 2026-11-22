@@ -105,6 +105,24 @@ impl<P: Clone, I> Drag<P, I> {
     }
 
     /// `drag-update` events dispatched since the last call.
+    /// The pending updates whose data `pick` accepts, converted; the others stay queued.
+    pub fn take_updates_with<Q>(&mut self, pick: impl Fn(&P) -> Option<Q>) -> Vec<DragUpdate<Q>> {
+        let mut taken = Vec::new();
+        self.updates.retain(|u| match pick(&u.data) {
+            Some(data) => {
+                taken.push(DragUpdate {
+                    end: u.end,
+                    x: u.x,
+                    y: u.y,
+                    data,
+                });
+                false
+            }
+            None => true,
+        });
+        taken
+    }
+
     pub fn take_updates(&mut self) -> Vec<DragUpdate<P>> {
         std::mem::take(&mut self.updates)
     }

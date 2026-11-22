@@ -583,7 +583,8 @@ impl Runner {
     }
 
     fn frame(&mut self) -> Result<(), String> {
-        let out = self.tabs.periodic(&mut self.host);
+        let now = self.host.clock.get();
+        let out = self.tabs.periodic(&mut self.host, now);
         for update in out.satellite_updates {
             if self.ignored.contains("update-satellite") {
                 continue;

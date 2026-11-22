@@ -796,7 +796,8 @@ impl Runner {
                 r.flush_image_loads();
             }
         }
-        let out = self.tabs.periodic(&mut self.host);
+        let now = self.host.clock.get();
+        let out = self.tabs.periodic(&mut self.host, now);
         if let Some(e) = out.error {
             self.frame_loop_dead = true;
             self.exception("requestAnimationFrame".to_owned(), e.to_string());
