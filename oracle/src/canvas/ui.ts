@@ -253,6 +253,15 @@ function hoverScene(dark: boolean): UiScene {
   return scene;
 }
 
+function searchHoverScene(dark: boolean): UiScene {
+  const scene = inputScene(`ui-inputs-search-hover-${dark ? "dark" : "light"}`, 420, 80, dark, ["www/hub.css", "www/renderers.css"], [
+    control("search", "sidebar-search", 0, 0, 300, 39, { placeholder: "Search", value: "Drive/Pose" }),
+    control("search", "console-filter", 0, 45, 400, 30, { placeholder: "Filter", value: "warning" })
+  ]);
+  scene.pointer = { x: 150, y: 20, down: false, selector: "input.side-bar-search" };
+  return scene;
+}
+
 export function uiScenes(upstream: string): UiScene[] {
   return [false, true].flatMap((dark) => [
     iconScene(upstream, dark),
@@ -262,7 +271,8 @@ export function uiScenes(upstream: string): UiScene[] {
     promptInputScene(dark),
     downloadInputScene(dark),
     betaInputScene(dark),
-    hoverScene(dark)
+    hoverScene(dark),
+    searchHoverScene(dark)
   ]);
 }
 

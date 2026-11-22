@@ -14,13 +14,13 @@ pub trait FieldModel: 'static {
 }
 
 /// An `<input type="range">`: its `value`, the sanitization assigning it runs, and the
-/// proportion the thumb sits at.
+/// proportion the thumb sits at, which `asrs_tabs::form` does not model yet (#160).
 pub trait RangeModel: 'static {
     fn value(&self) -> String;
     fn set_value(&mut self, value: &str);
     /// 0 at `min`, 1 at `max`.
     fn proportion(&self) -> f64;
-    /// The value a pointer at `proportion` along the track assigns (#160).
+    /// The value a pointer at `proportion` along the track assigns.
     fn value_at(&self, proportion: f64) -> String;
 }
 
@@ -89,7 +89,10 @@ impl FieldModel for PlainText {
     }
 
     fn set_value(&mut self, value: &str) {
-        self.0 = value.chars().filter(|c| !matches!(c, '\n' | '\r')).collect();
+        self.0 = value
+            .chars()
+            .filter(|c| !matches!(c, '\n' | '\r'))
+            .collect();
     }
 }
 
@@ -121,7 +124,10 @@ mod tests {
 
     #[test]
     fn number_accepts_only_number_characters() {
-        let accepted: String = "1a.e-E+ ,5x".chars().filter(|&c| number_accepts(c)).collect();
+        let accepted: String = "1a.e-E+ ,5x"
+            .chars()
+            .filter(|&c| number_accepts(c))
+            .collect();
         assert_eq!(accepted, "1.e-E+5");
     }
 }

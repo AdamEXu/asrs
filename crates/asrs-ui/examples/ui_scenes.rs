@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use asrs_js::string::JsString;
 use asrs_parity::json::{self, Json};
-use asrs_tabs::form;
 use asrs_parity::pixel::{self, Rgba};
+use asrs_tabs::form;
 use asrs_ui::button::IconButton;
 use asrs_ui::capture::{Capture, HeadlessCapture};
 use asrs_ui::icon::{Icon, IconFit, IconSource};
@@ -80,9 +80,7 @@ fn text(v: &Json, k: &str) -> String {
 }
 
 fn opt_text(v: &Json, k: &str) -> Option<String> {
-    v.get(k)
-        .and_then(Json::as_str)
-        .map(|s| s.to_string_lossy())
+    v.get(k).and_then(Json::as_str).map(|s| s.to_string_lossy())
 }
 
 fn control(c: &Json) -> Control {
@@ -208,23 +206,25 @@ impl FieldModel for Number {
     }
 }
 
+/// The slider scenes only show valid values, so the example's range model keeps them as given.
 struct Range {
-    input: form::RangeInput,
+    value: String,
     min: f64,
     max: f64,
 }
 
 impl RangeModel for Range {
     fn value(&self) -> String {
-        self.input.value().to_string_lossy()
+        self.value.clone()
     }
 
     fn set_value(&mut self, value: &str) {
-        self.input.set_value(JsString::from(value));
+        self.value = value.to_owned();
     }
 
     fn proportion(&self) -> f64 {
-        ((self.input.number() - self.min) / (self.max - self.min)).clamp(0.0, 1.0)
+        let n: f64 = self.value.parse().expect("range value");
+        ((n - self.min) / (self.max - self.min)).clamp(0.0, 1.0)
     }
 
     fn value_at(&self, proportion: f64) -> String {
@@ -234,8 +234,7 @@ impl RangeModel for Range {
 
 fn field<M: FieldModel>(
     model: M,
-    kind: FieldKind,
-    style: FieldStyle,
+    (kind, style): (FieldKind, FieldStyle),
     c: &Control,
     rect: [f32; 4],
     scale: f32,
@@ -291,10 +290,8 @@ fn part(
                 c.min.clone().unwrap_or_default(),
                 c.max.clone().unwrap_or_default(),
             );
-            let mut input = form::RangeInput::new(&value, &min, &max);
-            input.set_value(JsString::from(value.as_str()));
             let model = Range {
-                input,
+                value: value.clone(),
                 min: min.parse().expect("min"),
                 max: max.parse().expect("max"),
             };
@@ -310,24 +307,21 @@ fn part(
         "split" => return Part::Split(index),
         "download" => {
             let v: f64 = value.parse().expect("progress value");
-            let max: f64 = c.max.as_deref().unwrap_or("1").parse().expect("progress max");
+            let max: f64 = c
+                .max
+                .as_deref()
+                .unwrap_or("1")
+                .parse()
+                .expect("progress max");
             return Part::Progress(v / max);
         }
         "beta" => return Part::Checkbox(c.checked),
         other => panic!("unknown control preset {other}"),
     };
+    let look = (model_kind, style);
     Part::View(match model_kind {
-        FieldKind::Number => field(number(c), model_kind, style, c, rect, scale, window, cx),
-        _ => field(
-            PlainText::new(&value),
-            model_kind,
-            style,
-            c,
-            rect,
-            scale,
-            window,
-            cx,
-        ),
+        FieldKind::Number => field(number(c), look, c, rect, scale, window, cx),
+        _ => field(PlainText::new(&value), look, c, rect, scale, window, cx),
     })
 }
 
@@ -458,9 +452,11 @@ fn render(scene: &Arc<Scene>, scale: f32, reference: &Path, out: &Path) {
     let view = scene.clone();
     let rects = control_rects(reference, scene, scale);
     let window = capture
-        .open_window(size(px(scene.width), px(scene.height)), scale, |window, cx| {
-            cx.new(|cx| View::new(view, rects, window, cx))
-        })
+        .open_window(
+            size(px(scene.width), px(scene.height)),
+            scale,
+            |window, cx| cx.new(|cx| View::new(view, rects, window, cx)),
+        )
         .expect("open window");
     let shot = capture.capture(window.into()).expect("first frame");
     let shot = if let Some((x, y, down)) = scene.pointer {

@@ -38,16 +38,23 @@ pub fn svg(width: u32, height: u32, scale: f64, body: &str) -> Option<Pixmap> {
     let doc = Document::parse(text.as_bytes())?;
     let mut pixmap = Pixmap::new(width, height)?;
     let clip = [0.0, 0.0, width as f32, height as f32];
-    doc.paint(&Affine::scaling(scale, scale), clip, Backend::HOST, &mut pixmap);
+    doc.paint(
+        &Affine::scaling(scale, scale),
+        clip,
+        Backend::HOST,
+        &mut pixmap,
+    );
     Some(pixmap)
 }
 
 /// Source-over of premultiplied `src` onto `dst`, both the same size.
 pub fn over(dst: &mut Pixmap, src: &Pixmap) {
-    for (d, s) in dst.data_mut().chunks_exact_mut(4).zip(src.data().chunks_exact(4)) {
+    let (dst, _) = dst.data_mut().as_chunks_mut::<4>();
+    let (src, _) = src.data().as_chunks::<4>();
+    for (d, s) in dst.iter_mut().zip(src) {
         let inverse = 255 - u32::from(s[3]);
-        for i in 0..4 {
-            d[i] = (u32::from(s[i]) + (u32::from(d[i]) * inverse + 127) / 255) as u8;
+        for (d, &s) in d.iter_mut().zip(s) {
+            *d = (u32::from(s) + (u32::from(*d) * inverse + 127) / 255) as u8;
         }
     }
 }

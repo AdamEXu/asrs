@@ -1,11 +1,11 @@
 use gpui_kit::base::input::{Input, InputEvent, InputState};
 use gpui_kit::{
     App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
-    InteractiveElement, IntoElement, MouseButton, ParentElement, Render, Rgba, SharedString,
+    InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, px, rgba,
 };
 
-use crate::icon::{Icon, IconFit};
+use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::model::{FieldModel, FieldValue, number_accepts};
 use crate::input::native::paint_text_field;
 use crate::input::style::{FieldStyle, Frame, device_border};
@@ -89,10 +89,6 @@ pub fn geometry(
         editor: [x, y + (ch - line) / 2, editor_w, line].map(px_of),
         cancel,
     }
-}
-
-fn color(rgba_hex: u32) -> Rgba {
-    rgba(rgba_hex)
 }
 
 /// A device-px offset as a GPUI position on the device grid plus the remainder [`Text`]
@@ -259,7 +255,8 @@ impl<M: FieldModel> TextField<M> {
     }
 
     pub fn focus(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.editor.update(cx, |editor, cx| editor.focus(window, cx));
+        self.editor
+            .update(cx, |editor, cx| editor.focus(window, cx));
     }
 
     /// `input.blur()`.
@@ -318,9 +315,9 @@ impl<M: FieldModel> Render for TextField<M> {
                     _ => background,
                 };
                 div()
-                    .bg(color(background))
+                    .bg(rgba(background))
                     .border(px(g.border / scale))
-                    .border_color(color(border))
+                    .border_color(rgba(border))
                     .rounded(px(radius))
             }
         };
@@ -330,7 +327,7 @@ impl<M: FieldModel> Render for TextField<M> {
         let (top, dy) = split(ey, scale);
         let (right, _) = split(ex + ew, scale);
         let (bottom, _) = split(ey + eh, scale);
-        let text_color = color(style.color);
+        let text_color = rgba(style.color);
         let editor_text_color: Hsla = if focused {
             text_color.into()
         } else {
@@ -387,7 +384,8 @@ impl<M: FieldModel> Render for TextField<M> {
             .child(frame.absolute().inset_0())
             .child(editor_box);
 
-        let cancel_visible = (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();
+        let cancel_visible =
+            (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();
         if let (Some([cx0, cy0, cw, ch]), true) = (g.cancel, cancel_visible) {
             let (cl, _) = split(cx0, scale);
             let (ct, _) = split(cy0, scale);
@@ -403,11 +401,27 @@ impl<M: FieldModel> Render for TextField<M> {
                     .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
                     .on_click(cx.listener(|this, _, window, cx| this.clear(window, cx)))
                     .child(
-                        Icon::new(Symbol::named("cancel.svg").expect("cancel symbol"), filter)
-                            .fit(IconFit::Centered {
-                                max: 1.0,
-                                scale: 1.0,
-                            }),
+                        canvas(
+                            |_, _, _| {},
+                            move |bounds, _, window, cx| {
+                                let dpr = f64::from(window.scale_factor());
+                                let side = f64::from(bounds.size.width) * dpr;
+                                let placement = Placement {
+                                    anchor: [0.0, 0.0],
+                                    size: [side, side],
+                                    scale: 1.0,
+                                    centered: false,
+                                    zoom: dpr,
+                                };
+                                let origin =
+                                    [f64::from(bounds.origin.x), f64::from(bounds.origin.y)];
+                                let cancel = IconSource::Symbol(
+                                    Symbol::named("cancel.svg").expect("cancel symbol"),
+                                );
+                                paint_icon(&cancel, filter, &placement, origin, window, cx);
+                            },
+                        )
+                        .size_full(),
                     ),
             );
         }

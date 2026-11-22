@@ -187,7 +187,11 @@ impl RenderOnce for SegmentedControl {
                     let ih = lu(ch * SPLIT_ICON_FRACTION);
                     let ix = f64::from(x - left) + lu((cw - iw as f32) / 2.0);
                     let top = lu(ch / 2.0);
-                    let chain = if style.invert_icons { chains::INVERT } else { "" };
+                    let chain = if style.invert_icons {
+                        chains::INVERT
+                    } else {
+                        ""
+                    };
                     canvas(
                         |_, _, _| {},
                         move |bounds, _, window, cx| {

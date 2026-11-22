@@ -1,7 +1,7 @@
 use gpui_kit::{
-    BorderStyle, Bounds, Context, Corners, EventEmitter, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, Styled, Window,
-    canvas, div, point, px, quad, rgb, size, transparent_black,
+    BorderStyle, Bounds, Context, Corners, EventEmitter, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render,
+    Styled, Window, canvas, div, point, px, quad, rgb, size, transparent_black,
 };
 
 use crate::input::model::RangeModel;
@@ -182,17 +182,15 @@ impl<M: RangeModel> Render for Slider<M> {
 mod tests {
     use super::*;
 
+    /// Thumb left edges in the `ui-inputs-hub` capture: `min="1" max="300"` at values 1, 60
+    /// and 300 on a 260 px track, at 1x and 2x.
     #[test]
-    fn thumb_offset_truncates_to_layout_units() {
-        assert_eq!(thumb_offset(260.0, 4.0, 0.0), 0.0);
-        assert_eq!(thumb_offset(260.0, 4.0, 1.0), 256.0);
-        assert_eq!(thumb_offset(260.0, 4.0, 59.0 / 299.0), 50.515625);
-    }
-
-    #[test]
-    fn pointer_centres_the_thumb() {
-        assert_eq!(pointer_proportion(260.0, 4.0, 2.0), 0.0);
-        assert_eq!(pointer_proportion(260.0, 4.0, 258.0), 1.0);
-        assert_eq!(pointer_proportion(260.0, 4.0, 130.0), 0.5);
+    fn thumb_lands_where_blink_paints_it() {
+        for (scale, painted) in [(1.0, [0.0, 51.0, 256.0]), (2.0, [0.0, 101.0, 512.0])] {
+            for (value, x) in [1.0, 60.0, 300.0].into_iter().zip(painted) {
+                let p = (value - 1.0) / 299.0;
+                assert_eq!(thumb_offset(260.0 * scale, 4.0 * scale, p).round(), x);
+            }
+        }
     }
 }

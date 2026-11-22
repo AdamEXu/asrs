@@ -26,7 +26,14 @@ pub fn paint_text_field(bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
             skia::paint_attrs("fill", 0xffffffff),
             skia::paint_attrs("stroke", NATIVE_BORDER)
         );
-        let body = skia::rect(i, i, f64::from(w) - stroke, f64::from(h) - stroke, radius, &paint);
+        let body = skia::rect(
+            i,
+            i,
+            f64::from(w) - stroke,
+            f64::from(h) - stroke,
+            radius,
+            &paint,
+        );
         skia::svg(w, h, 1.0, &body)
     };
     skia::paint(("text-field", w, h), bounds, draw, window, cx);
@@ -70,7 +77,10 @@ impl Checkbox {
 pub fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, window: &mut Window, cx: &mut App) {
     let scale = window.scale_factor();
     let (w, h) = skia::device_size(bounds, scale);
-    let (cw, ch) = (f64::from(w) / f64::from(scale), f64::from(h) / f64::from(scale));
+    let (cw, ch) = (
+        f64::from(w) / f64::from(scale),
+        f64::from(h) / f64::from(scale),
+    );
     let side = cw.min(ch);
     let (x, y) = ((cw - side) / 2.0, (ch - side) / 2.0);
     let r = f64::from(NATIVE_RADIUS);
@@ -149,7 +159,14 @@ pub fn paint_progress(bounds: Bounds<Pixels>, position: f64, window: &mut Window
     let stroke = f64::from(native_stroke(scale));
     let draw = || {
         let r = wf.min(track_h) / 2.0;
-        let fill = skia::rect(0.0, top, wf, track_h, r, &skia::paint_attrs("fill", NATIVE_FILL));
+        let fill = skia::rect(
+            0.0,
+            top,
+            wf,
+            track_h,
+            r,
+            &skia::paint_attrs("fill", NATIVE_FILL),
+        );
         let mut pixmap = skia::svg(w, h, 1.0, &fill)?;
         if value > 0 {
             let pill = skia::rect(0.0, top, wf, track_h, r, &skia::paint_attrs("fill", ACCENT));

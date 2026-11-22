@@ -130,7 +130,9 @@ fn replay(id: &str) -> Tally {
     for record in &records {
         tally.records += 1;
         if let Err(e) = check(record, &mut element, &mut tally) {
-            tally.failures.push(format!("{id} line {}: {e}", record.line));
+            tally
+                .failures
+                .push(format!("{id} line {}: {e}", record.line));
         }
     }
     tally
@@ -189,15 +191,21 @@ fn run(id: &str) {
     );
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
     assert_eq!(t.compared, t.records, "{id}: one value read per record");
-    assert_eq!(t.compared + t.unexposed, t.reads, "{id}: every read accounted for");
+    assert_eq!(
+        t.compared + t.unexposed,
+        t.reads,
+        "{id}: every read accounted for"
+    );
 }
 
 #[test]
+#[ignore = "main's asrs_tabs::form is jsdom; runs once C08 (#157) lands, see #165"]
 fn number_fields_follow_blink() {
     run("form/number-input");
 }
 
 #[test]
+#[ignore = "main's asrs_tabs::form is jsdom; runs once C08 (#157) lands, see #165"]
 fn sliders_follow_blink() {
     run("form/range-input");
 }

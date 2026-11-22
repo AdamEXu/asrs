@@ -100,7 +100,11 @@ impl FieldStyle {
             placeholder_opacity: 1.0,
             focus_background: None,
             cancel_button: true,
-            cancel_filter: if dark { crate::theme::chains::INVERT } else { "" },
+            cancel_filter: if dark {
+                crate::theme::chains::INVERT
+            } else {
+                ""
+            },
         }
     }
 
