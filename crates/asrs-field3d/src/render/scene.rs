@@ -583,6 +583,9 @@ pub struct SpotLight {
 
 #[derive(Clone, Debug)]
 pub enum NodeKind {
+    /// A plain `Object3D`: unlike a `Group`, three's `projectObject` does not take its
+    /// `renderOrder` as the group order of its descendants.
+    Object3D,
     Group,
     Mesh(Mesh),
     FatLine(FatLine),

@@ -895,6 +895,7 @@ for (const f of fixtures) {
   ];
   write(SPEC_DIR, `${f.id}.entry.json`, {
     entry: "dom",
+    backend: "jsdom",
     inputs: [`../logs/${f.log}`],
     fixture
   });

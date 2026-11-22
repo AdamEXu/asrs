@@ -68,6 +68,8 @@ Windows the symlinks under upstream's `lite/` are skipped.
 | `cargo xtask oracle decode <file>` | canonical `Log` dump of one log file (below) |
 | `cargo xtask oracle export <file> --options <json> [--out <file>]` | exact export bytes for one `ExportOptions` |
 | `cargo xtask oracle historical [<corpus>...] [--check] [--jobs N]` | decode dumps and the export matrix over a synthetic corpus |
+| `cargo xtask oracle dom [--backend jsdom\|blink] <spec or fixture>` | one DOM fixture's records (see "Blink backend") |
+| `cargo xtask oracle dom-ab [<id prefix>...] [--jobs N] [--out <file>]` | every `dom/*` and `form/*` spec on jsdom and on Blink, differing records per family |
 
 ## Environment policy
 
@@ -168,7 +170,7 @@ Signaling NaN bit patterns are outside the contract: V8 may quiet them.
 Specs live in `parity/specs`, vectors in `parity/vectors/<id>.jsonl.zst`, and
 `parity/vectors/MANIFEST.json` records the upstream commit, Electron version and environment
 policy, and for each vector its case count, content hash, generator hash, spec, zone and the
-`<os>-<arch>` it was generated on. The header is pretty-printed and each vector is one
+`<os>-<arch>` it was generated on, plus the DOM `backend` of each `dom` spec's vector. The header is pretty-printed and each vector is one
 compact line, sorted by id, so branches that add or regenerate different vectors touch
 different lines.
 
@@ -176,7 +178,8 @@ A generator hash covers only what that vector's generator uses: the harness file
 point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
 as paths under `oracle/`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
 `protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page, `dom` evaluates
-the hub page bundle), `build.mjs`
+the hub page bundle; a Blink `dom` vector adds the `dom` and `domBlinkMain` entries' inputs),
+`build.mjs`
 and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
 Files are hashed with CRLF as LF. Upstream sources, upstream's bundles and workers, the
 Electron version and the environment policy are not in the per-vector hash: the manifest
@@ -192,7 +195,11 @@ file every entry imports (such as `src/shims.ts`) or `build.mjs` makes all of th
   itself (the `dom` entry does). `inputs` lists other files the entry reads, relative to the
   spec; they join the generator hash. An entry that reads a synthetic corpus names it in an
   arg (`target/parity/corpus/synthetic/<name>`) or an input
-  (`../../corpus/synthetic/<name>.manifest.json`); see Corpus preconditions.
+  (`../../corpus/synthetic/<name>.manifest.json`); see Corpus preconditions. A spec with
+  `"entry": "dom"` also names its `"backend"`, `"blink"` (the default) or `"jsdom"`; `gen`
+  runs the `domBlink` entry for Blink, and `gen --check` calls a vector stale when the backend
+  recorded in the manifest is not its spec's, so a jsdom-generated vector cannot stand in a
+  family flipped to Blink.
 - `<id>.fn.json`: `{"requests": "<name>.requests.jsonl", "zones": [...]}`, `fn` requests from
   a sibling file (`*.requests.jsonl` files are never specs themselves).
 - `<id>.session.json`: a live session (see Live sessions), run by the `liveSession` entry
@@ -676,9 +683,14 @@ recorded. The driver plays main's part over the hub's `MessagePort`: it sends th
 messages `main.ts` sends on `dom-ready`, then the fixture's steps.
 
 ```sh
-cargo xtask oracle run dom <spec or fixture file>     # vector lines on stdout
+cargo xtask oracle dom <spec or fixture file>         # vector lines on stdout, the spec's backend
 cargo xtask oracle gen dom/tabs/line-graph            # regenerate one committed vector
 ```
+
+Blink (Electron 39.2.7's Chromium) is the DOM of record: new fixtures run there, and jsdom is a
+local pre-check that families leave once they are flipped (`"backend": "jsdom"` in a spec marks
+one not flipped yet). The jsdom specifics below (`innerText`, text codecs, `jsdomError`) apply
+to that backend only.
 
 ### What is deterministic
 
@@ -777,6 +789,7 @@ Fixture keys, all optional:
 | `layout` | layout rules tried before the defaults |
 | `ignoreMain` | hub-to-main message names not to record (default `save-state`, `save-type-memory`, `update-touch-bar-slider`, which repeat on timers; capture `state` instead) |
 | `sourceLists` | `true` records every call into the hub's `SourceList` instances (see "Source lists" below) |
+| `geometry` | `"scripted"` (default) or `"real"`, Blink only (see "Blink backend") |
 | `steps` | run in order after start-up |
 
 `assets`, `preferences`, `state`, `typeMemory` and a `log` step may be a path to a JSON file,
@@ -796,6 +809,7 @@ Steps:
 | `{"selection": [method, ...args]}` | calls `window.selection[method](...args)` with CVE-1 arguments; `setLiveConnected` connects a scripted supplier that returns the last `liveTime` step's value |
 | `{"liveTime": <cve1>}` | sets the scripted live timestamp the `setLiveConnected` supplier returns |
 | `{"tuner": [keys...]}` | installs a stub `window.tuner` tunable for the listed keys and writes `{"tuner": ["publish", key, value]}` or `["unpublish", key]` records; `null` removes it |
+| `{"form": {...}}` | a form-control probe (see "Form vectors") |
 | `{"capture": [...], "label": ...}` | writes a `{"capture": label, "time": ms}` line, then each capture below |
 
 Captures (a string or `{"kind": ..., ...}`):
@@ -894,6 +908,163 @@ The recorder eval hooks every Field2d tab:
 | `{"f2dr": "mouse", "type", "button", "shiftKey", "x", "y"}` | before the sensor's and the camera menu's listeners |
 | `{"f2dr": "save" \| "aspectRatio" \| "restoreState" \| "set2DCamera", ...}` | renderer state calls |
 
-Not modelled: CSS (so no computed styles or real text layout), scrolling (`scrollTop` stays 0),
-workers and historical or live sources (logs are built with `log` steps), drag sessions other
-than through dispatched events, the documentation iframe's content, and 3D rendering.
+Not modelled on jsdom: CSS (so no computed styles or real text layout), scrolling (`scrollTop`
+stays 0). On either backend: workers and historical or live sources (logs are built with `log`
+steps), drag sessions other than through dispatched events, the documentation iframe's
+content, and 3D rendering.
+
+### Blink backend
+
+`src/domBlink.ts` (entry `domBlink`, chosen by `"backend": "blink"`) runs the same fixture and
+the same `domPage.js` in Blink. It spawns Electron's main process on `domBlinkMain.mjs`
+(`src/domBlinkMain.ts`, no upstream main process) with `--force-device-scale-factor=<window
+devicePixelRatio>` and `--lang=en-US`, which opens an offscreen `BrowserWindow` with the
+fixture's content size and `nativeTheme` set to its theme, loads upstream's `www/hub.html` and
+serves, in place of `bundles/hub.js`, the fixture followed by `domPage.js`. The page's first
+module, `src/dom/blinkBoot.ts`, provides the output sink and exception records `dom.ts` provides
+for jsdom, then `env.ts` installs the same fake clock, timers, frames, seeded random, recording
+canvas, `matchMedia`, `ResizeObserver` and image sizes. Before the first step the run fails
+unless `innerWidth`, `innerHeight` and `devicePixelRatio` equal the fixture's, the zone and
+`Intl` locales are the policy's and the page has no web fonts. Records are read back over the
+DevTools protocol.
+
+Determinism on Blink:
+
+- Only `hub.html` and its stylesheets load. Every other request (images, `<object>` icons,
+  iframes, workers, `fetch`, http and https) is answered with a body that never arrives, so no
+  load or error event lands at a time the steps do not control. A request left unanswered would
+  fail after Electron's 30 s timeout, and page load never completes. Image sizes still come from
+  `images`, as on jsdom.
+- Blink dispatches scroll events, runs layout and observers only in a real rendering frame, so
+  every settle after a callback or step waits for one real frame and then one task. Native
+  effects of a step (a scroll event after a `scrollTop` write, `selectionchange`) therefore run
+  before the next step, at the same point on every run.
+- CSS transitions and animations are off (`transition: none; animation: none`), because they
+  run on the real clock; geometry reads see the end state.
+- `requestIdleCallback`, `Element.animate` (Web Animations) and `WebSocket` are Blink's own and
+  run on the real clock. jsdom lacks the first two, so upstream code that feature-tests for them
+  (`NT4Source`'s idle loop, `VideoController`'s button animation) takes another path on each
+  backend. No fixture on Blink reaches them yet; one that does needs them faked first (#145).
+- `innerText`, `TextEncoder` and `TextDecoder` are Chromium's own. Exceptions in event
+  listeners reach the page's `error` event and unhandled rejections its `unhandledrejection`
+  event; both are written as `{"exception": "event" | "unhandledRejection", "error": "<name>:
+  <message>"}`, the text jsdom's records use.
+
+Geometry, fixture key `"geometry"`:
+
+- `"scripted"` (default): the layout rules answer `getBoundingClientRect`, `getClientRects`,
+  `client*`, `scroll{Width,Height}` and `offset*` exactly as on jsdom, and `scrollTo` and
+  `scrollIntoView` do nothing. Geometry is a declared input; the families that keep it are those
+  whose controllers only do pointer math inside one rectangle. Scroll positions, `MouseEvent`
+  coordinates and everything else are Blink's.
+- `"real"` (Blink only): Blink lays the page out. Every geometry read upstream makes is written
+  where it happens as `{"read": name, "el": path, "value": <CVE-1>}` (`getBoundingClientRect`
+  as `[x, y, width, height]`, `getClientRects` as a list of those, `client*`, `scroll*`,
+  `offset*` as numbers), and every `scrollTop` or `scrollLeft` assignment and `scrollTo`,
+  `scrollBy` or `scrollIntoView` call as `{"write": name, "el", "value"}`. `el` is
+  `tag.class.class:index` for each element from `<body>` down, joined by `>`. Harness code reads
+  inside `window.__oracleQuiet(fn)`, which records nothing; fixtures use it too, for scrolls
+  that are inputs rather than upstream behaviour. `asrs_parity::geometry::ScriptedReads`
+  answers a port's reads from these records in order and checks its writes, failing on any read
+  or write upstream did not make; `dom/tabs/table-real` replays the Table renderer this way
+  (`crates/asrs-tabs/tests/table_real_dom.rs`).
+
+`window.__oracleTree(value)` gives fixture evals the CVE-1 tree of a value.
+
+`cargo xtask oracle dom-ab` runs every committed `dom/*` and `form/*` spec on jsdom and on Blink
+with scripted geometry and writes a Markdown report: per family, the specs that are
+byte-identical and, for the others, the records only one backend wrote, by kind, with the first
+differing line. A family with no difference flips to Blink with unchanged content; one that
+differs stays on jsdom until its unit regenerates it from Blink and the port follows.
+
+### Form vectors
+
+`form/number-input`, `form/range-input`, `form/select` and `form/css-value` record Chromium's
+form-control semantics as pure string functions. `node oracle/tools/formSpecs.mjs` writes their
+specs; edit the script, not the specs. Each is a list of `form` steps:
+
+```json
+{"form": {"markup": "<input type=\"range\" value=\"0\" min=\"1\" max=\"1\" step=\"1\">",
+          "ops": [["set", "max", "300"], ["set", "value", "59.6"]],
+          "read": ["value", "valueAsNumber"]}}
+```
+
+The markup is parsed into a connected container (so attributes are set in markup order, as the
+parser sets upstream's), then each op runs: `["set", path, value]` assigns a property,
+`["setAttribute", name, value]`, `["appendElement", tag, [[path, value], ...]]` creates an
+element, assigns the pairs and appends it, `["remove", index]` removes an element child. After
+the parse and after each op the step writes `{"form": markup, "op": <op or null>, "threw"?,
+"values": [{"path", "value"} | {"path", "threw"}, ...]}`. Paths are dotted property paths from
+the parsed element, with numeric segments indexing collections (`options.1.value`,
+`style.width`).
+
+## Electron app driver
+
+`src/appMain.ts` runs the real upstream app: it sets an isolated userData directory, seeds it,
+requires upstream's `bundles/main.js`, and drives the hub through `webContents.executeJavaScript`
+and `webContents.sendInputEvent` only. `cargo xtask app` (`run`, `compare`, `normalize`, `check`)
+builds the harness, launches one Electron process per scenario variant with the pinned
+environment and the switches below, and compares runs. Scenarios live in `parity/scenarios/`.
+
+Switches, all on the real command line because Chromium reads several of them before the main
+script runs (the driver exits naming the expected set when one is missing):
+`--force-device-scale-factor=<1|2>`, `--lang=en-US`, `--disable-accelerated-2d-canvas`,
+`--js-flags=--random-seed=1` (V8's `Math.random`, so controller UUIDs repeat;
+`asrs_js::time::V8MathRandom::from_seed(1)` is the same stream), `--force-prefers-reduced-motion`
+(upstream's 3D camera otherwise eases to its default position over wall-clock frame deltas),
+`--disable-partial-raster` (partial re-raster left one-pixel seams that differed between runs),
+`--force-color-profile=srgb` (see below), and for `"gl": true` scenarios on Linux and Windows
+`--enable-unsafe-swiftshader`, plus `--use-angle=d3d11-warp` with `--gl d3d11-warp`.
+
+What the driver pins besides switches: windows are shown inactive (`show` becomes
+`showInactive`) at the primary display's work-area origin plus 16 px with the scenario's content
+size, ignore the real pointer, and never open DevTools; `fetch` and `net.fetch` in the main
+process and non-loopback HTTP and WebSocket requests from pages are refused (the refused URLs
+are in `run.json`); every `dialog` call is answered from the scenario's `dialog` actions, and an
+unscripted one fails the run; `prefs.json` is the scenario's `prefs` plus its theme, and
+`beta-2027.json` marks the beta welcome and survey done.
+
+A session preload installs a tap in each page's main world before page scripts run. It records
+every canvas context, and for 3D scenarios reads each WebGL drawing buffer with `gl.readPixels`
+right after the animation-frame callback that drew into it (the buffer is only defined until the
+compositor takes the frame), flipped to top-down rows.
+
+Scenario file:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `page` | `"app"` | `app` runs upstream; `colour-patch` shows 512 known sRGB patches instead |
+| `window` | `{"width":1100,"height":650}` | content size in CSS px |
+| `scales`, `themes` | `[1,2]`, `["light","dark"]` | variants; one launch each |
+| `gl` | `false` | 3D scenario: GL switches and drawing-buffer dumps |
+| `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra JSON files seeded into userData |
+| `actions` | | in order, below |
+
+Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-files` message;
+`app:<name>` is a log generated by `src/app/logs.ts` with upstream's `WPILOGEncoder` into
+`inputs/`), `{"main": name, "data": ...}` (any main-to-hub message, dispatched on the hub's
+`messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
+`{"selection": [method, ...args]}`, `{"mouse": "move"|"down"|"up"|"click", "x", "y"}`,
+`{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
+`{"key": keyCode, "modifiers": [...]}`, `{"dialog": button index | file name | null}` (queued
+answer for the next dialog), `{"wait": ms}`, `{"idle": true}` and
+`{"capture": name, "probes": [selectors], "masks": [selectors]}`.
+
+A capture waits until the page is idle (fonts loaded, no log or field loading, no playback) and
+then until three consecutive window captures, DOM dumps and drawing-buffer read counts agree.
+It writes `captures/<name>.png` (capturePage), `captures/<name>.json` (size, colour space,
+probed boxes, every visible text node's line boxes with font and colour, form controls, masks
+for focused text inputs, webviews and the scenario's mask selectors, the canvas and GL dump
+list, and a `timing` object that differs between runs), `<name>.canvas-<i>.png` (`getImageData`
+on each visible 2D canvas) and `<name>.gl-<i>.png`. After the last action the driver waits for
+upstream's periodic state saves and copies the top-level JSON files and asset folders of
+userData into `files/`.
+
+Colour: with `--force-color-profile=srgb` the colour-patch capture is exact on the macOS dev
+display (512 of 512). Without it capturePage returns the display's colour space (Display P3
+here); `--colour display` keeps that, stores the display's ICC profile as `display.icc`
+(NSScreen on macOS, the X root window's `_ICC_PROFILE` on Linux, `GetICMProfileW` on Windows) and
+`cargo xtask app normalize` converts with lcms2. That route loses information: after
+normalization 21 of 512 patches are 2 to 5 levels off, all saturated colours, because the 8-bit
+P3 capture is too coarse to invert near the sRGB gamut edge. `cargo xtask app check` gates the
+sRGB route and reports the display route.

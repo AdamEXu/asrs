@@ -12,6 +12,7 @@ export interface Rect {
 const noop = () => undefined;
 
 const allPorts: FakePort[] = [];
+export const sendLog: { port: FakePort; message: any }[] = [];
 
 export function takeSent(): any[] {
   const out: any[] = [];
@@ -42,8 +43,9 @@ export class FakePort {
     (this.handlers.get(name) ?? []).forEach((cb) => cb(event));
   }
 
-  postMessage(message: unknown): void {
+  postMessage(message: any): void {
     this.sent.push(message);
+    sendLog.push({ port: this, message });
   }
 
   start(): void {}

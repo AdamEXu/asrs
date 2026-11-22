@@ -1,5 +1,6 @@
 {
  "entry": "dom",
+ "backend": "jsdom",
  "inputs": [
   "../logs/field-2d-struct.json"
  ],
