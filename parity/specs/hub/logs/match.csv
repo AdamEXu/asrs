@@ -1,0 +1,8 @@
+Timestamp,Key,Value
+0,/DriverStation/Enabled,false
+0,/Drive/Velocity,0
+1,/Drive/Velocity,1.5
+2.5,/DriverStation/Enabled,true
+3,/Drive/Velocity,2
+7.5,/DriverStation/Enabled,false
+9,/Drive/Velocity,0.5

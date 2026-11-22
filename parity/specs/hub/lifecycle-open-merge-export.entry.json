@@ -1,0 +1,170 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv",
+    "logs/second.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "capture": [
+          "title",
+          "loading",
+          "selection",
+          "log",
+          "window",
+          "state"
+        ],
+        "label": "boot"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "capture": [
+          "title",
+          "loading",
+          "selection",
+          "log"
+        ],
+        "label": "opening"
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "title",
+          "loading",
+          "selection",
+          "log"
+        ],
+        "label": "opened"
+      },
+      {
+        "main": "zoom-enabled"
+      },
+      {
+        "capture": [
+          "selection"
+        ],
+        "label": "zoomed"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/second.csv"
+          ],
+          "merge": true
+        }
+      },
+      {
+        "capture": [
+          "title",
+          "loading",
+          "selection",
+          "log"
+        ],
+        "label": "merging"
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "title",
+          "loading",
+          "selection",
+          "log"
+        ],
+        "label": "merged"
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "capture": [
+          "loading"
+        ],
+        "label": "export-prompted"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/export.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "changes",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "advance": 200
+      },
+      {
+        "capture": [
+          "loading"
+        ],
+        "label": "exported"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          "loading"
+        ],
+        "label": "export-finished"
+      },
+      {
+        "main": "start-publish",
+        "data": false
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "win32",
+          "platformRelease": "10.0.22631",
+          "platformArch": "x64",
+          "appVersion": "1"
+        }
+      },
+      {
+        "capture": [
+          "window"
+        ],
+        "label": "windows"
+      },
+      {
+        "main": "set-fullscreen",
+        "data": true
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "darwin",
+          "platformRelease": "27.0.0",
+          "platformArch": "arm64",
+          "appVersion": "1"
+        }
+      },
+      {
+        "capture": [
+          "window"
+        ],
+        "label": "darwin-27"
+      }
+    ]
+  }
+}

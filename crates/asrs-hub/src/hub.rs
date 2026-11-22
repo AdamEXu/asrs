@@ -26,7 +26,7 @@ use asrs_log::log::log_key_utils::MERGE_PREFIX;
 use asrs_log::log::robot_state::{AKIT_TIMESTAMP_KEYS, get_enabled_data};
 use asrs_log::log::{Log, SerializedLog};
 use asrs_log::realm::JsRealm;
-use asrs_log::util::{calc_mock_progress, clamp_value, html_encode, scale_value};
+use asrs_log::util::{calc_mock_progress, clamp_value, scale_value};
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::build_constants::{DISTRIBUTION, Distribution, IS_LITE};
 use asrs_model::hub_state::SidebarState;
@@ -169,15 +169,16 @@ pub trait HubView {
     fn measure_value(&self, value: &RowValue) -> f64;
 }
 
-/// The `title` element's `innerHTML`.
+/// The `title` element's text after `setWindowTitle`: upstream `htmlEncode`s the name and
+/// status into its `innerHTML`, which the parser decodes back.
 fn window_title(name: &JsString, status: Option<&str>) -> JsString {
-    let mut title = html_encode(name);
+    let mut title = name.clone();
     if let Some(status) = status.filter(|s| !s.is_empty()) {
         title.push_str(&JsString::from(" ("));
-        title.push_str(&html_encode(&JsString::from(status)));
+        title.push_str(&JsString::from(status));
         title.push_str(&JsString::from(")"));
     }
-    title.push_str(&JsString::from(" &mdash; "));
+    title.push_str(&JsString::from(" \u{2014} "));
     title.push_str(&JsString::from(APP_NAME));
     if IS_LITE {
         title.push_str(&JsString::from(" Lite"));
@@ -194,18 +195,6 @@ fn window_title(name: &JsString, status: Option<&str>) -> JsString {
 pub struct LoadingGlow {
     pub show: Option<bool>,
     pub progress: Option<JsString>,
-}
-
-/// The `fancy-*` classes `updateFancyWindow` puts on `body`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct FancyWindow {
-    pub title_bar_mac: bool,
-    pub title_bar_win: bool,
-    pub title_bar_linux: bool,
-    pub title_bar_lite: bool,
-    pub side_bar_mac: bool,
-    pub side_bar_mac_27: bool,
-    pub side_bar_win: bool,
 }
 
 /// `set-version`'s fields.
@@ -443,14 +432,14 @@ pub struct HubModel {
     filenames: Rc<RefCell<Vec<JsString>>>,
     historical: Vec<SourceEntry>,
     platform: Platform,
-    fancy: FancyWindow,
+    body_classes: Vec<&'static str>,
     fullscreen: bool,
     focused: bool,
     battery: bool,
     fps: bool,
     update_button: Option<bool>,
     feedback_button: Option<bool>,
-    title: Option<JsString>,
+    title: JsString,
     loading: LoadingGlow,
     exporting: bool,
     log_friendly_name: Option<JsString>,
@@ -545,14 +534,14 @@ impl HubModel {
             filenames,
             historical: Vec::new(),
             platform: Platform::default(),
-            fancy: FancyWindow::default(),
+            body_classes: Vec::new(),
             fullscreen: false,
             focused: true,
             battery: false,
             fps: false,
             update_button: None,
             feedback_button: None,
-            title: None,
+            title: JsString::from(APP_NAME),
             loading: LoadingGlow::default(),
             exporting: false,
             log_friendly_name: None,
@@ -611,17 +600,18 @@ impl HubModel {
         f(&mut self.sidebar, &mut env)
     }
 
-    /// The `title` element's `innerHTML`, `None` before the first `setWindowTitle`.
-    pub fn title(&self) -> Option<&JsString> {
-        self.title.as_ref()
+    /// The `title` element's text (hub.html starts with the app name).
+    pub fn title(&self) -> &JsString {
+        &self.title
     }
 
     pub fn loading(&self) -> &LoadingGlow {
         &self.loading
     }
 
-    pub fn fancy_window(&self) -> FancyWindow {
-        self.fancy
+    /// The `fancy-*` classes on `body`, in `classList` order.
+    pub fn body_classes(&self) -> &[&'static str] {
+        &self.body_classes
     }
 
     pub fn platform(&self) -> &Platform {
@@ -681,7 +671,7 @@ impl HubModel {
     }
 
     fn set_window_title(&mut self, name: &JsString, status: Option<&str>) {
-        self.title = Some(window_title(name, status));
+        self.title = window_title(name, status);
     }
 
     fn set_loading(&mut self, progress: Option<f64>) {
@@ -701,25 +691,39 @@ impl HubModel {
         }
     }
 
+    fn toggle_class(&mut self, class: &'static str, on: bool) {
+        if on {
+            if !self.body_classes.contains(&class) {
+                self.body_classes.push(class);
+            }
+        } else {
+            self.body_classes.retain(|c| *c != class);
+        }
+    }
+
+    /// `updateFancyWindow()`.
     fn update_fancy_window(&mut self) {
-        let platform = &self.platform.platform;
-        let is = |name: &str| *platform == JsString::from(name);
+        let platform = self.platform.platform.clone();
+        let is = |name: &str| platform == JsString::from(name);
         let release = self.platform.release.to_string_lossy();
         let split: Vec<&str> = release.split('.').collect();
         let release_number = |s: Option<&&str>| {
             s.map_or(f64::NAN, |s| number::to_number(JsString::from(*s).units()))
         };
-        self.fancy.title_bar_mac = is("darwin") && !self.fullscreen;
-        self.fancy.title_bar_win = is("win32");
-        self.fancy.title_bar_linux = is("linux");
-        self.fancy.title_bar_lite = is("lite");
+        self.toggle_class("fancy-title-bar-mac", is("darwin") && !self.fullscreen);
+        self.toggle_class("fancy-title-bar-win", is("win32"));
+        self.toggle_class("fancy-title-bar-linux", is("linux"));
+        self.toggle_class("fancy-title-bar-lite", is("lite"));
         if is("darwin") {
-            self.fancy.side_bar_mac = true;
-            self.fancy.side_bar_mac_27 = release_number(split.first()) >= 27.0;
+            self.toggle_class("fancy-side-bar-mac", true);
+            self.toggle_class("fancy-side-bar-mac-27", release_number(split.first()) >= 27.0);
         } else {
-            self.fancy.side_bar_mac = false;
+            self.toggle_class("fancy-side-bar-mac", false);
         }
-        self.fancy.side_bar_win = is("win32") && release_number(split.last()) >= 22621.0;
+        self.toggle_class(
+            "fancy-side-bar-win",
+            is("win32") && release_number(split.last()) >= 22621.0,
+        );
     }
 
     fn report(

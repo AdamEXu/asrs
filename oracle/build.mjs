@@ -285,20 +285,25 @@ const field3dStub = {
     build.onResolve({ filter: /\/Field3dRendererImpl$/ }, () => ({ path: path.join(here, "src/dom/field3dStub.ts") }));
   }
 };
-recordInputs(
-  (
-    await esbuild.build({
-      ...common,
-      entryPoints: [path.join(here, "src/dom/page.ts")],
-      outfile: path.join(args.out, "domPage.js"),
-      format: "iife",
-      platform: "browser",
-      nodePaths: [path.join(args.upstream, "node_modules")],
-      plugins: [field3dStub, oraclePlugin],
-      logOverride: { "direct-eval": "silent", "equals-negative-zero": "silent" }
-    })
-  ).metafile
-);
+for (const [entry, outfile] of [
+  ["src/dom/page.ts", "domPage.js"],
+  ["src/hub/page.ts", "hubPage.js"]
+]) {
+  recordInputs(
+    (
+      await esbuild.build({
+        ...common,
+        entryPoints: [path.join(here, entry)],
+        outfile: path.join(args.out, outfile),
+        format: "iife",
+        platform: "browser",
+        nodePaths: [path.join(args.upstream, "node_modules")],
+        plugins: [field3dStub, oraclePlugin],
+        logOverride: { "direct-eval": "silent", "equals-negative-zero": "silent" }
+      })
+    ).metafile
+  );
+}
 fs.copyFileSync(path.join(here, "src/renderer/renderer.html"), path.join(args.out, "renderer.html"));
 fs.writeFileSync(
   path.join(args.out, "canvasPage.html"),
@@ -316,7 +321,8 @@ fs.writeFileSync(
 const runtimeLoads = {
   protoRenderer: ["rendererMain", "rendererPage", "src/renderer/renderer.html"],
   canvasMain: ["canvasPage", "heatmapPage"],
-  dom: ["domPage"]
+  dom: ["domPage"],
+  hubSession: ["hubPage"]
 };
 const inputs = {};
 for (const name of entries) {
