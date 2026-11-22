@@ -42,10 +42,9 @@ const FIELDS = [
 function items(menu: Electron.Menu): unknown[] {
   return menu.items.map((item: any) => {
     const record: any = {};
-    for (const field of FIELDS) record[field] = toTree(item[field]);
-    record.defaultRoleAccelerator = toTree(
-      typeof item.getDefaultRoleAccelerator === "function" ? item.getDefaultRoleAccelerator() : undefined
-    );
+    for (const field of FIELDS) record[field] = item[field];
+    record.defaultRoleAccelerator =
+      typeof item.getDefaultRoleAccelerator === "function" ? item.getDefaultRoleAccelerator() : undefined;
     if (item.submenu) record.submenu = items(item.submenu);
     return record;
   });
@@ -60,5 +59,5 @@ app.whenReady().then(() => {
     app.exit(1);
     return;
   }
-  process.stdout.write(JSON.stringify({ op: "electron", appName: app.getName(), menu: items(top) }) + "\n", () => app.exit(0));
+  process.stdout.write(JSON.stringify({ op: "electron", appName: app.getName(), menu: toTree(items(top)) }) + "\n", () => app.exit(0));
 });

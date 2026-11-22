@@ -29,6 +29,14 @@ pub(super) fn popup_menu(
     cx.defer(move |cx| on_close(None, cx));
 }
 
+pub(super) fn set_application_menu(
+    _cx: &mut App,
+    _menu: &PopupMenu,
+    _on_select: impl Fn(MenuPath, &mut App) + 'static,
+) -> bool {
+    false
+}
+
 pub(super) fn close_popup_menu(_window: &Window) {}
 
 pub(super) fn native_menu_label(label: &str) -> String {
@@ -194,6 +202,10 @@ pub(super) mod probe {
     use super::super::probe::{Frame, MouseAction, WheelReading, WheelSample, WindowImage};
 
     pub fn native_menu_roundtrip(_menu: &PopupMenu) -> Option<PopupMenu> {
+        None
+    }
+
+    pub fn read_application_menu() -> Option<PopupMenu> {
         None
     }
 

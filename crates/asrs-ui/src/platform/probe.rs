@@ -113,6 +113,12 @@ pub fn native_menu_roundtrip(menu: &PopupMenu) -> Option<PopupMenu> {
     imp::probe::native_menu_roundtrip(menu)
 }
 
+/// The application's main menu read back from the OS, with each item's role as its native
+/// wiring shows it.
+pub fn read_application_menu() -> Option<PopupMenu> {
+    imp::probe::read_application_menu()
+}
+
 pub fn read_wheel_sample(sample: &WheelSample) -> Option<WheelReading> {
     imp::probe::read_wheel_sample(sample)
 }
