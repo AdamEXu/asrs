@@ -72,6 +72,7 @@ use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Preferences, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
+use asrs_model::source_list::Undisplayed;
 use asrs_model::source_list::{Env, ItemView, Length, Rect, SourceList};
 use asrs_model::source_list_config::{
     SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
@@ -425,6 +426,7 @@ impl SourceListCx for Host {
             type_memory: &mut self.memory,
             selection: &mut self.selection,
             dark: self.dark,
+            dom: Undisplayed::dom(),
         }
     }
 }
@@ -876,6 +878,7 @@ impl Harness {
                 log: &host.log.borrow(),
                 type_memory: &mut host.memory,
                 dark: host.dark,
+                dom: Undisplayed::dom(),
             };
             f(&mut env)
         };
@@ -934,14 +937,14 @@ impl Harness {
             "promptType" => {
                 let i = index(at(&args, 1))?;
                 controller.with_list(list, |l, _| {
-                    l.prompt_type(i);
+                    l.prompt_type(Undisplayed::dom(), i);
                 });
                 None
             }
             "contextMenu" => {
-                let i = index(at(&args, 1))?;
+                let (i, x, y) = (index(at(&args, 1))?, num(at(&args, 2))?, num(at(&args, 3))?);
                 controller.with_list(list, |l, _| {
-                    l.context_menu(i);
+                    l.context_menu(i, x, y);
                 });
                 None
             }
@@ -978,7 +981,9 @@ impl Harness {
                 None
             }
             "clearClick" => {
-                controller.with_list(list, |l, _| l.request_clear());
+                controller.with_list(list, |l, _| {
+                    l.request_clear(Undisplayed::dom());
+                });
                 None
             }
             "clearResponse" => {

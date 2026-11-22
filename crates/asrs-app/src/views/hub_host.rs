@@ -10,7 +10,7 @@ use asrs_js::time::{Rng, SystemClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_model::source_list::Rect;
+use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_services::window_manager::Platform;
 use asrs_ui::gpui::{
     AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
@@ -19,12 +19,14 @@ use asrs_ui::gpui::{
 
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::sidebar::{self, SidebarView, ViewGeometry};
+use super::source_list::ListsGeometry;
 use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
 use crate::menus::bridge::{self, EffectHandler};
 use crate::menus::context::{self, Effect, MenuEnv};
 
 struct FrameView {
     geometry: FrameGeometry,
+    lists: ListsGeometry,
     dark: bool,
     sidebar: ViewGeometry,
 }
@@ -44,6 +46,10 @@ impl HubView for FrameView {
 
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
         &mut self.sidebar
+    }
+
+    fn source_list_dom(&mut self) -> &mut dyn SourceListDom {
+        &mut self.lists
     }
 
     fn title_rect(&self, index: usize) -> Rect {
@@ -86,6 +92,7 @@ const IMPORT_RANDOM_DRAWS: usize = 77;
 pub struct HubEntityHost {
     hub: Entity<Hub>,
     geometry: FrameGeometry,
+    lists: ListsGeometry,
     sidebar_geometry: ViewGeometry,
     sidebar: Entity<SidebarView>,
 }
@@ -196,8 +203,10 @@ impl HubEntityHost {
     ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
         let sidebar_geometry = ViewGeometry::new();
+        let lists = ListsGeometry::default();
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
+            lists: lists.clone(),
             dark,
             sidebar: sidebar_geometry.clone(),
         });
@@ -240,6 +249,7 @@ impl HubEntityHost {
                 HubEntityHost {
                     hub,
                     geometry,
+                    lists,
                     sidebar_geometry,
                     sidebar,
                 },
@@ -305,6 +315,10 @@ fn show_context_menu(
 impl FrameHost for HubEntityHost {
     fn geometry(&self) -> FrameGeometry {
         self.geometry.clone()
+    }
+
+    fn source_list_geometry(&self) -> ListsGeometry {
+        self.lists.clone()
     }
 
     fn frame_time(&self, cx: &App) -> f64 {

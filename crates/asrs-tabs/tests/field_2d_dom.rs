@@ -73,6 +73,7 @@ use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{CoordinateSystemPreference, Preferences, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
+use asrs_model::source_list::Undisplayed;
 use asrs_model::source_list::{Env, ItemView, Length, SourceList};
 use asrs_model::source_list_config::{
     SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
@@ -295,6 +296,7 @@ impl SourceListCx for Host {
             type_memory: &mut self.memory,
             selection: &mut self.selection,
             dark: self.dark,
+            dom: Undisplayed::dom(),
         }
     }
 }
@@ -1221,6 +1223,7 @@ impl Harness {
             log: &host.log.borrow(),
             type_memory: &mut host.memory,
             dark: host.dark,
+            dom: Undisplayed::dom(),
         };
         let result = controller.source_list_mut().frame(&mut env, time, None);
         Ok(result.err().map(|e| e.to_string()))
@@ -1253,6 +1256,7 @@ impl Harness {
                 log: &host.log.borrow(),
                 type_memory: &mut host.memory,
                 dark: host.dark,
+                dom: Undisplayed::dom(),
             };
             f(&mut env)
         };

@@ -23,6 +23,7 @@ use asrs_log::log::robot_state::{get_autonomous_key, get_enabled_key, get_utilit
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::source_list::Rect;
+use asrs_model::source_list::{ListInput, ListOutput};
 use asrs_model::tab_controller::{Command, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use indexmap::IndexSet;
@@ -499,6 +500,23 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     pub fn tabs(&self) -> impl ExactSizeIterator<Item = TabRef<'_, Cx>> + '_ {
         self.tabs.iter().map(TabRef)
+    }
+
+    /// `input` for every tab's source lists, in tab order. Each list's own listener runs
+    /// whatever another one threw; their exceptions come back together.
+    pub fn source_list_input(
+        &mut self,
+        cx: &mut Cx,
+        input: ListInput<'_>,
+    ) -> (ListOutput, Vec<JsError>) {
+        let mut errors = Vec::new();
+        let mut out = ListOutput::default();
+        for tab in &mut self.tabs {
+            let o = tab.controller.source_list_input(cx, input, &mut errors);
+            out.drag = out.drag.or(o.drag);
+            out.edit = out.edit.or(o.edit);
+        }
+        (out, errors)
     }
 
     /// `getSelectedTab()`.
