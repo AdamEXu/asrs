@@ -1,6 +1,7 @@
 pub mod ansi;
 pub mod console;
 pub mod cx;
+pub mod documentation;
 pub mod field3d;
 pub mod field_2d;
 pub mod form;

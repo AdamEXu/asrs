@@ -369,6 +369,10 @@ impl ConsoleRenderer {
         }
     }
 
+    pub fn dom(&self) -> &Rc<RefCell<ConsoleDom>> {
+        &self.dom
+    }
+
     /// The `HIGHLIGHT_BUTTON` click.
     pub fn highlight_click(&mut self) {
         self.highlight = !self.highlight;

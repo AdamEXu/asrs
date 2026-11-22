@@ -308,35 +308,41 @@ impl TabController<Host> for StatsHalf {
 struct StatFactory;
 
 impl TabFactory<Host> for StatFactory {
-    fn create(&mut self, cx: &mut Host, tab_type: Option<TabType>) -> TabParts<Host> {
-        let k = cx.created;
-        cx.created += 1;
-        if tab_type == Some(TabType::Statistics) {
-            TabParts {
-                uuid: JsString::from(time::create_uuid(&mut cx.rng)),
-                controller: Box::new(StatsHalf {
-                    inner: StatisticsController::new(cx),
-                    k,
-                }),
-                renderer: Box::new(StubRenderer(k)),
-            }
-        } else {
-            let mut uuid = JsString::new();
-            for i in 0..uuid_draws(tab_type) {
-                let drawn = JsString::from(time::create_uuid(&mut cx.rng));
-                if i == 0 {
-                    uuid = drawn;
+    fn create(
+        &mut self,
+        cx: &mut Host,
+        tab_type: Option<TabType>,
+    ) -> Result<TabParts<Host>, JsError> {
+        Ok({
+            let k = cx.created;
+            cx.created += 1;
+            if tab_type == Some(TabType::Statistics) {
+                TabParts {
+                    uuid: JsString::from(time::create_uuid(&mut cx.rng)),
+                    controller: Box::new(StatsHalf {
+                        inner: StatisticsController::new(cx),
+                        k,
+                    }),
+                    renderer: Box::new(StubRenderer(k)),
+                }
+            } else {
+                let mut uuid = JsString::new();
+                for i in 0..uuid_draws(tab_type) {
+                    let drawn = JsString::from(time::create_uuid(&mut cx.rng));
+                    if i == 0 {
+                        uuid = drawn;
+                    }
+                }
+                if let Some(seed) = cx.seeds.get(k) {
+                    uuid = seed.uuid.clone();
+                }
+                TabParts {
+                    uuid,
+                    controller: Box::new(StubController(k)),
+                    renderer: Box::new(StubRenderer(k)),
                 }
             }
-            if let Some(seed) = cx.seeds.get(k) {
-                uuid = seed.uuid.clone();
-            }
-            TabParts {
-                uuid,
-                controller: Box::new(StubController(k)),
-                renderer: Box::new(StubRenderer(k)),
-            }
-        }
+        })
     }
 }
 

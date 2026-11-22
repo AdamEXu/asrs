@@ -578,6 +578,12 @@ impl HistoricalDataSource {
         Ok(())
     }
 
+    /// Puts back `count` [`SourceEvent::AllFieldsLoaded`] resolutions whose callbacks never
+    /// ran because a callback before them threw.
+    pub fn requeue_load_all(&mut self, count: usize) {
+        self.load_all_callbacks += count;
+    }
+
     /// `loadAllFields()`. `true` when its promise is already resolved; otherwise it resolves
     /// with a later [`SourceEvent::AllFieldsLoaded`].
     pub fn load_all_fields(&mut self, cx: &mut PageContext<'_>) -> bool {

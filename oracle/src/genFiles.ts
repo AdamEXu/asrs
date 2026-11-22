@@ -17,6 +17,8 @@ import { toTree } from "./cve1";
 //     export/import, DS layout restore), dom-ready sends, interval ticks.
 //   genFiles beta <count> <seed>
 //     betaUtil's getState / welcome / expiry / survey-schedule calls over a fake clock.
+//   genFiles historical
+//     main.ts's `historical-start` and `historical-start-raw` (see files/historicalStart.ts).
 //
 // `main.ts` is bundled as strict ESM here and sloppy CJS in the real app, but the window
 // bounds reset assigns inside the StateTracker class body, which is strict in both.
@@ -904,4 +906,5 @@ else if (mode === "flows") {
   const startup = Number.isNaN(startupIndex) ? null : STATE_FILES[startupIndex] ?? null;
   await flowsMode(count, startup);
 } else if (mode === "beta") await betaMode(count);
+else if (mode === "historical") await (await import("./files/historicalStart")).run();
 else throw new Error(`genFiles: unknown mode ${mode}`);

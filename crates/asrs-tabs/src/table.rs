@@ -642,6 +642,10 @@ impl TableRenderer {
         }
     }
 
+    pub fn dom(&self) -> &Rc<RefCell<TableDom>> {
+        &self.dom
+    }
+
     /// Answers the renderer's layout reads from `geometry` instead of the shared `TableDom`.
     pub fn set_geometry(&mut self, geometry: Box<dyn TableGeometry>) {
         self.geometry = Some(geometry);

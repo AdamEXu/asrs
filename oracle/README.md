@@ -998,6 +998,30 @@ the parse and after each op the step writes `{"form": markup, "op": <op or null>
 the parsed element, with numeric segments indexing collections (`options.1.value`,
 `style.width`).
 
+## Hub sessions
+
+`hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
+`src/dom/env.ts`, then the real `src/hub/hub.ts` in hub.html under jsdom) and adds what the hub
+lifecycle needs:
+
+- Workers. The page's `Worker` is a real worker thread, with the worker realm's `Date` pinned to
+  1,000,000,000,000 as in `historicalSession`; messages are copied into the page realm. After
+  every page task, worker messages go to the page one at a time from the oldest worker that has
+  one or is still busy, until no worker is busy, so worker work takes no page time. Decode
+  workers and `exportWorker.js` both run this way.
+- Main's `historical-start`: the file named in the fixture (relative to it, and listed in
+  `inputs` under a spec) is read, and `historical-data` arrives as a zero-delay page timeout.
+- Live sources and the NT4 publisher are not connected; fixtures only reach their refusals.
+
+Besides the `dom` records, a session writes `{"worker", "script"}`, `{"post", "type", "files" |
+"key"}` and `{"terminate"}` for worker traffic, `{"console": "warn", "text"}` for the
+`set-assets` load-failure warning and `{"exception": "worker", "error"}` for a throw out of a
+worker message. Its generator hash also covers the `dom` entry's inputs
+(`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
+`crates/asrs-hub/tests/hub_lifecycle.rs` replays `parity/specs/hub/lifecycle-*.entry.json`
+through `asrs_hub::hub::HubModel` with the same scheduling and compares every record.
+
 ## Electron app driver
 
 `src/appMain.ts` runs the real upstream app: it sets an isolated userData directory, seeds it,

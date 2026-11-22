@@ -1,0 +1,182 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/akit.csv",
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/akit.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          }
+        ],
+        "label": "akit-opened"
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/akit.csv",
+          "options": {
+            "format": "csv-list",
+            "samplingMode": "akit",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
+        ],
+        "label": "akit-exported"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/failed.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "akit",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
+        ],
+        "label": "export-failed"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
+        ],
+        "label": "failed-mock-running"
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "cancel-export"
+      },
+      {
+        "main": "start-export"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/fixed.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "fixed",
+            "samplingPeriod": 1500,
+            "prefixes": "/Drive",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
+        ],
+        "label": "fixed-exported"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
+        ],
+        "label": "fixed-finished"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          }
+        ],
+        "label": "stale-mock"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
+    ]
+  }
+}

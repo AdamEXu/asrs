@@ -208,14 +208,15 @@ const nodeCommon = {
   logOverride: { "direct-eval": "silent", "commonjs-variable-in-esm": "silent", "equals-negative-zero": "silent" }
 };
 
-// genFiles builds apart from the shared entry graph: its fakes rewire jsonfile's fs for every
-// importer, and entries sharing the graph (genModel) must keep real fs.
+// genFiles and genWindows build apart from the shared entry graph: their fakes rewire jsonfile's
+// fs for every importer, and entries sharing the graph (genModel) must keep real fs.
+const FAKE_MAIN_ENTRIES = ["genFiles", "genWindows"];
 recordInputs(
   (
     await esbuild.build({
       ...nodeCommon,
       entryPoints: Object.fromEntries(
-        entries.filter((name) => name !== "genFiles").map((name) => [name, path.join(here, "src", name + ".ts")])
+        entries.filter((name) => !FAKE_MAIN_ENTRIES.includes(name)).map((name) => [name, path.join(here, "src", name + ".ts")])
       ),
       outdir: args.out,
       plugins: [oraclePlugin]
@@ -226,7 +227,7 @@ recordInputs(
   (
     await esbuild.build({
       ...nodeCommon,
-      entryPoints: { genFiles: path.join(here, "src", "genFiles.ts") },
+      entryPoints: Object.fromEntries(FAKE_MAIN_ENTRIES.map((name) => [name, path.join(here, "src", name + ".ts")])),
       outdir: args.out,
       plugins: [filesPlugin, oraclePlugin]
     })
