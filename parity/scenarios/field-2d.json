@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U15): the generated drive log, in wall-blue coordinates, on a restored 2D field with a full-log heatmap of /Odometry/Robot3d at a selected time; /Odometry/Robot dragged from the sidebar into the source list with the pointer (a robot), the small robot size and a clockwise rotation clicked in the settings, the rotation undone, trackpad zoom and a drag pan over the field, then the robot camera through main's set-2d-camera reply (what the camera menu's item sends; the native menu itself cannot be clicked on either side). Saved HubState (sources, field settings, zoom, pan, camera) is compared at each capture. Only .tab-bar is masked, until #214 (emoji titles)",
+  "about": "Interaction (U15): the generated drive log, in wall-blue coordinates, on a restored 2D field with a full-log heatmap of /Odometry/Robot3d at a selected time; /Odometry/Robot dragged from the sidebar into the source list with the pointer (a robot), the small robot size and a clockwise rotation clicked in the settings, the rotation undone, trackpad zoom and a drag pan over the field, then the robot camera through main's set-2d-camera reply (what the camera menu's item sends; the native menu itself cannot be clicked on either side). Saved HubState (sources, field settings, zoom, pan, camera) is compared at each capture; nothing is masked",
   "prefs": {
     "coordinateSystem": "wall-blue"
   },
@@ -79,9 +79,6 @@
         ".field-2d-scroll",
         ".field-2d-settings",
         ".field-select"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -138,9 +135,6 @@
         ".field-2d-scroll",
         ".field-2d-settings",
         ".field-select"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -182,9 +176,6 @@
         ".field-2d-scroll",
         ".field-2d-settings",
         ".field-select"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -265,9 +256,6 @@
         ".field-2d-scroll",
         ".field-2d-settings",
         ".field-select"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -288,9 +276,6 @@
         ".field-2d-scroll",
         ".field-2d-settings",
         ".field-select"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     },
     {
@@ -311,9 +296,6 @@
         ".field-2d-scroll",
         ".field-2d-settings",
         ".field-select"
-      ],
-      "masks": [
-        ".tab-bar"
       ]
     }
   ]
