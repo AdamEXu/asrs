@@ -292,6 +292,7 @@ dependencies = [
 name = "asrs-app"
 version = "0.1.0"
 dependencies = [
+ "asrs-canvas",
  "asrs-field3d",
  "asrs-formats",
  "asrs-hub",

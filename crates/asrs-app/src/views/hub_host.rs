@@ -2,17 +2,20 @@
 //! main (P) exists, the window is booted with the messages `main.ts` sends a new hub window,
 //! and what the hub sends main is dropped.
 
+use std::rc::Rc;
+
 use asrs_hub::hub::{HubModel, HubView};
 use asrs_hub::sidebar::SidebarGeometry;
 use asrs_js::time::{Rng, SystemClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::source_list::Rect;
 use asrs_ui::gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::sidebar::{self, SidebarView, ViewGeometry};
-use crate::hub::{Hub, HubConfig, HubEvent};
+use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
 
 struct FrameView {
     geometry: FrameGeometry,
@@ -35,6 +38,37 @@ impl HubView for FrameView {
 
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
         &mut self.sidebar
+    }
+
+    fn title_rect(&self, index: usize) -> Rect {
+        self.geometry.tab_bar().borrow().title_rect(index)
+    }
+
+    fn overlay_rect(&self) -> Rect {
+        self.geometry.tab_bar().borrow().overlay_rect()
+    }
+
+    fn add_button_rect(&self) -> Rect {
+        self.geometry.tab_bar().borrow().add_button_rect()
+    }
+
+    fn tab_bar_scroll_left(&self) -> f64 {
+        self.geometry.tab_bar().borrow().scroll_left
+    }
+
+    fn set_tab_bar_scroll_left(&self, value: f64) {
+        self.geometry
+            .tab_bar()
+            .borrow_mut()
+            .assign_scroll_left(value);
+    }
+
+    fn tab_bar_scroll_width(&self) -> f64 {
+        self.geometry.tab_bar().borrow().scroll_width()
+    }
+
+    fn tab_bar_client_width(&self) -> f64 {
+        self.geometry.tab_bar().borrow().client_width()
     }
 }
 
@@ -145,13 +179,13 @@ impl HubEntityHost {
     }
 
     /// The hub window's root view, booted with `boot` in place of main's messages. With
-    /// `random_seed`, the page's and its workers' `Math.random` are V8's under
-    /// `--random-seed=<seed>`.
+    /// `scenario_seed`, the page runs as a parity scenario's: its and its workers' `Math.random`
+    /// are V8's under `--random-seed=<seed>`, and its `Date` is a [`FrameClock`].
     pub fn open_with(
         window: &Window,
         dark: bool,
         boot: Vec<NamedMessage<MainToHub>>,
-        random_seed: Option<u64>,
+        scenario_seed: Option<u64>,
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
@@ -162,12 +196,13 @@ impl HubEntityHost {
             sidebar: sidebar_geometry.clone(),
         });
         let mut config = HubConfig::new(view);
-        if let Some(seed) = random_seed {
+        if let Some(seed) = scenario_seed {
             let mut random = V8MathRandom::from_seed(seed);
             for _ in 0..IMPORT_RANDOM_DRAWS {
                 random.next_f64();
             }
             config.realm = JsRealm::new(Box::new(random));
+            config.clock = Rc::new(FrameClock::new(cx));
             config.worker_realm = Box::new(move || {
                 (
                     Box::new(V8MathRandom::from_seed(seed)),
@@ -222,6 +257,10 @@ impl HubEntityHost {
 impl FrameHost for HubEntityHost {
     fn geometry(&self) -> FrameGeometry {
         self.geometry.clone()
+    }
+
+    fn frame_time(&self, cx: &App) -> f64 {
+        self.hub.read(cx).frame_time(cx)
     }
 
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {

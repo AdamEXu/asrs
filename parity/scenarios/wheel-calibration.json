@@ -1,5 +1,5 @@
 {
-  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first and trackpad deltas second; each capture compares selection.getTimelineRange(). Chromium animates a notched tick (capped at the overlay's size), so each one gets 500 ms to settle, and the ranges are compared within 1e-9 of the visible span, since the animation's compositor-timed steps compound the zoom differently in the last bits between upstream runs. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The timeline is U08's view and the mechanism U16's: their regions are masked with the others until those land",
+  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first and trackpad deltas second; each capture compares selection.getTimelineRange(). Chromium animates a notched tick (capped at the overlay's size), so each one gets 500 ms to settle, and the ranges are compared within 1e-9 of the visible span, since the animation's compositor-timed steps compound the zoom differently in the last bits between upstream runs. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The port's scroll sensors and Date run on the scenario's frame clock, so each wait is simulated frames, not real time. The timeline is compared unmasked; .tab-bar is masked until #214 (emoji titles) and the line graph and mechanism (U11, U16) with .renderer-content and .controls-content until they land",
   "actions": [
     {
       "open": [
@@ -71,8 +71,7 @@
       "masks": [
         ".tab-bar",
         ".renderer-content",
-        ".controls-content",
-        ".timeline"
+        ".controls-content"
       ]
     },
     {
@@ -127,8 +126,7 @@
       "masks": [
         ".tab-bar",
         ".renderer-content",
-        ".controls-content",
-        ".timeline"
+        ".controls-content"
       ]
     },
     {
@@ -180,8 +178,7 @@
       "masks": [
         ".tab-bar",
         ".renderer-content",
-        ".controls-content",
-        ".timeline"
+        ".controls-content"
       ]
     }
   ]

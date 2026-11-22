@@ -38,8 +38,8 @@ under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
 automatic folders of each variant's userData/ (without it the hub gets no assets).";
 
-/// A tick of the page: one animation frame and this much executor time. `wait` also lets this
-/// much real time pass per tick, for what the page times with `Date`.
+/// A tick of the page: one animation frame and this much executor time, which the page's `Date`
+/// and its scroll sensors' frame clock both run on.
 const FRAME: Duration = Duration::from_millis(16);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -550,7 +550,6 @@ impl Variant<'_> {
                 let deadline = Duration::from_secs_f64(ms / 1000.0);
                 let mut waited = Duration::ZERO;
                 while waited < deadline {
-                    std::thread::sleep(FRAME);
                     self.tick()?;
                     waited += FRAME;
                 }

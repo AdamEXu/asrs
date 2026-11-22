@@ -1,5 +1,5 @@
 {
-  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph. Until their views exist, the regions other units draw are masked on both sides: .tab-bar (U08), .renderer-content and .controls-content (U11, the line graph and its controls); each unit deletes its mask when its view lands",
+  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph. Masked on both sides: .tab-bar, whose emoji titles the port measures and draws unlike Blink (#214: advance does not scale with DPR, drawn monochrome), and .renderer-content and .controls-content until U11's line graph and controls land; each mask is deleted when its gap closes",
   "actions": [
     {
       "capture": "launch",

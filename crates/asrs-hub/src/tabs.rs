@@ -21,6 +21,7 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::Log;
 use asrs_log::log::robot_state::{get_autonomous_key, get_enabled_key, get_utility_key};
 use asrs_model::messages::{HubToMain, NamedMessage};
+use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::{Command, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
@@ -152,6 +153,30 @@ pub trait TabsHost {
     fn inner_height(&self) -> f64;
     /// `RENDERER_CONTENT.getBoundingClientRect().top` while `--show-timeline` is `show_timeline`.
     fn renderer_top(&self, show_timeline: bool) -> f64;
+    /// `getBoundingClientRect()` of the `index`th `div.tab` in `div.tab-bar`.
+    fn title_rect(&self, _index: usize) -> Rect {
+        Rect::default()
+    }
+    /// `div.tab-bar-scroll`'s `getBoundingClientRect()`.
+    fn overlay_rect(&self) -> Rect {
+        Rect::default()
+    }
+    /// `button.add-tab`'s `getBoundingClientRect()`.
+    fn add_button_rect(&self) -> Rect {
+        Rect::default()
+    }
+    /// `div.tab-bar`'s `scrollLeft`.
+    fn tab_bar_scroll_left(&self) -> f64 {
+        0.0
+    }
+    /// Assigns `div.tab-bar`'s `scrollLeft`; the host clamps and snaps it as Blink does.
+    fn set_tab_bar_scroll_left(&self, _value: f64) {}
+    fn tab_bar_scroll_width(&self) -> f64 {
+        0.0
+    }
+    fn tab_bar_client_width(&self) -> f64 {
+        0.0
+    }
 }
 
 /// A new tab's halves, built in `addTab`'s constructor order: the controller's `UUID` field is
@@ -196,6 +221,52 @@ impl TitleElement {
 
     pub fn class_name(&self) -> String {
         self.classes.join(" ")
+    }
+
+    /// The `innerText` getter: the setter turned line feeds into `<br>`, and each line's
+    /// spaces and tabs collapse, with collapsible space at a line's ends removed.
+    pub fn inner_text(&self) -> JsString {
+        let units = self.text.units();
+        let mut out: Vec<u16> = Vec::with_capacity(units.len());
+        let mut lines = Vec::new();
+        let mut start = 0;
+        let mut i = 0;
+        while i < units.len() {
+            match units[i] {
+                0x0d if units.get(i + 1) == Some(&0x0a) => {
+                    lines.push(&units[start..i]);
+                    i += 2;
+                    start = i;
+                }
+                0x0a | 0x0d => {
+                    lines.push(&units[start..i]);
+                    i += 1;
+                    start = i;
+                }
+                _ => i += 1,
+            }
+        }
+        lines.push(&units[start..]);
+        for (n, line) in lines.iter().enumerate() {
+            if n > 0 {
+                out.push(0x0a);
+            }
+            let mut pending_space = false;
+            let mut wrote = false;
+            for &u in line.iter() {
+                if u == 0x20 || u == 0x09 {
+                    pending_space = wrote;
+                    continue;
+                }
+                if pending_space {
+                    out.push(0x20);
+                    pending_space = false;
+                }
+                out.push(u);
+                wrote = true;
+            }
+        }
+        JsString::from_units(out)
     }
 }
 
@@ -339,6 +410,8 @@ pub struct Tabs<Cx: ?Sized> {
     drag_highlight: DragHighlight,
     frame_loop_alive: bool,
     messages: Vec<NamedMessage<HubToMain>>,
+    bar_sensor: ScrollSensor,
+    shadows: [Option<&'static str>; 2],
 }
 
 impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
@@ -361,6 +434,8 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             },
             frame_loop_alive: true,
             messages: Vec::new(),
+            bar_sensor: ScrollSensor::default(),
+            shadows: [None, None],
         };
         let start = tabs
             .update_controls_height(cx)
@@ -897,19 +972,66 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         Ok(())
     }
 
-    /// One pass of upstream's `periodic` after the tab bar shadows, scroll sensor and timeline:
-    /// the controls height, the timeline visibility, then a command for every tab shown in the
-    /// hub, a satellite or XR. Once a frame fails the loop is dead and this does nothing.
-    pub fn periodic(&mut self, cx: &mut Cx) -> FrameOutput {
+    /// A wheel event over `div.tab-bar-scroll` at `now` (ms).
+    pub fn tab_bar_wheel(&mut self, wheel: Wheel, now: f64) {
+        self.bar_sensor.wheel(wheel, now);
+    }
+
+    /// The tab bar's scroll sensor, for hosts that set its layout or watch its animation.
+    pub fn tab_bar_sensor_mut(&mut self) -> &mut ScrollSensor {
+        &mut self.bar_sensor
+    }
+
+    pub fn tab_bar_sensor(&self) -> &ScrollSensor {
+        &self.bar_sensor
+    }
+
+    /// `style.opacity` of `div.tab-bar-shadow-left` and `-right`, `None` until first set.
+    pub fn shadows(&self) -> [Option<&'static str>; 2] {
+        self.shadows
+    }
+
+    /// The frame's scroll step for the tab bar's overlay, which runs before the frame's
+    /// animation callbacks and keeps running after the frame loop dies: its `scroll` event
+    /// moves `div.tab-bar` by the scroll sensor's `dx + dy`.
+    pub fn scroll_step(&mut self, cx: &Cx, now: f64) {
+        self.bar_sensor.animate(now);
+        if let Some(d) = self.bar_sensor.scroll_step(now, true) {
+            let left = cx.tab_bar_scroll_left();
+            cx.set_tab_bar_scroll_left(left + (d.dx + d.dy));
+        }
+    }
+
+    /// One pass of upstream's `periodic` at `now` (ms), except the timeline's: the tab bar
+    /// shadows and scroll sensor, the controls height, the timeline visibility, then a command
+    /// for every tab shown in the hub, a satellite or XR. Once a frame fails the loop is dead
+    /// and this does nothing.
+    pub fn periodic(&mut self, cx: &mut Cx, now: f64) -> FrameOutput {
         let mut out = FrameOutput::default();
         if !self.frame_loop_alive {
             return out;
         }
+        let left = cx.tab_bar_scroll_left();
+        self.shadows[0] = Some(if math::floor(left) <= 0.0 { "0" } else { "1" });
+        let left = cx.tab_bar_scroll_left();
+        let max = cx.tab_bar_scroll_width() - cx.tab_bar_client_width();
+        self.shadows[1] = Some(if math::ceil(left) >= max { "0" } else { "1" });
+        self.bar_sensor.periodic(now);
         if let Err(e) = self.frame(cx, &mut out.satellite_updates) {
             self.frame_loop_alive = false;
             out.error = Some(e);
         }
         out
+    }
+
+    fn title_rect(&self, cx: &Cx, index: usize) -> Rect {
+        let element = &self.tabs[index].element;
+        let position = self
+            .bar
+            .iter()
+            .position(|e| Rc::ptr_eq(e, element))
+            .unwrap_or(index);
+        cx.title_rect(position)
     }
 
     fn frame(&mut self, cx: &mut Cx, updates: &mut Vec<SatelliteUpdate>) -> Result {
@@ -963,8 +1085,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     }
 
     /// `mouseup` on `div.tab-bar-scroll`: a click selects every tab under the pointer in turn.
-    /// `rects` are the title elements' client rects in tab order.
-    pub fn overlay_mouse_up(&mut self, cx: &Cx, x: f64, y: f64, rects: &[Rect]) -> Result {
+    pub fn overlay_mouse_up(&mut self, cx: &Cx, x: f64, y: f64) -> Result {
         let Some((down_x, down_y)) = self.mouse_down else {
             return Ok(());
         };
@@ -972,7 +1093,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             && math::abs(y - down_y) < TAB_DRAG_THRESHOLD_PX
         {
             for index in 0..self.tabs.len() {
-                if rects.get(index).is_some_and(|r| contains(r, x, y)) {
+                if contains(&self.title_rect(cx, index), x, y) {
                     self.set_selected(cx, &js::len(index))?;
                 }
             }
@@ -983,10 +1104,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     /// `mousemove` on `div.tab-bar-scroll`: hover classes, then a drag once the pointer has
     /// moved past the threshold from a press on a tab other than the first.
-    pub fn overlay_mouse_move(&mut self, x: f64, y: f64, rects: &[Rect]) -> Option<TabDragStart> {
-        for (index, tab) in self.tabs.iter().enumerate() {
-            let mut element = tab.element.borrow_mut();
-            if rects.get(index).is_some_and(|r| contains(r, x, y)) {
+    pub fn overlay_mouse_move(&mut self, cx: &Cx, x: f64, y: f64) -> Option<TabDragStart> {
+        for index in 0..self.tabs.len() {
+            let hovered = contains(&self.title_rect(cx, index), x, y);
+            let mut element = self.tabs[index].element.borrow_mut();
+            if hovered {
                 element.add("tab-hovered");
             } else {
                 element.remove("tab-hovered");
@@ -998,20 +1120,24 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         {
             return None;
         }
-        let tab_index = (0..self.tabs.len())
-            .rfind(|&i| rects.get(i).is_some_and(|r| contains(r, x, y)))
-            .unwrap_or(0);
+        let mut tab_index = 0;
+        for index in 0..self.tabs.len() {
+            if contains(&self.title_rect(cx, index), x, y) {
+                tab_index = index;
+            }
+        }
         if tab_index == 0 {
             return None;
         }
-        let rect = rects[tab_index];
+        let text = self.tabs[tab_index].element.borrow().inner_text();
+        let rect = self.title_rect(cx, tab_index);
         self.mouse_down = None;
         Some(TabDragStart {
             x,
             y,
             offset_x: x - rect.left(),
             offset_y: y - rect.top(),
-            text: self.tabs[tab_index].element.borrow().text.clone(),
+            text,
             selected: self.is_selected(tab_index),
             tab_index,
         })
@@ -1026,12 +1152,13 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     /// `contextmenu` on `div.tab-bar-scroll`: `ask-rename-tab` for every tab under the pointer
     /// except the first.
-    pub fn overlay_context_menu(&mut self, x: f64, y: f64, rects: &[Rect]) {
+    pub fn overlay_context_menu(&mut self, cx: &Cx, x: f64, y: f64) {
         self.mouse_down = None;
         for (index, tab) in self.tabs.iter().enumerate().skip(1) {
-            let Some(rect) = rects.get(index).filter(|r| contains(r, x, y)) else {
+            let rect = self.title_rect(cx, index);
+            if !contains(&rect, x, y) {
                 continue;
-            };
+            }
             let name = if js::strict_eq(&tab.title, &JsValue::string("")) {
                 JsValue::string(default_title(tab.kind))
             } else {
@@ -1040,7 +1167,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             let mut o = JsObject::new();
             o.insert("index", js::len(index));
             o.insert("name", name);
-            o.insert("rect", rect_js(rect));
+            o.insert("rect", rect_js(&rect));
             self.messages.push(NamedMessage::new(
                 HubToMain::AskRenameTab,
                 JsValue::Object(o),
@@ -1110,31 +1237,24 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.new_satellite()
     }
 
-    /// The add button, at `rect`.
-    pub fn add_button(&mut self, rect: &Rect) {
+    /// The add button.
+    pub fn add_button(&mut self, cx: &Cx) {
+        let rect = cx.add_button_rect();
         self.messages
-            .push(NamedMessage::new(HubToMain::AskNewTab, rect_js(rect)));
+            .push(NamedMessage::new(HubToMain::AskNewTab, rect_js(&rect)));
     }
 
-    /// A `drag-update` event for a tab drag started by `overlay_mouse_move`. `rects` are the
-    /// title elements' client rects in tab order, `overlay` is `div.tab-bar-scroll`'s.
-    pub fn drag_update(
-        &mut self,
-        cx: &Cx,
-        update: &DragUpdate<TabDragData>,
-        rects: &[Rect],
-        overlay: &Rect,
-    ) -> Result {
+    /// A `drag-update` event for a tab drag started by `overlay_mouse_move`.
+    pub fn drag_update(&mut self, cx: &Cx, update: &DragUpdate<TabDragData>) -> Result {
         let (x, y, end, tab_index) = (update.x, update.y, update.end, update.data.tab_index);
-        if y > overlay.bottom() + 100.0 {
+        if y > cx.overlay_rect().bottom() + 100.0 {
             self.drag_highlight.hidden = true;
             return Ok(());
         }
         let mut closest_dist = f64::INFINITY;
         let mut closest = 0usize;
         for index in 0..self.tabs.len() {
-            let right = rects.get(index).map_or(0.0, Rect::right);
-            let dist = math::abs(x - right);
+            let dist = math::abs(x - self.title_rect(cx, index).right());
             if dist < closest_dist {
                 closest_dist = dist;
                 closest = index;
@@ -1154,8 +1274,8 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             if closest >= self.tabs.len() {
                 return Err(missing("titleElement"));
             }
-            let right = rects.get(closest).map_or(0.0, Rect::right);
-            self.drag_highlight.left = Some(right - overlay.left() + 10.0);
+            let right = self.title_rect(cx, closest).right();
+            self.drag_highlight.left = Some(right - cx.overlay_rect().left() + 10.0);
             Ok(())
         }
     }

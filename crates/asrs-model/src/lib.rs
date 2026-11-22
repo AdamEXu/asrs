@@ -4,6 +4,7 @@ pub mod hub_state;
 pub mod json_file;
 pub mod messages;
 pub mod preferences;
+pub mod scroll_sensor;
 pub mod selection;
 pub mod selection_impl;
 pub mod source_list;

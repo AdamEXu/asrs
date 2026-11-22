@@ -1,0 +1,657 @@
+{
+  "entry": "dom",
+  "backend": "blink",
+  "inputs": [
+    "../logs/tabs.json"
+  ],
+  "fixture": {
+    "geometry": "real",
+    "seed": 6,
+    "window": {
+      "width": 1000,
+      "height": 650,
+      "devicePixelRatio": 2
+    },
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider",
+      "show"
+    ],
+    "steps": [
+      {
+        "eval": "/*tabs:recorder*/ (() => { const w = window; w.__tabsCreated = w.tabs.tabList.map((t) => [t, t.controller.UUID]); w.__tabsRestores = []; w.__tabsRanges = []; const hook = (t) => { const k = w.__tabsCreated.findIndex((c) => c[0] === t); for (const half of [\"controller\", \"renderer\"]) { const obj = t[half], restore = obj.restoreState; obj.restoreState = function (state) { w.__tabsRestores.push([k, half, state]); return restore.call(this, state); }; } const c = t.controller, r = t.renderer; if (typeof c.addRendererRange === \"function\") { const addRange = c.addRendererRange; c.addRendererRange = function (uuid, range) { w.__tabsRanges.push([k, \"add\", uuid, range && [...range]]); return addRange.call(this, uuid, range); }; } if (typeof r.getTimestampRange === \"function\") { const getRange = r.getTimestampRange; r.getTimestampRange = function () { const range = getRange.call(this); w.__tabsRanges.push([k, \"get\", range && [...range]]); return range; }; } }; w.__tabsCreated.forEach((c) => hook(c[0])); const add = w.tabs.addTab; w.tabs.addTab = function (type) { const before = this.tabList.slice(); try { return add.call(this, type); } finally { for (const t of this.tabList) if (!before.includes(t)) { w.__tabsCreated.push([t, t.controller.UUID]); hook(t); } } }; })()"
+      },
+      {
+        "log": "../logs/tabs.json"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "start"
+      },
+      {
+        "main": "new-tab",
+        "data": 4
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "main": "new-tab",
+        "data": 7
+      },
+      {
+        "main": "new-tab",
+        "data": 8
+      },
+      {
+        "main": "new-tab",
+        "data": 9
+      },
+      {
+        "main": "new-tab",
+        "data": 11
+      },
+      {
+        "main": "new-tab",
+        "data": 12
+      },
+      {
+        "main": "new-tab",
+        "data": 3
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "overflow"
+      },
+      {
+        "eval": "/*tabs:scroll 0 40*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 40; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "down-40"
+      },
+      {
+        "eval": "/*tabs:scroll 0 3*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 3; })"
+      },
+      {
+        "eval": "/*tabs:scroll 0 7*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 7; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "/*tabs:scroll 0 12*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 12; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "coalesced"
+      },
+      {
+        "eval": "/*tabs:scroll 25 0*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollLeft += 25; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "/*tabs:scroll -10 6*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollLeft += -10; o.scrollTop += 6; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "both-axes"
+      },
+      {
+        "eval": "/*tabs:scroll 0 33.3*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 33.3; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "/*tabs:scroll 0 3.75*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 3.75; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "fractional"
+      },
+      {
+        "eval": "/*tabs:scroll 0 -500*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += -500; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "left-edge"
+      },
+      {
+        "eval": "/*tabs:scroll 0 5000*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += 5000; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "right-edge"
+      },
+      {
+        "advance": 990
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "before-reset"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "after-reset"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "reset-settled"
+      },
+      {
+        "eval": "/*tabs:scroll 0 -120*/ window.__oracleQuiet(() => { const o = document.getElementsByClassName(\"tab-bar-scroll\")[0]; o.scrollTop += -120; })"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "main": "move-tab",
+        "data": -3
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "selection-moved"
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "shrunk"
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*tabs:info*/ window.__tabsCreated.map(([t, uuid]) => { const live = window.tabs.tabList.includes(t); return [uuid, live ? t.controller.saveState() : null, live ? t.renderer.saveState() : null, t.controller.showTimeline(), t.controller.getActiveFields()]; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.tabs.saveState()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:view*/ (() => { const d = document, q = (c) => d.getElementsByClassName(c)[0], css = (n) => d.documentElement.style.getPropertyValue(n), item = d.getElementById(\"dragItem\"), hl = q(\"tab-bar-drag-highlight\"); return { bar: Array.from(q(\"tab-bar\").children).map((e) => [e.className, e.innerText]), content: window.tabs.tabList.map((t) => [t.rendererElement.hidden, t.controlsElement.hidden]), tabControlsHeight: css(\"--tab-controls-height\"), showTabControls: css(\"--show-tab-controls\"), showTimeline: css(\"--show-timeline\"), timelineHidden: q(\"timeline\").hidden, handleHidden: q(\"controls-handle\").hidden, controlsHidden: q(\"controls-content\").hidden, handleActive: window.tabs.controlsHandleActive, highlight: [hl.hidden, hl.style.left], dragItem: [item.hidden, item.style.left, item.style.top, Array.from(item.children).map((e) => [e.className, e.innerText])] }; })()"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:restores*/ window.__tabsRestores"
+          },
+          {
+            "kind": "eval",
+            "expr": "/*tabs:ranges*/ [window.__tabsCreated.map(([t]) => t.renderer.UUID ?? null), window.__tabsRanges.splice(0)]"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
+          },
+          "commands",
+          {
+            "kind": "eval",
+            "expr": "/*tabs:bar*/ (() => { const q = (c) => document.getElementsByClassName(c)[0]; return [q(\"tab-bar-shadow-left\").style.opacity, q(\"tab-bar-shadow-right\").style.opacity, window.__oracleQuiet(() => q(\"tab-bar\").scrollLeft)]; })()"
+          }
+        ],
+        "label": "fits"
+      }
+    ]
+  }
+}
