@@ -48,6 +48,7 @@ fn array(items: impl IntoIterator<Item = JsValue>) -> JsValue {
 fn style_value(style: &Style) -> JsValue {
     match style {
         Style::Color(css) => string(css),
+        Style::Undefined => JsValue::Undefined,
         Style::Gradient(g) => {
             let (key, params): (&str, &[f64]) = match &g.shape {
                 GradientShape::Linear(p) => ("linearGradient", p),
@@ -372,6 +373,9 @@ fn optional_bool(args: &[JsValue], i: usize) -> Result<Option<bool>, String> {
 fn style_from(v: &JsValue) -> Result<Style, String> {
     if let Some(s) = v.as_str() {
         return Ok(Style::Color(s.to_string_lossy()));
+    }
+    if matches!(v, JsValue::Undefined) {
+        return Ok(Style::Undefined);
     }
     let shape = if let Some(p) = v.get("linearGradient") {
         GradientShape::Linear(nums(p.as_array().ok_or("linearGradient is not an array")?)?)
