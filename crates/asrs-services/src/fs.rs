@@ -2,9 +2,17 @@
 //! same calls against an in-memory store. Errors carry the `Error` name node's fs errors have.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::io::{ErrorKind, Read};
 
 use asrs_js::string::JsError;
+
+/// Where `fs.open` followed by `fs.readFile(fd)` failed.
+#[derive(Debug)]
+pub enum ReadError {
+    Open(JsError),
+    Read(JsError),
+}
 
 pub trait Fs {
     /// `fs.existsSync`.
@@ -18,10 +26,47 @@ pub trait Fs {
 
     /// `fs.copyFileSync`.
     fn copy(&self, from: &str, to: &str) -> Result<(), JsError>;
+
+    /// `fs.open(path, "r")`, then `fs.readFile` on the descriptor.
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, ReadError>;
+
+    /// `fs.rmSync(path, { force: true })`.
+    fn remove(&self, path: &str);
 }
 
+/// libuv's code and description for the errors file opens and writes commonly hit.
+fn uv_error(e: &std::io::Error) -> Option<(&'static str, &'static str)> {
+    Some(match e.kind() {
+        ErrorKind::NotFound => ("ENOENT", "no such file or directory"),
+        ErrorKind::PermissionDenied if cfg!(windows) => ("EPERM", "operation not permitted"),
+        ErrorKind::PermissionDenied => ("EACCES", "permission denied"),
+        ErrorKind::AlreadyExists => ("EEXIST", "file already exists"),
+        ErrorKind::IsADirectory => ("EISDIR", "illegal operation on a directory"),
+        ErrorKind::NotADirectory => ("ENOTDIR", "not a directory"),
+        ErrorKind::StorageFull => ("ENOSPC", "no space left on device"),
+        ErrorKind::ReadOnlyFilesystem => ("EROFS", "read-only file system"),
+        ErrorKind::InvalidFilename => ("ENAMETOOLONG", "name too long"),
+        ErrorKind::ResourceBusy => ("EBUSY", "resource busy or locked"),
+        _ => return None,
+    })
+}
+
+/// The message node gives an fs error: `CODE: description, syscall 'path'`.
 fn node_error(syscall: &str, path: &str, e: &std::io::Error) -> JsError {
-    JsError::new("Error", format!("{e} ({syscall} '{path}')"))
+    match uv_error(e) {
+        Some((code, description)) => JsError::new(
+            "Error",
+            format!("{code}: {description}, {syscall} '{path}'"),
+        ),
+        None => JsError::new("Error", format!("{e} ({syscall} '{path}')")),
+    }
+}
+
+fn enoent(syscall: &str, path: &str) -> JsError {
+    JsError::new(
+        "Error",
+        format!("ENOENT: no such file or directory, {syscall} '{path}'"),
+    )
 }
 
 fn eacces(syscall: &str, path: &str) -> JsError {
@@ -52,6 +97,19 @@ impl Fs for RealFs {
             .map(|_| ())
             .map_err(|e| node_error("copyfile", from, &e))
     }
+
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, ReadError> {
+        let mut file =
+            std::fs::File::open(path).map_err(|e| ReadError::Open(node_error("open", path, &e)))?;
+        let mut data = Vec::new();
+        file.read_to_end(&mut data)
+            .map_err(|e| ReadError::Read(node_error("read", path, &e)))?;
+        Ok(data)
+    }
+
+    fn remove(&self, path: &str) {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// An injected [`MemFs`] error, like a file without read or write permission.
@@ -59,6 +117,8 @@ impl Fs for RealFs {
 pub enum Failure {
     Read,
     Write,
+    /// Opens, but reading the descriptor fails, like a directory.
+    ReadOpened,
 }
 
 /// An in-memory filesystem recording write calls in order, for the vector harness.
@@ -66,6 +126,7 @@ pub enum Failure {
 pub struct MemFs {
     files: RefCell<BTreeMap<String, Vec<u8>>>,
     failures: RefCell<BTreeMap<String, Failure>>,
+    missing_dirs: RefCell<BTreeSet<String>>,
     writes: RefCell<Vec<String>>,
 }
 
@@ -97,6 +158,21 @@ impl MemFs {
         };
     }
 
+    /// Writes to a file directly inside `dir` fail with ENOENT, as if it did not exist.
+    pub fn set_missing_dir(&self, dir: &str, missing: bool) {
+        let mut dirs = self.missing_dirs.borrow_mut();
+        if missing {
+            dirs.insert(dir.to_owned());
+        } else {
+            dirs.remove(dir);
+        }
+    }
+
+    fn in_missing_dir(&self, path: &str) -> bool {
+        let parent = path.rfind('/').map_or("", |i| &path[..i]);
+        self.missing_dirs.borrow().contains(parent)
+    }
+
     fn fails(&self, path: &str, failure: Failure) -> bool {
         self.failures.borrow().get(path) == Some(&failure)
     }
@@ -124,17 +200,19 @@ impl Fs for MemFs {
         if self.fails(path, Failure::Read) {
             return Err(eacces("open", path));
         }
-        self.files.borrow().get(path).cloned().ok_or_else(|| {
-            JsError::new(
-                "Error",
-                format!("ENOENT: no such file or directory, open '{path}'"),
-            )
-        })
+        self.files
+            .borrow()
+            .get(path)
+            .cloned()
+            .ok_or_else(|| enoent("open", path))
     }
 
     fn write(&self, path: &str, data: &[u8]) -> Result<(), JsError> {
         if self.fails(path, Failure::Write) {
             return Err(eacces("open", path));
+        }
+        if self.in_missing_dir(path) {
+            return Err(enoent("open", path));
         }
         self.files
             .borrow_mut()
@@ -149,5 +227,20 @@ impl Fs for MemFs {
         }
         let data = self.read(from)?;
         self.write(to, &data)
+    }
+
+    fn read_file(&self, path: &str) -> Result<Vec<u8>, ReadError> {
+        let data = self.read(path).map_err(ReadError::Open)?;
+        if self.fails(path, Failure::ReadOpened) {
+            return Err(ReadError::Read(JsError::new(
+                "Error",
+                "EISDIR: illegal operation on a directory, read",
+            )));
+        }
+        Ok(data)
+    }
+
+    fn remove(&self, path: &str) {
+        self.files.borrow_mut().remove(path);
     }
 }
