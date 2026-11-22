@@ -358,6 +358,11 @@ impl Field3dController {
         };
     }
 
+    /// The field select's option values: the FRC optgroup's, then the FTC optgroup's.
+    pub fn field_options(&self) -> (&[JsString], &[JsString]) {
+        (&self.frc_field_options, &self.ftc_field_options)
+    }
+
     /// `FIELD_SELECT.value`; `""` when no option is selected.
     pub fn field_value(&self) -> JsString {
         self.field_value.clone().unwrap_or_default()

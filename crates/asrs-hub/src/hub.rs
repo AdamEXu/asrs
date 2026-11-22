@@ -12,6 +12,7 @@
 use std::cell::{Ref, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use asrs_canvas::text::TextBackend;
 use asrs_formats::historical::{
@@ -39,6 +40,7 @@ use asrs_model::source_list::{ListInput, ListOutput, Rect, SourceListDom};
 use asrs_model::source_list_config::{
     SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
 };
+use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::Field2dRenderer;
@@ -208,6 +210,16 @@ pub trait HubView {
     fn canvas_text(&self) -> Option<Rc<RefCell<dyn TextBackend>>> {
         None
     }
+    /// The renderer of a `kind` tab whose renderer lives in the view (`Field3dRenderer`), built
+    /// with `window.preferences` and `window.isBattery`; `None` leaves it pending.
+    fn tab_renderer(
+        &self,
+        _kind: TabType,
+        _preferences: Option<&Preferences>,
+        _is_battery: bool,
+    ) -> Option<Box<dyn TabRenderer<HubPage>>> {
+        None
+    }
 }
 
 /// The `title` element's text after `setWindowTitle`: upstream `htmlEncode`s the name and
@@ -252,8 +264,9 @@ pub struct HubPage {
     log: SharedLog,
     selection: SelectionImpl,
     preferences: Option<Preferences>,
-    assets: Option<AdvantageScopeAssets>,
+    assets: Option<Arc<AdvantageScopeAssets>>,
     assets_raw: JsValue,
+    battery: bool,
     type_memory: SourceListTypeMemory,
     /// `window.typeMemory` as restored, which may hold entries of other shapes.
     type_memory_raw: JsValue,
@@ -288,7 +301,22 @@ impl HubPage {
     }
 
     pub fn assets(&self) -> Option<&AdvantageScopeAssets> {
+        self.assets.as_deref()
+    }
+
+    /// `window.assets`, shared: a new value only when `set-assets` replaces it.
+    pub fn shared_assets(&self) -> Option<&Arc<AdvantageScopeAssets>> {
         self.assets.as_ref()
+    }
+
+    /// `window.isBattery`.
+    pub fn is_battery(&self) -> bool {
+        self.battery
+    }
+
+    /// The page's `Date` and `performance` clock.
+    pub fn clock(&self) -> &Rc<dyn Clock> {
+        &self.clock
     }
 
     pub fn type_memory(&self) -> &SourceListTypeMemory {
@@ -352,7 +380,7 @@ impl TabCx for HubPage {
     }
 
     fn tab_assets(&self) -> Option<&AdvantageScopeAssets> {
-        self.assets.as_ref()
+        self.assets.as_deref()
     }
 
     fn tab_rng(&mut self) -> &mut dyn Rng {
@@ -439,6 +467,11 @@ impl TabsHost for HubPage {
             clock: self.clock.clone(),
             text,
         })
+    }
+
+    fn view_renderer(&mut self, kind: TabType) -> Option<Box<dyn TabRenderer<Self>>> {
+        self.view
+            .tab_renderer(kind, self.preferences.as_ref(), self.battery)
     }
 }
 
@@ -634,6 +667,7 @@ impl HubModel {
             preferences: None,
             assets: None,
             assets_raw: JsValue::Null,
+            battery: false,
             type_memory: SourceListTypeMemory::new(),
             type_memory_raw: JsValue::Object(JsObject::new()),
             type_memory_synced: SourceListTypeMemory::new(),
@@ -1592,7 +1626,7 @@ impl HubModel {
         let alert = assets_alert(&self.page.assets_raw, data);
         self.page.assets = match data {
             JsValue::Null | JsValue::Undefined => None,
-            _ => Some(AdvantageScopeAssets::from_js(data)),
+            _ => Some(Arc::new(AdvantageScopeAssets::from_js(data))),
         };
         self.page.assets_raw = data.clone();
         self.tabs.new_assets(&mut self.page)?;
@@ -1665,7 +1699,10 @@ impl HubModel {
                 self.update_fancy_window();
             }
             MainToHub::SetFocused => self.focused = truthy(data),
-            MainToHub::SetBattery => self.battery = truthy(data),
+            MainToHub::SetBattery => {
+                self.battery = truthy(data);
+                self.page.battery = self.battery;
+            }
             MainToHub::SetVersion => {
                 let text = |key: &str| match data.get(key) {
                     Some(JsValue::String(s)) => s.clone(),

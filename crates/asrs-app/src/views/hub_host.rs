@@ -6,19 +6,23 @@ use std::rc::Rc;
 
 use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 
-use asrs_hub::hub::{HubModel, HubView};
+use asrs_hub::hub::{HubModel, HubPage, HubView};
 use asrs_hub::sidebar::SidebarGeometry;
 use asrs_js::time::{Rng, SystemClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::preferences::Preferences;
 use asrs_model::source_list::{Rect, SourceListDom};
+use asrs_model::tab_controller::TabRenderer;
+use asrs_model::tab_type::TabType;
 use asrs_services::window_manager::Platform;
 use asrs_ui::gpui::{
     AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
     Window,
 };
 
+use super::field3d::Field3dTab;
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::sidebar::{self, SidebarView, ViewGeometry};
 use super::source_list::ListsGeometry;
@@ -89,6 +93,18 @@ impl HubView for FrameView {
 
     fn canvas_text(&self) -> Option<Rc<RefCell<dyn TextBackend>>> {
         Some(self.canvas_text.clone())
+    }
+
+    fn tab_renderer(
+        &self,
+        kind: TabType,
+        preferences: Option<&Preferences>,
+        is_battery: bool,
+    ) -> Option<Box<dyn TabRenderer<HubPage>>> {
+        match kind {
+            TabType::Field3d => Some(Box::new(Field3dTab::new(preferences, is_battery))),
+            _ => None,
+        }
     }
 }
 
@@ -189,7 +205,7 @@ impl HubEntityHost {
         files: Vec<String>,
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
-        let preferences = asrs_model::preferences::Preferences::default().to_js();
+        let preferences = Preferences::default().to_js();
         Self::open_with(
             window,
             dark,
@@ -347,6 +363,11 @@ impl FrameHost for HubEntityHost {
 
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {
         self.hub.read(cx).model()
+    }
+
+    fn editable_focused(&self, cx: &App) -> bool {
+        self.sidebar_geometry.search_focused()
+            || FrameHost::hub(self, cx).sidebar().number_input_focused()
     }
 
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {

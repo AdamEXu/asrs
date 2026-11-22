@@ -135,10 +135,13 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
                     Field2dDom::default(),
                 )))),
             ),
-            Some(TabType::Field3d) => (
-                Box::new(Field3dController::new(cx)),
-                pending(TabType::Field3d),
-            ),
+            Some(TabType::Field3d) => {
+                let controller = Field3dController::new(cx);
+                let renderer = cx
+                    .view_renderer(TabType::Field3d)
+                    .unwrap_or_else(|| pending(TabType::Field3d));
+                (Box::new(controller), renderer)
+            }
             Some(TabType::Table) => {
                 let dom = Rc::new(RefCell::new(TableDom::default()));
                 let controller = TableController::new(uuid, dom.clone());

@@ -1,3 +1,4 @@
+pub mod field3d;
 pub mod field_2d;
 mod field_image;
 pub mod frame;

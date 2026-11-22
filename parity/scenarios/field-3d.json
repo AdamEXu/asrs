@@ -1,12 +1,231 @@
 {
-  "about": "Generated drive log on a new 3D Field tab with a KitBot at a selected time; the drawing buffer is dumped",
+  "about": "Interaction (U24): the generated drive log on a restored 3D Field tab (Evergreen); the robot pose dragged from the sidebar into the source list, a selected time, an orbit drag and a wheel dolly on the canvas, then Orbit Robot and the KitBot's Front Camera chosen through main's set-3d-camera reply (what the camera menu's items send; the native menu itself cannot be clicked on either side). The drawing buffer is compared under gate 4, the rest of the window under gates 1 to 3, and the saved HubState (sources, camera state) at each capture",
   "gl": true,
   "actions": [
-    { "open": ["app:drive"] },
-    { "idle": true },
-    { "main": "new-tab", "data": 3 },
-    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"robot\",\"logKey\":\"/Odometry/Robot3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}}])" },
-    { "selection": ["setSelectedTime", 3.25] },
-    { "capture": "robot", "probes": [".renderer-content", ".controls-content", ".timeline"] }
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".side-bar",
+        ".renderer-content",
+        ".controls-content",
+        "canvas.field-3d-canvas",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 80,
+      "y": 211
+    },
+    {
+      "mouse": "down",
+      "x": 80,
+      "y": 211
+    },
+    {
+      "mouse": "move",
+      "x": 210,
+      "y": 298
+    },
+    {
+      "mouse": "move",
+      "x": 340,
+      "y": 386
+    },
+    {
+      "mouse": "move",
+      "x": 470,
+      "y": 473
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "robot",
+      "probes": [
+        ".side-bar",
+        ".renderer-content",
+        ".controls-content",
+        "canvas.field-3d-canvas",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 650,
+      "y": 260
+    },
+    {
+      "mouse": "down",
+      "x": 650,
+      "y": 260
+    },
+    {
+      "mouse": "move",
+      "x": 670,
+      "y": 270
+    },
+    {
+      "mouse": "move",
+      "x": 690,
+      "y": 280
+    },
+    {
+      "mouse": "move",
+      "x": 710,
+      "y": 290
+    },
+    {
+      "mouse": "move",
+      "x": 730,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 730,
+      "y": 300
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "orbit",
+      "probes": [
+        ".side-bar",
+        ".renderer-content",
+        ".controls-content",
+        "canvas.field-3d-canvas",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 280,
+        "deltaY": -120,
+        "wheelTicksY": -3
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "dolly",
+      "probes": [
+        ".side-bar",
+        ".renderer-content",
+        ".controls-content",
+        "canvas.field-3d-canvas",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "main": "set-3d-camera",
+      "data": -2
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "orbit-robot",
+      "probes": [
+        ".side-bar",
+        ".renderer-content",
+        ".controls-content",
+        "canvas.field-3d-canvas",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "main": "set-3d-camera",
+      "data": 0
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "front-camera",
+      "probes": [
+        ".side-bar",
+        ".renderer-content",
+        ".controls-content",
+        "canvas.field-3d-canvas",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    }
   ]
 }
