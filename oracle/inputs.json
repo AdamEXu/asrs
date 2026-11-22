@@ -428,6 +428,14 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genRevlog": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genRevlog.ts",
+    "src/shims.ts"
+  ],
   "genRobotState": [
     "src/corpus/bytes.ts",
     "src/corpus/rng.ts",
