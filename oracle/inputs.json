@@ -248,6 +248,7 @@
     "src/fakes/globals.ts",
     "src/fakes/mainElectron.ts",
     "src/fakes/mainFs.ts",
+    "src/files/assetLoader.ts",
     "src/files/historicalStart.ts",
     "src/genFiles.ts"
   ],
@@ -381,6 +382,9 @@
     "src/environment.ts",
     "src/genMsgpack.ts",
     "src/shims.ts"
+  ],
+  "genPath": [
+    "src/genPath.ts"
   ],
   "genPhoton": [
     "src/consoleExport.ts",

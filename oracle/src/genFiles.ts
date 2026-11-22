@@ -19,6 +19,9 @@ import { toTree } from "./cve1";
 //     betaUtil's getState / welcome / expiry / survey-schedule calls over a fake clock.
 //   genFiles historical
 //     main.ts's `historical-start` and `historical-start-raw` (see files/historicalStart.ts).
+//   genFiles assets <count> <seed>
+//     assetLoader's createAssetFolders / getUserAssetsPath / loadAssets over fake folder
+//     trees (see files/assetLoader.ts).
 //
 // `main.ts` is bundled as strict ESM here and sloppy CJS in the real app, but the window
 // bounds reset assigns inside the StateTracker class body, which is strict in both.
@@ -907,4 +910,5 @@ else if (mode === "flows") {
   await flowsMode(count, startup);
 } else if (mode === "beta") await betaMode(count);
 else if (mode === "historical") await (await import("./files/historicalStart")).run();
+else if (mode === "assets") await (await import("./files/assetLoader")).run(count, Number(seedArg));
 else throw new Error(`genFiles: unknown mode ${mode}`);
