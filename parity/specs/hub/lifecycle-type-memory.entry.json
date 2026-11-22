@@ -1,0 +1,112 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "advance": 1000
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Old/A": {
+              "type": "independent"
+            },
+            "/Old/B": 5,
+            "/Old/C": {
+              "type": "independent",
+              "options": {
+                "color": "#af2437"
+              },
+              "extra": true
+            }
+          },
+          "field2d": "text",
+          "points": null,
+          "swerve": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 250,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "aaaa",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "Stats",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": -10,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "cccc",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "restored"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "update-touch-bar-slider"
+    ]
+  }
+}

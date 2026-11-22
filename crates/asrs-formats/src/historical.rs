@@ -585,7 +585,6 @@ impl HistoricalDataSource {
     }
 
     /// `loadAllFields()`. `true` when its promise is already resolved; otherwise it resolves
-
     /// with a later [`SourceEvent::AllFieldsLoaded`].
     pub fn load_all_fields(&mut self, cx: &mut PageContext<'_>) -> bool {
         self.update_field_request(true, None, cx);

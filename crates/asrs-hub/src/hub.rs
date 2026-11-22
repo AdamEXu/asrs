@@ -562,7 +562,6 @@ impl HubModel {
             type_memory: SourceListTypeMemory::new(),
             type_memory_raw: JsValue::Object(JsObject::new()),
             type_memory_synced: SourceListTypeMemory::new(),
-
             realm,
             clock,
             view,
@@ -1193,7 +1192,7 @@ impl HubModel {
                 Ok(Err(Abort::Unmodeled(what))) => {
                     host.exception("worker", format!("unmodeled: {what}"))
                 }
-                Err(e) => host.exception("worker", e.to_string()),
+                Err(e) => host.exception("worker", format!("{e}")),
             }
         }
         self.microtasks(host);
@@ -1207,7 +1206,7 @@ impl HubModel {
                 source.handle_main_message(reply, cx)
             });
             if let Err(e) = result {
-                host.exception("setTimeout", e.to_string());
+                host.exception("setTimeout", format!("{e}"));
                 break;
             }
         }
@@ -1892,7 +1891,7 @@ impl HubModel {
 
 fn uncaught<T>(task: &'static str, result: Result<T, TabsError>, host: &mut dyn HubHost) {
     if let Err(e) = result {
-        host.exception(task, e.to_string());
+        host.exception(task, format!("{e}"));
     }
 }
 

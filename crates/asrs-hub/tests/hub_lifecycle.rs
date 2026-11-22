@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use asrs_formats::export::{ExportOptions, Format, Output, Sampling, export};
+use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainReply, MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
 use asrs_hub::hub::{
@@ -202,8 +202,9 @@ fn export_options(options: &JsValue) -> Option<ExportOptions> {
 }
 
 impl HubHost for Host {
+    /// env.ts's `Date` takes the fractional clock, and a `Date` keeps whole milliseconds.
     fn now(&self) -> f64 {
-        self.clock.get()
+        self.clock.get().trunc()
     }
 
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>) {
@@ -349,20 +350,26 @@ impl HubHost for Host {
             Log::from_serialized(log, &mut realm),
             export_options(&options),
         ) {
-            (Ok(log), Some(options)) => export(&log, &options).ok(),
-            _ => None,
+            (Ok(log), Some(options)) => export(&log, &options),
+            (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
+            (_, None) => Err(ExportError::Unported("export options of another shape")),
         };
         let replies = match output {
-            Some(Output::Text(text)) => vec![
+            Ok(Output::Text(text)) => vec![
                 ExportReply::Progress(1.0),
                 ExportReply::Payload(JsValue::String(text)),
             ],
-            Some(Output::Bytes(_)) => {
+            Ok(Output::Bytes(_)) => {
                 self.unmodeled.push("a binary export payload".to_owned());
                 Vec::new()
             }
-            None => vec![ExportReply::Failed],
+            Err(ExportError::Rejected) => vec![ExportReply::Failed],
+            Err(ExportError::Unported(what)) => {
+                self.unmodeled.push(what.to_owned());
+                Vec::new()
+            }
         };
+
         self.slots.push(Slot {
             work: Work::Export { id, replies },
             terminated: false,
@@ -785,7 +792,6 @@ fn compare(spec: &Path, id: &str) -> Result<usize, String> {
                     .unwrap_or_else(|| "encodings differ".to_owned());
                 return Err(format!("line {} ({key}): {report}", record.line));
             }
-
         }
     }
     if emitted.len() > records.len() {
