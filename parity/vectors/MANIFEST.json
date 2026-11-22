@@ -193,6 +193,7 @@
     "hub/lifecycle-errors-and-files": {"cases":71,"content":"d3079de2832f4b6c","generator":"f902dfe7ca94b5bf","spec":"parity/specs/hub/lifecycle-errors-and-files.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-merge-without-logs": {"cases":10,"content":"b6e2af3732d176b2","generator":"8334377802c9c995","spec":"parity/specs/hub/lifecycle-merge-without-logs.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-open-merge-export": {"cases":54,"content":"f59ecfcf0a1476c4","generator":"139340e129f3583d","spec":"parity/specs/hub/lifecycle-open-merge-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "hub/lifecycle-state-and-selection": {"cases":43,"content":"083b87b25ea8f4ba","generator":"287b9b0c3bef11d8","spec":"parity/specs/hub/lifecycle-state-and-selection.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/collation": {"cases":5002,"content":"87628654f82c6a0f","generator":"e43c73f8e4701ff2","spec":"parity/specs/js/collation.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/collation-unsafe": {"cases":2,"content":"d83814ebe2b5110b","generator":"ddc49aa631a1ffd6","spec":"parity/specs/js/collation-unsafe.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/color": {"cases":269,"content":"e69f617d0af8da11","generator":"a004d7df96c4f12c","spec":"parity/specs/js/color.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
