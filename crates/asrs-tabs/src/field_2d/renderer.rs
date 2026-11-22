@@ -14,7 +14,7 @@ use asrs_canvas::raster::CanvasError;
 use asrs_canvas::{Canvas2d, Style};
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
-use asrs_js::{json, math, number, ops};
+use asrs_js::{json, math, number, ops, sort};
 use asrs_log::geometry::{ModuleVelocitySample, Pose2d};
 use asrs_log::units;
 use asrs_log::util::{scale_value, transform_px};
@@ -685,8 +685,9 @@ impl Field2dRenderer {
             );
         }
 
-        let mut objects: Vec<&Object> = command.objects.iter().collect();
-        objects.sort_by_key(|object| rendering_order(object));
+        let objects: Vec<&Object> = command.objects.iter().collect();
+        let objects =
+            sort::array_to_sorted(&objects, |a, b| rendering_order(a) - rendering_order(b));
         for object in objects {
             match object {
                 Object::Trajectory { color, size, poses } => {
@@ -824,8 +825,11 @@ impl Field2dRenderer {
                         context.set_line_join("round");
                         context.set_line_width(1.5 * field.pixels_per_inch);
                         let l = robot_length_pixels;
-                        let arrow_back =
-                            transform_px(position, rotation, [l * (-0.6 + 0.3 * offset_index), 0.0]);
+                        let arrow_back = transform_px(
+                            position,
+                            rotation,
+                            [l * (-0.6 + 0.3 * offset_index), 0.0],
+                        );
                         let arrow_front =
                             transform_px(position, rotation, [l * (0.3 * offset_index), 0.0]);
                         let arrow_left = transform_px(
@@ -840,8 +844,7 @@ impl Field2dRenderer {
                         );
                         let crossbar = if offset_index == 0.0 { 0.15 } else { 0.1 };
                         let crossbar_left = transform_px(position, rotation, [0.0, l * crossbar]);
-                        let crossbar_right =
-                            transform_px(position, rotation, [0.0, l * -crossbar]);
+                        let crossbar_right = transform_px(position, rotation, [0.0, l * -crossbar]);
                         context.begin_path();
                         context.move_to(arrow_back[0], arrow_back[1]);
                         context.line_to(arrow_front[0], arrow_front[1]);
@@ -918,14 +921,14 @@ fn canvas_error(error: CanvasError) -> JsError {
     }
 }
 
-/// `["trajectory", "robot", "ghost", "arrow"].indexOf(type)`; `toSorted` is stable.
-fn rendering_order(object: &Object) -> i8 {
+/// `["trajectory", "robot", "ghost", "arrow"].indexOf(type)`.
+fn rendering_order(object: &Object) -> f64 {
     match object {
-        Object::Trajectory { .. } => 0,
-        Object::Robot { .. } => 1,
-        Object::Ghost { .. } => 2,
-        Object::Arrow { .. } => 3,
-        Object::Heatmap { .. } => -1,
+        Object::Trajectory { .. } => 0.0,
+        Object::Robot { .. } => 1.0,
+        Object::Ghost { .. } => 2.0,
+        Object::Arrow { .. } => 3.0,
+        Object::Heatmap { .. } => -1.0,
     }
 }
 
@@ -1025,14 +1028,7 @@ impl FieldFrame {
             );
             for set in swerve_module_velocities {
                 if let Some(state) = set.values.get(index) {
-                    draw_module_data(
-                        context,
-                        ppi,
-                        rotation,
-                        module_center_px,
-                        state,
-                        &set.color,
-                    )?;
+                    draw_module_data(context, ppi, rotation, module_center_px, state, &set.color)?;
                 }
             }
         }

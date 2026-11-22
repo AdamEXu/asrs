@@ -946,7 +946,9 @@ impl Harness {
                 ]));
                 let expected_size = encode(&js(record, "size")?);
                 if size != expected_size {
-                    return Err(format!("canvas size: upstream {expected_size}, port {size}"));
+                    return Err(format!(
+                        "canvas size: upstream {expected_size}, port {size}"
+                    ));
                 }
                 let style = dom
                     .canvas_style
@@ -1557,7 +1559,9 @@ fn run_case(id: &str) -> Result<Stats, String> {
     }
     harness.drain_main().map_err(|e| format!("{id}: {e}"))?;
     if let Some(e) = &harness.frame_threw {
-        return Err(format!("{id}: the port's render threw {e:?}, upstream's did not"));
+        return Err(format!(
+            "{id}: the port's render threw {e:?}, upstream's did not"
+        ));
     }
     if harness.scrolls.iter().any(|q| !q.is_empty()) {
         return Err(format!(
