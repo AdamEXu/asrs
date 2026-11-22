@@ -112,6 +112,15 @@ asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
 The generated `spark-frames` files carry no license header of their own; the MIT notice
 above is the one REV attached to the utilities shipped alongside them.
 
+## @rev-robotics/revlog-converter
+
+- License: BSD-3-Clause ([`licenses/revlog-converter.txt`](licenses/revlog-converter.txt))
+- Copyright (c) 2025, REV Robotics
+- Version: 2.0.0 (npm), source https://github.com/REVrobotics/node-revlog-converter
+- Used in: `crates/asrs-formats/src/revlog.rs` and `revlog/dbc.rs` (ports of
+  `revlogParser` and `revDBC`), and `crates/asrs-formats/src/revlog/*.public.dbc`, the
+  package's DBC files copied unmodified
+
 ## V8
 
 - License: BSD-3-Clause ([`licenses/V8.txt`](licenses/V8.txt))

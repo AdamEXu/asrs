@@ -83,16 +83,16 @@ const META: [&str; 32] = [
 fn inspect_string(s: &JsString) -> JsString {
     let has = |text: &str| s.includes(&JsString::from(text), None);
     let quote = if !has("'") {
-        '\''
+        "'"
     } else if !has("\"") {
-        '"'
+        "\""
     } else if !has("`") && !has("${") {
-        '`'
+        "`"
     } else {
-        '\''
+        "'"
     };
     let units = s.units();
-    let mut out = JsString::from(quote.to_string().as_str());
+    let mut out = JsString::from(quote);
     let mut i = 0;
     while i < units.len() {
         let unit = units[i];
@@ -100,7 +100,7 @@ fn inspect_string(s: &JsString) -> JsString {
             0x00..=0x1f => out.push_str(&JsString::from(META[unit as usize])),
             0x7f..=0x9f => out.push_str(&JsString::from(format!("\\x{unit:02X}").as_str())),
             0x5c => out.push_str(&JsString::from("\\\\")),
-            0x27 if quote == '\'' => out.push_str(&JsString::from("\\'")),
+            0x27 if quote == "'" => out.push_str(&JsString::from("\\'")),
             0xd800..=0xdbff if matches!(units.get(i + 1), Some(0xdc00..=0xdfff)) => {
                 out.push_str(&JsString::from_units(units[i..i + 2].to_vec()));
                 i += 1;
@@ -110,7 +110,7 @@ fn inspect_string(s: &JsString) -> JsString {
         }
         i += 1;
     }
-    out.push_str(&JsString::from(quote.to_string().as_str()));
+    out.push_str(&JsString::from(quote));
     out
 }
 

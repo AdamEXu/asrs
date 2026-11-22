@@ -98,7 +98,10 @@ const SPECIAL_FRAMES: Uint8Array[] = [
   [...f64(-Infinity), ...f64(5e-324)],
   [0x80, 0, 0, 0, 0, 0, 0, 0x80, 0x80, 0, 0, 0, 0, 0, 0, 0x80],
   [0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0, 0, 0, 0, 0xe0, 0xff, 0xff, 0xff, 0xff, 0xff],
-  [1, 0, 0, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0x20, 0]
+  [1, 0, 0, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0x20, 0],
+  [0, 0, 0, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0x20, 0],
+  [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x1f, 0],
+  [1, 0, 0, 0, 0, 0, 0xe0, 0xff, 1, 0, 0, 0, 0, 0, 0xe0, 0xff]
 ].map((a) => new Uint8Array(a));
 
 const SYNTHETIC_DBCS: string[] = [
@@ -424,6 +427,8 @@ async function genConvert(): Promise<void> {
   await run("NUL and both quotes in path", "none", undefined, "\"it's\"\u0000\n\t\\.revlog");
   await run("NUL and every quote in path", "none", undefined, "`\"'\u0000.revlog");
   await run("long path with NUL", "none", undefined, "x".repeat(140) + "\u0000\u0001\u007fé\u{1f600}.revlog");
+  await run("NUL path inspected to 128 units", "none", undefined, "a".repeat(115) + "\u0000.revlog");
+  await run("NUL path inspected to 129 units", "none", undefined, "a".repeat(116) + "\u0000.revlog");
   await run("control characters with NUL", "none", undefined, "\b\f\r\u000b\u001b\u0000.revlog");
   await run("lone surrogates and C1 controls with NUL", "none", undefined, "\ud800a\udc00😀\u0085\u009f '\u0000.revlog");
   await run("long path, lone surrogates and C1 controls with NUL", "none", undefined, "y".repeat(90) + "\ud800a\udc00\u0085\u009f\\'\u0000\u007f" + "z".repeat(40) + ".revlog");
@@ -436,6 +441,7 @@ async function genConvert(): Promise<void> {
   await file("v2 header only", bytes(header()));
   await file("v2 header with start time only", bytes(header({ startUs: 0x0102030405060708n, tail: false })));
   await file("header magic wrong", bytes(header({ magic: "REVLOX", startUs: 1 })));
+  await file("header magic with high bits set", bytes(cat(rec(R.header, [0xd2, 0xc5, 0x56, 0xcc, 0x4f, 0xc7, 2, 0, ...le(3, 8)]), loggerEvent(4, 2))));
   await file("header payload of 7 bytes", bytes(rec(R.header, [...utf8("REVLOG"), 2])));
   await file("header payload empty", bytes(rec(R.header, [])));
   await file("header newer major", bytes(header({ major: 3, minor: 1 })));
@@ -702,6 +708,17 @@ async function genConvert(): Promise<void> {
     frames(0, 40, [{ offsetUs: 0, id: (status(SPARK, 0, 5) | 0xc0000000) >>> 0, data: [8, 7, 6, 5, 4, 3, 2, 1] }]),
     frames(2, 50, [{ offsetUs: 0, id: (status(SPARK, 0, 5) | 0xa0000000) >>> 0, data: [8, 7, 6, 5, 4, 3, 2, 1] }]),
     frames(3, 60, [{ offsetUs: 0, id: (status(SPARK, 0, 5) | 0x80000000) >>> 0, data: [8, 7, 6, 5, 4, 3, 2, 1] }])
+  )));
+  await file("same entry names from different CAN ids and buses", bytes(cat(
+    header({ startUs: 10 }),
+    busTable([{ id: 0, name: "same" }, { id: 1, name: "same" }]),
+    frames(0, 20, [
+      { offsetUs: 0, id: status(SPARK, 0, 7), data: [1, 2, 3, 4, 5, 6, 7, 8] },
+      { offsetUs: 1, id: canId(2, 5, 0x01, 0, 7), data: [2, 3, 4, 5, 6, 7, 8, 9] },
+      { offsetUs: 2, id: status(SPARK, 0, 7), data: [3, 4, 5, 6, 7, 8, 9, 10] }
+    ]),
+    frames(1, 30, [{ offsetUs: 0, id: status(SPARK, 0, 7), data: [4, 5, 6, 7, 8, 9, 10, 11] }]),
+    firmware([{ bus: 0, id: firmwareId(SPARK, 7), data: [1, 2, 3, 4] }, { bus: 1, id: firmwareId(SPARK, 7), data: [1, 2, 3, 4] }])
   )));
   await file("timestamp widths", bytes(cat(
     header({ startUs: 0 }),

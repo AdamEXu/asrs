@@ -3,7 +3,7 @@
 //! CVE-1, and the exact WPILOG bytes or rejection of every REVLOG input. The open-failure cases
 //! of `revlog/convert` go through `asrs_services::historical_start` in that crate's tests.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use asrs_formats::revlog::dbc::{CanDecoder, DataType, Dbc, Message, Signal, SignalValue};
 use asrs_formats::revlog::{self, A301_DBC, ENCODER_DBC, SERVO_HUB_DBC, SPARK_DBC};
@@ -102,7 +102,7 @@ fn decoded_tree(decoded: Option<Vec<(String, SignalValue)>>) -> Value {
                 .map(|(name, value)| {
                     let value = match value {
                         SignalValue::Number(x) => Value::number(x),
-                        SignalValue::BigInt(i) => Value::BigInt(i.to_string()),
+                        SignalValue::BigInt(i) => Value::BigInt(format!("{i}")),
                     };
                     object(vec![("name", Value::string(&name)), ("value", value)])
                 })
@@ -131,7 +131,7 @@ fn hex(text: &str) -> Result<Vec<u8>, String> {
     }
     (0..text.len())
         .step_by(2)
-        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).map_err(|e| e.to_string()))
+        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).map_err(|e| format!("{e}")))
         .collect()
 }
 
@@ -208,12 +208,8 @@ impl Tally {
             );
         }
         assert_eq!(
-            self.recorded.keys().copied().collect::<Vec<_>>(),
-            {
-                let mut kinds = expect_kinds.to_vec();
-                kinds.sort();
-                kinds
-            },
+            self.recorded.keys().copied().collect::<BTreeSet<_>>(),
+            expect_kinds.iter().copied().collect::<BTreeSet<_>>(),
             "vectors {id}: record kinds"
         );
     }
@@ -266,7 +262,7 @@ fn revlog_dbc() {
                         None => string(r, "text")?,
                     };
                     let dbc = Dbc::load(&text);
-                    let expected = r.value("dump").map_err(|e| e.to_string())?;
+                    let expected = r.value("dump").map_err(|e| format!("{e}"))?;
                     let result = compare_values("Dbc", &expected, &dbc_tree(&dbc));
                     loads.insert(index, dbc);
                     result
@@ -280,12 +276,12 @@ fn revlog_dbc() {
                     let dbc = loads
                         .get(&index)
                         .ok_or_else(|| format!("no Dbc for load {index}"))?;
-                    let frame_id = match r.value("id").map_err(|e| e.to_string())? {
+                    let frame_id = match r.value("id").map_err(|e| format!("{e}"))? {
                         Value::Number(bits) => f64::from_bits(bits),
                         other => return Err(format!("id is {}", other.kind())),
                     };
                     let data = hex(&string(r, "data")?)?;
-                    let expected = r.value("result").map_err(|e| e.to_string())?;
+                    let expected = r.value("result").map_err(|e| format!("{e}"))?;
                     let actual = decoded_tree(CanDecoder::new(dbc).decode(frame_id, &data));
                     compare_values(
                         &format!("decode(0x{:x}, {})", frame_id as u64, string(r, "data")?),
