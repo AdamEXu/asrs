@@ -12,7 +12,7 @@ pub mod gpui {
         WindowOptions, anchored, application, canvas, deferred, div, point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
-    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};
+    pub use gpui_kit::{HeadlessAppContext, Modifiers, NoopTextSystem, PlatformInput};
 }
 
 pub mod button;

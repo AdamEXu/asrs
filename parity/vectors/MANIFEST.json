@@ -113,6 +113,7 @@
     "dom/source-list/points": {"cases":418,"content":"3e1ffe7d405c2853","generator":"82c9fe121a026620","spec":"parity/specs/dom/source-list/points.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/source-list/statistics": {"cases":702,"content":"c0c11db68ff2206b","generator":"03bff0eca0caba38","spec":"parity/specs/dom/source-list/statistics.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/source-list/swerve": {"cases":293,"content":"0ef4096ef11b39af","generator":"04dbd68e51d37eab","spec":"parity/specs/dom/source-list/swerve.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/source-list/view-drag": {"cases":608,"content":"5bca4ba2a87a0a62","generator":"144b2a9607db493c","spec":"parity/specs/dom/source-list/view-drag.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/statistics/akit": {"cases":48,"content":"d4d2521136486b93","generator":"5e9965c18ce82344","spec":"parity/specs/dom/statistics/akit.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/statistics/edges": {"cases":44,"content":"ed9e51c28c953036","generator":"55589507cc647db2","spec":"parity/specs/dom/statistics/edges.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/statistics/fields": {"cases":49,"content":"ae69f7cd7eed2af1","generator":"eb7183c4bc9536d9","spec":"parity/specs/dom/statistics/fields.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
