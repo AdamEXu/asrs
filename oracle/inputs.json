@@ -199,6 +199,9 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genDownloadHelpers": [
+    "src/genDownloadHelpers.ts"
+  ],
   "genField3dFields": [
     "src/cve1.ts",
     "src/environment.ts",

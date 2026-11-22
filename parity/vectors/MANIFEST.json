@@ -347,6 +347,7 @@
     "msgpack/decode": {"cases":7131,"content":"6ef775b5fdf738d5","generator":"0eae4bcfa9e86d6e","spec":"parity/specs/msgpack/decode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/encode": {"cases":100193,"content":"b4c663a4660606e0","generator":"d7d48fcc26625d55","spec":"parity/specs/msgpack/encode.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "msgpack/multi": {"cases":766,"content":"d1cae0b634ef8bf3","generator":"8a9eaf53273295bc","spec":"parity/specs/msgpack/multi.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "node/download-helpers": {"cases":8511,"content":"d2548bc7ba84bbd1","generator":"4d53f808b97ff659","spec":"parity/specs/node/download-helpers.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "node/path-join": {"cases":3079,"content":"46163267da176e35","generator":"b732e28173485a99","spec":"parity/specs/node/path-join.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/numberformat": {"cases":182,"content":"44a96cd7bef54d21","generator":"43c0a123dcce7628","spec":"parity/specs/number/numberformat.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/parse": {"cases":569,"content":"495136adba4d37f3","generator":"460e8cebad54668e","spec":"parity/specs/number/parse.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
