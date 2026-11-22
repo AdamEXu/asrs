@@ -79,18 +79,21 @@ pub(in super::super) fn message_box(
     }
     let buttons = alert.buttons();
     let count = buttons.count();
-    if let Some(default) = options.default_id.filter(|d| *d < count) {
-        buttons.objectAtIndex(default).highlight(true);
+    let default_id = options.default_id.filter(|d| *d < count);
+    if let Some(default) = default_id {
         buttons.objectAtIndex(0).setKeyEquivalent(&ns_string(""));
         buttons
             .objectAtIndex(default)
             .setKeyEquivalent(&ns_string("\r"));
     }
     let cancel = options.cancel_id();
-    if cancel < count {
+    if count > 1 && cancel < count {
         buttons
             .objectAtIndex(cancel)
             .setKeyEquivalent(&ns_string("\u{1b}"));
+        if default_id == Some(cancel) {
+            buttons.objectAtIndex(cancel).highlight(true);
+        }
     }
     if !options.checkbox_label.is_empty() {
         alert.setShowsSuppressionButton(true);
@@ -184,17 +187,25 @@ fn setup(
     }
 }
 
-/// `SetAllowedFileTypes`: every filter's extensions, unless one of them is `*`.
+/// `SetAllowedFileTypes`: the first filter's extensions, each cut to its last dotted part,
+/// unless one of them is `*`. The other filters only feed the format popup (#139).
 #[allow(deprecated)]
 fn set_allowed_file_types(panel: &NSSavePanel, filters: &[FileFilter]) {
+    let Some(first) = filters.first() else {
+        return;
+    };
     let mut types: Vec<&str> = Vec::new();
-    for extension in filters.iter().flat_map(|f| &f.extensions) {
+    for extension in &first.extensions {
+        let extension = extension.rsplit('.').next().unwrap_or(extension);
         if extension == "*" {
             return;
         }
-        if !types.contains(&extension.as_str()) {
+        if !types.contains(&extension) {
             types.push(extension);
         }
+    }
+    if types.is_empty() {
+        return;
     }
     let types: Vec<Retained<NSString>> = types.into_iter().map(ns_string).collect();
     panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&types)));

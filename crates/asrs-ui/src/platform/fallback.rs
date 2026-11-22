@@ -48,6 +48,10 @@ pub(super) mod window {
         None
     }
 
+    pub fn bounds(_window: &Window) -> Option<(f64, f64, f64, f64)> {
+        None
+    }
+
     impl NativeWindow {
         pub fn hidden_inset_titlebar(&self) {
             match *self {}
@@ -70,10 +74,6 @@ pub(super) mod window {
         }
 
         pub fn set_fullscreenable(&self, _fullscreenable: bool) {
-            match *self {}
-        }
-
-        pub fn center(&self) {
             match *self {}
         }
 

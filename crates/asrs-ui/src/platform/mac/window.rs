@@ -3,7 +3,7 @@
 use gpui_kit::Window;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSToolbar, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 use super::ns_window;
@@ -66,10 +66,6 @@ impl NativeWindow {
         self.0.setCollectionBehavior(behavior);
     }
 
-    pub fn center(&self) {
-        self.0.center();
-    }
-
     pub fn begin_sheet(&self, sheet: &NativeWindow) {
         self.0.beginSheet_completionHandler(&sheet.0, None);
     }
@@ -87,4 +83,18 @@ impl NativeWindow {
             self.0.orderFront(None);
         }
     }
+}
+
+/// `NativeWindowMac::GetBounds`: the frame in top-left coordinates of the primary screen,
+/// truncated to whole points.
+pub fn bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
+    let frame = ns_window(window)?.frame();
+    let screen = NSScreen::screens(MainThreadMarker::new()?).firstObject()?;
+    let top = screen.frame().size.height - (frame.origin.y + frame.size.height);
+    Some((
+        frame.origin.x.trunc(),
+        top.trunc(),
+        frame.size.width.trunc(),
+        frame.size.height.trunc(),
+    ))
 }

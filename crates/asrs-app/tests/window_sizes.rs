@@ -1,8 +1,9 @@
 #![allow(clippy::disallowed_methods)]
 
 //! Opens every window `main.ts` creates in the `windows/*` vectors twice: through
-//! `asrs_app::windows`, and in Electron 39 with the recorded `BrowserWindow` options. The content
-//! sizes after open must be equal. Then checks that an always-on-top window stays visible while
+//! `asrs_app::windows`, and in Electron 39 with the recorded `BrowserWindow` options and the
+//! position the port's model gives it. The content sizes after open must be equal, and so must
+//! the frames of windows that are not sheets. Then checks that an always-on-top window stays visible while
 //! the app is inactive, which a bare `WindowKind::Floating` window does not.
 //!
 //! Needs a display and the oracle's Electron (`ASRS_ELECTRON` or `cargo xtask oracle setup`);
@@ -46,7 +47,7 @@ app.whenReady().then(() => {
       const win = new BrowserWindow(options);
       win.show();
       await wait(500);
-      out("size " + JSON.stringify(win.getContentSize()));
+      out("size " + JSON.stringify([...win.getContentSize(), ...Object.values(win.getBounds())]));
       win.destroy();
       await wait(200);
     } else if (request.op === "cancelId") {
@@ -226,8 +227,12 @@ impl Case {
         }
     }
 
-    fn electron_json(&self, with_parent: bool) -> String {
+    fn electron_json(&self, with_parent: bool, origin: Option<(f64, f64)>) -> String {
         let mut pairs: Vec<(&str, Json)> = Vec::new();
+        if let Some((x, y)) = origin {
+            pairs.push(("x", Json::Number(x)));
+            pairs.push(("y", Json::Number(y)));
+        }
         for (key, value) in &self.options {
             let json = match value {
                 Value::Bool(b) => Json::Bool(*b),
@@ -351,26 +356,45 @@ impl Report {
     }
 }
 
+struct Measured {
+    content: (f64, f64),
+    frame: (f64, f64, f64, f64),
+}
+
+async fn measure_electron(cx: &mut AsyncApp, electron: &Electron, request: &str) -> Measured {
+    let reply = electron.request(cx, request, "size ").await;
+    let values: Vec<f64> = asrs_parity::json::parse(&reply)
+        .expect("size json")
+        .as_array()
+        .expect("size array")
+        .iter()
+        .map(|v| v.as_f64().expect("number"))
+        .collect();
+    let [w, h, x, y, fw, fh] = values[..] else {
+        panic!("size reply {reply}");
+    };
+    Measured {
+        content: (w, h),
+        frame: (x, y, fw, fh),
+    }
+}
+
+fn frame_of(cx: &mut AsyncApp, handle: AnyWindowHandle) -> (f64, f64, f64, f64) {
+    with_window(cx, handle, |w| asrs_ui::platform::window_bounds(w)).expect("window bounds")
+}
+
 async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     let parent = cx
-        .update(|cx| {
-            windows::open_hub(
-                cx,
-                Some(Rect {
-                    x: 60.0,
-                    y: 60.0,
-                    width: 1100.0,
-                    height: 650.0,
-                }),
-                |_, cx| cx.new(|_| Blank),
-            )
-        })
+        .update(|cx| windows::open_hub(cx, None, |_, cx| cx.new(|_| Blank)))
         .expect("parent hub")
         .0;
     sleep(cx, 600).await;
     let parent_handle = cx
         .update(|cx| Windows::handle(cx, parent))
         .expect("parent handle");
+    let parent_bounds = cx
+        .update(|cx| Windows::manager(cx).bounds(parent))
+        .expect("parent bounds");
     let cases = cases();
     assert!(cases.len() >= 12, "only {} distinct windows", cases.len());
     for (case, origin) in &cases {
@@ -386,6 +410,7 @@ async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
         let model = cx.update(|cx| Windows::manager(cx).kind(id));
         sleep(cx, 700).await;
         let ours = with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+        let ours_frame = frame_of(cx, handle);
         if kind.is_modal() {
             let attached = cx
                 .update(|cx| {
@@ -398,20 +423,21 @@ async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
                 .unwrap_or(false);
             report.check(&format!("{name} is a sheet on its parent"), attached, "");
         }
-        let reply = electron
-            .request(cx, &case.electron_json(kind.is_modal()), "size ")
-            .await;
-        let theirs = asrs_parity::json::parse(&reply).expect("size json");
-        let theirs = theirs.as_array().expect("size array");
-        let theirs = (
-            theirs[0].as_f64().expect("width"),
-            theirs[1].as_f64().expect("height"),
-        );
+        let placed = model_options(case, *origin, Some(parent_bounds));
+        let request = case.electron_json(kind.is_modal(), placed.x.zip(placed.y));
+        let theirs = measure_electron(cx, electron, &request).await;
         report.check(
             &format!("{name} content size"),
-            ours == theirs,
-            format!("ours {ours:?}, Electron {theirs:?}"),
+            ours == theirs.content,
+            format!("ours {ours:?}, Electron {:?}", theirs.content),
         );
+        if !kind.is_modal() {
+            report.check(
+                &format!("{name} frame"),
+                ours_frame == theirs.frame,
+                format!("ours {ours_frame:?}, Electron {:?}", theirs.frame),
+            );
+        }
         report.check(
             &format!("{name} model kind"),
             model == Some(kind),
@@ -426,7 +452,7 @@ async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     }
     let mismatched: Vec<String> = cases
         .iter()
-        .filter(|(case, origin)| port_options(&model_options(case, *origin)) != case.options)
+        .filter(|(case, origin)| port_options(&model_options(case, *origin, None)) != case.options)
         .map(|(case, _)| format!("{:?}", case.kind()))
         .collect();
     report.check(
@@ -449,10 +475,18 @@ fn case_rect(case: &Case, origin: Option<(f64, f64)>) -> Rect {
     }
 }
 
-/// The options the port's model gives the window `open_case` opens.
-fn model_options(case: &Case, origin: Option<(f64, f64)>) -> windows::WindowOptions {
+/// The options the port's model gives the window `open_case` opens, with the parent at
+/// `parent_bounds` when given.
+fn model_options(
+    case: &Case,
+    origin: Option<(f64, f64)>,
+    parent_bounds: Option<Rect>,
+) -> windows::WindowOptions {
     let mut manager = WindowManager::for_platform(Platform::Mac);
     let (parent, _) = manager.create_hub(None);
+    if let Some(bounds) = parent_bounds {
+        manager.set_bounds(parent, bounds);
+    }
     let rect = case_rect(case, origin);
     let opened = |opened: Opened| match opened {
         Opened::New(_, options) => options,

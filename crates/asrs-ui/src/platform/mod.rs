@@ -144,6 +144,12 @@ pub fn native_window(window: &Window) -> Option<NativeWindow> {
     imp::window::native(window).map(NativeWindow)
 }
 
+/// Electron's `getBounds()`: the window frame as `(x, y, width, height)` in top-left
+/// coordinates of the primary screen. `None` off macOS.
+pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
+    imp::window::bounds(window)
+}
+
 pub struct NativeWindow(imp::window::NativeWindow);
 
 impl NativeWindow {
@@ -164,6 +170,7 @@ impl NativeWindow {
         self.0.content_size()
     }
 
+    /// Resizes the content, keeping the frame's top-left corner in place.
     pub fn set_content_size(&self, width: f64, height: f64) {
         self.0.set_content_size(width, height);
     }
@@ -176,11 +183,6 @@ impl NativeWindow {
     /// Electron's `fullscreenable` option.
     pub fn set_fullscreenable(&self, fullscreenable: bool) {
         self.0.set_fullscreenable(fullscreenable);
-    }
-
-    /// Electron's placement of a window opened without `x` and `y`.
-    pub fn center(&self) {
-        self.0.center();
     }
 
     /// Attaches `sheet` to this window as a sheet, as Electron does for `modal: true` with a

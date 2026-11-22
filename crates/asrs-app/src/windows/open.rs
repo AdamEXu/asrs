@@ -13,8 +13,13 @@ const UNBOUNDED: f64 = i32::MAX as f64;
 
 fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui::WindowOptions {
     let content = size(px(options.width as f32), px(options.height as f32));
-    let bounds = match options.x.zip(options.y) {
-        Some((x, y)) => Bounds::new(point(px(x.trunc() as f32), px(y.trunc() as f32)), content),
+    let origin = options
+        .x
+        .zip(options.y)
+        .map(|(x, y)| (x.trunc(), y.trunc()))
+        .or_else(|| default_origin(options, cx));
+    let bounds = match origin {
+        Some((x, y)) => Bounds::new(point(px(x as f32), px(y as f32)), content),
         None => Bounds::centered(None, content, cx),
     };
     let fancy = options.kind == WindowKind::Hub && cfg!(target_os = "macos");
@@ -47,12 +52,36 @@ fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui:
     }
 }
 
-fn rect(bounds: Bounds<asrs_ui::gpui::Pixels>) -> Rect {
+/// Where `NativeWindowMac` puts a window opened without `x` and `y`: its requested size centred
+/// on the primary screen's full frame, rounded. It never calls `[NSWindow center]`.
+fn default_origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let screen = cx.primary_display()?.bounds().size;
+    Some((
+        ((f64::from(f32::from(screen.width)) - options.width) / 2.0).round(),
+        ((f64::from(f32::from(screen.height)) - options.height) / 2.0).round(),
+    ))
+}
+
+/// `window.getBounds()`.
+fn bounds(window: &Window) -> Rect {
+    let (x, y, width, height) = platform::window_bounds(window).unwrap_or_else(|| {
+        let b = window.bounds();
+        let f = |p: asrs_ui::gpui::Pixels| f64::from(f32::from(p));
+        (
+            f(b.origin.x),
+            f(b.origin.y),
+            f(b.size.width),
+            f(b.size.height),
+        )
+    });
     Rect {
-        x: f64::from(f32::from(bounds.origin.x)),
-        y: f64::from(f32::from(bounds.origin.y)),
-        width: f64::from(f32::from(bounds.size.width)),
-        height: f64::from(f32::from(bounds.size.height)),
+        x,
+        y,
+        width,
+        height,
     }
 }
 
@@ -68,7 +97,7 @@ fn track<V: Render>(id: WindowId, window: &mut Window, entity: &Entity<V>, cx: &
         })
         .detach();
         cx.observe_window_bounds(window, move |_, window, cx| {
-            let bounds = rect(window.bounds());
+            let bounds = bounds(window);
             cx.global_mut::<Windows>().manager.set_bounds(id, bounds);
         })
         .detach();
@@ -97,8 +126,7 @@ fn content_limits(native: &NativeWindow, options: &WindowOptions) -> (Option<Siz
 /// What Electron's `BrowserWindow` constructor does that GPUI's options cannot: the
 /// `hiddenInset` toolbar, the exact content size (GPUI opens macOS windows 1 px taller than
 /// asked), frame-based sizes for windows without `useContentSize`, size limits,
-/// `fullscreenable`, centering, then showing the window, or attaching it as a sheet to its
-/// parent. GPUI's `Dialog` kind would attach it to whichever window is main, and to none while
+/// `fullscreenable`, then showing the window, or attaching it as a sheet to its parent. GPUI's `Dialog` kind would attach it to whichever window is main, and to none while
 /// the app is inactive.
 fn finish(native: &NativeWindow, options: &WindowOptions, parent: Option<&NativeWindow>) {
     if options.kind == WindowKind::Hub {
@@ -118,9 +146,6 @@ fn finish(native: &NativeWindow, options: &WindowOptions, parent: Option<&Native
     if let (true, Some(parent)) = (options.modal, parent) {
         parent.begin_sheet(native);
         return;
-    }
-    if options.x.is_none() || options.y.is_none() {
-        native.center();
     }
     native.show(true);
 }
@@ -160,7 +185,7 @@ pub(super) fn open<V: Render>(
             finish(&native, &options, parent.as_ref());
             handle
                 .update(cx, |_, window, cx| {
-                    let bounds = rect(window.bounds());
+                    let bounds = bounds(window);
                     cx.global_mut::<Windows>().manager.set_bounds(id, bounds);
                 })
                 .ok();
