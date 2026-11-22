@@ -50,7 +50,9 @@ use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::line_graph::{LineGraphController, ListId};
 use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use asrs_tabs::mechanism::MechanismController;
+use asrs_tabs::mechanism_renderer::MechanismRenderer;
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
+use asrs_tabs::points_renderer::PointsRenderer;
 use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
@@ -433,17 +435,47 @@ impl RendererHook<Host> for Hook {
         kind: Option<TabType>,
         renderer: Box<dyn TabRenderer<Host>>,
     ) -> Box<dyn TabRenderer<Host>> {
-        let inner: Box<dyn TabRenderer<Host>> = if kind == Some(TabType::Field3d) {
-            Box::new(Field3dStubRenderer {
+        let inner: Box<dyn TabRenderer<Host>> = match kind {
+            Some(TabType::Field3d) => Box::new(Field3dStubRenderer {
                 state: JsValue::Null,
-            })
-        } else {
-            renderer
+            }),
+            Some(TabType::Mechanism) if renderer.downcast_ref::<MechanismRenderer>().is_none() => {
+                Box::new(MissingPainter("MechanismRenderer"))
+            }
+            Some(TabType::Points) if renderer.downcast_ref::<PointsRenderer>().is_none() => {
+                Box::new(MissingPainter("PointsRenderer"))
+            }
+            _ => renderer,
         };
         Box::new(Recorder {
             inner,
             slot: Rc::new(RefCell::new(None)),
         })
+    }
+}
+
+/// Stands in for a painter the production factory does not build yet; every render fails,
+/// so the case shows an exception upstream never recorded.
+struct MissingPainter(&'static str);
+
+impl<Cx: ?Sized> TabRenderer<Cx> for MissingPainter {
+    fn save_state(&self, _cx: &Cx) -> JsValue {
+        JsValue::Null
+    }
+
+    fn restore_state(&mut self, _cx: &mut Cx, _state: &JsValue) -> Result<(), JsError> {
+        Ok(())
+    }
+
+    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
+        None
+    }
+
+    fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
+        Err(JsError::new(
+            "Unmodeled",
+            format!("the production factory builds no {}", self.0),
+        ))
     }
 }
 
@@ -754,6 +786,31 @@ impl Runner {
                     dom.images = self.images.clone();
                 }
                 DomKind::Other => {}
+            }
+            let mechanism = self.layout.rect_of(&el(
+                "div",
+                &["mechanism-svg-container"],
+                false,
+                1,
+                root_el(hidden, pos),
+            ));
+            let points = self.layout.rect_of(&el(
+                "div",
+                &["points-background-container"],
+                false,
+                1,
+                root_el(hidden, pos),
+            ));
+            let index = JsValue::Number(i as f64);
+            if let Ok(renderer) = self.tabs.renderer_mut(&index) {
+                if let Some(r) = inner_mut::<MechanismRenderer>(renderer) {
+                    r.client_size = [
+                        asrs_js::math::round(mechanism.width),
+                        asrs_js::math::round(mechanism.height),
+                    ];
+                } else if let Some(r) = inner_mut::<PointsRenderer>(renderer) {
+                    r.container_size = [points.width, points.height];
+                }
             }
         }
     }
