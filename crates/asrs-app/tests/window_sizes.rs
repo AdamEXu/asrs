@@ -12,10 +12,14 @@ use std::cell::RefCell;
 use std::io::{BufRead, BufReader, Write as _};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use asrs_app::windows::{self, Rect, SatellitePlacement, WindowId, WindowKind, Windows};
+use asrs_app::windows::{
+    self, FileFilter, MessageBoxOptions, MessageBoxResult, MessageBoxType, OpenDialogOptions, Rect,
+    SatellitePlacement, SaveDialogOptions, WindowId, WindowKind, Windows,
+};
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
@@ -27,7 +31,7 @@ use gpui_kit::{
 };
 
 const ELECTRON_MAIN: &str = r#"
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, dialog } = require("electron");
 const readline = require("readline");
 const out = (line) => process.stdout.write(line + "\n");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,6 +49,14 @@ app.whenReady().then(() => {
       out("size " + JSON.stringify(win.getContentSize()));
       win.destroy();
       await wait(200);
+    } else if (request.op === "cancelId") {
+      const controller = new AbortController();
+      controller.abort();
+      const options = { message: "", buttons: request.buttons, signal: controller.signal };
+      if (request.defaultId !== null) options.defaultId = request.defaultId;
+      if (request.cancelId !== null) options.cancelId = request.cancelId;
+      const result = await dialog.showMessageBox(options);
+      out("cancelId " + (result.cancelId ?? result.response));
     } else if (request.op === "activate") {
       app.focus({ steal: true });
       parent.focus();
@@ -532,6 +544,212 @@ async fn activate(cx: &mut AsyncApp, report: &mut Report) {
     );
 }
 
+const CANCEL_CASES: &[(&[&str], Option<usize>, Option<usize>)] = &[
+    (&[], None, None),
+    (&["OK"], None, None),
+    (&["OK"], Some(0), None),
+    (&["Open", "Cancel"], None, None),
+    (&["Open", "Cancel"], Some(0), None),
+    (&["NO", "Yes"], Some(1), None),
+    (&["Continue", "cancel", "No"], None, None),
+    (&["Don't Close", "Close"], Some(0), None),
+    (&["Quit", "Ignore"], Some(0), None),
+    (&["A", "B"], Some(1), None),
+    (&["A", "B", "C"], Some(0), Some(2)),
+    (
+        &["Open in DS Window", "Open in This Window", "Cancel"],
+        Some(0),
+        Some(2),
+    ),
+];
+
+async fn wait_for<T: Clone>(cx: &mut AsyncApp, slot: &Rc<RefCell<Option<T>>>) -> Option<T> {
+    for _ in 0..40 {
+        if let Some(value) = slot.borrow().clone() {
+            return Some(value);
+        }
+        sleep(cx, 50).await;
+    }
+    None
+}
+
+async fn dialogs(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+    for (buttons, default_id, cancel_id) in CANCEL_CASES {
+        let options = MessageBoxOptions {
+            buttons: buttons.iter().map(|b| (*b).to_owned()).collect(),
+            default_id: *default_id,
+            cancel_id: *cancel_id,
+            ..Default::default()
+        };
+        let number = |n: Option<usize>| n.map_or(Json::Null, |n| Json::Number(n as f64));
+        let request = Json::object([
+            ("op", Json::string("cancelId")),
+            (
+                "buttons",
+                Json::Array(buttons.iter().map(|b| Json::string(b)).collect()),
+            ),
+            ("defaultId", number(*default_id)),
+            ("cancelId", number(*cancel_id)),
+        ])
+        .to_compact();
+        let theirs = electron.request(cx, &request, "cancelId ").await;
+        report.check(
+            &format!("cancelId for {buttons:?} default {default_id:?}"),
+            theirs == options.cancel_id().to_string(),
+            format!("ours {}, Electron {theirs}", options.cancel_id()),
+        );
+    }
+
+    let hub = cx.update(|cx| Windows::hubs(cx)[0]);
+    let result: Rc<RefCell<Option<MessageBoxResult>>> = Rc::default();
+    for (checkbox, click) in [(true, "Cancel"), (false, "Open")] {
+        result.borrow_mut().take();
+        let slot = result.clone();
+        cx.update(|cx| {
+            hub.update(cx, |_, window, cx| {
+                windows::message_box(
+                    Some(window),
+                    cx,
+                    MessageBoxOptions {
+                        kind: MessageBoxType::Info,
+                        title: "Alert".to_owned(),
+                        message: "Limited Signals Available".to_owned(),
+                        detail: "Detail".to_owned(),
+                        buttons: vec!["Open".to_owned(), "Cancel".to_owned()],
+                        default_id: Some(0),
+                        checkbox_label: if checkbox {
+                            "Don't Show Again".to_owned()
+                        } else {
+                            String::new()
+                        },
+                        ..Default::default()
+                    },
+                    move |r, _| *slot.borrow_mut() = Some(r),
+                )
+            })
+        })
+        .expect("hub");
+        sleep(cx, 800).await;
+        let clicked = with_window(cx, hub, |w| {
+            (!checkbox || probe::click_sheet_button(w, "Don't Show Again"))
+                && probe::click_sheet_button(w, click)
+        });
+        let got = wait_for(cx, &result).await;
+        let want = MessageBoxResult {
+            response: usize::from(click == "Cancel"),
+            checkbox_checked: checkbox,
+        };
+        report.check(
+            &format!("message box sheet answers {click} with checkbox {checkbox}"),
+            clicked && got == Some(want),
+            format!("{got:?}"),
+        );
+        sleep(cx, 300).await;
+    }
+
+    let dir = std::env::temp_dir().canonicalize().expect("temp dir");
+    let saved: Rc<RefCell<Option<Option<PathBuf>>>> = Rc::default();
+    let slot = saved.clone();
+    let save = SaveDialogOptions {
+        title: "Select export location for layout file".to_owned(),
+        default_path: Some(dir.join("AdvantageScope 2026-11-21.json")),
+        filters: vec![FileFilter {
+            name: "JSON files".to_owned(),
+            extensions: vec!["json".to_owned()],
+        }],
+        create_directory: true,
+        ..Default::default()
+    };
+    cx.update(|cx| {
+        hub.update(cx, |_, window, cx| {
+            windows::save_dialog(Some(window), cx, save, move |p, _| {
+                *slot.borrow_mut() = Some(p)
+            })
+        })
+    })
+    .expect("hub");
+    sleep(cx, 1000).await;
+    let state = with_window(cx, hub, |w| probe::sheet_panel_state(w));
+    let want = probe::PanelState {
+        open: false,
+        title: "Select export location for layout file".to_owned(),
+        allowed_file_types: vec!["json".to_owned()],
+        directory: Some(dir.to_string_lossy().into_owned()),
+        name: "AdvantageScope 2026-11-21.json".to_owned(),
+        can_create_directories: true,
+        ..Default::default()
+    };
+    let matches = state.as_ref().is_some_and(|s| {
+        probe::PanelState {
+            message: String::new(),
+            prompt: String::new(),
+            ..s.clone()
+        } == want
+    });
+    report.check(
+        "save panel sheet is set up from the options",
+        matches,
+        format!("{state:?}"),
+    );
+    with_window(cx, hub, |w| probe::cancel_sheet_panel(w));
+    let got = wait_for(cx, &saved).await;
+    report.check(
+        "cancelled save panel gives no path",
+        got == Some(None),
+        format!("{got:?}"),
+    );
+    sleep(cx, 500).await;
+
+    let opened: Rc<RefCell<Option<Vec<PathBuf>>>> = Rc::default();
+    let slot = opened.clone();
+    let open = OpenDialogOptions {
+        title: "Select the robot log file(s) to open".to_owned(),
+        message: "If multiple files are selected, timestamps will be aligned automatically"
+            .to_owned(),
+        filters: vec![FileFilter {
+            name: "Robot logs".to_owned(),
+            extensions: ["rlog", "wpilog", "wpilogxz", "*"]
+                .map(str::to_owned)
+                .to_vec(),
+        }],
+        open_file: true,
+        multi_selections: true,
+        ..Default::default()
+    };
+    cx.update(|cx| {
+        hub.update(cx, |_, window, cx| {
+            windows::open_dialog(Some(window), cx, open, move |p, _| {
+                *slot.borrow_mut() = Some(p)
+            })
+        })
+    })
+    .expect("hub");
+    sleep(cx, 1000).await;
+    let state = with_window(cx, hub, |w| probe::sheet_panel_state(w));
+    let matches = state.as_ref().is_some_and(|s| {
+        s.open
+            && s.message
+                == "If multiple files are selected, timestamps will be aligned automatically"
+            && s.allowed_file_types.is_empty()
+            && s.can_choose_files
+            && !s.can_choose_directories
+            && s.allows_multiple_selection
+            && !s.can_create_directories
+    });
+    report.check(
+        "open panel sheet is set up from the options, `*` allowing every type",
+        matches,
+        format!("{state:?}"),
+    );
+    with_window(cx, hub, |w| probe::cancel_sheet_panel(w));
+    let got = wait_for(cx, &opened).await;
+    report.check(
+        "cancelled open panel gives no paths",
+        got == Some(Vec::new()),
+        format!("{got:?}"),
+    );
+}
+
 fn main() {
     if asrs_parity::ci::skip_in_ci("window sizes", "a display and the oracle's Electron") {
         return;
@@ -550,6 +768,7 @@ fn main() {
             let mut report = Report::default();
             report.check("Electron is upstream's", version == "39.2.7", &version);
             sizes(cx, &electron, &mut report).await;
+            dialogs(cx, &electron, &mut report).await;
             floating(cx, &electron, &mut report).await;
             drop(electron);
             println!(

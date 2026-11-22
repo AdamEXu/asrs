@@ -251,6 +251,18 @@ pub(super) mod probe {
         None
     }
 
+    pub fn click_sheet_button(_parent: &Window, _title: &str) -> bool {
+        false
+    }
+
+    pub fn sheet_panel_state(_parent: &Window) -> Option<super::super::probe::PanelState> {
+        None
+    }
+
+    pub fn cancel_sheet_panel(_parent: &Window) -> bool {
+        false
+    }
+
     pub fn has_attached_sheet(_window: &Window) -> bool {
         false
     }

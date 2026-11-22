@@ -77,10 +77,7 @@ fn track<V: Render>(id: WindowId, window: &mut Window, entity: &Entity<V>, cx: &
 
 /// Electron's size constraints for the window, converted to content sizes. A constraint with a
 /// zero dimension is `IsEmpty()` there and is not applied.
-fn content_limits(
-    native: &NativeWindow,
-    options: &WindowOptions,
-) -> (Option<Size>, Option<Size>) {
+fn content_limits(native: &NativeWindow, options: &WindowOptions) -> (Option<Size>, Option<Size>) {
     let content = |(w, h): (f64, f64)| {
         if options.use_content_size {
             (w, h)
