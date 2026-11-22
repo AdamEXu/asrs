@@ -18,9 +18,10 @@ use asrs_model::selection_impl::ControlButton;
 use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
-    AnyElement, App, BoxShadow, Context, CursorStyle, ExternalPaths, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled, Window, div, point, px, rgb, rgba,
+    AnyElement, App, BoxShadow, Context, CursorStyle, DispatchPhase, ExternalPaths,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window, canvas, div,
+    point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::symbols::Symbol;
@@ -378,17 +379,32 @@ impl<H: FrameHost> Render for HubFrame<H> {
         self.geometry.sync(self.host.hub());
         let classes = inputs.classes;
 
+        let entity = cx.entity().downgrade();
+        // Window listeners, not hover-gated element ones: a press that leaves the window keeps
+        // delivering moves and its release, as Chromium's mouse capture does upstream.
+        let window_listeners = canvas(
+            |_, _, _| {},
+            move |_, _, window, _| {
+                let frame = entity.clone();
+                window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        let _ = frame.update(cx, |frame, cx| frame.mouse_move(event, cx));
+                    }
+                });
+                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        let _ = entity.update(cx, |frame, cx| frame.mouse_up(cx));
+                    }
+                });
+            },
+        )
+        .absolute()
+        .size_full();
         let mut root = div()
             .id("hub-frame")
             .relative()
             .size_full()
-            .on_mouse_move(
-                cx.listener(|frame, event: &MouseMoveEvent, _, cx| frame.mouse_move(event, cx)),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|frame, _: &MouseUpEvent, _, cx| frame.mouse_up(cx)),
-            )
+            .child(window_listeners)
             .on_drop(cx.listener(|frame, paths: &ExternalPaths, _, _| frame.drop_files(paths)));
         root = match self.shell.cursor() {
             BodyCursor::ColResize => root.cursor(CursorStyle::ResizeColumn),
@@ -466,12 +482,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     place(rect, origin)
                         .id("controls-handle")
                         .cursor(CursorStyle::ResizeRow)
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|frame, _: &MouseDownEvent, _, cx| {
-                                frame.handle_down(Handle::Controls, cx)
-                            }),
-                        )
+                        .on_any_mouse_down(cx.listener(|frame, _: &MouseDownEvent, _, cx| {
+                            frame.handle_down(Handle::Controls, cx)
+                        }))
                         .on_click(
                             cx.listener(|frame, _, _, cx| frame.handle_click(Handle::Controls, cx)),
                         ),
@@ -536,12 +549,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 place(rect, (0.0, 0.0))
                     .id("side-bar-handle")
                     .cursor(CursorStyle::ResizeColumn)
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|frame, _: &MouseDownEvent, _, cx| {
-                            frame.handle_down(Handle::SideBar, cx)
-                        }),
-                    )
+                    .on_any_mouse_down(cx.listener(|frame, _: &MouseDownEvent, _, cx| {
+                        frame.handle_down(Handle::SideBar, cx)
+                    }))
                     .on_click(
                         cx.listener(|frame, _, _, cx| frame.handle_click(Handle::SideBar, cx)),
                     ),

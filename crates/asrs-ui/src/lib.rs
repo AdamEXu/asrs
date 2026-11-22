@@ -3,7 +3,7 @@
 pub mod gpui {
     pub use gpui_kit::{
         AnyElement, AnyWindowHandle, App, AppContext, Application, AsyncApp, Bounds, BoxShadow,
-        Context, Corners, CursorStyle, Div, Entity, ExternalPaths, Global, Hsla,
+        Context, Corners, CursorStyle, DispatchPhase, Div, Entity, ExternalPaths, Global, Hsla,
         InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
         ParentElement, Pixels, Render, RenderImage, Result, ScrollDelta, ScrollEvent, SharedString,
         Stateful, StatefulInteractiveElement, Styled, TitlebarOptions, Window,
