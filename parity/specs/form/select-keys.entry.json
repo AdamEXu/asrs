@@ -82,6 +82,17 @@
           ["focus"],
           ["char", "b", 100]
         ]
+      },
+      {
+        "markup": "<select><option value=\"a\">Alpha</option><option value=\"b\">Beta</option><option value=\"br\">Bravo</option></select>",
+        "ops": [
+          ["char", "b", 100],
+          ["blur"],
+          ["focus"],
+          ["char", "r", 300],
+          ["char", " ", 400],
+          ["char", "b", 500]
+        ]
       }
     ]
   }

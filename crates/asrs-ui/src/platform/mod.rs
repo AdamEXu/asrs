@@ -273,6 +273,7 @@ pub struct SelectMenuItem {
     pub label: String,
     pub kind: SelectMenuItemKind,
     pub enabled: bool,
+    /// The item's `title`; empty sets no tool tip.
     pub tool_tip: String,
 }
 

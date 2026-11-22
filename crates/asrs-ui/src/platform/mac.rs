@@ -658,7 +658,9 @@ fn build_select_menu(
                 &NSString::new(),
             )
         };
-        ns_item.setToolTip(Some(&NSString::from_str(&item.tool_tip)));
+        if !item.tool_tip.is_empty() {
+            ns_item.setToolTip(Some(&NSString::from_str(&item.tool_tip)));
+        }
         ns_item.setEnabled(item.enabled && item.kind != SelectMenuItemKind::Group);
         // SAFETY: the target is retained by the menu through `retain_target`.
         unsafe { ns_item.setTarget(Some(target)) };

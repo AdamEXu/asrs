@@ -96,9 +96,11 @@ pub fn select_key(keystroke: &Keystroke, type_ahead_active: bool) -> SelectKey {
     SelectKey::TypeAhead(code)
 }
 
-/// `u_isprint` for a keypress character: anything but a C0 or C1 control.
+/// `u_isprint`: any general category outside `C` (controls, format characters, surrogates,
+/// private use and unassigned code points).
 fn is_printable(code: u16) -> bool {
-    !(code < 0x20 || (0x7F..=0x9F).contains(&code))
+    let category = icu_properties::maps::general_category().get32(u32::from(code));
+    !icu_properties::GeneralCategoryGroup::Other.contains(category)
 }
 
 /// The popup `GetPopupMenuInfo` builds for `items`, and for each of its rows the list item it
@@ -601,11 +603,18 @@ impl<M: SelectModel> Select<M> {
         self.popup_open
     }
 
+    /// `select.focus()`, which a disabled select ignores.
+    pub fn focus(&self, window: &mut Window, cx: &mut App) {
+        if !self.disabled {
+            window.focus(&self.focus, cx);
+        }
+    }
+
     fn mouse_down(&mut self, _: &MouseDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.disabled {
             return;
         }
-        window.focus(&self.focus, cx);
+        self.focus(window, cx);
         self.open_popup(window, cx);
     }
 
@@ -716,6 +725,14 @@ mod tests {
                 SelectKey::TypeAhead(0xe9),
             ),
             (key("x", Some("\u{1f600}"), none), false, ignore),
+            (key("x", Some("\u{200b}"), none), false, ignore),
+            (key("x", Some("\u{f710}"), none), false, ignore),
+            (key("x", Some("\u{378}"), none), false, ignore),
+            (
+                key("x", Some("\u{a0}"), none),
+                false,
+                SelectKey::TypeAhead(0xa0),
+            ),
         ] {
             assert_eq!(
                 select_key(&stroke, active),

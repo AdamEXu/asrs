@@ -24,6 +24,7 @@ asrs-canvas = { path = "../asrs-canvas" }
 gpui-kit.workspace = true
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
+icu_properties = "=1.4.3"
 image = { version = "=0.25.10", default-features = false }
 roxmltree = "=0.21.2"
 simplecss = "=0.2.2"

@@ -197,13 +197,14 @@ fn open(headless: &mut HeadlessCapture, markup: &str, focus: bool) -> Step {
                 });
             })
             .detach();
-            if focus && !disabled {
-                let handle = entity.read(cx).focus_handle(cx);
-                window.focus(&handle, cx);
+            window.activate_window();
+            if focus {
+                entity.update(cx, |select, cx| select.focus(window, cx));
             }
             entity
         })
         .expect("window");
+    headless.context().run_until_parked();
     headless.capture(window.into()).expect("first frame");
     Step {
         window,
@@ -257,12 +258,7 @@ fn apply(headless: &mut HeadlessCapture, step: &Step, op: &[Json]) {
                     window.blur(cx);
                 }
             }
-            "focus" => {
-                if !entity.read(cx).is_disabled() {
-                    let handle = entity.read(cx).focus_handle(cx);
-                    window.focus(&handle, cx);
-                }
-            }
+            "focus" => entity.update(cx, |select, cx| select.focus(window, cx)),
             "press" => {
                 assert!(
                     entity.read(cx).is_disabled(),
@@ -422,18 +418,16 @@ fn select_view() -> usize {
         let length = read("options.length")
             .and_then(|v| v.as_f64())
             .expect("length") as usize;
+        let markup = record.string("form").expect("form");
         let expected_label = if index >= 0.0 {
             match read(&format!("options.{index}.text")) {
                 Some(Value::String(s)) => s.to_string_lossy(),
-                _ => continue,
+                other => panic!("{markup}: options.{index}.text is {other:?}"),
             }
         } else {
             String::new()
         };
-        let markup = record.string("form").expect("form");
-        if !markup.starts_with("<select") {
-            continue;
-        }
+        assert!(markup.starts_with("<select"), "not a select: {markup}");
         let model = replayed(&records, record);
         let select = FormSelect::new(model);
         assert_eq!(select.shown_text(), expected_label, "{markup} label");
@@ -459,6 +453,7 @@ fn select_view() -> usize {
         assert_eq!(selected_option.unwrap_or(-1.0), index, "{markup} popup row");
         checked += 1;
     }
+    assert_eq!(checked, records.len());
     checked
 }
 
