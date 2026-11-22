@@ -107,7 +107,7 @@ fn value_as_number(value: &JsString) -> f64 {
 
 /// An `<input type="number">`. Assigning `value` keeps the string when
 /// `ParseToDoubleForNumberType` reads it as a finite double, and empties it otherwise.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct NumberInput {
     value: JsString,
 }

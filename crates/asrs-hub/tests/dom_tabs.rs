@@ -2487,7 +2487,7 @@ impl Runner {
             .and_then(|v| js_json::to_js(&Value::from_json_lenient(v)).ok())
             .and_then(JsValue::into_string);
         if let (Some(value), Some(dom)) = (value, self.selected_table_dom()) {
-            dom.borrow_mut().jump_value = value;
+            dom.borrow_mut().jump_input.set_value(value);
         }
     }
 

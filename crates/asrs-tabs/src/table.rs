@@ -19,6 +19,7 @@ use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 
 use crate::cx::{TabCx, display_offset};
+use crate::form::NumberInput;
 
 const DRAG_THRESHOLD_PX: f64 = 5.0;
 const DEFAULT_ROW_HEIGHT_PX: f64 = 25.0;
@@ -47,8 +48,8 @@ pub struct TableDom {
     /// `DRAG_HIGHLIGHT.hidden` and its `style.left` px value.
     pub drag_highlight_hidden: bool,
     pub drag_highlight_left: Option<f64>,
-    /// `INPUT_FIELD.value`.
-    pub jump_value: JsString,
+    /// `INPUT_FIELD`, an `<input type="number">`.
+    pub jump_input: NumberInput,
     /// The last `mousemove` `clientY` on `TABLE_BODY`; `None` after `mouseleave`.
     pub hover_cursor_y: Option<f64>,
 }
@@ -679,7 +680,7 @@ impl TableRenderer {
 
     /// The jump input's Enter handler and jump-button click.
     pub fn jump(&mut self, cx: &mut impl TabCx) {
-        let value = self.dom.borrow().jump_value.clone();
+        let value = self.dom.borrow().jump_input.value().clone();
         let target = if value.is_empty() {
             if self.selection_mode != SelectionMode::Idle {
                 self.selected_time
