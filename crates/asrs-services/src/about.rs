@@ -1,6 +1,7 @@
 //! `createAboutWindow()` in `src/main/electron/main.ts`.
 
-use asrs_model::build_constants::Distribution;
+use asrs_js::string::JsString;
+use asrs_model::build_constants::{self, Distribution};
 
 use crate::dialog::MessageBox;
 
@@ -36,14 +37,51 @@ pub struct AboutEnv<'a> {
 /// `createAboutWindow()`'s box and copy text (`BUILD_DATE` and `COPYRIGHT` from
 /// `asrs_model::build_constants`).
 pub fn about(env: &AboutEnv<'_>) -> About {
-    let _ = env;
-    todo!("P07: createAboutWindow")
+    let version = if env.packaged {
+        env.version
+    } else {
+        "Development"
+    };
+    let distribution = match env.distribution {
+        Distribution::WpiLib => "WPILib",
+        _ => "FRC 6328",
+    };
+    let copy_text = [
+        format!("Version: {version}"),
+        format!("Distribution: {distribution}"),
+        format!("Platform: {}-{}", env.platform, env.arch),
+        format!("Build Date: {}", build_constants::BUILD_DATE),
+        format!("Electron: {ELECTRON_VERSION}"),
+        format!("Chromium: {CHROMIUM_VERSION}"),
+        format!("Node: {NODE_VERSION}"),
+    ]
+    .join("\n");
+    About {
+        message_box: MessageBox {
+            kind: "info",
+            title: "About",
+            message: JsString::from(env.app_name),
+            detail: JsString::from(format!("{}\n\n{copy_text}", build_constants::COPYRIGHT)),
+            buttons: Some(vec![
+                "Close",
+                if env.platform == "win32" {
+                    "Copy and Close"
+                } else {
+                    "Copy & Close"
+                },
+            ]),
+            default_id: Some(0.0),
+            cancel_id: None,
+            icon: true,
+            modal: false,
+        },
+        copy_text,
+    }
 }
 
 impl About {
     /// The clipboard text written once the box resolves with `response`, if any.
     pub fn response(&self, response: usize) -> Option<&str> {
-        let _ = response;
-        todo!("P07: About response")
+        (response == 1).then_some(self.copy_text.as_str())
     }
 }

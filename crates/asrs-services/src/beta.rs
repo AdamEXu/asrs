@@ -196,14 +196,68 @@ pub fn beta_startup(
     distribution: Distribution,
     app_name: &str,
 ) -> Result<BetaStartup, JsError> {
-    let _ = (fs, beta_file, config, clock, distribution, app_name);
-    todo!("P07: dom-ready beta block")
+    let Some(config) = config else {
+        return Ok(BetaStartup::Nothing);
+    };
+    if is_beta_expired(Some(config), clock) {
+        let mut detail = JsString::from("The ");
+        detail.push_str(&JsString::from(app_name));
+        detail.push_str(&JsString::from(if config.is_alpha {
+            " alpha is complete. "
+        } else {
+            " beta is complete. "
+        }));
+        detail.push_str(&JsString::from(if distribution == Distribution::WpiLib {
+            "Please update to the latest stable release of WPILib.".to_owned()
+        } else {
+            format!("Please download the latest stable release of {app_name} from GitHub.")
+        }));
+        return Ok(BetaStartup::Expired(MessageBox {
+            kind: "info",
+            title: "Alert",
+            message: JsString::from(if config.is_alpha {
+                "Alpha is complete"
+            } else {
+                "Beta is complete"
+            }),
+            detail,
+            buttons: Some(vec!["Quit", "Ignore"]),
+            default_id: Some(0.0),
+            cancel_id: None,
+            icon: false,
+            modal: true,
+        }));
+    }
+    if !ops::to_boolean(&is_beta_welcome_complete(fs, beta_file)?) {
+        return Ok(BetaStartup::Welcome);
+    }
+    if should_prompt_beta_survey(fs, beta_file, Some(config), clock)? {
+        let mut detail =
+            JsString::from("Please take 30 seconds to share your experience using the ");
+        detail.push_str(&JsString::from(app_name));
+        detail.push_str(&JsString::from(if config.is_alpha {
+            " alpha. We'll keep this quick."
+        } else {
+            " beta. We'll keep this quick."
+        }));
+        return Ok(BetaStartup::Survey(MessageBox {
+            kind: "info",
+            title: "Alert",
+            message: JsString::from("Share feedback?"),
+            detail,
+            buttons: Some(vec!["Open", "Not Now"]),
+            default_id: Some(0.0),
+            cancel_id: None,
+            icon: false,
+            modal: true,
+        }));
+    }
+    Ok(BetaStartup::Nothing)
 }
 
 /// The expired alert resolved with `response`: whether main calls `app.quit()`.
 pub fn beta_expired_response(response: usize) -> bool {
-    let _ = response;
-    todo!("P07: expired alert response")
+    response == 0
 }
 
 /// The survey prompt resolved with `response`: `openBetaSurvey()` or `delayBetaSurvey()`.
@@ -215,8 +269,11 @@ pub fn beta_survey_response(
     response: usize,
     open: impl FnOnce(&str),
 ) -> Result<(), JsError> {
-    let _ = (fs, beta_file, config, clock, response, open);
-    todo!("P07: survey prompt response")
+    if response == 0 {
+        open_beta_survey(fs, beta_file, config, open)
+    } else {
+        delay_beta_survey(fs, beta_file, clock)
+    }
 }
 
 /// The `BrowserWindow` options `openBetaWelcome` passes (it is always modal to the hub and
@@ -233,14 +290,19 @@ pub struct WelcomeWindow {
 
 /// `openBetaWelcome`'s window options on `platform` (`process.platform`).
 pub fn beta_welcome_window(platform: &str) -> WelcomeWindow {
-    let _ = platform;
-    todo!("P07: beta welcome window")
+    WelcomeWindow {
+        width: 450.0,
+        height: if platform == "win32" { 530.0 } else { 490.0 },
+        use_content_size: true,
+        resizable: false,
+        modal: true,
+        show: false,
+    }
 }
 
 /// The welcome page's dom-ready: the value main posts on the new port (`isAlpha()`).
 pub fn beta_welcome_ready(config: Option<&BetaConfig>) -> bool {
-    let _ = config;
-    todo!("P07: beta welcome port message")
+    config.is_some_and(|c| c.is_alpha)
 }
 
 /// Any message from the welcome page: `saveBetaWelcomeComplete()`, then
@@ -251,11 +313,12 @@ pub fn beta_welcome_done(
     config: Option<&BetaConfig>,
     clock: &dyn Clock,
 ) -> Result<(), JsError> {
-    let _ = (fs, beta_file, config, clock);
-    todo!("P07: beta welcome completion")
+    save_beta_welcome_complete(fs, beta_file)?;
+    should_prompt_beta_survey(fs, beta_file, config, clock)?;
+    Ok(())
 }
 
 /// The welcome window's "close" event: whether main calls `app.quit()`.
 pub fn beta_welcome_closed() -> bool {
-    todo!("P07: beta welcome close")
+    true
 }
