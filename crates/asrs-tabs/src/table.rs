@@ -591,6 +591,10 @@ impl TableRenderer {
         }
     }
 
+    pub fn dom(&self) -> &Rc<RefCell<TableDom>> {
+        &self.dom
+    }
+
     /// `TABLE_BODY`'s `mousemove`.
     pub fn body_mouse_move(&mut self, client_y: f64) {
         self.dom.borrow_mut().hover_cursor_y = Some(client_y);
