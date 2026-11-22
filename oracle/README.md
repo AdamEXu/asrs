@@ -941,6 +941,10 @@ Determinism on Blink:
   before the next step, at the same point on every run.
 - CSS transitions and animations are off (`transition: none; animation: none`), because they
   run on the real clock; geometry reads see the end state.
+- `requestIdleCallback`, `Element.animate` (Web Animations) and `WebSocket` are Blink's own and
+  run on the real clock; jsdom has none of them, so upstream code that feature-tests for them
+  (`NT4Source`'s idle loop, `VideoController`'s button animation) takes another path on each
+  backend. No fixture on Blink reaches them yet; one that does needs them faked first (#145).
 - `innerText`, `TextEncoder` and `TextDecoder` are Chromium's own. Exceptions in event
   listeners reach the page's `error` event and unhandled rejections its `unhandledrejection`
   event; both are written as `{"exception": "event" | "unhandledRejection", "error": "<name>:
