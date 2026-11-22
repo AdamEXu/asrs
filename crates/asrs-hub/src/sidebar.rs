@@ -1295,6 +1295,13 @@ impl Sidebar {
     }
 
     /// Number tuning input focus/blur/value/keydown (the DOM element's own state).
+    /// Whether a tuning number input has focus.
+    pub fn number_input_focused(&self) -> bool {
+        self.nodes
+            .iter()
+            .any(|node| matches!(&node.value, ValueState::Number(state) if state.focused))
+    }
+
     pub fn number_input_focus(&mut self, flat_index: usize, focused: bool) {
         if let Some(id) = self.flat_id(flat_index)
             && let ValueState::Number(state) = &mut self.nodes[id].value

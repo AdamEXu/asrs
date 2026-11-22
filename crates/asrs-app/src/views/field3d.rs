@@ -1110,11 +1110,12 @@ impl<H: FrameHost> HubFrame<H> {
         });
     }
 
+    /// camera-controls' `wheel` listener: `WheelEvent.deltaY` is Chromium's wheel delta negated.
     fn field3d_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {
         let Some(shown) = self.field3d.shown else {
             return;
         };
-        let delta_y = f64::from(platform::wheel_delta(event).y);
+        let delta_y = -f64::from(platform::wheel_delta(event).y);
         self.host_mut().input(cx, |hub| {
             with_tab(hub, shown.index, |tab, _| {
                 if let Some(implementation) = tab.renderer.implementation_mut() {
@@ -1241,7 +1242,8 @@ impl<H: FrameHost> HubFrame<H> {
                     text::measure(cx, &style, &indented, scale).0
                 })
                 .fold(0.0, math::max2);
-            math::ceil(widest) + 4.0 + 1.0 + 15.0 + 2.0
+            let device = f64::from(scale);
+            math::ceil(widest * device) / device + 4.0 + 1.0 + 15.0 + 2.0
         };
         let select_x = content_x + layout_unit((width - select_w) / 2.0);
         let select_y = controls[1] + 5.0 + TITLE_HEIGHT + 8.0;
