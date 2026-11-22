@@ -484,6 +484,18 @@ fn sub_fragment(
     }
 }
 
+/// Where the first character's cluster ends: the line's first character is clipped, never
+/// replaced by the ellipsis (`LineTruncator::TruncateChild`).
+fn first_cluster_end(fragment: &Fragment, len: usize) -> usize {
+    fragment
+        .glyphs
+        .iter()
+        .map(|g| g.cluster as usize)
+        .filter(|&c| c > 0)
+        .min()
+        .unwrap_or(len)
+}
+
 fn boundaries_of(fragment: &Fragment, width: f32, len: usize) -> Vec<f32> {
     boundaries(
         &Shaped {
@@ -517,20 +529,24 @@ fn truncate(
     if style.direction == Direction::Ltr {
         let limit = available - ellipsis_width;
         let mut end = 0;
-        for (f, width) in fragments {
+        for (i, (f, width)) in fragments.into_iter().enumerate() {
             if f.x + f.width <= limit {
                 end = f.x + f.width;
                 out.push(f);
                 continue;
             }
-            if f.x < limit {
+            let first = i == 0;
+            if f.x < limit || (first && f.x < available) {
                 let len = utf16_len(&f.text);
                 let at = boundaries_of(&f, width, len);
                 let room = (limit - f.x) as f32 / 64.0;
-                let fit = (0..=len)
+                let mut fit = (0..=len)
                     .rev()
                     .find(|&k| at[k] * scale <= room)
                     .unwrap_or(0);
+                if fit == 0 && first {
+                    fit = first_cluster_end(&f, len);
+                }
                 end = f.x;
                 if fit > 0 {
                     let kept = lu_ceil(at[fit] * scale);
@@ -544,20 +560,29 @@ fn truncate(
     } else {
         let limit = ellipsis_width;
         let mut start = available;
-        for (f, width) in fragments.into_iter().rev() {
+        for (i, (f, width)) in fragments.into_iter().rev().enumerate() {
             if f.x >= limit {
                 start = f.x;
                 out.push(f);
                 continue;
             }
+            let first = i == 0;
             let right = f.x + f.width;
-            if right > limit {
+            if right > limit || (first && right > 0) {
                 let len = utf16_len(&f.text);
                 let at = boundaries_of(&f, width, len);
                 let room = (right - limit) as f32 / 64.0;
-                let fit = (0..=len)
+                let mut fit = (0..=len)
                     .find(|&k| (width - at[k]) * scale <= room)
                     .unwrap_or(len);
+                if fit == len && first {
+                    fit = f
+                        .glyphs
+                        .iter()
+                        .map(|g| g.cluster as usize)
+                        .max()
+                        .unwrap_or(0);
+                }
                 start = right;
                 if fit < len {
                     let kept = lu_ceil((width - at[fit]) * scale);

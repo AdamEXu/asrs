@@ -159,7 +159,7 @@ function emojiScene(dark: boolean): TextScene {
   ];
   fonts.forEach(([id, font], i) => {
     TAB_TITLES.forEach((text, j) => {
-      const x = 10 + (j % 4) * 190 + (i % 4) * 0.25 + (j % 3) * 0.3;
+      const x = 10 + (j % 4) * 190 + (i % 4) * 0.25 + (j % 3) * 0.125;
       const y = 8 + i * 110 + Math.floor(j / 4) * 26;
       boxes.push(box({ id: `${id}/${j}`, x, y, font, text, color }));
     });
