@@ -107,7 +107,27 @@ const rangeProbes = [
   { markup: '<input type="range">', ops: RANGE_VALUES.map((v) => ["set", "value", v]), read: RANGE_READ },
   { markup: '<input type="range" min="1" max="1" step="1" value="0">', read: RANGE_READ },
   { markup: '<input type="range" value="250" min="1" max="300" step="1">', read: RANGE_READ },
-  { markup: '<input type="range" value="2.5" min="1" max="300" step="1">', read: RANGE_READ }
+  { markup: '<input type="range" value="2.5" min="1" max="300" step="1">', read: RANGE_READ },
+  {
+    markup: '<input type="range" value="0.5" max="10">',
+    ops: [
+      ["set", "value", "3"],
+      ["setAttribute", "value", "0.25"],
+      ["set", "value", "3"],
+      ["set", "min", "abc"],
+      ["set", "min", "0"]
+    ],
+    read: RANGE_READ
+  },
+  {
+    markup: '<input type="range" value="0.5" max="10">',
+    ops: [
+      ["setAttribute", "value", "4.25"],
+      ["set", "max", "5"],
+      ["setAttribute", "value", "abc"]
+    ],
+    read: RANGE_READ
+  }
 ];
 
 const optionReads = (n) =>

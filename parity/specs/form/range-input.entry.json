@@ -519,6 +519,74 @@
             "step"
           ]
         }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"range\" value=\"0.5\" max=\"10\">",
+          "ops": [
+            [
+              "set",
+              "value",
+              "3"
+            ],
+            [
+              "setAttribute",
+              "value",
+              "0.25"
+            ],
+            [
+              "set",
+              "value",
+              "3"
+            ],
+            [
+              "set",
+              "min",
+              "abc"
+            ],
+            [
+              "set",
+              "min",
+              "0"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber",
+            "min",
+            "max",
+            "step"
+          ]
+        }
+      },
+      {
+        "form": {
+          "markup": "<input type=\"range\" value=\"0.5\" max=\"10\">",
+          "ops": [
+            [
+              "setAttribute",
+              "value",
+              "4.25"
+            ],
+            [
+              "set",
+              "max",
+              "5"
+            ],
+            [
+              "setAttribute",
+              "value",
+              "abc"
+            ]
+          ],
+          "read": [
+            "value",
+            "valueAsNumber",
+            "min",
+            "max",
+            "step"
+          ]
+        }
       }
     ]
   }
