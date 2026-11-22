@@ -1,5 +1,5 @@
 {
-  "about": "Interaction: restores a layout without asset-dependent tabs (a renamed line graph), then drags the sidebar handle from 300 to 362 px and the controls handle up by 70 px with the pointer; the saved HubState (sidebar width, controls height) must be byte-equal. Masks as in hub-empty until U07, U08 and U11 land",
+  "about": "Interaction: restores a layout without asset-dependent tabs (a renamed line graph), then drags the sidebar handle from 300 to 362 px and the controls handle up by 70 px with the pointer; the saved HubState (sidebar width, controls height) must be byte-equal. Masks as in hub-empty until U08 and U11 land",
   "actions": [
     {
       "main": "restore-state",
@@ -110,7 +110,6 @@
         ".controls-handle"
       ],
       "masks": [
-        ".side-bar",
         ".tab-bar",
         ".renderer-content",
         ".controls-content"

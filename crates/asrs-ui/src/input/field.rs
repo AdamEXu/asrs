@@ -345,6 +345,7 @@ impl<M: FieldModel> Render for TextField<M> {
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
         let paint = |s: &str, rgba_hex: u32| {
             Text::new(s.to_owned(), text_style)
+                .form_control()
                 .color(rgba_hex >> 8)
                 .subpixel(subpixel.0, subpixel.1)
                 .w(px(right - left))

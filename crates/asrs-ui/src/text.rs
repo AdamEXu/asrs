@@ -274,6 +274,7 @@ pub struct Text {
     color: [u8; 3],
     subpixel: (f32, f32),
     probe: Option<SharedString>,
+    form_control: bool,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -288,6 +289,7 @@ impl Text {
             color: [0x22; 3],
             subpixel: (0.0, 0.0),
             probe: None,
+            form_control: false,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -302,6 +304,13 @@ impl Text {
     /// is painted from the unsnapped position, as Chromium paints it.
     pub fn subpixel(mut self, dx: f32, dy: f32) -> Self {
         self.subpixel = (dx, dy);
+        self
+    }
+
+    /// Text a form control draws (a value or placeholder): Chromium keeps it in the control's
+    /// shadow tree, so the DOM dump has no text node for it and parity captures leave it out.
+    pub fn form_control(mut self) -> Self {
+        self.form_control = true;
         self
     }
 
@@ -452,7 +461,9 @@ impl Element for Text {
             if let Some(id) = &self.probe {
                 probe::record(cx, id, bounds, layout, *origin);
             }
-            crate::parity::record_text(cx, probe::text_run(layout, *origin));
+            if !self.form_control {
+                crate::parity::record_text(cx, probe::text_run(layout, *origin));
+            }
         }
     }
 }
