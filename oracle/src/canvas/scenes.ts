@@ -1,3 +1,4 @@
+import field2dTraces from "./field2dTraces.json";
 import lineGraphTraces from "./lineGraphTraces.json";
 import timelineTraces from "./timelineTraces.json";
 
@@ -1321,6 +1322,41 @@ function lineGraphScenes(): Scene[] {
   );
 }
 
+// A stand-in field image: carpet gradient, 2 px white lines every 48 px and two alliance
+// blocks, so nearest-neighbour blits of it show any off-by-one in the source or destination
+// rectangle.
+function fieldImage(width: number, height: number): string {
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      let rgb = [60 + Math.floor((x * 60) / width), 90 + Math.floor((y * 50) / height), 70];
+      if (x % 48 < 2 || y % 48 < 2) rgb = [235, 235, 235];
+      if (x > width * 0.1 && x < width * 0.2 && y > height * 0.3 && y < height * 0.7) rgb = [200, 40, 40];
+      if (x > width * 0.8 && x < width * 0.9 && y > height * 0.3 && y < height * 0.7) rgb = [40, 60, 200];
+      data.set([...rgb, 255], i);
+    }
+  }
+  return Buffer.from(data).toString("base64");
+}
+
+// Frames recorded from upstream's Field2dRenderer in dom/field-2d vectors, which asrs-tabs's
+// renderer reproduces call for call. The field image is `fieldImage` at the recorded natural
+// size; the heatmap canvas is left transparent (its pixels are `canvas heatmap`'s gate).
+function field2dScenes(): Scene[] {
+  return field2dTraces.map((t) => {
+    const sources: Cmd[] = Object.entries(t.images as { [src: string]: number[] }).map(([src, [w, h]]) => [
+      "image",
+      src,
+      w,
+      h,
+      fieldImage(w, h)
+    ]);
+    sources.push(["canvas", "heatmap", 1, 1, []]);
+    return scene(t.name, "field2d", "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, [...sources, ...(t.cmds as Cmd[])]);
+  });
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -1335,7 +1371,8 @@ export function allScenes(): Scene[] {
     shapes("shapes-1x", 1),
     longHairlines(),
     ...timelineScenes(),
-    ...lineGraphScenes()
+    ...lineGraphScenes(),
+    ...field2dScenes()
   ];
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));

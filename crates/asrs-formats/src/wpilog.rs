@@ -466,6 +466,9 @@ fn index_with_limit(data: &[u8], record_limit: usize) -> Result<WpilogIndex, Ind
     let mut records: Vec<(u32, u32)> = Vec::with_capacity(capacity);
 
     while offset.wrapping_add(4) <= buffer_size {
+        if records.len().is_multiple_of(4096) && crate::worker::stop_requested() {
+            return Err(IndexError);
+        }
         let length_bitfield = memory.byte(offset)?;
         let entry_length = usize::from(length_bitfield & 0x3) + 1;
         let data_size_length = usize::from((length_bitfield >> 2) & 0x3) + 1;

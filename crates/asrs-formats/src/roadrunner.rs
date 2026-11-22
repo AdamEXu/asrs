@@ -432,6 +432,9 @@ impl RrLogDecoder {
         let mut steps = CycleDetector::new();
         let mut restarts = CycleDetector::new();
         loop {
+            if crate::worker::stop_requested() {
+                return Err(Abort::Threw);
+            }
             if steps.period(offset).is_some() {
                 return Err(Abort::NeverReturns);
             }
