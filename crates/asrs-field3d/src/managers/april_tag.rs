@@ -4,6 +4,7 @@ use std::sync::Arc;
 use asrs_js::math;
 use asrs_js::number;
 use asrs_js::string::JsString;
+use asrs_log::util::zfill;
 
 use super::{
     AprilTagObj, ManagerContext, ManagerError, ObjectManager, concat, rotation3d_to_quaternion,
@@ -39,13 +40,6 @@ pub struct AprilTagManager {
     white_material: Arc<PhongMaterial>,
     id_textures: Vec<Arc<Texture>>,
     requests: Vec<TextureRequest>,
-}
-
-fn zfill(mut s: JsString, length: usize) -> JsString {
-    while s.len() < length {
-        s = concat(&[&JsString::from("0"), &s]);
-    }
-    s
 }
 
 impl AprilTagManager {
@@ -170,7 +164,7 @@ impl ObjectManager for AprilTagManager {
                     scene.graph.add(self.ctx.root, object_id);
                     let texture_name = match id_text {
                         None => JsString::from("smile"),
-                        Some(text) => zfill(text, 3),
+                        Some(text) => zfill(&text, 3.0),
                     };
                     let url = concat(&[
                         &JsString::from("../www/textures/apriltag-"),

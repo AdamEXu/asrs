@@ -75,6 +75,10 @@ impl HeatmapManager {
         &self.heatmap
     }
 
+    pub fn heatmap_mut(&mut self) -> &mut Heatmap {
+        &mut self.heatmap
+    }
+
     pub fn mesh(&self) -> Option<ObjectId> {
         self.mesh
     }

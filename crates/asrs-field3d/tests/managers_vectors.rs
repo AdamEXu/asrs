@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use asrs_canvas::Raster;
 use asrs_field3d::managers::{
     AprilTagManager, AprilTagObj, AprilTagVariant, AxesManager, AxesObj, ConeManager, ConeObj,
     GamePieceManager, GamePieceObj, GamePieces, HeatmapField, HeatmapManager, HeatmapObj,
@@ -469,12 +470,47 @@ impl Case {
         }
     }
 
+    /// The recording names only a canvas texture's canvas, whose contents the cone traces and
+    /// the heatmap store pin. Upstream's `needsUpdate` means the texture shows those contents.
+    fn check_canvas_pixels(&mut self, id: u64, texture: &Texture) -> Result<()> {
+        let current = match &mut self.manager {
+            Manager::Cone(m) => {
+                let canvas = if id == 0 {
+                    m.main_canvas()
+                } else {
+                    m.base_canvas()
+                }
+                .canvas();
+                let mut raster =
+                    Raster::new(canvas.width, canvas.height).ok_or("cone canvas size")?;
+                for call in &canvas.calls {
+                    raster.apply(call);
+                }
+                let pixmap = raster.pixmap();
+                asrs_canvas::pixels::read_rect(pixmap, 0, 0, pixmap.width(), pixmap.height())
+                    .ok_or("whole-canvas read")?
+                    .data
+            }
+            Manager::Heatmap(m) => match m.heatmap_mut().image_data() {
+                Ok(Some(image)) => image.data,
+                _ => return Ok(()),
+            },
+            _ => return Ok(()),
+        };
+        if texture.rgba[..] == current[..] {
+            Ok(())
+        } else {
+            Err(format!("canvas {id}'s texture is not its current pixels"))
+        }
+    }
+
     fn texture(&mut self, texture: Option<&Arc<Texture>>) -> Result<Value> {
         let Some(texture) = texture else {
             return Ok(Value::Null);
         };
         let source = match self.source(texture)? {
             Source::Canvas(id) => {
+                self.check_canvas_pixels(id, texture)?;
                 let label = self.labels.label(&Source::Canvas(id));
                 vec![Value::string("canvas"), num(label as f64)]
             }
