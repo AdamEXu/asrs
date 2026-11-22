@@ -172,13 +172,19 @@ impl Tally {
 /// `hub` is the window id a modal box must be parented to.
 pub fn check_box(ctx: &str, parent: &Json, options: &Value, actual: &MessageBox, hub: Option<f64>) {
     match parent {
-        Json::Null => assert!(!actual.modal, "{ctx}: port parents a box upstream shows unparented"),
+        Json::Null => assert!(
+            !actual.modal,
+            "{ctx}: port parents a box upstream shows unparented"
+        ),
         other => {
             let id = other.as_f64().unwrap_or_else(|| {
                 tree_number(&Value::from_json(other).expect("parent id"))
                     .unwrap_or_else(|| panic!("{ctx}: parent {}", other.to_compact()))
             });
-            assert!(actual.modal, "{ctx}: port shows unparented a box upstream parents");
+            assert!(
+                actual.modal,
+                "{ctx}: port shows unparented a box upstream parents"
+            );
             assert_eq!(Some(id), hub, "{ctx}: box parent is not the hub");
         }
     }
@@ -226,17 +232,32 @@ pub fn check_box(ctx: &str, parent: &Json, options: &Value, actual: &MessageBox,
     }
     let has = |k: &str| seen.iter().any(|s| s == k);
     assert_eq!(actual.icon, has("icon"), "{ctx}: icon presence");
-    assert_eq!(actual.buttons.is_some(), has("buttons"), "{ctx}: buttons presence");
-    assert_eq!(actual.default_id.is_some(), has("defaultId"), "{ctx}: defaultId presence");
-    assert_eq!(actual.cancel_id.is_some(), has("cancelId"), "{ctx}: cancelId presence");
+    assert_eq!(
+        actual.buttons.is_some(),
+        has("buttons"),
+        "{ctx}: buttons presence"
+    );
+    assert_eq!(
+        actual.default_id.is_some(),
+        has("defaultId"),
+        "{ctx}: defaultId presence"
+    );
+    assert_eq!(
+        actual.cancel_id.is_some(),
+        has("cancelId"),
+        "{ctx}: cancelId presence"
+    );
 }
 
 /// The release identity's box must be upstream's with the app name substituted in the
 /// presentation strings and nothing else (PLAN note 38).
 pub fn check_release_box(ctx: &str, upstream: &MessageBox, release: &MessageBox) {
     let swap = |s: &JsString| {
-        s.replace_all(&JsString::from(UPSTREAM_NAME), &JsString::from(RELEASE_NAME))
-            .expect("string pattern")
+        s.replace_all(
+            &JsString::from(UPSTREAM_NAME),
+            &JsString::from(RELEASE_NAME),
+        )
+        .expect("string pattern")
     };
     let expected = MessageBox {
         message: swap(&upstream.message),
@@ -253,7 +274,12 @@ pub fn cve_object(json: &Json, ctx: &str) -> Json {
         Value::Object(pairs) => Json::Object(
             pairs
                 .into_iter()
-                .map(|(k, v)| (k, asrs_parity::json::parse(&v.encode()).expect("CVE-1 is JSON")))
+                .map(|(k, v)| {
+                    (
+                        k,
+                        asrs_parity::json::parse(&v.encode()).expect("CVE-1 is JSON"),
+                    )
+                })
                 .collect(),
         ),
         other => panic!("{ctx}: expected an object, got {}", other.encode()),

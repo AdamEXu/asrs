@@ -60,7 +60,11 @@ impl LicenseHost for Host {
             "{}: readdir of {path:?}, which is not a directory",
             self.ctx
         );
-        let prefix = if base.is_empty() { String::new() } else { base + "/" };
+        let prefix = if base.is_empty() {
+            String::new()
+        } else {
+            base + "/"
+        };
         self.entries
             .iter()
             .filter_map(|(p, _)| p.strip_prefix(&prefix))
@@ -122,7 +126,11 @@ impl LicenseHost for Host {
     fn write(&mut self, path: &str, text: &JsString) {
         let mut f = self.next("write");
         assert_eq!(f.string("path"), path, "{}: written path", self.ctx);
-        assert_tree(&format!("{}: {path}", self.ctx), &f.tree("data"), &js_string_value(text));
+        assert_tree(
+            &format!("{}: {path}", self.ctx),
+            &f.tree("data"),
+            &js_string_value(text),
+        );
         f.finish();
         self.tally.compare("write");
     }

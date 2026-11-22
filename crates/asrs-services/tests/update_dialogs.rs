@@ -178,17 +178,25 @@ impl World {
         }
     }
 
-    fn check_for_update(&mut self, fx: &mut Effects, scripted: &FetchReply, always: bool, response: usize) {
+    fn check_for_update(
+        &mut self,
+        fx: &mut Effects,
+        scripted: &FetchReply,
+        always: bool,
+        response: usize,
+    ) {
         let env = self.process.env(UPSTREAM_NAME);
         let mut requests = Vec::new();
-        let run = self.checker.check_for_update(&env, &self.zone, always, |request| {
-            requests.push(request.clone());
-            scripted.clone()
-        });
+        let run = self
+            .checker
+            .check_for_update(&env, &self.zone, always, |request| {
+                requests.push(request.clone());
+                scripted.clone()
+            });
         let release_env = self.process.env(RELEASE_NAME);
-        let release_run = self
-            .release_checker
-            .check_for_update(&release_env, &self.zone, always, |_| scripted.clone());
+        let release_run =
+            self.release_checker
+                .check_for_update(&release_env, &self.zone, always, |_| scripted.clone());
         fx.fetches.extend(requests);
         fx.update.extend(run.button);
         assert_eq!(run.button, release_run.button, "release identity button");
@@ -232,7 +240,10 @@ fn run_op(world: &mut World, op: &str, args: &mut Fields, ctx: &str) -> Effects 
             world.process.arch = args.string("arch");
             world.process.packaged = args.bool("packaged");
             world.clock.0.set(args.number("now"));
-            let mut config = Fields::new(&cve_object(&args.take("config"), ctx), &format!("{ctx}: config"));
+            let mut config = Fields::new(
+                &cve_object(&args.take("config"), ctx),
+                &format!("{ctx}: config"),
+            );
             world.beta.is_alpha = config.bool("isAlpha");
             world.beta.survey_url = match config.take("surveyUrl") {
                 Json::Null => None,
@@ -253,8 +264,12 @@ fn run_op(world: &mut World, op: &str, args: &mut Fields, ctx: &str) -> Effects 
             let response = args.number("response") as usize;
             let shown = about(&world.process.about_env(UPSTREAM_NAME));
             let release = about(&world.process.about_env(RELEASE_NAME));
-            assert_eq!(shown.copy_text, release.copy_text, "{ctx}: release identity copy text");
-            fx.clipboard.extend(shown.response(response).map(str::to_owned));
+            assert_eq!(
+                shown.copy_text, release.copy_text,
+                "{ctx}: release identity copy text"
+            );
+            fx.clipboard
+                .extend(shown.response(response).map(str::to_owned));
             fx.boxes.push((shown.message_box, release.message_box));
         }
         "domReady" => {
@@ -298,11 +313,19 @@ fn run_op(world: &mut World, op: &str, args: &mut Fields, ctx: &str) -> Effects 
             };
             match startup {
                 Err(e) => {
-                    assert_eq!(release.err().map(|r| r.name), Some(e.name), "{ctx}: release identity error");
+                    assert_eq!(
+                        release.err().map(|r| r.name),
+                        Some(e.name),
+                        "{ctx}: release identity error"
+                    );
                     fx.throw = Some(e.name);
                 }
                 Ok(BetaStartup::Nothing) => {
-                    assert_eq!(release.ok(), Some(BetaStartup::Nothing), "{ctx}: release identity startup");
+                    assert_eq!(
+                        release.ok(),
+                        Some(BetaStartup::Nothing),
+                        "{ctx}: release identity startup"
+                    );
                 }
                 Ok(BetaStartup::Expired(shown)) => {
                     fx.boxes.push((shown, release_box(release)));
@@ -311,8 +334,13 @@ fn run_op(world: &mut World, op: &str, args: &mut Fields, ctx: &str) -> Effects 
                     }
                 }
                 Ok(BetaStartup::Welcome) => {
-                    assert_eq!(release.ok(), Some(BetaStartup::Welcome), "{ctx}: release identity startup");
-                    fx.created.push(beta::beta_welcome_window(&world.process.platform));
+                    assert_eq!(
+                        release.ok(),
+                        Some(BetaStartup::Welcome),
+                        "{ctx}: release identity startup"
+                    );
+                    fx.created
+                        .push(beta::beta_welcome_window(&world.process.platform));
                 }
                 Ok(BetaStartup::Survey(shown)) => {
                     fx.boxes.push((shown, release_box(release)));
@@ -326,21 +354,39 @@ fn run_op(world: &mut World, op: &str, args: &mut Fields, ctx: &str) -> Effects 
                         |url| opened.push(url.to_owned()),
                     )
                     .unwrap_or_else(|e| panic!("{ctx}: survey response failed: {e:?}"));
-                    fx.opened.extend(opened.into_iter().map(|u| JsValue::string(u.as_str())));
+                    fx.opened
+                        .extend(opened.into_iter().map(|u| JsValue::string(u.as_str())));
                 }
             }
         }
         "welcomeReady" => {
-            assert_eq!(Some(args.number("window")), world.welcome, "{ctx}: welcome window");
+            assert_eq!(
+                Some(args.number("window")),
+                world.welcome,
+                "{ctx}: welcome window"
+            );
             fx.posted.push(beta::beta_welcome_ready(Some(&world.beta)));
         }
         "welcomeDone" => {
-            assert_eq!(Some(args.number("window")), world.welcome, "{ctx}: welcome window");
-            beta::beta_welcome_done(&world.fs, Some(&world.beta_file), Some(&world.beta), &world.clock)
-                .unwrap_or_else(|e| panic!("{ctx}: welcome completion failed: {e:?}"));
+            assert_eq!(
+                Some(args.number("window")),
+                world.welcome,
+                "{ctx}: welcome window"
+            );
+            beta::beta_welcome_done(
+                &world.fs,
+                Some(&world.beta_file),
+                Some(&world.beta),
+                &world.clock,
+            )
+            .unwrap_or_else(|e| panic!("{ctx}: welcome completion failed: {e:?}"));
         }
         "welcomeClose" => {
-            assert_eq!(Some(args.number("window")), world.welcome, "{ctx}: welcome window");
+            assert_eq!(
+                Some(args.number("window")),
+                world.welcome,
+                "{ctx}: welcome window"
+            );
             if beta::beta_welcome_closed() {
                 fx.quits += 1;
             }
@@ -348,7 +394,9 @@ fn run_op(world: &mut World, op: &str, args: &mut Fields, ctx: &str) -> Effects 
         "feedback" => {
             let hub = args.number("window");
             world.hub(hub, ctx);
-            fx.opened.push(JsValue::string(feedback_url(ReleaseProfile::PARITY.repository).as_str()));
+            fx.opened.push(JsValue::string(
+                feedback_url(ReleaseProfile::PARITY.repository).as_str(),
+            ));
         }
         "promptUpdate" => {
             let hub = args.number("window");
@@ -380,7 +428,10 @@ fn check(zone_name: &str) {
     let ctx = format!("{id} line {}", first.line);
     let mut f = Fields::new(&first.json, &ctx);
     assert_eq!(f.string("op"), "config", "{ctx}");
-    let mut c = Fields::new(&cve_object(&f.take("result"), &ctx), &format!("{ctx}: config"));
+    let mut c = Fields::new(
+        &cve_object(&f.take("result"), &ctx),
+        &format!("{ctx}: config"),
+    );
     let user_data = c.string("userData");
     let beta_file = c.string("betaFile");
     let version = c.string("version");
@@ -445,7 +496,9 @@ fn check(zone_name: &str) {
 
         match (f.has("throw"), fx.throw) {
             (true, Some(name)) => assert_eq!(f.string("throw"), name, "{ctx}: thrown error"),
-            (false, None) => assert_tree(&format!("{ctx}: result"), &f.tree("result"), &Value::Null),
+            (false, None) => {
+                assert_tree(&format!("{ctx}: result"), &f.tree("result"), &Value::Null)
+            }
             (recorded, port) => panic!("{ctx}: upstream threw: {recorded}, port threw: {port:?}"),
         }
 
@@ -462,7 +515,11 @@ fn check(zone_name: &str) {
             tally.compare("box");
         }
 
-        assert_eq!(f.raw_number("quits") as usize, fx.quits, "{ctx}: app.quit calls");
+        assert_eq!(
+            f.raw_number("quits") as usize,
+            fx.quits,
+            "{ctx}: app.quit calls"
+        );
 
         let opened = f.array("opened");
         assert_eq!(opened.len(), fx.opened.len(), "{ctx}: opened count");
@@ -474,10 +531,18 @@ fn check(zone_name: &str) {
         }
 
         let clipboard = f.array("clipboard");
-        assert_eq!(clipboard.len(), fx.clipboard.len(), "{ctx}: clipboard writes");
+        assert_eq!(
+            clipboard.len(),
+            fx.clipboard.len(),
+            "{ctx}: clipboard writes"
+        );
         for (recorded, text) in clipboard.iter().zip(&fx.clipboard) {
             tally.record("clipboard");
-            assert_eq!(recorded, &Json::string(text.as_str()), "{ctx}: clipboard text");
+            assert_eq!(
+                recorded,
+                &Json::string(text.as_str()),
+                "{ctx}: clipboard text"
+            );
             tally.compare("clipboard");
         }
 
@@ -487,21 +552,36 @@ fn check(zone_name: &str) {
             tally.record("window");
             let mut w = Fields::new(recorded, &format!("{ctx}: window"));
             world.welcome = Some(w.raw_number("id"));
-            assert_eq!(Some(w.raw_number("parent")), world.hub, "{ctx}: welcome parent");
+            assert_eq!(
+                Some(w.raw_number("parent")),
+                world.hub,
+                "{ctx}: welcome parent"
+            );
             let expected = Value::Object(vec![
                 ("width".into(), Value::number(window.width)),
                 ("height".into(), Value::number(window.height)),
-                ("useContentSize".into(), Value::Bool(window.use_content_size)),
+                (
+                    "useContentSize".into(),
+                    Value::Bool(window.use_content_size),
+                ),
                 ("resizable".into(), Value::Bool(window.resizable)),
                 ("modal".into(), Value::Bool(window.modal)),
                 ("show".into(), Value::Bool(window.show)),
             ]);
-            assert_tree(&format!("{ctx}: welcome options"), &w.tree("options"), &expected);
+            assert_tree(
+                &format!("{ctx}: welcome options"),
+                &w.tree("options"),
+                &expected,
+            );
             w.finish();
             tally.compare("window");
         }
 
-        for (key, values) in [("posted", &fx.posted), ("feedback", &fx.feedback), ("update", &fx.update)] {
+        for (key, values) in [
+            ("posted", &fx.posted),
+            ("feedback", &fx.feedback),
+            ("update", &fx.update),
+        ] {
             let recorded = f.array(key);
             assert_eq!(recorded.len(), values.len(), "{ctx}: {key} count");
             for (json, value) in recorded.iter().zip(values) {
@@ -520,18 +600,32 @@ fn check(zone_name: &str) {
         for (recorded, request) in fetches.iter().zip(&fx.fetches) {
             tally.record("fetch");
             let mut r = Fields::new(recorded, &format!("{ctx}: fetch"));
-            assert_tree(&format!("{ctx}: url"), &r.tree("url"), &str_value(&request.url));
-            assert_tree(&format!("{ctx}: init"), &r.tree("init"), &request_tree(request));
+            assert_tree(
+                &format!("{ctx}: url"),
+                &r.tree("url"),
+                &str_value(&request.url),
+            );
+            assert_tree(
+                &format!("{ctx}: init"),
+                &r.tree("init"),
+                &request_tree(request),
+            );
             r.finish();
             tally.compare("fetch");
         }
 
-        assert_eq!(f.raw_number("betaWrites") as usize, world.fs.writes.get(), "{ctx}: beta file writes");
-        let actual_file = world
-            .fs
-            .inner
-            .exists(&world.beta_file)
-            .then(|| world.fs.inner.read(&world.beta_file).expect("beta file reads"));
+        assert_eq!(
+            f.raw_number("betaWrites") as usize,
+            world.fs.writes.get(),
+            "{ctx}: beta file writes"
+        );
+        let actual_file = world.fs.inner.exists(&world.beta_file).then(|| {
+            world
+                .fs
+                .inner
+                .read(&world.beta_file)
+                .expect("beta file reads")
+        });
         match f.take("betaFile") {
             Json::Null => assert_eq!(actual_file, None, "{ctx}: beta file should be absent"),
             other => {

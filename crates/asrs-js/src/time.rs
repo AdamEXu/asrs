@@ -695,22 +695,6 @@ fn time_from_day_ms(ms: i64) -> (i64, i64, i64, i64) {
     (hour, minute, second, milli)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn v8_math_random_matches_electron_seed_42() {
-        let mut rng = V8MathRandom::from_seed(42);
-        let draws: Vec<u64> = (0..130).map(|_| rng.next_f64().to_bits()).collect();
-        assert_eq!(draws[0], 0x3fe9_67b8_a4f3_3142);
-        assert_eq!(draws[1], 0x3fe0_d0e3_67f2_3fe4);
-        assert_eq!(draws[63], 0x3fb4_e1b5_6906_4d78);
-        assert_eq!(draws[64], 0x3fde_1f7a_c97a_0320);
-        assert_eq!(draws[129], 0x3fcd_016b_bed4_84d4);
-    }
-}
-
 /// `Date.parse(text)`, which is also what `new Date(text)` does with a string: V8's `DateParser`
 /// (`src/date/dateparser*.{h,cc}`), the ES date-time format first and its legacy fallback after,
 /// then `ParseDateTimeString` (`src/date/date.cc`): a result without an offset is local time
@@ -725,4 +709,20 @@ pub fn parse_date(text: &JsString, zone: &impl LocalZone) -> f64 {
 pub fn date_from_value(value: &JsValue, zone: &impl LocalZone) -> f64 {
     let _ = (value, zone);
     todo!("P07: new Date(value)")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v8_math_random_matches_electron_seed_42() {
+        let mut rng = V8MathRandom::from_seed(42);
+        let draws: Vec<u64> = (0..130).map(|_| rng.next_f64().to_bits()).collect();
+        assert_eq!(draws[0], 0x3fe9_67b8_a4f3_3142);
+        assert_eq!(draws[1], 0x3fe0_d0e3_67f2_3fe4);
+        assert_eq!(draws[63], 0x3fb4_e1b5_6906_4d78);
+        assert_eq!(draws[64], 0x3fde_1f7a_c97a_0320);
+        assert_eq!(draws[129], 0x3fcd_016b_bed4_84d4);
+    }
 }

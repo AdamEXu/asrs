@@ -8,15 +8,15 @@
 mod p07_support;
 
 use asrs_js::time::NamedZone;
+use asrs_parity::Value;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
-use asrs_parity::Value;
 use asrs_services::update::{
     CheckOutcome, FetchReply, FetchRequest, ReleaseProfile, UpdateChecker, UpdateEnv,
 };
 use p07_support::{
-    Fields, RELEASE_NAME, Tally, UPSTREAM_NAME, assert_tree, check_box, check_release_box,
-    from_js, str_value, tree_bytes,
+    Fields, RELEASE_NAME, Tally, UPSTREAM_NAME, assert_tree, check_box, check_release_box, from_js,
+    str_value, tree_bytes,
 };
 
 struct Config {
@@ -80,8 +80,16 @@ fn request_tree(request: &FetchRequest) -> Value {
 fn check_fetch_effect(ctx: &str, effect: &Json, request: &FetchRequest) {
     let mut f = Fields::new(effect, ctx);
     assert_eq!(f.string("k"), "fetch", "{ctx}: effect kind");
-    assert_tree(&format!("{ctx}: url"), &f.tree("url"), &str_value(&request.url));
-    assert_tree(&format!("{ctx}: init"), &f.tree("init"), &request_tree(request));
+    assert_tree(
+        &format!("{ctx}: url"),
+        &f.tree("url"),
+        &str_value(&request.url),
+    );
+    assert_tree(
+        &format!("{ctx}: init"),
+        &f.tree("init"),
+        &request_tree(request),
+    );
     f.finish();
 }
 
@@ -91,6 +99,7 @@ fn check(zone_name: &str) {
     let records = vectors::load(&id).unwrap_or_else(|e| panic!("{e}"));
     let mut tally = Tally::default();
     let mut state: Option<(Config, UpdateChecker, UpdateChecker)> = None;
+    let mut repositories = [false, false];
     let mut expected_case = -1.0;
     let mut expected_step = 0.0;
     for record in &records {
@@ -114,12 +123,13 @@ fn check(zone_name: &str) {
                 repository: c.string("repository"),
             };
             c.finish();
-            assert!(
-                config.repository == ReleaseProfile::PARITY.repository
-                    || config.repository == ReleaseProfile::RELEASE.repository,
-                "{ctx}: repository {}",
-                config.repository
-            );
+            if config.repository == ReleaseProfile::PARITY.repository {
+                repositories[0] = true;
+            } else if config.repository == ReleaseProfile::RELEASE.repository {
+                repositories[1] = true;
+            } else {
+                panic!("{ctx}: repository {}", config.repository);
+            }
             state = Some((config, UpdateChecker::new(), UpdateChecker::new()));
             tally.compare("case");
             f.finish();
@@ -143,7 +153,11 @@ fn check(zone_name: &str) {
                 });
                 let release_outcome = release.check(&release_env, &zone, |_| scripted.clone());
                 assert_eq!(outcome, release_outcome, "{ctx}: release identity outcome");
-                assert_eq!(f.bool("rejected"), outcome == CheckOutcome::Rejected, "{ctx}: rejected");
+                assert_eq!(
+                    f.bool("rejected"),
+                    outcome == CheckOutcome::Rejected,
+                    "{ctx}: rejected"
+                );
                 let effects = f.array("effects");
                 assert_eq!(effects.len(), requests.len(), "{ctx}: fetch count");
                 for (effect, request) in effects.iter().zip(&requests) {
@@ -155,7 +169,11 @@ fn check(zone_name: &str) {
             "shouldPrompt" => {
                 let actual = checker.should_prompt();
                 assert_eq!(f.bool("result"), actual, "{ctx}: getShouldPrompt");
-                assert_eq!(release.should_prompt(), actual, "{ctx}: release getShouldPrompt");
+                assert_eq!(
+                    release.should_prompt(),
+                    actual,
+                    "{ctx}: release getShouldPrompt"
+                );
             }
             "prompt" => {
                 let response = f.raw_number("response") as usize;
@@ -170,7 +188,9 @@ fn check(zone_name: &str) {
                 );
                 let effects = f.array("effects");
                 let mut effects = effects.iter();
-                let effect = effects.next().unwrap_or_else(|| panic!("{ctx}: no box recorded"));
+                let effect = effects
+                    .next()
+                    .unwrap_or_else(|| panic!("{ctx}: no box recorded"));
                 tally.record("box");
                 let mut e = Fields::new(effect, &format!("{ctx}: box"));
                 assert_eq!(e.string("k"), "box", "{ctx}: first effect");
@@ -202,6 +222,11 @@ fn check(zone_name: &str) {
         tally.compare(&op);
         f.finish();
     }
+    assert_eq!(
+        repositories,
+        [true, true],
+        "{id}: upstream's repository (ReleaseProfile::PARITY) and asrs's (RELEASE) must both be replayed"
+    );
     tally.finish(&id);
 }
 
@@ -227,9 +252,19 @@ fn checker_auckland() {
 
 #[test]
 fn release_profile() {
-    assert_eq!(ReleaseProfile::RELEASE.repository, "AdamEXu/asrs");
-    assert!(!ReleaseProfile::RELEASE.update_check);
-    assert!(!ReleaseProfile::RELEASE.beta_survey);
-    assert!(ReleaseProfile::PARITY.update_check);
-    assert!(ReleaseProfile::PARITY.beta_survey);
+    assert_eq!(
+        ReleaseProfile::RELEASE,
+        ReleaseProfile {
+            repository: "AdamEXu/asrs",
+            update_check: false,
+            beta_survey: false,
+        }
+    );
+    assert_eq!(
+        (
+            ReleaseProfile::PARITY.update_check,
+            ReleaseProfile::PARITY.beta_survey
+        ),
+        (true, true)
+    );
 }

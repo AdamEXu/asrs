@@ -30,7 +30,12 @@ fn check(zone_name: &str) {
             panic!("{id} line {}: not an object", record.line)
         };
         let keys: Vec<String> = pairs.iter().map(|(k, _)| k.to_string_lossy()).collect();
-        assert_eq!(keys, ["case", "input", "time"], "{id} line {}: fields", record.line);
+        assert_eq!(
+            keys,
+            ["case", "input", "time"],
+            "{id} line {}: fields",
+            record.line
+        );
         assert_eq!(
             record.field("case").and_then(Json::as_f64),
             Some(index as f64),
