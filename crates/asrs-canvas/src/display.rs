@@ -36,6 +36,8 @@ impl Gradient {
 pub enum Style {
     Color(String),
     Gradient(Gradient),
+    /// `undefined` assigned to the property: recorded, and ignored like any invalid colour.
+    Undefined,
 }
 
 impl From<&str> for Style {
