@@ -332,11 +332,13 @@ dependencies = [
 name = "asrs-field3d"
 version = "0.1.0"
 dependencies = [
+ "asrs-canvas",
  "asrs-js",
  "asrs-log",
  "asrs-model",
  "asrs-parity",
  "bytemuck",
+ "png 0.18.1",
  "pollster 0.4.0",
  "sha2 0.10.9",
  "wgpu",
