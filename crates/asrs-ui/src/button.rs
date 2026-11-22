@@ -33,6 +33,8 @@ pub struct IconButton {
     height: f32,
     tint: IconTint,
     fit: IconFit,
+    translate: [f64; 2],
+    subpixel: [f64; 2],
     disabled: bool,
     blurred: bool,
     appearance: Option<Appearance>,
@@ -48,6 +50,8 @@ impl IconButton {
             height: 28.0,
             tint: IconTint::BUTTON,
             fit: IconFit::BUTTON,
+            translate: [0.0, 0.0],
+            subpixel: [0.0, 0.0],
             disabled: false,
             blurred: false,
             appearance: None,
@@ -68,6 +72,19 @@ impl IconButton {
 
     pub fn fit(mut self, fit: IconFit) -> Self {
         self.fit = fit;
+        self
+    }
+
+    /// The button is placed `translate` from its layout position by a CSS `translate()`;
+    /// its icon keeps the fraction Chromium keeps.
+    pub fn translate(mut self, x: f64, y: f64) -> Self {
+        self.translate = [x, y];
+        self
+    }
+
+    /// The button's CSS position less where GPUI's pixel snapping put it, for its icon.
+    pub fn subpixel(mut self, dx: f64, dy: f64) -> Self {
+        self.subpixel = [dx, dy];
         self
     }
 
@@ -128,7 +145,12 @@ impl RenderOnce for IconButton {
             .w(px(self.width))
             .h(px(self.height))
             .rounded(px(radius))
-            .child(Icon::new(self.icon, chain).fit(self.fit));
+            .child(
+                Icon::new(self.icon, chain)
+                    .fit(self.fit)
+                    .translate(self.translate[0], self.translate[1])
+                    .subpixel(self.subpixel[0], self.subpixel[1]),
+            );
         if let Some(focus) = &focus {
             button = button.track_focus(&focus.read(cx).handle);
         }

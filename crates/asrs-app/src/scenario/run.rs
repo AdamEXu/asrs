@@ -46,7 +46,7 @@ origin on the Electron driver's host, which places its window 16 px inside it (d
 const FRAME: Duration = Duration::from_millis(16);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
-const STABLE_ATTEMPTS: usize = 20;
+const STABLE_ATTEMPTS: usize = 120;
 /// The Electron driver's `--js-flags=--random-seed`.
 const RANDOM_SEED: u64 = 1;
 /// The Electron driver's `WINDOW_ORIGIN`: its window's offset into the primary work area.

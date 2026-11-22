@@ -23,7 +23,7 @@ use asrs_log::util::{clamp_value, lower_bound, scale_value_clamped, upper_bound}
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::source_list::{
-    Env, ListInput, ListOutput, Rect, SourceList, SourceListError, configs,
+    Env, ListInput, ListOutput, ListPointer, Rect, SourceList, SourceListError, configs,
 };
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
@@ -1264,7 +1264,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for LineGraphController {
             }
             return ListOutput::default();
         }
-        route_lists(
+        let out = route_lists(
             &mut [
                 &mut self.left_list,
                 &mut self.right_list,
@@ -1273,7 +1273,22 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for LineGraphController {
             cx,
             input,
             errors,
-        )
+        );
+        if let (
+            ListInput::Pointer {
+                uuid,
+                event: ListPointer::EditClick,
+            },
+            Some(rect),
+        ) = (input, out.edit)
+            && let Some(id) = [ListId::Left, ListId::Right, ListId::Discrete]
+                .into_iter()
+                .find(|id| self.list(*id).uuid() == uuid)
+            && let Err(e) = self.ask_edit_axis(cx, id, rect)
+        {
+            errors.push(e);
+        }
+        out
     }
 }
 

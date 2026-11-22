@@ -252,6 +252,11 @@ impl LineGraphRenderer {
         }
     }
 
+    /// What the host writes before each `render` and takes the painted frame from.
+    pub fn dom(&self) -> &Rc<RefCell<LineGraphDom>> {
+        &self.dom
+    }
+
     pub fn style(&self) -> &OverlayStyle {
         &self.style
     }
