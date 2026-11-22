@@ -1,0 +1,11 @@
+{
+  "about": "Generated drive log on a new 2D Field tab with the robot pose at a selected time",
+  "actions": [
+    { "open": ["app:drive"] },
+    { "idle": true },
+    { "main": "new-tab", "data": 2 },
+    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Robot\")" },
+    { "selection": ["setSelectedTime", 3.25] },
+    { "capture": "robot", "probes": [".tab-bar", ".renderer-content", ".controls-content", ".timeline"] }
+  ]
+}

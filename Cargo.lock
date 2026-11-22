@@ -332,11 +332,13 @@ dependencies = [
 name = "asrs-field3d"
 version = "0.1.0"
 dependencies = [
+ "asrs-canvas",
  "asrs-js",
  "asrs-log",
  "asrs-model",
  "asrs-parity",
  "bytemuck",
+ "png 0.18.1",
  "pollster 0.4.0",
  "sha2 0.10.9",
  "wgpu",
@@ -3972,6 +3974,29 @@ name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
+
+[[package]]
+name = "lcms2"
+version = "6.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "678106a51fa289d2c059f8594a7b980b4f3ac396c22d60094587dad7ab952f41"
+dependencies = [
+ "bytemuck",
+ "foreign-types",
+ "lcms2-sys",
+]
+
+[[package]]
+name = "lcms2-sys"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a0fc4c537f27eb6fd5497862c47072f731c96fc914eba9f63f385240d5978b3"
+dependencies = [
+ "cc",
+ "dunce",
+ "libc",
+ "pkg-config",
+]
 
 [[package]]
 name = "lebe"
@@ -8941,6 +8966,7 @@ version = "0.1.0"
 dependencies = [
  "asrs-parity",
  "flate2",
+ "lcms2",
  "sha2 0.10.9",
  "tar",
  "toml 0.8.23",
