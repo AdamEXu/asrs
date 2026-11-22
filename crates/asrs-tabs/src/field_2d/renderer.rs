@@ -90,7 +90,7 @@ pub struct Field2dRenderer {
     pan_last_cursor: [f64; 2],
     last_cursor: [f64; 2],
     start_px: Option<[f64; 2]>,
-    frame_requested: bool,
+    frame_requests: u32,
 }
 
 fn to_number(value: &JsValue) -> f64 {
@@ -135,7 +135,7 @@ impl Field2dRenderer {
             pan_last_cursor: [0.0, 0.0],
             last_cursor: [0.0, 0.0],
             start_px: None,
-            frame_requested: false,
+            frame_requests: 0,
         }
     }
 
@@ -154,10 +154,10 @@ impl Field2dRenderer {
         self.image_load_count
     }
 
-    /// Whether the scroll callback asked for an animation frame since the last call; the
-    /// host then renders the last command once.
-    pub fn take_frame_request(&mut self) -> bool {
-        std::mem::take(&mut self.frame_requested)
+    /// The animation frames the scroll callback requested since the last call; the host
+    /// renders the last command once in each.
+    pub fn take_frame_requests(&mut self) -> u32 {
+        std::mem::take(&mut self.frame_requests)
     }
 
     /// The private camera fields, in the form the DOM harness records them.
@@ -273,7 +273,7 @@ impl Field2dRenderer {
                     add_assign(&self.pan[1], (canvas_center_y / base_image_scalar) * scale);
             }
         }
-        self.frame_requested = true;
+        self.frame_requests += 1;
     }
 
     /// `mousedown`, `mousemove`, `mouseup` or `mouseleave` (`kind` without the `mouse`

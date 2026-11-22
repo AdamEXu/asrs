@@ -1,6 +1,6 @@
 //! `hub/controllers/StatisticsController.ts`. The source list and the histogram inputs are
-//! modelled headless: each `input[type=number]` keeps its sanitized `value` and `step`
-//! strings, and the `select` keeps the value of its selected option (none reads as `""`).
+//! modelled headless: each `input[type=number]` is a [`NumberInput`] with its `step` attribute
+//! string beside it, and the time range is a [`Select`].
 
 use std::rc::Rc;
 
@@ -21,15 +21,22 @@ use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{SourceListCx, js_error, with_env};
+use crate::form::{NumberInput, Select, SelectOption};
+use crate::list_cx::{self, SourceListCx, js_error, with_env};
 use crate::simple_statistics as stats;
 
 const UPDATE_PERIOD_MS: f64 = 100.0;
 const DEFAULT_DT: f64 = 0.02;
 const MAX_BINS: f64 = 1000.0;
 
-const TIME_RANGE_OPTIONS: &[&str] = &[
-    "visible", "full", "enabled", "auto", "teleop", "live-30", "live-10",
+const TIME_RANGE_OPTIONS: [(&str, &str); 7] = [
+    ("visible", "Visible Range"),
+    ("full", "Full Log"),
+    ("enabled", "Enabled"),
+    ("auto", "Auto"),
+    ("teleop", "Teleop"),
+    ("live-30", "Live: 30 Seconds"),
+    ("live-10", "Live: 10 Seconds"),
 ];
 
 /// What the controller reads besides [`SourceListCx`].
@@ -52,10 +59,10 @@ pub struct HistogramInputs {
 
 pub struct StatisticsController {
     source_list: SourceList,
-    time_range: Option<JsString>,
-    range_min: JsString,
-    range_max: JsString,
-    step_size: JsString,
+    time_range: Select,
+    range_min: NumberInput,
+    range_max: NumberInput,
+    step_size: NumberInput,
     range_min_step: JsString,
     range_max_step: JsString,
     step_size_step: JsString,
@@ -74,10 +81,15 @@ impl StatisticsController {
         let uuid = time::create_uuid(cx.tab_rng());
         let mut controller = StatisticsController {
             source_list: SourceList::new(configs::statistics(), uuid, false),
-            time_range: Some(JsString::from("visible")),
-            range_min: JsString::from("0"),
-            range_max: JsString::from("10"),
-            step_size: JsString::from("1"),
+            time_range: Select::with_options(
+                TIME_RANGE_OPTIONS
+                    .iter()
+                    .map(|(value, text)| SelectOption::new(Some(value), text))
+                    .collect(),
+            ),
+            range_min: NumberInput::new("0"),
+            range_max: NumberInput::new("10"),
+            step_size: NumberInput::new("1"),
             range_min_step: JsString::new(),
             range_max_step: JsString::new(),
             step_size_step: JsString::new(),
@@ -101,38 +113,20 @@ impl StatisticsController {
     }
 
     fn time_range_value(&self) -> JsString {
-        self.time_range.clone().unwrap_or_default()
+        self.time_range.value()
     }
 
     /// The `.stats-*` control element values, in the template's order.
     pub fn histogram_inputs(&self) -> HistogramInputs {
         HistogramInputs {
-            range_min: self.range_min.clone(),
-            range_max: self.range_max.clone(),
-            step_size: self.step_size.clone(),
+            range_min: self.range_min.value().clone(),
+            range_max: self.range_max.value().clone(),
+            step_size: self.step_size.value().clone(),
             range_min_step: self.range_min_step.clone(),
             range_max_step: self.range_max_step.clone(),
             step_size_step: self.step_size_step.clone(),
-            time_range: self.time_range.clone(),
+            time_range: (self.time_range.selected_index() >= 0).then(|| self.time_range.value()),
         }
-    }
-
-    /// `input[type=number].value = v`: jsdom keeps the string when it parses as a finite
-    /// floating-point number and drops it otherwise.
-    fn set_number_input(value: &mut JsString, v: JsString) {
-        *value = if valid_float(v.units()) && number::parse_float(v.units()).is_finite() {
-            v
-        } else {
-            JsString::new()
-        };
-    }
-
-    /// `select.value = v`: selects the matching option, or nothing (`value` reads `""`).
-    fn set_select(&mut self, v: JsString) {
-        self.time_range = TIME_RANGE_OPTIONS
-            .iter()
-            .any(|o| eq_str(&v, o))
-            .then_some(v);
     }
 
     pub fn should_update(&self) -> bool {
@@ -167,90 +161,73 @@ impl StatisticsController {
         cx: &mut (impl StatisticsCx + ?Sized),
         value: &JsValue,
     ) -> Result<(), JsError> {
-        let JsValue::Array(items) = value else {
-            self.source_list.clear();
-            if let JsValue::Bytes(_) = value {
-                return Err(JsError::new("Unmodeled", "a typed array of sources"));
-            }
-            ops::get(value, "forEach")?;
-            return Err(JsError::type_error("state.forEach is not a function"));
-        };
-        let items = items
-            .iter()
-            .map(|item| {
-                SourceListItemState::from_js(item)
-                    .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)
+        list_cx::set_source_state(&mut self.source_list, cx, value)
     }
 
     /// `select.value = v`, without the `change` listener's `shouldUpdate`.
     pub fn set_time_range(&mut self, v: JsString) {
-        self.set_select(v);
+        self.time_range.set_value(&v);
     }
 
     /// `input.value = v` on `.range-min`, without the `change` listeners.
     pub fn set_range_min(&mut self, v: JsString) {
-        Self::set_number_input(&mut self.range_min, v);
+        self.range_min.set_value(v);
     }
 
     /// `input.value = v` on `.range-max`, without the `change` listeners.
     pub fn set_range_max(&mut self, v: JsString) {
-        Self::set_number_input(&mut self.range_max, v);
+        self.range_max.set_value(v);
     }
 
     /// `input.value = v` on `.step-size`, without the `change` listeners.
     pub fn set_step_size(&mut self, v: JsString) {
-        Self::set_number_input(&mut self.step_size, v);
+        self.step_size.set_value(v);
     }
 
     /// `change` on `.time-range`.
     pub fn time_range_input(&mut self, v: JsString) {
-        self.set_select(v);
+        self.time_range.set_value(&v);
         self.should_update = true;
     }
 
     /// `change` on `.range-min`: `shouldUpdate` first, then `updateHistogramInputs`.
     pub fn range_min_input(&mut self, v: JsString) {
-        Self::set_number_input(&mut self.range_min, v);
+        self.range_min.set_value(v);
         self.should_update = true;
         self.update_histogram_inputs();
     }
 
     /// `change` on `.range-max`.
     pub fn range_max_input(&mut self, v: JsString) {
-        Self::set_number_input(&mut self.range_max, v);
+        self.range_max.set_value(v);
         self.should_update = true;
         self.update_histogram_inputs();
     }
 
     /// `change` on `.step-size`.
     pub fn step_size_input(&mut self, v: JsString) {
-        Self::set_number_input(&mut self.step_size, v);
+        self.step_size.set_value(v);
         self.should_update = true;
         self.update_histogram_inputs();
     }
 
     fn update_histogram_inputs(&mut self) {
-        if value_to_number(&self.step_size) <= 0.0 {
-            self.step_size = JsString::from(number::to_string(clean_float(
-                value_to_number(&self.step_size_step) * 0.9,
-            )));
+        if self.step_size.number() <= 0.0 {
+            self.step_size
+                .set_value(JsString::from(number::to_string(clean_float(
+                    value_to_number(&self.step_size_step) * 0.9,
+                ))));
         }
-        let range = math::abs(value_to_number(&self.range_max) - value_to_number(&self.range_min));
-        if range / value_to_number(&self.step_size) > MAX_BINS {
-            self.step_size = JsString::from(number::to_string(clean_float(range / MAX_BINS)));
+        let range = math::abs(self.range_max.number() - self.range_min.number());
+        if range / self.step_size.number() > MAX_BINS {
+            self.step_size
+                .set_value(JsString::from(number::to_string(clean_float(
+                    range / MAX_BINS,
+                ))));
         }
-        let step = math::pow(
-            10.0,
-            math::floor(math::log10(value_to_number(&self.step_size))),
-        );
+        let step = math::pow(10.0, math::floor(math::log10(self.step_size.number())));
         self.step_size_step = JsString::from(number::to_string(step));
-        let min_max_step = math::pow(
-            10.0,
-            math::ceil(math::log10(value_to_number(&self.step_size))),
-        );
+        let min_max_step = math::pow(10.0, math::ceil(math::log10(self.step_size.number())));
         self.range_min_step = JsString::from(number::to_string(min_max_step));
         self.range_max_step = JsString::from(number::to_string(min_max_step));
     }
@@ -295,9 +272,9 @@ impl StatisticsController {
     }
 
     fn recompute(&mut self, cx: &mut (impl StatisticsCx + ?Sized)) -> Result<(), JsError> {
-        let min = value_to_number(&self.range_min);
-        let max = value_to_number(&self.range_max);
-        let mut step = value_to_number(&self.step_size);
+        let min = self.range_min.number();
+        let max = self.range_max.number();
+        let mut step = self.step_size.number();
         if step <= 0.0 {
             step = 1.0;
         }
@@ -566,48 +543,6 @@ fn clean_float(x: f64) -> f64 {
     if output == 0.0 { 0.0 } else { output }
 }
 
-/// `input[type=number]` sanitization: `^-?(?:\d+|\d*\.\d+)(?:[eE][-+]?\d+)?$`.
-fn valid_float(units: &[u16]) -> bool {
-    if units.iter().any(|&u| u >= 0x80) {
-        return false;
-    }
-    let s: Vec<u8> = units.iter().map(|&u| u as u8).collect();
-    let mut i = 0usize;
-    if s.first() == Some(&b'-') {
-        i += 1;
-    }
-    let digits = |s: &[u8], i: &mut usize| -> usize {
-        let start = *i;
-        while s.get(*i).is_some_and(|u| u.is_ascii_digit()) {
-            *i += 1;
-        }
-        *i - start
-    };
-    if digits(&s, &mut i) == 0 {
-        if s.get(i) == Some(&b'.') {
-            i += 1;
-        }
-        if digits(&s, &mut i) == 0 {
-            return false;
-        }
-    } else if s.get(i) == Some(&b'.') {
-        i += 1;
-        if digits(&s, &mut i) == 0 {
-            return false;
-        }
-    }
-    if matches!(s.get(i), Some(b'e' | b'E')) {
-        i += 1;
-        if matches!(s.get(i), Some(b'-' | b'+')) {
-            i += 1;
-        }
-        if digits(&s, &mut i) == 0 {
-            return false;
-        }
-    }
-    i == s.len()
-}
-
 fn field_stats(
     samples: &[JsValue],
     non_negative: &[JsValue],
@@ -793,9 +728,9 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
             JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect()),
         );
         state.insert("timeRange", JsValue::String(self.time_range_value()));
-        state.insert("rangeMin", num(value_to_number(&self.range_min)));
-        state.insert("rangeMax", num(value_to_number(&self.range_max)));
-        state.insert("stepSize", num(value_to_number(&self.step_size)));
+        state.insert("rangeMin", num(self.range_min.number()));
+        state.insert("rangeMax", num(self.range_max.number()));
+        state.insert("stepSize", num(self.step_size.number()));
         JsValue::Object(state)
     }
 
@@ -817,22 +752,25 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
         if ops::has(state, "timeRange")?
             && let JsValue::String(v) = &ops::get(state, "timeRange")?
         {
-            self.set_select(v.clone());
+            self.time_range.set_value(v);
         }
         if ops::has(state, "rangeMin")?
             && let JsValue::Number(v) = ops::get(state, "rangeMin")?
         {
-            Self::set_number_input(&mut self.range_min, JsString::from(number::to_string(v)));
+            self.range_min
+                .set_value(JsString::from(number::to_string(v)));
         }
         if ops::has(state, "rangeMax")?
             && let JsValue::Number(v) = ops::get(state, "rangeMax")?
         {
-            Self::set_number_input(&mut self.range_max, JsString::from(number::to_string(v)));
+            self.range_max
+                .set_value(JsString::from(number::to_string(v)));
         }
         if ops::has(state, "stepSize")?
             && let JsValue::Number(v) = ops::get(state, "stepSize")?
         {
-            Self::set_number_input(&mut self.step_size, JsString::from(number::to_string(v)));
+            self.step_size
+                .set_value(JsString::from(number::to_string(v)));
         }
         self.update_histogram_inputs();
         Ok(())
