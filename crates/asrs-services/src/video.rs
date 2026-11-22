@@ -795,7 +795,7 @@ impl VideoProcessor {
             Wait::TimerGroup { group, slot } => {
                 if let VideoEvent::TimerText { text, .. } = event {
                     self.waits.remove(&handle);
-                    self.timer_group(host, group, slot, text);
+                    self.timer_group(group, slot, text);
                 }
             }
             Wait::Fetch { tba } => {
@@ -1296,13 +1296,7 @@ impl VideoProcessor {
         }
     }
 
-    fn timer_group(
-        &mut self,
-        _host: &mut dyn VideoHost,
-        group: usize,
-        slot: usize,
-        text: JsString,
-    ) {
+    fn timer_group(&mut self, group: usize, slot: usize, text: JsString) {
         self.groups[group].results[slot] = Some(text);
         self.groups[group].pending -= 1;
         if self.groups[group].pending == 0 {
@@ -1313,10 +1307,9 @@ impl VideoProcessor {
     fn finish_group(&mut self, group: usize) {
         let load = self.groups[group].load;
         let secs4_frame = self.groups[group].secs4_frame;
-        for index in 0..self.groups[group].results.len() {
-            let text = self.groups[group].results[index]
-                .clone()
-                .unwrap_or_default();
+        let results = std::mem::take(&mut self.groups[group].results);
+        for (index, text) in results.into_iter().enumerate() {
+            let text = text.expect("a finished group has every result");
             if self.loads[load].auto_end_frame > 0.0 {
                 continue;
             }
@@ -1751,13 +1744,15 @@ impl VideoProcessor {
     }
 
     fn menu_click(&mut self, host: &mut dyn VideoHost, tba: usize, index: usize) {
+        let Some(key) = self.tbas[tba].keys.get(index).cloned() else {
+            return;
+        };
         self.tbas[tba].menu_clicked = true;
         if self.tbas[tba].phase != TbaPhase::Menu {
             return;
         }
         self.tbas[tba].phase = TbaPhase::Done;
         let mut url = s("https://youtube.com/watch?v=");
-        let key = self.tbas[tba].keys[index].clone();
         url.push_str(&ops::to_string(&key));
         self.start_direct(host, Caller::Tba { tba }, url);
     }
