@@ -220,14 +220,21 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     let check = args.iter().any(|a| a == "--check");
     let stale_only = args.iter().any(|a| a == "--stale");
     let local_only = args.iter().any(|a| a == "--local");
-    if let Some(flag) = args
-        .iter()
-        .find(|a| a.starts_with("--") && !["--check", "--stale", "--local"].contains(&a.as_str()))
-    {
+    let hashes_only = args.iter().any(|a| a == "--check-hashes");
+    if let Some(flag) = args.iter().find(|a| {
+        a.starts_with("--")
+            && !["--check", "--check-hashes", "--stale", "--local"].contains(&a.as_str())
+    }) {
         return Err(format!("oracle gen: unknown option {flag}"));
     }
-    if check && (stale_only || local_only) {
-        return Err("oracle gen: --check cannot be combined with --stale or --local".to_owned());
+    if (check || hashes_only) && (stale_only || local_only) {
+        return Err(
+            "oracle gen: --check and --check-hashes cannot be combined with --stale or --local"
+                .to_owned(),
+        );
+    }
+    if check && hashes_only {
+        return Err("oracle gen: --check already includes --check-hashes".to_owned());
     }
     let wanted: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
     let specs = discover(&specs_dir(&paths.root))?;
@@ -254,7 +261,7 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
         .iter()
         .filter(|v| (every || is_wanted(v)) && (!local_only || v.spec.local))
         .collect();
-    if check {
+    if check || hashes_only {
         if let Some(v) = selected.iter().find(|v| v.spec.local && is_wanted(v)) {
             return Err(format!(
                 "oracle gen --check: {} is a local vector; --check covers committed vectors only",
@@ -266,6 +273,9 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
             eprintln!("  {local} local vectors are not committed and not checked");
         }
         selected.retain(|v| !v.spec.local);
+    }
+    if hashes_only {
+        return check_hashes(paths, &selected, full);
     }
     let missing_logs = public::missing_local_logs(paths)?;
     let mut local_skipped = false;
@@ -316,7 +326,11 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     }
 
     oracle::build_harness(paths)?;
-    let entry_hashes = entry_hashes(&paths.oracle_src, &read_entry_inputs(&paths.dist)?)?;
+    sync_entry_inputs(paths, check)?;
+    let entry_hashes = entry_hashes(
+        &paths.oracle_src,
+        &read_entry_inputs(&paths.oracle_src.join(ENTRY_INPUTS))?,
+    )?;
     let mut jobs = Vec::new();
     for vector in selected {
         let generator = generator_hash(&entry_hashes, vector)?;
@@ -481,6 +495,61 @@ pub(crate) fn generate(paths: &Paths, args: &[String]) -> Result {
     Ok(())
 }
 
+/// The `--check` that needs no oracle install: every generator hash comes from the committed
+/// harness dependency graph (`oracle/inputs.json`) and repository files alone.
+fn check_hashes(paths: &Paths, selected: &[&Vector<'_>], full: bool) -> Result {
+    let current = Current {
+        commit: oracle::UPSTREAM_COMMIT.to_owned(),
+        electron: oracle::ELECTRON_VERSION.to_owned(),
+        environment: oracle::environment_policy(),
+    };
+    let dir = paths.root.join("parity/vectors");
+    let manifest = read_manifest(&dir)?;
+    let entry_hashes = entry_hashes(
+        &paths.oracle_src,
+        &read_entry_inputs(&paths.oracle_src.join(ENTRY_INPUTS))?,
+    )?;
+    let expected = selected
+        .iter()
+        .map(|vector| {
+            let generator = generator_hash(&entry_hashes, vector)?;
+            expected_entry(paths, &dir, vector, &generator)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let stale = stale_entries(&manifest, &current, &expected, full);
+    if !stale.is_empty() {
+        return Err(format!(
+            "oracle gen --check-hashes: committed vectors are stale ({} problems):\n  {}\n{REGENERATE} (including oracle/{ENTRY_INPUTS})",
+            stale.len(),
+            stale.join("\n  ")
+        ));
+    }
+    eprintln!(
+        "oracle gen --check-hashes: generator hashes current for {} vectors",
+        expected.len()
+    );
+    Ok(())
+}
+
+/// Keeps `oracle/inputs.json`, the dependency graph the harness build records, committed so
+/// `--check-hashes` can compute generator hashes without building the harness.
+fn sync_entry_inputs(paths: &Paths, check: bool) -> Result {
+    let built = oracle::read(&paths.dist.join(ENTRY_INPUTS))?;
+    let committed_path = paths.oracle_src.join(ENTRY_INPUTS);
+    let committed = fs::read(&committed_path).ok();
+    if committed.as_deref().map(oracle::hash_text) == Some(oracle::hash_text(&built)) {
+        return Ok(());
+    }
+    if check {
+        return Err(format!(
+            "oracle gen --check: oracle/{ENTRY_INPUTS} does not match the harness build's dependency graph; {REGENERATE}"
+        ));
+    }
+    fs::write(&committed_path, &built).map_err(|e| format!("{}: {e}", committed_path.display()))?;
+    eprintln!("  updated oracle/{ENTRY_INPUTS}");
+    Ok(())
+}
+
 fn expected_entry(
     paths: &Paths,
     vectors_dir: &Path,
@@ -518,13 +587,12 @@ const ENTRY_INPUTS: &str = "inputs.json";
 const BORROWED_INPUTS: &[(&str, &str)] = &[("hubSession", "dom")];
 const LAZY_HELPER_PREFIX: &str = "lazyHelpers/";
 
-fn read_entry_inputs(dist: &Path) -> Result<Vec<(String, Vec<String>)>> {
-    let path = dist.join(ENTRY_INPUTS);
-    let json = read_json(&path)?;
+fn read_entry_inputs(path: &Path) -> Result<Vec<(String, Vec<String>)>> {
+    let json = read_json(path)?;
     let Json::Object(pairs) = json else {
         return Err(format!("{}: not an object", path.display()));
     };
-    let mut inputs = parse_entry_inputs(&path, pairs)?;
+    let mut inputs = parse_entry_inputs(path, pairs)?;
     for (entry, lender) in BORROWED_INPUTS {
         let Some(borrowed) = inputs
             .iter()

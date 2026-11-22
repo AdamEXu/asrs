@@ -55,6 +55,15 @@ jobs:
       - run: rustup toolchain install
       - run: cargo fmt --all --check
 
+  vector-hashes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Generator hashes of committed vectors
+        run: cargo run --locked -p xtask -- oracle gen --check-hashes
+
   build:
     needs: matrix
     name: ${{ matrix.target }}

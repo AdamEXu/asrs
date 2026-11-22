@@ -1,3 +1,4 @@
+import field2dTraces from "./field2dTraces.json";
 import lineGraphTraces from "./lineGraphTraces.json";
 import timelineTraces from "./timelineTraces.json";
 
@@ -1268,6 +1269,43 @@ function multiFrame(dpr: number, mode: "" | "-single" | "-resized"): Scene {
   return scene(`multiframe${mode}-${dpr}x`, "coverage", "pixel", [300, 100], dpr, LIGHT, r.cmds);
 }
 
+// Width-1 strokes at 1x are antialiased hairlines. Skia halves them while longer than 511 px, and
+// with round caps (outset pi/8) both halves blit the pixel where they meet. Lines leaving the
+// canvas go through its clip blitter, which turns slanted lines' paired blits into plain ones.
+function longHairlines(): Scene {
+  const r = new Rec();
+  r.set("lineWidth", 1);
+  const lines: [string, number, number, number, number][] = [
+    ["round", 55, 22.5, 735, 22.5],
+    ["round", 105, 42.5, 735, 42.5],
+    ["round", 0, 62.5, 790, 62.5],
+    ["round", 55, 82.5, 335, 82.5],
+    ["round", 20.3, 101.7, 780.6, 101.7],
+    ["square", 55, 122.5, 735, 122.5],
+    ["butt", 55.3, 142.5, 735.7, 142.5],
+    ["round", 12.5, 160, 12.5, 790],
+    ["round", 31.2, 158.6, 31.2, 797.3],
+    ["square", 50.5, 160, 50.5, 790],
+    ["round", 70, 170, 790, 260],
+    ["round", 70, 280, 790, 520.4],
+    ["round", 90, 300, 160, 790],
+    ["round", 120, 790, 330, 220],
+    ["round", 795, 540, 60, 560]
+  ];
+  for (const [color, from] of [["#222", 0], ["rgba(43, 102, 162, 0.6)", 7]] as [string, number][]) {
+    r.set("strokeStyle", color);
+    lines.forEach(([cap, x0, y0, x1, y1], i) => {
+      const [dx, dy] = i < 7 ? [0, from] : [from, 0];
+      r.set("lineCap", cap);
+      r.call("beginPath");
+      r.call("moveTo", x0 + dx, y0 + dy);
+      r.call("lineTo", x1 + dx, y1 + dy);
+      r.call("stroke");
+    });
+  }
+  return scene("hairlines-1x", "coverage", "pixel", [800, 800], 1, LIGHT, r.cmds);
+}
+
 // Frames recorded from upstream's Timeline in dom/timeline vectors (asrs-hub's timeline
 // traces equal them call for call), extracted to plain JSON numbers.
 function timelineScenes(): Scene[] {
@@ -1284,6 +1322,41 @@ function lineGraphScenes(): Scene[] {
   );
 }
 
+// A stand-in field image: carpet gradient, 2 px white lines every 48 px and two alliance
+// blocks, so nearest-neighbour blits of it show any off-by-one in the source or destination
+// rectangle.
+function fieldImage(width: number, height: number): string {
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      let rgb = [60 + Math.floor((x * 60) / width), 90 + Math.floor((y * 50) / height), 70];
+      if (x % 48 < 2 || y % 48 < 2) rgb = [235, 235, 235];
+      if (x > width * 0.1 && x < width * 0.2 && y > height * 0.3 && y < height * 0.7) rgb = [200, 40, 40];
+      if (x > width * 0.8 && x < width * 0.9 && y > height * 0.3 && y < height * 0.7) rgb = [40, 60, 200];
+      data.set([...rgb, 255], i);
+    }
+  }
+  return Buffer.from(data).toString("base64");
+}
+
+// Frames recorded from upstream's Field2dRenderer in dom/field-2d vectors, which asrs-tabs's
+// renderer reproduces call for call. The field image is `fieldImage` at the recorded natural
+// size; the heatmap canvas is left transparent (its pixels are `canvas heatmap`'s gate).
+function field2dScenes(): Scene[] {
+  return field2dTraces.map((t) => {
+    const sources: Cmd[] = Object.entries(t.images as { [src: string]: number[] }).map(([src, [w, h]]) => [
+      "image",
+      src,
+      w,
+      h,
+      fieldImage(w, h)
+    ]);
+    sources.push(["canvas", "heatmap", 1, 1, []]);
+    return scene(t.name, "field2d", "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, [...sources, ...(t.cmds as Cmd[])]);
+  });
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -1296,8 +1369,10 @@ export function allScenes(): Scene[] {
     textGrid("text-dark-1x", 1, true),
     shapes("shapes-2x", 2),
     shapes("shapes-1x", 1),
+    longHairlines(),
     ...timelineScenes(),
-    ...lineGraphScenes()
+    ...lineGraphScenes(),
+    ...field2dScenes()
   ];
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));

@@ -176,11 +176,10 @@ different lines.
 
 A generator hash covers only what that vector's generator uses: the harness files its entry
 point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
-as paths under `oracle/`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
-`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page, `dom` evaluates
-the hub page bundle; a Blink `dom` vector adds the `dom` and `domBlinkMain` entries' inputs),
-`build.mjs`
-and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
+as paths under `oracle/`; `gen` keeps a committed copy in `oracle/inputs.json`), the bundles
+it starts at runtime (`runtimeLoads` in `build.mjs`: `protoRenderer` spawns the renderer check,
+`canvasMain` loads the canvas page, `dom` evaluates the hub page bundle; a Blink `dom` vector
+adds the `dom` and `domBlinkMain` entries' inputs), `build.mjs` and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
 Files are hashed with CRLF as LF. Upstream sources, upstream's bundles and workers, the
 Electron version and the environment policy are not in the per-vector hash: the manifest
 header pins them (upstream commit, Electron, policy) and a change there makes every vector
@@ -236,7 +235,21 @@ manifest's upstream commit, Electron version or environment policy differs from 
 one, or if any vector's generator hash, spec, zone or content hash (against the committed
 file) is stale, or a manifest entry has no spec. So an edit to a spec or to the oracle
 sources without a regenerate fails even when it would not change the output. Only then does
-it regenerate in memory and compare content with the differ.
+it regenerate in memory and compare content with the differ. It also fails when
+`oracle/inputs.json` differs from the graph the build just recorded.
+
+`gen --check-hashes` is the first stage alone, computed from `oracle/inputs.json` and
+repository files, so it needs no oracle install, upstream checkout or Electron. CI runs it, so
+an edit to `build.mjs`, `package-lock.json`, a harness source or a spec cannot merge without
+regenerating the vectors it touches.
+
+The committed graph cannot drift silently through an import edit: adding or removing an import
+changes a file already in the graph, which makes its vectors stale, and regenerating rewrites
+`oracle/inputs.json`. It can drift only when an unchanged specifier starts resolving to a
+different file under esbuild's extension order, such as a new `x.ts` beside an imported
+`x.js` or `x.tsx` beside `x.ts`. Then `--check-hashes` keeps hashing the old file and misses
+the new one and later edits to it until the next `gen`; only `gen --check`, which rebuilds the
+graph, notices.
 
 Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
 checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a
@@ -910,11 +923,19 @@ The recorder eval hooks every Field2d tab:
 | `{"f2d": "create" \| "command" \| "save" \| "activeFields", "id", "dark", "prefs", "assets", "value" \| "threw", "reads"?}` | on construction and after `getCommand`, `saveState`, `getActiveFields`; `prefs` is `{cs, ftc, ts}` of `window.preferences` |
 | `{"f2d": <method>, "phase": "begin" \| "end", ...}` | around `restoreState`, `refresh`, `newAssets` |
 | `{"f2d": "select" \| "source" \| "orientation" \| "size", ...}` then `{"f2d": "controls", "controls"}` | before the control's handler runs, and the control DOM on the next timer turn |
-| `{"f2dr": "render", "command", "dom", "camera"}` | after `render`: the DOM it read and the private camera fields after it |
+| `{"f2dr": "render", "command", "dom", "camera", "threw"?, "size"?, "style"?, "calls"?, "heatmap"?}` | after `render`: the DOM it read and the private camera fields after it; when the render reset the canvas, its pixel size, the `width`, `height` and `transform` strings it assigned to `CANVAS.style` (captured by accessors on the style object, since Blink re-serializes lengths on read), its recorded calls with the heatmap canvas named `@heatmap`, and h337's `getData()` |
 | `{"f2dr": "camera", "id", "camera"}` | when a fixture calls `window.__f2dCamera(renderer)`, after dispatching mouse events: the drag pan calls a callback the recorder cannot wrap |
 | `{"f2dr": "scrollEvent"}` then `{"f2dr": "scroll", "args"}` | a `scroll` event on the sensor and the callback it dispatched, if any; the port takes the deltas through its wheel input and must produce the same cursor |
 | `{"f2dr": "mouse", "type", "button", "shiftKey", "x", "y"}` | before the sensor's and the camera menu's listeners |
 | `{"f2dr": "save" \| "aspectRatio" \| "restoreState" \| "set2DCamera", ...}` | renderer state calls |
+
+Each `render` runs the port's `Field2dRenderer` on the recorded command and compares the
+throw, the frame (or its absence), size, style strings, trace call for call and heatmap store;
+a `requestAnimationFrame` exception must match what the port's render or list frame threw.
+`node oracle/tools/field2dTraces.mjs` copies a few painted frames into
+`oracle/src/canvas/field2dTraces.json`, which `scenes.ts` turns into the `field2d-trace-*`
+canvas pixel scenes: each field image is a generated stand-in at its recorded natural size and
+the heatmap canvas is transparent (its pixels are gated by `cargo xtask canvas heatmap`).
 
 Not modelled on jsdom: CSS (so no computed styles or real text layout), scrolling (`scrollTop`
 stays 0). On either backend: workers and historical or live sources (logs are built with `log`
