@@ -3,12 +3,29 @@
 // exposes to the port.
 
 const files = new Map<string, Buffer>();
-const failures = new Map<string, "read" | "write">();
+const failures = new Map<string, "read" | "write" | "readOpened">();
+const missingDirs = new Set<string>();
+const openFds = new Map<number, string>();
+let nextFd = 100;
 export const writes: string[] = [];
 
-export function setFailure(name: string, kind: "read" | "write" | null): void {
+export function setFailure(name: string, kind: "read" | "write" | "readOpened" | null): void {
   if (kind === null) failures.delete(name);
   else failures.set(name, kind);
+}
+
+// Writes to a file directly inside `dir` fail with ENOENT, as if the directory did not exist.
+export function setMissingDir(dir: string, missing: boolean): void {
+  if (missing) missingDirs.add(dir);
+  else missingDirs.delete(dir);
+}
+
+export function reset(): void {
+  files.clear();
+  failures.clear();
+  missingDirs.clear();
+  openFds.clear();
+  writes.splice(0, writes.length);
 }
 
 export function putFile(name: string, data: Uint8Array): void {
@@ -62,8 +79,30 @@ export function readFileSync(name: unknown): Buffer {
   return Buffer.from(data);
 }
 
+function eisdir(syscall: string): NodeJS.ErrnoException {
+  const error = new Error(`EISDIR: illegal operation on a directory, ${syscall}`) as NodeJS.ErrnoException;
+  error.code = "EISDIR";
+  error.errno = -21;
+  error.syscall = syscall;
+  return error;
+}
+
+// Node validates paths before any callback API runs and throws synchronously on a NUL byte.
+function checkPath(name: unknown): void {
+  if (String(name).includes("\0")) {
+    const error = new TypeError(
+      `The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received ${JSON.stringify(String(name))}`
+    ) as NodeJS.ErrnoException;
+    error.code = "ERR_INVALID_ARG_VALUE";
+    throw error;
+  }
+}
+
+const parentDir = (name: string): string => name.slice(0, Math.max(name.lastIndexOf("/"), 0));
+
 export function writeFileSync(name: unknown, data: unknown): void {
   if (failures.get(String(name)) === "write") throw eacces("open", name);
+  if (missingDirs.has(parentDir(String(name)))) throw enoent("open", name);
   files.set(String(name), Buffer.from(asBuffer(data)));
   writes.push(String(name));
 }
@@ -95,9 +134,36 @@ const last = (args: unknown[]): ((...a: any[]) => void) | undefined => {
   return typeof end === "function" ? (end as (...a: any[]) => void) : undefined;
 };
 
+export function open(name: unknown, ...rest: unknown[]): void {
+  checkPath(name);
+  const cb = last(rest);
+  if (cb === undefined) return;
+  let fd = -1;
+  let failure: unknown = null;
+  if (failures.get(String(name)) === "read") failure = eacces("open", name);
+  else if (!files.has(String(name))) failure = enoent("open", name);
+  else {
+    fd = nextFd++;
+    openFds.set(fd, String(name));
+  }
+  setImmediate(() => (failure === null ? cb(null, fd) : cb(failure)));
+}
+
+function readOpened(fd: number, cb: (...a: any[]) => void): void {
+  const name = openFds.get(fd);
+  setImmediate(() => {
+    if (name === undefined || failures.get(name) === "readOpened" || !files.has(name)) cb(eisdir("read"), undefined);
+    else cb(null, Buffer.from(files.get(name)!));
+  });
+}
+
 export function readFile(name: unknown, ...rest: unknown[]): void {
   const cb = last(rest);
   if (cb === undefined) return;
+  if (typeof name === "number") {
+    readOpened(name, cb);
+    return;
+  }
   let data: Buffer;
   try {
     data = readFileSync(name);
@@ -119,6 +185,7 @@ function callback(rest: unknown[], run: () => void): void {
 }
 
 export function writeFile(name: unknown, data: unknown, ...rest: unknown[]): void {
+  checkPath(name);
   callback(rest, () => writeFileSync(name, data));
 }
 
@@ -137,7 +204,8 @@ const api = {
   readdirSync,
   readFile,
   writeFile,
-  unlink
+  unlink,
+  open
 };
 
 export const promises = {
