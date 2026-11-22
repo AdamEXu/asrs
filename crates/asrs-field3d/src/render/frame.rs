@@ -354,6 +354,7 @@ fn project(
     let node = &mut scene.graph.node_mut(id).data;
     let (render_order, frustum_culled) = (node.render_order, node.frustum_culled);
     match &mut node.kind {
+        NodeKind::Object3D => {}
         NodeKind::Group => {
             if id != scene.root {
                 group_order = render_order;

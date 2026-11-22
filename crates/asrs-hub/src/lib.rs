@@ -1,5 +1,7 @@
 pub mod custom_schemas;
 pub mod drag;
+pub mod factory;
+pub mod hub;
 pub mod sidebar;
 pub mod tab_icons;
 pub mod tabs;

@@ -1,12 +1,11 @@
 #![allow(clippy::disallowed_methods)]
 
-//! Replays `parity/specs/dom/tabs/<case>.entry.json` against `asrs_hub::tabs::Tabs` wired to
-//! the real `asrs_tabs` controllers and renderers for Table, Console and Metadata, and
-//! compares the emitted records with the committed `dom/tabs/<case>` vector, line for line.
-//! Other tab kinds keep stub halves whose recorded states are spliced in from the expected
-//! records (they are other units' work); their UUID draws still come from the fixture's
-//! seeded `Math.random`. `dom`, `canvas`, `measure` and `sourceLists` capture kinds belong to
-//! other layers and are skipped while comparing.
+//! Replays `parity/specs/dom/tabs/<case>.entry.json` against `asrs_hub::tabs::Tabs` built
+//! through the production `asrs_hub::factory::HubTabFactory`, so every tab runs its real
+//! controller and, where ported, its real renderer; the oracle's `field3dStub.ts` stands in for
+//! `Field3dRenderer` on both sides. Emitted records are compared with the committed
+//! `dom/tabs/<case>` vector, line for line. `dom`, `canvas`, `measure` and `sourceLists` capture
+//! kinds belong to other layers and are skipped while comparing.
 //!
 //! jsdom's `:nth-child` and `:nth-of-type` go stale once the table header is rebuilt, so
 //! table fixtures lay header cells out by `data-i`, set by a `/*table:tag*/` eval step right
@@ -21,10 +20,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use asrs_hub::tabs::{TabFactory, TabParts, Tabs, TabsHost};
+use asrs_hub::factory::{HubTabFactory, RendererHook};
+use asrs_hub::hub::assets_alert;
+use asrs_hub::tabs::{Tabs, TabsHost};
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::time::{Clock, Rng, create_uuid};
+use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::log::LoggableType;
@@ -35,9 +36,7 @@ use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{KeyTarget, SelectionImpl};
 use asrs_model::source_list::{Rect, SourceList};
 use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
-use asrs_model::tab_controller::{
-    Command, TabCommand, TabController, TabRenderer, keyboard_clicks,
-};
+use asrs_model::tab_controller::{TabCommand, TabController, TabRenderer, keyboard_clicks};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
@@ -48,10 +47,11 @@ use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
+use asrs_tabs::line_graph::{LineGraphController, ListId};
 use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use asrs_tabs::mechanism::MechanismController;
-use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
+use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
@@ -151,7 +151,7 @@ fn matches_compound(el: &ElDesc, compound: &str) -> bool {
     };
     let mut parts = compound.split('.');
     let tag = parts.next().unwrap_or("");
-    if !tag.is_empty() && tag != el.tag {
+    if !tag.is_empty() && tag != "*" && tag != el.tag {
         return false;
     }
     for class in parts {
@@ -361,34 +361,26 @@ enum DomKind {
     Other,
 }
 
-type Doms = Rc<RefCell<Vec<(String, DomKind)>>>;
-
-struct Factory {
-    doms: Doms,
-}
-
-struct Recorder<T> {
-    inner: T,
+/// Wraps every renderer the production factory builds, recording the last command it drew.
+struct Recorder {
+    inner: Box<dyn TabRenderer<Host>>,
     slot: Rc<RefCell<Option<JsValue>>>,
 }
 
-impl<T, Cx: TabCx + ?Sized> TabRenderer<Cx> for Recorder<T>
-where
-    T: TabRenderer<Cx> + 'static,
-{
-    fn save_state(&self, cx: &Cx) -> JsValue {
+impl TabRenderer<Host> for Recorder {
+    fn save_state(&self, cx: &Host) -> JsValue {
         self.inner.save_state(cx)
     }
 
-    fn restore_state(&mut self, cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
+    fn restore_state(&mut self, cx: &mut Host, state: &JsValue) -> Result<(), JsError> {
         self.inner.restore_state(cx, state)
     }
 
-    fn aspect_ratio(&self, cx: &Cx) -> Option<f64> {
+    fn aspect_ratio(&self, cx: &Host) -> Option<f64> {
         self.inner.aspect_ratio(cx)
     }
 
-    fn render(&mut self, cx: &mut Cx, command: &dyn TabCommand) -> Result<(), JsError> {
+    fn render(&mut self, cx: &mut Host, command: &dyn TabCommand) -> Result<(), JsError> {
         *self.slot.borrow_mut() = Some(command.to_js());
         self.inner.render(cx, command)
     }
@@ -397,108 +389,61 @@ where
         self.inner.renderer_uuid()
     }
 
-    fn timestamp_range(&self, cx: &Cx) -> Option<[f64; 2]> {
+    fn timestamp_range(&self, cx: &Host) -> Option<[f64; 2]> {
         self.inner.timestamp_range(cx)
     }
 }
 
-/// The slot of the `Recorder` wrapping a tab's renderer. A restore replaces the tab's UUID,
-/// so the slot is found through the renderer rather than the UUID it was created with.
-fn recorded_command(renderer: &dyn TabRenderer<Host>) -> Option<Rc<RefCell<Option<JsValue>>>> {
-    macro_rules! slot_of {
-        ($($inner:ty),*) => {$(
-            if let Some(recorder) = renderer.downcast_ref::<Recorder<$inner>>() {
-                return Some(recorder.slot.clone());
-            }
-        )*};
-    }
-    slot_of!(
-        TableRenderer,
-        ConsoleRenderer,
-        MetadataRenderer,
-        Field2dRenderer,
-        Field3dStubRenderer,
-        PendingRenderer,
-        StubRenderer
-    );
-    None
+fn inner_ref<T: 'static>(renderer: &dyn TabRenderer<Host>) -> Option<&T> {
+    renderer
+        .downcast_ref::<Recorder>()?
+        .inner
+        .downcast_ref::<T>()
 }
 
-/// The halves of tab kinds other units own. `command` returns `null` and every state is
-/// `undefined`, which the comparison replaces with the value upstream recorded.
-struct StubController {
-    timeline: bool,
+fn inner_mut<T: 'static>(renderer: &mut dyn TabRenderer<Host>) -> Option<&mut T> {
+    renderer
+        .downcast_mut::<Recorder>()?
+        .inner
+        .downcast_mut::<T>()
 }
 
-impl<Cx: TabCx + ?Sized> TabController<Cx> for StubController {
-    fn save_state(&self, _cx: &Cx) -> JsValue {
-        JsValue::Undefined
-    }
-
-    fn restore_state(&mut self, _cx: &mut Cx, _state: &JsValue) -> Result<(), JsError> {
-        Ok(())
-    }
-
-    fn refresh(&mut self, _cx: &mut Cx) -> Result<(), JsError> {
-        Ok(())
-    }
-
-    fn new_assets(&mut self, _cx: &mut Cx) -> Result<(), JsError> {
-        Ok(())
-    }
-
-    fn active_fields(&self, _cx: &Cx) -> Vec<JsString> {
-        Vec::new()
-    }
-
-    fn show_timeline(&self, _cx: &Cx) -> bool {
-        self.timeline
-    }
-
-    fn command(&mut self, _cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
-        Ok(Rc::new(JsValue::Null))
+/// The DOM mirror a tab's renderer draws into, found through the renderer so a restored
+/// tab's new UUID does not lose it.
+fn dom_of(renderer: &dyn TabRenderer<Host>) -> DomKind {
+    if let Some(r) = inner_ref::<TableRenderer>(renderer) {
+        DomKind::Table(r.dom().clone())
+    } else if let Some(r) = inner_ref::<ConsoleRenderer>(renderer) {
+        DomKind::Console(r.dom().clone())
+    } else if let Some(r) = inner_ref::<Field2dRenderer>(renderer) {
+        DomKind::Field2d(r.dom().clone())
+    } else {
+        DomKind::Other
     }
 }
 
-struct StubRenderer;
+/// The oracle swaps `Field3dRenderer` for `oracle/src/dom/field3dStub.ts`, so the harness swaps
+/// the production placeholder for the same stub.
+struct Hook;
 
-impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for StubRenderer {
-    fn save_state(&self, _cx: &Cx) -> JsValue {
-        JsValue::Undefined
-    }
-
-    fn restore_state(&mut self, _cx: &mut Cx, _state: &JsValue) -> Result<(), JsError> {
-        Ok(())
-    }
-
-    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
-        None
-    }
-
-    fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
-        Ok(())
-    }
-}
-
-/// Stands in for the R07 and R08 renderers, which are not ported yet: their `saveState()`
-/// returns `null`, and drawing is left to those units.
-struct PendingRenderer;
-
-impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for PendingRenderer {
-    fn save_state(&self, _cx: &Cx) -> JsValue {
-        JsValue::Null
-    }
-
-    fn restore_state(&mut self, _cx: &mut Cx, _state: &JsValue) -> Result<(), JsError> {
-        Ok(())
-    }
-
-    fn aspect_ratio(&self, _cx: &Cx) -> Option<f64> {
-        None
-    }
-
-    fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
-        Ok(())
+impl RendererHook<Host> for Hook {
+    fn renderer(
+        &mut self,
+        _cx: &mut Host,
+        kind: Option<TabType>,
+        renderer: Box<dyn TabRenderer<Host>>,
+    ) -> Box<dyn TabRenderer<Host>> {
+        let inner: Box<dyn TabRenderer<Host>> = if kind == Some(TabType::Field3d) {
+            Box::new(Field3dStubRenderer {
+                state: JsValue::Null,
+            })
+        } else {
+            renderer
+        };
+        Box::new(Recorder {
+            inner,
+            slot: Rc::new(RefCell::new(None)),
+        })
     }
 }
 
@@ -527,130 +472,6 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for Field3dStubRenderer {
     }
 }
 
-impl TabFactory<Host> for Factory {
-    fn create(&mut self, cx: &mut Host, tab_type: Option<TabType>) -> TabParts<Host> {
-        let uuid = JsString::from(create_uuid(&mut cx.rng));
-        let slot: Rc<RefCell<Option<JsValue>>> = Rc::new(RefCell::new(None));
-        self.doms
-            .borrow_mut()
-            .push((uuid.to_string_lossy(), DomKind::Other));
-        match tab_type {
-            Some(TabType::Table) => {
-                let dom = Rc::new(RefCell::new(TableDom::default()));
-                let renderer_uuid = JsString::from(create_uuid(&mut cx.rng));
-                self.doms.borrow_mut().last_mut().unwrap().1 = DomKind::Table(dom.clone());
-                TabParts {
-                    uuid: uuid.clone(),
-                    controller: Box::new(TableController::new(&uuid, dom.clone())),
-                    renderer: Box::new(Recorder {
-                        inner: TableRenderer::new(renderer_uuid, dom),
-                        slot,
-                    }),
-                }
-            }
-            Some(TabType::Console) => {
-                let dom = Rc::new(RefCell::new(ConsoleDom::default()));
-                self.doms.borrow_mut().last_mut().unwrap().1 = DomKind::Console(dom.clone());
-                TabParts {
-                    uuid: uuid.clone(),
-                    controller: Box::new(ConsoleController::new(dom.clone())),
-                    renderer: Box::new(Recorder {
-                        inner: ConsoleRenderer::new(dom),
-                        slot,
-                    }),
-                }
-            }
-            Some(TabType::Metadata) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(MetadataController::new(cx).unwrap()),
-                renderer: Box::new(Recorder {
-                    inner: MetadataRenderer,
-                    slot,
-                }),
-            },
-            Some(TabType::Video) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(VideoController::new()),
-                renderer: Box::new(Recorder {
-                    inner: PendingRenderer,
-                    slot,
-                }),
-            },
-            Some(TabType::Field2d) => {
-                let dom = Rc::new(RefCell::new(Field2dDom::default()));
-                self.doms.borrow_mut().last_mut().unwrap().1 = DomKind::Field2d(dom.clone());
-                TabParts {
-                    uuid: uuid.clone(),
-                    controller: Box::new(Field2dController::new(cx)),
-                    renderer: Box::new(Recorder {
-                        inner: Field2dRenderer::new(dom),
-                        slot,
-                    }),
-                }
-            }
-            Some(TabType::Field3d) => TabParts {
-                uuid: uuid.clone(),
-                controller: Box::new(Field3dController::new(cx)),
-                renderer: Box::new(Recorder {
-                    inner: Field3dStubRenderer {
-                        state: JsValue::Null,
-                    },
-                    slot,
-                }),
-            },
-            Some(
-                kind
-                @ (TabType::Joysticks | TabType::Swerve | TabType::Mechanism | TabType::Points),
-            ) => {
-                let controller: Box<dyn TabController<Host>> = match kind {
-                    TabType::Joysticks => Box::new(JoysticksController::new(cx)),
-                    TabType::Swerve => Box::new(SwerveController::new(cx)),
-                    TabType::Mechanism => Box::new(MechanismController::new(cx)),
-                    _ => Box::new(PointsController::new(cx)),
-                };
-                TabParts {
-                    uuid: uuid.clone(),
-                    controller,
-                    renderer: Box::new(Recorder {
-                        inner: PendingRenderer,
-                        slot,
-                    }),
-                }
-            }
-            other => {
-                let timeline = !matches!(
-                    other,
-                    Some(
-                        TabType::Documentation
-                            | TabType::Video
-                            | TabType::Table
-                            | TabType::Console
-                            | TabType::Metadata
-                    )
-                );
-                // Each upstream controller draws `createUUID()` once per `SourceList` it
-                // owns, after its own UUID.
-                let source_lists = match other {
-                    Some(TabType::LineGraph) => 3,
-                    Some(TabType::Statistics) => 1,
-                    _ => 0,
-                };
-                for _ in 0..source_lists {
-                    create_uuid(&mut cx.rng);
-                }
-                TabParts {
-                    uuid,
-                    controller: Box::new(StubController { timeline }),
-                    renderer: Box::new(Recorder {
-                        inner: StubRenderer,
-                        slot,
-                    }),
-                }
-            }
-        }
-    }
-}
-
 struct Host {
     log: Rc<RefCell<Log>>,
     selection: SelectionImpl,
@@ -672,6 +493,12 @@ struct Host {
 }
 
 impl VideoCx for Host {
+    fn now(&self) -> f64 {
+        self.clock.get()
+    }
+}
+
+impl StatisticsCx for Host {
     fn now(&self) -> f64 {
         self.clock.get()
     }
@@ -728,8 +555,7 @@ impl SourceListCx for Host {
 }
 
 /// `window.assets = message.data`, parsed into the typed assets controllers read. An entry
-/// the config parsers drop, and load failures (whose alert belongs to D07's hub lifecycle),
-/// fail the run.
+/// the config parsers drop fails the run.
 fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String> {
     let JsValue::Object(o) = data else {
         return match data {
@@ -741,9 +567,7 @@ fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String
         Some(JsValue::Array(items)) => Ok(items.len()),
         _ => Err(format!("set-assets without a {key} array is not modeled")),
     };
-    if list("loadFailures")? > 0 {
-        return Err("set-assets with load failures is not modeled".to_owned());
-    }
+    list("loadFailures")?;
     let assets = AdvantageScopeAssets::from_js(data);
     for (key, parsed) in [
         ("field2ds", assets.field2ds.len()),
@@ -841,7 +665,6 @@ struct Runner {
     layout: Layout,
     host: Host,
     tabs: Tabs<Host>,
-    doms: Doms,
     emitted: Vec<Emit>,
     clock: Rc<Cell<f64>>,
     now: f64,
@@ -885,13 +708,10 @@ impl Runner {
         });
     }
 
-    fn tab_dom(&self, uuid: &str) -> DomKind {
-        self.doms
-            .borrow()
-            .iter()
-            .find(|(u, _)| u == uuid)
-            .map(|(_, k)| k.clone())
-            .unwrap_or(DomKind::Other)
+    fn tab_dom(&self, index: usize) -> DomKind {
+        self.tabs
+            .tab(index)
+            .map_or(DomKind::Other, |t| dom_of(t.renderer()))
     }
 
     /// The DOM state each renderer's shared `dom` mirrors: hidden flags, resolved rects.
@@ -904,7 +724,7 @@ impl Runner {
             let uuid = tab.uuid().as_str().map(|s| s.to_string_lossy());
             let Some(uuid) = uuid else { continue };
             let pos = i + 1;
-            match self.tab_dom(&uuid) {
+            match self.tab_dom(i) {
                 DomKind::Table(dom) => {
                     let tagged = self.tagged_tables.contains(&uuid);
                     let mut dom = dom.borrow_mut();
@@ -970,9 +790,9 @@ impl Runner {
                 .tabs
                 .renderer_mut(&index)
                 .ok()
-                .and_then(|r| r.downcast_mut::<Recorder<Field2dRenderer>>())
+                .and_then(|r| inner_mut::<Field2dRenderer>(r))
             {
-                r.inner.flush_image_loads();
+                r.flush_image_loads();
             }
         }
         let out = self.tabs.periodic(&mut self.host);
@@ -1347,13 +1167,11 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         .strip_prefix("document.querySelector('div.renderer-content > :not([hidden]) div.")
         .and_then(|e| e.strip_suffix("').scrollTop"))
     {
-        let uuid = r
+        let dom = r
             .tabs
             .selected_index()
-            .and_then(|i| r.tabs.tab(i))
-            .and_then(|t| t.uuid().as_str().map(|s| s.to_string_lossy()))
-            .unwrap_or_default();
-        let scroll_top = match (container, r.tab_dom(&uuid)) {
+            .map_or(DomKind::Other, |i| r.tab_dom(i));
+        let scroll_top = match (container, dom) {
             ("data-table-container", DomKind::Table(dom)) => dom.borrow().scroll_top,
             ("console-table-container", DomKind::Console(dom)) => dom.borrow().scroll_top,
             _ => return Err(err(format!("unsupported eval {expr}"))),
@@ -1403,13 +1221,6 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
     }
 }
 
-fn tab_index(r: &Runner, index: &JsValue) -> Option<usize> {
-    match index {
-        JsValue::Number(n) if *n >= 0.0 && (*n as usize) < r.tabs.len() => Some(*n as usize),
-        _ => None,
-    }
-}
-
 /// A harness-side gap reported as an exception the vector can never contain.
 fn unmodeled(what: String) -> asrs_hub::tabs::TabsError {
     asrs_hub::tabs::TabsError::Thrown(JsError::new("Unmodeled", what))
@@ -1436,6 +1247,11 @@ fn tab_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut Sour
         return any
             .downcast_mut::<Field3dController>()
             .map(Field3dController::source_list_mut);
+    }
+    if any.is::<StatisticsController>() {
+        return any
+            .downcast_mut::<StatisticsController>()
+            .map(StatisticsController::source_list_mut);
     }
     any.downcast_mut::<PointsController>()
         .map(PointsController::source_list_mut)
@@ -1508,26 +1324,6 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .map_err(|e| e.message)?;
         return Ok(JsValue::Undefined);
     }
-    if suffix.starts_with(".renderer.") {
-        let i = tab_index(r, index);
-        let is_stub = i
-            .and_then(|i| r.tabs.tab(i))
-            .and_then(|t| t.tab_type())
-            .map(|k| {
-                !matches!(
-                    k,
-                    TabType::Table
-                        | TabType::Console
-                        | TabType::Metadata
-                        | TabType::Field2d
-                        | TabType::Field3d
-                )
-            })
-            .unwrap_or(false);
-        if is_stub {
-            return Ok(JsValue::Undefined);
-        }
-    }
     if let Some(arg) = suffix
         .strip_prefix(".renderer.restoreState(")
         .and_then(|s| s.strip_suffix(')'))
@@ -1539,30 +1335,6 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .restore_state(&mut r.host, &state)
             .map_err(|e| e.message)?;
         return Ok(JsValue::Undefined);
-    }
-    if suffix.starts_with(".controller.") {
-        let i = tab_index(r, index);
-        let is_stub = i
-            .and_then(|i| r.tabs.tab(i))
-            .and_then(|t| t.tab_type())
-            .map(|k| {
-                !matches!(
-                    k,
-                    TabType::Table
-                        | TabType::Console
-                        | TabType::Metadata
-                        | TabType::Joysticks
-                        | TabType::Swerve
-                        | TabType::Mechanism
-                        | TabType::Points
-                        | TabType::Field2d
-                        | TabType::Field3d
-                )
-            })
-            .unwrap_or(false);
-        if is_stub {
-            return Ok(JsValue::Undefined);
-        }
     }
     if let Some(arg) = suffix
         .strip_prefix(".controller.setXRActive(")
@@ -1585,6 +1357,34 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .controller_mut(index)
             .map_err(|e| err(e.to_string()))?
             .save_state(&r.host));
+    }
+    for (name, list_id) in [
+        ("leftSourceList", ListId::Left),
+        ("rightSourceList", ListId::Right),
+        ("discreteSourceList", ListId::Discrete),
+    ] {
+        let Some(arg) = suffix
+            .strip_prefix(&format!(".controller.{name}.addField("))
+            .and_then(|s| s.strip_suffix(')'))
+        else {
+            continue;
+        };
+        let Some(key) = parse_arg(arg)?.into_string() else {
+            return Err(err("addField needs a string key"));
+        };
+        let controller = r
+            .tabs
+            .controller_mut(index)
+            .map_err(|e| err(e.to_string()))?
+            .downcast_mut::<LineGraphController>()
+            .ok_or_else(|| err(format!("{name} on a tab that is not a line graph")))?;
+        let host = &mut r.host;
+        controller
+            .with_list(list_id, |list, [a, b]| {
+                with_env(host, |env| list.add_field(env, &[a, b], &key, None))
+            })
+            .map_err(|e| js_error(e).message)?;
+        return Ok(JsValue::Undefined);
     }
     if let Some(op) = suffix.strip_prefix(".controller.sourceList.") {
         let controller = r
@@ -1939,15 +1739,13 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
             .into(),
     };
 
-    let doms: Doms = Rc::new(RefCell::new(Vec::new()));
-    let factory = Factory { doms: doms.clone() };
+    let factory = HubTabFactory::with_hook(Box::new(Hook));
     host.rng.next_f64();
     let tabs = Tabs::new(Box::new(factory), &mut host);
     let mut runner = Runner {
         layout,
         host,
         tabs,
-        doms,
         emitted: Vec::new(),
         clock: clock_cell.clone(),
         now: start,
@@ -2192,9 +1990,15 @@ impl Runner {
             "set-assets" => {
                 if asrs_js::json::stringify(&self.host.assets_raw) != asrs_js::json::stringify(data)
                 {
+                    let alert = assets_alert(&self.host.assets_raw, data);
                     self.host.assets = assets_from_js(data).map_err(unmodeled)?;
                     self.host.assets_raw = data.clone();
                     self.tabs.new_assets(&mut self.host)?;
+                    if let Some(error) = alert.error {
+                        self.host
+                            .messages
+                            .push(NamedMessage::new(error.name.name(), error.data));
+                    }
                 }
             }
             "restore-type-memory" => {
@@ -2212,10 +2016,10 @@ impl Runner {
             "set-2d-camera" => {
                 if let Some(r) = self
                     .tabs
-                    .selected_renderer_as::<Recorder<Field2dRenderer>>(TabType::Field2d)?
+                    .selected_renderer_as::<Recorder>(TabType::Field2d)?
+                    .and_then(|r| r.inner.downcast_mut::<Field2dRenderer>())
                 {
-                    r.inner
-                        .set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN));
+                    r.set_2d_camera(&self.host, data.as_f64().unwrap_or(f64::NAN));
                 }
             }
             "set-fullscreen"
@@ -2460,13 +2264,7 @@ impl Runner {
     }
 
     fn selected_table_dom(&self) -> Option<Rc<RefCell<TableDom>>> {
-        let uuid = self
-            .tabs
-            .tab(self.tabs.selected_index()?)?
-            .uuid()
-            .as_str()?
-            .to_string_lossy();
-        match self.tab_dom(&uuid) {
+        match self.tab_dom(self.tabs.selected_index()?) {
             DomKind::Table(dom) => Some(dom),
             _ => None,
         }
@@ -2476,9 +2274,8 @@ impl Runner {
         let index = JsValue::Number(self.tabs.selected_index()? as f64);
         self.tabs
             .renderer_mut(&index)
-            .ok()?
-            .downcast_mut::<Recorder<TableRenderer>>()
-            .map(|r| &mut r.inner)
+            .ok()
+            .and_then(|r| inner_mut::<TableRenderer>(r))
     }
 
     fn set_jump_value(&mut self, props: Option<&Json>) {
@@ -2496,14 +2293,8 @@ impl Runner {
             .and_then(|p| p.get("scrollTop"))
             .and_then(Json::as_f64)
             .unwrap_or(f64::NAN);
-        if let Some(i) = self.tabs.selected_index()
-            && let Some(uuid) = self
-                .tabs
-                .tab(i)
-                .and_then(|t| t.uuid().as_str())
-                .map(|s| s.to_string_lossy())
-        {
-            match self.tab_dom(&uuid) {
+        if let Some(i) = self.tabs.selected_index() {
+            match self.tab_dom(i) {
                 DomKind::Table(dom) if target.contains("data-table") => {
                     dom.borrow_mut().scroll_top = scroll_top;
                 }
@@ -2533,11 +2324,11 @@ impl Runner {
             .tabs
             .renderer_mut(&index)
             .ok()
-            .and_then(|r| r.downcast_mut::<Recorder<TableRenderer>>())
+            .and_then(|r| inner_mut::<TableRenderer>(r))
         {
             match etype {
-                "click" => r.inner.row_click(&mut self.host, row),
-                _ => r.inner.row_context_menu(&mut self.host),
+                "click" => r.row_click(&mut self.host, row),
+                _ => r.row_context_menu(&mut self.host),
             }
         }
     }
@@ -2551,9 +2342,9 @@ impl Runner {
             .tabs
             .renderer_mut(&index)
             .ok()
-            .and_then(|r| r.downcast_mut::<Recorder<TableRenderer>>())
+            .and_then(|r| inner_mut::<TableRenderer>(r))
         {
-            r.inner.jump(&mut self.host);
+            r.jump(&mut self.host);
         }
     }
 
@@ -2762,9 +2553,9 @@ impl Runner {
             .tabs
             .renderer_mut(&index)
             .ok()
-            .and_then(|r| r.downcast_mut::<Recorder<ConsoleRenderer>>())
+            .and_then(|r| inner_mut::<ConsoleRenderer>(r))
         {
-            r.inner.highlight_click();
+            r.highlight_click();
         }
     }
 
@@ -2875,7 +2666,10 @@ impl Runner {
                         let Some(uuid) = tab.uuid().as_str().map(|s| s.to_string_lossy()) else {
                             continue;
                         };
-                        let slot = recorded_command(tab.renderer())
+                        let slot = tab
+                            .renderer()
+                            .downcast_ref::<Recorder>()
+                            .map(|r| r.slot.clone())
                             .ok_or_else(|| err(format!("tab {i} has no recording renderer")))?;
                         let Some(command) = slot.borrow_mut().take() else {
                             continue;
@@ -2944,57 +2738,6 @@ impl Runner {
     }
 }
 
-/// `state` records carry every tab's saved state; stub-kind tabs keep the values upstream
-/// recorded (their halves are other units' work) while Table, Console and Metadata are
-/// compared through the real port.
-fn patch_state(expected: &Value, actual: &mut Value) {
-    let Some(expected_tabs) = expected
-        .get("tabs")
-        .and_then(|t| t.get("tabs"))
-        .and_then(Value::as_array)
-        .map(|a| a.to_vec())
-    else {
-        return;
-    };
-    let Value::Object(state_fields) = actual else {
-        return;
-    };
-    let Some(tabs_value) = state_fields
-        .iter_mut()
-        .find(|(k, _)| k.eq_str("tabs"))
-        .map(|(_, v)| v)
-    else {
-        return;
-    };
-    let Value::Object(tabs_fields) = tabs_value else {
-        return;
-    };
-    let Some(Value::Array(actual_tabs)) = tabs_fields
-        .iter_mut()
-        .find(|(k, _)| k.eq_str("tabs"))
-        .map(|(_, v)| v)
-    else {
-        return;
-    };
-    for (expected_tab, actual_tab) in expected_tabs.iter().zip(actual_tabs.iter_mut()) {
-        let ty = expected_tab.get("type").and_then(Value::as_f64);
-        if matches!(ty, Some(4.0 | 5.0 | 8.0 | 9.0 | 10.0 | 11.0 | 12.0)) {
-            continue;
-        }
-        let Value::Object(fields) = actual_tab else {
-            continue;
-        };
-        for key in ["controller", "renderer"] {
-            if let Some(v) = expected_tab.get(key).cloned() {
-                match fields.iter_mut().find(|(k, _)| k.eq_str(key)) {
-                    Some((_, slot)) => *slot = v,
-                    None => fields.push((Utf16String::from(key), v)),
-                }
-            }
-        }
-    }
-}
-
 fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     let emitted = replay(spec)?;
     let records = vectors::load(vector_id)?;
@@ -3012,14 +2755,6 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
         let record = expected
             .next()
             .ok_or_else(|| err("port emitted more records than the vector has"))?;
-        // Documentation, LineGraph, Statistics and Video run `StubController` here.
-        let stub_command = emit
-            .values
-            .iter()
-            .find(|(k, _)| *k == "command")
-            .and_then(|(_, v)| v.get("type"))
-            .and_then(Value::as_f64)
-            .is_some_and(|t| matches!(t, 0.0 | 1.0 | 6.0));
         for (key, value) in &emit.values {
             let expected_value = record.value(key).map_err(|e| {
                 format!(
@@ -3027,14 +2762,7 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
                     record.line
                 )
             })?;
-            if *key == "value" && stub_command {
-                continue;
-            }
-            let mut actual = value.clone();
-            if *key == "state" {
-                patch_state(&expected_value, &mut actual);
-            }
-            if let Some(report) = asrs_parity::diff::report(&expected_value, &actual) {
+            if let Some(report) = asrs_parity::diff::report(&expected_value, value) {
                 return Err(format!("line {} ({key}): {report}", record.line));
             }
         }

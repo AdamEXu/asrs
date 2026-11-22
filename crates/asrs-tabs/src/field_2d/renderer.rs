@@ -139,6 +139,10 @@ impl Field2dRenderer {
         }
     }
 
+    pub fn dom(&self) -> &Rc<RefCell<Field2dDom>> {
+        &self.dom
+    }
+
     /// Delivers the `IMAGE` `load` events queued since the last call: assigning a `src`
     /// that can load fires one asynchronously.
     pub fn flush_image_loads(&mut self) {

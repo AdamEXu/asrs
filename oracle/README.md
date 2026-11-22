@@ -874,7 +874,7 @@ items with a `data-i` attribute before each event and lay them out by it.
 ### LineGraph controller
 
 `dom/line-graph/<case>` (`crates/asrs-tabs/tests/line_graph_dom.rs`) replays every LineGraph
-controller call. `node oracle/tools/lineGraphSpecs.mjs` writes the specs and their logs
+controller call and every renderer frame. `node oracle/tools/lineGraphSpecs.mjs` writes the specs and their logs
 (`parity/specs/dom/logs/line-graph-*.json`); edit the script, not the specs. Each fixture sets
 `"sourceLists": true` and starts with a `/*lg:recorder*/` eval, which hooks every LineGraph
 controller (the hub's default tab and any `addTab` creates) and writes inline records:
@@ -885,9 +885,17 @@ controller (the hub's default tab and any `addTab` creates) and writes inline re
 | `{"lg": "command" \| "preview" \| "save" \| "activeFields", "id", "dark", "ts", "args"?, "value" \| "threw", "reads"}` | after `getCommand`, `getPreview` (key and time only), `saveState` and `getActiveFields` return; `reads` lists each outermost `window.selection` getter called during it with its result, and `ts` is `preferences.timestamps` |
 | `{"lg": <method>, "id", "phase": "begin", "args", "dark"}` and `{"lg": <method>, "id", "phase": "end", "threw"?}` | around `restoreState`, `editAxis`, `clearAxis`, `setRobotModeVisible` and `refresh`; the list ops and nested `getCommand` between them belong to the call |
 | `{"lg": "edit", "id", "list", "rect"}` | before an axis's edit button handler runs, with the button's rect |
+| `{"lg": "render", "id", "width", "height", "dpr", "dark", "prefs", "threw"?, "writes", "size"?, "calls"?, "style"}` | after the tab's `LineGraphRenderer.render` returns or throws; `width` and `height` are the canvas's client size, `prefs` is `[timestamps, hasScrolledLineGraph]` (or undefined before `set-preferences`), `size` and `calls` are the canvas's pixel size and its recorded calls when the render reset it, and `style` is the scroll overlay's `top`, `left`, `right`, the help overlay's `display` and whether it has `fading-out` |
+| `{"lg": "event", "type", "x", "shift", "targets", "writes"}` | after a `mousemove`, `mousedown`, `mouseup`, `click`, `contextmenu` or `mouseleave` dispatch; `targets` holds, per hooked renderer, `[id, ROOT.hidden, on overlay, ROOT x, overlay x, overlay clientWidth]` |
+| `{"lg": "scroll", "id", "args", "pointer", "prefs", "writes", "style"}` | after the renderer's scroll sensor callback (wheel input, which fixtures call directly) |
 
-The harness answers the port's selection reads from `reads`, so a read upstream did not make,
-or one it skipped, fails the case.
+`writes` lists the outermost `window.selection` setters (`setHoveredTime`, `setSelectedTime`,
+`setGrabZoomRange`, `finishGrabZoom`, `goIdle`, `applyTimelineScroll`) called during the
+render, dispatch or callback. The harness answers the port's selection reads from `reads`, so
+a read upstream did not make, or one it skipped, fails the case. Each `render` runs the port's
+`LineGraphRenderer` on the command the port's controller built in the preceding `command`
+record and compares the trace, the writes and the styles; `event` and `scroll` records drive
+its pointer and wheel handlers.
 
 ### Field2d controller
 
@@ -997,6 +1005,30 @@ the parse and after each op the step writes `{"form": markup, "op": <op or null>
 "values": [{"path", "value"} | {"path", "threw"}, ...]}`. Paths are dotted property paths from
 the parsed element, with numeric segments indexing collections (`options.1.value`,
 `style.width`).
+
+## Hub sessions
+
+`hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
+`src/dom/env.ts`, then the real `src/hub/hub.ts` in hub.html under jsdom) and adds what the hub
+lifecycle needs:
+
+- Workers. The page's `Worker` is a real worker thread, with the worker realm's `Date` pinned to
+  1,000,000,000,000 as in `historicalSession`; messages are copied into the page realm. After
+  every page task, worker messages go to the page one at a time from the oldest worker that has
+  one or is still busy, until no worker is busy, so worker work takes no page time. Decode
+  workers and `exportWorker.js` both run this way.
+- Main's `historical-start`: the file named in the fixture (relative to it, and listed in
+  `inputs` under a spec) is read, and `historical-data` arrives as a zero-delay page timeout.
+- Live sources and the NT4 publisher are not connected; fixtures only reach their refusals.
+
+Besides the `dom` records, a session writes `{"worker", "script"}`, `{"post", "type", "files" |
+"key"}` and `{"terminate"}` for worker traffic, `{"console": "warn", "text"}` for the
+`set-assets` load-failure warning and `{"exception": "worker", "error"}` for a throw out of a
+worker message. Its generator hash also covers the `dom` entry's inputs
+(`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
+`crates/asrs-hub/tests/hub_lifecycle.rs` replays `parity/specs/hub/lifecycle-*.entry.json`
+through `asrs_hub::hub::HubModel` with the same scheduling and compares every record.
 
 ## Electron app driver
 

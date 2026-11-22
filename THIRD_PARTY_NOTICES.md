@@ -225,6 +225,22 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Used in: `crates/asrs-formats/src/mcap.rs` (`McapWriter`, `McapRecordBuilder`,
   `ChunkBuilder`, `BufferBuilder` and the CRC-32, translated to Rust)
 
+## lzma-native
+
+- License: MIT ([`licenses/lzma-native.txt`](licenses/lzma-native.txt))
+- Copyright (c) 2014-2016 Anna Henningsen
+- Version: 8.0.6
+- Used in: `crates/asrs-formats/src/wpilogxz.rs`, which reproduces how `JSLzmaStream` and
+  `LZMAStream::doLZMACode` feed liblzma (input splitting, output buffering, decoder restarts)
+
+## XZ Utils (liblzma)
+
+- License: public domain (liblzma; see `COPYING` in the XZ Utils source)
+- Copyright: none claimed; written by Lasse Collin, Igor Pavlov and others
+- Version: 5.2.5, built from the source bundled in the `lzma-sys` crate (`xz2`'s `static`
+  feature) and linked into the app
+- Used in: `.wpilogxz` decompression (`crates/asrs-formats/src/wpilogxz.rs`)
+
 ## Not yet ported
 
 Upstream also depends on mathjs (Apache-2.0) and Chart.js (MIT). No code from them has

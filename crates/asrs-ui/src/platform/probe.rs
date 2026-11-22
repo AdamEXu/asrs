@@ -172,6 +172,54 @@ pub fn hides_on_deactivate(window: &Window) -> Option<bool> {
     imp::probe::hides_on_deactivate(window)
 }
 
+/// Whether any part of the window is on screen: ordered in and not fully covered.
+pub fn is_visible(window: &Window) -> Option<bool> {
+    imp::probe::is_visible(window)
+}
+
+pub fn app_is_active() -> Option<bool> {
+    imp::probe::app_is_active()
+}
+
+/// Whether `window` is attached as a sheet to `parent`.
+pub fn is_sheet_of(window: &Window, parent: &Window) -> bool {
+    imp::probe::is_sheet_of(window, parent)
+}
+
+/// Clicks the button titled `title` in the sheet attached to `parent`, as a user would.
+pub fn click_sheet_button(parent: &Window, title: &str) -> bool {
+    imp::probe::click_sheet_button(parent, title)
+}
+
+/// The configuration of the open or save panel attached to `parent` as a sheet.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PanelState {
+    pub open: bool,
+    pub title: String,
+    pub message: String,
+    pub prompt: String,
+    pub allowed_file_types: Vec<String>,
+    pub directory: Option<String>,
+    pub name: String,
+    pub can_create_directories: bool,
+    pub can_choose_files: bool,
+    pub can_choose_directories: bool,
+    pub allows_multiple_selection: bool,
+}
+
+pub fn sheet_panel_state(parent: &Window) -> Option<PanelState> {
+    imp::probe::sheet_panel_state(parent)
+}
+
+/// Cancels the open or save panel attached to `parent`.
+pub fn cancel_sheet_panel(parent: &Window) -> bool {
+    imp::probe::cancel_sheet_panel(parent)
+}
+
+pub fn has_attached_sheet(window: &Window) -> bool {
+    imp::probe::has_attached_sheet(window)
+}
+
 pub fn has_sidebar_vibrancy(window: &Window) -> bool {
     imp::probe::has_sidebar_vibrancy(window)
 }

@@ -28,6 +28,9 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use super::probe::GpuiDelta;
 use super::{MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, WheelDelta};
 
+pub(super) mod dialog;
+pub(super) mod window;
+
 pub(super) fn init() {
     if MainThreadMarker::new().is_some() {
         install_wheel_monitor();
@@ -473,11 +476,14 @@ pub(super) fn popup_menu(
 ) {
     let ns_window = ns_window(window);
     let cx = cx.to_async();
-    let job = move || {
+    perform_on_run_loop(move || {
         let selection = ns_window.and_then(|w| show_popup(&w, &menu, x, y));
         cx.spawn(async move |cx| cx.update(|cx| on_close(selection, cx)))
             .detach();
-    };
+    });
+}
+
+fn perform_on_run_loop(job: impl FnOnce() + 'static) {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
@@ -505,9 +511,9 @@ struct PopupRunnerIvars {
     job: RefCell<Option<Box<dyn FnOnce()>>>,
 }
 
-// Menu tracking runs a nested run loop. Starting it from a GCD main-queue block (where GPUI runs
-// its foreground tasks) would stall every other main-queue block until the menu closes, so the
-// popup starts from a run loop perform instead, as Chromium's posted task does.
+// Menu tracking and modal panels run a nested run loop. Starting one from a GCD main-queue block
+// (where GPUI runs its foreground tasks) would stall every other main-queue block until it
+// closes, so they start from a run loop perform instead, as Chromium's posted task does.
 define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
@@ -901,8 +907,102 @@ pub(super) mod probe {
             .collect()
     }
 
+    pub fn is_visible(window: &Window) -> Option<bool> {
+        let window = ns_window(window)?;
+        Some(
+            window.isVisible()
+                && window
+                    .occlusionState()
+                    .contains(objc2_app_kit::NSWindowOcclusionState::Visible),
+        )
+    }
+
+    pub fn app_is_active() -> Option<bool> {
+        Some(NSApplication::sharedApplication(MainThreadMarker::new()?).isActive())
+    }
+
+    pub fn is_sheet_of(window: &Window, parent: &Window) -> bool {
+        let (Some(window), Some(parent)) = (ns_window(window), ns_window(parent)) else {
+            return false;
+        };
+        window.isSheet() && parent.attachedSheet().is_some_and(|s| s == window)
+    }
+
     pub fn hides_on_deactivate(window: &Window) -> Option<bool> {
         Some(ns_window(window)?.hidesOnDeactivate())
+    }
+
+    use objc2::rc::Retained;
+    use objc2_app_kit::NSView;
+    fn find_button(view: &NSView, title: &str) -> Option<Retained<objc2_app_kit::NSButton>> {
+        for child in view.subviews().iter() {
+            if let Ok(button) = child.clone().downcast::<objc2_app_kit::NSButton>()
+                && button.title().to_string() == title
+            {
+                return Some(button);
+            }
+            if let Some(found) = find_button(&child, title) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    pub fn click_sheet_button(parent: &Window, title: &str) -> bool {
+        let Some(sheet) = ns_window(parent).and_then(|w| w.attachedSheet()) else {
+            return false;
+        };
+        let Some(button) = sheet.contentView().and_then(|v| find_button(&v, title)) else {
+            return false;
+        };
+        // SAFETY: `performClick:` takes an optional sender.
+        unsafe { button.performClick(None) };
+        true
+    }
+
+    fn sheet_panel(parent: &Window) -> Option<Retained<objc2_app_kit::NSSavePanel>> {
+        ns_window(parent)?
+            .attachedSheet()?
+            .downcast::<objc2_app_kit::NSSavePanel>()
+            .ok()
+    }
+
+    #[allow(deprecated)]
+    pub fn sheet_panel_state(parent: &Window) -> Option<super::super::probe::PanelState> {
+        let panel = sheet_panel(parent)?;
+        let open = panel.clone().downcast::<objc2_app_kit::NSOpenPanel>().ok();
+        Some(super::super::probe::PanelState {
+            open: open.is_some(),
+            title: panel.title().to_string(),
+            message: panel.message().to_string(),
+            prompt: panel.prompt().to_string(),
+            allowed_file_types: panel
+                .allowedFileTypes()
+                .map(|types| types.iter().map(|t| t.to_string()).collect())
+                .unwrap_or_default(),
+            directory: panel
+                .directoryURL()
+                .and_then(|url| url.path())
+                .map(|p| p.to_string()),
+            name: panel.nameFieldStringValue().to_string(),
+            can_create_directories: panel.canCreateDirectories(),
+            can_choose_files: open.as_ref().is_some_and(|o| o.canChooseFiles()),
+            can_choose_directories: open.as_ref().is_some_and(|o| o.canChooseDirectories()),
+            allows_multiple_selection: open.as_ref().is_some_and(|o| o.allowsMultipleSelection()),
+        })
+    }
+
+    pub fn cancel_sheet_panel(parent: &Window) -> bool {
+        let Some(panel) = sheet_panel(parent) else {
+            return false;
+        };
+        // SAFETY: `cancel:` takes an optional sender.
+        unsafe { panel.cancel(None) };
+        true
+    }
+
+    pub fn has_attached_sheet(window: &Window) -> bool {
+        ns_window(window).is_some_and(|w| w.attachedSheet().is_some())
     }
 
     pub fn has_sidebar_vibrancy(window: &Window) -> bool {

@@ -1,0 +1,151 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/merged-root.csv",
+    "logs/second.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/merged-root.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          },
+          "state"
+        ],
+        "label": "opened"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/second.csv"
+          ],
+          "merge": true
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "document.getElementsByTagName('title')[0].textContent"
+          },
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]"
+          },
+          "selection",
+          {
+            "kind": "eval",
+            "expr": "window.log.getFieldKeys()"
+          },
+          {
+            "kind": "eval",
+            "expr": "window.log.getTimestampRange()"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.getLoadingFields()].sort()"
+          }
+        ],
+        "label": "merged"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 220,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "aaaa",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "Stats",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": -10,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "cccc",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "restore-threw"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
+    ]
+  }
+}

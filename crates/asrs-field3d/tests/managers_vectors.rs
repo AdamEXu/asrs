@@ -1,19 +1,22 @@
-//! Replays `parity/vectors/field3d/managers` (oracle/src/genField3dManagers.ts): each case runs a
-//! port of one upstream object manager through the recorded ops and compares the scene under the
-//! root after every op with the state upstream's manager left.
+//! Replays `parity/vectors/field3d/managers` (oracle/src/genField3dManagers.ts) and
+//! `parity/vectors/field3d/robot` (oracle/src/genField3dRobot.ts): each case runs a port of one
+//! upstream object manager through the recorded ops and compares the scene under the root after
+//! every op with the state upstream's manager left.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_canvas::Raster;
+use asrs_field3d::glb::{self, OptimizedMesh};
 use asrs_field3d::managers::{
     AprilTagManager, AprilTagObj, AprilTagVariant, AxesManager, AxesObj, ConeManager, ConeObj,
     GamePieceManager, GamePieceObj, GamePieces, HeatmapField, HeatmapManager, HeatmapObj,
-    InstanceSource, ManagerContext, ObjectManager, TextureRequest, TrajectoryManager,
-    TrajectoryObj, april_tag_texture_path, decode_png_texture,
+    InstanceSource, ManagerContext, ObjectManager, RobotKind, RobotLoadRequest, RobotManager,
+    RobotMechanisms, RobotObj, SwerveModuleSet, TextureRequest, TrajectoryManager, TrajectoryObj,
+    april_tag_texture_path, decode_png_texture,
 };
 use asrs_field3d::render::{
     Filter, Geometry, LineMaterial, Materials, MinFilter, NodeKind, PhongMaterial, Scene, Side,
@@ -24,8 +27,13 @@ use asrs_field3d::three::{ArrayData, BufferGeometry, Color, ObjectId};
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
-use asrs_log::geometry::{AnnotatedPose3d, Pose3d, PoseAnnotations};
-use asrs_model::assets::CoordinateSystem;
+use asrs_log::geometry::{
+    AnnotatedPose3d, ModuleVelocity, ModuleVelocitySample, Pose3d, PoseAnnotations,
+};
+use asrs_log::log::mechanism_state::{MechanismLine, MechanismState};
+use asrs_model::assets::{
+    AdvantageScopeAssets, Config3dRobot, CoordinateSystem, Parsed, parse_robot,
+};
 use asrs_model::preferences::{CoordinateSystemPreference, Field3dMode};
 use asrs_parity::vectors::{self, Record, check_records};
 use asrs_parity::{Value, diff};
@@ -102,6 +110,8 @@ fn poses(v: &Value) -> Result<Vec<AnnotatedPose3d>> {
             let pose = get(p, "pose")?;
             let annotation = get(p, "annotation")?;
             let april_tag_id = annotation.get("aprilTagId").map(number).transpose()?;
+            let vision_color = annotation.get("visionColor").map(js_string).transpose()?;
+            let vision_size = annotation.get("visionSize").map(js_string).transpose()?;
             Ok(AnnotatedPose3d {
                 pose: Pose3d {
                     translation: numbers(get(pose, "translation")?)?,
@@ -111,11 +121,99 @@ fn poses(v: &Value) -> Result<Vec<AnnotatedPose3d>> {
                     is_2d_source: boolean(get(annotation, "is2DSource")?)?,
                     has_april_tag_id: april_tag_id.is_some(),
                     april_tag_id,
-                    ..PoseAnnotations::default()
+                    vision_color,
+                    vision_size,
                 },
             })
         })
         .collect()
+}
+
+fn optional_number(v: &Value) -> Result<Option<f64>> {
+    match v {
+        Value::Null => Ok(None),
+        other => number(other).map(Some),
+    }
+}
+
+fn mechanism(v: &Value) -> Result<Option<MechanismState>> {
+    if matches!(v, Value::Null) {
+        return Ok(None);
+    }
+    let coordinates = |v: &Value| items(v)?.iter().map(optional_number).collect::<Result<_>>();
+    let lines = items(get(v, "lines")?)?
+        .iter()
+        .map(|line| {
+            let color = match get(line, "color")? {
+                Value::String(_) => Some(js_string(get(line, "color")?)?),
+                other if number(other)? == 0.0 => None,
+                other => return Err(format!("unmodeled mechanism line color {}", other.encode())),
+            };
+            Ok(MechanismLine {
+                start: coordinates(get(line, "start")?)?,
+                end: coordinates(get(line, "end")?)?,
+                color,
+                weight: optional_number(get(line, "weight")?)?,
+            })
+        })
+        .collect::<Result<_>>()?;
+    Ok(Some(MechanismState {
+        background_color: js_string(get(v, "backgroundColor")?)?,
+        dimensions: items(get(v, "dimensions")?)?
+            .iter()
+            .map(number)
+            .collect::<Result<_>>()?,
+        lines,
+    }))
+}
+
+fn module_sample(v: &Value) -> Result<ModuleVelocitySample> {
+    if matches!(v, Value::Undefined) {
+        return Ok(ModuleVelocitySample::Undefined);
+    }
+    let velocity = optional_number(get(v, "velocity")?)?;
+    let angle = optional_number(get(v, "angle")?)?;
+    Ok(match (velocity, angle) {
+        (Some(velocity), Some(angle)) => {
+            ModuleVelocitySample::Full(ModuleVelocity { velocity, angle })
+        }
+        (velocity, angle) => ModuleVelocitySample::Partial { velocity, angle },
+    })
+}
+
+fn robot_obj(o: &Value) -> Result<RobotObj> {
+    let kind = match js_string(get(o, "type")?)?.as_string().as_deref() {
+        Some("robot") => RobotKind::Robot,
+        Some("ghost") => RobotKind::Ghost {
+            color: js_string(get(o, "color")?)?,
+        },
+        other => return Err(format!("not a robot object type: {other:?}")),
+    };
+    let mechanisms = get(o, "mechanisms")?;
+    let swerve_module_velocities = items(get(o, "swerveModuleVelocities")?)?
+        .iter()
+        .map(|set| {
+            Ok(SwerveModuleSet {
+                values: items(get(set, "values")?)?
+                    .iter()
+                    .map(module_sample)
+                    .collect::<Result<_>>()?,
+                color: js_string(get(set, "color")?)?,
+            })
+        })
+        .collect::<Result<_>>()?;
+    Ok(RobotObj {
+        kind,
+        model: js_string(get(o, "model")?)?,
+        poses: poses(get(o, "poses")?)?,
+        components: poses(get(o, "components")?)?,
+        mechanisms: RobotMechanisms {
+            xz: mechanism(get(mechanisms, "xz")?)?,
+            yz: mechanism(get(mechanisms, "yz")?)?,
+        },
+        vision_targets: poses(get(o, "visionTargets")?)?,
+        swerve_module_velocities,
+    })
 }
 
 fn geometry_tree(g: &BufferGeometry) -> Value {
@@ -210,6 +308,122 @@ enum Manager {
     Cone(ConeManager),
     Trajectory(TrajectoryManager),
     Heatmap(HeatmapManager),
+    Robot(RobotManager),
+}
+
+/// The robot assets a case names: each one's config (its path is `<id>/model.glb`), whether
+/// upstream's worker answers for it, and the files behind its URLs.
+struct RobotAssets {
+    ids: Vec<String>,
+    configs: Vec<Config3dRobot>,
+    never: Vec<bool>,
+    files: HashMap<String, Vec<u8>>,
+    results: HashMap<usize, Option<Vec<Vec<OptimizedMesh>>>>,
+    window: Rc<RefCell<Option<Arc<AdvantageScopeAssets>>>>,
+    loading: Rc<Cell<[u32; 2]>>,
+    pending: Vec<RobotLoadRequest>,
+    requested: Vec<RobotLoadRequest>,
+    calls_seen: usize,
+}
+
+impl RobotAssets {
+    fn new(setup: &Value) -> Result<RobotAssets> {
+        let mut assets = RobotAssets {
+            ids: Vec::new(),
+            configs: Vec::new(),
+            never: Vec::new(),
+            files: HashMap::new(),
+            results: HashMap::new(),
+            window: Rc::default(),
+            loading: Rc::default(),
+            pending: Vec::new(),
+            requested: Vec::new(),
+            calls_seen: 0,
+        };
+        for asset in items(get(setup, "assets")?)? {
+            let id = js_string(get(asset, "id")?)?.to_string_lossy();
+            let text = js_string(get(asset, "config")?)?.to_string_lossy();
+            let raw = asrs_js::json::parse_str(&text).map_err(|e| format!("{e:?}"))?;
+            let Ok(Parsed::Config(mut config)) = parse_robot(&raw) else {
+                return Err(format!("robot asset {id} does not parse"));
+            };
+            config.path = JsString::from(format!("{id}/model.glb").as_str());
+            for file in items(get(asset, "files")?)? {
+                let pair = items(file)?;
+                let name = js_string(&pair[0])?.to_string_lossy();
+                let bundled = js_string(get(&pair[1], "bundled")?)?.to_string_lossy();
+                let bytes = std::fs::read(
+                    workspace_root()
+                        .join("reference/AdvantageScope")
+                        .join(&bundled),
+                )
+                .map_err(|e| format!("{bundled}: {e}"))?;
+                assets.files.insert(format!("{id}/{name}"), bytes);
+            }
+            assets.ids.push(id);
+            assets.configs.push(config);
+            assets.never.push(boolean(get(asset, "never")?)?);
+        }
+        assets.set_window(Some(&assets.ids.clone()))?;
+        Ok(assets)
+    }
+
+    fn set_window(&self, ids: Option<&[String]>) -> Result<()> {
+        let assets = ids
+            .map(|ids| {
+                let robots = ids
+                    .iter()
+                    .map(|id| {
+                        self.ids
+                            .iter()
+                            .position(|i| i == id)
+                            .map(|i| self.configs[i].clone())
+                            .ok_or_else(|| format!("no robot asset {id}"))
+                    })
+                    .collect::<Result<_>>()?;
+                Ok::<_, String>(Arc::new(AdvantageScopeAssets {
+                    robots,
+                    ..AdvantageScopeAssets::default()
+                }))
+            })
+            .transpose()?;
+        *self.window.borrow_mut() = assets;
+        Ok(())
+    }
+
+    /// Runs the port's `loadRobot` for each pending request and hands back the answers, checking
+    /// that the port answers exactly where upstream's worker does.
+    fn answer(&mut self, manager: &mut RobotManager) -> Result<()> {
+        for request in std::mem::take(&mut self.pending) {
+            let index = self
+                .configs
+                .iter()
+                .position(|c| c.path == request.config.path)
+                .ok_or("a load request for no asset")?;
+            if !self.results.contains_key(&index) {
+                let files = &self.files;
+                let fetch = |url: &JsString| files.get(&url.to_string_lossy()).cloned();
+                let loaded = glb::with_load_stack(|| {
+                    glb::load_robot(&request.config, request.is_ftc, &request.options, &fetch)
+                });
+                self.results.insert(index, loaded.ok());
+            }
+            match (&self.results[&index], self.never[index]) {
+                (Some(meshes), false) => manager.load_finished(&request, meshes),
+                (None, true) => {}
+                (Some(_), true) => {
+                    return Err(format!("{} loads; upstream never answers", self.ids[index]));
+                }
+                (None, false) => {
+                    return Err(format!(
+                        "{} fails to load; upstream answers",
+                        self.ids[index]
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 struct Case {
@@ -221,6 +435,9 @@ struct Case {
     texture_urls: HashMap<u64, JsString>,
     field: Rc<RefCell<Option<HeatmapField>>>,
     preference: Rc<RefCell<Option<CoordinateSystemPreference>>>,
+    robot: Option<RobotAssets>,
+    digests: HashMap<u64, Value>,
+    checked_textures: HashSet<u64>,
 }
 
 fn field_of(v: &Value) -> Result<Option<HeatmapField>> {
@@ -298,6 +515,11 @@ impl Case {
             None => None,
         }));
         let preference = Rc::new(RefCell::new(preference_of(setup.get("preferences"))?));
+        let robot = if kind == "robot" {
+            Some(RobotAssets::new(setup)?)
+        } else {
+            None
+        };
         let manager = match kind {
             "gamePiece" => {
                 let mut pieces = GamePieces::new();
@@ -322,6 +544,17 @@ impl Case {
                     Box::new(move || *p.borrow()),
                 ))
             }
+            "robot" => {
+                let robot = robot.as_ref().expect("robot assets");
+                let window = robot.window.clone();
+                let (starts, ends) = (robot.loading.clone(), robot.loading.clone());
+                Manager::Robot(RobotManager::new(
+                    ctx,
+                    Box::new(move || window.borrow().clone()),
+                    Box::new(move || starts.set([starts.get()[0] + 1, starts.get()[1]])),
+                    Box::new(move || ends.set([ends.get()[0], ends.get()[1] + 1])),
+                ))
+            }
             other => return Err(format!("unknown manager {other}")),
         };
         Ok(Case {
@@ -333,6 +566,9 @@ impl Case {
             texture_urls: HashMap::new(),
             field,
             preference,
+            robot,
+            digests: HashMap::new(),
+            checked_textures: HashSet::new(),
         })
     }
 
@@ -383,6 +619,7 @@ impl Case {
                         },
                     ),
                     Manager::Heatmap(m) => m.set_object_data(scene, &HeatmapObj { poses: p }),
+                    Manager::Robot(m) => m.set_object_data(scene, &robot_obj(o)?),
                 }
                 .map_err(|e| format!("{e}"))
             }
@@ -425,6 +662,7 @@ impl Case {
                     Manager::Cone(m) => m.set_resolution(resolution),
                     Manager::Trajectory(m) => m.set_resolution(resolution),
                     Manager::Heatmap(m) => m.set_resolution(resolution),
+                    Manager::Robot(m) => m.set_resolution(resolution),
                 }
                 Ok(())
             }
@@ -436,13 +674,50 @@ impl Case {
                     Manager::Cone(m) => m.dispose(scene),
                     Manager::Trajectory(m) => m.dispose(scene),
                     Manager::Heatmap(m) => m.dispose(scene),
+                    Manager::Robot(m) => m.dispose(scene),
                 }
+                Ok(())
+            }
+            ("load", Manager::Robot(m)) => {
+                self.robot.as_mut().expect("robot assets").answer(m)?;
+                Ok(())
+            }
+            ("assets", Manager::Robot(_)) => {
+                let ids = match &op[1] {
+                    Value::Null => None,
+                    v => Some(
+                        items(v)?
+                            .iter()
+                            .map(|id| js_string(id).map(|s| s.to_string_lossy()))
+                            .collect::<Result<Vec<_>>>()?,
+                    ),
+                };
+                self.robot
+                    .as_ref()
+                    .expect("robot assets")
+                    .set_window(ids.as_deref())?;
+                Ok(())
+            }
+            ("newAssets", Manager::Robot(m)) => {
+                m.new_assets();
+                Ok(())
+            }
+            ("hide", Manager::Robot(m)) => {
+                m.set_hide_robot_models(boolean(&op[1])?);
                 Ok(())
             }
             (other, _) => return Err(format!("op {other} does not apply to this manager")),
         };
-        if let Manager::AprilTag(m) = &mut self.manager {
-            self.pending.extend(m.take_texture_requests());
+        match &mut self.manager {
+            Manager::AprilTag(m) => self.pending.extend(m.take_texture_requests()),
+            Manager::Robot(m) => {
+                if let Some(request) = m.take_load_request() {
+                    let robot = self.robot.as_mut().expect("robot assets");
+                    robot.pending.push(request.clone());
+                    robot.requested.push(request);
+                }
+            }
+            _ => {}
         }
         Ok(outcome)
     }
@@ -462,6 +737,10 @@ impl Case {
                 .canvas()
                 .map(Source::Canvas)
                 .ok_or_else(|| "a heatmap texture before any canvas".to_owned()),
+            Manager::Robot(m) => match m.swerve_canvas() {
+                Some(swerve) if swerve.texture().key() == texture.key() => Ok(Source::Canvas(0)),
+                _ => Err("a robot texture that is not the current swerve canvas".to_owned()),
+            },
             _ => self
                 .texture_urls
                 .get(&texture.key())
@@ -495,6 +774,22 @@ impl Case {
                 Ok(Some(image)) => image.data,
                 _ => return Ok(()),
             },
+            Manager::Robot(m) => {
+                if !self.checked_textures.insert(texture.key()) {
+                    return Ok(());
+                }
+                let swerve = m.swerve_canvas().ok_or("no swerve canvas")?;
+                let canvas = swerve.canvas();
+                let mut raster =
+                    Raster::new(canvas.width, canvas.height).ok_or("swerve canvas size")?;
+                for call in &canvas.calls[..swerve.applied()] {
+                    raster.apply(call);
+                }
+                let pixmap = raster.pixmap();
+                asrs_canvas::pixels::read_rect(pixmap, 0, 0, pixmap.width(), pixmap.height())
+                    .ok_or("whole-canvas read")?
+                    .data
+            }
             _ => return Ok(()),
         };
         if texture.rgba[..] == current[..] {
@@ -593,7 +888,10 @@ impl Case {
                     "Mesh",
                     mesh.cast_shadow,
                     mesh.receive_shadow,
-                    geometry_digest(&mesh.geometry.geometry),
+                    self.digests
+                        .entry(mesh.geometry.key())
+                        .or_insert_with(|| geometry_digest(&mesh.geometry.geometry))
+                        .clone(),
                     materials,
                     instances,
                 )
@@ -693,6 +991,39 @@ impl Case {
                 });
                 Value::Array(vec![size, store])
             }
+            Manager::Robot(m) => {
+                let robot = self.robot.as_mut().expect("robot assets");
+                let swerve = m
+                    .swerve_canvas()
+                    .expect("desktop robots have a swerve canvas");
+                let calls = &swerve.canvas().calls;
+                let drawn = calls[robot.calls_seen..]
+                    .iter()
+                    .map(|c| from_js(&asrs_canvas::trace::call_to_value(c)))
+                    .collect();
+                robot.calls_seen = calls.len();
+                let [starts, ends] = robot.loading.get();
+                let requests = std::mem::take(&mut robot.requested)
+                    .into_iter()
+                    .map(|r| {
+                        Value::Array(vec![
+                            Value::String(r.config.name.units().to_vec().into()),
+                            Value::Bool(r.is_ftc),
+                            Value::string(r.options.mode.as_str()),
+                            nums(&r.options.material_specular),
+                            num(r.options.material_shininess),
+                        ])
+                    })
+                    .collect();
+                Value::Array(vec![
+                    Value::Array(drawn),
+                    num(f64::from(swerve.version())),
+                    nums(&[f64::from(starts), f64::from(ends)]),
+                    Value::String(m.get_model().units().to_vec().into()),
+                    nums(&m.dimensions()),
+                    Value::Array(requests),
+                ])
+            }
             _ => Value::Null,
         }
     }
@@ -709,10 +1040,11 @@ impl Case {
             .collect::<Result<_>>()?;
         let mut fields = Vec::new();
         if let Err(message) = outcome {
-            fields.push((
-                "throw",
-                Value::Error("Error".into(), message.as_str().into()),
-            ));
+            let (name, message) = match message.strip_prefix("TypeError: ") {
+                Some(rest) => ("TypeError", rest),
+                None => ("Error", message.as_str()),
+            };
+            fields.push(("throw", Value::Error(name.into(), message.into())));
         }
         fields.push(("children", Value::Array(children)));
         fields.push(("extra", self.extra(requested)));
@@ -745,11 +1077,10 @@ fn check_case(record: &Record, compared: &mut usize) -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn managers_match_upstream() {
+fn check_vectors(id: &str) {
     let mut compared = 0;
     let mut recorded = 0;
-    check_records("field3d/managers", |record| {
+    check_records(id, |record| {
         recorded += record
             .value("out")
             .ok()
@@ -758,4 +1089,14 @@ fn managers_match_upstream() {
         check_case(record, &mut compared)
     });
     assert_eq!(compared, recorded, "every recorded state is compared");
+}
+
+#[test]
+fn managers_match_upstream() {
+    check_vectors("field3d/managers");
+}
+
+#[test]
+fn robot_matches_upstream() {
+    check_vectors("field3d/robot");
 }

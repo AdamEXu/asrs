@@ -9,6 +9,7 @@ import AxesManager from "@upstream/shared/renderers/field3d/objectManagers/AxesM
 import ConeManager from "@upstream/shared/renderers/field3d/objectManagers/ConeManager";
 import GamePieceManager from "@upstream/shared/renderers/field3d/objectManagers/GamePieceManager";
 import HeatmapManager from "@upstream/shared/renderers/field3d/objectManagers/HeatmapManager";
+import RobotManager from "@upstream/shared/renderers/field3d/objectManagers/RobotManager";
 import TrajectoryManager from "@upstream/shared/renderers/field3d/objectManagers/TrajectoryManager";
 import { toTree } from "../cve1";
 import { RecordingContext } from "../dom/recordingCanvas";
@@ -25,6 +26,10 @@ import { fakeContainer, installFakeDom } from "../heatmap/fakeDom";
 //     load whose file exists under www (the others never call back, as a 404 does);
 //     ["redAlliance", bool]; ["field", config | null]; ["preferences", prefs | undefined];
 //     ["resolution", w, h]; ["dispose"]
+//   robot only (`robots` gives each asset's id, parsed config and loadRobot result, null for a
+//   worker that never answers; window.assets starts with every config): ["load"] answers every
+//     pending loadRobot request; ["assets", ids | null] replaces window.assets; ["newAssets"];
+//     ["hide", bool]
 //
 // Each result is {children, extra} or {throw, children, extra} when the op threw, as plain values
 // (numbers and typed arrays unencoded); geometries are FNV-1a 64 digests of their CVE-1 text.
@@ -75,6 +80,42 @@ type Pending = { url: string; texture: THREE.Texture; onLoad?: (texture: THREE.T
 let pending: Pending[] = [];
 let requested: string[] = [];
 
+export type RobotSetup = { ids: string[]; configs: any[]; payloads: any[]; results: (unknown[][] | null)[] };
+let robotLoads: { worker: LoadRobotWorker; id: number; payload: any }[] = [];
+let robotRequests: unknown[] = [];
+
+// Stands in for the Worker that WorkerManager.request starts, so the request's real promise
+// resolves when the "load" op answers it.
+class LoadRobotWorker {
+  onmessage: ((event: unknown) => void) | null = null;
+  constructor(script: string) {
+    if (script !== "../bundles/loadRobot.js") throw new Error(`field3dManagersRun: unexpected worker ${script}`);
+  }
+  postMessage(message: { id: number; payload: any }) {
+    const payload = message.payload;
+    robotRequests.push([payload.robotConfig.name, payload.isFTC, payload.mode, payload.materialSpecular, payload.materialShininess]);
+    robotLoads.push({ worker: this, id: message.id, payload });
+  }
+  terminate() {}
+}
+
+async function answerRobotLoads(robots: RobotSetup) {
+  const loads = robotLoads;
+  robotLoads = [];
+  for (const load of loads) {
+    const index = robots.configs.indexOf(load.payload.robotConfig);
+    const result = robots.results[index];
+    if (result === undefined) throw new Error("field3dManagersRun: a loadRobot request for an unknown config");
+    const { robotConfig: _sent, ...sent } = load.payload;
+    const { robotConfig: _ran, ...ran } = robots.payloads[index];
+    if (JSON.stringify(sent) !== JSON.stringify(ran)) {
+      throw new Error("field3dManagersRun: a loadRobot payload the worker was not run on");
+    }
+    if (result !== null) load.worker.onmessage!({ data: { id: load.id, payload: structuredClone(result) } });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function installTextureLoader() {
   THREE.TextureLoader.prototype.load = function (url: string, onLoad?: (texture: THREE.Texture) => void) {
     const texture = new THREE.Texture();
@@ -122,12 +163,19 @@ function makePiece(spec: { geometry: [string, ...number[]]; color: number }): TH
   return new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: spec.color }));
 }
 
-export function run(kind: string, setup: any, ops: any[][]): unknown[] {
+export async function run(kind: string, setup: any, ops: any[][], robots?: RobotSetup): Promise<unknown[]> {
   installDom();
   installTextureLoader();
+  const realWorker = (globalThis as any).Worker;
+  (globalThis as any).Worker = LoadRobotWorker;
   pending = [];
   requested = [];
-  recordCanvases = kind === "cone";
+  robotLoads = [];
+  robotRequests = [];
+  recordCanvases = kind === "cone" || kind === "robot";
+  const robotConfigs = (ids: string[]) => ids.map((id) => robots!.configs[robots!.ids.indexOf(id)]);
+  (globalThis as any).assets = robots === undefined ? undefined : { robots: robots.configs };
+  let loading = [0, 0];
   (globalThis as any).preferences = setup.preferences;
   let field = setup.field ?? null;
 
@@ -156,6 +204,13 @@ export function run(kind: string, setup: any, ops: any[][]): unknown[] {
       break;
     case "heatmap":
       manager = new HeatmapManager(...args, () => field);
+      break;
+    case "robot":
+      manager = new RobotManager(
+        ...args,
+        () => loading[0]++,
+        () => loading[1]++
+      );
       break;
     default:
       throw new Error(`field3dManagersRun: unknown manager ${JSON.stringify(kind)}`);
@@ -225,6 +280,7 @@ export function run(kind: string, setup: any, ops: any[][]): unknown[] {
     ];
   };
 
+  let swerveCallsSeen = 0;
   const extraOf = () => {
     if (kind === "aprilTag") {
       const urls = requested;
@@ -234,6 +290,22 @@ export function run(kind: string, setup: any, ops: any[][]): unknown[] {
     if (kind === "cone") {
       const canvases = [...labels.keys()].filter((k) => k instanceof RecordingCanvas) as RecordingCanvas[];
       return canvases.map((c) => [label(c), structuredClone(c.context.calls)]);
+    }
+    if (kind === "robot") {
+      const robot = manager as any;
+      const calls = robot.swerveCanvas.context.calls;
+      const drawn = calls.slice(swerveCallsSeen);
+      swerveCallsSeen = calls.length;
+      const requests = robotRequests;
+      robotRequests = [];
+      return [
+        structuredClone(drawn),
+        robot.swerveTexture.version,
+        [...loading],
+        robot.getModel(),
+        [...robot.dimensions],
+        requests
+      ];
     }
     if (kind === "heatmap") {
       const heatmap = (manager as any).heatmap;
@@ -249,7 +321,8 @@ export function run(kind: string, setup: any, ops: any[][]): unknown[] {
     return { children, extra: extraOf() };
   };
 
-  return ops.map((op) => {
+  const states: unknown[] = [];
+  for (const op of ops) {
     let error: unknown = undefined;
     try {
       switch (op[0]) {
@@ -274,6 +347,18 @@ export function run(kind: string, setup: any, ops: any[][]): unknown[] {
         case "dispose":
           manager.dispose();
           break;
+        case "load":
+          await answerRobotLoads(robots!);
+          break;
+        case "assets":
+          (globalThis as any).assets = op[1] === null ? null : { robots: robotConfigs(op[1]) };
+          break;
+        case "newAssets":
+          (manager as RobotManager).newAssets();
+          break;
+        case "hide":
+          (manager as RobotManager).setHideRobotModels(op[1]);
+          break;
         default:
           throw new Error(`field3dManagersRun: unknown op ${JSON.stringify(op[0])}`);
       }
@@ -282,6 +367,8 @@ export function run(kind: string, setup: any, ops: any[][]): unknown[] {
       error = e;
     }
     const state = stateOf();
-    return error === undefined ? state : { throw: error, ...state };
-  });
+    states.push(error === undefined ? state : { throw: error, ...state });
+  }
+  (globalThis as any).Worker = realWorker;
+  return states;
 }
