@@ -13,7 +13,7 @@ pub mod gpui {
         linear_color_stop, linear_gradient, point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
-    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};
+    pub use gpui_kit::{HeadlessAppContext, Modifiers, NoopTextSystem};
 }
 
 pub mod button;

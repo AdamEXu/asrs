@@ -1,139 +1,16 @@
 {
   "entry": "dom",
+  "backend": "blink",
   "inputs": [
     "../logs/source-list.json"
   ],
   "fixture": {
     "sourceLists": true,
-    "layout": [
-      {
-        "selector": "div.field-3d-sources",
-        "rect": [
-          310,
-          460,
-          400,
-          180
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list",
-        "rect": [
-          310,
-          490,
-          400,
-          150
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"0\"]",
-        "rect": [
-          310,
-          490,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"1\"]",
-        "rect": [
-          310,
-          520,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"2\"]",
-        "rect": [
-          310,
-          550,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"3\"]",
-        "rect": [
-          310,
-          580,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"4\"]",
-        "rect": [
-          310,
-          610,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"5\"]",
-        "rect": [
-          310,
-          640,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"6\"]",
-        "rect": [
-          310,
-          670,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"7\"]",
-        "rect": [
-          310,
-          700,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"8\"]",
-        "rect": [
-          310,
-          730,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"9\"]",
-        "rect": [
-          310,
-          760,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"10\"]",
-        "rect": [
-          310,
-          790,
-          400,
-          30
-        ]
-      },
-      {
-        "selector": "div.field-3d-sources > div.list > div.item[data-i=\"11\"]",
-        "rect": [
-          310,
-          820,
-          400,
-          30
-        ]
-      }
-    ],
+    "geometry": "real",
     "steps": [
+      {
+        "eval": "/*sl:mouse*/ window.__slMouse = (type, target, root, anchor, dx, dy) => { const [x, y] = window.__oracleQuiet(() => { const r = document.querySelector(root).getBoundingClientRect(); if (anchor === 'root') return [r.left + dx, r.top + dy]; const items = document.querySelector(root + ' > div.list').children; if (anchor < items.length) { const i = items[anchor].getBoundingClientRect(); return [r.left + dx, i.top + Math.round(dy * i.height / 30)]; } const end = items.length === 0 ? document.querySelector(root + ' > div.list').getBoundingClientRect().top : items[items.length - 1].getBoundingClientRect().bottom; return [r.left + dx, end + (anchor - items.length) * 30 + dy]; }); const t = target === 'window' ? window : document.querySelector(target); t.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })); }"
+      },
       {
         "log": "../logs/source-list.json"
       },
@@ -151,7 +28,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "no-assets"
       }

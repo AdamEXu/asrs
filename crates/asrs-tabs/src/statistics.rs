@@ -16,7 +16,7 @@ use asrs_log::log::robot_state::{
     AKIT_TIMESTAMP_KEYS, RobotMode, RobotStateRange, get_robot_state_ranges,
 };
 use asrs_model::selection::Selection;
-use asrs_model::source_list::{SourceList, configs};
+use asrs_model::source_list::{ListInput, ListOutput, SourceList, configs};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
@@ -792,6 +792,19 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
 
     fn show_timeline(&self, _cx: &Cx) -> bool {
         eq_str(&self.time_range_value(), "visible")
+    }
+
+    fn source_lists(&self) -> Vec<&SourceList> {
+        vec![&self.source_list]
+    }
+
+    fn source_list_input(
+        &mut self,
+        cx: &mut Cx,
+        input: ListInput<'_>,
+        errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        list_cx::route_lists(&mut [&mut self.source_list], cx, input, errors)
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {

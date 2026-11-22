@@ -7,12 +7,12 @@ use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::mechanism_state::{
     MechanismLine, MechanismState, get_mechanism_state, merge_mechanism_states,
 };
-use asrs_model::source_list::SourceList;
 use asrs_model::source_list::configs;
+use asrs_model::source_list::{ListInput, ListOutput, SourceList};
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{SourceListCx, js_error, source_state, with_env};
+use crate::list_cx::{self, SourceListCx, js_error, source_state, with_env};
 
 pub struct MechanismController {
     source_list: SourceList,
@@ -95,6 +95,19 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for MechanismController {
 
     fn show_timeline(&self, _cx: &Cx) -> bool {
         true
+    }
+
+    fn source_lists(&self) -> Vec<&SourceList> {
+        vec![&self.source_list]
+    }
+
+    fn source_list_input(
+        &mut self,
+        cx: &mut Cx,
+        input: ListInput<'_>,
+        errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        list_cx::route_lists(&mut [&mut self.source_list], cx, input, errors)
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
