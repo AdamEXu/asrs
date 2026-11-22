@@ -121,6 +121,10 @@ fn run(headless: &mut HeadlessCapture, scale: f32) {
 }
 
 fn main() {
+    if !cfg!(any(target_os = "macos", target_os = "linux")) {
+        println!("sidebar_view: skipped, no headless renderer on this platform");
+        return;
+    }
     let mut headless = HeadlessCapture::new(Arc::new(())).expect("headless app");
     for scale in [1.0, 2.0] {
         run(&mut headless, scale);
