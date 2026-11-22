@@ -146,7 +146,7 @@ fn install(
     prefs: &Preferences,
     received: &Rc<RefCell<Vec<MenuAction>>>,
 ) -> Vec<BuiltItem> {
-    let mut template = app_menu::template(Platform::Mac, prefs);
+    let mut template = app_menu::template(Platform::Mac, prefs, asrs_app::IDENTITY);
     app_menu::apply_preferences(&mut template, prefs);
     let sink = received.clone();
     install_application_menu(

@@ -21,20 +21,20 @@ impl AppIdentity {
     /// with the app name this identity presents.
     pub fn window_title(&self, upstream: &str) -> String {
         let upstream_name = Self::UPSTREAM.name;
-        if let Some(rest) = upstream.strip_prefix(upstream_name)
-            && (rest.is_empty() || rest.starts_with(' '))
-        {
-            return format!("{}{rest}", self.name);
-        }
         let separator = format!(" \u{2014} {upstream_name}");
-        match upstream.rfind(&separator) {
-            Some(at) => format!(
+        if let Some(at) = upstream.rfind(&separator) {
+            return format!(
                 "{} \u{2014} {}{}",
                 &upstream[..at],
                 self.name,
                 &upstream[at + separator.len()..]
-            ),
-            None => upstream.to_owned(),
+            );
+        }
+        match upstream.strip_prefix(upstream_name) {
+            Some(rest) if rest.is_empty() || rest.starts_with(' ') => {
+                format!("{}{rest}", self.name)
+            }
+            _ => upstream.to_owned(),
         }
     }
 }

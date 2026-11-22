@@ -8,14 +8,16 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::app_identity::USER_DATA_DIR;
 use asrs_model::json_file;
-use asrs_model::messages::MainToHub;
+use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
 
-use crate::asset_loader::AssetFolders;
-use crate::constants;
+use crate::asset_loader::{AssetFolders, AssetService};
 use crate::fs::Fs;
 use crate::path::PathStyle;
+use crate::state_tracker::StateTracker;
 use crate::window_manager::Platform;
+use crate::windows::WindowSystem;
+use crate::{constants, recent_units, type_memory};
 
 /// The extensions `whenReady` takes a launch argument as a file to open by.
 pub const FILE_ARG_EXTENSIONS: [&str; 9] = [
@@ -261,6 +263,72 @@ pub fn take_akit_input(fs: &dyn Fs, akit_path_input: &str) -> Option<String> {
 /// `app.on("quit")`: the log path handed to AdvantageKit is withdrawn.
 pub fn quit_cleanup(fs: &dyn Fs, akit_path_output: &str) {
     fs.remove(akit_path_output);
+}
+
+/// What main keeps in files: the `StateTracker` made at module load, the assets `whenReady`
+/// loads, and the preferences, type memory and recent units files.
+pub struct MainState {
+    pub paths: AppPaths,
+    pub tracker: StateTracker,
+    pub assets: AssetService,
+}
+
+impl MainState {
+    /// `new StateTracker()` at module load, then `whenReady` up to the menu: the preferences
+    /// rewrite, `createAssetFolders()` and the first `loadAssets()`. An error is a throw that
+    /// leaves upstream running without a window.
+    pub fn start(
+        fs: &dyn Fs,
+        ws: &dyn WindowSystem,
+        paths: AppPaths,
+        platform: &str,
+    ) -> Result<(MainState, Preferences), JsError> {
+        let tracker = StateTracker::new(fs, ws, &paths.state())?;
+        let prefs = startup_preferences(fs, &paths.prefs(), platform)?;
+        let mut assets = AssetService::new(paths.asset_folders());
+        assets.start(fs)?;
+        let main = MainState {
+            paths,
+            tracker,
+            assets,
+        };
+        Ok((main, prefs))
+    }
+
+    /// `jsonfile.readFileSync(PREFS_FILENAME)`, as `sendAllPreferences` sends it.
+    pub fn preferences(&self, fs: &dyn Fs) -> Result<JsValue, JsError> {
+        json_file::parse(&fs.read(&self.paths.prefs())?)
+    }
+
+    /// `handleHubMessage`'s file effects for the hub window with numeric id `window`.
+    pub fn hub_message(
+        &mut self,
+        fs: &dyn Fs,
+        window: f64,
+        message: &NamedMessage<HubToMain>,
+    ) -> Result<(), JsError> {
+        match message.name {
+            HubToMain::SaveState => {
+                self.tracker
+                    .save_renderer_state(window, message.data.clone());
+                Ok(())
+            }
+            HubToMain::SaveTypeMemory => {
+                type_memory::save(fs, &self.paths.type_memory(), &message.data)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// `ask-edit-axis`'s read of `recent-units.json`.
+    pub fn recent_units(&self, fs: &dyn Fs) -> Result<Option<JsValue>, JsError> {
+        recent_units::read(fs, &self.paths.recent_units())
+    }
+
+    /// `updateRecents(preset)`.
+    pub fn update_recent_units(&self, fs: &dyn Fs, preset: &JsValue) -> Result<(), JsError> {
+        recent_units::update(fs, &self.paths.recent_units(), preset)
+    }
 }
 
 #[cfg(test)]
