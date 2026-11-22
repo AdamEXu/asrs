@@ -740,32 +740,21 @@ pub fn source_list_type(data: &JsValue, dark: bool) -> Result<ContextMenu, JsErr
     let options = get(&state, "options")?;
     let mut menu = ContextMenu::default();
     let option_item = |menu: &mut ContextMenu, option_key: &str, key: &str, display: &str| {
+        let checked = ops::strict_equals(&JsValue::string(key), &get(&options, option_key)?);
         let mut new_state = state.clone();
-        let effects =
-            set_option(&mut new_state, option_key, key).map(|()| vec![respond(new_state)]);
-        effects.map(|effects| {
-            menu.click(
-                checkbox(
-                    display,
-                    ops::strict_equals(
-                        &JsValue::string(key),
-                        &ops::get(&options, option_key).unwrap_or_default(),
-                    ),
-                )
-                .icon(icon(key)),
-                effects,
-            )
-        })
+        set_option(&mut new_state, option_key, key)?;
+        Ok::<_, JsError>(menu.click(
+            checkbox(display, checked).icon(icon(key)),
+            vec![respond(new_state)],
+        ))
     };
     if let [option] = current.options.as_slice() {
-        get(&options, &option.key)?;
         for value in &option.values {
             let item = option_item(&mut menu, &option.key, &value.key, &value.display)?;
             menu.append(item);
         }
     } else {
         for option in &current.options {
-            get(&options, &option.key)?;
             let mut submenu = Vec::with_capacity(option.values.len());
             for value in &option.values {
                 submenu.push(option_item(
