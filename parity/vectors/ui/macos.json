@@ -4,7 +4,7 @@
   "platform": "darwin",
   "arch": "arm64",
   "osRelease": "27.3.0",
-  "generator": "f60fc9454e22d7bb",
+  "generator": "1aa5ca270414922a",
   "file": "tints-macos.jsonl.zst",
   "cases": 592,
   "content": "e3959c6a08ef4973"

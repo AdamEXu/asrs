@@ -5,6 +5,8 @@ pub enum Family {
     SansSerif,
     Serif,
     Monospace,
+    /// The family of Chromium's `-webkit-small-control` font on macOS, which form controls use.
+    Arial,
 }
 
 /// A canvas `font` resolved to what the glyph backends need. Size and weight are `f32`, as
@@ -183,6 +185,7 @@ fn families(list: &str) -> Option<Family> {
             "helvetica" => Some(Family::SansSerif),
             "times" => Some(Family::Serif),
             "courier" => Some(Family::Monospace),
+            "arial" => Some(Family::Arial),
             _ => None,
         };
         first = first.or(family);
