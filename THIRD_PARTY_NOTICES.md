@@ -251,6 +251,23 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
   feature) and linked into the app
 - Used in: `.wpilogxz` decompression (`crates/asrs-formats/src/wpilogxz.rs`)
 
+## math.js
+
+- License: Apache-2.0 ([`licenses/mathjs.txt`](licenses/mathjs.txt), which starts with its NOTICE)
+- Copyright (C) 2013-2022 Jos de Jong
+- Version: 11.3.0
+- Used in: `crates/asrs-model/src/mathjs/`, translated to Rust and modified (the expression
+  parser and the evaluation of the number subset that upstream's unit conversion prompt uses),
+  and `crates/asrs-model/src/unit_conversion_dialog.rs`
+
+## typed-function
+
+- License: MIT ([`licenses/typed-function.txt`](licenses/typed-function.txt))
+- Copyright (c) 2014-2018 Jos de Jong
+- Version: 4.1.0
+- Used in: `crates/asrs-model/src/mathjs/` (signature dispatch and argument error messages of
+  math.js functions)
+
 ## npm packages behind the asset downloader
 
 - License: MIT ([`licenses/asset-download-npm.txt`](licenses/asset-download-npm.txt), one
@@ -266,5 +283,5 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 
 ## Not yet ported
 
-Upstream also depends on mathjs (Apache-2.0) and Chart.js (MIT). No code from them has
-been ported yet; add an entry here and a file header when one is.
+Upstream also depends on Chart.js (MIT). No code from it has been ported yet; add an entry
+here and a file header when one is.
