@@ -20,6 +20,7 @@ export function busyReasons(): string[] {
   if (typeof w.getLoadingFields === "function" && w.getLoadingFields().size > 0) reasons.push("fields loading");
   if (document.documentElement.style.getPropertyValue("--show-loading-glow") === "1") reasons.push("log loading");
   if (/\((Loading)\)/.test(document.title)) reasons.push("title loading");
+  if (document.querySelector(".spinner-cubes-container.visible") !== null) reasons.push("3D field or robot loading");
   if (w.selection && typeof w.selection.getMode === "function" && [2, 3].includes(w.selection.getMode())) reasons.push("playback or live");
   return reasons;
 }

@@ -472,24 +472,50 @@ fn compare(a_root: &Path, b_root: &Path) -> Result<Report> {
         }
         compare_variant(&label, &a, &b, &mut report)?;
     }
+    for b in variant_dirs(b_root)? {
+        let rel = b.strip_prefix(b_root).expect("variant under its root");
+        if !a_root.join(rel).join("run.json").exists() {
+            report.failures.push(format!(
+                "{}: missing in {}",
+                rel.display(),
+                a_root.display()
+            ));
+        }
+    }
     Ok(report)
+}
+
+fn capture_names(captures: &Path) -> Result<BTreeSet<String>> {
+    Ok(sorted_entries(captures)?
+        .iter()
+        .filter_map(|e| {
+            e.file_name()?
+                .to_str()?
+                .strip_suffix(".json")
+                .map(str::to_owned)
+        })
+        .collect())
+}
+
+fn record_scale(record: &Json, file: &Path) -> Result<f64> {
+    record
+        .get("scale")
+        .and_then(Json::as_f64)
+        .ok_or_else(|| format!("{}: no scale", file.display()))
 }
 
 fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Result {
     let captures = a.join("captures");
-    let mut names = BTreeSet::new();
-    for entry in sorted_entries(&captures)? {
-        let file = entry
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default()
-            .to_owned();
-        let Some(name) = file.strip_suffix(".json") else {
-            continue;
-        };
-        names.insert(name.to_owned());
+    let names = capture_names(&captures)?;
+    for extra in capture_names(&b.join("captures"))?.difference(&names) {
+        report
+            .failures
+            .push(format!("{label} {extra}: missing in {}", a.display()));
+    }
+    for name in &names {
+        let file = format!("{name}.json");
         let (ja, jb) = (
-            read_json(&entry)?,
+            read_json(&captures.join(&file))?,
             read_json(&b.join("captures").join(&file))?,
         );
         if without_key(&ja, "timing") != without_key(&jb, "timing") {
@@ -497,7 +523,7 @@ fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Resu
                 "{label} {name}: DOM dump or capture record differs"
             ));
         }
-        let scale = ja.get("scale").and_then(Json::as_f64).unwrap_or(1.0);
+        let scale = record_scale(&ja, &captures.join(&file))?;
         let image_a = pixel::read_png(&captures.join(format!("{name}.png")))?;
         let image_b = pixel::read_png(&b.join("captures").join(format!("{name}.png")))?;
         let mut masks = rects(ja.get("masks"));
@@ -519,12 +545,16 @@ fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Resu
                 .push(format!("{label} {name}: window captures differ in size")),
         }
         for (kind, key) in [("canvas", "canvases"), ("drawing buffer", "gl")] {
-            let dumps = ja.get(key).and_then(Json::as_array).unwrap_or_default();
+            let dumps = ja
+                .get(key)
+                .and_then(Json::as_array)
+                .ok_or_else(|| format!("{label} {name}: capture record has no {key}"))?;
             for dump in dumps {
-                let Some(file) = dump.get("file").and_then(Json::as_str) else {
-                    continue;
-                };
-                let file = file.to_string();
+                let file = dump
+                    .get("file")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| format!("{label} {name}: {kind} dump without a file"))?
+                    .to_string();
                 let pa = pixel::read_png(&captures.join(&file))?;
                 let pb = pixel::read_png(&b.join("captures").join(&file))?;
                 if pa == pb {
@@ -682,18 +712,25 @@ fn check_patches(variant: &Path) -> Result<PatchResult> {
         over: Vec::new(),
     };
     for (name, image) in normalize_variant(variant)? {
-        let record = read_json(&variant.join("captures").join(format!("{name}.json")))?;
-        let scale = record.get("scale").and_then(Json::as_f64).unwrap_or(1.0);
+        let file = variant.join("captures").join(format!("{name}.json"));
+        let record = read_json(&file)?;
+        let scale = record_scale(&record, &file)?;
         let patches = record
             .get("patches")
             .and_then(Json::as_array)
-            .unwrap_or_default();
+            .ok_or_else(|| format!("{}: no patches", file.display()))?;
         for patch in patches {
-            let rgb: Vec<u8> = patch
+            let rgb: [u8; 3] = patch
                 .get("rgb")
                 .and_then(Json::as_array)
-                .map(|a| a.iter().filter_map(Json::as_f64).map(|v| v as u8).collect())
-                .unwrap_or_default();
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Json::as_f64)
+                        .map(|v| v as u8)
+                        .collect::<Vec<_>>()
+                })
+                .and_then(|v| v.try_into().ok())
+                .ok_or_else(|| format!("{}: patch without an rgb triple", file.display()))?;
             let [x, y, w, h] = rects(Some(&Json::Array(vec![patch.clone()])))
                 .first()
                 .copied()
