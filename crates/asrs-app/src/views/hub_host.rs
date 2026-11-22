@@ -4,7 +4,9 @@
 
 use asrs_hub::hub::{HubModel, HubView};
 use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_js::time::{Rng, SystemClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
+use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_ui::gpui::{App, AppContext, Entity, Window};
 
@@ -42,6 +44,11 @@ impl HubView for FrameView {
     }
 }
 
+/// The `Math.random()` calls upstream's hub bundle makes while its imports evaluate, before
+/// hub.ts draws its first UUID: 19 three.js objects built at module scope (4 draws each in
+/// `MathUtils.generateUUID`) and bignumber.js's `BigNumber.random` setup.
+const IMPORT_RANDOM_DRAWS: usize = 77;
+
 pub struct HubEntityHost {
     hub: Entity<Hub>,
     geometry: FrameGeometry,
@@ -72,8 +79,13 @@ fn platform() -> &'static str {
 }
 
 /// What `main.ts` sends a new hub window with no saved state: `is_beta` shows the feedback
-/// button, and `files` (`firstOpenPath`) are opened once the page is up.
-fn boot_messages(is_beta: bool, files: Vec<String>) -> Vec<NamedMessage<MainToHub>> {
+/// button, `preferences` are main's merged preferences, and `files` (`firstOpenPath`) are opened
+/// once the page is up.
+pub fn boot_messages(
+    is_beta: bool,
+    preferences: JsValue,
+    files: Vec<String>,
+) -> Vec<NamedMessage<MainToHub>> {
     let arch = match std::env::consts::ARCH {
         "aarch64" => "arm64",
         "x86_64" => "x64",
@@ -96,10 +108,7 @@ fn boot_messages(is_beta: bool, files: Vec<String>) -> Vec<NamedMessage<MainToHu
         (MainToHub::ShowUpdateButton, JsValue::Bool(false)),
         (MainToHub::ShowFeedbackButton, JsValue::Bool(is_beta)),
         (MainToHub::ShowWhenReady, JsValue::Undefined),
-        (
-            MainToHub::SetPreferences,
-            asrs_model::preferences::Preferences::default().to_js(),
-        ),
+        (MainToHub::SetPreferences, preferences),
         (MainToHub::SetActiveSatellites, JsValue::Array(Vec::new())),
     ];
     if !files.is_empty() {
@@ -128,12 +137,46 @@ impl HubEntityHost {
         files: Vec<String>,
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
+        let preferences = asrs_model::preferences::Preferences::default().to_js();
+        Self::open_with(
+            window,
+            dark,
+            boot_messages(is_beta, preferences, files),
+            None,
+            cx,
+        )
+    }
+
+    /// The hub window's root view, booted with `boot` in place of main's messages. With
+    /// `random_seed`, the page's and its workers' `Math.random` are V8's under
+    /// `--random-seed=<seed>`.
+    pub fn open_with(
+        window: &Window,
+        dark: bool,
+        boot: Vec<NamedMessage<MainToHub>>,
+        random_seed: Option<u64>,
+        cx: &mut App,
+    ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
             dark,
         });
-        let hub = cx.new(|cx| Hub::new(Some(window), HubConfig::new(view), cx));
+        let mut config = HubConfig::new(view);
+        if let Some(seed) = random_seed {
+            let mut random = V8MathRandom::from_seed(seed);
+            for _ in 0..IMPORT_RANDOM_DRAWS {
+                random.next_f64();
+            }
+            config.realm = JsRealm::new(Box::new(random));
+            config.worker_realm = Box::new(move || {
+                (
+                    Box::new(V8MathRandom::from_seed(seed)),
+                    Box::new(SystemClock),
+                )
+            });
+        }
+        let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
         cx.subscribe(&hub, |_, event, _| match event {
             HubEvent::Console { warn: true, text } => eprintln!("asrs: {text}"),
             HubEvent::Exception { task, error } => eprintln!("asrs: {task}: {error}"),
@@ -141,7 +184,7 @@ impl HubEntityHost {
         })
         .detach();
         hub.update(cx, |hub, cx| {
-            for message in boot_messages(is_beta, files) {
+            for message in boot {
                 geometry.sync(hub.model());
                 hub.handle_main_message(message, cx);
             }

@@ -30,8 +30,11 @@ with run.json and captures/<name>.{png,json} plus canvas and 3D dumps.
                   same platform, scale and colour settings, and a variant on one side only
                   fails. Writes report.html (default target/parity/pixel/report)
   port [<scenario>...] [--scale 1|2]... [--theme light|dark]... [--label <label>]
+       [--upstream <label>]
                   build asrs with the parity feature and run each scenario headless into
-                  target/parity/port/<label> (default `run`)
+                  target/parity/port/<label> (default `run`); logs a scenario opens as
+                  `app:<name>` come from the inputs/ the Electron driver wrote for that
+                  scenario under target/parity/app/<upstream label> (default: the port label)
   check           the port's exit criteria: colour-patch and hub-empty at 1x and 2x, every
                   capture the scenario's window size times the scale, every patch exact
   selftest [<upstream variant dir>...]
@@ -201,6 +204,8 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
+/// Capture names are `[a-z0-9-]`, so a dotted stem (`<name>.hub-state.json`) is a capture's
+/// side file.
 pub(crate) fn capture_names(variant: &Path) -> Result<Vec<String>> {
     Ok(sorted_entries(&variant.join("captures"))?
         .iter()
@@ -208,6 +213,7 @@ pub(crate) fn capture_names(variant: &Path) -> Result<Vec<String>> {
             e.file_name()?
                 .to_str()?
                 .strip_suffix(".json")
+                .filter(|stem| !stem.contains('.'))
                 .map(str::to_owned)
         })
         .collect())
@@ -385,6 +391,23 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         ),
         _ => None,
     };
+    let hub_state = match string(&record, "hubState") {
+        Some(file) => Some(
+            fs::read(captures.join(&file))
+                .map_err(|e| format!("{}: {e}", captures.join(&file).display()))?,
+        ),
+        None => None,
+    };
+    let timeline_range = match record.get("timelineRange") {
+        None | Some(Json::Null) => None,
+        Some(range) => Some(
+            range
+                .as_array()
+                .filter(|a| a.len() == 2)
+                .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]))
+                .ok_or_else(|| format!("{name}: timelineRange is not two numbers"))?,
+        ),
+    };
     Ok(Capture {
         scale,
         image,
@@ -395,6 +418,8 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         canvases,
         gl,
         patches,
+        hub_state,
+        timeline_range,
     })
 }
 
@@ -595,6 +620,7 @@ struct PortOptions {
     scenarios: Vec<String>,
     flags: Vec<String>,
     label: String,
+    upstream: Option<String>,
 }
 
 impl PortOptions {
@@ -611,6 +637,9 @@ impl PortOptions {
                     options.flags.extend([arg.clone(), value.clone()]);
                 }
                 "--label" => options.label = iter.next().ok_or("--label needs a value")?.clone(),
+                "--upstream" => {
+                    options.upstream = Some(iter.next().ok_or("--upstream needs a label")?.clone());
+                }
                 flag if flag.starts_with("--") => {
                     return Err(format!("unknown option {flag}\n\n{USAGE}"));
                 }
@@ -667,11 +696,27 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
         if out.exists() {
             fs::remove_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
         }
+        let upstream = parity_dir()
+            .join("app")
+            .join(options.upstream.as_ref().unwrap_or(&options.label))
+            .join(&name);
+        let inputs = match upstream.is_dir() {
+            true => variant_dirs(&upstream)?
+                .into_iter()
+                .map(|v| v.join("inputs"))
+                .find(|i| i.is_dir()),
+            false => None,
+        };
         let status = Command::new(&exe)
             .arg("--parity-scenario")
             .arg(scenarios.join(format!("{name}.json")))
             .arg("--out")
             .arg(&out)
+            .args(
+                inputs
+                    .iter()
+                    .flat_map(|i| [std::ffi::OsStr::new("--inputs"), i.as_os_str()]),
+            )
             .args(&options.flags)
             .current_dir(workspace_root())
             .status()

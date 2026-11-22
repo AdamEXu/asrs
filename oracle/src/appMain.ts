@@ -34,6 +34,7 @@ const STABLE_TIMEOUT_MS = 30_000;
 const STABLE_CAPTURES = 3;
 const STABLE_GAP_MS = 120;
 const SAVE_SETTLE_MS = 1500;
+const STATE_SAVE_TIMEOUT_MS = 5000;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 function fail(message: string): never {
@@ -70,7 +71,11 @@ const switches: [string, string?][] = [
   ["force-prefers-reduced-motion"],
   // Partial raster re-rasters only invalidated rects into old tiles, which leaves timing-dependent
   // seams (one pixel of a button border in 2 of 5 runs); a full raster is what a fresh paint gives.
-  ["disable-partial-raster"]
+  ["disable-partial-raster"],
+  // Chromium animates a notched wheel scroll over several frames, so ScrollSensor sees the delta
+  // in a timing-dependent number of scroll events and the zoom it compounds differs in the last
+  // bits between runs. Unanimated, each wheel event is one scroll.
+  ["disable-smooth-scrolling"]
 ];
 if (colour === "srgb") switches.push(["force-color-profile", "srgb"]);
 // GPU-less hosts need SwiftShader for WebGL. 2D and DOM launches go without it, so their raster
@@ -317,6 +322,16 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
   const base = path.join(capturesDir, name);
   fs.writeFileSync(`${base}.png`, encodePng(size.width, size.height, rgba!));
 
+  let hubState: string | undefined;
+  let timelineRange: number[] | undefined;
+  if (scenario.page === "app") {
+    const saves = await exec<number>("window.__asrsParity.saves()");
+    await until(`capture ${name}: a save-state after the capture`, STATE_SAVE_TIMEOUT_MS, async () => (await exec<number>("window.__asrsParity.saves()")) > saves);
+    hubState = `${name}.hub-state.json`;
+    fs.writeFileSync(path.join(capturesDir, hubState), await exec<string>("window.__asrsParity.savedState()"));
+    timelineRange = await exec<number[]>("window.selection.getTimelineRange()");
+  }
+
   const patches =
     scenario.page === "colour-patch"
       ? await exec("Array.from(document.querySelectorAll('.patch'), (el) => { const r = el.getBoundingClientRect(); return { rgb: el.dataset.rgb.split(',').map(Number), rect: [r.x, r.y, r.width, r.height] }; })")
@@ -339,7 +354,15 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
       if (pixels.rgba === null) throw new Error(`capture ${name}: WebGL canvas ${context.path} has not drawn since the page loaded`);
       const file = `${name}.gl-${context.index}.png`;
       fs.writeFileSync(path.join(capturesDir, file), encodePng(pixels.width, pixels.height, Buffer.from(pixels.rgba)));
-      gl.push({ ...context, file, width: pixels.width, height: pixels.height, attributes: pixels.attributes, renderer: pixels.renderer });
+      gl.push({
+        ...context,
+        file,
+        width: pixels.width,
+        height: pixels.height,
+        mode: renderMode(name, pixels.attributes),
+        attributes: pixels.attributes,
+        renderer: pixels.renderer
+      });
       glFrames[file] = pixels.frame;
     }
   }
@@ -361,6 +384,8 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
         canvases,
         gl,
         patches,
+        hubState,
+        timelineRange,
         timing: { stableAfter: attempts, glFrames, frame: await exec<number>("window.__asrsParity.frame()") }
       },
       null,
@@ -368,6 +393,16 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     ) + "\n"
   );
   console.error(`  ${scenario.name} ${scale}x ${theme}: ${name} (${size.width}x${size.height}, ${canvases.length} canvases, ${gl.length} gl)`);
+}
+
+// Field3dRendererImpl creates its WebGL context with a powerPreference chosen by the render mode
+// and nothing else, so the context's attributes name the mode the frame was drawn in.
+const POWER_PREFERENCE_MODES: Record<string, string> = { default: "standard", "low-power": "low-power", "high-performance": "cinematic" };
+
+function renderMode(name: string, attributes: any): string {
+  const mode = POWER_PREFERENCE_MODES[attributes?.powerPreference];
+  if (mode === undefined) throw new Error(`capture ${name}: WebGL powerPreference ${JSON.stringify(attributes?.powerPreference)} names no 3D render mode`);
+  return mode;
 }
 
 function resolveLog(spec: string): string {

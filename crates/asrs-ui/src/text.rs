@@ -430,8 +430,11 @@ impl Element for Text {
             }
         });
         #[cfg(feature = "parity")]
-        if let Some(id) = &self.probe {
-            probe::record(cx, id, bounds, layout, *origin);
+        {
+            if let Some(id) = &self.probe {
+                probe::record(cx, id, bounds, layout, *origin);
+            }
+            crate::parity::record_text(cx, probe::text_run(layout, *origin));
         }
     }
 }
@@ -454,18 +457,7 @@ pub mod probe {
     #[derive(Default)]
     pub struct Probe(pub Vec<Record>);
 
-    impl Global for Probe {}
-
-    pub(super) fn record(
-        cx: &mut App,
-        id: &SharedString,
-        bounds: Bounds<Pixels>,
-        layout: &Layout,
-        origin: (Lu, Lu),
-    ) {
-        if !cx.has_global::<Probe>() {
-            return;
-        }
+    fn fragments(layout: &Layout, origin: (Lu, Lu)) -> Vec<(String, [f64; 4])> {
         let px = |lu: Lu| f64::from(lu) / 64.0 / f64::from(layout.scale);
         let mut fragments = Vec::new();
         for line in &layout.lines {
@@ -480,6 +472,40 @@ pub mod probe {
                 fragments.push((f.text.clone(), rect));
             }
         }
+        fragments
+    }
+
+    /// The text and one box per line, the union of the line's fragments.
+    pub(super) fn text_run(layout: &Layout, origin: (Lu, Lu)) -> crate::parity::TextRun {
+        let mut text = String::new();
+        let mut rects: Vec<[f64; 4]> = Vec::new();
+        for (fragment, r) in fragments(layout, origin) {
+            text.push_str(&fragment);
+            match rects.last_mut() {
+                Some(last) if last[1] == r[1] => {
+                    let right = (last[0] + last[2]).max(r[0] + r[2]);
+                    last[0] = last[0].min(r[0]);
+                    last[2] = right - last[0];
+                }
+                _ => rects.push(r),
+            }
+        }
+        crate::parity::TextRun { text, rects }
+    }
+
+    impl Global for Probe {}
+
+    pub(super) fn record(
+        cx: &mut App,
+        id: &SharedString,
+        bounds: Bounds<Pixels>,
+        layout: &Layout,
+        origin: (Lu, Lu),
+    ) {
+        if !cx.has_global::<Probe>() {
+            return;
+        }
+        let fragments = fragments(layout, origin);
         let record = Record {
             id: id.clone(),
             bounds: [

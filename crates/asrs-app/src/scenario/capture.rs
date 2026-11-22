@@ -1,231 +1,136 @@
-use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+//! The files one port capture writes, in the layout and keys of the Electron driver's
+//! (`oracle/src/appMain.ts`), so `cargo xtask pixel` reads both sides with one loader.
 
-use asrs_ui::capture::{Capture, HeadlessCapture};
-use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, IntoElement, ParentElement, Render, Styled, Window, div,
-    px, rgb, size,
-};
-use asrs_ui::theme::ThemeSource;
+use std::path::Path;
+
+use asrs_js::value::{JsObject, JsValue};
+use asrs_ui::capture::Capture;
+use asrs_ui::parity::{Recorder, Rect};
 
 use super::{Action, COLUMNS, PATCH, Page, Scenario, Theme, patch_colours};
-use crate::views::frame::{HubFrame, probe_rects};
-use crate::views::hub_host::HubEntityHost;
 
-const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
-[--scale 1|2]... [--theme light|dark]...";
+/// `parity/probes.json`: for each upstream selector a scenario probes or masks, the parity ids
+/// of the port elements it matches.
+pub struct Probes(Vec<(String, Vec<String>)>);
 
-/// `Some(exit code)` when the command line asks for a scenario run.
-pub fn run_from_args() -> Option<i32> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if !args.iter().any(|a| a == "--parity-scenario") {
-        return None;
-    }
-    Some(match run(&args) {
-        Ok(()) => 0,
-        Err(e) => {
-            eprintln!("asrs --parity-scenario: {e}");
-            1
-        }
-    })
-}
-
-struct Options {
-    scenario: PathBuf,
-    out: PathBuf,
-    scales: Vec<u32>,
-    themes: Vec<String>,
-}
-
-fn options(args: &[String]) -> Result<Options, String> {
-    let (mut scenario, mut out) = (None, None);
-    let (mut scales, mut themes) = (Vec::new(), Vec::new());
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        let mut value = || iter.next().cloned().ok_or(format!("{arg} needs a value"));
-        match arg.as_str() {
-            "--parity-scenario" => scenario = Some(PathBuf::from(value()?)),
-            "--out" => out = Some(PathBuf::from(value()?)),
-            "--scale" => scales.push(value()?.parse().map_err(|_| "--scale is 1 or 2")?),
-            "--theme" => themes.push(value()?),
-            other => return Err(format!("unknown argument {other}\n{USAGE}")),
-        }
-    }
-    Ok(Options {
-        scenario: scenario.ok_or(USAGE)?,
-        out: out.ok_or(USAGE)?,
-        scales,
-        themes,
-    })
-}
-
-struct ColourPatches(Vec<[u8; 3]>);
-
-impl Render for ColourPatches {
-    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
-        div()
-            .size_full()
-            .bg(rgb(0x000000))
-            .children(self.0.iter().enumerate().map(|(i, c)| {
-                let i = i as u32;
-                div()
-                    .absolute()
-                    .left(px(((i % COLUMNS) * PATCH) as f32))
-                    .top(px(((i / COLUMNS) * PATCH) as f32))
-                    .size(px(PATCH as f32))
-                    .bg(rgb(u32::from_be_bytes([0, c[0], c[1], c[2]])))
-            }))
-    }
-}
-
-pub fn run(args: &[String]) -> Result<(), String> {
-    let options = options(args)?;
-    let name = options
-        .scenario
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or("scenario file has no name")?
-        .to_owned();
-    let text = std::fs::read_to_string(&options.scenario)
-        .map_err(|e| format!("{}: {e}", options.scenario.display()))?;
-    let scenario = Scenario::parse(&name, &text)?;
-    let mut headless = HeadlessCapture::new(Arc::new(())).map_err(|e| e.to_string())?;
-    for &scale in &scenario.scales {
-        if !options.scales.is_empty() && !options.scales.contains(&scale) {
-            continue;
-        }
-        for &theme in &scenario.themes {
-            if !options.themes.is_empty() && !options.themes.iter().any(|t| t == theme.name()) {
+impl Probes {
+    pub fn load(path: &Path) -> Result<Probes, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let root =
+            asrs_js::json::parse_str(&text).map_err(|e| format!("{}: {e:?}", path.display()))?;
+        let object = root
+            .as_object()
+            .ok_or_else(|| format!("{}: not an object", path.display()))?;
+        let mut map = Vec::new();
+        for key in object.keys() {
+            let selector = key.to_string_lossy();
+            if selector == "about" {
                 continue;
             }
-            let dir = options.out.join(format!("{scale}x-{}", theme.name()));
-            run_variant(&mut headless, &scenario, scale, theme, &dir)
-                .map_err(|e| format!("{name} {scale}x {}: {e}", theme.name()))?;
+            let ids = object
+                .get_key(key)
+                .and_then(JsValue::as_array)
+                .and_then(|ids| {
+                    ids.iter()
+                        .map(|id| id.as_str().map(|s| s.to_string_lossy()))
+                        .collect::<Option<Vec<_>>>()
+                })
+                .ok_or_else(|| {
+                    format!("{}: {selector} is not a list of parity ids", path.display())
+                })?;
+            map.push((selector, ids));
         }
+        Ok(Probes(map))
     }
-    Ok(())
+
+    fn ids(&self, selector: &str) -> Result<&[String], String> {
+        self.0
+            .iter()
+            .find(|(s, _)| s == selector)
+            .map(|(_, ids)| ids.as_slice())
+            .ok_or_else(|| format!("{selector} has no parity ids in parity/probes.json"))
+    }
+
+    /// The painted boxes `selector` matches, in paint order.
+    fn rects(&self, recorder: &Recorder, selector: &str) -> Result<Vec<Rect>, String> {
+        let ids = self.ids(selector)?;
+        Ok(recorder
+            .boxes
+            .iter()
+            .filter(|(id, _)| ids.iter().any(|i| i == id.as_ref()))
+            .map(|(_, r)| *r)
+            .collect())
+    }
 }
 
-fn run_variant(
-    headless: &mut HeadlessCapture,
-    scenario: &Scenario,
-    scale: u32,
-    theme: Theme,
-    dir: &Path,
-) -> Result<(), String> {
-    let captures = dir.join("captures");
-    std::fs::create_dir_all(&captures).map_err(|e| format!("{}: {e}", captures.display()))?;
-    headless.context().update(|cx| {
-        cx.set_global(match theme {
-            Theme::Light => ThemeSource::Light,
-            Theme::Dark => ThemeSource::Dark,
-        });
-    });
-    let content = size(px(scenario.width as f32), px(scenario.height as f32));
-    let mut hub_window = None;
-    let window: AnyWindowHandle = match scenario.page {
-        Page::App => headless
-            .open_window(content, scale as f32, |window, cx| {
-                HubEntityHost::open(window, theme == Theme::Dark, true, Vec::new(), cx)
-            })
-            .map(|w| {
-                hub_window = Some(w);
-                w.into()
-            }),
-        Page::ColourPatch => headless
-            .open_window(content, scale as f32, |_, cx| {
-                cx.new(|_| ColourPatches(patch_colours()))
-            })
-            .map(Into::into),
-    }
-    .map_err(|e| e.to_string())?;
-    for action in &scenario.actions {
-        let Action::Capture {
-            name,
-            probes,
-            masks,
-        } = action;
-        let shot = headless.capture(window).map_err(|e| e.to_string())?;
-        let viewport = headless
-            .context()
-            .update_window(window, |_, window, _| window.viewport_size())
-            .map_err(|e| e.to_string())?;
-        let expected = (
-            (scenario.width * f64::from(scale)) as u32,
-            (scenario.height * f64::from(scale)) as u32,
-        );
-        if (shot.width, shot.height) != expected
-            || (
-                f64::from(f32::from(viewport.width)),
-                f64::from(f32::from(viewport.height)),
-            ) != (scenario.width, scenario.height)
-        {
-            return Err(format!(
-                "capture {name}: content is {}x{} px ({:?} logical), expected {}x{}",
-                shot.width, shot.height, viewport, expected.0, expected.1
-            ));
-        }
-        if !masks.is_empty() {
-            return Err(format!(
-                "capture {name}: mask selectors need parity ids (H10b)"
-            ));
-        }
-        write_png(&captures.join(format!("{name}.png")), &shot)?;
-        let mut rects = Vec::new();
-        for probe in probes {
-            let found = match hub_window {
-                Some(w) => headless
-                    .context()
-                    .update_window(w.into(), |root, _, cx| {
-                        let frame = root.downcast::<HubFrame<HubEntityHost>>().ok()?;
-                        let layout = frame.read(cx).layout(
-                            cx,
-                            scenario.width,
-                            scenario.height,
-                            f64::from(scale),
-                        );
-                        probe_rects(&layout, probe)
-                    })
-                    .map_err(|e| e.to_string())?,
-                None => None,
-            };
-            rects.push(found.ok_or_else(|| {
-                format!("capture {name}: no element answers probe {probe} (H10b)")
-            })?);
-        }
-        let record = capture_record(name, scenario, scale, theme, &shot, probes, &rects);
-        write(&captures.join(format!("{name}.json")), &record)?;
-    }
-    headless
-        .context()
-        .update_window(window, |_, window, _| window.remove_window())
-        .map_err(|e| e.to_string())?;
-    write(&dir.join("run.json"), &run_record(scenario, scale, theme))
+pub struct Shot {
+    pub image: Capture,
+    pub recorder: Recorder,
+    pub viewport: (f64, f64),
 }
 
-fn write(path: &Path, text: &str) -> Result<(), String> {
+impl Shot {
+    pub fn same_as(&self, other: &Shot) -> bool {
+        self.image == other.image && self.recorder == other.recorder
+    }
+}
+
+pub struct Context<'a> {
+    pub scenario: &'a Scenario,
+    pub scale: u32,
+    pub theme: Theme,
+    pub probes: &'a Probes,
+}
+
+pub fn kind(action: &Action) -> &'static str {
+    match action {
+        Action::Main { .. } => "main",
+        Action::Open { .. } => "open",
+        Action::Selection { .. } => "selection",
+        Action::Wait { .. } => "wait",
+        Action::Idle => "idle",
+        Action::Mouse { .. } => "mouse",
+        Action::Wheel(_) => "wheel",
+        Action::Key { .. } => "key",
+        Action::Capture { .. } => "capture",
+    }
+}
+
+pub fn write(path: &Path, text: &str) -> Result<(), String> {
     std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn write_png(path: &Path, shot: &Capture) -> Result<(), String> {
+fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), shot.width, shot.height);
+    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     encoder
         .write_header()
-        .and_then(|mut w| w.write_image_data(&shot.rgba))
+        .and_then(|mut w| w.write_image_data(rgba))
         .map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn quote(text: &str) -> String {
-    let mut out = String::new();
-    asrs_js::json::quote_into(&text.encode_utf16().collect::<Vec<_>>(), &mut out);
-    out
+fn json(value: &JsValue) -> Result<String, String> {
+    asrs_js::json::stringify_gap(value, " ")
+        .map_err(|e| format!("{e:?}"))?
+        .map(|text| text + "\n")
+        .ok_or_else(|| "the record is not JSON".to_owned())
 }
 
-/// The process.platform name the Electron driver records, so both runs pick the same masks.
+fn num(v: f64) -> JsValue {
+    JsValue::Number(v)
+}
+
+fn rect(r: Rect) -> JsValue {
+    JsValue::Array(r.iter().map(|v| num(*v)).collect())
+}
+
+fn rects(rs: &[Rect]) -> JsValue {
+    JsValue::Array(rs.iter().map(|r| rect(*r)).collect())
+}
+
+/// The `process.platform` name the Electron driver records, so both runs pick the same masks.
 fn platform() -> &'static str {
     match std::env::consts::OS {
         "macos" => "darwin",
@@ -234,70 +139,183 @@ fn platform() -> &'static str {
     }
 }
 
-fn run_record(scenario: &Scenario, scale: u32, theme: Theme) -> String {
-    format!(
-        "{{\n \"scenario\": {},\n \"scale\": {scale},\n \"theme\": {},\n \"window\": {{\"width\": {}, \"height\": {}}},\n \"platform\": {},\n \"arch\": {},\n \"capture\": \"headless\"\n}}\n",
-        quote(&scenario.name),
-        quote(theme.name()),
-        scenario.width,
-        scenario.height,
-        quote(platform()),
-        quote(std::env::consts::ARCH),
-    )
+pub fn run_record(scenario: &Scenario, scale: u32, theme: Theme, exceptions: &[String]) -> String {
+    let record = asrs_js::ops::object([
+        ("scenario", JsValue::string(&scenario.name)),
+        ("scale", num(f64::from(scale))),
+        ("theme", JsValue::string(theme.name())),
+        (
+            "window",
+            asrs_js::ops::object([
+                ("width", num(scenario.width)),
+                ("height", num(scenario.height)),
+            ]),
+        ),
+        ("platform", JsValue::string(platform())),
+        ("arch", JsValue::string(std::env::consts::ARCH)),
+        ("capture", JsValue::string("headless")),
+        ("files", JsValue::Array(Vec::new())),
+        (
+            "exceptions",
+            JsValue::Array(exceptions.iter().map(|e| JsValue::string(e)).collect()),
+        ),
+    ]);
+    json(&record).expect("the run record is plain JSON")
 }
 
-fn capture_record(
+#[allow(clippy::too_many_arguments)]
+pub fn write_capture(
+    dir: &Path,
     name: &str,
-    scenario: &Scenario,
-    scale: u32,
-    theme: Theme,
-    shot: &Capture,
+    cx: Context<'_>,
+    shot: &Shot,
     probes: &[String],
-    rects: &[Vec<[f64; 4]>],
-) -> String {
-    let mut out = String::new();
-    let _ = write!(
-        out,
-        "{{\n \"name\": {},\n \"scale\": {scale},\n \"theme\": {},\n \"width\": {},\n \"height\": {},\n \"image\": {},\n \"colourSpace\": \"srgb\",\n \"devicePixelRatio\": {scale},\n \"viewport\": [{}, {}],\n",
-        quote(name),
-        quote(theme.name()),
-        shot.width,
-        shot.height,
-        quote(&format!("{name}.png")),
-        scenario.width,
-        scenario.height,
-    );
-    let probes: Vec<String> = probes
+    masks: &[String],
+    state: Option<&JsValue>,
+    timeline: Option<[f64; 2]>,
+) -> Result<(), String> {
+    let recorder = &shot.recorder;
+    let image = format!("{name}.png");
+    write_png(
+        &dir.join(&image),
+        shot.image.width,
+        shot.image.height,
+        &shot.image.rgba,
+    )?;
+
+    let mut probed = JsObject::new();
+    for selector in probes {
+        let found = cx
+            .probes
+            .rects(recorder, selector)
+            .map_err(|e| format!("capture {name}: {e}"))?;
+        probed.insert(selector.as_str(), rects(&found));
+    }
+    let texts = recorder
+        .texts
         .iter()
-        .zip(rects)
-        .map(|(p, rects)| {
-            let rects: Vec<String> = rects
-                .iter()
-                .map(|r| format!("[{}, {}, {}, {}]", r[0], r[1], r[2], r[3]))
-                .collect();
-            format!("{}: [{}]", quote(p), rects.join(", "))
+        .filter(|t| !t.text.trim().is_empty() && !t.rects.is_empty())
+        .map(|t| {
+            asrs_js::ops::object([
+                ("text", JsValue::string(&t.text)),
+                ("rects", rects(&t.rects)),
+            ])
         })
         .collect();
-    let _ = writeln!(out, " \"probes\": {{{}}},", probes.join(", "));
-    out.push_str(" \"texts\": [],\n \"masks\": [],\n \"canvases\": [],\n \"gl\": []");
-    if scenario.page == Page::ColourPatch {
-        let patches: Vec<String> = patch_colours()
+    let mut mask_list: Vec<JsValue> = recorder
+        .masks
+        .iter()
+        .map(|(reason, r)| {
+            asrs_js::ops::object([("reason", JsValue::string(reason)), ("rect", rect(*r))])
+        })
+        .collect();
+    for selector in masks {
+        for r in cx
+            .probes
+            .rects(recorder, selector)
+            .map_err(|e| format!("capture {name}: mask {e}"))?
+        {
+            mask_list.push(asrs_js::ops::object([
+                ("reason", JsValue::string(selector)),
+                ("rect", rect(r)),
+            ]));
+        }
+    }
+
+    let mut canvases = Vec::new();
+    for (i, dump) in recorder.canvases.iter().enumerate() {
+        let file = format!("{name}.canvas-{i}.png");
+        write_png(&dir.join(&file), dump.width, dump.height, &dump.rgba)?;
+        canvases.push(asrs_js::ops::object([
+            ("file", JsValue::string(&file)),
+            ("rect", rect(dump.rect)),
+            ("width", num(f64::from(dump.width))),
+            ("height", num(f64::from(dump.height))),
+        ]));
+    }
+    let mut gl = Vec::new();
+    for (i, dump) in recorder.gl.iter().enumerate() {
+        let file = format!("{name}.gl-{i}.png");
+        let edges = format!("{name}.gl-{i}.edges.png");
+        write_png(&dir.join(&file), dump.width, dump.height, &dump.rgba)?;
+        let mask: Vec<u8> = dump
+            .edges
+            .iter()
+            .flat_map(|e| if *e { [255; 4] } else { [0, 0, 0, 255] })
+            .collect();
+        write_png(&dir.join(&edges), dump.width, dump.height, &mask)?;
+        gl.push(asrs_js::ops::object([
+            ("file", JsValue::string(&file)),
+            ("edges", JsValue::string(&edges)),
+            ("rect", rect(dump.rect)),
+            ("width", num(f64::from(dump.width))),
+            ("height", num(f64::from(dump.height))),
+            ("mode", JsValue::string(dump.mode)),
+        ]));
+    }
+    if cx.scenario.gl && gl.is_empty() {
+        return Err(format!(
+            "capture {name}: the scenario is a 3D scenario but no 3D view painted"
+        ));
+    }
+
+    let scale = f64::from(cx.scale);
+    let mut record = JsObject::new();
+    record.insert("name", JsValue::string(name));
+    record.insert("scale", num(scale));
+    record.insert("theme", JsValue::string(cx.theme.name()));
+    record.insert("width", num(f64::from(shot.image.width)));
+    record.insert("height", num(f64::from(shot.image.height)));
+    record.insert("image", JsValue::string(&image));
+    record.insert("colourSpace", JsValue::string("srgb"));
+    record.insert("devicePixelRatio", num(scale));
+    record.insert(
+        "viewport",
+        JsValue::Array(vec![num(shot.viewport.0), num(shot.viewport.1)]),
+    );
+    record.insert("probes", JsValue::Object(probed));
+    record.insert("texts", JsValue::Array(texts));
+    record.insert("masks", JsValue::Array(mask_list));
+    record.insert("canvases", JsValue::Array(canvases));
+    record.insert("gl", JsValue::Array(gl));
+    if let Some(state) = state {
+        let file = format!("{name}.hub-state.json");
+        let text = asrs_js::json::stringify(state)
+            .map_err(|e| format!("capture {name}: HubState: {e:?}"))?
+            .unwrap_or_default();
+        write(&dir.join(&file), &text)?;
+        record.insert("hubState", JsValue::string(&file));
+    }
+    if let Some([min, max]) = timeline {
+        record.insert("timelineRange", JsValue::Array(vec![num(min), num(max)]));
+    }
+    if cx.scenario.page == Page::ColourPatch {
+        let patches = patch_colours()
             .iter()
             .enumerate()
             .map(|(i, c)| {
                 let i = i as u32;
-                format!(
-                    "{{\"rgb\": [{}, {}, {}], \"rect\": [{}, {}, {PATCH}, {PATCH}]}}",
-                    c[0],
-                    c[1],
-                    c[2],
-                    (i % COLUMNS) * PATCH,
-                    (i / COLUMNS) * PATCH
-                )
+                asrs_js::ops::object([
+                    (
+                        "rgb",
+                        JsValue::Array(c.iter().map(|v| num(f64::from(*v))).collect()),
+                    ),
+                    (
+                        "rect",
+                        rect([
+                            f64::from((i % COLUMNS) * PATCH),
+                            f64::from((i / COLUMNS) * PATCH),
+                            f64::from(PATCH),
+                            f64::from(PATCH),
+                        ]),
+                    ),
+                ])
             })
             .collect();
-        let _ = write!(out, ",\n \"patches\": [\n  {}\n ]", patches.join(",\n  "));
+        record.insert("patches", JsValue::Array(patches));
     }
-    out.push_str("\n}\n");
-    out
+    write(
+        &dir.join(format!("{name}.json")),
+        &json(&JsValue::Object(record))?,
+    )
 }

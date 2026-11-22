@@ -1,6 +1,10 @@
 {
-  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph",
+  "about": "Fresh launch with no log open: default layout, empty sidebar, tab bar and line graph. Until their views exist, the regions other units draw are masked on both sides: .side-bar (U07), .tab-bar (U08), .renderer-content and .controls-content (U11, the line graph and its controls); each unit deletes its mask when its view lands",
   "actions": [
-    { "capture": "launch", "probes": [".title-bar", ".side-bar", ".tab-bar", ".renderer-content", ".controls-content", ".timeline"] }
+    {
+      "capture": "launch",
+      "probes": [".title-bar", ".side-bar", ".tab-bar", ".renderer-content", ".controls-content", ".timeline"],
+      "masks": [".side-bar", ".tab-bar", ".renderer-content", ".controls-content"]
+    }
   ]
 }

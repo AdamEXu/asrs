@@ -569,6 +569,68 @@ fn plant_all(
         ));
     }
 
+    let state_capture = names
+        .iter()
+        .find(|n| read_json(&record_path(upstream, n)).is_ok_and(|r| r.get("hubState").is_some()));
+    match state_capture {
+        Some(name) => {
+            let dir = work.join("hub-state");
+            make_port(upstream, &dir)?;
+            let record = read_json(&record_path(&dir, name))?;
+            let file = record
+                .get("hubState")
+                .and_then(Json::as_str)
+                .map(|s| dir.join("captures").join(s.to_string()))
+                .ok_or_else(|| format!("{name}: hubState is not a file name"))?;
+            let mut bytes = io(&file, fs::read(&file))?;
+            let at = bytes
+                .iter()
+                .rposition(u8::is_ascii_digit)
+                .ok_or_else(|| format!("{}: no digit to change", file.display()))?;
+            bytes[at] = if bytes[at] == b'9' {
+                b'8'
+            } else {
+                bytes[at] + 1
+            };
+            io(&file, fs::write(&file, bytes))?;
+            out.push(judge(
+                label,
+                &format!("one digit of the HubState changed in {name}"),
+                false,
+                true,
+                &run(&dir)?,
+            ));
+
+            let dir = work.join("timeline-range");
+            make_port(upstream, &dir)?;
+            let path = record_path(&dir, name);
+            let mut record = read_json(&path)?;
+            let range = record
+                .get("timelineRange")
+                .and_then(Json::as_array)
+                .and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?]))
+                .ok_or_else(|| format!("{name}: no timelineRange"))?;
+            let nudged = f64::from_bits(range[1].to_bits() + 1);
+            set(
+                &mut record,
+                "timelineRange",
+                Json::Array(vec![Json::Number(range[0]), Json::Number(nudged)]),
+            );
+            write_json(&path, &record)?;
+            out.push(judge(
+                label,
+                &format!("timeline range end one ulp off in {name}"),
+                false,
+                true,
+                &run(&dir)?,
+            ));
+        }
+        None if synthetic => {
+            return Err(format!("{label}: the synthetic variant has no HubState"));
+        }
+        None => {}
+    }
+
     if has_gl {
         let dir = work.join("shading");
         make_port(upstream, &dir)?;
@@ -852,6 +914,13 @@ mod synthetic {
         pixel::write_png(&captures.join("ui.png"), &ui.image)?;
         pixel::write_png(&captures.join("ui.canvas-0.png"), &chart)?;
         pixel::write_png(&captures.join("ui.gl-1.png"), &scene)?;
+        io(
+            &captures,
+            fs::write(
+                captures.join("ui.hub-state.json"),
+                br#"{"sidebar":{"width":300,"expanded":[]},"tabs":{"selected":1,"tabs":[]}}"#,
+            ),
+        )?;
         let num = |v: f64| Json::Number(v);
         let rect = |r: Rect| Json::Array(r.iter().map(|v| Json::Number(*v)).collect());
         run_json(dir, scale, WIDTH, HEIGHT)?;
@@ -887,6 +956,8 @@ mod synthetic {
                     ),
                 ),
                 ("masks", Json::Array(Vec::new())),
+                ("hubState", Json::string("ui.hub-state.json")),
+                ("timelineRange", Json::Array(vec![num(0.0), num(10.0)])),
                 (
                     "canvases",
                     Json::Array(vec![Json::object([

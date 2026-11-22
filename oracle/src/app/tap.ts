@@ -15,6 +15,19 @@ export function installTap(readGl: boolean) {
   const entries: Entry[] = [];
   let frame = 0;
   let glReads = 0;
+  let saves = 0;
+  let savedState: string | null = null;
+
+  // The hub's HubState as main receives it: the data of the last "save-state" message the page
+  // posted on its message port.
+  const postMessage = MessagePort.prototype.postMessage;
+  MessagePort.prototype.postMessage = function (this: MessagePort, message: any, ...rest: any[]) {
+    if (message !== null && typeof message === "object" && message.name === "save-state") {
+      savedState = JSON.stringify(message.data);
+      saves++;
+    }
+    return (postMessage as any).call(this, message, ...rest);
+  } as any;
 
   const DRAW_CALLS = ["clear", "drawArrays", "drawElements", "drawArraysInstanced", "drawElementsInstanced", "drawRangeElements", "blitFramebuffer"];
 
@@ -114,6 +127,8 @@ export function installTap(readGl: boolean) {
   (window as any).__asrsParity = {
     frame: () => frame,
     glReads: () => glReads,
+    saves: () => saves,
+    savedState: () => savedState,
     contexts: () => entries.map((e, index) => ({ index, kind: e.kind, ...describe(e.canvas) })),
     canvasPixels(index: number) {
       const entry = entries[index];

@@ -229,6 +229,7 @@ fn electron_switches(scale: u32, gl: Option<&str>, colour: &str) -> Vec<String> 
         format!("--js-flags=--random-seed={RANDOM_SEED}"),
         "--force-prefers-reduced-motion".to_owned(),
         "--disable-partial-raster".to_owned(),
+        "--disable-smooth-scrolling".to_owned(),
     ];
     if colour == "srgb" {
         switches.push("--force-color-profile=srgb".to_owned());

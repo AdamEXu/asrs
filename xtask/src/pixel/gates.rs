@@ -56,6 +56,10 @@ pub struct Capture {
     pub canvases: Vec<Dump>,
     pub gl: Vec<GlDump>,
     pub patches: Option<Vec<Patch>>,
+    /// The bytes of the `HubState` the hub last sent main with `save-state`.
+    pub hub_state: Option<Vec<u8>>,
+    /// `selection.getTimelineRange()` at the capture.
+    pub timeline_range: Option<[f64; 2]>,
 }
 
 /// A mask that applies to every capture on one platform (`parity/masks.json`).
@@ -263,7 +267,65 @@ pub fn compare(reference: &Capture, port: &Capture, platform: &[PlatformMask]) -
     if let Some(patches) = &reference.patches {
         colour_patches(patches, reference, port, &mut out);
     }
+    state(reference, port, &mut out);
     out
+}
+
+fn state(reference: &Capture, port: &Capture, out: &mut Outcome) {
+    if let Some(expected) = &reference.hub_state {
+        let (pass, detail) = match &port.hub_state {
+            None => (false, "the port recorded no HubState".to_owned()),
+            Some(actual) if actual == expected => (true, format!("{} bytes equal", expected.len())),
+            Some(actual) => {
+                let at = expected
+                    .iter()
+                    .zip(actual)
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(expected.len().min(actual.len()));
+                let context = |bytes: &[u8]| {
+                    String::from_utf8_lossy(
+                        &bytes[at.saturating_sub(40)..(at + 40).min(bytes.len())],
+                    )
+                    .into_owned()
+                };
+                (
+                    false,
+                    format!(
+                        "differ at byte {at}: upstream ...{}..., port ...{}...",
+                        context(expected),
+                        context(actual)
+                    ),
+                )
+            }
+        };
+        out.push("state", "HubState", pass, detail);
+    }
+    if let Some(expected) = reference.timeline_range {
+        let bits = |r: [f64; 2]| r.map(f64::to_bits);
+        let pass = port.timeline_range.map(bits) == Some(bits(expected));
+        out.push(
+            "state",
+            "timeline range",
+            pass,
+            format!("upstream {expected:?}, port {:?}", port.timeline_range),
+        );
+    }
+}
+
+/// The mask on both sides that covers a dumped canvas or 3D view, if any: such a view belongs
+/// to a unit whose region the scenario masks.
+fn covering_mask(rect: Rect, reference: &Capture, port: &Capture) -> Option<String> {
+    let inside = |m: &Rect| {
+        rect[0] >= m[0] - LAYOUT_TOLERANCE
+            && rect[1] >= m[1] - LAYOUT_TOLERANCE
+            && rect[0] + rect[2] <= m[0] + m[2] + LAYOUT_TOLERANCE
+            && rect[1] + rect[3] <= m[1] + m[3] + LAYOUT_TOLERANCE
+    };
+    reference
+        .masks
+        .iter()
+        .find(|(reason, m)| inside(m) && port.masks.iter().any(|(r, p)| r == reason && inside(p)))
+        .map(|(reason, m)| format!("{reason} {}", fmt_rect(*m)))
 }
 
 fn port_masks(reference: &Capture, port: &Capture, out: &mut Outcome) {
@@ -492,6 +554,10 @@ fn pair<T>(rect: Rect, candidates: &[T], rect_of: impl Fn(&T) -> Rect) -> Option
 fn canvases(reference: &Capture, port: &Capture, out: &mut Outcome) {
     for dump in &reference.canvases {
         let what = format!("canvas {}", dump.file);
+        if let Some(mask) = covering_mask(dump.rect, reference, port) {
+            out.push("5 masks", what, true, format!("masked by {mask}"));
+            continue;
+        }
         let Some(ours) = pair(dump.rect, &port.canvases, |d| d.rect) else {
             out.push(
                 "2 pixels",
@@ -529,6 +595,10 @@ fn canvases(reference: &Capture, port: &Capture, out: &mut Outcome) {
 fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
     for dump in &reference.gl {
         let what = format!("3D {}", dump.file);
+        if let Some(mask) = covering_mask(dump.rect, reference, port) {
+            out.push("5 masks", what, true, format!("masked by {mask}"));
+            continue;
+        }
         let Some(ours) = pair(dump.rect, &port.gl, |d| d.rect) else {
             out.push(
                 "4 3D",
@@ -703,6 +773,8 @@ mod tests {
             canvases: Vec::new(),
             gl: Vec::new(),
             patches: None,
+            hub_state: None,
+            timeline_range: None,
         }
     }
 

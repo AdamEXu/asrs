@@ -24,19 +24,14 @@ use asrs_ui::gpui::{
     point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
+use asrs_ui::parity::{Probed, probed};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
-/// The boxes of the frame elements a scenario probe selector (`.title-bar`) names, as
-/// `getBoundingClientRect()` gives them for each rendered match; `None` when the selector names
-/// no frame element.
-pub fn probe_rects(layout: &FrameLayout, selector: &str) -> Option<Vec<[f64; 4]>> {
-    let element = FrameElement::ALL.into_iter().find(|e| {
-        let full = e.selector();
-        full == selector || full.find('.').is_some_and(|dot| &full[dot..] == selector)
-    })?;
-    Some(layout.rect(element).into_iter().collect())
+/// `element` under its parity id, which is its selector in `www/hub.html` (`div.title-bar`).
+fn probe(element: FrameElement, child: impl IntoElement) -> Probed {
+    probed(element.selector(), child)
 }
 
 /// The regions other views draw into.
@@ -303,7 +298,7 @@ impl<H: FrameHost> HubFrame<H> {
                     cx.notify();
                 });
             });
-        Some(place(rect, (0.0, 0.0)).child(button).into_any_element())
+        Some(probe(element, place(rect, (0.0, 0.0)).child(button)).into_any_element())
     }
 
     fn tab_control_click(&mut self, element: FrameElement, rect: [f64; 4], cx: &mut App) {
@@ -433,7 +428,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             if classes.side_bar_win {
                 bg = bg.opacity(0.5);
             }
-            root = root.child(bg);
+            root = root.child(probe(FrameElement::SideBarBackground, bg));
         }
         if let Some(rect) = layout.rect(FrameElement::SideBarShadow)
             && shadow_shown
@@ -443,7 +438,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
             } else {
                 box_shadow(0x777777ff, 3.0, 0.0)
             };
-            root = root.child(place(rect, (0.0, 0.0)).shadow(vec![shadow]));
+            root = root.child(probe(
+                FrameElement::SideBarShadow,
+                place(rect, (0.0, 0.0)).shadow(vec![shadow]),
+            ));
         }
         if let Some(rect) = layout.rect(FrameElement::ViewerBackground) {
             let mut bg = place(rect, (0.0, 0.0)).bg(rgb(theme.background));
@@ -454,29 +452,31 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     box_shadow(0x00000022, 3.0, 0.0)
                 }]);
             }
-            root = root.child(bg);
+            root = root.child(probe(FrameElement::ViewerBackground, bg));
         }
         if let Some(rect) = layout.rect(FrameElement::SideBar) {
             let mut side_bar = place(rect, (0.0, 0.0)).overflow_hidden();
             if let Some(content) = self.host.slot(FrameSlot::SideBar, window, cx) {
                 side_bar = side_bar.child(content);
             }
-            root = root.child(side_bar);
+            root = root.child(probe(FrameElement::SideBar, side_bar));
         }
         if let Some(viewer_rect) = layout.rect(FrameElement::Viewer) {
             let origin = (viewer_rect[0], viewer_rect[1]);
             let mut viewer = place(viewer_rect, (0.0, 0.0)).overflow_hidden();
-            if let Some(rect) = layout.rect(FrameElement::TabBar)
-                && let Some(content) = self.host.slot(FrameSlot::TabBar, window, cx)
-            {
-                viewer = viewer.child(place(rect, origin).child(content));
+            if let Some(rect) = layout.rect(FrameElement::TabBar) {
+                let mut tab_bar = place(rect, origin);
+                if let Some(content) = self.host.slot(FrameSlot::TabBar, window, cx) {
+                    tab_bar = tab_bar.child(content);
+                }
+                viewer = viewer.child(probe(FrameElement::TabBar, tab_bar));
             }
             if let Some(rect) = layout.rect(FrameElement::RendererContent) {
                 let mut renderer = place(rect, origin);
                 if let Some(content) = self.host.slot(FrameSlot::RendererContent, window, cx) {
                     renderer = renderer.child(content);
                 }
-                viewer = viewer.child(renderer);
+                viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
                 let shadow = if dark {
@@ -490,10 +490,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(content) = self.host.slot(FrameSlot::ControlsContent, window, cx) {
                     controls = controls.child(content);
                 }
-                viewer = viewer.child(controls);
+                viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsHandle) {
-                viewer = viewer.child(
+                viewer = viewer.child(probe(
+                    FrameElement::ControlsHandle,
                     place(rect, origin)
                         .id("controls-handle")
                         .cursor(CursorStyle::ResizeRow)
@@ -503,14 +504,16 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         .on_click(
                             cx.listener(|frame, _, _, cx| frame.handle_click(Handle::Controls, cx)),
                         ),
-                );
+                ));
             }
-            if let Some(rect) = layout.rect(FrameElement::Timeline)
-                && let Some(content) = self.host.slot(FrameSlot::Timeline, window, cx)
-            {
-                viewer = viewer.child(place(rect, origin).child(content));
+            if let Some(rect) = layout.rect(FrameElement::Timeline) {
+                let mut timeline = place(rect, origin);
+                if let Some(content) = self.host.slot(FrameSlot::Timeline, window, cx) {
+                    timeline = timeline.child(content);
+                }
+                viewer = viewer.child(probe(FrameElement::Timeline, timeline));
             }
-            root = root.child(viewer);
+            root = root.child(probe(FrameElement::Viewer, viewer));
         }
         if let Some(rect) = layout.rect(FrameElement::TitleBar) {
             let mut bar = place(rect, (0.0, 0.0)).id("title-bar").on_mouse_down(
@@ -524,7 +527,8 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 },
             );
             if let Some(text_rect) = layout.rect(FrameElement::TitleBarText) {
-                bar = bar.child(
+                bar = bar.child(probe(
+                    FrameElement::TitleBarText,
                     Text::new(title, title_style())
                         .color(theme.text)
                         .probe("title-bar-text")
@@ -533,9 +537,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         .top(px((text_rect[1] - rect[1]) as f32))
                         .w(px(text_rect[2] as f32))
                         .h(px(text_rect[3] as f32)),
-                );
+                ));
             }
-            root = root.child(bar);
+            root = root.child(probe(FrameElement::TitleBar, bar));
         }
         for element in [
             FrameElement::Update,
@@ -556,10 +560,14 @@ impl<H: FrameHost> Render for HubFrame<H> {
             && rect[1] + rect[3] > 0.0
             && rect[2] > 0.0
         {
-            root = root.child(place(rect, (0.0, 0.0)).bg(rgb(GLOW)));
+            root = root.child(probe(
+                FrameElement::LoadingGlow,
+                place(rect, (0.0, 0.0)).bg(rgb(GLOW)),
+            ));
         }
         if let Some(rect) = layout.rect(FrameElement::SideBarHandle) {
-            root = root.child(
+            root = root.child(probe(
+                FrameElement::SideBarHandle,
                 place(rect, (0.0, 0.0))
                     .id("side-bar-handle")
                     .cursor(CursorStyle::ResizeColumn)
@@ -569,16 +577,17 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     .on_click(
                         cx.listener(|frame, _, _, cx| frame.handle_click(Handle::SideBar, cx)),
                     ),
-            );
+            ));
         }
         if let (Some(rect), Some(fps)) = (layout.rect(FrameElement::Fps), fps_text) {
-            root = root.child(
+            root = root.child(probe(
+                FrameElement::Fps,
                 Text::new(fps, fps_style())
                     .color(FPS_COLOR)
                     .absolute()
                     .left(px(rect[0] as f32))
                     .top(px(rect[1] as f32)),
-            );
+            ));
         }
         let drag = self.shell.drag();
         if !drag.item_hidden()
