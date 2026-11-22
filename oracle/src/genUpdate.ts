@@ -23,8 +23,8 @@ import {
 //       {case, step, op: "check", fetch, rejected, effects}    fetch: {reject} or {status, body}
 //       {case, step, op: "shouldPrompt", result}
 //       {case, step, op: "prompt", response, effects}
-//     Effects, in call order: {k: "fetch", url, init}, {k: "box", options} (`icon` is the string
-//     "WINDOW_ICON" when it is ElectronConstants' WINDOW_ICON), {k: "open", url}.
+//     Effects, in call order: {k: "fetch", url, init}, {k: "box", parent, options} (`icon` is
+//     the string "WINDOW_ICON" when it is ElectronConstants' WINDOW_ICON), {k: "open", url}.
 //   genUpdate dates <count> <seed>
 //     {case, input, time}: `new Date(input).getTime()` for the hand list and <count> generated
 //     strings, in the zone the vector names.
@@ -83,12 +83,13 @@ class CheckerWorld {
           getPath: (name: string) => "/fake/" + name
         },
         dialog: {
-          showMessageBox(options: any) {
+          showMessageBox(...args: any[]) {
+            const [parent, options] = args.length >= 2 ? [args[0], args[1]] : [null, args[0]];
             const described: any = {};
             for (const key of Object.keys(options)) {
               described[key] = key === "icon" && options.icon === world.windowIcon ? "WINDOW_ICON" : options[key];
             }
-            world.effects.push({ k: "box", options: toTree(described) });
+            world.effects.push({ k: "box", parent: parent === null ? null : toTree(parent), options: toTree(described) });
             return Promise.resolve({ response: world.response, checkboxChecked: false });
           }
         },

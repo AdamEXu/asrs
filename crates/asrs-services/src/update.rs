@@ -1,7 +1,6 @@
 //! `src/main/electron/UpdateChecker.ts` and the `checkForUpdate`, `prompt-update`,
 //! `open-feedback` and hub dom-ready button glue around it in `src/main/electron/main.ts`.
 
-use asrs_js::string::JsString;
 use asrs_js::time::LocalZone;
 use asrs_js::value::JsValue;
 

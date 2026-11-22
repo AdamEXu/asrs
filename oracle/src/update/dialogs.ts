@@ -16,8 +16,9 @@ import type { Fetch } from "./cases";
 //   quits      app.quit() calls
 //   opened     shell.openExternal URLs
 //   clipboard  clipboard.writeText texts
-//   created    new windows: {id, parent, options} with the size/modality options main passed
-//   posted     messages main posted on ports it created during the op
+//   created    new windows main opened as children of a hub (the beta welcome): {id, parent,
+//              options} with the size and modality options main passed
+//   posted     messages main posted on ports it created during the op for a hub's child window
 //   feedback   "show-feedback-button" values sent to the hub
 //   update     "show-update-button" values sent to the hub
 //   fetches    net.fetch calls: {url, init}; an op that fetches carries the scripted reply in
@@ -101,11 +102,13 @@ async function record(op: string, args: unknown, run: () => unknown) {
   r.quits = quits.splice(0, quits.length).length;
   r.opened = electronFake.externalUrls.splice(0, electronFake.externalUrls.length).map((u) => toTree(u));
   r.clipboard = clipboard.splice(0, clipboard.length);
-  r.created = electronFake.takeCreated().map(({ id }) => {
+  r.created = electronFake.takeCreated().flatMap(({ id }) => {
     const options = electronFake.FakeBrowserWindow.fromId(id)?.options ?? {};
-    return {
-      id,
-      parent: options.parent?.id ?? null,
+    if (options.parent === undefined) return [];
+    return [
+      {
+        id,
+        parent: options.parent.id,
       options: toTree({
         width: options.width,
         height: options.height,
@@ -114,9 +117,17 @@ async function record(op: string, args: unknown, run: () => unknown) {
         modal: options.modal,
         show: options.show
       })
-    };
+      }
+    ];
   });
-  r.posted = electronFake.channels.slice(channelsBefore).flatMap((c) => c.port2.sent.map((m) => toTree(m)));
+  const childPort = (c: electronFake.MessageChannelMain) =>
+    electronFake
+      .windowList()
+      .some((w) => w.options?.parent !== undefined && w.webContents.posted.some((p) => p.ports?.includes(c.port1)));
+  r.posted = electronFake.channels
+    .slice(channelsBefore)
+    .filter(childPort)
+    .flatMap((c) => c.port2.sent.map((m) => toTree(m)));
   const sent = electronFake.takeSent();
   r.feedback = sent.filter((m) => m?.name === "show-feedback-button").map((m) => toTree(m.data));
   r.update = sent.filter((m) => m?.name === "show-update-button").map((m) => toTree(m.data));
