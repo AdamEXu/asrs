@@ -6,6 +6,7 @@ mod field;
 mod model;
 mod native;
 mod segmented;
+mod select;
 mod skia;
 mod slider;
 pub mod style;
@@ -14,5 +15,9 @@ pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry};
 pub use model::{FieldModel, FieldValue, PlainText, RangeModel, number_accepts};
 pub use native::{Checkbox, Progress, paint_checkbox, paint_progress, paint_text_field};
 pub use segmented::{Segment, SegmentedControl, segment_boxes};
+pub use select::{
+    Select, SelectEvent, SelectGeometry, SelectItem, SelectKey, SelectModel, SelectState,
+    geometry as select_geometry, paint_select, popup_menu, select_key,
+};
 pub use slider::{Slider, SliderEvent, pointer_proportion, thumb_offset};
 pub use style::{FieldStyle, Frame, SliderStyle, SplitStyle};

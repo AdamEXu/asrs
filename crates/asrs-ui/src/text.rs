@@ -161,8 +161,17 @@ impl TextSystem {
         )
         .and_then(|run| {
             let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
-            for &a in &run.alpha {
-                bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+            match &run.rgba {
+                Some(rgba) => {
+                    for p in rgba.as_chunks::<4>().0 {
+                        bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+                    }
+                }
+                None => {
+                    for &a in &run.alpha {
+                        bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+                    }
+                }
             }
             let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
             Some((
@@ -235,6 +244,64 @@ fn exact_width(measured: &RefCell<Vec<(Pixels, Lu)>>, width: Pixels, scale: f32)
             || dom::lu_round(f32::from(width) * scale),
             |&(_, exact)| exact,
         )
+}
+
+/// `(ascent, descent)` of `style`'s font at device scale `scale`, in whole device px: what
+/// Blink's `FontMetrics::Height()` adds up.
+pub fn font_metrics(cx: &mut App, style: &TextStyle, scale: f32) -> (f32, f32) {
+    let system = cx.default_global::<TextSystem>();
+    let (ascent, descent, _) = dom::line_metrics(system.backend.as_mut(), style, scale);
+    (ascent as f32 / 64.0, descent as f32 / 64.0)
+}
+
+/// One glyph run's coverage, after mask gamma, at a whole device pixel position.
+pub struct GlyphMask {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub alpha: Vec<u8>,
+}
+
+/// The coverage [`Text`] would paint for `text` in a box `width` CSS px wide whose content
+/// box starts at `origin` device px, for callers that composite text into their own pixmap.
+pub fn glyph_masks(
+    cx: &mut App,
+    style: &TextStyle,
+    text: &str,
+    scale: f32,
+    width: f32,
+    origin: (f32, f32),
+    color: u32,
+) -> Vec<GlyphMask> {
+    let color = [(color >> 16) as u8, (color >> 8) as u8, color as u8];
+    let layout = layout(cx, style, text, scale, Some(width));
+    let origin = (dom::lu_round(origin.0), dom::lu_round(origin.1));
+    let system = cx.default_global::<TextSystem>();
+    let mut out = Vec::new();
+    for line in &layout.lines {
+        let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
+        for fragment in &line.fragments {
+            let x = origin.0 + fragment.x;
+            if let Some(run) = dom::rasterize(
+                system.backend.as_mut(),
+                &system.lut,
+                &fragment.glyphs,
+                x.rem_euclid(64),
+                scale,
+                color,
+            ) {
+                out.push(GlyphMask {
+                    x: x.div_euclid(64) + run.left,
+                    y: baseline + run.top,
+                    width: run.width,
+                    height: run.height,
+                    alpha: run.alpha,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// The border-box size Chromium gives a shrink-to-fit block holding `text`, in CSS px.

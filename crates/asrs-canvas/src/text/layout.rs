@@ -25,7 +25,7 @@ fn align_kind(align: &str) -> u8 {
 
 /// Shapes `text` the way canvas `fillText` and `measureText` see it.
 pub fn shape(backend: &mut dyn TextBackend, font: &FontSpec, text: &str) -> Shaped {
-    backend.shape(font, &normalize_space(text))
+    backend.shape(font, &normalize_space(text), 1.0)
 }
 
 #[derive(Clone, Debug, PartialEq)]

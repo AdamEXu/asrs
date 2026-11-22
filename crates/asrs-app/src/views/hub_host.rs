@@ -1,6 +1,5 @@
-//! The hub window's root: a [`HubFrame`] over the [`Hub`] entity, which it observes. Until
-//! main (P) exists, the window is booted with the messages `main.ts` sends a new hub window,
-//! and what the hub sends main is dropped.
+//! The hub window's root: a [`HubFrame`] over the [`Hub`] entity, which it observes, booted
+//! with the messages `main.ts` sends a new hub window.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,6 +23,7 @@ use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::sidebar::{self, SidebarView, ViewGeometry};
 use super::source_list::ListsGeometry;
 use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
+use crate::main_process::MainProcess;
 use crate::menus::bridge::{self, EffectHandler};
 use crate::menus::context::{self, Effect, MenuEnv};
 
@@ -279,8 +279,7 @@ impl HubEntityHost {
 }
 
 /// The context menu `main.ts` pops up for `message`, if any, with each click's messages sent
-/// back to the hub. Prompt windows, the source list help window and the recent units file are
-/// not wired yet.
+/// back to the hub. Prompt windows and the source list help window are not wired yet.
 fn show_context_menu(
     handle: AnyWindowHandle,
     hub: WeakEntity<Hub>,
@@ -288,10 +287,17 @@ fn show_context_menu(
     message: &NamedMessage<HubToMain>,
     cx: &mut App,
 ) {
-    let env = MenuEnv {
-        dark,
-        recent_units: None,
+    let recent_units = match message.name {
+        HubToMain::AskEditAxis => match MainProcess::recent_units(cx) {
+            Ok(recents) => recents,
+            Err(error) => {
+                eprintln!("asrs: {}: {error}", message.name.name());
+                return;
+            }
+        },
+        _ => None,
     };
+    let env = MenuEnv { dark, recent_units };
     let menu = match context::for_hub_message(message, &env) {
         Ok(Some(menu)) => menu,
         Ok(None) => return,
@@ -310,6 +316,9 @@ fn show_context_menu(
                 }
                 (Effect::WriteClipboard(JsValue::String(text)), None) => {
                     cx.write_to_clipboard(ClipboardItem::new_string(text.to_string_lossy()))
+                }
+                (Effect::UpdateRecentUnits(preset), None) => {
+                    MainProcess::update_recent_units(cx, preset)
                 }
                 (other, None) => {
                     eprintln!("asrs: context menu effect not available yet: {other:?}")

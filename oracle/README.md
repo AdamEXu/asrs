@@ -1039,6 +1039,25 @@ the parse and after each op the step writes `{"form": markup, "op": <op or null>
 the parsed element, with numeric segments indexing collections (`options.1.value`,
 `style.width`).
 
+### Select input vectors
+
+`form/select-keys` (`src/selectKeys.ts`, with `src/selectKeysMain.ts` as its Electron main
+process) records what trusted input does to a closed `<select>` in a real Chromium page. Each
+step of the spec's fixture is `{"markup", "focus"?, "ops"}`: the markup is loaded into an
+offscreen window, the first `<select>` is focused unless `focus` is `false`, and each op runs:
+`["char", text, ms, modifiers?]` types a character and `["key", name, ms, modifiers?]` presses a
+named key (`Enter`, `Escape`, `Home`, `End`, `PageUp`, `PageDown`, `ArrowLeft`, `ArrowRight`,
+`Backspace`), both through the DevTools protocol's `Input.dispatchKeyEvent` with the event
+timestamp `ms` after a fixed origin, since type-ahead compares event times; `["press", null, ms]`
+presses the mouse at the select's centre; `["set", property, value]`, `["blur"]` and
+`["focus"]` are script. After the markup and after each op it writes `{"step", "op", "value",
+"selectedIndex", "focused", "events"}`, where `events` lists the DOM events the select received
+since the previous record. Keys and presses that open the native popup on macOS (up, down, F4,
+space outside a type-ahead session, a press on an enabled select) would block in AppKit's menu
+loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift`; `meta` combinations
+can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
+`selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
@@ -1139,13 +1158,15 @@ the hub's model APIs (`main` and `open` as main messages, `selection` on the mod
 `SelectionImpl`) and the window's input dispatch (`mouse`, `wheel`, `key`; a notched wheel event
 becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); `eval`,
 `dialog` and a non-empty `userData` are refused because the port has no page script and no main
-yet. Before the window opens it does what main does with the variant's own `userData/`: seeds
-`prefs.json` as the driver does, then `createAssetFolders()` and `loadAssets()` over upstream's
-`bundledAssets` (`--bundled-assets`), and boots the hub with those assets. What lands in
-`userData/` is copied to `files/` and listed in `run.json` with the driver's filter, and `xtask
-pixel compare` requires every file the port wrote to equal upstream's and every file upstream
-wrote to be written by the port, except the files main itself writes (the state file, the
-rewritten preferences), which are listed until the port has a main process (#207). Its
+yet. Before the window opens it seeds `prefs.json` as the driver does and runs main's own
+startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
+rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
+(`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's
+`save-state` and `save-type-memory` go to main's `StateTracker` and type memory, with the window
+where the driver puts its own: 16 px into the primary work area that `xtask pixel port` reads
+from the upstream run (`--work-area`). What lands in `userData/` is copied to `files/` and listed
+in `run.json` with the driver's filter, and `xtask pixel compare` requires every file the port
+wrote to equal upstream's and every file upstream wrote to be written by the port. Its
 page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle
 makes while its imports evaluate, so restored and default controller UUIDs match. Idle means the
 same busy reasons, read from the model. Probes and mask selectors resolve through

@@ -509,6 +509,26 @@
     "src/genUtf8.ts",
     "src/shims.ts"
   ],
+  "genVideo": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genVideo.ts",
+    "src/video/bundle.ts",
+    "src/video/cases.ts",
+    "src/video/samples/audio-only.json",
+    "src/video/samples/h264-1080p2997.json",
+    "src/video/samples/h264-2160p-downscale.json",
+    "src/video/samples/h264-720p30-aac.json",
+    "src/video/samples/h264-long-progress.json",
+    "src/video/samples/h264-raw-no-duration.json",
+    "src/video/samples/hevc-portrait-23976.json",
+    "src/video/samples/missing-input.json",
+    "src/video/samples/mjpeg-1000fps.json",
+    "src/video/samples/mpeg4-240p15.json",
+    "src/video/samples/prores-480p60.json",
+    "src/video/samples/vp9-360p25.json",
+    "src/video/world.ts"
+  ],
   "genWindows": [
     "src/cve1.ts",
     "src/fakes/globals.ts",
@@ -661,6 +681,14 @@
     "src/logRun.ts",
     "src/registry.ts",
     "src/shims.ts"
+  ],
+  "selectKeys": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/selectKeys.ts"
+  ],
+  "selectKeysMain": [
+    "src/selectKeysMain.ts"
   ],
   "selftest": [
     "src/cve1.ts",
