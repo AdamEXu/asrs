@@ -2,6 +2,7 @@
   "entry": "dom",
   "inputs": [
     "../logs/line-graph-alerts.json",
+    "../logs/line-graph-magnitudes.json",
     "../logs/line-graph-numeric.json"
   ],
   "fixture": {
@@ -30,6 +31,9 @@
       },
       {
         "log": "../logs/line-graph-alerts.json"
+      },
+      {
+        "log": "../logs/line-graph-magnitudes.json"
       },
       {
         "main": "restore-state",
@@ -153,6 +157,37 @@
                                               [
                                                 "size",
                                                 "normal"
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    },
+                                    {
+                                      "o": [
+                                        [
+                                          "type",
+                                          "points"
+                                        ],
+                                        [
+                                          "logKey",
+                                          "/Big/Flat"
+                                        ],
+                                        [
+                                          "logType",
+                                          "Number"
+                                        ],
+                                        [
+                                          "visible",
+                                          true
+                                        ],
+                                        [
+                                          "options",
+                                          {
+                                            "o": [
+                                              [
+                                                "color",
+                                                "#af2437"
                                               ]
                                             ]
                                           }

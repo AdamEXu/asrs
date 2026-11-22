@@ -302,6 +302,20 @@ logs.huge = (() => {
   return ops;
 })();
 
+logs.dense = (() => {
+  const ops = [];
+  for (let i = 0; i <= 40; i++) ops.push(["putBoolean", "/Dense/Toggle", r6(1 + i * 0.008), i % 2 === 0]);
+  for (let i = 0; i <= 30; i++) ops.push(["putBoolean", "/Dense/Toggle", r6(2 + i * 0.016), i % 2 === 1]);
+  for (let i = 0; i <= 2500; i++) ops.push(["putNumber", "/Dense/Signal", r6(i * 0.004), r6(Math.sin(i * 0.37) * 2 + Math.sin(i * 0.022) * 5)]);
+  return ops;
+})();
+logs.magnitudes = [
+  ...[0.1, 0.35, 0.6, 0.85].map((f, i) => ["putNumber", "/Big/Mid", i * 3, 2e8 + f]),
+  ...[0.1, 40.4, 80.7].map((f, i) => ["putNumber", "/Big/Over", i * 4, 3e9 + f]),
+  ...[0.1, 0.4, 0.7].map((f, i) => ["putNumber", "/Big/Fine", i * 4, 3e9 + f]),
+  ["putNumber", "/Big/Flat", 0, 5],
+  ["putNumber", "/Big/Flat", 9, 5]
+];
 logs.offset = [["putNumber", "/A", 100, 1], ["putNumber", "/A", 101, 2]];
 logs.blank = [["createBlankField", "/Blank", 2], ["putNumber", "/One", 3, 1]];
 logs.live = [["putNumber", "/Live/Value", 0, 1], ["putBoolean", "/Live/Flag", 0, true], ["putNumber", "/Timestamp", 0, 0]];
@@ -1195,6 +1209,11 @@ fixtures["help-fade"] = {
     wheel(0, -500),
     frames(1),
     capture("sent"),
+    { eval: "window.preferences.hasScrolledLineGraph = true" },
+    frames(1),
+    { eval: "window.preferences.hasScrolledLineGraph = false" },
+    wheel(0, -250),
+    frames(1),
     mouse("mousedown", 600),
     mouse("mousemove", 640),
     mouse("mousemove", 590),
@@ -1230,18 +1249,68 @@ fixtures.scrolled = {
   ]
 };
 
+fixtures.dense = {
+  seed: 37,
+  logs: ["dense"],
+  steps: [
+    { log: "dense" },
+    restore(
+      controller({
+        leftSources: [num0("stepped", "/Dense/Signal", 0)],
+        rightSources: [num0("smooth", "/Dense/Signal", 1)],
+        discreteSources: [item("stripes", "/Dense/Toggle", "Boolean", { color: colors[2] }), item("graph", "/Dense/Toggle", "Boolean", { color: colors[3] })]
+      })
+    ),
+    frames(),
+    capture("full"),
+    sel("setTimelineRange", [0.9, 2.6], false),
+    frames(1),
+    mouse("mousemove", 600),
+    frames(1),
+    capture("zoomed")
+  ]
+};
+
+fixtures.magnitudes = {
+  seed: 38,
+  logs: ["magnitudes"],
+  steps: [
+    { log: "magnitudes" },
+    restore(
+      controller({
+        leftSources: [num0("smooth", "/Big/Mid", 0)],
+        rightSources: [num0("stepped", "/Big/Over", 1)]
+      })
+    ),
+    frames(),
+    capture("big"),
+    restore(controller({ rightSources: [num0("smooth", "/Big/Fine", 0)] })),
+    frames(),
+    capture("fine"),
+    restore(controller({ leftSources: [num0("points", "/Big/Flat", 0)] })),
+    frames(),
+    sel("setTimelineRange", [4, 4], false),
+    sel("setSelectedTime", 4),
+    frames(1),
+    mouse("mousemove", 600),
+    frames(1),
+    capture("degenerate")
+  ]
+};
+
 fixtures.tiny = {
   seed: 36,
-  logs: ["numeric", "alerts"],
+  logs: ["numeric", "alerts", "magnitudes"],
   window: { devicePixelRatio: 3 },
   layout: [{ selector: "div.renderer-content", rect: [300, 92, 61, 37] }],
   steps: [
     { log: "numeric" },
     { log: "alerts" },
+    { log: "magnitudes" },
     restore(
       controller({
         leftSources: [num0("smooth", "/Drive/LeftPositionMeters", 0)],
-        rightSources: [num0("smooth", "/Motor/Temp", 1)],
+        rightSources: [num0("smooth", "/Motor/Temp", 1), num0("points", "/Big/Flat", 2)],
         discreteSources: [item("alerts", "/Alerts", "Alerts", {})]
       })
     ),

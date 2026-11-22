@@ -80,6 +80,21 @@
         "label": "sent"
       },
       {
+        "eval": "window.preferences.hasScrolledLineGraph = true"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "eval": "window.preferences.hasScrolledLineGraph = false"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.scrollSensor.callback(0, -250, false, 0, 0)"
+      },
+      {
+        "frames": 1
+      },
+      {
         "event": {
           "target": "div.line-graph-scroll",
           "kind": "MouseEvent",
