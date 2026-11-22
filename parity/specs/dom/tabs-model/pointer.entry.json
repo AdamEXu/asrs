@@ -1,135 +1,17 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
+  "backend": "blink",
   "inputs": [
     "../logs/tabs.json"
   ],
   "fixture": {
+    "geometry": "real",
     "seed": 6,
     "ignoreMain": [
       "save-state",
       "save-type-memory",
       "update-touch-bar-slider",
       "show"
-    ],
-    "layout": [
-      {
-        "selector": "div.tab[data-i=\"0\"]",
-        "rect": [
-          310,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"1\"]",
-        "rect": [
-          410,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"2\"]",
-        "rect": [
-          510,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"3\"]",
-        "rect": [
-          610,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"4\"]",
-        "rect": [
-          710,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"5\"]",
-        "rect": [
-          810,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"6\"]",
-        "rect": [
-          910,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"7\"]",
-        "rect": [
-          1010,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"8\"]",
-        "rect": [
-          1110,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"9\"]",
-        "rect": [
-          1210,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"10\"]",
-        "rect": [
-          1310,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "div.tab[data-i=\"11\"]",
-        "rect": [
-          1410,
-          10,
-          95,
-          30
-        ]
-      },
-      {
-        "selector": "button.add-tab",
-        "rect": [
-          1050,
-          10,
-          30,
-          30
-        ]
-      }
     ],
     "steps": [
       {
@@ -189,7 +71,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 520,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -230,7 +112,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 320,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -308,7 +190,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 520,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -319,7 +201,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 523,
-            "clientY": 24
+            "clientY": 62
           }
         }
       },
@@ -363,7 +245,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 320,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -374,7 +256,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 325,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -418,7 +300,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 320,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -458,8 +340,8 @@
           "type": "mousedown",
           "kind": "MouseEvent",
           "init": {
-            "clientX": 405,
-            "clientY": 20
+            "clientX": 352,
+            "clientY": 58
           }
         }
       },
@@ -469,8 +351,8 @@
           "type": "mouseup",
           "kind": "MouseEvent",
           "init": {
-            "clientX": 405,
-            "clientY": 20
+            "clientX": 352,
+            "clientY": 58
           }
         }
       },
@@ -514,7 +396,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 1200,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -525,7 +407,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 1200,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -566,7 +448,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 330,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -577,7 +459,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 620,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -595,7 +477,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 620,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -767,7 +649,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 330,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -778,7 +660,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 360,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -819,7 +701,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 520,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -860,7 +742,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 640,
-            "clientY": 30
+            "clientY": 68
           }
         }
       },
@@ -901,7 +783,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 700,
-            "clientY": 180
+            "clientY": 218
           }
         }
       },
@@ -942,7 +824,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 760,
-            "clientY": 40
+            "clientY": 78
           }
         }
       },
@@ -996,7 +878,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 720,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -1007,7 +889,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 720,
-            "clientY": 26
+            "clientY": 64
           }
         }
       },
@@ -1048,7 +930,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 300,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -1102,7 +984,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 420,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -1113,7 +995,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 440,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -1124,7 +1006,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 900,
-            "clientY": 200
+            "clientY": 238
           }
         }
       },
@@ -1175,7 +1057,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 420,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -1186,7 +1068,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 440,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
@@ -1197,7 +1079,7 @@
           "kind": "MouseEvent",
           "init": {
             "clientX": 1000,
-            "clientY": 20
+            "clientY": 58
           }
         }
       },
