@@ -20,8 +20,6 @@ pub struct Coverage {
     pub width: usize,
     pub height: usize,
     pub alpha: Vec<u8>,
-    /// Blitted pixel pair by pixel pair (`blitAntiH2`, `blitAntiV2`), as slanted hairlines are.
-    pub pair: bool,
 }
 
 struct Accumulator {
@@ -526,7 +524,6 @@ fn sweep(path: &tiny_skia::Path, width: u32, height: u32, snap: bool) -> Option<
         width: w,
         height: h,
         alpha,
-        pair: false,
     })
 }
 
@@ -535,15 +532,7 @@ impl Coverage {
         let mut spans = Spans::new(width, height);
         for row in 0..self.height {
             let alphas = &self.alpha[row * self.width..(row + 1) * self.width];
-            if self.pair {
-                for (i, &a) in alphas.iter().enumerate() {
-                    if a != 0 {
-                        spans.anti_v2(self.x + i as i32, self.y + row as i32, a, 0);
-                    }
-                }
-            } else {
-                spans.anti_h(self.x, self.y + row as i32, alphas);
-            }
+            spans.anti_h(self.x, self.y + row as i32, alphas);
         }
         spans
     }
