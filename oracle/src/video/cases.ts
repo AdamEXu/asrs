@@ -614,6 +614,16 @@ export function flowCases(samples: Sample[]): Case[] {
     })
   );
   cases.push(tba("tba-menu-dismissed", 225, { fetch: tbaFetch(threeVideos), yt: titleRun(["A", "B", "C"]), menu: () => [{ close: true }] }));
+  cases.push(
+    tba("tba-menu-closed-twice", 240, { fetch: tbaFetch(threeVideos), yt: titleRun(["A", "B", "C"]), menu: () => [{ close: true }, { close: true }] })
+  );
+  cases.push(
+    tba("tba-menu-clicked-twice", 241, {
+      fetch: tbaFetch(threeVideos),
+      yt: titleRun(["A", "B", "C"]),
+      menu: () => [{ click: 0 }, { close: true }, { click: 2 }]
+    })
+  );
   for (const seed of [226, 227, 228, 229, 236, 237, 238, 239]) {
     cases.push(
       tba("tba-menu-race-" + seed, seed, { fetch: tbaFetch(threeVideos), yt: titleRun(["A", "B", "C"]), menu: () => [{ close: true }, { click: 2 }] })
