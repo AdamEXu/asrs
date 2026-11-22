@@ -1,0 +1,212 @@
+//! `main.ts`'s windows on GPUI: every window opens through here, from the options and placement
+//! `asrs_services::window_manager` gives it, and its focus, moves and closing feed back into
+//! that model, which keeps the hub list in most-recently-focused order.
+
+pub mod chrome;
+mod open;
+
+pub use asrs_services::window_manager::{SatellitePlacement, WindowId, WindowKind, WindowOptions};
+pub use asrs_services::windows::Rect;
+pub use asrs_ui::platform::dialog::{
+    FileFilter, MessageBoxOptions, MessageBoxResult, MessageBoxType, OpenDialogOptions,
+    SaveDialogOptions, message_box, open_dialog, save_dialog,
+};
+
+use asrs_services::window_manager::{Opened, WindowManager};
+use gpui_kit::{AnyWindowHandle, App, Entity, Global, Render, Window};
+
+#[derive(Default)]
+pub struct Windows {
+    manager: WindowManager,
+    handles: Vec<(WindowId, AnyWindowHandle)>,
+}
+
+impl Global for Windows {}
+
+pub fn init(cx: &mut App) {
+    cx.set_global(Windows::default());
+    cx.on_window_closed(|cx, closed| {
+        let windows = cx.global_mut::<Windows>();
+        if let Some(i) = windows
+            .handles
+            .iter()
+            .position(|(_, h)| h.window_id() == closed)
+        {
+            let (id, _) = windows.handles.remove(i);
+            windows.manager.closed(id);
+        }
+    })
+    .detach();
+}
+
+impl Windows {
+    pub fn manager(cx: &App) -> &WindowManager {
+        &cx.global::<Windows>().manager
+    }
+
+    pub fn handle(cx: &App, id: WindowId) -> Option<AnyWindowHandle> {
+        let windows = cx.global::<Windows>();
+        windows
+            .handles
+            .iter()
+            .find(|(i, _)| *i == id)
+            .map(|(_, h)| *h)
+    }
+
+    pub fn id(cx: &App, window: &Window) -> Option<WindowId> {
+        let target = window.window_handle().window_id();
+        let windows = cx.global::<Windows>();
+        windows
+            .handles
+            .iter()
+            .find(|(_, h)| h.window_id() == target)
+            .map(|(id, _)| *id)
+    }
+
+    /// `hubWindows`: most recently focused first.
+    pub fn hubs(cx: &App) -> Vec<AnyWindowHandle> {
+        Self::manager(cx)
+            .hubs()
+            .iter()
+            .filter_map(|id| Self::handle(cx, *id))
+            .collect()
+    }
+}
+
+/// `window.destroy()`. A modal prompt is detached from its parent first.
+pub fn close(cx: &mut App, id: WindowId) {
+    let Some(handle) = Windows::handle(cx, id) else {
+        return;
+    };
+    let native = handle
+        .update(cx, |_, window, _| asrs_ui::platform::native_window(window))
+        .ok()
+        .flatten();
+    cx.spawn(async move |cx| {
+        if let Some(native) = native {
+            native.end_sheet();
+        }
+        handle
+            .update(cx, |_, window, _| window.remove_window())
+            .ok();
+    })
+    .detach();
+}
+
+pub type Opening<V> = gpui_kit::Result<(WindowId, Entity<V>)>;
+
+fn open_new<V: Render>(
+    cx: &mut App,
+    id: WindowId,
+    options: WindowOptions,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Opening<V> {
+    match open::open(cx, id, options, build) {
+        Ok((handle, entity)) => {
+            cx.global_mut::<Windows>().handles.push((id, handle));
+            Ok((id, entity))
+        }
+        Err(e) => {
+            cx.global_mut::<Windows>().manager.closed(id);
+            Err(e)
+        }
+    }
+}
+
+/// `createHubWindow(state)`.
+pub fn open_hub<V: Render>(
+    cx: &mut App,
+    state: Option<Rect>,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Opening<V> {
+    let (id, options) = cx.global_mut::<Windows>().manager.create_hub(state);
+    open_new(cx, id, options, build)
+}
+
+/// `createSatellite`.
+pub fn open_satellite<V: Render>(
+    cx: &mut App,
+    uuid: &str,
+    placement: SatellitePlacement,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Opening<V> {
+    let (id, options) = cx
+        .global_mut::<Windows>()
+        .manager
+        .create_satellite(uuid, placement);
+    open_new(cx, id, options, build)
+}
+
+/// A modal prompt as a sheet on `parent`. GPUI attaches sheets to the main window, which is the
+/// parent whenever the prompt answers an action in it, as all of upstream's do.
+pub fn open_modal<V: Render>(
+    cx: &mut App,
+    kind: WindowKind,
+    parent: WindowId,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Opening<V> {
+    let (id, options) = cx
+        .global_mut::<Windows>()
+        .manager
+        .create_modal(kind, parent);
+    open_new(cx, id, options, build)
+}
+
+/// `openSourceListHelp`.
+pub fn open_source_list_help<V: Render>(
+    cx: &mut App,
+    parent: WindowId,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Opening<V> {
+    let (id, options) = cx
+        .global_mut::<Windows>()
+        .manager
+        .open_source_list_help(parent);
+    open_new(cx, id, options, build)
+}
+
+/// What opening a singleton window did: `None` when it already existed and was focused.
+pub type SingletonOpening<V> = gpui_kit::Result<Option<(WindowId, Entity<V>)>>;
+
+fn singleton<V: Render>(
+    cx: &mut App,
+    open: impl FnOnce(&mut WindowManager) -> Opened,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> SingletonOpening<V> {
+    match open(&mut cx.global_mut::<Windows>().manager) {
+        Opened::New(id, options) => open_new(cx, id, options, build).map(Some),
+        Opened::Focus(id) => {
+            if let Some(handle) = Windows::handle(cx, id) {
+                handle.update(cx, |_, window, _| window.activate_window())?;
+            }
+            Ok(None)
+        }
+    }
+}
+
+/// `openPreferences`.
+pub fn open_preferences<V: Render>(
+    cx: &mut App,
+    parent: WindowId,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> SingletonOpening<V> {
+    singleton(cx, |m| m.open_preferences(parent), build)
+}
+
+/// `openDownload`.
+pub fn open_download<V: Render>(
+    cx: &mut App,
+    parent: WindowId,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> SingletonOpening<V> {
+    singleton(cx, |m| m.open_download(parent), build)
+}
+
+/// `openLicenses`.
+pub fn open_licenses<V: Render>(
+    cx: &mut App,
+    parent: WindowId,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> SingletonOpening<V> {
+    singleton(cx, |m| m.open_licenses(parent), build)
+}

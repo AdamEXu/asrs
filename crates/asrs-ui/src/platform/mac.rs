@@ -907,8 +907,33 @@ pub(super) mod probe {
             .collect()
     }
 
+    pub fn is_visible(window: &Window) -> Option<bool> {
+        let window = ns_window(window)?;
+        Some(
+            window.isVisible()
+                && window
+                    .occlusionState()
+                    .contains(objc2_app_kit::NSWindowOcclusionState::Visible),
+        )
+    }
+
+    pub fn app_is_active() -> Option<bool> {
+        Some(NSApplication::sharedApplication(MainThreadMarker::new()?).isActive())
+    }
+
+    pub fn is_sheet_of(window: &Window, parent: &Window) -> bool {
+        let (Some(window), Some(parent)) = (ns_window(window), ns_window(parent)) else {
+            return false;
+        };
+        window.isSheet() && parent.attachedSheet().is_some_and(|s| s == window)
+    }
+
     pub fn hides_on_deactivate(window: &Window) -> Option<bool> {
         Some(ns_window(window)?.hidesOnDeactivate())
+    }
+
+    pub fn has_attached_sheet(window: &Window) -> bool {
+        ns_window(window).is_some_and(|w| w.attachedSheet().is_some())
     }
 
     pub fn has_sidebar_vibrancy(window: &Window) -> bool {

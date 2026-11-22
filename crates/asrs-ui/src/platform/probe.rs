@@ -172,6 +172,24 @@ pub fn hides_on_deactivate(window: &Window) -> Option<bool> {
     imp::probe::hides_on_deactivate(window)
 }
 
+/// Whether any part of the window is on screen: ordered in and not fully covered.
+pub fn is_visible(window: &Window) -> Option<bool> {
+    imp::probe::is_visible(window)
+}
+
+pub fn app_is_active() -> Option<bool> {
+    imp::probe::app_is_active()
+}
+
+/// Whether `window` is attached as a sheet to `parent`.
+pub fn is_sheet_of(window: &Window, parent: &Window) -> bool {
+    imp::probe::is_sheet_of(window, parent)
+}
+
+pub fn has_attached_sheet(window: &Window) -> bool {
+    imp::probe::has_attached_sheet(window)
+}
+
 pub fn has_sidebar_vibrancy(window: &Window) -> bool {
     imp::probe::has_sidebar_vibrancy(window)
 }

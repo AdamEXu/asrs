@@ -42,28 +42,53 @@ pub(super) fn wheel_delta(_event: &ScrollEvent) -> Option<WheelDelta> {
 pub(super) mod window {
     use gpui_kit::Window;
 
-    pub fn hidden_inset_titlebar(_window: &Window) -> bool {
-        false
-    }
+    pub enum NativeWindow {}
 
-    pub fn content_size_for_frame(
-        _window: &Window,
-        _width: f64,
-        _height: f64,
-    ) -> Option<(f64, f64)> {
+    pub fn native(_window: &Window) -> Option<NativeWindow> {
         None
     }
 
-    pub fn set_content_size_limits(
-        _window: &Window,
-        _min: Option<(f64, f64)>,
-        _max: Option<(f64, f64)>,
-    ) {
+    impl NativeWindow {
+        pub fn hidden_inset_titlebar(&self) {
+            match *self {}
+        }
+
+        pub fn content_size_for_frame(&self, _width: f64, _height: f64) -> (f64, f64) {
+            match *self {}
+        }
+
+        pub fn content_size(&self) -> (f64, f64) {
+            match *self {}
+        }
+
+        pub fn set_content_size(&self, _width: f64, _height: f64) {
+            match *self {}
+        }
+
+        pub fn set_content_size_limits(&self, _min: Option<(f64, f64)>, _max: Option<(f64, f64)>) {
+            match *self {}
+        }
+
+        pub fn set_fullscreenable(&self, _fullscreenable: bool) {
+            match *self {}
+        }
+
+        pub fn center(&self) {
+            match *self {}
+        }
+
+        pub fn begin_sheet(&self, _sheet: &NativeWindow) {
+            match *self {}
+        }
+
+        pub fn end_sheet(&self) {
+            match *self {}
+        }
+
+        pub fn show(&self, _focus: bool) {
+            match *self {}
+        }
     }
-
-    pub fn set_fullscreenable(_window: &Window, _fullscreenable: bool) {}
-
-    pub fn center(_window: &Window) {}
 }
 
 pub(super) mod dialog {
@@ -210,8 +235,24 @@ pub(super) mod probe {
         Vec::new()
     }
 
+    pub fn is_visible(_window: &Window) -> Option<bool> {
+        None
+    }
+
+    pub fn app_is_active() -> Option<bool> {
+        None
+    }
+
+    pub fn is_sheet_of(_window: &Window, _parent: &Window) -> bool {
+        false
+    }
+
     pub fn hides_on_deactivate(_window: &Window) -> Option<bool> {
         None
+    }
+
+    pub fn has_attached_sheet(_window: &Window) -> bool {
+        false
     }
 
     pub fn has_sidebar_vibrancy(_window: &Window) -> bool {
