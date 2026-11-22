@@ -3,17 +3,19 @@
 //! and what the hub sends main is dropped.
 
 use asrs_hub::hub::{HubModel, HubView};
-use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_hub::sidebar::SidebarGeometry;
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_ui::gpui::{App, AppContext, Entity, Window};
+use asrs_ui::gpui::{AnyElement, App, AppContext, Entity, IntoElement, Window};
 
-use super::frame::{FrameGeometry, FrameHost, HubFrame};
+use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
+use super::sidebar::{self, SidebarView, ViewGeometry};
 use crate::hub::{Hub, HubConfig, HubEvent};
 
 struct FrameView {
     geometry: FrameGeometry,
     dark: bool,
+    sidebar: ViewGeometry,
 }
 
 impl HubView for FrameView {
@@ -29,22 +31,16 @@ impl HubView for FrameView {
         self.dark
     }
 
-    fn can_scroll_into_view(&self) -> bool {
-        true
-    }
-
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
-        vec![RowRect::default(); sidebar.rows().len()]
-    }
-
-    fn measure_value(&self, _value: &RowValue) -> f64 {
-        0.0
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
+        &mut self.sidebar
     }
 }
 
 pub struct HubEntityHost {
     hub: Entity<Hub>,
     geometry: FrameGeometry,
+    sidebar_geometry: ViewGeometry,
+    sidebar: Entity<SidebarView>,
 }
 
 /// `os.release()`.
@@ -129,17 +125,26 @@ impl HubEntityHost {
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
+        let sidebar_geometry = ViewGeometry::new();
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
             dark,
+            sidebar: sidebar_geometry.clone(),
         });
         let hub = cx.new(|cx| Hub::new(Some(window), HubConfig::new(view), cx));
-        cx.subscribe(&hub, |_, event, _| match event {
+        let handle = window.window_handle();
+        cx.subscribe(&hub, move |_, event, cx| match event {
             HubEvent::Console { warn: true, text } => eprintln!("asrs: {text}"),
             HubEvent::Exception { task, error } => eprintln!("asrs: {task}: {error}"),
+            HubEvent::Main(message) => {
+                let _ = handle.update(cx, |_, window, cx| {
+                    crate::menus::context::handle(message, window, cx)
+                });
+            }
             _ => {}
         })
         .detach();
+        let sidebar = cx.new(|_| SidebarView::new(hub.clone(), &sidebar_geometry));
         hub.update(cx, |hub, cx| {
             for message in boot_messages(is_beta, files) {
                 geometry.sync(hub.model());
@@ -148,12 +153,25 @@ impl HubEntityHost {
         });
         cx.new(|cx| {
             cx.observe(&hub, |_, _, cx| cx.notify()).detach();
-            HubFrame::new(HubEntityHost { hub, geometry }, cx)
+            cx.observe(&sidebar, |_, _, cx| cx.notify()).detach();
+            HubFrame::new(
+                HubEntityHost {
+                    hub,
+                    geometry,
+                    sidebar_geometry,
+                    sidebar,
+                },
+                cx,
+            )
         })
     }
 
     pub fn hub(&self) -> &Entity<Hub> {
         &self.hub
+    }
+
+    pub fn sidebar(&self) -> &Entity<SidebarView> {
+        &self.sidebar
     }
 }
 
@@ -175,5 +193,15 @@ impl FrameHost for HubEntityHost {
         self.hub.update(cx, |hub, cx| {
             hub.update(cx, |_, host| host.send_main_message(message))
         });
+    }
+
+    fn slot(&mut self, slot: FrameSlot, _window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
+        match slot {
+            FrameSlot::SideBar => {
+                sidebar::set_side_bar(&self.sidebar_geometry, self.geometry.side_bar());
+                Some(self.sidebar.clone().into_any_element())
+            }
+            _ => None,
+        }
     }
 }

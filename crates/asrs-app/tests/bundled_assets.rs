@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use asrs_app::hub::{Hub, HubConfig, HubEvent};
 use asrs_hub::hub::HubView;
-use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::string::JsString;
 use asrs_model::messages::{MainToHub, NamedMessage};
 use asrs_parity::Value;
@@ -27,7 +27,9 @@ use asrs_ui::gpui::{
     div, px, size,
 };
 
-struct View;
+struct View {
+    sidebar: NoLayout,
+}
 
 impl HubView for View {
     fn inner_height(&self) -> f64 {
@@ -42,16 +44,8 @@ impl HubView for View {
         false
     }
 
-    fn can_scroll_into_view(&self) -> bool {
-        false
-    }
-
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
-        vec![RowRect::default(); sidebar.rows().len()]
-    }
-
-    fn measure_value(&self, _value: &RowValue) -> f64 {
-        0.0
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
+        &mut self.sidebar
     }
 }
 
@@ -151,7 +145,13 @@ fn bundled_assets_load_into_set_assets() {
     let slot = Rc::new(RefCell::new(None));
     let built = slot.clone();
     cx.open_window(size(px(1100.0), px(650.0)), move |window, cx| {
-        let hub = cx.new(|cx| Hub::new(Some(window), HubConfig::new(Box::new(View)), cx));
+        let hub = cx.new(|cx| {
+            Hub::new(
+                Some(window),
+                HubConfig::new(Box::new(View { sidebar: NoLayout })),
+                cx,
+            )
+        });
         *built.borrow_mut() = Some(hub.clone());
         cx.new(|_| Shell(hub))
     })
