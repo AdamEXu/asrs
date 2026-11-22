@@ -15,9 +15,10 @@ const USAGE: &str = r"usage: cargo xtask app <command>
 The Electron scenario driver (oracle/src/appMain.ts) runs upstream's real app on scenarios from
 parity/scenarios/*.json with an isolated userData directory and drives it with executeJavaScript
 and sendInputEvent only. Each run directory holds run.json, captures/<name>.png (capturePage)
-with captures/<name>.json (probed boxes, text boxes, masks, colour space), per-canvas getImageData
-dumps (<name>.canvas-<i>.png), WebGL drawing-buffer dumps read right after the draw
-(<name>.gl-<i>.png), files/ (what the app wrote to userData) and inputs/ (generated logs).
+with captures/<name>.json (probed boxes, text boxes, masks, colour space, timeline range),
+per-canvas getImageData dumps (<name>.canvas-<i>.png), WebGL drawing-buffer dumps read right after
+the draw with their render mode (<name>.gl-<i>.png), the HubState of the next save-state
+(<name>.hub-state.json), files/ (what the app wrote to userData) and inputs/ (generated logs).
 
 Captures are sRGB: Chromium composites with --force-color-profile=srgb. With --colour display it
 keeps the display's colour space instead and the driver stores the display's ICC profile as
@@ -485,6 +486,7 @@ fn compare(a_root: &Path, b_root: &Path) -> Result<Report> {
     Ok(report)
 }
 
+/// Capture names are `[a-z0-9-]`; a dotted stem (`<name>.hub-state.json`) is a side file.
 fn capture_names(captures: &Path) -> Result<BTreeSet<String>> {
     Ok(sorted_entries(captures)?
         .iter()
@@ -492,6 +494,7 @@ fn capture_names(captures: &Path) -> Result<BTreeSet<String>> {
             e.file_name()?
                 .to_str()?
                 .strip_suffix(".json")
+                .filter(|stem| !stem.contains('.'))
                 .map(str::to_owned)
         })
         .collect())
@@ -518,10 +521,47 @@ fn compare_variant(label: &str, a: &Path, b: &Path, report: &mut Report) -> Resu
             read_json(&captures.join(&file))?,
             read_json(&b.join("captures").join(&file))?,
         );
-        if without_key(&ja, "timing") != without_key(&jb, "timing") {
+        let record = |j: &Json| without_key(&without_key(j, "timing"), "timelineRange");
+        if record(&ja) != record(&jb) {
             report.failures.push(format!(
                 "{label} {name}: DOM dump or capture record differs"
             ));
+        }
+        let range = |j: &Json| {
+            j.get("timelineRange")
+                .and_then(Json::as_array)
+                .and_then(|r| Some([r.first()?.as_f64()?, r.get(1)?.as_f64()?]))
+        };
+        match (range(&ja), range(&jb)) {
+            (None, None) => {}
+            (Some(x), Some(y))
+                if (x[0] - y[0]).abs().max((x[1] - y[1]).abs())
+                    <= crate::pixel::TIMELINE_TOLERANCE * (x[1] - x[0]) =>
+            {
+                report.compared.push(format!(
+                    "{label} {name}: timeline range within {:e} of the span",
+                    crate::pixel::TIMELINE_TOLERANCE
+                ));
+            }
+            (x, y) => report.failures.push(format!(
+                "{label} {name}: timeline range {x:?} against {y:?}"
+            )),
+        }
+        if let Some(state) = ja.get("hubState").and_then(Json::as_str) {
+            let state = state.to_string();
+            let read = |dir: &Path| {
+                let path = dir.join(&state);
+                fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+            };
+            if read(&captures)? == read(&b.join("captures"))? {
+                report
+                    .compared
+                    .push(format!("{label} {name}: HubState {state} byte-identical"));
+            } else {
+                report
+                    .failures
+                    .push(format!("{label} {name}: HubState {state} differs"));
+            }
         }
         let scale = record_scale(&ja, &captures.join(&file))?;
         let image_a = pixel::read_png(&captures.join(format!("{name}.png")))?;
@@ -678,7 +718,7 @@ fn normalize_variant(variant: &Path) -> Result<Vec<(String, Rgba)>> {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or_default();
-        let Some(name) = name.strip_suffix(".json") else {
+        let Some(name) = name.strip_suffix(".json").filter(|n| !n.contains('.')) else {
             continue;
         };
         let image = pixel::read_png(&captures.join(format!("{name}.png")))?;
