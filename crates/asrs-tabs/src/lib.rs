@@ -4,7 +4,7 @@ pub mod cx;
 pub mod field3d;
 pub mod field_2d;
 pub mod form;
-pub mod heatmap;
+pub use asrs_canvas::heatmap;
 pub mod joysticks;
 pub mod line_graph;
 pub mod list_cx;

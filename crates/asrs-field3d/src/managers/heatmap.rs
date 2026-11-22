@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use asrs_canvas::heatmap::Heatmap;
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_log::geometry::{self, Alliance, ConvertPose, annotated_pose_3d_to_2d};
 use asrs_model::assets::{Config3dField, CoordinateSystem};
 use asrs_model::preferences::CoordinateSystemPreference;
-use asrs_tabs::heatmap::Heatmap;
 
 use super::{HeatmapObj, ManagerContext, ManagerError, ObjectManager};
 use crate::render::{Geometry, Mesh, PhongMaterial, Scene, Texture};

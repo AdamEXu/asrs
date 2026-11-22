@@ -337,7 +337,6 @@ dependencies = [
  "asrs-log",
  "asrs-model",
  "asrs-parity",
- "asrs-tabs",
  "bytemuck",
  "png 0.18.1",
  "pollster 0.4.0",
