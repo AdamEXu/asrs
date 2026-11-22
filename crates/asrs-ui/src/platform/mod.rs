@@ -41,6 +41,12 @@ pub struct PopupEntry {
     pub checked: bool,
     pub swatch: Option<[u8; 3]>,
     pub submenu: Option<PopupMenu>,
+    /// A macOS key equivalent and `NSEventModifierFlags` mask.
+    pub key_equivalent: Option<(String, u32)>,
+    pub works_when_hidden: bool,
+    /// The item's Electron role, lowercased. On macOS some roles become AppKit selectors or
+    /// system menus, as `ElectronMenuController` makes them.
+    pub role: Option<String>,
 }
 
 impl PopupMenu {
@@ -75,7 +81,25 @@ impl PopupEntry {
             checked: false,
             swatch: None,
             submenu: None,
+            key_equivalent: None,
+            works_when_hidden: true,
+            role: None,
         }
+    }
+
+    pub fn key_equivalent(mut self, key: impl Into<String>, modifiers: u32) -> Self {
+        self.key_equivalent = Some((key.into(), modifiers));
+        self
+    }
+
+    pub fn works_when_hidden(mut self, works: bool) -> Self {
+        self.works_when_hidden = works;
+        self
+    }
+
+    pub fn role(mut self, role: impl Into<String>) -> Self {
+        self.role = Some(role.into());
+        self
     }
 
     pub fn enabled(mut self, enabled: bool) -> Self {
@@ -220,6 +244,17 @@ pub fn popup_menu(
     on_close: impl FnOnce(Option<MenuPath>, &mut App) + 'static,
 ) {
     imp::popup_menu(window, cx, menu, x, y, on_close);
+}
+
+/// Electron's `Menu.setApplicationMenu(menu)`: each top-level entry is a submenu of the menu bar.
+/// `on_select` gets the path of each chosen entry. Returns false where the platform has no
+/// native menu bar.
+pub fn set_application_menu(
+    cx: &mut App,
+    menu: &PopupMenu,
+    on_select: impl Fn(MenuPath, &mut App) + 'static,
+) -> bool {
+    imp::set_application_menu(cx, menu, on_select)
 }
 
 /// Electron's `menu.closePopup(window)`.

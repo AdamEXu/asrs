@@ -1,6 +1,5 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
   "inputs": [
     "../logs/timeline-short.json"
   ],

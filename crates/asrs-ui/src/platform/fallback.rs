@@ -29,6 +29,14 @@ pub(super) fn popup_menu(
     cx.defer(move |cx| on_close(None, cx));
 }
 
+pub(super) fn set_application_menu(
+    _cx: &mut App,
+    _menu: &PopupMenu,
+    _on_select: impl Fn(MenuPath, &mut App) + 'static,
+) -> bool {
+    false
+}
+
 pub(super) fn close_popup_menu(_window: &Window) {}
 
 pub(super) fn native_menu_label(label: &str) -> String {
@@ -195,6 +203,18 @@ pub(super) mod probe {
 
     pub fn native_menu_roundtrip(_menu: &PopupMenu) -> Option<PopupMenu> {
         None
+    }
+
+    pub fn read_application_menu() -> Option<(PopupMenu, Vec<String>)> {
+        None
+    }
+
+    pub fn perform_application_menu_item(_path: &[usize]) -> bool {
+        false
+    }
+
+    pub fn perform_key_equivalent(_key: &str, _modifiers: u32) -> bool {
+        false
     }
 
     pub fn read_wheel_sample(_sample: &WheelSample) -> Option<WheelReading> {

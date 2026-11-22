@@ -16,6 +16,7 @@ pub mod canvas_view;
 pub mod capture;
 pub mod filter;
 pub mod icon;
+pub mod menu;
 pub mod platform;
 pub mod svg;
 pub mod symbols;
