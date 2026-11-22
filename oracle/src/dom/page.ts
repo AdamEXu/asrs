@@ -3,6 +3,7 @@ import "@upstream/hub/hub";
 import { DEFAULT_PREFS, mergePreferences } from "@upstream/shared/Preferences";
 import { LITE_VERSION } from "@upstream/shared/buildConstants";
 import { fromTree, toTree } from "../cve1";
+import { formProbe } from "./formProbe";
 import { measureFixed, parseFontSize } from "./recordingCanvas";
 import * as sourceLists from "./sourceLists";
 
@@ -233,11 +234,15 @@ async function step(s: any, index: number) {
       };
     }
     await settle();
+  } else if ("form" in s) {
+    formProbe(s.form, write);
   } else if ("capture" in s) {
     write({ capture: toTree(s.label ?? index), time: toTree(clock.now - clock.start) });
     for (const spec of Array.isArray(s.capture) ? s.capture : [s.capture]) capture(spec);
   } else throw new Error(`step ${index}: unknown step ${JSON.stringify(Object.keys(s))}`);
 }
+
+w.__oracleTree = toTree;
 
 w.__oracleRun = async () => {
   setExceptionHandler(exception);

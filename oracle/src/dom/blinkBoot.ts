@@ -38,14 +38,15 @@ w.__oracleOutput = () => lines.map((line) => line + "\n").join("");
 w.__oracleLog = (text: string) => log(text);
 w.__oracleOuter = { TextEncoder, TextDecoder };
 
-const errorText = (error: unknown, message: string) =>
-  error instanceof Error ? `${error.name}: ${error.message}` : String(error ?? message);
+// The same text dom.ts writes for jsdom, `name: message` of whatever was thrown, so the two
+// backends differ only where the DOM does.
+const errorText = (error: any) => `${error?.name}: ${error?.message}`;
 window.addEventListener("error", (event) => {
-  lines.push(JSON.stringify({ exception: "event", error: errorText(event.error, event.message) }));
+  lines.push(JSON.stringify({ exception: "event", error: errorText(event.error) }));
 });
 window.addEventListener("unhandledrejection", (event) => {
   event.preventDefault();
-  lines.push(JSON.stringify({ exception: "unhandledRejection", error: errorText(event.reason, "") }));
+  lines.push(JSON.stringify({ exception: "unhandledRejection", error: errorText(event.reason) }));
 });
 
 // CSS transitions and animations run on the real clock; with them off, every geometry read

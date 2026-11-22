@@ -1,5 +1,5 @@
 import defaultLayout from "./layout.json";
-import { installRealGeometry } from "./realGeometry";
+import { installRealGeometry, quiet } from "./realGeometry";
 import { fixedWidth, RecordingContext } from "./recordingCanvas";
 
 export type Rect = [number, number, number, number];
@@ -299,6 +299,7 @@ function installScriptedGeometry() {
   proto.scrollIntoView = function () {};
   proto.scrollTo = function () {};
 }
+w.__oracleQuiet = quiet;
 if (realGeometry) installRealGeometry(w, (record) => w.__oracleWrite(JSON.stringify(record)));
 else installScriptedGeometry();
 

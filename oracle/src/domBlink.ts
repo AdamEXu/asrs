@@ -20,8 +20,8 @@ if (geometry !== "scripted" && geometry !== "real") {
   process.exit(2);
 }
 const scale = view.devicePixelRatio ?? 1;
-if (scale !== 1 && scale !== 2) {
-  process.stderr.write(`domBlink: devicePixelRatio must be 1 or 2, not ${JSON.stringify(scale)}\n`);
+if (typeof scale !== "number" || !(scale > 0)) {
+  process.stderr.write(`domBlink: devicePixelRatio must be a positive number, not ${JSON.stringify(scale)}\n`);
   process.exit(2);
 }
 
@@ -46,7 +46,7 @@ try {
   env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
   run = spawnSync(
     process.execPath,
-    [`--force-device-scale-factor=${scale}`, "--lang=en-US", path.join(here, "domBlinkMain.mjs"), requestPath],
+    [`--force-device-scale-factor=${scale}`, "--lang=en-US", "--log-level=3", path.join(here, "domBlinkMain.mjs"), requestPath],
     { env, encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "inherit"] }
   );
 } finally {

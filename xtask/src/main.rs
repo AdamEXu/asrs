@@ -5,6 +5,7 @@ mod bundle;
 mod canvas;
 mod check;
 mod corpus;
+mod dom;
 mod field3d;
 mod glb;
 mod gpui;
