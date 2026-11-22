@@ -156,3 +156,63 @@ mod tests {
         assert_eq!(data.data, [0, 0, 0, 0, 9, 9, 9, 255]);
     }
 }
+
+/// `src` as a compositor draws a transformed layer into a `width` x `height` device-pixel
+/// target: each target pixel centre is mapped back through `inverse` (`[a, b, c, d, e, f]`,
+/// `x' = a*x + c*y + e`, `y' = b*x + d*y + f`) and `src` is sampled bilinearly there, transparent
+/// outside it. A pixel centre that lands on a source pixel centre copies that pixel exactly.
+pub fn transform_bilinear(
+    src: &Pixmap,
+    width: u32,
+    height: u32,
+    inverse: [f64; 6],
+) -> Option<Pixmap> {
+    let mut out = Pixmap::new(width, height)?;
+    let [a, b, c, d, e, f] = inverse;
+    let (sw, sh) = (i64::from(src.width()), i64::from(src.height()));
+    let data = src.data();
+    let texel = |x: i64, y: i64| -> [f32; 4] {
+        if x < 0 || y < 0 || x >= sw || y >= sh {
+            return [0.0; 4];
+        }
+        let i = ((y * sw + x) * 4) as usize;
+        [0, 1, 2, 3].map(|k| f32::from(data[i + k]))
+    };
+    let split = |v: f64| {
+        let i = v.floor();
+        let t = v - i;
+        if t < 1e-6 {
+            (i as i64, 0.0)
+        } else if t > 1.0 - 1e-6 {
+            (i as i64 + 1, 0.0)
+        } else {
+            (i as i64, t as f32)
+        }
+    };
+    let row = width as usize * 4;
+    let pixels = out.data_mut();
+    for y in 0..height {
+        let py = f64::from(y) + 0.5;
+        for x in 0..width {
+            let px = f64::from(x) + 0.5;
+            let (x0, tx) = split(a * px + c * py + e - 0.5);
+            let (y0, ty) = split(b * px + d * py + f - 0.5);
+            let p = if tx == 0.0 && ty == 0.0 {
+                texel(x0, y0)
+            } else {
+                let (p00, p10) = (texel(x0, y0), texel(x0 + 1, y0));
+                let (p01, p11) = (texel(x0, y0 + 1), texel(x0 + 1, y0 + 1));
+                std::array::from_fn(|k| {
+                    let top = p00[k] + (p10[k] - p00[k]) * tx;
+                    let bottom = p01[k] + (p11[k] - p01[k]) * tx;
+                    top + (bottom - top) * ty
+                })
+            };
+            let i = y as usize * row + x as usize * 4;
+            for k in 0..4 {
+                pixels[i + k] = p[k].round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    Some(out)
+}

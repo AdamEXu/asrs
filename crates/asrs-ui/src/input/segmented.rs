@@ -29,6 +29,7 @@ pub struct SegmentedControl {
     segments: Vec<Segment>,
     selected: Option<usize>,
     size: (f32, f32),
+    subpixel: f32,
     appearance: Appearance,
     on_select: Option<Select>,
 }
@@ -61,6 +62,7 @@ impl SegmentedControl {
             segments,
             selected: None,
             size: (0.0, 0.0),
+            subpixel: 0.0,
             appearance: Appearance::Light,
             on_select: None,
         }
@@ -74,6 +76,13 @@ impl SegmentedControl {
     /// The `div.split` box in CSS px.
     pub fn size(mut self, width: f32, height: f32) -> Self {
         self.size = (width, height);
+        self
+    }
+
+    /// What GPUI's pixel snapping dropped from the control's x position, in CSS px: Chromium
+    /// snaps each segment from its exact position.
+    pub fn subpixel(mut self, dx: f32) -> Self {
+        self.subpixel = dx;
         self
     }
 
@@ -112,9 +121,11 @@ impl RenderOnce for SegmentedControl {
             .relative()
             .w(px(self.size.0))
             .h(px(self.size.1));
+        let shift = self.subpixel * scale;
         for (i, (segment, [x, _, w, h])) in self.segments.into_iter().zip(boxes).enumerate() {
-            let left = x.round();
-            let right = (x + w).round();
+            let x = x + shift;
+            let left = (x + 0.5).floor();
+            let right = (x + w + 0.5).floor();
             let selected = self.selected == Some(i);
             let background = if selected {
                 style.selected

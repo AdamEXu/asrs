@@ -1,6 +1,7 @@
 // Ported from Skia and Blink, Chromium m142 (BSD-3-Clause, Copyright Google Inc. and The Chromium Authors). See THIRD_PARTY_NOTICES.md.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use asrs_js::string::JsString;
 use tiny_skia::{
@@ -158,7 +159,7 @@ pub struct Raster<'a> {
     path: Path,
     fast: Fast,
     lines: RasterState,
-    images: HashMap<String, Pixmap>,
+    images: HashMap<String, Arc<Pixmap>>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
     errors: Vec<(usize, CanvasError)>,
@@ -183,7 +184,7 @@ enum Source {
     Shader(Shader<'static>),
     Device(Pixmap),
     Image {
-        pixmap: Pixmap,
+        pixmap: Arc<Pixmap>,
         transform: Affine,
         quality: FilterQuality,
         opacity: f32,
@@ -396,8 +397,8 @@ impl<'a> Raster<'a> {
     }
 
     /// Makes `pixmap` (premultiplied) available to `drawImage` as `id`.
-    pub fn add_image(&mut self, id: &str, pixmap: Pixmap) {
-        self.images.insert(id.to_owned(), pixmap);
+    pub fn add_image(&mut self, id: &str, pixmap: impl Into<Arc<Pixmap>>) {
+        self.images.insert(id.to_owned(), pixmap.into());
     }
 
     pub fn register(&self, name: &str) -> Option<&ImageData> {
@@ -993,7 +994,7 @@ impl<'a> Raster<'a> {
                 quality,
                 opacity,
             } => Pattern::new(
-                pixmap.as_ref(),
+                pixmap.as_ref().as_ref(),
                 SpreadMode::Pad,
                 *quality,
                 *opacity,

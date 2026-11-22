@@ -35,6 +35,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::field_2d::Field2dViews;
 use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
@@ -133,6 +134,7 @@ pub struct HubFrame<H: FrameHost> {
     timeline_rect: Option<[f64; 4]>,
     timeline_hovered: bool,
     pub(super) line_graph: LineGraphViews,
+    pub(super) field_2d: Field2dViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -215,6 +217,7 @@ impl<H: FrameHost> HubFrame<H> {
             timeline_rect: None,
             timeline_hovered: false,
             line_graph: LineGraphViews::default(),
+            field_2d: Field2dViews::default(),
         }
     }
 
@@ -308,6 +311,13 @@ impl<H: FrameHost> HubFrame<H> {
             eprintln!("asrs: {e}");
         }
         self.line_graph_mouse_move(
+            x,
+            y,
+            event.modifiers.shift,
+            event.pressed_button.is_some(),
+            cx,
+        );
+        self.field_2d_mouse_move(
             x,
             y,
             event.modifiers.shift,
@@ -829,6 +839,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(graph) = self.line_graph_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(graph);
                 }
+                let covered = self.timeline_rect;
+                if let Some(field) = self.field_2d_element(rect, covered, scale, window, cx) {
+                    renderer = renderer.child(field);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
@@ -845,6 +859,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 self.layout_source_lists(rect, width, scale, cx);
                 controls = controls.children(self.source_lists(rect, appearance, cx));
+                if let Some(settings) = self.field_2d_controls(rect, appearance, scale, window, cx)
+                {
+                    controls = controls.child(settings);
+                }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsHandle) {

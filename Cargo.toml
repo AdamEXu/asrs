@@ -56,3 +56,15 @@ opt-level = 3
 
 [profile.dev.package.tiny-skia]
 opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.crc32fast]
+opt-level = 3

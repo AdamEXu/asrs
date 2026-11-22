@@ -290,6 +290,14 @@ impl Heatmap {
         }
     }
 
+    /// The output canvas's premultiplied bitmap, which `drawImage` draws from.
+    pub fn pixmap(&self) -> Option<&Pixmap> {
+        self.heatmap
+            .as_ref()
+            .and_then(|h| h.renderer.canvas.raster.as_ref())
+            .map(Raster::pixmap)
+    }
+
     /// The output canvas's bitmap size, as the element's `width`/`height` report.
     pub fn canvas_size(&self) -> Option<(u32, u32)> {
         self.heatmap.as_ref().map(|h| h.renderer.canvas_size())
