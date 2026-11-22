@@ -10,13 +10,15 @@ use crate::Result;
 use crate::oracle::{self, Paths};
 use crate::vectors::{self, Backend, DOM_ENTRY};
 
-pub(crate) const DOM_USAGE: &str = "usage: cargo xtask oracle dom [--backend jsdom|blink] <spec or fixture file>
+pub(crate) const DOM_USAGE: &str =
+    "usage: cargo xtask oracle dom [--backend jsdom|blink] <spec or fixture file>
 
 Runs one DOM fixture and prints its records. The backend defaults to the spec's \"backend\"
 (Blink when it names none); a bare fixture file runs on Blink. Like `oracle run`, it uses the
 built harness: run `cargo xtask oracle build` after editing oracle/src.";
 
-pub(crate) const AB_USAGE: &str = "usage: cargo xtask oracle dom-ab [<spec id prefix>...] [--jobs N] [--out <file>]
+pub(crate) const AB_USAGE: &str =
+    "usage: cargo xtask oracle dom-ab [<spec id prefix>...] [--jobs N] [--out <file>]
 
 Runs every committed dom/* and form/* spec (or those whose id starts with a prefix) on jsdom and
 on Blink with scripted geometry, and writes a Markdown report: per family, which vectors are
@@ -100,7 +102,11 @@ fn collect(base: &Path, dir: &Path, out: &mut Vec<Case>) -> Result {
         };
         let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         let spec = json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-        if spec.get("entry").and_then(Json::as_str).map(|e| e.to_string_lossy()).as_deref()
+        if spec
+            .get("entry")
+            .and_then(Json::as_str)
+            .map(|e| e.to_string_lossy())
+            .as_deref()
             != Some(DOM_ENTRY)
         {
             continue;
@@ -264,7 +270,12 @@ fn compare(paths: &Paths, vectors_dir: &Path, manifest: &Json, case: &Case) -> R
     }
 }
 
-fn committed_note(committed: Option<&str>, backend: Backend, jsdom: Option<&str>, blink: &str) -> Option<String> {
+fn committed_note(
+    committed: Option<&str>,
+    backend: Backend,
+    jsdom: Option<&str>,
+    blink: &str,
+) -> Option<String> {
     let committed = committed?;
     let run = match backend {
         Backend::Jsdom => jsdom?,

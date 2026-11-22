@@ -161,7 +161,9 @@ impl ScriptedReads {
         let value = self.read(name, target);
         value.as_f64().unwrap_or_else(|| {
             if self.error.is_none() {
-                self.fail(format!("{name} on {target} recorded {value:?}, not a number"));
+                self.fail(format!(
+                    "{name} on {target} recorded {value:?}, not a number"
+                ));
             }
             f64::NAN
         })
@@ -180,7 +182,9 @@ impl ScriptedReads {
             }
             _ => {
                 if self.error.is_none() {
-                    self.fail(format!("getBoundingClientRect on {target} recorded {value:?}"));
+                    self.fail(format!(
+                        "getBoundingClientRect on {target} recorded {value:?}"
+                    ));
                 }
                 [f64::NAN; 4]
             }
@@ -252,11 +256,18 @@ mod tests {
     fn rejects_other_order_targets_values_and_leftovers() {
         let mut r = reads();
         r.read_rect("tr:2");
-        assert!(r.finish().unwrap_err().contains("upstream's next was read scrollTop"));
+        assert!(
+            r.finish()
+                .unwrap_err()
+                .contains("upstream's next was read scrollTop")
+        );
 
         let mut r = reads();
         r.read_f64("scrollTop", "c:0");
-        assert!(r.finish().is_err(), "a tail must start at an element boundary");
+        assert!(
+            r.finish().is_err(),
+            "a tail must start at an element boundary"
+        );
 
         let mut r = reads();
         r.read_f64("scrollTop", "div.c.selected:0");

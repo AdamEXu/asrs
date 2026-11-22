@@ -19,9 +19,9 @@ use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::TabRenderer;
-use asrs_parity::{Json, Value};
 use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::vectors::{Record, load};
+use asrs_parity::{Json, Value};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::table::{TableCommand, TableCommandField, TableDom, TableGeometry, TableRenderer};
 
@@ -30,7 +30,10 @@ const CONTAINER: &str = "div.data-table-container:2";
 const HEADER: &str = "div.data-table-container:2>table.data-table:0>tbody:0>tr:0";
 
 fn data_row(index: usize) -> String {
-    format!("div.data-table-container:2>table.data-table:0>tbody:0>tr:{}", index + 2)
+    format!(
+        "div.data-table-container:2>table.data-table:0>tbody:0>tr:{}",
+        index + 2
+    )
 }
 
 struct ScriptedTable(Rc<RefCell<ScriptedReads>>);
@@ -220,7 +223,9 @@ fn field<'a>(object: &'a Value, key: &str) -> &'a Value {
 }
 
 fn number(value: &Value) -> f64 {
-    value.as_f64().unwrap_or_else(|| panic!("not a number: {value:?}"))
+    value
+        .as_f64()
+        .unwrap_or_else(|| panic!("not a number: {value:?}"))
 }
 
 fn opt(value: &Value) -> Option<f64> {
@@ -304,7 +309,9 @@ fn table_real_geometry_replays_through_scripted_reads() {
                         None if GeometryRecord::parse(r).unwrap().is_some() => {
                             geometry_recorded += 1
                         }
-                        None => panic!("line {}: unexpected record in a render: {}", r.line, r.text),
+                        None => {
+                            panic!("line {}: unexpected record in a render: {}", r.line, r.text)
+                        }
                     }
                 }
                 *reads.borrow_mut() = ScriptedReads::from_records(span).unwrap();
@@ -323,7 +330,10 @@ fn table_real_geometry_replays_through_scripted_reads() {
                         );
                     }
                 }
-                assert_eq!(host.selection.calls, selection_calls, "{at}: selection calls");
+                assert_eq!(
+                    host.selection.calls, selection_calls,
+                    "{at}: selection calls"
+                );
                 let taken = std::mem::take(&mut *reads.borrow_mut());
                 geometry_compared += taken.finish().unwrap_or_else(|e| panic!("{at}: {e}"));
                 renders += 1;
@@ -349,6 +359,12 @@ fn table_real_geometry_replays_through_scripted_reads() {
     }
     assert!(open.is_none(), "the vector ends inside a render");
     assert_eq!(renders, recorded_renders, "renders compared");
-    assert_eq!(geometry_compared, geometry_recorded, "geometry records compared");
-    assert!(renders > 100 && geometry_compared > 1000, "{renders} renders, {geometry_compared} reads");
+    assert_eq!(
+        geometry_compared, geometry_recorded,
+        "geometry records compared"
+    );
+    assert!(
+        renders > 100 && geometry_compared > 1000,
+        "{renders} renders, {geometry_compared} reads"
+    );
 }
