@@ -67,12 +67,19 @@ fn dom_text_boxes_match_chromium() {
         let layout = dom::layout(backend.as_mut(), &style, &text, available, scale);
         let dom_rect = rect(r.field("rect").unwrap());
         let exact = !matches!(r.field("exact"), Some(Json::Bool(false)));
+        let emoji = string(r, "scene").starts_with("text-emoji");
         for (k, ours, i) in [
             ("width", layout.width_px(), 2),
             ("height", layout.height_px(), 3),
         ] {
             if number(r, k).is_none() {
                 let err = (ours - dom_rect[i]).abs();
+                if emoji && err != 0.0 {
+                    failures.push(format!(
+                        "{id}: {k} {ours} vs DOM {}, not exact",
+                        dom_rect[i]
+                    ));
+                }
                 if exact {
                     max_size = max_size.max(err);
                 }
@@ -116,6 +123,11 @@ fn dom_text_boxes_match_chromium() {
             .collect();
         for (t, o) in &ours {
             runs_checked += 1;
+            if emoji && !dom_runs.iter().any(|d| d[2] == o[2] && d[3] == o[3]) {
+                failures.push(format!(
+                    "{id}: run {t:?} {o:?} size not exactly in {dom_runs:?}"
+                ));
+            }
             if exact && !dom_runs.iter().any(|d| close(*o, *d, RUN_TOLERANCE)) {
                 failures.push(format!("{id}: run {t:?} {o:?} not in {dom_runs:?}"));
             }

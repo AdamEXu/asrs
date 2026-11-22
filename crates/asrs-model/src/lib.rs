@@ -1,3 +1,4 @@
+pub mod app_identity;
 pub mod assets;
 pub mod build_constants;
 pub mod hub_state;

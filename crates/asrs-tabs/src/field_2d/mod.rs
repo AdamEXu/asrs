@@ -28,7 +28,7 @@ use asrs_log::units;
 use asrs_model::assets::{AdvantageScopeAssets, Config2d};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::CoordinateSystemPreference;
-use asrs_model::source_list::{SourceList, configs};
+use asrs_model::source_list::{ListInput, ListOutput, SourceList, configs};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
@@ -400,6 +400,19 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
 
     fn show_timeline(&self, _cx: &C) -> bool {
         true
+    }
+
+    fn source_lists(&self) -> Vec<&SourceList> {
+        vec![&self.list]
+    }
+
+    fn source_list_input(
+        &mut self,
+        cx: &mut C,
+        input: ListInput<'_>,
+        errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        list_cx::route_lists(&mut [&mut self.list], cx, input, errors)
     }
 
     fn command(&mut self, cx: &mut C, uuid: &JsValue) -> Result<Command, JsError> {

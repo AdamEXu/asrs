@@ -1,391 +1,16 @@
 {
   "entry": "dom",
+  "backend": "blink",
   "inputs": [
     "../logs/source-list.json"
   ],
   "fixture": {
     "sourceLists": true,
-    "layout": [
-      {
-        "selector": "div.line-graph-left",
-        "rect": [
-          300,
-          450,
-          266,
-          200
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list",
-        "rect": [
-          300,
-          490,
-          266,
-          160
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"0\"]",
-        "rect": [
-          300,
-          490,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"1\"]",
-        "rect": [
-          300,
-          520,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"2\"]",
-        "rect": [
-          300,
-          550,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"3\"]",
-        "rect": [
-          300,
-          580,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"4\"]",
-        "rect": [
-          300,
-          610,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"5\"]",
-        "rect": [
-          300,
-          640,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"6\"]",
-        "rect": [
-          300,
-          670,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"7\"]",
-        "rect": [
-          300,
-          700,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"8\"]",
-        "rect": [
-          300,
-          730,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"9\"]",
-        "rect": [
-          300,
-          760,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"10\"]",
-        "rect": [
-          300,
-          790,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-left > div.list > div.item[data-i=\"11\"]",
-        "rect": [
-          300,
-          820,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right",
-        "rect": [
-          566,
-          450,
-          266,
-          200
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list",
-        "rect": [
-          566,
-          490,
-          266,
-          160
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"0\"]",
-        "rect": [
-          566,
-          490,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"1\"]",
-        "rect": [
-          566,
-          520,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"2\"]",
-        "rect": [
-          566,
-          550,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"3\"]",
-        "rect": [
-          566,
-          580,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"4\"]",
-        "rect": [
-          566,
-          610,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"5\"]",
-        "rect": [
-          566,
-          640,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"6\"]",
-        "rect": [
-          566,
-          670,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"7\"]",
-        "rect": [
-          566,
-          700,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"8\"]",
-        "rect": [
-          566,
-          730,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"9\"]",
-        "rect": [
-          566,
-          760,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"10\"]",
-        "rect": [
-          566,
-          790,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-right > div.list > div.item[data-i=\"11\"]",
-        "rect": [
-          566,
-          820,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete",
-        "rect": [
-          832,
-          450,
-          266,
-          200
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list",
-        "rect": [
-          832,
-          490,
-          266,
-          160
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"0\"]",
-        "rect": [
-          832,
-          490,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"1\"]",
-        "rect": [
-          832,
-          520,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"2\"]",
-        "rect": [
-          832,
-          550,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"3\"]",
-        "rect": [
-          832,
-          580,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"4\"]",
-        "rect": [
-          832,
-          610,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"5\"]",
-        "rect": [
-          832,
-          640,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"6\"]",
-        "rect": [
-          832,
-          670,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"7\"]",
-        "rect": [
-          832,
-          700,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"8\"]",
-        "rect": [
-          832,
-          730,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"9\"]",
-        "rect": [
-          832,
-          760,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"10\"]",
-        "rect": [
-          832,
-          790,
-          266,
-          30
-        ]
-      },
-      {
-        "selector": "div.line-graph-discrete > div.list > div.item[data-i=\"11\"]",
-        "rect": [
-          832,
-          820,
-          266,
-          30
-        ]
-      }
-    ],
+    "geometry": "real",
     "steps": [
+      {
+        "eval": "/*sl:mouse*/ window.__slMouse = (type, target, root, anchor, dx, dy) => { const [x, y] = window.__oracleQuiet(() => { const r = document.querySelector(root).getBoundingClientRect(); if (anchor === 'root') return [r.left + dx, r.top + dy]; const items = document.querySelector(root + ' > div.list').children; if (anchor < items.length) { const i = items[anchor].getBoundingClientRect(); return [r.left + dx, i.top + Math.round(dy * i.height / 30)]; } const end = items.length === 0 ? document.querySelector(root + ' > div.list').getBoundingClientRect().top : items[items.length - 1].getBoundingClientRect().bottom; return [r.left + dx, end + (anchor - items.length) * 30 + dy]; }); const t = target === 'window' ? window : document.querySelector(target); t.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })); }"
+      },
       {
         "log": "../logs/source-list.json"
       },
@@ -439,7 +64,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "added"
       },
@@ -453,29 +82,13 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 520
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 1, 100, 0)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 400,
-            "clientY": 560
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 2, 100, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -497,15 +110,7 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 900,
-            "clientY": 500
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-discrete\", 0, 68, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -541,15 +146,7 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 900,
-            "clientY": 500
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-discrete\", 0, 68, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -566,7 +163,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "field-drag"
       },
@@ -574,57 +175,25 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-left > div.list > div.item[data-i=\"0\"]",
-          "type": "mousedown",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 495
-          }
-        }
+        "eval": "__slMouse(\"mousedown\", \"div.line-graph-left > div.list > div.item[data-i=\\\"0\\\"]\", \"div.line-graph-left\", 0, 20, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-left > div.list",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 501
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"div.line-graph-left > div.list\", \"div.line-graph-left\", 0, 20, 11)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 560
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 2, 20, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 330,
-            "clientY": 571
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 2, 30, 21)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -638,7 +207,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "reorder-down"
       },
@@ -646,57 +219,25 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-left > div.list > div.item[data-i=\"3\"]",
-          "type": "mousedown",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 585
-          }
-        }
+        "eval": "__slMouse(\"mousedown\", \"div.line-graph-left > div.list > div.item[data-i=\\\"3\\\"]\", \"div.line-graph-left\", 3, 20, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-left > div.list",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 591
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"div.line-graph-left > div.list\", \"div.line-graph-left\", 3, 20, 11)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 500
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 0, 20, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 491
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 0, 20, 1)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -710,7 +251,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "reorder-up"
       },
@@ -718,57 +263,25 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-left > div.list > div.item[data-i=\"1\"]",
-          "type": "mousedown",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 525
-          }
-        }
+        "eval": "__slMouse(\"mousedown\", \"div.line-graph-left > div.list > div.item[data-i=\\\"1\\\"]\", \"div.line-graph-left\", 1, 20, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-left > div.list",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 320,
-            "clientY": 531
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"div.line-graph-left > div.list\", \"div.line-graph-left\", 1, 20, 11)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 600,
-            "clientY": 500
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-right\", 0, 34, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 650,
-            "clientY": 560
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-right\", 2, 84, 10)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -785,7 +298,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "cross-list"
       },
@@ -793,29 +310,13 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"2\"]",
-          "type": "mousedown",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 840,
-            "clientY": 555
-          }
-        }
+        "eval": "__slMouse(\"mousedown\", \"div.line-graph-discrete > div.list > div.item[data-i=\\\"2\\\"]\", \"div.line-graph-discrete\", 2, 8, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-discrete > div.list",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 840,
-            "clientY": 561
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"div.line-graph-discrete > div.list\", \"div.line-graph-discrete\", 2, 8, 11)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -845,43 +346,19 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"2\"]",
-          "type": "mousedown",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 840,
-            "clientY": 555
-          }
-        }
+        "eval": "__slMouse(\"mousedown\", \"div.line-graph-discrete > div.list > div.item[data-i=\\\"2\\\"]\", \"div.line-graph-discrete\", 2, 8, 5)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-discrete > div.list",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 840,
-            "clientY": 561
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"div.line-graph-discrete > div.list\", \"div.line-graph-discrete\", 2, 8, 11)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "window",
-          "type": "mousemove",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 500,
-            "clientY": 520
-          }
-        }
+        "eval": "__slMouse(\"mousemove\", \"window\", \"div.line-graph-left\", 1, 200, 0)"
       },
       {
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
@@ -895,7 +372,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "rejected-drags"
       },
@@ -916,15 +397,7 @@
         "eval": "document.querySelectorAll('div.source-list > div.list').forEach((list) => Array.from(list.children).forEach((item, i) => item.setAttribute('data-i', String(i))))"
       },
       {
-        "event": {
-          "target": "div.line-graph-discrete > div.list > div.item[data-i=\"1\"]",
-          "type": "contextmenu",
-          "kind": "MouseEvent",
-          "init": {
-            "clientX": 850,
-            "clientY": 530
-          }
-        }
+        "eval": "__slMouse(\"contextmenu\", \"div.line-graph-discrete > div.list > div.item[data-i=\\\"1\\\"]\", \"div.line-graph-discrete\", 1, 18, 10)"
       },
       {
         "eval": "(sl => sl.constructor.typePromptCallbacks[sl.UUID]?.({\"type\": \"graph\", \"logKey\": \"/Mode\", \"logType\": \"String\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}))(window.tabs.tabList[1].controller.discreteSourceList)"
@@ -997,7 +470,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "interactions"
       },
@@ -1009,7 +486,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "dark"
       },
@@ -1039,7 +520,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "availability"
       },
@@ -1064,7 +549,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "restored-field"
       },
@@ -1079,7 +568,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "set-state"
       }

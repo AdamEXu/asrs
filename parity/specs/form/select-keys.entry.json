@@ -1,0 +1,99 @@
+{
+  "entry": "selectKeys",
+  "fixture": {
+    "steps": [
+      {
+        "markup": "<select class=\"time-range\" title=\"Select time range\"><option value=\"visible\">Visible Range</option><option value=\"full\">Full Log</option><option value=\"enabled\">Enabled</option><option value=\"auto\">Auto</option><option value=\"teleop\">Teleop</option></select>",
+        "ops": [
+          ["char", "f", 0],
+          ["char", "u", 100],
+          ["char", "e", 1300],
+          ["char", "e", 1400],
+          ["char", "a", 2600],
+          ["char", "T", 3800],
+          ["char", "x", 5000],
+          ["key", "Enter", 5100],
+          ["key", "Home", 5200],
+          ["key", "End", 5300],
+          ["key", "PageUp", 5400],
+          ["key", "PageDown", 5500],
+          ["key", "ArrowLeft", 5600],
+          ["key", "ArrowRight", 5700],
+          ["key", "Escape", 5800],
+          ["char", "v", 7000, ["ctrl"]],
+          ["char", "v", 7100, ["alt"]],
+          ["char", "v", 8200],
+          ["char", " ", 8300],
+          ["char", "f", 9500],
+          ["char", "u", 9600],
+          ["char", "l", 9700],
+          ["char", "l", 9800],
+          ["char", " ", 9900],
+          ["char", "l", 10000],
+          ["char", "a", 10999],
+          ["char", "e", 12000],
+          ["char", "n", 13000],
+          ["char", "t", 13999],
+          ["char", "a", 13990],
+          ["char", "a", 15100],
+          ["char", "a", 15200]
+        ]
+      },
+      {
+        "markup": "<select class=\"field-select\" title=\"Select field image\"><optgroup label=\"FRC Fields\"><option value=\"frc-2025\">2025 Field</option><option value=\"frc-2024\">2024 Field</option></optgroup><optgroup label=\"FTC Fields\"><option value=\"ftc-2025\" disabled>2025 FTC</option><option value=\"ftc-2024\">2024 FTC</option></optgroup><option>Émile</option><option>  Spaced</option><optgroup label=\"Off\" disabled><option value=\"off\">2023 Off</option></optgroup></select>",
+        "ops": [
+          ["char", "2", 0],
+          ["char", "2", 100],
+          ["char", "2", 200],
+          ["char", "2", 300],
+          ["char", "e", 2000],
+          ["char", "s", 3500],
+          ["char", "F", 5000],
+          ["char", "2", 6500],
+          ["char", "0", 6600],
+          ["char", "2", 6700],
+          ["char", "4", 6800],
+          ["char", " ", 6900],
+          ["char", "f", 7000],
+          ["char", "t", 7100]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"a\">Alpha</option><option value=\"b\">Beta</option><option value=\"b2\">beta two</option></select>",
+        "ops": [
+          ["set", "value", "b"],
+          ["blur"],
+          ["focus"],
+          ["key", "Enter", 0],
+          ["char", "b", 100],
+          ["char", "b", 200],
+          ["char", "b", 300],
+          ["blur"],
+          ["char", "a", 2000],
+          ["focus"],
+          ["char", "a", 3500]
+        ]
+      },
+      {
+        "markup": "<select disabled><option value=\"a\">Alpha</option><option value=\"b\">Beta</option></select>",
+        "focus": false,
+        "ops": [
+          ["press", null, 0],
+          ["focus"],
+          ["char", "b", 100]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"a\">Alpha</option><option value=\"b\">Beta</option><option value=\"br\">Bravo</option></select>",
+        "ops": [
+          ["char", "b", 100],
+          ["blur"],
+          ["focus"],
+          ["char", "r", 300],
+          ["char", " ", 400],
+          ["char", "b", 500]
+        ]
+      }
+    ]
+  }
+}

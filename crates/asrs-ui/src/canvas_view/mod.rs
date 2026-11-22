@@ -241,6 +241,30 @@ pub fn canvas_view(
             }
             [f32::from(bounds.origin.x), f32::from(bounds.origin.y)]
         },
-        move |_, origin, window, cx| paint_state.read(cx).presenter.paint(origin, window),
+        move |_, origin, window, cx| {
+            let state = paint_state.read(cx);
+            state.presenter.paint(origin, window);
+            #[cfg(feature = "parity")]
+            if let (Some(metrics), Some(image)) = (state.metrics, state.presenter.image().cloned())
+            {
+                crate::parity::record_canvas(cx, || canvas_dump(metrics.client_rect, &image));
+            }
+        },
     )
+}
+
+/// The presented bitmap as `getImageData` reads it: straight-alpha RGBA.
+#[cfg(feature = "parity")]
+fn canvas_dump(rect: [f64; 4], image: &gpui_kit::RenderImage) -> crate::parity::CanvasDump {
+    let size = image.size(0);
+    let mut rgba = image.as_bytes(0).unwrap_or_default().to_vec();
+    for p in rgba.as_chunks_mut::<4>().0 {
+        p.swap(0, 2);
+    }
+    crate::parity::CanvasDump {
+        rect,
+        width: size.width.0 as u32,
+        height: size.height.0 as u32,
+        rgba,
+    }
 }

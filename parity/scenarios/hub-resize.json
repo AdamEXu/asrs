@@ -1,0 +1,118 @@
+{
+  "about": "Interaction: restores a layout without asset-dependent tabs (a renamed line graph), then drags the sidebar handle from 300 to 362 px and the controls handle up by 70 px with the pointer; the saved HubState (sidebar width, controls height) must be byte-equal. Masks as in hub-empty until U11 closes",
+  "actions": [
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Resized",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 300,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 300,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 330,
+      "y": 302
+    },
+    {
+      "mouse": "move",
+      "x": 362,
+      "y": 305
+    },
+    {
+      "mouse": "up",
+      "x": 362,
+      "y": 305
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 420
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 380
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 380
+    },
+    {
+      "capture": "resized",
+      "probes": [
+        ".title-bar",
+        ".side-bar",
+        ".side-bar-handle",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".controls-handle"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    }
+  ]
+}

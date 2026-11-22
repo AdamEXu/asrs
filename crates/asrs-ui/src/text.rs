@@ -161,8 +161,17 @@ impl TextSystem {
         )
         .and_then(|run| {
             let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
-            for &a in &run.alpha {
-                bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+            match &run.rgba {
+                Some(rgba) => {
+                    for p in rgba.as_chunks::<4>().0 {
+                        bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+                    }
+                }
+                None => {
+                    for &a in &run.alpha {
+                        bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+                    }
+                }
             }
             let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
             Some((
@@ -237,6 +246,64 @@ fn exact_width(measured: &RefCell<Vec<(Pixels, Lu)>>, width: Pixels, scale: f32)
         )
 }
 
+/// `(ascent, descent)` of `style`'s font at device scale `scale`, in whole device px: what
+/// Blink's `FontMetrics::Height()` adds up.
+pub fn font_metrics(cx: &mut App, style: &TextStyle, scale: f32) -> (f32, f32) {
+    let system = cx.default_global::<TextSystem>();
+    let (ascent, descent, _) = dom::line_metrics(system.backend.as_mut(), style, scale);
+    (ascent as f32 / 64.0, descent as f32 / 64.0)
+}
+
+/// One glyph run's coverage, after mask gamma, at a whole device pixel position.
+pub struct GlyphMask {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub alpha: Vec<u8>,
+}
+
+/// The coverage [`Text`] would paint for `text` in a box `width` CSS px wide whose content
+/// box starts at `origin` device px, for callers that composite text into their own pixmap.
+pub fn glyph_masks(
+    cx: &mut App,
+    style: &TextStyle,
+    text: &str,
+    scale: f32,
+    width: f32,
+    origin: (f32, f32),
+    color: u32,
+) -> Vec<GlyphMask> {
+    let color = [(color >> 16) as u8, (color >> 8) as u8, color as u8];
+    let layout = layout(cx, style, text, scale, Some(width));
+    let origin = (dom::lu_round(origin.0), dom::lu_round(origin.1));
+    let system = cx.default_global::<TextSystem>();
+    let mut out = Vec::new();
+    for line in &layout.lines {
+        let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
+        for fragment in &line.fragments {
+            let x = origin.0 + fragment.x;
+            if let Some(run) = dom::rasterize(
+                system.backend.as_mut(),
+                &system.lut,
+                &fragment.glyphs,
+                x.rem_euclid(64),
+                scale,
+                color,
+            ) {
+                out.push(GlyphMask {
+                    x: x.div_euclid(64) + run.left,
+                    y: baseline + run.top,
+                    width: run.width,
+                    height: run.height,
+                    alpha: run.alpha,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// The border-box size Chromium gives a shrink-to-fit block holding `text`, in CSS px.
 pub fn measure(cx: &mut App, style: &TextStyle, text: &str, scale: f32) -> (f64, f64) {
     let l = layout(cx, style, text, scale, None);
@@ -274,6 +341,7 @@ pub struct Text {
     color: [u8; 3],
     subpixel: (f32, f32),
     probe: Option<SharedString>,
+    form_control: bool,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -288,6 +356,7 @@ impl Text {
             color: [0x22; 3],
             subpixel: (0.0, 0.0),
             probe: None,
+            form_control: false,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -302,6 +371,13 @@ impl Text {
     /// is painted from the unsnapped position, as Chromium paints it.
     pub fn subpixel(mut self, dx: f32, dy: f32) -> Self {
         self.subpixel = (dx, dy);
+        self
+    }
+
+    /// Text a form control draws (a value or placeholder): Chromium keeps it in the control's
+    /// shadow tree, so the DOM dump has no text node for it and parity captures leave it out.
+    pub fn form_control(mut self) -> Self {
+        self.form_control = true;
         self
     }
 
@@ -448,8 +524,13 @@ impl Element for Text {
             }
         });
         #[cfg(feature = "parity")]
-        if let Some(id) = &self.probe {
-            probe::record(cx, id, bounds, layout, *origin);
+        {
+            if let Some(id) = &self.probe {
+                probe::record(cx, id, bounds, layout, *origin);
+            }
+            if !self.form_control {
+                crate::parity::record_text(cx, probe::text_run(layout, *origin));
+            }
         }
     }
 }
@@ -472,18 +553,7 @@ pub mod probe {
     #[derive(Default)]
     pub struct Probe(pub Vec<Record>);
 
-    impl Global for Probe {}
-
-    pub(super) fn record(
-        cx: &mut App,
-        id: &SharedString,
-        bounds: Bounds<Pixels>,
-        layout: &Layout,
-        origin: (Lu, Lu),
-    ) {
-        if !cx.has_global::<Probe>() {
-            return;
-        }
+    fn fragments(layout: &Layout, origin: (Lu, Lu)) -> Vec<(String, [f64; 4])> {
         let px = |lu: Lu| f64::from(lu) / 64.0 / f64::from(layout.scale);
         let mut fragments = Vec::new();
         for line in &layout.lines {
@@ -498,6 +568,40 @@ pub mod probe {
                 fragments.push((f.text.clone(), rect));
             }
         }
+        fragments
+    }
+
+    /// The text and one box per line, the union of the line's fragments.
+    pub(super) fn text_run(layout: &Layout, origin: (Lu, Lu)) -> crate::parity::TextRun {
+        let mut text = String::new();
+        let mut rects: Vec<[f64; 4]> = Vec::new();
+        for (fragment, r) in fragments(layout, origin) {
+            text.push_str(&fragment);
+            match rects.last_mut() {
+                Some(last) if last[1] == r[1] => {
+                    let right = (last[0] + last[2]).max(r[0] + r[2]);
+                    last[0] = last[0].min(r[0]);
+                    last[2] = right - last[0];
+                }
+                _ => rects.push(r),
+            }
+        }
+        crate::parity::TextRun { text, rects }
+    }
+
+    impl Global for Probe {}
+
+    pub(super) fn record(
+        cx: &mut App,
+        id: &SharedString,
+        bounds: Bounds<Pixels>,
+        layout: &Layout,
+        origin: (Lu, Lu),
+    ) {
+        if !cx.has_global::<Probe>() {
+            return;
+        }
+        let fragments = fragments(layout, origin);
         let record = Record {
             id: id.clone(),
             bounds: [

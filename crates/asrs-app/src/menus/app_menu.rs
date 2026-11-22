@@ -1,6 +1,7 @@
 //! The application menu template of `setupMenu` in `src/main/electron/main.ts`, and the in-place
 //! rewrite `sendAllPreferences` applies to it.
 
+use asrs_model::app_identity::AppIdentity;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress};
 use asrs_model::tab_type::TabType;
 use asrs_services::window_manager::Platform;
@@ -17,11 +18,12 @@ const LIVE_MODES: [LiveMode; 6] = [
 ];
 
 /// `setupMenu()`. `prefs` is the preferences file as it reads at startup; the FRC 6328
-/// distribution is the one upstream ships with "Check for Updates...".
-pub fn template(platform: Platform, prefs: &Preferences) -> Vec<MenuItem> {
+/// distribution is the one upstream ships with "Check for Updates...". `identity` names the app
+/// in "About".
+pub fn template(platform: Platform, prefs: &Preferences, identity: AppIdentity) -> Vec<MenuItem> {
     let mac = platform == Platform::Mac;
     vec![
-        app(mac),
+        app(mac, identity),
         file(prefs),
         MenuItem::role("editMenu"),
         view(),
@@ -31,8 +33,8 @@ pub fn template(platform: Platform, prefs: &Preferences) -> Vec<MenuItem> {
     ]
 }
 
-fn app(mac: bool) -> MenuItem {
-    let mut items = vec![MenuItem::new("About AdvantageScope").command(Command::About)];
+fn app(mac: bool, identity: AppIdentity) -> MenuItem {
+    let mut items = vec![MenuItem::new(format!("About {}", identity.name)).command(Command::About)];
     if mac {
         items.push(MenuItem::separator());
     }

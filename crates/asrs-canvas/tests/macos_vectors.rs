@@ -33,10 +33,9 @@ const FIELDS: [&str; 10] = [
     "ideographicBaseline",
 ];
 
-/// Strings Chromium draws with a fallback font it picks differently from CoreText: emoji
-/// (Chromium leaves out `Apple Color Emoji`'s tracking and reports its bitmap bounds rounded
-/// out) and CJK next to Helvetica or a `wght` instance (Chromium matches the fallback's weight).
-const FALLBACK: [&str; 2] = ["\u{1f916} robot", "\u{65e5}\u{672c}\u{8a9e}"];
+/// Strings Chromium draws with a fallback font it picks differently from CoreText: CJK next to
+/// Helvetica or a `wght` instance (Chromium matches the fallback's weight).
+const FALLBACK: [&str; 1] = ["\u{65e5}\u{672c}\u{8a9e}"];
 
 fn field(m: &TextMetrics, name: &str) -> f64 {
     match name {
@@ -64,7 +63,7 @@ struct Error {
 
 type Errors = BTreeMap<String, Error>;
 
-/// Every measured field of the macOS width vectors (9 fonts, 53 strings, 3 aligns, 4
+/// Every measured field of the macOS width vectors (9 fonts, 58 strings, 3 aligns, 4
 /// baselines) against `measure_text`, keyed by `font / field`, fallback strings apart.
 fn measure_errors() -> (Errors, Errors) {
     let records = vectors::load("canvas/measure-macos").unwrap();
@@ -123,7 +122,7 @@ fn text_metrics_are_bit_exact_against_chromium() {
     let report = report(&main);
     assert_eq!(main.len(), 9 * FIELDS.len(), "{report}");
     for (key, e) in &main {
-        assert_eq!(e.cases, 51 * 12, "{key}");
+        assert_eq!(e.cases, 57 * 12, "{key}");
         assert_eq!(e.inexact, 0, "{key}\n{report}");
     }
     let s2_fonts = ["12px ", "16px ", "200 12px ", "200 14px "];

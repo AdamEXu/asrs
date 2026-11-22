@@ -64,6 +64,11 @@ name = "bundled_assets"
 required-features = ["parity"]
 
 [[test]]
+name = "select_vectors"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "parity_scenario"
 harness = false
 required-features = ["parity"]
@@ -71,3 +76,8 @@ required-features = ["parity"]
 [[test]]
 name = "app_menu_mac"
 harness = false
+
+[[test]]
+name = "source_list_view"
+harness = false
+required-features = ["parity"]

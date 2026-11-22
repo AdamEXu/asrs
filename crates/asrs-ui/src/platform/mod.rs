@@ -257,6 +257,47 @@ pub fn set_application_menu(
     imp::set_application_menu(cx, menu, on_select)
 }
 
+/// What a `<select>`'s native popup lists, as Blink's `ExternalPopupMenu::GetPopupMenuInfo`
+/// sends it to the browser.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectMenu {
+    pub items: Vec<SelectMenuItem>,
+    /// `int(computed font size)` of the select, in CSS px.
+    pub font_size: f64,
+    pub selected: Option<usize>,
+    pub right_aligned: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectMenuItem {
+    pub label: String,
+    pub kind: SelectMenuItemKind,
+    pub enabled: bool,
+    /// The item's `title`; empty sets no tool tip.
+    pub tool_tip: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectMenuItemKind {
+    Option,
+    Group,
+    Separator,
+}
+
+/// Chromium's popup for a `<select>`: on macOS an `NSPopUpButtonCell` menu with the selected
+/// item over the control, as `WebMenuRunner` shows it. `bounds` is the select's border box in
+/// window content coordinates `[x, y, width, height]`. The menu opens on a later turn of the
+/// event loop, and `on_close` gets the chosen item's index in `menu.items`, if any.
+pub fn select_popup(
+    window: &Window,
+    cx: &mut App,
+    menu: SelectMenu,
+    bounds: [f64; 4],
+    on_close: impl FnOnce(Option<usize>, &mut App) + 'static,
+) {
+    imp::select_popup(window, cx, menu, bounds, on_close);
+}
+
 /// Electron's `menu.closePopup(window)`.
 pub fn close_popup_menu(window: &Window) {
     imp::close_popup_menu(window);

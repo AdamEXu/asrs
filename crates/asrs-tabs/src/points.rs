@@ -8,14 +8,14 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::geometry::{RotationUnits, grab_poses_auto, translation_3d_to_2d};
 use asrs_log::log::log_util::get_or_default;
-use asrs_model::source_list::SourceList;
 use asrs_model::source_list::configs;
+use asrs_model::source_list::{ListInput, ListOutput, SourceList};
 use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
 use crate::form::{NumberInput, Select, SelectOption};
-use crate::list_cx::{SourceListCx, js_error, source_state, with_env};
+use crate::list_cx::{self, SourceListCx, js_error, source_state, with_env};
 
 /// `WIDTH` and `HEIGHT`, in the order of upstream's `forEach` (`index` 0 and 1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,6 +228,19 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
 
     fn show_timeline(&self, _cx: &Cx) -> bool {
         true
+    }
+
+    fn source_lists(&self) -> Vec<&SourceList> {
+        vec![&self.source_list]
+    }
+
+    fn source_list_input(
+        &mut self,
+        cx: &mut Cx,
+        input: ListInput<'_>,
+        errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        list_cx::route_lists(&mut [&mut self.source_list], cx, input, errors)
     }
 
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError> {
