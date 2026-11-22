@@ -5,16 +5,16 @@ use std::ptr::{self, NonNull};
 use block2::RcBlock;
 use gpui_kit::{App, ScrollEvent, Window};
 use objc2::rc::Retained;
-use objc2::runtime::{AnyClass, AnyObject, Imp, NSObject, Sel};
+use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, NSObject, Sel};
 use objc2::{
     AllocAnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, ffi, msg_send,
     sel,
 };
 use objc2_app_kit::{
-    NSAutoresizingMaskOptions, NSBitmapImageRep, NSControlStateValueOff, NSControlStateValueOn,
-    NSEvent, NSEventMask, NSImage, NSMenu, NSMenuItem, NSView, NSVisualEffectBlendingMode,
-    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow,
-    NSWindowOrderingMode,
+    NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSControlStateValueOff,
+    NSControlStateValueOn, NSEvent, NSEventMask, NSEventModifierFlags, NSImage, NSMenu, NSMenuItem,
+    NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
+    NSVisualEffectView, NSWindow, NSWindowOrderingMode,
 };
 use objc2_core_foundation::{CFData, CGRect};
 use objc2_core_graphics::{
@@ -294,6 +294,7 @@ pub(super) fn native_menu_label(label: &str) -> String {
 struct PopupTargetIvars {
     paths: RefCell<Vec<MenuPath>>,
     selected: Cell<Option<usize>>,
+    on_select: Option<Box<dyn Fn(MenuPath)>>,
 }
 
 define_class!(
@@ -306,16 +307,31 @@ define_class!(
     impl PopupTarget {
         #[unsafe(method(itemSelected:))]
         fn item_selected(&self, sender: &NSMenuItem) {
-            self.ivars().selected.set(usize::try_from(sender.tag()).ok());
+            let index = usize::try_from(sender.tag()).ok();
+            self.ivars().selected.set(index);
+            if let Some(on_select) = &self.ivars().on_select {
+                let path = index.and_then(|i| self.ivars().paths.borrow().get(i).cloned());
+                if let Some(path) = path {
+                    on_select(path);
+                }
+            }
         }
     }
 );
 
 impl PopupTarget {
     fn new(mtm: MainThreadMarker) -> Retained<Self> {
+        Self::with_callback(mtm, None)
+    }
+
+    fn with_callback(
+        mtm: MainThreadMarker,
+        on_select: Option<Box<dyn Fn(MenuPath)>>,
+    ) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(PopupTargetIvars {
             paths: RefCell::new(Vec::new()),
             selected: Cell::new(None),
+            on_select,
         });
         // SAFETY: NSObject's designated initializer on a freshly allocated instance.
         unsafe { msg_send![super(this), init] }
@@ -327,6 +343,42 @@ impl PopupTarget {
     }
 }
 
+/// `kRolesMap` in `electron_menu_controller.mm`: roles AppKit performs through the responder
+/// chain instead of the item's target.
+const ROLE_SELECTORS: &[(&str, &CStr)] = &[
+    ("about", c"orderFrontStandardAboutPanel:"),
+    ("hide", c"hide:"),
+    ("hideothers", c"hideOtherApplications:"),
+    ("unhide", c"unhideAllApplications:"),
+    ("front", c"arrangeInFront:"),
+    ("undo", c"undo:"),
+    ("redo", c"redo:"),
+    ("cut", c"cut:"),
+    ("copy", c"copy:"),
+    ("paste", c"paste:"),
+    ("delete", c"delete:"),
+    ("pasteandmatchstyle", c"pasteAndMatchStyle:"),
+    ("selectall", c"selectAll:"),
+    ("showsubstitutions", c"orderFrontSubstitutionsPanel:"),
+    ("togglesmartquotes", c"toggleAutomaticQuoteSubstitution:"),
+    ("togglesmartdashes", c"toggleAutomaticDashSubstitution:"),
+    ("toggletextreplacement", c"toggleAutomaticTextReplacement:"),
+    ("startspeaking", c"startSpeaking:"),
+    ("stopspeaking", c"stopSpeaking:"),
+    ("minimize", c"performMiniaturize:"),
+    ("close", c"performClose:"),
+    ("zoom", c"performZoom:"),
+    ("quit", c"terminate:"),
+    ("togglefullscreen", c"toggleFullScreenMode:"),
+    ("toggletabbar", c"toggleTabBar:"),
+    ("selectnexttab", c"selectNextTab:"),
+    ("showalltabs", c"toggleTabOverview:"),
+    ("selectprevioustab", c"selectPreviousTab:"),
+    ("mergeallwindows", c"mergeAllWindows:"),
+    ("movetabtonewwindow", c"moveTabToNewWindow:"),
+    ("clearrecentdocuments", c"clearRecentDocuments:"),
+];
+
 /// `-[ElectronMenuController menuFromModel:]`.
 fn build_menu(
     mtm: MainThreadMarker,
@@ -336,17 +388,45 @@ fn build_menu(
 ) -> Retained<NSMenu> {
     let ns_menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::new());
     ns_menu.setAutoenablesItems(false);
+    retain_target(&ns_menu, target);
     for (index, item) in menu.items.iter().enumerate() {
-        match item {
-            PopupItem::Separator => ns_menu.addItem(&NSMenuItem::separatorItem(mtm)),
+        let ns_item = match item {
+            PopupItem::Separator => NSMenuItem::separatorItem(mtm),
             PopupItem::Entry(entry) => {
                 let mut path = prefix.to_vec();
                 path.push(index);
-                ns_menu.addItem(&build_item(mtm, entry, target, path));
+                build_item(mtm, entry, target, path)
             }
-        }
+        };
+        mark_built(&ns_item);
+        ns_menu.addItem(&ns_item);
     }
     ns_menu
+}
+
+static TARGET_KEY: u8 = 0;
+
+/// `setTarget:` does not retain, and AppKit can keep a menu (or one of its submenus) past our
+/// last reference, such as a menu bar replaced while it is being tracked.
+fn retain_target(menu: &NSMenu, target: &PopupTarget) {
+    // SAFETY: both are live objects; the key is a static's address, unique to this association.
+    unsafe {
+        ffi::objc_setAssociatedObject(
+            ptr::from_ref(menu).cast_mut().cast(),
+            (&raw const TARGET_KEY).cast(),
+            ptr::from_ref(target).cast_mut().cast(),
+            ffi::OBJC_ASSOCIATION_RETAIN_NONATOMIC,
+        );
+    }
+}
+
+const BUILT_MARKER: &str = "asrs.menu";
+
+/// Tags an item as ours, so a read-back can tell it from items AppKit adds to menus on its own
+/// (dictation, emoji and writing tools in a menu with editing selectors).
+fn mark_built(item: &NSMenuItem) {
+    // SAFETY: an immutable NSString is a valid represented object.
+    unsafe { item.setRepresentedObject(Some(&NSString::from_str(BUILT_MARKER))) };
 }
 
 /// `-[ElectronMenuController makeMenuItemForIndex:fromModel:]` followed by
@@ -371,6 +451,18 @@ fn build_item(
         item.setImage(swatch_image(rgb).as_deref());
     }
     item.setToolTip(Some(&NSString::new()));
+    let role = entry.role.as_deref();
+    if role == Some("services") {
+        // SAFETY: clearing the target and action of a submenu item.
+        unsafe {
+            item.setTarget(None);
+            item.setAction(None);
+        }
+        let submenu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str("Services"));
+        item.setSubmenu(Some(&submenu));
+        NSApplication::sharedApplication(mtm).setServicesMenu(Some(&submenu));
+        return item;
+    }
     match &entry.submenu {
         Some(submenu) if entry.visible => {
             // SAFETY: clearing the target and action of a submenu item.
@@ -385,14 +477,47 @@ fn build_item(
             };
             ns_submenu.setTitle(&item.title());
             item.setSubmenu(Some(&ns_submenu));
+            let app = NSApplication::sharedApplication(mtm);
+            if matches!(role, Some("window" | "windowmenu")) && ns_submenu.numberOfItems() > 0 {
+                app.setWindowsMenu(Some(&ns_submenu));
+            } else if role == Some("help") {
+                app.setHelpMenu(Some(&ns_submenu));
+            }
         }
         _ => {
             let mut paths = target.ivars().paths.borrow_mut();
             item.setTag(paths.len() as isize);
             paths.push(path);
-            // SAFETY: the target outlives the menu's tracking loop, which is the only time
-            // AppKit sends it `itemSelected:`.
-            unsafe { item.setTarget(Some(target)) };
+            if let Some((key, modifiers)) = &entry.key_equivalent {
+                item.setKeyEquivalent(&NSString::from_str(key));
+                item.setKeyEquivalentModifierMask(NSEventModifierFlags::from_bits_retain(
+                    *modifiers as usize,
+                ));
+            }
+            // SAFETY: `setAllowsKeyEquivalentWhenHidden:` takes a BOOL; Electron sends it the
+            // same way on every macOS version it supports.
+            unsafe {
+                let _: () = msg_send![
+                    &*item,
+                    setAllowsKeyEquivalentWhenHidden: Bool::new(entry.works_when_hidden)
+                ];
+            }
+            let selector = role.and_then(|role| {
+                ROLE_SELECTORS
+                    .iter()
+                    .find(|(name, _)| *name == role)
+                    .map(|(_, selector)| Sel::register(selector))
+            });
+            match selector {
+                // SAFETY: a role item goes to the first responder that implements its
+                // selector, as AppKit's own menu items do.
+                Some(selector) => unsafe {
+                    item.setTarget(None);
+                    item.setAction(Some(selector));
+                },
+                // SAFETY: `build_menu` ties the target's lifetime to this item's menu.
+                None => unsafe { item.setTarget(Some(target)) },
+            }
         }
     }
     item.setHidden(!entry.visible);
@@ -419,6 +544,7 @@ fn empty_submenu(mtm: MainThreadMarker) -> Retained<NSMenu> {
         )
     };
     item.setEnabled(false);
+    mark_built(&item);
     menu.addItem(&item);
     menu
 }
@@ -481,6 +607,31 @@ pub(super) fn popup_menu(
         cx.spawn(async move |cx| cx.update(|cx| on_close(selection, cx)))
             .detach();
     });
+}
+
+/// `Menu::SetApplicationMenu` with `useDefaultAccelerator:YES`; the caller has already resolved
+/// default accelerators into the entries' key equivalents.
+pub(super) fn set_application_menu(
+    cx: &mut App,
+    menu: &PopupMenu,
+    on_select: impl Fn(MenuPath, &mut App) + 'static,
+) -> bool {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
+    let cx = cx.to_async();
+    let on_select = std::rc::Rc::new(on_select);
+    let target = PopupTarget::with_callback(
+        mtm,
+        Some(Box::new(move |path| {
+            let on_select = on_select.clone();
+            cx.spawn(async move |cx| cx.update(|cx| on_select(path, cx)))
+                .detach();
+        })),
+    );
+    let ns_menu = build_menu(mtm, menu, &target, &[]);
+    NSApplication::sharedApplication(mtm).setMainMenu(Some(&ns_menu));
+    true
 }
 
 fn perform_on_run_loop(job: impl FnOnce() + 'static) {
@@ -689,9 +840,12 @@ pub(super) mod probe {
     use std::ptr;
 
     use gpui_kit::Window;
+    use objc2::rc::Retained;
+    use objc2::runtime::Bool;
     use objc2::{MainThreadMarker, msg_send};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSControlStateValueOn, NSEvent, NSImage, NSMenu, NSScreen,
+        NSApplication, NSBitmapImageRep, NSControlStateValueOn, NSEvent, NSImage, NSMenu,
+        NSMenuItem, NSScreen,
     };
     use objc2_core_foundation::{CFRetained, CGPoint, CGRect, CGSize};
     #[allow(deprecated)]
@@ -716,28 +870,138 @@ pub(super) mod probe {
     fn read_menu(menu: &NSMenu) -> Option<PopupMenu> {
         let mut items = Vec::new();
         for item in menu.itemArray().iter() {
+            let built = item
+                .representedObject()
+                .and_then(|o| o.downcast::<objc2_foundation::NSString>().ok())
+                .is_some_and(|marker| marker.to_string() == super::BUILT_MARKER);
+            if !built {
+                ADDED_BY_APPKIT.with_borrow_mut(|added| added.push(item.title().to_string()));
+                continue;
+            }
             if item.isSeparatorItem() {
                 items.push(PopupItem::Separator);
                 continue;
             }
-            let swatch = match item.image() {
-                Some(image) => Some(read_swatch(&image)?),
-                None => None,
-            };
+            // macOS 26 gives items with standard selectors a system symbol image of its own;
+            // only a swatch reads back as one.
+            let swatch = item.image().and_then(|image| read_swatch(&image));
             let submenu = match item.submenu() {
                 Some(sub) => Some(read_menu(&sub)?),
                 None => None,
             };
+            let key = item.keyEquivalent().to_string();
+            // SAFETY: a BOOL getter with no arguments.
+            let works_when_hidden: Bool =
+                unsafe { msg_send![&*item, allowsKeyEquivalentWhenHidden] };
             items.push(PopupItem::Entry(PopupEntry {
                 label: item.title().to_string(),
                 enabled: item.isEnabled(),
                 visible: !item.isHidden(),
                 checked: item.state() == NSControlStateValueOn,
                 swatch,
+                works_when_hidden: key.is_empty() || works_when_hidden.as_bool(),
+                key_equivalent: (!key.is_empty())
+                    .then(|| (key, item.keyEquivalentModifierMask().bits() as u32)),
+                role: read_role(&item),
                 submenu,
             }));
         }
         Some(PopupMenu { items })
+    }
+
+    /// The role an item's AppKit wiring stands for: a role selector, or the system menu its
+    /// submenu was registered as. `window` and `windowmenu` both read as `windowmenu`.
+    fn read_role(item: &NSMenuItem) -> Option<String> {
+        let mtm = MainThreadMarker::new()?;
+        let app = NSApplication::sharedApplication(mtm);
+        if let Some(submenu) = item.submenu() {
+            let is = |menu: Option<Retained<NSMenu>>| menu.is_some_and(|m| m == submenu);
+            return if is(app.servicesMenu()) {
+                Some("services".to_owned())
+            } else if is(app.windowsMenu()) {
+                Some("windowmenu".to_owned())
+            } else if is(app.helpMenu()) {
+                Some("help".to_owned())
+            } else {
+                None
+            };
+        }
+        let action = item.action()?;
+        super::ROLE_SELECTORS
+            .iter()
+            .find(|(_, selector)| *selector == action.name())
+            .map(|(role, _)| (*role).to_owned())
+    }
+
+    pub fn perform_application_menu_item(path: &[usize]) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
+        };
+        let Some(mut menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
+            return false;
+        };
+        let Some((&last, parents)) = path.split_last() else {
+            return false;
+        };
+        for &index in parents {
+            let Some(submenu) = menu
+                .itemAtIndex(index as isize)
+                .and_then(|item| item.submenu())
+            else {
+                return false;
+            };
+            menu = submenu;
+        }
+        if last as isize >= menu.numberOfItems() {
+            return false;
+        }
+        menu.performActionForItemAtIndex(last as isize);
+        true
+    }
+
+    pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
+        };
+        let Some(menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
+            return false;
+        };
+        let characters = objc2_foundation::NSString::from_str(key);
+        // SAFETY: NSEvent's documented key event constructor; a nil graphics context is the
+        // value AppKit requires.
+        let event: Option<Retained<NSEvent>> = unsafe {
+            msg_send![
+                <NSEvent as objc2::ClassType>::class(),
+                keyEventWithType: objc2_app_kit::NSEventType::KeyDown,
+                location: objc2_foundation::NSPoint::ZERO,
+                modifierFlags: objc2_app_kit::NSEventModifierFlags::from_bits_retain(
+                    modifiers as usize
+                ),
+                timestamp: 0.0f64,
+                windowNumber: 0isize,
+                context: None::<&objc2::runtime::AnyObject>,
+                characters: &*characters,
+                charactersIgnoringModifiers: &*characters,
+                isARepeat: false,
+                keyCode: 0u16
+            ]
+        };
+        event.is_some_and(|event| menu.performKeyEquivalent(&event))
+    }
+
+    thread_local! {
+        static ADDED_BY_APPKIT: std::cell::RefCell<Vec<String>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// The application's main menu as AppKit holds it, without the items AppKit added itself,
+    /// whose titles come second.
+    pub fn read_application_menu() -> Option<(PopupMenu, Vec<String>)> {
+        let mtm = MainThreadMarker::new()?;
+        let menu = NSApplication::sharedApplication(mtm).mainMenu()?;
+        ADDED_BY_APPKIT.with_borrow_mut(Vec::clear);
+        let read = read_menu(&menu)?;
+        Some((read, ADDED_BY_APPKIT.with_borrow_mut(std::mem::take)))
     }
 
     fn read_swatch(image: &NSImage) -> Option<[u8; 3]> {
@@ -932,7 +1196,6 @@ pub(super) mod probe {
         Some(ns_window(window)?.hidesOnDeactivate())
     }
 
-    use objc2::rc::Retained;
     use objc2_app_kit::NSView;
     fn find_button(view: &NSView, title: &str) -> Option<Retained<objc2_app_kit::NSButton>> {
         for child in view.subviews().iter() {
