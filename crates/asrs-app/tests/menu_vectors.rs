@@ -7,11 +7,11 @@
 //! field with `roles::build_from_template`.
 
 use asrs_app::menus::app_menu;
-use asrs_app::menus::bridge::APP_NAME;
 use asrs_app::menus::model::{ItemType, MenuItem};
 use asrs_app::menus::roles::{BuiltItem, build_from_template};
 use asrs_js::json;
 use asrs_js::string::JsString;
+use asrs_model::app_identity::AppIdentity;
 use asrs_model::preferences::Preferences;
 use asrs_parity::cve1::Value;
 use asrs_parity::vectors::{self, Record};
@@ -121,7 +121,7 @@ fn replay_template(id: &str) -> usize {
                 let platform = platform.expect("config first");
                 let step = record.value("step").expect("step").as_f64().expect("step");
                 if step == 0.0 {
-                    template = app_menu::template(platform, &prefs);
+                    template = app_menu::template(platform, &prefs, AppIdentity::UPSTREAM);
                 } else {
                     merge(
                         &mut prefs,
@@ -226,9 +226,17 @@ fn electron_builds_the_darwin_menu() {
         match record.string("op").as_deref() {
             Some("config") => {}
             Some("electron") => {
-                assert_eq!(record.string("appName").as_deref(), Some(APP_NAME));
-                let template = app_menu::template(Platform::Mac, &Preferences::default());
-                let built = build_from_template(&template, Platform::Mac, APP_NAME);
+                assert_eq!(
+                    record.string("appName").as_deref(),
+                    Some(AppIdentity::UPSTREAM.name)
+                );
+                let template = app_menu::template(
+                    Platform::Mac,
+                    &Preferences::default(),
+                    AppIdentity::UPSTREAM,
+                );
+                let built =
+                    build_from_template(&template, Platform::Mac, AppIdentity::UPSTREAM.name);
                 let want = record.value("menu").expect("menu");
                 compare_built(array(&want), &built, "electron", &mut compared);
                 menus += 1;

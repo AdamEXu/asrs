@@ -45,3 +45,11 @@ pub fn update(fs: &dyn Fs, recent_units_file: &str, preset: &JsValue) -> Result<
     items.truncate(MAX_RECENT_UNITS);
     fs.write(recent_units_file, &json_file::stringify(&recents)?)
 }
+
+/// `recent-units.json` as the `ask-edit-axis` menu reads it: `None` when the file is missing.
+pub fn read(fs: &dyn Fs, recent_units_file: &str) -> Result<Option<JsValue>, JsError> {
+    if !fs.exists(recent_units_file) {
+        return Ok(None);
+    }
+    json_file::parse(&fs.read(recent_units_file)?).map(Some)
+}
