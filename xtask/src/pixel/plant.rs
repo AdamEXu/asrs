@@ -610,7 +610,7 @@ fn plant_all(
                 .and_then(Json::as_array)
                 .and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?]))
                 .ok_or_else(|| format!("{name}: no timelineRange"))?;
-            let nudged = f64::from_bits(range[1].to_bits() + 1);
+            let nudged = range[1] + 1e-6 * (range[1] - range[0]);
             set(
                 &mut record,
                 "timelineRange",
@@ -619,7 +619,7 @@ fn plant_all(
             write_json(&path, &record)?;
             out.push(judge(
                 label,
-                &format!("timeline range end one ulp off in {name}"),
+                &format!("timeline range end 1e-6 of the span off in {name}"),
                 false,
                 true,
                 &run(&dir)?,

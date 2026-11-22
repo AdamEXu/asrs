@@ -14,6 +14,10 @@ pub const TEXT_DILATE: f64 = 2.0;
 pub const TEXT_BOX_TOLERANCE: f64 = 1.0;
 pub const TEXT_MAX_PCT: f64 = 6.0;
 pub const PATCH_REFERENCE_MAX: u8 = 1;
+/// Of the visible span. Chromium animates a notched wheel tick in compositor-timed steps, and
+/// `ScrollSensor` compounds the zoom per step, so upstream runs of the same input differ in the
+/// last bits (measured 9e-16 of the span); a wrong delta scale or cap is off by 1e-3 and more.
+pub const TIMELINE_TOLERANCE: f64 = 1e-9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderMode {
@@ -301,13 +305,18 @@ fn state(reference: &Capture, port: &Capture, out: &mut Outcome) {
         out.push("state", "HubState", pass, detail);
     }
     if let Some(expected) = reference.timeline_range {
-        let bits = |r: [f64; 2]| r.map(f64::to_bits);
-        let pass = port.timeline_range.map(bits) == Some(bits(expected));
+        let limit = TIMELINE_TOLERANCE * (expected[1] - expected[0]);
+        let off = port
+            .timeline_range
+            .map(|r| (r[0] - expected[0]).abs().max((r[1] - expected[1]).abs()));
         out.push(
             "state",
             "timeline range",
-            pass,
-            format!("upstream {expected:?}, port {:?}", port.timeline_range),
+            off.is_some_and(|d| d <= limit),
+            format!(
+                "upstream {expected:?}, port {:?}, off by {off:?} (max {limit:e})",
+                port.timeline_range
+            ),
         );
     }
 }
@@ -1010,7 +1019,7 @@ mod tests {
     }
 
     #[test]
-    fn hub_state_bytes_and_timeline_range_bits_must_match() {
+    fn hub_state_bytes_must_match_and_timeline_ranges_agree() {
         let mut a = capture(8, 8, 1.0);
         a.hub_state = Some(br#"{"sidebar":{"width":362}}"#.to_vec());
         a.timeline_range = Some([0.25, 9.75]);
@@ -1027,7 +1036,9 @@ mod tests {
             [("state", "HubState".into())]
         );
         b.hub_state = a.hub_state.clone();
-        b.timeline_range = Some([0.25, f64::from_bits(9.75f64.to_bits() + 1)]);
+        b.timeline_range = Some([0.25, f64::from_bits(9.75f64.to_bits() + 4)]);
+        assert!(compare(&a, &b, &[]).pass());
+        b.timeline_range = Some([0.25, 9.75 + 1e-8]);
         assert_eq!(
             failed(&compare(&a, &b, &[])),
             [("state", "timeline range".into())]

@@ -1,5 +1,5 @@
 {
-  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first and trackpad deltas second; each capture compares selection.getTimelineRange() bit for bit. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The timeline is U08's view and the mechanism U16's: their regions are masked with the others until those land",
+  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first and trackpad deltas second; each capture compares selection.getTimelineRange(). Chromium animates a notched tick (capped at the overlay's size), so each one gets 500 ms to settle, and the ranges are compared within 1e-9 of the visible span, since the animation's compositor-timed steps compound the zoom differently in the last bits between upstream runs. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The timeline is U08's view and the mechanism U16's: their regions are masked with the others until those land",
   "actions": [
     {
       "open": [
@@ -85,12 +85,18 @@
       }
     },
     {
+      "wait": 500
+    },
+    {
       "wheel": {
         "x": 700,
         "y": 105,
         "deltaY": 120,
         "wheelTicksY": 3
       }
+    },
+    {
+      "wait": 500
     },
     {
       "wheel": {
@@ -101,12 +107,18 @@
       }
     },
     {
+      "wait": 500
+    },
+    {
       "wheel": {
         "x": 820,
         "y": 105,
         "deltaY": 80,
         "wheelTicksY": 2
       }
+    },
+    {
+      "wait": 500
     },
     {
       "capture": "notched",

@@ -1045,10 +1045,7 @@ script runs (the driver exits naming the expected set when one is missing):
 `asrs_js::time::V8MathRandom::from_seed(1)` is the same stream), `--force-prefers-reduced-motion`
 (upstream's 3D camera otherwise eases to its default position over wall-clock frame deltas),
 `--disable-partial-raster` (partial re-raster left one-pixel seams that differed between runs),
-`--disable-smooth-scrolling` (an animated notched scroll reaches `ScrollSensor` as a
-timing-dependent number of scroll events, so the timeline zoom it compounds differed in the last
-bits between runs; with it each wheel event is one scroll and the wheel calibration repeats bit
-for bit), `--force-color-profile=srgb` (see below), and for `"gl": true` scenarios on Linux and Windows
+`--force-color-profile=srgb` (see below), and for `"gl": true` scenarios on Linux and Windows
 `--enable-unsafe-swiftshader`, plus `--use-angle=d3d11-warp` with `--gl d3d11-warp`.
 
 What the driver pins besides switches: windows are shown inactive (`show` becomes
@@ -1097,7 +1094,9 @@ on each visible 2D canvas) and `<name>.gl-<i>.png`. Each GL entry names its rend
 `Field3dRendererImpl` sets from the mode alone), and gate 4 picks its rule from it. On the `app`
 page the capture also waits for the next `save-state` and writes its data as
 `<name>.hub-state.json` (`JSON.stringify`, compared byte for byte) and records
-`selection.getTimelineRange()` as `timelineRange` (compared bit for bit). After the last action
+`selection.getTimelineRange()` as `timelineRange` (compared within 1e-9 of the span: Chromium
+animates a notched wheel tick in compositor-timed steps, so the zoom `ScrollSensor` compounds
+differs in the last bits between runs). After the last action
 the driver waits for upstream's periodic state saves and copies the top-level JSON files and
 asset folders of userData into `files/`.
 

@@ -71,11 +71,7 @@ const switches: [string, string?][] = [
   ["force-prefers-reduced-motion"],
   // Partial raster re-rasters only invalidated rects into old tiles, which leaves timing-dependent
   // seams (one pixel of a button border in 2 of 5 runs); a full raster is what a fresh paint gives.
-  ["disable-partial-raster"],
-  // Chromium animates a notched wheel scroll over several frames, so ScrollSensor sees the delta
-  // in a timing-dependent number of scroll events and the zoom it compounds differs in the last
-  // bits between runs. Unanimated, each wheel event is one scroll.
-  ["disable-smooth-scrolling"]
+  ["disable-partial-raster"]
 ];
 if (colour === "srgb") switches.push(["force-color-profile", "srgb"]);
 // GPU-less hosts need SwiftShader for WebGL. 2D and DOM launches go without it, so their raster

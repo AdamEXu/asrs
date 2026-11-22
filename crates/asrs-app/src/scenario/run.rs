@@ -32,7 +32,8 @@ const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory.";
 
-/// A tick of the page: one animation frame and this much executor time.
+/// A tick of the page: one animation frame and this much executor time. `wait` also lets this
+/// much real time pass per tick, for what the page times with `Date`.
 const FRAME: Duration = Duration::from_millis(16);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -532,6 +533,7 @@ impl Variant<'_> {
                 let deadline = Duration::from_secs_f64(ms / 1000.0);
                 let mut waited = Duration::ZERO;
                 while waited < deadline {
+                    std::thread::sleep(FRAME);
                     self.tick()?;
                     waited += FRAME;
                 }
