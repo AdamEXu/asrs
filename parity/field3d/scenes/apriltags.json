@@ -1,0 +1,212 @@
+{
+  "size": [
+    1100,
+    650
+  ],
+  "antialias": true,
+  "fov": 50,
+  "camera": {
+    "position": [
+      -1.2,
+      0.6,
+      0
+    ],
+    "target": [
+      0,
+      0.6,
+      0
+    ]
+  },
+  "nodes": [
+    {
+      "type": "hemisphere",
+      "color": 16777215,
+      "groundColor": 4473924,
+      "intensity": 2
+    },
+    {
+      "type": "group",
+      "name": "wpilib",
+      "rotation": [
+        -1.5707963267948966,
+        0,
+        3.141592653589793
+      ]
+    },
+    {
+      "type": "point",
+      "parent": "wpilib",
+      "color": 16777215,
+      "intensity": 0.5,
+      "position": [
+        0,
+        0,
+        10
+      ]
+    },
+    {
+      "type": "mesh",
+      "parent": "wpilib",
+      "geometry": {
+        "type": "plane",
+        "args": [
+          7,
+          5,
+          1,
+          1
+        ]
+      },
+      "material": {
+        "color": 8947848,
+        "side": "double"
+      }
+    },
+    {
+      "type": "manager",
+      "manager": "aprilTag",
+      "parent": "wpilib",
+      "loadTextures": true,
+      "commands": [
+        {
+          "type": "aprilTag",
+          "variant": {
+            "family": "36h11",
+            "inches": 6.5
+          },
+          "poses": [
+            {
+              "pose": {
+                "translation": [
+                  0,
+                  -0.45,
+                  0.55
+                ],
+                "rotation": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "annotation": {
+                "is2DSource": false,
+                "aprilTagId": 1
+              }
+            },
+            {
+              "pose": {
+                "translation": [
+                  0,
+                  -0.15,
+                  0.5
+                ],
+                "rotation": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "annotation": {
+                "is2DSource": false,
+                "aprilTagId": 2
+              }
+            },
+            {
+              "pose": {
+                "translation": [
+                  0,
+                  0.15,
+                  0.55
+                ],
+                "rotation": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "annotation": {
+                "is2DSource": false,
+                "aprilTagId": 13
+              }
+            },
+            {
+              "pose": {
+                "translation": [
+                  0,
+                  0.45,
+                  0.5
+                ],
+                "rotation": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "annotation": {
+                "is2DSource": false,
+                "aprilTagId": 22
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "manager",
+      "manager": "aprilTag",
+      "parent": "wpilib",
+      "loadTextures": true,
+      "commands": [
+        {
+          "type": "aprilTag",
+          "variant": {
+            "family": "16h5",
+            "inches": 6
+          },
+          "poses": [
+            {
+              "pose": {
+                "translation": [
+                  0,
+                  0,
+                  0.85
+                ],
+                "rotation": [
+                  0.9800665778412416,
+                  0,
+                  0,
+                  0.19866933079506122
+                ]
+              },
+              "annotation": {
+                "is2DSource": false,
+                "aprilTagId": 5
+              }
+            },
+            {
+              "pose": {
+                "translation": [
+                  0,
+                  0.6,
+                  0.85
+                ],
+                "rotation": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "annotation": {
+                "is2DSource": false
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

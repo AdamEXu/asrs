@@ -10,6 +10,7 @@ import AprilTagManager from "@upstream/shared/renderers/field3d/objectManagers/A
 import AxesManager from "@upstream/shared/renderers/field3d/objectManagers/AxesManager";
 import ConeManager from "@upstream/shared/renderers/field3d/objectManagers/ConeManager";
 import HeatmapManager from "@upstream/shared/renderers/field3d/objectManagers/HeatmapManager";
+import RobotManager from "@upstream/shared/renderers/field3d/objectManagers/RobotManager";
 import TrajectoryManager from "@upstream/shared/renderers/field3d/objectManagers/TrajectoryManager";
 
 type Vec3 = [number, number, number];
@@ -30,11 +31,18 @@ type MaterialSpec = {
 
 // A "manager" node is a group that one of upstream's object managers fills: it is constructed
 // with `specular`/`shininess` in standard mode and given each of `commands` in turn. AprilTag
-// textures load asynchronously, so the capture sees the white placeholder material.
+// textures load asynchronously: the capture sees the white placeholder material unless the node
+// sets `loadTextures`, which waits for every texture first. A "robot" manager gets `robot` (a
+// parsed Config3dRobot whose path is upstream's `model`) as window.assets; it is given the first
+// command, its real loadRobot worker is awaited, and then it is given every command in turn. Both
+// load relative to upstream's www/hub.html, as in the app.
 type NodeSpec = {
   type: "group" | "mesh" | "instanced" | "hemisphere" | "point" | "spot" | "line2" | "line" | "grid" | "manager";
-  manager?: "aprilTag" | "axes" | "cone" | "heatmap" | "trajectory";
+  manager?: "aprilTag" | "axes" | "cone" | "heatmap" | "trajectory" | "robot";
   commands?: any[];
+  loadTextures?: boolean;
+  robot?: any;
+  model?: string;
   specular?: number;
   shininess?: number;
   field?: { widthInches: number; heightInches: number; coordinateSystem: string };
@@ -159,7 +167,27 @@ function place(object: THREE.Object3D, spec: { position?: Vec3; rotation?: Vec3;
   if (spec.scale) object.scale.set(...spec.scale);
 }
 
-function build(spec: SceneSpec, scene: THREE.Scene) {
+let upstreamDir = "";
+
+function fileUrl(file: string): string {
+  return "file://" + file.split("/").map(encodeURIComponent).join("/");
+}
+
+function useUpstreamBase() {
+  if (document.querySelector("base") !== null) return;
+  const base = document.createElement("base");
+  base.href = fileUrl(upstreamDir + "/www/hub.html");
+  document.head.appendChild(base);
+}
+
+function texturesLoaded(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    THREE.DefaultLoadingManager.onLoad = () => resolve();
+    THREE.DefaultLoadingManager.onError = (url) => reject(new Error(`texture ${url} failed`));
+  });
+}
+
+async function build(spec: SceneSpec, scene: THREE.Scene) {
   const named = new Map<string, THREE.Object3D>();
   for (const node of spec.nodes) {
     const parent = node.parent === undefined ? scene : named.get(node.parent)!;
@@ -238,8 +266,23 @@ function build(spec: SceneSpec, scene: THREE.Scene) {
           heatmap: () => new HeatmapManager(...args, () => field as any),
           trajectory: () => new TrajectoryManager(...args)
         };
+        if (node.manager === "robot") {
+          useUpstreamBase();
+          const robot = { ...node.robot, path: upstreamDir.split("/").map(encodeURIComponent).join("/") + "/" + node.model };
+          (window as any).assets = { field2ds: [], field3ds: [], robots: [robot], joysticks: [], loadFailures: [] };
+          let loaded: () => void = () => {};
+          const done = new Promise<void>((resolve) => (loaded = resolve));
+          const manager = new RobotManager(...args, () => {}, () => loaded());
+          manager.setObjectData(node.commands![0]);
+          await done;
+          for (const command of node.commands!) manager.setObjectData(command);
+          break;
+        }
+        if (node.loadTextures === true) useUpstreamBase();
+        const loads = node.loadTextures === true ? texturesLoaded() : null;
         const manager = managers[node.manager!]();
         for (const command of node.commands!) manager.setObjectData(command);
+        if (loads !== null) await loads;
         break;
       }
     }
@@ -261,7 +304,8 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-(window as any).renderScene = (spec: SceneSpec, dark: boolean, scale: number) => {
+(window as any).renderScene = async (spec: SceneSpec, dark: boolean, scale: number, upstream: string) => {
+  upstreamDir = upstream;
   const canvas = document.createElement("canvas");
   document.body.appendChild(canvas);
   const renderer = new THREE.WebGLRenderer({ canvas, powerPreference: "default", antialias: spec.antialias });
@@ -270,7 +314,7 @@ function toBase64(bytes: Uint8Array): string {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(spec.fov, 2, 0.15, 1000);
-  build(spec, scene);
+  await build(spec, scene);
   camera.position.set(...spec.camera.position);
   camera.lookAt(...spec.camera.target);
 

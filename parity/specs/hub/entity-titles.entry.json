@@ -1,0 +1,121 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/corpus-a-struct-wpilib.wpilog",
+    "logs/corpus-b-random-r2-3.rlog"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "(() => { window.__titles = []; new MutationObserver((records) => { for (const r of records) for (const n of r.addedNodes) window.__titles.push(n.textContent); }).observe(document.getElementsByTagName('title')[0], { childList: true }); return document.getElementsByTagName('title')[0].textContent; })()"
+          }
+        ],
+        "label": "boot"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/corpus-a-struct-wpilib.wpilog"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__titles.splice(0)"
+          }
+        ],
+        "label": "wpilog-open"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/wpilog.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "changes",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__titles.splice(0)"
+          }
+        ],
+        "label": "wpilog-all"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/corpus-b-random-r2-3.rlog"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__titles.splice(0)"
+          }
+        ],
+        "label": "rlog-open"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/rlog.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "changes",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__titles.splice(0)"
+          }
+        ],
+        "label": "rlog-all"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "save-type-memory",
+      "update-touch-bar-slider"
+    ]
+  }
+}

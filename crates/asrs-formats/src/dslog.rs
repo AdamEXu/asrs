@@ -147,6 +147,9 @@ impl<'a> DsLogReader<'a> {
         let mut timestamp = 0.0f64;
         let mut last_battery_volts = 0.0f64;
         loop {
+            if crate::worker::stop_requested() {
+                return Err(Abort::Threw);
+            }
             let mask = u8_at(self.data, position + 5)?;
             let mut battery_volts =
                 f64::from(u16_be_at(self.data, position + 2)?) / math::pow(2.0, 8.0);
@@ -301,6 +304,9 @@ impl<'a> DsEventsReader<'a> {
         let start_time = self.timestamp()?;
         let mut visited = BTreeSet::new();
         loop {
+            if crate::worker::stop_requested() {
+                return Err(Abort::Threw);
+            }
             if !visited.insert(position) {
                 return Err(Abort::NeverReturns);
             }

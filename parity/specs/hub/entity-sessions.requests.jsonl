@@ -1,0 +1,2 @@
+{"name":"wpilog","steps":[{"op":"open","path":"parity/specs/hub/logs/corpus-a-struct-wpilib.wpilog","prefix":""},{"op":"dump","phase":"open"},{"op":"loadAll"},{"op":"dump","phase":"all"}]}
+{"name":"rlog","steps":[{"op":"open","path":"parity/specs/hub/logs/corpus-b-random-r2-3.rlog","prefix":""},{"op":"dump","phase":"open"},{"op":"loadAll"},{"op":"dump","phase":"all"}]}

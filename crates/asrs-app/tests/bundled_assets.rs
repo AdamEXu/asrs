@@ -7,17 +7,61 @@
 #[allow(dead_code)]
 mod js_json;
 
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
+use std::sync::Arc;
 
-use asrs_app::views::frame::FrameHost;
-use asrs_app::views::standalone::StandaloneHub;
+use asrs_app::hub::{Hub, HubConfig, HubEvent};
+use asrs_hub::hub::HubView;
+use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
 use asrs_js::string::JsString;
-use asrs_model::messages::MainToHub;
+use asrs_model::messages::{MainToHub, NamedMessage};
 use asrs_parity::Value;
 use asrs_parity::vectors;
 use asrs_services::asset_loader::{AssetFolders, AssetService, USER_ASSETS_README};
 use asrs_services::fs::RealFs;
 use asrs_services::path::PathStyle;
+use asrs_ui::gpui::{
+    AppContext, Context, Entity, HeadlessAppContext, IntoElement, NoopTextSystem, Render, Window,
+    div, px, size,
+};
+
+struct View;
+
+impl HubView for View {
+    fn inner_height(&self) -> f64 {
+        650.0
+    }
+
+    fn renderer_top(&self, _show_timeline: bool) -> f64 {
+        92.0
+    }
+
+    fn dark(&self) -> bool {
+        false
+    }
+
+    fn can_scroll_into_view(&self) -> bool {
+        false
+    }
+
+    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
+        vec![RowRect::default(); sidebar.rows().len()]
+    }
+
+    fn measure_value(&self, _value: &RowValue) -> f64 {
+        0.0
+    }
+}
+
+struct Shell(#[allow(dead_code)] Entity<Hub>);
+
+impl Render for Shell {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        div()
+    }
+}
 
 fn without_paths(value: &Value) -> Value {
     match value {
@@ -103,12 +147,33 @@ fn bundled_assets_load_into_set_assets() {
     assert_eq!(assets.robots.len(), 2);
     assert!(assets.load_failures.is_empty());
 
-    let mut hub = StandaloneHub::new(false, false);
-    let replies = hub.main_message(MainToHub::SetAssets, data);
-    assert!(
-        replies.is_empty(),
-        "set-assets replied {} messages",
-        replies.len()
-    );
-    assert_eq!(hub.hub().page().assets(), Some(assets));
+    let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
+    let slot = Rc::new(RefCell::new(None));
+    let built = slot.clone();
+    cx.open_window(size(px(1100.0), px(650.0)), move |window, cx| {
+        let hub = cx.new(|cx| Hub::new(Some(window), HubConfig::new(Box::new(View)), cx));
+        *built.borrow_mut() = Some(hub.clone());
+        cx.new(|_| Shell(hub))
+    })
+    .expect("open a headless window");
+    let hub = slot.borrow_mut().take().expect("the window built the hub");
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let sink = events.clone();
+    cx.update(|cx| {
+        cx.subscribe(&hub, move |_, event: &HubEvent, _| {
+            sink.borrow_mut().push(event.clone())
+        })
+        .detach();
+        hub.update(cx, |hub, cx| {
+            hub.handle_main_message(NamedMessage::new(MainToHub::SetAssets, data), cx)
+        });
+    });
+    let replies: Vec<_> = events
+        .borrow()
+        .iter()
+        .filter(|e| matches!(e, HubEvent::Main(_) | HubEvent::Console { warn: true, .. }))
+        .cloned()
+        .collect();
+    assert!(replies.is_empty(), "set-assets replied {replies:?}");
+    cx.update(|cx| assert_eq!(hub.read(cx).model().page().assets(), Some(assets)));
 }

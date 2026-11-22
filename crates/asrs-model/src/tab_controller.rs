@@ -101,6 +101,12 @@ pub trait TabRenderer<Cx: ?Sized>: AsAny {
     fn timestamp_range(&self, _cx: &Cx) -> Option<[f64; 2]> {
         None
     }
+
+    /// `Field3dRenderer.set3DCamera(index)`. `Tabs` calls it only on Field3d tabs.
+    fn set_3d_camera(&mut self, _cx: &mut Cx, _index: f64) {}
+
+    /// `Field3dRenderer.setFov(fov)`. `Tabs` calls it only on Field3d tabs.
+    fn set_fov(&mut self, _cx: &mut Cx, _fov: f64) {}
 }
 
 macro_rules! downcasts {

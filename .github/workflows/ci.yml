@@ -111,8 +111,10 @@ jobs:
           --features asrs-ui/parity,asrs-app/parity -- -D warnings
       - name: Test
         run: cargo test --workspace --locked --no-fail-fast
-      - name: Test (asrs-ui parity feature)
-        run: cargo test -p asrs-ui --locked --features parity --no-fail-fast
+      - name: Test (parity features)
+        run: >-
+          cargo test -p asrs-ui -p asrs-app --locked
+          --features asrs-ui/parity,asrs-app/parity --no-fail-fast
       - name: Bundle
         run: cargo xtask bundle
       - uses: actions/upload-artifact@v4

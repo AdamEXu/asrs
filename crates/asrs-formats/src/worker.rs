@@ -1,6 +1,7 @@
 //! The decode-worker protocol of `HistoricalDataSource.ts` (`HistoricalDataSource_WorkerRequest`,
 //! `HistoricalDataSource_WorkerResponse`) and the thread each worker runs on.
 
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -59,6 +60,21 @@ pub enum WorkerMessage {
     Done(Result<(), Abort>),
 }
 
+thread_local! {
+    static STOP: RefCell<Option<Arc<AtomicBool>>> = const { RefCell::new(None) };
+}
+
+/// Whether the [`WorkerThread`] running this code was terminated. Decode loops poll it so a
+/// terminated worker's thread ends promptly instead of finishing a request nobody will read;
+/// it is always false outside a worker thread.
+pub fn stop_requested() -> bool {
+    STOP.with(|stop| {
+        stop.borrow()
+            .as_ref()
+            .is_some_and(|s| s.load(Ordering::Relaxed))
+    })
+}
+
 /// A worker on its own OS thread, named `decode-<id>`. Requests are handled in order. After a
 /// `NeverReturns` or `Unmodeled` abort the thread drops every later request without answering,
 /// as the stuck upstream worker would.
@@ -70,7 +86,17 @@ pub struct WorkerThread {
 }
 
 impl WorkerThread {
-    pub fn spawn(id: &str, mut worker: Box<dyn DecodeWorker>) -> std::io::Result<Self> {
+    pub fn spawn(id: &str, worker: Box<dyn DecodeWorker>) -> std::io::Result<Self> {
+        Self::spawn_notifying(id, worker, || {})
+    }
+
+    /// [`Self::spawn`], calling `notify` on the decode thread after each message it sends, so
+    /// an event loop can wait for messages without blocking in [`Self::recv`].
+    pub fn spawn_notifying(
+        id: &str,
+        mut worker: Box<dyn DecodeWorker>,
+        notify: impl Fn() + Send + 'static,
+    ) -> std::io::Result<Self> {
         let (request_tx, request_rx) = channel::<Request>();
         let (message_tx, message_rx) = channel();
         let terminated = Arc::new(AtomicBool::new(false));
@@ -78,20 +104,22 @@ impl WorkerThread {
         let thread = std::thread::Builder::new()
             .name(format!("decode-{id}"))
             .spawn(move || {
+                STOP.with(|s| *s.borrow_mut() = Some(Arc::clone(&stop)));
+                let send = |message| {
+                    if !stop.load(Ordering::Acquire) && message_tx.send(message).is_ok() {
+                        notify();
+                    }
+                };
                 let mut stuck = false;
                 for request in request_rx {
                     if stuck || stop.load(Ordering::Acquire) {
                         continue;
                     }
                     let end = worker.handle(request, &mut |response| {
-                        if !stop.load(Ordering::Acquire) {
-                            let _ = message_tx.send(WorkerMessage::Response(response));
-                        }
+                        send(WorkerMessage::Response(response));
                     });
                     stuck = matches!(end, Err(Abort::NeverReturns | Abort::Unmodeled(_)));
-                    if !stop.load(Ordering::Acquire) {
-                        let _ = message_tx.send(WorkerMessage::Done(end));
-                    }
+                    send(WorkerMessage::Done(end));
                 }
             })?;
         Ok(WorkerThread {
@@ -124,11 +152,16 @@ impl WorkerThread {
     }
 
     /// `terminate()`: nothing more is delivered and no further request is handled. A request
-    /// already running finishes on the detached thread with its messages discarded.
+    /// already running stops at the next [`stop_requested`] check in its decode loop, with
+    /// its messages discarded.
     pub fn terminate(&mut self) {
         self.terminated.store(true, Ordering::Release);
         self.requests = None;
-        self.thread.take();
+    }
+
+    /// Whether the OS thread has exited.
+    pub fn is_finished(&self) -> bool {
+        self.thread.as_ref().is_none_or(JoinHandle::is_finished)
     }
 }
 
