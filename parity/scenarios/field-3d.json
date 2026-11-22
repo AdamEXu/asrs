@@ -1,0 +1,12 @@
+{
+  "about": "Generated drive log on a new 3D Field tab with a KitBot at a selected time; the drawing buffer is dumped",
+  "gl": true,
+  "actions": [
+    { "open": ["app:drive"] },
+    { "idle": true },
+    { "main": "new-tab", "data": 3 },
+    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\":\"robot\",\"logKey\":\"/Odometry/Robot3d\",\"logType\":\"Pose3d\",\"visible\":true,\"options\":{\"model\":\"KitBot\"}}])" },
+    { "selection": ["setSelectedTime", 3.25] },
+    { "capture": "robot", "probes": [".renderer-content", ".controls-content", ".timeline"] }
+  ]
+}

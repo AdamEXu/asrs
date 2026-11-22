@@ -2,5 +2,6 @@
 
 pub mod camera_controls;
 pub mod glb;
+pub mod managers;
 pub mod render;
 pub mod three;

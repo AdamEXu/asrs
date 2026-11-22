@@ -9,6 +9,11 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use asrs_field3d::managers::{
+    AprilTagManager, AprilTagObj, AprilTagVariant, AxesManager, AxesObj, ConeManager, ConeObj,
+    HeatmapField, HeatmapManager, HeatmapObj, ManagerContext, ObjectManager, TrajectoryManager,
+    TrajectoryObj,
+};
 use asrs_field3d::render::{
     FatLine, Filter, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial,
     LineSegmentsGeometry, Mesh, MinFilter, NodeKind, PhongMaterial, Renderer, Scene, Side, Texture,
@@ -18,6 +23,10 @@ use asrs_field3d::three::{
     ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, Object3D, ObjectId,
     PerspectiveCamera, Vector3, primitives,
 };
+use asrs_js::string::JsString;
+use asrs_log::geometry::{AnnotatedPose3d, Pose3d, PoseAnnotations};
+use asrs_model::assets::CoordinateSystem;
+use asrs_model::preferences::Field3dMode;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 
@@ -177,6 +186,117 @@ fn place(object: &mut Object3D, spec: &Json) {
     }
 }
 
+fn js_text(j: &Json, key: &str) -> JsString {
+    JsString::from(text(j, key).unwrap_or_default().as_str())
+}
+
+fn poses(command: &Json) -> Vec<AnnotatedPose3d> {
+    command
+        .get("poses")
+        .and_then(Json::as_array)
+        .expect("poses")
+        .iter()
+        .map(|p| {
+            let pose = p.get("pose").expect("pose");
+            let annotation = p.get("annotation").expect("annotation");
+            let translation = numbers(pose, "translation");
+            let rotation = numbers(pose, "rotation");
+            let april_tag_id = num(annotation, "aprilTagId");
+            AnnotatedPose3d {
+                pose: Pose3d {
+                    translation: [translation[0], translation[1], translation[2]],
+                    rotation: [rotation[0], rotation[1], rotation[2], rotation[3]],
+                },
+                annotation: PoseAnnotations {
+                    is_2d_source: flag(annotation, "is2DSource").unwrap_or(false),
+                    has_april_tag_id: april_tag_id.is_some(),
+                    april_tag_id,
+                    ..PoseAnnotations::default()
+                },
+            }
+        })
+        .collect()
+}
+
+/// A `manager` node (see `oracle/field3d/page.ts`): the group `root`, filled by one of the
+/// port's object managers from the node's commands. AprilTag textures are never delivered, as
+/// the reference captures before they load.
+fn run_manager(scene: &mut Scene, root: ObjectId, node: &Json) {
+    let ctx = ManagerContext {
+        root,
+        material_specular: Color::hex(num(node, "specular").unwrap_or(0.0)),
+        material_shininess: num(node, "shininess").unwrap_or(0.0),
+        mode: Field3dMode::Standard,
+        is_xr: false,
+    };
+    let commands = node
+        .get("commands")
+        .and_then(Json::as_array)
+        .expect("commands");
+    let result = match text(node, "manager").as_deref() {
+        Some("aprilTag") => {
+            let mut manager = AprilTagManager::new(ctx);
+            commands.iter().try_for_each(|c| {
+                let variant = c.get("variant").expect("variant");
+                let object = AprilTagObj {
+                    poses: poses(c),
+                    variant: AprilTagVariant {
+                        family: js_text(variant, "family"),
+                        inches: num(variant, "inches").expect("inches"),
+                    },
+                };
+                manager.set_object_data(scene, &object)
+            })
+        }
+        Some("axes") => {
+            let mut manager = AxesManager::new(ctx);
+            commands
+                .iter()
+                .try_for_each(|c| manager.set_object_data(scene, &AxesObj { poses: poses(c) }))
+        }
+        Some("cone") => {
+            let mut manager = ConeManager::new(ctx);
+            commands.iter().try_for_each(|c| {
+                let object = ConeObj {
+                    color: js_text(c, "color"),
+                    position: js_text(c, "position"),
+                    poses: poses(c),
+                };
+                manager.set_object_data(scene, &object)
+            })
+        }
+        Some("trajectory") => {
+            let mut manager = TrajectoryManager::new(ctx, scene);
+            commands.iter().try_for_each(|c| {
+                let object = TrajectoryObj {
+                    color: js_text(c, "color"),
+                    size: js_text(c, "size"),
+                    poses: poses(c),
+                };
+                manager.set_object_data(scene, &object)
+            })
+        }
+        Some("heatmap") => {
+            let field = node.get("field").map(|f| HeatmapField {
+                width_inches: num(f, "widthInches").expect("widthInches"),
+                height_inches: num(f, "heightInches").expect("heightInches"),
+                coordinate_system: match text(f, "coordinateSystem").as_deref() {
+                    Some("wall-alliance") => CoordinateSystem::WallAlliance,
+                    Some("wall-blue") => CoordinateSystem::WallBlue,
+                    Some("center-rotated") => CoordinateSystem::CenterRotated,
+                    _ => CoordinateSystem::CenterRed,
+                },
+            });
+            let mut manager = HeatmapManager::new(ctx, Box::new(move || field), Box::new(|| None));
+            commands
+                .iter()
+                .try_for_each(|c| manager.set_object_data(scene, &HeatmapObj { poses: poses(c) }))
+        }
+        other => panic!("unknown manager {other:?}"),
+    };
+    result.expect("manager commands apply");
+}
+
 fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
     let mut scene = Scene::new();
     let mut named: HashMap<String, ObjectId> = HashMap::new();
@@ -288,6 +408,11 @@ fn build(spec: &Json) -> (Scene, PerspectiveCamera) {
                 }
                 spot_target = Some(target);
                 light
+            }
+            Some("manager") => {
+                let id = scene.create(NodeKind::Group);
+                run_manager(&mut scene, id, node);
+                id
             }
             other => panic!("unknown node type {other:?}"),
         };

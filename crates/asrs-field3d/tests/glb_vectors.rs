@@ -392,10 +392,11 @@ fn load_job_matches_direct_load_and_converts_for_the_renderer() {
     assert_eq!(background, direct);
 
     let mesh = background[0][0].to_render_mesh();
-    assert_eq!(mesh.material.specular.get_hex(), f64::from(0x666666));
-    assert_eq!(mesh.material.shininess, 100.0);
-    assert_eq!(mesh.material.side, Side::Double);
-    assert!(mesh.material.vertex_colors && mesh.cast_shadow && !mesh.receive_shadow);
+    let material = mesh.material.single().expect("one material");
+    assert_eq!(material.specular.get_hex(), f64::from(0x666666));
+    assert_eq!(material.shininess, 100.0);
+    assert_eq!(material.side, Side::Double);
+    assert!(material.vertex_colors && mesh.cast_shadow && !mesh.receive_shadow);
     let (rendered, source) = (&mesh.geometry.geometry, &background[0][0].geometry);
     assert!(rendered.index == source.index && rendered.attributes().eq(source.attributes()));
 
