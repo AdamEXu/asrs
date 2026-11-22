@@ -7,7 +7,11 @@ import { parseField3d, parseRobot } from "@upstream/main/assetUtil";
 import { UPSTREAM_DIR } from "./shims";
 import { toTree } from "./cve1";
 import { encodePath, runWorker } from "./glb/worker";
-import { run, type Env, type WorkerAnswers } from "./lazyHelpers/field3dRendererRun";
+import type { Env, WorkerAnswers } from "./lazyHelpers/field3dRendererRun";
+
+// camera-controls reads navigator.platform once at module load to pick its wheel scale.
+Object.defineProperty(globalThis, "navigator", { value: { platform: "MacIntel" }, configurable: true, writable: true });
+const { run } = await import("./lazyHelpers/field3dRendererRun");
 
 // Ground truth for asrs-field3d's renderer orchestration (Field3dRenderer.ts and
 // Field3dRendererImpl.ts), run through `oracle:field3dRendererRun`. One record per case:
@@ -207,6 +211,10 @@ function ghost(model: string, posesList: any[], color: string): any {
 const gamePiece = (variant: string, n: number) => ({ type: "gamePiece", variant, poses: poses(n) });
 const trajectory = (n: number) => ({ type: "trajectory", color: "#ff8800", size: "normal", poses: poses(n) });
 const heatmap = (n: number) => ({ type: "heatmap", poses: poses(n) });
+const wallHeatmap = (n: number) => ({
+  type: "heatmap",
+  poses: Array.from({ length: n }, () => pose([uniform(1, 14), uniform(1, 6.5), 0]))
+});
 const aprilTags = (type: "aprilTag" | "aprilTagBuiltIn", ids: number[]) => ({
   type,
   poses: ids.map((id) => ({ ...pose([uniform(-7, 7), uniform(-3.5, 3.5), uniform(0.2, 1.5)], rotation()), annotation: { aprilTagId: id, is2DSource: false } })),
@@ -317,9 +325,24 @@ function orbitOps(): unknown[][] {
   }
   ops.push(["key", "up", "KeyW", {}]);
   frames(ops, empty, 2);
+  ops.push(["wheel", 100, 0]);
+  frames(ops, empty, 3);
+  ops.push(["wheel", -3, 1]);
+  frames(ops, empty, 3);
+  ops.push(["pointer", "down", 1, 1, 400, 200]);
+  frames(ops, empty, 1);
+  ops.push(["pointer", "move", 1, 1, 430, 215]);
+  frames(ops, empty, 2);
+  ops.push(["pointer", "move", 1, 1, 470, 190], ["pointer", "up", 1, 0, 470, 190]);
+  frames(ops, empty, 4);
+  ops.push(["pointer", "down", 2, 2, 300, 300], ["pointer", "move", 2, 2, 320, 280]);
+  frames(ops, empty, 2);
+  ops.push(["pointer", "up", 2, 0, 320, 280]);
+  frames(ops, empty, 3);
   ops.push(["fov", 75], ["render", empty], ["fov", 500], ["render", empty], ["fov", -20], ["render", empty], ["fov", 50]);
   ops.push(["mouse", "down", 2, 100, 120], ["mouse", "up", 2, 100, 120]);
   ops.push(["mouse", "down", 2, 100, 120], ["mouse", "up", 2, 101, 120]);
+  ops.push(["mouse", "down", 2, 100, 120], ["mouse", "up", 2, 100, 121]);
   ops.push(["mouse", "down", 0, 10, 10], ["mouse", "up", 0, 10, 10]);
 
   const kit = pose([2, 1, 0], yaw(0.7));
@@ -392,6 +415,8 @@ function orbitOps(): unknown[][] {
   frames(ops, auto4, 1);
   ops.push(["env", { parentWidth: 333, parentHeight: 701 }]);
   frames(ops, auto4, 1);
+  ops.push(["wheel", 100, 0], ["pointer", "down", 3, 1, 100, 100], ["pointer", "move", 3, 1, 150, 120], ["pointer", "up", 3, 0, 150, 120]);
+  frames(ops, auto4, 2);
   ops.push(["camera", 2]);
   frames(ops, auto4, 1);
   const override = command("FRC:Evergreen", auto4.objects, { cameraOverride: pose([1, 2, 1.5], rotation()) });
@@ -485,12 +510,13 @@ function ftcOps(): unknown[][] {
 // A field model from a worker, its game pieces and staged pieces, and asset changes.
 function glbFieldOps(): unknown[][] {
   const ops: unknown[][] = [];
-  const pieces = (n: number) => command("glb-field", [robot("KitBot", [pose()]), gamePiece("Piece", n)], { coordinateSystem: "wall-alliance" });
+  const pieces = (n: number) =>
+    command("glb-field", [robot("KitBot", [pose()]), gamePiece("Piece", n), wallHeatmap(6)], { coordinateSystem: "wall-alliance" });
   ops.push(["render", pieces(2)]);
   frames(ops, pieces(3), 2);
   ops.push(["load"]);
   frames(ops, pieces(3), 2);
-  frames(ops, command("glb-field", [robot("KitBot", [pose()])], { coordinateSystem: "wall-alliance", isRedAlliance: true }), 1);
+  frames(ops, command("glb-field", [robot("KitBot", [pose()]), wallHeatmap(6)], { coordinateSystem: "wall-alliance", isRedAlliance: true }), 1);
   frames(ops, pieces(5), 1);
   ops.push(["camera", -6]);
   frames(ops, pieces(5), 2, 40);
@@ -589,7 +615,8 @@ function lowPowerOps(): unknown[][] {
   return ops;
 }
 
-// A manager that throws leaves the rest of render() undone.
+// A manager that throws leaves the rest of render() undone; a robot manager disposed while its
+// model loads still ends its load.
 function throwOps(): unknown[][] {
   const ops: unknown[][] = [];
   const ok = command("FRC:Evergreen", [robot("KitBot", [pose([1, 0.5, 0], yaw(0.25))]), axes(1)]);
@@ -605,6 +632,12 @@ function throwOps(): unknown[][] {
   ops.push(["camera", -2]);
   frames(ops, bad, 2);
   frames(ops, ok, 2);
+  frames(ops, command("FRC:Evergreen", [robot("Drive Base (Simple)", [pose()])]), 1);
+  frames(ops, command("FRC:Evergreen", []), 1);
+  ops.push(["load"]);
+  frames(ops, command("FRC:Evergreen", []), 2);
+  ops.push(["advance", 300]);
+  frames(ops, command("FRC:Evergreen", []), 1);
   return ops;
 }
 

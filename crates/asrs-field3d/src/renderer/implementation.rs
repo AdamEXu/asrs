@@ -490,6 +490,16 @@ impl Field3dRendererImpl {
         build_frame(&mut self.scene, self.controls.camera_mut(), options)
     }
 
+    /// The heatmap managers, in reconciliation order.
+    pub fn heatmap_managers(&self) -> impl Iterator<Item = &HeatmapManager> {
+        self.object_managers
+            .iter()
+            .filter_map(|e| match &e.manager {
+                AnyManager::Heatmap(m) => Some(m),
+                _ => None,
+            })
+    }
+
     /// The worker loads started since the last take, in request order.
     pub fn take_load_requests(&mut self) -> Vec<LoadRequest> {
         std::mem::take(&mut self.load_requests)

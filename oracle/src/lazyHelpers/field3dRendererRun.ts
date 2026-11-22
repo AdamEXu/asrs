@@ -26,13 +26,15 @@ import { fakeContainer, installFakeDom } from "../heatmap/fakeDom";
 //   setup: {preferences, isBattery, platform, assets, env, now}
 //   ops: ["env", partial env]; ["advance", ms]; ["render", command];
 //     ["key", "down"|"up", code, {meta?, ctrl?, editable?}];
-//     ["mouse", "down"|"up", button, x, y]; ["camera", index]; ["fov", fov];
+//     ["mouse", "down"|"up", button, x, y]; ["pointer", "down"|"move"|"up", id, buttons, x, y]
+//     (down on the canvas, move and up on the document, as camera-controls listens);
+//     ["wheel", deltaY, deltaMode]; ["camera", index]; ["fov", fov];
 //     ["restore", state]; ["assets", key]; ["preferences", prefs]; ["battery", bool];
 //     ["load"] answers every pending worker request in request order (one that never answers
 //     stays pending); ["loadTextures"] completes every TextureLoader load whose file exists
 //
 // Each state: {[throw], scene, camera, controls, dom, renders, messages, requests, textures,
-// aspect, saved}.
+// aspect, saved, heatmaps}; heatmaps is each heatmap manager's h337 store, in manager order.
 
 declare const __UPSTREAM_DIR__: string;
 const UPSTREAM_DIR: string = process.env.ORACLE_UPSTREAM_DIR ?? __UPSTREAM_DIR__;
@@ -542,7 +544,15 @@ export async function run(setup: any, ops: any[][], assetSets: { [key: string]: 
       requests,
       textures,
       aspect: renderer.getAspectRatio(),
-      saved: renderer.saveState()
+      saved: renderer.saveState(),
+      heatmaps: impl
+        ? impl.objectManagers
+            .filter((entry: any) => entry.type === "heatmap")
+            .map((entry: any) => {
+              const heatmap = entry.manager.heatmap;
+              return heatmap.heatmap === null ? null : structuredClone(heatmap.heatmap.getData());
+            })
+        : null
     };
     renders = [];
     messages = [];
@@ -575,6 +585,25 @@ export async function run(setup: any, ops: any[][], assetSets: { [key: string]: 
           break;
         case "mouse":
           view.fire(op[1] === "down" ? "mousedown" : "mouseup", { button: op[2], clientX: op[3], clientY: op[4] });
+          break;
+        case "pointer": {
+          const event = {
+            pointerType: "mouse",
+            pointerId: op[2],
+            buttons: op[3],
+            clientX: op[4],
+            clientY: op[5],
+            movementX: 0,
+            movementY: 0,
+            cancelable: true,
+            preventDefault() {}
+          };
+          if (op[1] === "down") view.fire("pointerdown", event);
+          else fakeDocument.fire(op[1] === "move" ? "pointermove" : "pointerup", event);
+          break;
+        }
+        case "wheel":
+          view.fire("wheel", { deltaY: op[1], deltaX: 0, deltaMode: op[2], clientX: 0, clientY: 0, preventDefault() {} });
           break;
         case "camera":
           renderer.set3DCamera(op[1]);

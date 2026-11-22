@@ -16,7 +16,9 @@ use asrs_js::value::JsValue;
 use asrs_model::assets::{AdvantageScopeAssets, Config3dField};
 use asrs_model::preferences::{Field3dBatteryMode, Field3dMode, Preferences};
 
-pub use command::{AnyObj, CameraOverride, Field3dRendererCommand, ObjType, annotated_pose};
+pub use command::{
+    AnyObj, CameraOverride, Field3dRendererCommand, ObjType, annotated_pose, any_obj,
+};
 pub use implementation::Field3dRendererImpl;
 
 use crate::glb::{LoadOptions, LoadedField, OptimizedMesh};

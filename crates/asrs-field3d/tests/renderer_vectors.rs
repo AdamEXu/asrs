@@ -1,6 +1,7 @@
 //! Replays `parity/vectors/field3d/renderer` (oracle/src/genField3dRenderer.ts): each case drives
 //! the port's `Field3dRenderer` through the recorded ops (renders, keys, mouse, camera and FOV
-//! changes, saved state, asset and preference changes, worker and texture loads) and compares,
+//! changes, pointer and wheel input, saved state, asset and preference changes, worker and
+//! texture loads) and compares,
 //! after every op, the whole scene graph, the camera, the controls, the DOM the renderer writes,
 //! the render calls, main-process messages, load requests, the aspect ratio and the saved state
 //! with what upstream's real renderer produced.
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use asrs_field3d::camera_controls::{ElementRect, PointerInput, WheelInput};
 use asrs_field3d::glb::{self, LoadedField, OptimizedMesh};
 use asrs_field3d::managers::{april_tag_texture_path, decode_png_texture};
 use asrs_field3d::render::{
@@ -315,7 +317,7 @@ impl Case {
         let darwin = text(get(&setup, "platform")?)? == "darwin";
         let env = get(&setup, "env")?.clone();
         let clock = number(get(&setup, "now")?)?;
-        let renderer = Field3dRenderer::new(prefs.as_deref(), is_battery, false);
+        let renderer = Field3dRenderer::new(prefs.as_deref(), is_battery, true);
         Ok(Case {
             assets,
             files,
@@ -537,6 +539,36 @@ impl Case {
                         Value::string("ask-3d-camera"),
                         from_js(&data)?,
                     ]));
+                }
+            }
+            "pointer" => {
+                let event = PointerInput {
+                    pointer_id: number(&op[2])? as i32,
+                    buttons: number(&op[3])? as u32,
+                    client_x: number(&op[4])?,
+                    client_y: number(&op[5])?,
+                };
+                let rect = ElementRect {
+                    x: 0.0,
+                    y: 0.0,
+                    width: self.env_number("width")?,
+                    height: self.env_number("height")?,
+                };
+                if let Some(implementation) = self.renderer.implementation_mut() {
+                    let controls = implementation.controls_mut();
+                    match text(&op[1])?.as_str() {
+                        "down" => controls.pointer_down(event, rect),
+                        "move" => controls.pointer_move(event),
+                        _ => controls.pointer_up(event),
+                    }
+                }
+            }
+            "wheel" => {
+                if let Some(implementation) = self.renderer.implementation_mut() {
+                    implementation.controls_mut().wheel(WheelInput {
+                        delta_y: number(&op[1])?,
+                        delta_mode: number(&op[2])? as u32,
+                    });
                 }
             }
             "camera" => self.renderer.set_3d_camera(number(&op[1])?),
@@ -822,6 +854,42 @@ impl Case {
             self.renderer.get_aspect_ratio().map_or(Value::Null, num),
         ));
         fields.push(("saved", from_js(&self.renderer.save_state())?));
+        let heatmaps = self
+            .renderer
+            .implementation()
+            .map_or(Value::Null, |implementation| {
+                Value::Array(
+                    implementation
+                        .heatmap_managers()
+                        .map(|m| {
+                            m.heatmap().get_data().map_or(Value::Null, |store| {
+                                Value::object([
+                                    ("min", num(store.min)),
+                                    ("max", num(store.max)),
+                                    (
+                                        "data",
+                                        Value::Array(
+                                            store
+                                                .data
+                                                .iter()
+                                                .map(|p| {
+                                                    Value::object([
+                                                        ("x", Value::string(&p.x)),
+                                                        ("y", Value::string(&p.y)),
+                                                        ("radius", num(p.radius)),
+                                                        ("value", num(p.value)),
+                                                    ])
+                                                })
+                                                .collect(),
+                                        ),
+                                    ),
+                                ])
+                            })
+                        })
+                        .collect(),
+                )
+            });
+        fields.push(("heatmaps", heatmaps));
         Ok(Value::object(fields))
     }
 }
