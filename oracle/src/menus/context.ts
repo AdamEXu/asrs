@@ -175,7 +175,9 @@ export async function runContext(theme: string, out: Out, flush: Flush, hubPort:
       { type: null, factor: 2.5 },
       { type: "angular velocity", factor: 0.5, from: "radians/second", to: "rotations/minute" },
       { type: "length", factor: 1e-7, from: "light years", to: "nautical miles" },
-      { type: "time", factor: 1, from: "seconds", to: "milliseconds" }
+      { type: "time", factor: 1, from: "seconds", to: "milliseconds" },
+      { type: "length", factor: 2, from: "meters" },
+      { type: "length", factor: 1, from: null, to: "feet" }
     ];
     const prompts = {
       "editRange.html": [[0, 5.5]],
@@ -203,7 +205,7 @@ export async function runContext(theme: string, out: Out, flush: Flush, hubPort:
         window: "hub",
         name: "ask-edit-axis",
         data,
-        recentUnits: i % 3 === 0 ? undefined : i % 3 === 1 ? recents.slice(0, (i % 5) + 1) : [],
+        recentUnits: i % 3 === 0 ? undefined : i % 3 === 1 ? recents.slice(i % 3, (i % 7) + 2) : [],
         responses: prompts
       });
     });
