@@ -293,7 +293,11 @@ name = "asrs-app"
 version = "0.1.0"
 dependencies = [
  "asrs-field3d",
+ "asrs-formats",
+ "asrs-hub",
  "asrs-js",
+ "asrs-log",
+ "asrs-model",
  "asrs-parity",
  "asrs-services",
  "asrs-ui",

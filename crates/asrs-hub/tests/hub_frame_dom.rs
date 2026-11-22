@@ -343,11 +343,15 @@ impl Run {
         let now = self.host.now();
         match (handle, kind.as_str()) {
             (Some(handle), "mousedown") => self.shell.handle_mouse_down(&mut self.hub, handle),
-            (Some(handle), "click") => self.shell.handle_click(&mut self.hub, handle, now)?,
+            (Some(handle), "click") => self
+                .shell
+                .handle_click(&mut self.hub, handle, now)
+                .map_err(|e| format!("{e}"))?,
             (None, "mousemove") => {
                 let geometry = self.geometry.clone();
                 self.shell
-                    .window_mouse_move(&mut self.hub, x, y, &mut |hub| Run::sync(&geometry, hub))?
+                    .window_mouse_move(&mut self.hub, x, y, &mut |hub| Run::sync(&geometry, hub))
+                    .map_err(|e| format!("{e}"))?
             }
             (None, "mouseup") => self.shell.window_mouse_up(&mut self.hub),
             (target, kind) => return Err(format!("{kind} on {target:?}")),

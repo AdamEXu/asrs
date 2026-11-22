@@ -14,7 +14,7 @@ use asrs_model::selection_impl::ControlButton;
 
 use crate::drag::{Drag, DragItem, DragPayload};
 use crate::hub::HubModel;
-use crate::tabs::{TabDragData, TabDragStart};
+use crate::tabs::{TabDragData, TabDragStart, TabsError};
 
 pub const TITLE_BAR_HEIGHT: f64 = 38.0;
 const FPS_SAMPLE_LENGTH: usize = 10;
@@ -940,7 +940,7 @@ impl HubShell {
         hub: &mut HubModel,
         handle: Handle,
         now: f64,
-    ) -> Result<(), String> {
+    ) -> Result<(), TabsError> {
         match handle {
             Handle::SideBar => {
                 hub.with_sidebar(|sidebar, _| sidebar.handle_click(now));
@@ -949,7 +949,6 @@ impl HubShell {
             Handle::Controls => {
                 let (tabs, page) = hub.tabs_mut();
                 tabs.controls_handle_click(page, now)
-                    .map_err(|e| e.to_string())
             }
         }
     }
@@ -963,11 +962,11 @@ impl HubShell {
         x: f64,
         y: f64,
         sync: &mut dyn FnMut(&HubModel),
-    ) -> Result<(), String> {
+    ) -> Result<(), TabsError> {
         hub.with_sidebar(|sidebar, _| sidebar.handle_mouse_move(x));
         sync(hub);
         let (tabs, page) = hub.tabs_mut();
-        let result = tabs.window_mouse_move(page, y).map_err(|e| e.to_string());
+        let result = tabs.window_mouse_move(page, y);
         sync(hub);
         self.drag.move_to(x, y);
         result
