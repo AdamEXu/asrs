@@ -13,7 +13,7 @@ use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
 use asrs_services::fs::{Failure, Fs, MemFs, ReadError};
-use asrs_services::historical_start::{FileOpen, UPSTREAM_HAS_LZMA};
+use asrs_services::historical_start::FileOpen;
 use sha2::{Digest, Sha256};
 
 const ID: &str = "files/historical-start";
@@ -197,7 +197,7 @@ fn run_case(record: &Json, blobs: &HashMap<u64, Vec<u8>>) -> Result<(), String> 
     let open = FileOpen {
         fs: &fs,
         temp_dir: TEMP,
-        lzma: UPSTREAM_HAS_LZMA,
+        lzma: true,
     };
     let outcome = open.handle(request, &mut rng);
 
