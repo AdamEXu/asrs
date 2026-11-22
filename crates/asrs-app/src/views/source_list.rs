@@ -22,7 +22,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Measurer, Text, TextStyle, snap_remainder};
+use asrs_ui::text::{self, Measurer, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 
 use super::frame::{FrameHost, HubFrame};
@@ -41,14 +41,21 @@ fn style(declarations: &[(&str, &str)]) -> TextStyle {
     TextStyle::from_css(declarations.iter().copied()).expect("source list text style")
 }
 
-fn title_style() -> TextStyle {
+fn title_style(align: &str) -> TextStyle {
     style(&[
         ("font", &font("bold 16px")),
         ("line-height", "30px"),
-        ("text-align", "center"),
+        ("text-align", align),
         ("white-space", "nowrap"),
         ("text-overflow", "ellipsis"),
     ])
+}
+
+/// Where `div.title`'s centred line starts in a box `available` wide: Blink halves the free
+/// space in `LayoutUnit`s, so the offset is truncated to 1/64 px rather than snapped with the box.
+fn centred_offset(available: f64, text_width: f64) -> Option<f64> {
+    let free = math::floor(available * 64.0) - math::ceil(text_width * 64.0);
+    (free >= 0.0).then(|| math::floor(free / 2.0) / 64.0)
 }
 
 pub fn type_name_style() -> TextStyle {
@@ -197,6 +204,35 @@ fn length(l: Length, of: f64) -> f32 {
     }
 }
 
+/// A box `rel` CSS px right of a parent whose exact CSS position is `parent` and whose GPUI box
+/// sits there snapped to the device pixel grid: the offset to author, which GPUI keeps whole,
+/// and the fraction of the exact position that snapping drops.
+fn place_in(parent: f64, rel: f64, scale: f64) -> (f32, f64) {
+    let snap = |v: f64| math::floor(v * scale + 0.5) / scale;
+    let exact = parent + rel;
+    ((snap(exact) - snap(parent)) as f32, exact - snap(exact))
+}
+
+/// One of the list's 25 px buttons whose CSS box is `layout` from its parent's exact position
+/// `parent` and painted `translate` from there: `top: 15px` with `translate(±50%, -50%)`.
+fn translated_button(
+    button: IconButton,
+    parent: f64,
+    layout_x: f64,
+    translate_x: f64,
+    scale: f64,
+) -> Div {
+    let half = f64::from(BUTTON) / 2.0;
+    let (x, dx) = place_in(parent, layout_x + translate_x, scale);
+    let (y, dy) = place_in(0.0, 15.0 - half, scale);
+    div().absolute().left(px(x)).top(px(y)).child(
+        button
+            .size(BUTTON, BUTTON)
+            .translate(translate_x, -half)
+            .subpixel(dx, dy),
+    )
+}
+
 fn hsla(color: u32) -> Hsla {
     rgba(color).into()
 }
@@ -268,7 +304,13 @@ fn on(
 /// `img.hand-icon`: `width: 60px` and an auto height, so the SVG scales from its 24 px
 /// intrinsic size by its aspect ratio.
 fn hand_icon() -> IconSource {
-    let svg = std::str::from_utf8(symbol("trackpadinput.svg").svg()).unwrap_or_default();
+    ratio_symbol("trackpadinput.svg")
+}
+
+/// A symbol without its 24 px intrinsic size, so an `<img>` sized by CSS draws it across its
+/// width at its aspect ratio.
+fn ratio_symbol(name: &str) -> IconSource {
+    let svg = std::str::from_utf8(symbol(name).svg()).unwrap_or_default();
     IconSource::Svg(
         svg.replacen(r#" height="24px""#, "", 1)
             .replacen(r#" width="24px""#, "", 1)
@@ -343,17 +385,16 @@ fn item_body(
         .and_then(|r| type_icon(&r.symbol_path, &r.color))
     {
         body = body.child(fade(
-            div()
-                .absolute()
-                .left(px((2.5 + indent) as f32))
-                .top(px(2.5))
-                .child(
-                    IconButton::new(("sl-type", index), icon)
-                        .size(BUTTON, BUTTON)
-                        .tint(NO_FILTER)
-                        .fit(OBJECT_FIT)
-                        .on_click(on(dispatch, ListPointer::TypeClick(index))),
-                ),
+            translated_button(
+                IconButton::new(("sl-type", index), icon)
+                    .tint(NO_FILTER)
+                    .fit(OBJECT_FIT)
+                    .on_click(on(dispatch, ListPointer::TypeClick(index))),
+                origin_x,
+                15.0 + indent,
+                -f64::from(BUTTON) / 2.0,
+                f64::from(scale),
+            ),
             hidden,
         ));
     }
@@ -430,10 +471,13 @@ fn item_body(
                     .top(px(32.0))
                     .w(px(11.0))
                     .h(px(11.0))
-                    .child(Icon::new(
-                        symbol("subdirectoryarrowright.svg"),
-                        chains::SOURCE_LIST_VALUE_SYMBOL,
-                    )),
+                    .child(
+                        Icon::new(
+                            ratio_symbol("subdirectoryarrowright.svg"),
+                            chains::SOURCE_LIST_VALUE_SYMBOL,
+                        )
+                        .fit(IconFit::Natural),
+                    ),
                 hidden,
             ))
             .child(fade(
@@ -455,35 +499,30 @@ fn item_body(
             ));
     }
     let visible = item.rendered.as_ref().is_none_or(|r| r.visible);
-    body.child(
-        div()
-            .absolute()
-            .left(px((width - 40.0 - f64::from(BUTTON) / 2.0) as f32))
-            .top(px(2.5))
-            .child(
-                IconButton::new(
-                    ("sl-hide", index),
-                    symbol(if visible {
-                        "visibility.svg"
-                    } else {
-                        "visibilityoff.svg"
-                    }),
-                )
-                .size(BUTTON, BUTTON)
-                .on_click(on(dispatch, ListPointer::HideClick(index))),
-            ),
-    )
-    .child(
-        div()
-            .absolute()
-            .left(px((width - 15.0 - f64::from(BUTTON) / 2.0) as f32))
-            .top(px(2.5))
-            .child(
-                IconButton::new(("sl-remove", index), symbol("close.svg"))
-                    .size(BUTTON, BUTTON)
-                    .on_click(on(dispatch, ListPointer::RemoveClick(index))),
-            ),
-    )
+    let half = f64::from(BUTTON) / 2.0;
+    body.child(translated_button(
+        IconButton::new(
+            ("sl-hide", index),
+            symbol(if visible {
+                "visibility.svg"
+            } else {
+                "visibilityoff.svg"
+            }),
+        )
+        .on_click(on(dispatch, ListPointer::HideClick(index))),
+        origin_x,
+        width - 40.0 - 2.0 * half,
+        half,
+        f64::from(scale),
+    ))
+    .child(translated_button(
+        IconButton::new(("sl-remove", index), symbol("close.svg"))
+            .on_click(on(dispatch, ListPointer::RemoveClick(index))),
+        origin_x,
+        width - 15.0 - 2.0 * half,
+        half,
+        f64::from(scale),
+    ))
 }
 
 /// `#dragItem`'s copy of a dragged item: `clientWidth` wide, 30 px tall, without borders.
@@ -638,18 +677,25 @@ impl<H: FrameHost> HubFrame<H> {
             .h(px(r.height as f32));
 
         let inset = if list.edit_button { 30.0 } else { 55.0 };
+        let available = (inner - 2.0 * inset).max(0.0);
+        let (title_width, _) = text::measure(cx, &title_style("left"), &list.title, scale as f32);
+        let (title_left, title_box, title_style) = match centred_offset(available, title_width) {
+            Some(offset) => (inset + offset, title_width, title_style("left")),
+            None => (inset, available, title_style("center")),
+        };
+        let (title_x, title_dx) = place_in(left, title_left, scale);
         element = element.child(
             div()
                 .absolute()
                 .top_0()
-                .left(px(inset as f32))
-                .w(px((inner - 2.0 * inset).max(0.0) as f32))
+                .left(px(title_x))
+                .w(px(title_box as f32))
                 .h(px(TITLE_HEIGHT as f32))
                 .overflow_hidden()
                 .child(
-                    Text::new(list.title.clone(), title_style())
+                    Text::new(list.title.clone(), title_style)
                         .color(theme.text)
-                        .subpixel(snap_remainder((left + inset) as f32, scale as f32), 0.0),
+                        .subpixel(title_dx as f32, 0.0),
                 ),
         );
         let dispatch: Option<Dispatch> = {
@@ -659,19 +705,17 @@ impl<H: FrameHost> HubFrame<H> {
                 let _ = frame.update(cx, |frame, cx| frame.list_input(&uuid, event, cx));
             }))
         };
+        let half = f64::from(BUTTON) / 2.0;
         let corner = |right: f64, id: &'static str, icon: Symbol, fit: IconFit, event| {
-            div()
-                .absolute()
-                .left(px(
-                    (snap(left + inner - right - f64::from(BUTTON) / 2.0) - left) as f32,
-                ))
-                .top(px(2.5))
-                .child(
-                    IconButton::new((id, uuid_hash(&uuid)), icon)
-                        .size(BUTTON, BUTTON)
-                        .fit(fit)
-                        .on_click(on(&dispatch, event)),
-                )
+            translated_button(
+                IconButton::new((id, uuid_hash(&uuid)), icon)
+                    .fit(fit)
+                    .on_click(on(&dispatch, event)),
+                left,
+                inner - right - 2.0 * half,
+                half,
+                scale,
+            )
         };
         if list.edit_button {
             element = element.child(corner(

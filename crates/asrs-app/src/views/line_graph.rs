@@ -162,6 +162,8 @@ pub struct LineGraphViews {
     tabs: HashMap<usize, TabView>,
     shown: Option<Shown>,
     hovered: bool,
+    pointer: Option<[f64; 2]>,
+    pressed: bool,
 }
 
 fn renderer_key(renderer: &LineGraphRenderer) -> usize {
@@ -246,6 +248,14 @@ impl<H: FrameHost> HubFrame<H> {
             views.hovered = false;
         }
         views.shown = Some(shown);
+        // Chromium's fake mouse move after a layout change: the overlay moved out from under a
+        // still pointer, which fires its `mouseleave` unless a button is held.
+        let left_under_pointer = views.hovered
+            && !views.pressed
+            && views.pointer.is_some_and(|[x, y]| !shown.contains(x, y));
+        if left_under_pointer {
+            views.hovered = false;
+        }
         let tab = views.tabs.entry(key).or_default();
         let canvas = tab
             .canvas
@@ -257,6 +267,13 @@ impl<H: FrameHost> HubFrame<H> {
             window.request_animation_frame();
         }
 
+        if left_under_pointer {
+            self.host_mut().input(cx, |hub| {
+                with_renderer(hub, index, |renderer, page| {
+                    renderer.mouse_leave(page.selection_mut())
+                });
+            });
+        }
         let dark = appearance == Appearance::Dark;
         let entity = cx.entity().downgrade();
         let painter = move |metrics: &CanvasMetrics, cx: &mut App| {
@@ -400,9 +417,13 @@ impl<H: FrameHost> HubFrame<H> {
         x: f64,
         y: f64,
         shift: bool,
+        pressed: bool,
         cx: &mut Context<'_, Self>,
     ) {
-        let Some(shown) = self.line_graph().shown else {
+        let views = self.line_graph_mut();
+        views.pointer = Some([x, y]);
+        views.pressed = pressed;
+        let Some(shown) = views.shown else {
             return;
         };
         let inside = shown.contains(x, y);
@@ -429,6 +450,7 @@ impl<H: FrameHost> HubFrame<H> {
 
     /// The renderer's window `mouseup` listener.
     pub(super) fn line_graph_mouse_up(&mut self, x: f64, shift: bool, cx: &mut Context<'_, Self>) {
+        self.line_graph_mut().pressed = false;
         let Some(shown) = self.line_graph().shown else {
             return;
         };

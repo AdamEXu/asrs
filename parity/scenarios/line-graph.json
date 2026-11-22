@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U11): the generated drive log on a restored empty line graph with the help overlay shown; three sidebar fields dragged into the left, right and discrete lists with the pointer, a selected time, a hover over the plot, a click that selects the hovered time, a drag pan, the left axis locked through main's edit-axis reply (what the axis menu's Lock Axis item sends), then trackpad zoom over the plot. Saved HubState (sources, locked range) and the timeline range are compared at each capture. Only .tab-bar is masked, until #214 (emoji titles)",
+  "about": "Interaction (U11): the generated drive log on a restored empty line graph with the help overlay shown; three sidebar fields (two numbers and the Mode string) dragged into the left, right and discrete lists with the pointer, a selected time, a hover over the plot, a click that selects the hovered time, a drag pan, the left axis locked through main's edit-axis reply (what the axis menu's Lock Axis item sends), then trackpad zoom over the plot. Saved HubState (sources, locked range) and the timeline range are compared at each capture. Only .tab-bar is masked, until #214 (emoji titles)",
   "actions": [
     {
       "open": [
@@ -15,8 +15,7 @@
         "sidebar": {
           "width": 300,
           "expanded": [
-            "/Drive",
-            "/DriverStation"
+            "/Drive"
           ]
         },
         "tabs": {
@@ -148,17 +147,17 @@
     {
       "mouse": "move",
       "x": 90,
-      "y": 330
+      "y": 180
     },
     {
       "mouse": "down",
       "x": 90,
-      "y": 330
+      "y": 180
     },
     {
       "mouse": "move",
       "x": 100,
-      "y": 334
+      "y": 184
     },
     {
       "mouse": "move",
