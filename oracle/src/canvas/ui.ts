@@ -22,16 +22,42 @@ export interface UiProbe {
   opacity: number;
 }
 
+export type ControlKind = "text" | "number" | "search" | "checkbox" | "segmented" | "range" | "progress";
+
+export interface UiSegment {
+  icon: string | null;
+  label: string | null;
+}
+
+export interface UiControl {
+  kind: ControlKind;
+  preset: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  value: string | null;
+  placeholder: string | null;
+  checked: boolean;
+  min: string | null;
+  max: string | null;
+  step: string | null;
+  segments: UiSegment[];
+  selected: number | null;
+}
+
 export interface UiScene {
   name: string;
   width: number;
   height: number;
   dark: boolean;
   background: [number, number, number];
+  css: string[];
   buttons: UiButton[];
   probes: UiProbe[];
   patches: { x: number; y: number; color: string }[];
-  pointer: { x: number; y: number; down: boolean } | null;
+  controls: UiControl[];
+  pointer: { x: number; y: number; down: boolean; selector: string } | null;
 }
 
 const FILTER_SOURCES = ["www/global.css", "www/hub.css", "www/renderers.css"];
@@ -105,9 +131,11 @@ function iconScene(upstream: string, dark: boolean): UiScene {
     height: y + 30,
     dark,
     background: dark ? [0x22, 0x22, 0x22] : [0xff, 0xff, 0xff],
+    css: [],
     buttons,
     probes,
     patches,
+    controls: [],
     pointer: null
   };
 }
@@ -123,14 +151,129 @@ function pointerScene(dark: boolean, down: boolean): UiScene {
       { x: 10, y: 10, size: BUTTON, icon: "play.svg", state: "normal" },
       { x: 50, y: 10, size: BUTTON, icon: "pause.svg", state: "normal" }
     ],
+    css: [],
     probes: [],
     patches: [],
-    pointer: { x: 20, y: 30, down }
+    controls: [],
+    pointer: { x: 20, y: 30, down, selector: "button" }
   };
 }
 
+function control(kind: ControlKind, preset: string, x: number, y: number, width: number, height: number, extra: Partial<UiControl> = {}): UiControl {
+  return {
+    kind,
+    preset,
+    x,
+    y,
+    width,
+    height,
+    value: null,
+    placeholder: null,
+    checked: false,
+    min: null,
+    max: null,
+    step: null,
+    segments: [],
+    selected: null,
+    ...extra
+  };
+}
+
+const SEGMENT_ICONS: UiSegment[] = [
+  { icon: "rotateleft.svg", label: null },
+  { icon: "rotateright.svg", label: null }
+];
+const SEGMENT_LABELS: UiSegment[] = ["30", "27", "24"].map((label) => ({ icon: null, label }));
+
+function hubInputScene(dark: boolean): UiScene {
+  const controls = [
+    control("search", "sidebar-search", 0, 0, 300, 39, { placeholder: "Search" }),
+    control("search", "sidebar-search", 0, 40, 300, 39, { placeholder: "Search", value: "Drive/Pose" }),
+    control("search", "sidebar-search", 0, 80, 300, 39, { placeholder: "Search", value: "/RealOutputs/Odometry/Robot with a long key that overflows the box" }),
+    control("number", "field-value", 0, 130, 300, 30, { placeholder: "12.345" }),
+    control("number", "field-value", 0, 160, 300, 30, { placeholder: "12.345", value: "-0.5" }),
+    control("number", "setting-block", 0, 200, 200, 40, { value: "5" }),
+    control("number", "setting-block", 0, 245, 200, 40, { value: "0.65" }),
+    control("segmented", "split", 320, 0, 200, 40, { segments: SEGMENT_ICONS, selected: null }),
+    control("segmented", "split", 320, 45, 200, 40, { segments: SEGMENT_LABELS, selected: 1 }),
+    control("segmented", "split", 320, 90, 200, 60, { segments: SEGMENT_LABELS, selected: 0 }),
+    control("range", "video-timeline", 320, 160, 260, 35, { min: "1", max: "300", step: "1", value: "1" }),
+    control("range", "video-timeline", 320, 200, 260, 35, { min: "1", max: "300", step: "1", value: "60" }),
+    control("range", "video-timeline", 320, 240, 260, 35, { min: "1", max: "300", step: "1", value: "300" }),
+    control("search", "console-filter", 0, 300, 400, 30, { placeholder: "Filter" }),
+    control("search", "console-filter", 0, 335, 400, 30, { placeholder: "Filter", value: "warning" }),
+    control("number", "table-jump", 420, 300, 175, 30, { placeholder: "0.000" }),
+    control("number", "table-jump", 420, 335, 175, 30, { placeholder: "0.000", value: "12.5" })
+  ];
+  return inputScene(`ui-inputs-hub-${dark ? "dark" : "light"}`, 600, 375, dark, ["www/hub.css", "www/renderers.css"], controls);
+}
+
+function promptInputScene(dark: boolean): UiScene {
+  const controls = [
+    control("number", "prompt", 10, 10, 200, 21),
+    control("number", "prompt", 10, 40, 200, 21, { value: "12.5" }),
+    control("text", "prompt", 10, 70, 200, 21, { value: "Line Graph" }),
+    control("text", "prompt", 10, 100, 200, 21, { value: "/U/logs", placeholder: "/U/logs" }),
+    control("text", "prompt", 10, 130, 200, 21, { placeholder: "/U/logs" })
+  ];
+  return inputScene(`ui-inputs-prompts-${dark ? "dark" : "light"}`, 230, 160, dark, ["www/prompts.css"], controls);
+}
+
+function downloadInputScene(dark: boolean): UiScene {
+  const controls = [0, 0.004, 0.4, 1].map((v, i) => control("progress", "download", 0, i * 50, 300, 45, { max: "1", min: "0", value: String(v) }));
+  return inputScene(`ui-inputs-download-${dark ? "dark" : "light"}`, 300, 200, dark, ["www/download.css"], controls);
+}
+
+function betaInputScene(dark: boolean): UiScene {
+  const controls = [false, true].map((checked, i) => control("checkbox", "beta", 10 + i * 40, 10, 30, 30, { checked }));
+  return inputScene(`ui-inputs-beta-${dark ? "dark" : "light"}`, 100, 50, dark, ["www/betaWelcome.css"], controls);
+}
+
+function inputScene(name: string, width: number, height: number, dark: boolean, css: string[], controls: UiControl[]): UiScene {
+  return {
+    name,
+    width,
+    height,
+    dark,
+    background: dark ? [0x22, 0x22, 0x22] : [0xff, 0xff, 0xff],
+    css,
+    buttons: [],
+    probes: [],
+    patches: [],
+    controls,
+    pointer: null
+  };
+}
+
+function hoverScene(dark: boolean): UiScene {
+  const scene = inputScene(`ui-inputs-hover-${dark ? "dark" : "light"}`, 220, 50, dark, ["www/hub.css"], [
+    control("segmented", "split", 0, 0, 200, 40, { segments: SEGMENT_LABELS, selected: 0 })
+  ]);
+  scene.pointer = { x: 100, y: 20, down: false, selector: "div.split > div" };
+  return scene;
+}
+
+function searchHoverScene(dark: boolean): UiScene {
+  const scene = inputScene(`ui-inputs-search-hover-${dark ? "dark" : "light"}`, 420, 80, dark, ["www/hub.css", "www/renderers.css"], [
+    control("search", "sidebar-search", 0, 0, 300, 39, { placeholder: "Search", value: "Drive/Pose" }),
+    control("search", "console-filter", 0, 45, 400, 30, { placeholder: "Filter", value: "warning" })
+  ]);
+  scene.pointer = { x: 150, y: 20, down: false, selector: "input.side-bar-search" };
+  return scene;
+}
+
 export function uiScenes(upstream: string): UiScene[] {
-  return [false, true].flatMap((dark) => [iconScene(upstream, dark), pointerScene(dark, false), pointerScene(dark, true)]);
+  return [false, true].flatMap((dark) => [
+    iconScene(upstream, dark),
+    pointerScene(dark, false),
+    pointerScene(dark, true),
+    hubInputScene(dark),
+    promptInputScene(dark),
+    downloadInputScene(dark),
+    betaInputScene(dark),
+    hoverScene(dark),
+    searchHoverScene(dark)
+  ]);
 }
 
 export function probeSvg(probe: UiProbe): string {
@@ -149,6 +292,57 @@ function imgStyle(btn: UiButton): string {
   if (btn.fit === undefined) return "";
   const { max, scale } = btn.fit;
   return ` style="max-width:${Math.round(max * 100)}%;max-height:${Math.round(max * 100)}%;transform:translate(-50%, -50%) scale(${Math.round(scale * 100)}%)"`;
+}
+
+function esc(value: string): string {
+  return attr(value).replace(/</g, "&lt;");
+}
+
+function valueAttrs(c: UiControl): string {
+  const parts: string[] = [];
+  for (const key of ["min", "max", "step", "value", "placeholder"] as const) {
+    const v = c[key];
+    if (v !== null) parts.push(` ${key}="${esc(v)}"`);
+  }
+  if (c.checked) parts.push(" checked");
+  return parts.join("");
+}
+
+function controlMarkup(c: UiControl, href: (rel: string) => string): string {
+  const a = valueAttrs(c);
+  const tag = ` data-control`;
+  switch (c.preset) {
+    case "sidebar-search":
+      return `<div class="side-bar-search-container"><input${tag} class="side-bar-search" type="search"${a}></div>`;
+    case "field-value":
+      return `<div class="field-value"><input${tag} type="number"${a}></div>`;
+    case "setting-block":
+      return `<div class="setting-blocks"><div class="input"><input${tag} type="number"${a}></div></div>`;
+    case "split": {
+      const segments = c.segments
+        .map((s, i) => {
+          const cls = i === c.selected ? ' class="selected"' : "";
+          const body = s.icon !== null ? `<img class="invertable" src="${href(`www/symbols/${s.icon}`)}">` : `<span>${esc(s.label ?? "")}</span>`;
+          return `<div tabindex="0"${cls}>${body}</div>`;
+        })
+        .join("");
+      return `<div class="setting-blocks"><div class="input" style="height:${c.height}px"><div${tag} class="split split-${c.segments.length}">${segments}</div></div></div>`;
+    }
+    case "video-timeline":
+      return `<div class="video-timeline-container" style="left:0px;right:0px"><input${tag} class="video-timeline-slider" type="range"${a}></div>`;
+    case "console-filter":
+      return `<table class="console-table" style="width:100%"><thead><tr><th style="height:${c.height}px"></th><th style="position:relative"><input${tag} class="filter" type="search"${a}></th></tr></thead></table>`;
+    case "table-jump":
+      return `<table class="data-table"><thead><tr><th style="height:${c.height}px"><input${tag} class="data-table-jump-input" type="number"${a}></th></tr></thead></table>`;
+    case "prompt":
+      return `<input${tag} type="${c.kind}"${a}>`;
+    case "download":
+      return `<progress${tag}${a}></progress>`;
+    case "beta":
+      return `<input${tag} type="checkbox"${a}>`;
+    default:
+      throw new Error(`unknown control preset ${c.preset}`);
+  }
 }
 
 export function uiHtml(scene: UiScene, upstream: string): string {
@@ -172,10 +366,17 @@ export function uiHtml(scene: UiScene, upstream: string): string {
   for (const p of scene.patches) {
     parts.push(`<div data-patch="${p.color}" style="position:absolute;left:${p.x}px;top:${p.y}px;width:20px;height:20px;background:${p.color}"></div>`);
   }
+  for (const c of scene.controls) {
+    parts.push(
+      `<div class="control-host" style="position:absolute;left:${c.x}px;top:${c.y}px;width:${c.width}px;height:${c.height}px">${controlMarkup(c, href)}</div>`
+    );
+  }
+  const sheets = ["www/global.css", ...scene.css].map((css) => `<link rel="stylesheet" href="${href(css)}">`).join("");
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
-    `<link rel="stylesheet" href="${href("www/global.css")}">` +
-    `<style>html,body{margin:0;overflow:hidden;background:rgb(${r},${g},${b})}</style>` +
+    sheets +
+    `<style>html,body{margin:0;overflow:hidden;background:rgb(${r},${g},${b})}` +
+    ".control-host table,.control-host th{border:none!important;background:none!important;box-shadow:none!important}</style>" +
     "</head><body>" +
     parts.join("") +
     "</body></html>"

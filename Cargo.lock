@@ -300,6 +300,7 @@ dependencies = [
  "asrs-model",
  "asrs-parity",
  "asrs-services",
+ "asrs-tabs",
  "asrs-ui",
  "async-channel",
  "image",
@@ -464,6 +465,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "asrs-canvas",
+ "asrs-js",
  "asrs-parity",
  "block2 0.6.2",
  "gpui-kit",

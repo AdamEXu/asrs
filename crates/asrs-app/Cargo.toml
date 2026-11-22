@@ -30,6 +30,7 @@ png = { version = "=0.18.1", optional = true }
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }
 asrs-parity = { path = "../asrs-parity" }
+asrs-tabs = { path = "../asrs-tabs" }
 image = { version = "=0.25.10", default-features = false }
 
 [lints]
