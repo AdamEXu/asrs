@@ -24,6 +24,7 @@ use std::rc::Rc;
 use asrs_canvas::text::FixedAdvance;
 use asrs_hub::timeline::{ScrollTarget, Timeline, TimelineFrame};
 use asrs_hub::touch_bar;
+use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_js::time::Clock;
 use asrs_log::log::Log;
@@ -728,7 +729,9 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                 Some(Json::Number(n)) => *n != 0.0 && !n.is_nan(),
                 _ => false,
             };
-            let overlay_x = init.get("clientX").and_then(Json::as_f64).unwrap_or(0.0)
+            // Blink's `MouseEvent::clientX()` returns `std::floor(client_x_)`
+            // (`core/events/mouse_event.h`), so a fractional init reads back floored.
+            let overlay_x = math::floor(init.get("clientX").and_then(Json::as_f64).unwrap_or(0.0))
                 - if hub.timeline_hidden {
                     0.0
                 } else {
