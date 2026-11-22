@@ -12,7 +12,7 @@ use crate::number::to_string as number_to_string;
 
 use case_table::{CASE_IGNORABLE, CASED, LOWER, UPPER};
 
-pub use encoding::{DecodeError, TextDecoder, text_encode};
+pub use encoding::{DecodeError, TextDecoder, response_text, text_encode};
 pub use uri::{UriError, decode_uri_component, encode_uri_component};
 
 use std::borrow::Borrow;
