@@ -44,8 +44,10 @@ fn timeline_range(path: &Path) -> [f64; 2] {
 }
 
 fn main() {
-    if !cfg!(any(target_os = "macos", target_os = "linux")) {
-        println!("wheel scenario: skipped, no headless renderer on this platform");
+    if !cfg!(target_os = "macos") {
+        println!(
+            "wheel scenario: skipped, the recorded wheel deltas are macOS input (Linux mapping is X05)"
+        );
         return;
     }
     let root = vectors::workspace_root();
