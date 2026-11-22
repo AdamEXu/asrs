@@ -176,11 +176,10 @@ different lines.
 
 A generator hash covers only what that vector's generator uses: the harness files its entry
 point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
-as paths under `oracle/`; `gen` keeps a committed copy in `oracle/inputs.json`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
-`protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page, `dom` evaluates
-the hub page bundle; a Blink `dom` vector adds the `dom` and `domBlinkMain` entries' inputs),
-`build.mjs`
-and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
+as paths under `oracle/`; `gen` keeps a committed copy in `oracle/inputs.json`), the bundles
+it starts at runtime (`runtimeLoads` in `build.mjs`: `protoRenderer` spawns the renderer check,
+`canvasMain` loads the canvas page, `dom` evaluates the hub page bundle; a Blink `dom` vector
+adds the `dom` and `domBlinkMain` entries' inputs), `build.mjs` and `package-lock.json`, then the spec files and the zone. `fn` specs use the `fn` entry.
 Files are hashed with CRLF as LF. Upstream sources, upstream's bundles and workers, the
 Electron version and the environment policy are not in the per-vector hash: the manifest
 header pins them (upstream commit, Electron, policy) and a change there makes every vector
@@ -243,6 +242,13 @@ it regenerate in memory and compare content with the differ. It also fails when
 repository files, so it needs no oracle install, upstream checkout or Electron. CI runs it, so
 an edit to `build.mjs`, `package-lock.json`, a harness source or a spec cannot merge without
 regenerating the vectors it touches.
+
+The committed graph cannot drift silently through an import edit: adding or removing an import
+changes a file already in the graph, which makes its vectors stale, and regenerating rewrites
+`oracle/inputs.json`. It can drift only when an unchanged specifier starts resolving to a
+different file, such as a new `x.ts` beside an imported `x.js` or a new `x/index.ts` for
+`./x`. Then `--check-hashes` keeps hashing the old file and misses edits to the new one until
+the next `gen`, and only `gen --check` (which rebuilds the graph) notices.
 
 Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
 checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a
