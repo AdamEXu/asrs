@@ -16,9 +16,9 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::snap_remainder;
 use asrs_ui::theme::Appearance;
 use gpui_kit::{
-    AnyElement, AnyView, AppContext, Context, Corners, IntoElement, Modifiers, MouseButton,
-    MouseDownEvent, MouseMoveEvent, ParentElement, PlatformInput, Render, Styled, Window, div,
-    point, px, rgb, size,
+    AnyElement, AnyView, AppContext, Context, IntoElement, Modifiers, MouseButton, MouseDownEvent,
+    MouseMoveEvent, ParentElement, PlatformInput, Render, Styled, Window, div, point, px, rgb,
+    size,
 };
 
 struct Button {
@@ -295,10 +295,11 @@ fn part(
                 min: min.parse().expect("min"),
                 max: max.parse().expect("max"),
             };
+            let container_height = rect[3];
             return Part::View(
                 cx.new(|_| {
                     let mut slider = Slider::new(model, SliderStyle::VIDEO_TIMELINE);
-                    slider.set_corner_radii(Corners::all(px(VIDEO_TIMELINE_RADIUS)));
+                    slider.set_clip(VIDEO_TIMELINE_RADIUS, container_height);
                     slider
                 })
                 .into(),

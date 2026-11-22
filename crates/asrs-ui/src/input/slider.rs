@@ -1,7 +1,7 @@
 use gpui_kit::{
-    BorderStyle, Bounds, Context, Corners, EventEmitter, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render,
-    Styled, Window, canvas, div, point, px, quad, rgb, size, transparent_black,
+    BorderStyle, Bounds, ContentMask, Context, Corners, EventEmitter, InteractiveElement,
+    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Render, Styled, Window, canvas, div, point, px, quad, rgb, size, transparent_black,
 };
 
 use crate::input::model::RangeModel;
@@ -38,7 +38,7 @@ pub fn pointer_proportion(track: f32, thumb: f32, x: f32) -> f64 {
 pub struct Slider<M: RangeModel> {
     model: M,
     style: SliderStyle,
-    corners: Corners<Pixels>,
+    clip: Option<Clip>,
     disabled: bool,
     bounds: Bounds<Pixels>,
     pressed: Option<String>,
@@ -51,18 +51,18 @@ impl<M: RangeModel> Slider<M> {
         Slider {
             model,
             style,
-            corners: Corners::default(),
+            clip: None,
             disabled: false,
             bounds: Bounds::default(),
             pressed: None,
         }
     }
 
-    /// The rounded clip of the box the slider fills (`div.video-timeline-container`'s
-    /// `border-radius` with `overflow: hidden`), applied to the track and to the thumb where it
-    /// meets a corner.
-    pub fn set_corner_radii(&mut self, corners: Corners<Pixels>) {
-        self.corners = corners;
+    /// The rounded box that clips the slider (`div.video-timeline-container`'s `border-radius`
+    /// with `overflow: hidden`): as wide as the slider and level with its top, `height` CSS px
+    /// tall, so its bottom corners only reach the slider when the box ends with it.
+    pub fn set_clip(&mut self, radius: f32, height: f32) {
+        self.clip = (radius > 0.0).then_some(Clip { radius, height });
     }
 
     pub fn model(&self) -> &M {
@@ -106,7 +106,7 @@ impl<M: RangeModel> Slider<M> {
 impl<M: RangeModel> Render for Slider<M> {
     fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let style = self.style;
-        let corners = self.corners;
+        let clip = self.clip;
         let proportion = self.model.proportion();
         let this = cx.entity();
         let mut root = div().id("slider").size_full().child(
@@ -114,37 +114,15 @@ impl<M: RangeModel> Render for Slider<M> {
                 move |bounds, _, cx| this.update(cx, |slider, _| slider.bounds = bounds),
                 move |bounds, _, window, _| {
                     let scale = window.scale_factor();
-                    window.paint_quad(quad(
-                        bounds,
-                        corners,
-                        rgb(style.track),
-                        px(0.0),
-                        transparent_black(),
-                        BorderStyle::Solid,
-                    ));
                     let thumb = style.thumb_width * scale;
                     let track = f32::from(bounds.size.width) * scale;
                     let x = thumb_offset(track, thumb, proportion).round() / scale;
-                    let at_left = px(x) < corners.top_left.max(corners.bottom_left);
-                    let at_right = px(x + style.thumb_width)
-                        > bounds.size.width - corners.top_right.max(corners.bottom_right);
-                    let zero = px(0.0);
-                    window.paint_quad(quad(
-                        Bounds {
-                            origin: point(bounds.origin.x + px(x), bounds.origin.y),
-                            size: size(px(style.thumb_width), bounds.size.height),
-                        },
-                        Corners {
-                            top_left: if at_left { corners.top_left } else { zero },
-                            bottom_left: if at_left { corners.bottom_left } else { zero },
-                            top_right: if at_right { corners.top_right } else { zero },
-                            bottom_right: if at_right { corners.bottom_right } else { zero },
-                        },
-                        rgb(style.thumb),
-                        px(0.0),
-                        transparent_black(),
-                        BorderStyle::Solid,
-                    ));
+                    let thumb_bounds = Bounds {
+                        origin: point(bounds.origin.x + px(x), bounds.origin.y),
+                        size: size(px(style.thumb_width), bounds.size.height),
+                    };
+                    paint_clipped(bounds, bounds, clip, style.track, window);
+                    paint_clipped(thumb_bounds, bounds, clip, style.thumb, window);
                 },
             )
             .size_full(),
@@ -176,6 +154,44 @@ impl<M: RangeModel> Render for Slider<M> {
         }
         root
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Clip {
+    radius: f32,
+    height: f32,
+}
+
+/// Fills `part` of the slider at `bounds` as clipped by `clip`. The clip's round rect is painted
+/// whole and masked to the part, so a 4 px thumb keeps the clip's corner where a quad of its own
+/// would clamp the radius to half its width.
+fn paint_clipped(
+    part: Bounds<Pixels>,
+    bounds: Bounds<Pixels>,
+    clip: Option<Clip>,
+    color: u32,
+    window: &mut Window,
+) {
+    let (shape, radius) = match clip {
+        Some(clip) => (
+            Bounds {
+                origin: bounds.origin,
+                size: size(bounds.size.width, px(clip.height)),
+            },
+            px(clip.radius),
+        ),
+        None => (part, px(0.0)),
+    };
+    window.with_content_mask(Some(ContentMask { bounds: part }), |window| {
+        window.paint_quad(quad(
+            shape,
+            Corners::all(radius),
+            rgb(color),
+            px(0.0),
+            transparent_black(),
+            BorderStyle::Solid,
+        ));
+    });
 }
 
 #[cfg(test)]
