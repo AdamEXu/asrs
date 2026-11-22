@@ -48,6 +48,8 @@ pub struct Patch {
 pub struct Capture {
     pub scale: f64,
     pub image: Rgba,
+    /// Converted from the display's colour space, which leaves up to 1 level on a patch.
+    pub normalized: bool,
     pub probes: Vec<(String, Vec<Rect>)>,
     pub texts: Vec<Rect>,
     pub masks: Vec<(String, Rect)>,
@@ -60,7 +62,8 @@ pub struct Capture {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlatformMask {
     Rect(String, Rect),
-    /// Pixels with alpha 0 on either side: the vibrancy or acrylic backdrop.
+    /// Pixels with alpha 0 on both sides: the vibrancy or acrylic backdrop. A pixel that is
+    /// transparent on one side only is compared.
     Transparent(String),
     /// One device-pixel row, from the bottom when negative.
     DeviceRow(String, i64),
@@ -172,7 +175,7 @@ fn masked_pixels(
                 let alpha = |img: &Rgba, i: usize| img.data[i * 4 + 3];
                 let mut n = 0;
                 for (i, m) in mask.iter_mut().enumerate() {
-                    if alpha(&reference.image, i) == 0 || alpha(&port.image, i) == 0 {
+                    if alpha(&reference.image, i) == 0 && alpha(&port.image, i) == 0 {
                         *m = true;
                         n += 1;
                     }
@@ -252,6 +255,7 @@ fn pct(n: usize, of: usize) -> f64 {
 
 pub fn compare(reference: &Capture, port: &Capture, platform: &[PlatformMask]) -> Outcome {
     let mut out = Outcome::default();
+    port_masks(reference, port, &mut out);
     layout(reference, port, &mut out);
     window(reference, port, platform, &mut out);
     canvases(reference, port, &mut out);
@@ -260,6 +264,36 @@ pub fn compare(reference: &Capture, port: &Capture, platform: &[PlatformMask]) -
         colour_patches(patches, reference, port, &mut out);
     }
     out
+}
+
+fn port_masks(reference: &Capture, port: &Capture, out: &mut Outcome) {
+    if port.masks.is_empty() {
+        return;
+    }
+    let unpaired: Vec<String> = port
+        .masks
+        .iter()
+        .filter(|(_, r)| {
+            !reference
+                .masks
+                .iter()
+                .any(|(_, u)| edges_within(*u, *r, LAYOUT_TOLERANCE))
+        })
+        .map(|(reason, r)| format!("{reason} {}", fmt_rect(*r)))
+        .collect();
+    out.push(
+        "5 masks",
+        "port masks",
+        unpaired.is_empty(),
+        if unpaired.is_empty() {
+            format!(
+                "{} masks, each within {LAYOUT_TOLERANCE} px of an upstream mask",
+                port.masks.len()
+            )
+        } else {
+            format!("no upstream mask for {}", unpaired.join("; "))
+        },
+    );
 }
 
 fn layout(reference: &Capture, port: &Capture, out: &mut Outcome) {
@@ -504,6 +538,15 @@ fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
             );
             continue;
         };
+        if ours.mode != dump.mode {
+            out.push(
+                "4 3D",
+                what,
+                false,
+                format!("upstream records {:?}, the port {:?}", dump.mode, ours.mode),
+            );
+            continue;
+        }
         let Some(edges) = &ours.edges else {
             out.push(
                 "4 3D",
@@ -515,7 +558,7 @@ fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
         };
         match pixel3d::gate4(&dump.image, &ours.image, edges) {
             Ok(g) => {
-                let pass = if ours.mode == RenderMode::Cinematic {
+                let pass = if dump.mode == RenderMode::Cinematic {
                     g.cinematic_pass
                 } else {
                     g.pass
@@ -526,7 +569,7 @@ fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
                     pass,
                     format!(
                         "{:?}: SSIM {:.5}, {:.3} % differ, interior max {} and {:.4} % of {} px, outlier blob {}, interior blob {}, mean dE00 {:.3}",
-                        ours.mode,
+                        dump.mode,
                         g.ssim,
                         g.differing_pct,
                         g.interior_max_delta,
@@ -587,44 +630,57 @@ fn colour_patches(patches: &[Patch], reference: &Capture, port: &Capture, out: &
             return;
         }
     }
-    for (side, capture, limit) in [
-        ("upstream", reference, PATCH_REFERENCE_MAX),
-        ("port", port, 0),
-    ] {
-        let mut exact = 0;
-        let mut worst = 0;
-        let mut over = Vec::new();
-        for p in patches {
-            match patch_delta(&capture.image, capture.scale, p.rect, p.rgb) {
-                Some(d) => {
-                    exact += usize::from(d == 0);
-                    worst = worst.max(d);
-                    if d > limit {
-                        over.push(format!(
-                            "rgb({},{},{}) off by {d}",
-                            p.rgb[0], p.rgb[1], p.rgb[2]
-                        ));
-                    }
+    out.checks.push(patch_check(
+        "upstream",
+        reference,
+        patches,
+        reference_patch_limit(reference),
+    ));
+    out.checks.push(patch_check("port", port, patches, 0));
+}
+
+pub fn reference_patch_limit(capture: &Capture) -> u8 {
+    if capture.normalized {
+        PATCH_REFERENCE_MAX
+    } else {
+        0
+    }
+}
+
+pub fn patch_check(side: &str, capture: &Capture, patches: &[Patch], limit: u8) -> Check {
+    let mut exact = 0;
+    let mut worst = 0;
+    let mut over = Vec::new();
+    for p in patches {
+        match patch_delta(&capture.image, capture.scale, p.rect, p.rgb) {
+            Some(d) => {
+                exact += usize::from(d == 0);
+                worst = worst.max(d);
+                if d > limit {
+                    over.push(format!(
+                        "rgb({},{},{}) off by {d}",
+                        p.rgb[0], p.rgb[1], p.rgb[2]
+                    ));
                 }
-                None => over.push(format!("rect {} outside the capture", fmt_rect(p.rect))),
             }
+            None => over.push(format!("rect {} outside the capture", fmt_rect(p.rect))),
         }
-        let n = over.len();
-        over.truncate(6);
-        out.push(
-            "colour patch",
-            side,
-            n == 0,
-            format!(
-                "{exact}/{} exact, max delta {worst} (limit {limit}){}",
-                patches.len(),
-                if n == 0 {
-                    String::new()
-                } else {
-                    format!("; {n} over: {}", over.join("; "))
-                }
-            ),
-        );
+    }
+    let n = over.len();
+    over.truncate(6);
+    Check {
+        gate: "colour patch",
+        what: side.to_owned(),
+        pass: n == 0 && !patches.is_empty(),
+        detail: format!(
+            "{exact}/{} exact, max delta {worst} (limit {limit}){}",
+            patches.len(),
+            if n == 0 {
+                String::new()
+            } else {
+                format!("; {n} over: {}", over.join("; "))
+            }
+        ),
     }
 }
 
@@ -640,6 +696,7 @@ mod tests {
                 height,
                 data: [200, 200, 200, 255].repeat((width * height) as usize),
             },
+            normalized: false,
             probes: Vec::new(),
             texts: Vec::new(),
             masks: Vec::new(),
@@ -707,22 +764,51 @@ mod tests {
             PlatformMask::DeviceColumn("border".into(), -1),
             PlatformMask::Transparent("backdrop".into()),
         ];
-        assert!(compare(&a, &b, &windows).pass());
-        assert!(!compare(&a, &b, &windows[..2]).pass());
+        assert_eq!(
+            failed(&compare(&a, &b, &windows)),
+            [("2 pixels", "window".into())]
+        );
+        let mut backdrop = a.clone();
+        for x in 0..10 {
+            paint(&mut backdrop, x, 10, [90, 90, 90, 0]);
+        }
+        let o = compare(&backdrop, &b, &windows);
+        assert!(o.pass());
+        assert!(
+            o.checks[0].detail.contains("backdrop (10 px)"),
+            "{}",
+            o.checks[0].detail
+        );
         let mut c = a.clone();
         c.masks = vec![("input".into(), [0.0, 0.0, 15.0, 0.5])];
         for x in 0..30 {
             paint(&mut c, x, 0, [0, 0, 0, 255]);
         }
+        let mut upstream = a.clone();
+        upstream.masks = c.masks.clone();
         let mut d = c.clone();
         paint(&mut d, 5, 5, [0, 0, 0, 255]);
-        assert!(compare(&a, &c, &[]).pass());
-        assert!(compare(&a, &d, &[]).pass());
+        assert!(compare(&upstream, &c, &[]).pass());
+        assert!(compare(&upstream, &d, &[]).pass());
         let mut e = c.clone();
         for x in 0..30 {
             paint(&mut e, x, 1, [0, 0, 0, 255]);
         }
-        assert!(!compare(&a, &e, &[]).pass());
+        assert!(!compare(&upstream, &e, &[]).pass());
+    }
+
+    #[test]
+    fn port_masks_need_an_upstream_mask() {
+        let mut a = capture(30, 20, 1.0);
+        a.masks = vec![("input".into(), [0.0, 0.0, 15.0, 2.0])];
+        let mut b = a.clone();
+        b.masks = vec![("input".into(), [1.0, 0.0, 14.0, 3.0])];
+        assert!(compare(&a, &b, &[]).pass());
+        b.masks.push(("hide".into(), [0.0, 5.0, 30.0, 10.0]));
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("5 masks", "port masks".into())]
+        );
     }
 
     #[test]
@@ -764,6 +850,11 @@ mod tests {
         let mut b = a.clone();
         assert!(compare(&a, &b, &[]).pass());
         paint(&mut a, 3, 3, [201, 200, 199, 255]);
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("colour patch", "upstream".into())]
+        );
+        a.normalized = true;
         assert!(compare(&a, &b, &[]).pass());
         paint(&mut a, 3, 3, [202, 200, 200, 255]);
         assert_eq!(
@@ -809,6 +900,9 @@ mod tests {
             [("2 pixels", "canvas c.png".into())]
         );
         b.canvases = a.canvases.clone();
+        b.gl[0].mode = RenderMode::Cinematic;
+        assert_eq!(failed(&compare(&a, &b, &[])), [("4 3D", "3D g.png".into())]);
+        b.gl[0].mode = RenderMode::Standard;
         b.gl[0].edges = None;
         assert_eq!(failed(&compare(&a, &b, &[])), [("4 3D", "3D g.png".into())]);
     }

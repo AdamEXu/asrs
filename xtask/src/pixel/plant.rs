@@ -12,7 +12,10 @@ use asrs_parity::utf16::Utf16String;
 use lcms2::{CIExyY, CIExyYTRIPLE, Intent, PixelFormat, Profile, ToneCurve, Transform};
 
 use super::gates::Rect;
-use super::{CaptureResult, capture_names, compare_variant, parity_dir, read_json, variant_dirs};
+use super::{
+    CaptureResult, capture_names, compare_roots, compare_variant, parity_dir, read_json,
+    variant_dirs,
+};
 use crate::Result;
 
 /// Neighbours further apart than this are an edge: the synthetic mesh's shading gradient stays
@@ -38,6 +41,11 @@ fn selftest_in(work: &Path, args: &[String]) -> Result {
             &dir,
             Some(icon),
             true,
+        )?);
+        results.extend(plant_roots(
+            &format!("synthetic {scale}x"),
+            &dir.join("roots"),
+            scale,
         )?);
     }
     for (i, arg) in args.iter().enumerate() {
@@ -608,6 +616,91 @@ fn plant_all(
     Ok(out)
 }
 
+fn greyscale(image: &Rgba) -> Rgba {
+    let data = image
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|p| {
+            let g = ((u32::from(p[0]) * 3 + u32::from(p[1]) * 6 + u32::from(p[2])) / 10) as u8;
+            [g, g, g, p[3]]
+        })
+        .collect();
+    Rgba {
+        data,
+        ..image.clone()
+    }
+}
+
+fn plant_roots(label: &str, work: &Path, scale: u32) -> Result<Vec<PlantResult>> {
+    let upstream = work.join("upstream");
+    let grey = upstream.join("ui/v");
+    synthetic::write(&grey, scale)?;
+    rewrite_image(&grey, "ui", greyscale)?;
+    synthetic::write_patches(&upstream.join("colour-patch/v"), scale)?;
+    let port = work.join("port");
+    for variant in variant_dirs(&upstream)? {
+        let rel = variant.strip_prefix(&upstream).expect("under root");
+        make_port(&variant, &port.join(rel))?;
+    }
+    let mut out = Vec::new();
+    out.push(judge(
+        label,
+        "identical runs with their colour patch",
+        true,
+        true,
+        &compare_roots(&upstream, &port)?,
+    ));
+
+    let extra = work.join("port-extra");
+    copy_dir(&port, &extra)?;
+    copy_dir(&extra.join("ui/v"), &extra.join("ui/w"))?;
+    out.push(judge(
+        label,
+        "a variant run by the port only",
+        false,
+        true,
+        &compare_roots(&upstream, &extra)?,
+    ));
+
+    let alone = work.join("upstream-no-patch");
+    copy_dir(&grey, &alone.join("ui/v"))?;
+    out.push(judge(
+        label,
+        "an upstream run without its colour patch",
+        false,
+        true,
+        &compare_roots(&alone, &port)?,
+    ));
+
+    let bare = work.join("upstream-p3-bare");
+    copy_dir(&upstream, &bare)?;
+    let p3 = display_p3()?;
+    for variant in variant_dirs(&bare)? {
+        for name in capture_names(&variant)? {
+            rewrite_image(&variant, &name, |image| {
+                to_p3(image, &p3).expect("sRGB to P3")
+            })?;
+        }
+    }
+    let grey_only = |results: Vec<CaptureResult>| -> Vec<CaptureResult> {
+        results
+            .into_iter()
+            .filter(|r| r.label.starts_with("ui"))
+            .collect()
+    };
+    let ui = grey_only(compare_roots(&bare, &port)?);
+    out.push(judge(
+        label,
+        "P3 pixels with no colour metadata on a grey UI, colour patch in the same run",
+        false,
+        true,
+        &ui,
+    ));
+    Ok(out)
+}
+
 mod synthetic {
     use std::fs;
     use std::path::Path;
@@ -761,23 +854,7 @@ mod synthetic {
         pixel::write_png(&captures.join("ui.gl-1.png"), &scene)?;
         let num = |v: f64| Json::Number(v);
         let rect = |r: Rect| Json::Array(r.iter().map(|v| Json::Number(*v)).collect());
-        write_json(
-            &dir.join("run.json"),
-            &Json::object([
-                ("scenario", Json::string("synthetic")),
-                ("platform", Json::string("darwin")),
-                ("colour", Json::string("srgb")),
-                (
-                    "displayProfile",
-                    Json::object([("source", Json::string("forced-srgb"))]),
-                ),
-                ("scale", num(f64::from(scale))),
-                (
-                    "window",
-                    Json::object([("width", num(WIDTH)), ("height", num(HEIGHT))]),
-                ),
-            ]),
-        )?;
+        run_json(dir, scale, WIDTH, HEIGHT)?;
         write_json(
             &captures.join("ui.json"),
             &Json::object([
@@ -827,6 +904,72 @@ mod synthetic {
             ]),
         )?;
         Ok(("ui".to_owned(), ICON))
+    }
+
+    fn run_json(dir: &Path, scale: u32, width: f64, height: f64) -> Result {
+        let num = |v: f64| Json::Number(v);
+        write_json(
+            &dir.join("run.json"),
+            &Json::object([
+                ("scenario", Json::string("synthetic")),
+                ("platform", Json::string("darwin")),
+                ("colour", Json::string("srgb")),
+                (
+                    "displayProfile",
+                    Json::object([("source", Json::string("forced-srgb"))]),
+                ),
+                ("scale", num(f64::from(scale))),
+                (
+                    "window",
+                    Json::object([("width", num(width)), ("height", num(height))]),
+                ),
+            ]),
+        )
+    }
+
+    pub fn write_patches(dir: &Path, scale: u32) -> Result {
+        const SIDE: f64 = 16.0;
+        let colours: Vec<[u8; 4]> = SWATCHES
+            .iter()
+            .copied()
+            .chain((0..8).map(|i| [i * 36, i * 36, i * 36, 255]))
+            .collect();
+        let (w, h) = (SIDE * 8.0, SIDE * 2.0);
+        let mut page = Canvas::new(w, h, scale as usize, [255, 255, 255, 255]);
+        let mut patches = Vec::new();
+        for (i, c) in colours.iter().enumerate() {
+            let r = [(i % 8) as f64 * SIDE, (i / 8) as f64 * SIDE, SIDE, SIDE];
+            page.rect(r, *c);
+            patches.push(Json::object([
+                (
+                    "rgb",
+                    Json::Array(c[..3].iter().map(|v| Json::Number(f64::from(*v))).collect()),
+                ),
+                ("rect", rects(&[r]).as_array().expect("one rect")[0].clone()),
+            ]));
+        }
+        let captures = dir.join("captures");
+        io(&captures, fs::create_dir_all(&captures))?;
+        pixel::write_png(&captures.join("patches.png"), &page.image)?;
+        run_json(dir, scale, w, h)?;
+        let num = |v: f64| Json::Number(v);
+        write_json(
+            &captures.join("patches.json"),
+            &Json::object([
+                ("name", Json::string("patches")),
+                ("scale", num(f64::from(scale))),
+                ("width", num(f64::from(page.image.width))),
+                ("height", num(f64::from(page.image.height))),
+                ("image", Json::string("patches.png")),
+                ("colourSpace", Json::string("srgb")),
+                ("probes", Json::object(Vec::<(&str, Json)>::new())),
+                ("texts", Json::Array(Vec::new())),
+                ("masks", Json::Array(Vec::new())),
+                ("canvases", Json::Array(Vec::new())),
+                ("gl", Json::Array(Vec::new())),
+                ("patches", Json::Array(patches)),
+            ]),
+        )
     }
 }
 
