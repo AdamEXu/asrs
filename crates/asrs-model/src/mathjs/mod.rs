@@ -7,7 +7,13 @@
 //! [`MathError`] named [`UNSUPPORTED`]. Other mathjs names are not known, so they are undefined
 //! symbols. Either way the dialog shows its failure alert; the deferred part is issue #246.
 
+mod eval;
+mod fns;
 pub mod node;
+mod parse;
+mod sigs;
+
+use std::rc::Rc;
 
 use asrs_js::string::JsString;
 
@@ -79,6 +85,8 @@ pub struct MathError {
 pub struct Function {
     /// The JS function's `name`.
     pub name: JsString,
+    /// The body when a `FunctionAssignmentNode` created it.
+    pub(crate) def: Option<Rc<eval::FunctionDef>>,
 }
 
 #[derive(Clone, Debug)]
@@ -125,31 +133,26 @@ pub struct ParamType {
 
 /// `parse(expr)`.
 pub fn parse(expr: &JsString) -> Result<Node, MathError> {
-    let _ = expr;
-    todo!("D08: port mathjs parse")
+    parse::parse(expr)
 }
 
 /// `evaluate(expr)` with a fresh scope.
 pub fn evaluate(expr: &JsString) -> Result<Value, MathError> {
-    let _ = expr;
-    todo!("D08: port mathjs evaluate")
+    eval::evaluate(expr)
 }
 
 /// `math[name](...args)` for a name in [`OPERATOR_FUNCTIONS`], [`FUNCTIONS`] or
 /// [`HELPER_FUNCTIONS`].
 pub fn call(name: &str, args: &[Value]) -> Result<Value, MathError> {
-    let _ = (name, args);
-    todo!("D08: port the subset functions")
+    fns::call(name, args)
 }
 
 /// `format(value, { truncate: 78 })`, the text FunctionNode puts in "is not a function" errors.
 pub fn format(value: &Value) -> JsString {
-    let _ = value;
-    todo!("D08: port mathjs format")
+    fns::format(value)
 }
 
 /// The typed function behind `name` (any name [`call`] takes): its JS `name` and signatures.
 pub fn signatures(name: &str) -> Option<(&'static str, &'static [Signature])> {
-    let _ = name;
-    todo!("D08: typed-function signature tables")
+    sigs::lookup(name)
 }
