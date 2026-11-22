@@ -156,6 +156,10 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genAssetDownload": [
+    "src/environment.ts",
+    "src/genAssetDownload.ts"
+  ],
   "genAssets": [
     "src/cve1.ts",
     "src/environment.ts",
