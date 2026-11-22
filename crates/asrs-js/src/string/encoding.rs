@@ -114,6 +114,18 @@ impl TextDecoder {
     }
 }
 
+/// `Response.prototype.text()`, which `.json()` parses, in Electron's undici: `utf8DecodeBytes`
+/// strips a leading UTF-8 BOM and then decodes with a default `TextDecoder`, which strips a
+/// second one.
+pub fn response_text(body: &[u8]) -> JsString {
+    let body = body.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(body);
+    let Ok(units) = decode_utf8(body, false) else {
+        unreachable!("non-fatal decoding cannot fail")
+    };
+    let skip = usize::from(units.first() == Some(&0xfeff));
+    JsString::from_units(units[skip..].to_vec())
+}
+
 const FFFD: u16 = 0xfffd;
 
 /// WHATWG UTF-8 decode: on a malformed sequence emit one U+FFFD and resync at the

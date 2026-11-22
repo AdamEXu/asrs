@@ -131,6 +131,172 @@ impl PathStyle {
         self.normalize(&JsString::from_units(joined))
     }
 
+    /// `path.dirname(path)`.
+    pub fn dirname(self, path: &JsString) -> JsString {
+        let p = path.units();
+        let len = p.len();
+        if len == 0 {
+            return JsString::from(".");
+        }
+        let mut root_end: Option<usize> = None;
+        let mut offset = 0;
+        match self {
+            PathStyle::Posix => {
+                let has_root = p[0] == SLASH;
+                let mut end = None;
+                let mut matched_slash = true;
+                for i in (1..len).rev() {
+                    if p[i] == SLASH {
+                        if !matched_slash {
+                            end = Some(i);
+                            break;
+                        }
+                    } else {
+                        matched_slash = false;
+                    }
+                }
+                return match end {
+                    None => JsString::from(if has_root { "/" } else { "." }),
+                    Some(1) if has_root => JsString::from("//"),
+                    Some(end) => JsString::from_units(p[..end].to_vec()),
+                };
+            }
+            PathStyle::Win32 => {
+                if len == 1 {
+                    return if self.is_sep(p[0]) {
+                        path.clone()
+                    } else {
+                        JsString::from(".")
+                    };
+                }
+                if self.is_sep(p[0]) {
+                    root_end = Some(1);
+                    offset = 1;
+                    if self.is_sep(p[1]) {
+                        let mut j = 2;
+                        let mut last = j;
+                        while j < len && !self.is_sep(p[j]) {
+                            j += 1;
+                        }
+                        if j < len && j != last {
+                            last = j;
+                            while j < len && self.is_sep(p[j]) {
+                                j += 1;
+                            }
+                            if j < len && j != last {
+                                last = j;
+                                while j < len && !self.is_sep(p[j]) {
+                                    j += 1;
+                                }
+                                if j == len {
+                                    return path.clone();
+                                }
+                                if j != last {
+                                    root_end = Some(j + 1);
+                                    offset = j + 1;
+                                }
+                            }
+                        }
+                    }
+                } else if is_device_root(p[0]) && p[1] == COLON {
+                    let end = if len > 2 && self.is_sep(p[2]) { 3 } else { 2 };
+                    root_end = Some(end);
+                    offset = end;
+                }
+            }
+        }
+        let mut end = None;
+        let mut matched_slash = true;
+        for i in (offset..len).rev() {
+            if self.is_sep(p[i]) {
+                if !matched_slash {
+                    end = Some(i);
+                    break;
+                }
+            } else {
+                matched_slash = false;
+            }
+        }
+        match end.or(root_end) {
+            None => JsString::from("."),
+            Some(end) => JsString::from_units(p[..end].to_vec()),
+        }
+    }
+
+    fn drive_prefix(self, p: &[u16]) -> usize {
+        if self == PathStyle::Win32 && p.len() >= 2 && is_device_root(p[0]) && p[1] == COLON {
+            2
+        } else {
+            0
+        }
+    }
+
+    /// `path.basename(path)`.
+    pub fn basename(self, path: &JsString) -> JsString {
+        let p = path.units();
+        let mut start = self.drive_prefix(p);
+        let mut end = None;
+        let mut matched_slash = true;
+        for i in (start..p.len()).rev() {
+            if self.is_sep(p[i]) {
+                if !matched_slash {
+                    start = i + 1;
+                    break;
+                }
+            } else if end.is_none() {
+                matched_slash = false;
+                end = Some(i + 1);
+            }
+        }
+        match end {
+            None => JsString::from(""),
+            Some(end) => JsString::from_units(p[start..end].to_vec()),
+        }
+    }
+
+    /// `path.extname(path)`.
+    pub fn extname(self, path: &JsString) -> JsString {
+        let p = path.units();
+        let start = self.drive_prefix(p);
+        let mut start_part = start;
+        let mut start_dot: Option<usize> = None;
+        let mut end: Option<usize> = None;
+        let mut matched_slash = true;
+        let mut pre_dot_state = 0;
+        for i in (start..p.len()).rev() {
+            let code = p[i];
+            if self.is_sep(code) {
+                if !matched_slash {
+                    start_part = i + 1;
+                    break;
+                }
+                continue;
+            }
+            if end.is_none() {
+                matched_slash = false;
+                end = Some(i + 1);
+            }
+            if code == DOT {
+                if start_dot.is_none() {
+                    start_dot = Some(i);
+                } else if pre_dot_state != 1 {
+                    pre_dot_state = 1;
+                }
+            } else if start_dot.is_some() {
+                pre_dot_state = -1;
+            }
+        }
+        match (start_dot, end) {
+            (Some(dot), Some(end))
+                if pre_dot_state != 0
+                    && !(pre_dot_state == 1 && dot + 1 == end && dot == start_part + 1) =>
+            {
+                JsString::from_units(p[dot..end].to_vec())
+            }
+            _ => JsString::from(""),
+        }
+    }
+
     /// `path.normalize(path)`.
     pub fn normalize(self, path: &JsString) -> JsString {
         match self {
