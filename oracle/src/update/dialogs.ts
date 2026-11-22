@@ -322,13 +322,21 @@ export async function run() {
   await mod.load();
   betaConfig = mod.BETA_CONFIG;
   install(mod.Constants);
-  out({ op: "config", result: toTree({ userData: "/fake/userData", betaFile: BETA_NAME }) });
+  out({
+    op: "config",
+    result: toTree({
+      userData: "/fake/userData",
+      betaFile: BETA_NAME,
+      version: electronFake.app.getVersion(),
+      translation: electronFake.app.runningUnderARM64Translation
+    })
+  });
 
   caseIndex++;
   electronFake.setPackaged(true);
   setNow(T0);
   const startupFetch: Fetch = { status: 200, body: releases("v27.0.0-alpha-7", "2027-01-08T23:30:00Z") };
-  await record("ready", { fetch: describeFetch(startupFetch) }, async () => {
+  await record("ready", { fetch: describeFetch(startupFetch), platform: "darwin", arch: "arm64", packaged: true, now: T0 }, async () => {
     scriptedFetch = startupFetch;
     electronFake.fireReady();
     await flush(12);
