@@ -12,6 +12,7 @@
   ],
   "canvasMain": [
     "src/canvas/dom.ts",
+    "src/canvas/lineGraphTraces.json",
     "src/canvas/page.ts",
     "src/canvas/png.ts",
     "src/canvas/scenes.ts",
@@ -320,6 +321,20 @@
     "src/genLogKeys.ts",
     "src/logRun.ts",
     "src/shims.ts"
+  ],
+  "genMenus": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/fakes/globals.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/genMenus.ts",
+    "src/genMenusMain.ts",
+    "src/shims.ts"
+  ],
+  "genMenusMain": [
+    "src/cve1.ts",
+    "src/genMenusMain.ts"
   ],
   "genMergeCalculator": [
     "src/corpus/bytes.ts",
