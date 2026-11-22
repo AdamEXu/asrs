@@ -1,23 +1,15 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
   "inputs": [
     "../logs/stale.json"
   ],
   "fixture": {
     "seed": 7,
-    "layout": [
-      {
-        "selector": "div.field-item",
-        "rect": [
-          0,
-          100,
-          300,
-          20
-        ]
-      }
-    ],
+    "geometry": "real",
     "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
       {
         "log": "../logs/stale.json"
       },

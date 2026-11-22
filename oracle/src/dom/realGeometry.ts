@@ -67,7 +67,7 @@ export function installRealGeometry(w: any, write: (record: object) => void) {
   wrap(elementProto, ["clientWidth", "clientHeight", "clientLeft", "clientTop"]);
   wrap(elementProto, ["scrollWidth", "scrollHeight", "scrollLeft", "scrollTop"]);
   wrap(w.HTMLElement.prototype, ["offsetWidth", "offsetHeight", "offsetLeft", "offsetTop"]);
-  for (const name of ["scrollTo", "scrollBy", "scrollIntoView"]) {
+  for (const name of ["scrollTo", "scrollBy", "scrollIntoView", "scrollIntoViewIfNeeded"]) {
     const original = elementProto[name];
     elementProto[name] = function (this: Element, ...args: unknown[]) {
       record("write", name, this, args);

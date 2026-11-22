@@ -47,7 +47,7 @@ use asrs_tabs::statistics::StatisticsCx;
 use asrs_tabs::video::{VideoController, VideoCx};
 
 use crate::factory::HubTabFactory;
-use crate::sidebar::{EventOutcome, RowRect, RowValue, Sidebar, SidebarEnv, Tuner};
+use crate::sidebar::{EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, Tuner};
 use crate::tabs::{Tabs, TabsError, TabsHost};
 
 pub const STATE_SAVE_PERIOD_MS: f64 = 250.0;
@@ -79,6 +79,9 @@ pub enum HubTimeout {
 /// A `requestAnimationFrame` callback. Each runs once; the hub requests the next one itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HubFrame {
+    /// `Sidebar`'s per-frame loop. Its 250 ms tuning interval and 3 s highlight timeouts run
+    /// in the first of these frames at or after they are due.
+    Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
     /// Every source list's own loop (previews, and re-rendering on a theme change).
@@ -170,12 +173,8 @@ pub trait HubView {
     fn renderer_top(&self, show_timeline: bool) -> f64;
     /// `prefers-color-scheme: dark`.
     fn dark(&self) -> bool;
-    /// Whether `scrollIntoViewIfNeeded` exists.
-    fn can_scroll_into_view(&self) -> bool;
-    /// `.field-item` rects in display order.
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect>;
-    /// `clientWidth` of a displayed `.field-value` showing `value`.
-    fn measure_value(&self, value: &RowValue) -> f64;
+    /// What the sidebar reads from its layout and scrolls.
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry;
     /// The layout of every tab's source lists.
     fn source_list_dom(&mut self) -> &mut dyn SourceListDom;
 }
@@ -578,6 +577,7 @@ impl HubModel {
             outbox: Vec::new(),
             open_xr: Vec::new(),
         };
+        host.request_animation_frame(HubFrame::Sidebar);
         let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
         host.request_animation_frame(HubFrame::SourceLists);
         host.request_animation_frame(HubFrame::Tabs);
@@ -649,17 +649,16 @@ impl HubModel {
     pub fn with_sidebar<R>(&mut self, f: impl FnOnce(&mut Sidebar, &mut SidebarEnv<'_>) -> R) -> R {
         let loading = self.loading_fields();
         let page = &mut self.page;
-        let view = &*page.view;
-        let measure = |value: &RowValue| view.measure_value(value);
+        let dark_theme = page.view.dark();
+        let inner_height = page.view.inner_height();
         let mut env = SidebarEnv {
             log: &page.log,
             selection: &mut page.selection,
             tuner: self.tuner.as_deref(),
-            dark_theme: view.dark(),
-            inner_height: view.inner_height(),
-            can_scroll_into_view: view.can_scroll_into_view(),
+            dark_theme,
+            inner_height,
             loading_fields: &loading,
-            measure_value: &measure,
+            geometry: page.view.sidebar_geometry(),
         };
         f(&mut self.sidebar, &mut env)
     }
@@ -862,8 +861,7 @@ impl HubModel {
 
     fn active_fields(&mut self) -> Vec<JsString> {
         let mut fields = self.tabs.active_fields(&self.page, &self.page.log.borrow());
-        let rects = self.page.view.sidebar_rects(&self.sidebar);
-        let sidebar = self.with_sidebar(|sidebar, env| sidebar.get_active_fields(env, &rects));
+        let sidebar = self.with_sidebar(|sidebar, env| sidebar.get_active_fields(env));
         fields.extend(sidebar);
         fields
     }
@@ -1184,6 +1182,14 @@ impl HubModel {
     /// Runs one animation-frame callback the hub requested.
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
+            HubFrame::Sidebar => {
+                let now = host.now();
+                self.with_sidebar(|sidebar, env| {
+                    sidebar.fire_timers(now, env);
+                    sidebar.periodic(env);
+                });
+                host.request_animation_frame(HubFrame::Sidebar);
+            }
             HubFrame::Tabs => {
                 let out = self.tabs.periodic(&mut self.page);
                 for update in out.satellite_updates {
@@ -1972,7 +1978,6 @@ fn uncaught<T>(task: &'static str, result: Result<T, TabsError>, host: &mut dyn 
 fn sidebar_result(outcome: EventOutcome) -> Result<(), TabsError> {
     let message = match outcome {
         EventOutcome::Ok => return Ok(()),
-        EventOutcome::HighlightAborted => "fieldElement.scrollIntoViewIfNeeded is not a function",
         EventOutcome::MergedFilenameMissing => {
             "Cannot read properties of undefined (reading 'replace')"
         }

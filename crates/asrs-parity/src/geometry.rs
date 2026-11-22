@@ -128,6 +128,11 @@ impl ScriptedReads {
         self.queue.front()
     }
 
+    /// How many records the port has asked for so far.
+    pub fn consumed(&self) -> usize {
+        self.recorded - self.queue.len()
+    }
+
     fn fail(&mut self, message: String) {
         self.error.get_or_insert(message);
     }
