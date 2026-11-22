@@ -654,3 +654,113 @@ impl<M: SelectModel> Render for Select<M> {
         root
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::Modifiers;
+
+    use super::*;
+
+    fn key(key: &str, key_char: Option<&str>, m: Modifiers) -> Keystroke {
+        Keystroke {
+            modifiers: m,
+            key: key.to_owned(),
+            key_char: key_char.map(str::to_owned),
+        }
+    }
+
+    fn with(f: impl FnOnce(&mut Modifiers)) -> Modifiers {
+        let mut m = Modifiers::default();
+        f(&mut m);
+        m
+    }
+
+    #[test]
+    fn mac_keys() {
+        let none = Modifiers::default();
+        let alt = with(|m| m.alt = true);
+        let ctrl = with(|m| m.control = true);
+        let cmd = with(|m| m.platform = true);
+        let shift = with(|m| m.shift = true);
+        let open = SelectKey::OpenPopup;
+        let ignore = SelectKey::Ignore;
+        for (stroke, active, want) in [
+            (key("down", None, none), false, open),
+            (key("up", None, none), true, open),
+            (key("down", None, alt), false, open),
+            (key("up", None, cmd), false, open),
+            (key("f4", None, none), false, open),
+            (key("f4", None, alt), false, ignore),
+            (key("f4", None, ctrl), false, ignore),
+            (key("space", Some(" "), none), false, open),
+            (key("space", Some(" "), ctrl), false, open),
+            (
+                key("space", Some(" "), none),
+                true,
+                SelectKey::TypeAhead(0x20),
+            ),
+            (key("a", Some("a"), none), false, SelectKey::TypeAhead(0x61)),
+            (key("a", Some("A"), shift), true, SelectKey::TypeAhead(0x41)),
+            (key("a", Some("a"), ctrl), false, ignore),
+            (key("v", Some("\u{221a}"), alt), false, ignore),
+            (key("a", None, cmd), false, ignore),
+            (key("enter", Some("\r"), none), false, ignore),
+            (key("tab", Some("\t"), none), false, ignore),
+            (key("escape", None, none), false, ignore),
+            (key("home", None, none), false, ignore),
+            (key("left", None, none), false, ignore),
+            (key("pagedown", None, none), false, ignore),
+            (
+                key("e", Some("\u{e9}"), none),
+                false,
+                SelectKey::TypeAhead(0xe9),
+            ),
+            (key("x", Some("\u{1f600}"), none), false, ignore),
+        ] {
+            assert_eq!(
+                select_key(&stroke, active),
+                want,
+                "{stroke:?} active {active}"
+            );
+        }
+    }
+
+    fn item(label: &str, group: bool, enabled: bool, hidden: bool) -> SelectItem {
+        SelectItem {
+            label: label.to_owned(),
+            group,
+            enabled,
+            hidden,
+        }
+    }
+
+    #[test]
+    fn popup_rows_skip_hidden_items() {
+        let items = [
+            item("Visible Range", false, true, false),
+            item("Live: 30 Seconds", false, true, true),
+            item("FRC Fields", true, true, false),
+            item("    2025 Field", false, false, false),
+            item("    2024 Field", false, true, false),
+        ];
+        let (menu, map) = popup_menu(&items, Some(4));
+        assert_eq!(map, vec![0, 2, 3, 4]);
+        assert_eq!(menu.selected, Some(3));
+        assert_eq!(menu.font_size, 13.0);
+        let rows: Vec<(&str, SelectMenuItemKind, bool)> = menu
+            .items
+            .iter()
+            .map(|r| (r.label.as_str(), r.kind, r.enabled))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("Visible Range", SelectMenuItemKind::Option, true),
+                ("FRC Fields", SelectMenuItemKind::Group, true),
+                ("    2025 Field", SelectMenuItemKind::Option, false),
+                ("    2024 Field", SelectMenuItemKind::Option, true),
+            ]
+        );
+        assert_eq!(popup_menu(&items, Some(1)).0.selected, None);
+    }
+}
