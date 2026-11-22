@@ -5,13 +5,23 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{ErrorKind, Read};
 
-use asrs_js::string::JsError;
+use asrs_js::string::{JsError, JsString};
+
+use crate::path::PathStyle;
 
 /// Where `fs.open` followed by `fs.readFile(fd)` failed.
 #[derive(Debug)]
 pub enum ReadError {
     Open(JsError),
     Read(JsError),
+}
+
+/// A `fs.Dirent` from `readdirSync(dir, { withFileTypes: true })`: `is_dir` is
+/// `isDirectory()`, which is false for a symlink to a directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DirEntry {
+    pub name: String,
+    pub is_dir: bool,
 }
 
 pub trait Fs {
@@ -32,6 +42,12 @@ pub trait Fs {
 
     /// `fs.rmSync(path, { force: true })`.
     fn remove(&self, path: &str);
+
+    /// `fs.readdirSync(path, { withFileTypes: true })`, in no particular order.
+    fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>, JsError>;
+
+    /// `fs.mkdirSync(path)`.
+    fn mkdir(&self, path: &str) -> Result<(), JsError>;
 }
 
 /// libuv's code and description for the errors file opens and writes commonly hit.
@@ -110,6 +126,23 @@ impl Fs for RealFs {
     fn remove(&self, path: &str) {
         let _ = std::fs::remove_file(path);
     }
+
+    fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>, JsError> {
+        let err = |e: std::io::Error| node_error("scandir", path, &e);
+        let mut entries = Vec::new();
+        for entry in std::fs::read_dir(path).map_err(err)? {
+            let entry = entry.map_err(err)?;
+            entries.push(DirEntry {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                is_dir: entry.file_type().map_err(err)?.is_dir(),
+            });
+        }
+        Ok(entries)
+    }
+
+    fn mkdir(&self, path: &str) -> Result<(), JsError> {
+        std::fs::create_dir(path).map_err(|e| node_error("mkdir", path, &e))
+    }
 }
 
 /// An injected [`MemFs`] error, like a file without read or write permission.
@@ -121,10 +154,12 @@ pub enum Failure {
     ReadOpened,
 }
 
-/// An in-memory filesystem recording write calls in order, for the vector harness.
+/// An in-memory filesystem recording write calls in order, for the vector harness. Like the
+/// oracle's fake, directories exist only when put or made and are keyed by their normalized path.
 #[derive(Default)]
 pub struct MemFs {
     files: RefCell<BTreeMap<String, Vec<u8>>>,
+    dirs: RefCell<BTreeSet<String>>,
     failures: RefCell<BTreeMap<String, Failure>>,
     missing_dirs: RefCell<BTreeSet<String>>,
     writes: RefCell<Vec<String>>,
@@ -148,6 +183,19 @@ impl MemFs {
         self.files
             .borrow_mut()
             .insert(path.to_owned(), data.to_vec());
+    }
+
+    /// Seed a directory, like the oracle's `putDir`.
+    pub fn put_dir(&self, path: &str) {
+        self.dirs.borrow_mut().insert(dir_key(path));
+    }
+
+    pub fn dirs(&self) -> Vec<String> {
+        self.dirs.borrow().iter().cloned().collect()
+    }
+
+    fn is_dir(&self, path: &str) -> bool {
+        self.dirs.borrow().contains(&dir_key(path))
     }
 
     pub fn set_failure(&self, path: &str, failure: Option<Failure>) {
@@ -191,9 +239,33 @@ impl MemFs {
     }
 }
 
+fn dir_key(path: &str) -> String {
+    let normalized = PathStyle::Posix
+        .normalize(&JsString::from(path))
+        .to_string_lossy();
+    let mut key = normalized.as_str();
+    while key.len() > 1 && key.ends_with('/') {
+        key = &key[..key.len() - 1];
+    }
+    key.to_owned()
+}
+
+/// `path.posix.dirname` of a normalized key.
+fn parent_key(key: &str) -> &str {
+    match key.rfind('/') {
+        Some(0) => "/",
+        Some(i) => &key[..i],
+        None => ".",
+    }
+}
+
+fn base_name(key: &str) -> &str {
+    key.rfind('/').map_or(key, |i| &key[i + 1..])
+}
+
 impl Fs for MemFs {
     fn exists(&self, path: &str) -> bool {
-        self.files.borrow().contains_key(path)
+        self.files.borrow().contains_key(path) || self.is_dir(path)
     }
 
     fn read(&self, path: &str) -> Result<Vec<u8>, JsError> {
@@ -242,5 +314,50 @@ impl Fs for MemFs {
 
     fn remove(&self, path: &str) {
         self.files.borrow_mut().remove(path);
+    }
+
+    fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>, JsError> {
+        let key = dir_key(path);
+        if !self.dirs.borrow().contains(&key) {
+            if self.files.borrow().contains_key(path) {
+                return Err(JsError::new(
+                    "Error",
+                    format!("ENOTDIR: not a directory, scandir '{path}'"),
+                ));
+            }
+            return Err(enoent("scandir", path));
+        }
+        let mut children = BTreeMap::new();
+        let mut visit = |entry: &str, is_dir: bool| {
+            if entry != key && parent_key(entry) == key {
+                children.insert(base_name(entry).to_owned(), is_dir);
+            }
+        };
+        for entry in self.files.borrow().keys() {
+            visit(entry, false);
+        }
+        for entry in self.dirs.borrow().iter() {
+            visit(entry, true);
+        }
+        Ok(children
+            .into_iter()
+            .map(|(name, is_dir)| DirEntry { name, is_dir })
+            .collect())
+    }
+
+    fn mkdir(&self, path: &str) -> Result<(), JsError> {
+        let key = dir_key(path);
+        if self.files.borrow().contains_key(path) || self.dirs.borrow().contains(&key) {
+            return Err(JsError::new(
+                "Error",
+                format!("EEXIST: file already exists, mkdir '{path}'"),
+            ));
+        }
+        let parent = parent_key(&key);
+        if parent != "/" && parent != "." && !self.dirs.borrow().contains(parent) {
+            return Err(enoent("mkdir", path));
+        }
+        self.dirs.borrow_mut().insert(key);
+        Ok(())
     }
 }
