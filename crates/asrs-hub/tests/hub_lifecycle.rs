@@ -780,11 +780,12 @@ fn compare(spec: &Path, id: &str) -> Result<usize, String> {
         }
         for (key, value) in &emit.0 {
             let expected = record.value(key).map_err(|e| e.0)?;
-            if !vectors::values_match(&expected, value)
-                && let Some(report) = asrs_parity::diff::report(&expected, value)
-            {
+            if !vectors::values_match(&expected, value) {
+                let report = asrs_parity::diff::report(&expected, value)
+                    .unwrap_or_else(|| "encodings differ".to_owned());
                 return Err(format!("line {} ({key}): {report}", record.line));
             }
+
         }
     }
     if emitted.len() > records.len() {

@@ -19,7 +19,7 @@ use asrs_formats::historical::{
 };
 use asrs_formats::worker::{Abort, DecodeWorker, Request, Response};
 use asrs_js::number;
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::log_key_utils::MERGE_PREFIX;
@@ -44,7 +44,7 @@ use asrs_tabs::statistics::StatisticsCx;
 use asrs_tabs::video::{VideoController, VideoCx};
 
 use crate::factory::HubTabFactory;
-use crate::sidebar::{RowRect, RowValue, Sidebar, SidebarEnv, Tuner};
+use crate::sidebar::{EventOutcome, RowRect, RowValue, Sidebar, SidebarEnv, Tuner};
 use crate::tabs::{Tabs, TabsError, TabsHost};
 
 pub const STATE_SAVE_PERIOD_MS: f64 = 250.0;
@@ -218,6 +218,10 @@ pub struct HubPage {
     assets: Option<AdvantageScopeAssets>,
     assets_raw: JsValue,
     type_memory: SourceListTypeMemory,
+    /// `window.typeMemory` as restored, which may hold entries of other shapes.
+    type_memory_raw: JsValue,
+    /// `type_memory` when last written into `type_memory_raw`.
+    type_memory_synced: SourceListTypeMemory,
     realm: JsRealm,
     clock: Rc<dyn Clock>,
     view: Box<dyn HubView>,
@@ -252,6 +256,40 @@ impl HubPage {
 
     pub fn type_memory(&self) -> &SourceListTypeMemory {
         &self.type_memory
+    }
+
+    /// `window.typeMemory = data`. Source lists read the entries of the shape they write.
+    fn restore_type_memory(&mut self, data: &JsValue) {
+        self.type_memory = type_memory_entries(data);
+        self.type_memory_synced = self.type_memory.clone();
+        self.type_memory_raw = data.clone();
+    }
+
+    /// `window.typeMemory`: the restored value with the entries source lists wrote since.
+    fn type_memory_value(&mut self) -> Result<JsValue, &'static str> {
+        for (id, entries) in self.type_memory.iter() {
+            for (key, entry) in entries.iter() {
+                let synced = self
+                    .type_memory_synced
+                    .get_key(id)
+                    .and_then(|e| e.get_key(key));
+                if synced == Some(entry) {
+                    continue;
+                }
+                let JsValue::Object(ids) = &mut self.type_memory_raw else {
+                    return Err("type memory written into a value that is not an object");
+                };
+                if ids.get_key(id).is_none() {
+                    ids.insert(id.clone(), JsValue::Object(JsObject::new()));
+                }
+                let Some(JsValue::Object(raw)) = ids.get_units_mut(id.units()) else {
+                    return Err("type memory written under an id that is not an object");
+                };
+                raw.insert(key.clone(), entry.to_js());
+            }
+        }
+        self.type_memory_synced = self.type_memory.clone();
+        Ok(self.type_memory_raw.clone())
     }
 
     pub fn view(&self) -> &dyn HubView {
@@ -522,6 +560,9 @@ impl HubModel {
             assets: None,
             assets_raw: JsValue::Null,
             type_memory: SourceListTypeMemory::new(),
+            type_memory_raw: JsValue::Object(JsObject::new()),
+            type_memory_synced: SourceListTypeMemory::new(),
+
             realm,
             clock,
             view,
@@ -735,17 +776,6 @@ impl HubModel {
         );
     }
 
-    fn report(
-        &mut self,
-        task: &'static str,
-        result: Result<(), TabsError>,
-        host: &mut dyn HubHost,
-    ) {
-        if let Err(e) = result {
-            host.exception(task, format!("{e}"));
-        }
-    }
-
     /// Sends what the page queued during a task: the tabs', the selection's and the
     /// sidebar's main messages.
     fn flush(&mut self, host: &mut dyn HubHost) {
@@ -791,16 +821,15 @@ impl HubModel {
         self.page.selection.set_context(context);
     }
 
-    fn sidebar_refresh(&mut self, host: &mut dyn HubHost) {
-        let result = self.with_sidebar(|sidebar, env| sidebar.refresh(env, false));
-        if let Err(outcome) = result {
-            host.exception("sidebar", format!("{outcome:?}"));
+    fn sidebar_refresh(&mut self) -> Result<(), TabsError> {
+        match self.with_sidebar(|sidebar, env| sidebar.refresh(env, false)) {
+            Ok(()) => Ok(()),
+            Err(outcome) => sidebar_result(outcome),
         }
     }
 
-    fn tabs_refresh(&mut self, host: &mut dyn HubHost) {
-        let result = self.tabs.refresh(&mut self.page);
-        self.report("tabs", result, host);
+    fn tabs_refresh(&mut self) -> Result<(), TabsError> {
+        self.tabs.refresh(&mut self.page)
     }
 
     fn active_fields(&mut self) -> Vec<JsString> {
@@ -811,17 +840,21 @@ impl HubModel {
         fields
     }
 
-    /// Runs `f` on historical source `index` and then handles the events it raised, as the
-    /// callbacks upstream passes to `openFile` would have. Upstream runs them synchronously
-    /// inside the source; they are deferred to its return because they borrow the `Log` the
-    /// source is writing, so a callback that throws no longer cuts the source's work short.
+    /// Runs `f` on historical source `index` and then hands the events it raised to the
+    /// callbacks upstream passes to `openFile`, which upstream runs inside the source; here
+    /// they borrow the `Log` the source writes, so they run after it. Only their `refresh`
+    /// calls can throw, and a throw ends the upstream handler: the events after it are
+    /// dropped, and the `loadAllFields()` resolutions among them stay queued on the source.
+    /// The source's own state is not rolled back; the one change a handler makes after a
+    /// refresh, `updateFieldRequest`'s status, never follows a throwing one, since every
+    /// handler that changes the field keys refreshes before it returns.
     fn with_source<R>(
         &mut self,
         index: usize,
         active_fields: &[JsString],
         host: &mut dyn HubHost,
         f: impl FnOnce(&mut HistoricalDataSource, &mut PageContext<'_>) -> R,
-    ) -> R {
+    ) -> Result<R, TabsError> {
         let mut adapter = SourceAdapter {
             host,
             active_fields,
@@ -837,11 +870,19 @@ impl HubModel {
             };
             f(&mut self.historical[index].source, &mut cx)
         };
-        let events = adapter.events;
-        for event in events {
-            self.source_event(index, event, host);
+        let mut events = adapter.events.into_iter();
+        while let Some(event) = events.next() {
+            if let Err(e) = self.source_event(index, event, host) {
+                let unresolved = events
+                    .filter(|e| matches!(e, SourceEvent::AllFieldsLoaded))
+                    .count();
+                if let Some(entry) = self.historical.get_mut(index) {
+                    entry.source.requeue_load_all(unresolved);
+                }
+                return Err(e);
+            }
         }
-        result
+        Ok(result)
     }
 
     fn update_loading(&mut self) {
@@ -866,7 +907,12 @@ impl HubModel {
         }
     }
 
-    fn source_event(&mut self, index: usize, event: SourceEvent, host: &mut dyn HubHost) {
+    fn source_event(
+        &mut self,
+        index: usize,
+        event: SourceEvent,
+        host: &mut dyn HubHost,
+    ) -> Result<(), TabsError> {
         match event {
             SourceEvent::Status {
                 status,
@@ -879,13 +925,14 @@ impl HubModel {
                 self.update_loading();
             }
             SourceEvent::Refresh { has_new_fields } => {
-                self.sidebar_refresh(host);
+                self.sidebar_refresh()?;
                 if has_new_fields {
-                    self.tabs_refresh(host);
+                    self.tabs_refresh()?;
                 }
             }
             SourceEvent::AllFieldsLoaded => self.all_fields_loaded(index),
         }
+        Ok(())
     }
 
     fn source_status(
@@ -969,12 +1016,13 @@ impl HubModel {
             .collect();
     }
 
-    fn stop_historical(&mut self, host: &mut dyn HubHost) {
+    fn stop_historical(&mut self, host: &mut dyn HubHost) -> Result<(), TabsError> {
         for index in 0..self.historical.len() {
-            self.with_source(index, &[], host, |source, cx| source.stop(cx));
+            self.with_source(index, &[], host, |source, cx| source.stop(cx))?;
         }
         self.historical.clear();
         self.sync_filenames();
+        Ok(())
     }
 
     /// `startHistorical(path, clear, merge)`.
@@ -984,11 +1032,11 @@ impl HubModel {
         clear: bool,
         merge: bool,
         host: &mut dyn HubHost,
-    ) {
+    ) -> Result<(), TabsError> {
         let clear = clear || !merge;
         let mut original_timeline = None;
         if clear {
-            self.stop_historical(host);
+            self.stop_historical(host)?;
             let selection = &mut self.page.selection;
             original_timeline = Some((
                 selection.get_timeline_range(),
@@ -997,8 +1045,8 @@ impl HubModel {
             let log: SharedLog = Rc::new(RefCell::new(Log::new(true)));
             self.page.log = log.clone();
             self.page.selection.set_log(log);
-            self.sidebar_refresh(host);
-            self.tabs_refresh(host);
+            self.sidebar_refresh()?;
+            self.tabs_refresh()?;
         }
 
         if self.has_live_source {
@@ -1029,7 +1077,7 @@ impl HubModel {
         };
         self.with_source(index, &[], host, |source, cx| {
             source.open_file(path, &prefix, cx)
-        });
+        })
     }
 
     fn route(&self, uuid: &str) -> Option<usize> {
@@ -1041,9 +1089,10 @@ impl HubModel {
         match timeout {
             HubTimeout::Source(timeout) => {
                 if let Some(index) = self.route(timeout.source()) {
-                    self.with_source(index, &[], host, |source, cx| {
+                    let result = self.with_source(index, &[], host, |source, cx| {
                         source.run_timeout(timeout, cx)
                     });
+                    uncaught("setTimeout", result, host);
                 }
             }
         }
@@ -1058,10 +1107,12 @@ impl HubModel {
                 let state = self.save_state();
                 host.send_main_message(NamedMessage::new(HubToMain::SaveState, state));
             }
-            HubInterval::SaveTypeMemory => {
-                let memory = type_memory_to_js(&self.page.type_memory);
-                host.send_main_message(NamedMessage::new(HubToMain::SaveTypeMemory, memory));
-            }
+            HubInterval::SaveTypeMemory => match self.page.type_memory_value() {
+                Ok(memory) => {
+                    host.send_main_message(NamedMessage::new(HubToMain::SaveTypeMemory, memory))
+                }
+                Err(what) => host.exception("setInterval", format!("unmodeled: {what}")),
+            },
             HubInterval::TouchBarSlider => {
                 if self.platform.platform == JsString::from("darwin") {
                     let mut range = self.page.log.borrow().get_timestamp_range();
@@ -1088,9 +1139,10 @@ impl HubModel {
                 if let Some(index) = self.route(uuid) {
                     let active = self.active_fields();
                     let uuid = uuid.clone();
-                    self.with_source(index, &active, host, |source, cx| {
+                    let result = self.with_source(index, &active, host, |source, cx| {
                         source.fire_interval(&uuid, cx)
                     });
+                    uncaught("setInterval", result, host);
                 }
             }
         }
@@ -1115,9 +1167,10 @@ impl HubModel {
             HubFrame::Source(uuid) => {
                 if let Some(index) = self.route(uuid) {
                     let uuid = uuid.clone();
-                    self.with_source(index, &[], host, |source, cx| {
+                    let result = self.with_source(index, &[], host, |source, cx| {
                         source.animation_frame(&uuid, cx)
                     });
+                    uncaught("requestAnimationFrame", result, host);
                 }
             }
         }
@@ -1132,14 +1185,15 @@ impl HubModel {
                 root.worker_message(source, response, cx)
             });
             match result {
-                Ok(()) => {}
-                Err(Abort::Threw) => host.exception("worker", "threw".to_owned()),
-                Err(Abort::NeverReturns) => {
+                Ok(Ok(())) => {}
+                Ok(Err(Abort::Threw)) => host.exception("worker", "threw".to_owned()),
+                Ok(Err(Abort::NeverReturns)) => {
                     host.exception("worker", "the page realm never returns".to_owned())
                 }
-                Err(Abort::Unmodeled(what)) => {
+                Ok(Err(Abort::Unmodeled(what))) => {
                     host.exception("worker", format!("unmodeled: {what}"))
                 }
+                Err(e) => host.exception("worker", e.to_string()),
             }
         }
         self.microtasks(host);
@@ -1149,9 +1203,13 @@ impl HubModel {
     /// `historical-data`: main's reply to a source's read, handed to every source.
     pub fn historical_data(&mut self, reply: &MainReply, host: &mut dyn HubHost) {
         for index in 0..self.historical.len() {
-            self.with_source(index, &[], host, |source, cx| {
+            let result = self.with_source(index, &[], host, |source, cx| {
                 source.handle_main_message(reply, cx)
             });
+            if let Err(e) = result {
+                host.exception("setTimeout", e.to_string());
+                break;
+            }
         }
         self.microtasks(host);
         self.flush(host);
@@ -1285,8 +1343,12 @@ impl HubModel {
     }
 
     /// `startLive(sourceType)`.
-    fn start_live(&mut self, source_type: &JsValue, host: &mut dyn HubHost) {
-        self.stop_historical(host);
+    fn start_live(
+        &mut self,
+        source_type: &JsValue,
+        host: &mut dyn HubHost,
+    ) -> Result<(), TabsError> {
+        self.stop_historical(host)?;
         if self.has_live_source {
             host.stop_live_source();
         }
@@ -1295,7 +1357,7 @@ impl HubModel {
         self.set_loading(None);
 
         let Some(preferences) = self.page.preferences.as_ref() else {
-            return;
+            return Ok(());
         };
         let is =
             |name: &str| matches!(source_type, JsValue::String(s) if *s == JsString::from(name));
@@ -1318,15 +1380,15 @@ impl HubModel {
             preferences.robot_address_for(&self.platform.platform.to_string_lossy())
         };
         let Some(kind) = kind else {
-            host.exception(
-                "main start-live",
-                "TypeError: Cannot read properties of null (reading 'connect')".to_owned(),
-            );
-            return;
+            return Err(TabsError::Thrown(JsError::new(
+                "TypeError",
+                "Cannot read properties of null (reading 'connect')",
+            )));
         };
         self.live_address = address.clone();
         self.has_live_source = true;
         host.start_live_source(kind, &address);
+        Ok(())
     }
 
     /// The live source's status callback.
@@ -1361,8 +1423,8 @@ impl HubModel {
         self.page.log = log.clone();
         self.page.selection.set_log(log);
         self.page.selection.set_live_connected(time_supplier);
-        self.sidebar_refresh(host);
-        self.tabs_refresh(host);
+        let result = self.sidebar_refresh().and_then(|()| self.tabs_refresh());
+        uncaught("live", result, host);
         self.flush(host);
     }
 
@@ -1388,7 +1450,7 @@ impl HubModel {
     }
 
     /// `restoreState(state)`.
-    fn restore_state(&mut self, state: &JsValue, host: &mut dyn HubHost) -> Result<(), TabsError> {
+    fn restore_state(&mut self, state: &JsValue) -> Result<(), TabsError> {
         let sidebar = state.get("sidebar").cloned().unwrap_or_default();
         let Some(sidebar) = SidebarState::from_js(&sidebar) else {
             return Err(TabsError::Unmodeled(
@@ -1396,9 +1458,7 @@ impl HubModel {
             ));
         };
         let outcome = self.with_sidebar(|s, env| s.restore_state(env, &sidebar));
-        if outcome != crate::sidebar::EventOutcome::Ok {
-            host.exception("sidebar", format!("{outcome:?}"));
-        }
+        sidebar_result(outcome)?;
         let tabs = state.get("tabs").cloned().unwrap_or_default();
         self.tabs.restore_state(&mut self.page, &tabs)
     }
@@ -1477,11 +1537,8 @@ impl HubModel {
         let field = |key: &str| data.get(key).cloned().unwrap_or_default();
         match message.name {
             MainToHub::ShowWhenReady => host.request_animation_frame(HubFrame::Show),
-            MainToHub::RestoreState => self.restore_state(data, host)?,
-            MainToHub::RestoreTypeMemory => {
-                self.page.type_memory = type_memory_from_js(data)
-                    .ok_or(TabsError::Unmodeled("restore-type-memory of another shape"))?;
-            }
+            MainToHub::RestoreState => self.restore_state(data)?,
+            MainToHub::RestoreTypeMemory => self.page.restore_type_memory(data),
             MainToHub::SetFullscreen => {
                 self.fullscreen = truthy(data);
                 self.update_fancy_window();
@@ -1528,7 +1585,7 @@ impl HubModel {
                     host.live_data(data);
                 }
             }
-            MainToHub::OpenFiles => self.open_files(data, host),
+            MainToHub::OpenFiles => self.open_files(data, host)?,
             MainToHub::StartLive => {
                 if self.exporting {
                     host.send_main_message(error_message(
@@ -1536,10 +1593,10 @@ impl HubModel {
                         "Please wait for the export to finish, then try again.",
                     ));
                 } else {
-                    self.start_live(data, host);
+                    self.start_live(data, host)?;
                 }
             }
-            MainToHub::StartPublish => self.start_publish(data, host),
+            MainToHub::StartPublish => self.start_publish(data, host)?,
             MainToHub::StopPublish => host.stop_publisher(),
             MainToHub::SetPlaybackOptions => {
                 let speed = field("speed").as_f64().unwrap_or(f64::NAN);
@@ -1636,7 +1693,7 @@ impl HubModel {
             }
             MainToHub::StartExport => self.start_export(host),
             MainToHub::CancelExport => self.set_exporting(false, host),
-            MainToHub::PrepareExport => self.prepare_export(data, host),
+            MainToHub::PrepareExport => self.prepare_export(data, host)?,
             MainToHub::FinishExport => self.set_loading(None),
             MainToHub::UpdateTouchBarSlider => {
                 let mut range = self.page.log.borrow().get_timestamp_range();
@@ -1698,7 +1755,7 @@ impl HubModel {
         }
     }
 
-    fn open_files(&mut self, data: &JsValue, host: &mut dyn HubHost) {
+    fn open_files(&mut self, data: &JsValue, host: &mut dyn HubHost) -> Result<(), TabsError> {
         let files: Vec<JsValue> = data
             .get("files")
             .and_then(JsValue::as_array)
@@ -1731,21 +1788,22 @@ impl HubModel {
                     ),
                 };
                 if merge {
-                    self.start_historical(&path, false, true, host);
+                    self.start_historical(&path, false, true, host)?;
                 } else {
-                    self.start_historical(&path, index == 0, count > 1, host);
+                    self.start_historical(&path, index == 0, count > 1, host)?;
                 }
             }
         }
+        Ok(())
     }
 
-    fn start_publish(&mut self, data: &JsValue, host: &mut dyn HubHost) {
+    fn start_publish(&mut self, data: &JsValue, host: &mut dyn HubHost) -> Result<(), TabsError> {
         if self.live_active {
             host.send_main_message(error_message(
                 "Cannot publish",
                 "Publishing is not allowed from a live source.",
             ));
-            return;
+            return Ok(());
         }
         let has_nt = self
             .page
@@ -1758,20 +1816,21 @@ impl HubModel {
                 "Cannot publish",
                 "Please open a log file with NetworkTables data, then try again.",
             ));
-            return;
+            return Ok(());
         }
         let (interval, _) = self.start_mock(1.0, host);
         if self.historical.is_empty() {
             self.clear_mock(&interval, host);
             self.start_publisher(data, host);
-            return;
+            return Ok(());
         }
-        let resolved = self.with_source(0, &[], host, |source, cx| source.load_all_fields(cx));
+        let resolved = self.with_source(0, &[], host, |source, cx| source.load_all_fields(cx))?;
         self.pending.push(Pending::Publish {
             interval,
             is_sim: data.clone(),
             waiting: usize::from(!resolved),
         });
+        Ok(())
     }
 
     fn start_export(&mut self, host: &mut dyn HubHost) {
@@ -1810,12 +1869,12 @@ impl HubModel {
         }
     }
 
-    fn prepare_export(&mut self, data: &JsValue, host: &mut dyn HubHost) {
+    fn prepare_export(&mut self, data: &JsValue, host: &mut dyn HubHost) -> Result<(), TabsError> {
         let (interval, mock) = self.start_mock(0.25, host);
         let mut waiting = 0;
         for index in 0..self.historical.len() {
             let resolved =
-                self.with_source(index, &[], host, |source, cx| source.load_all_fields(cx));
+                self.with_source(index, &[], host, |source, cx| source.load_all_fields(cx))?;
             if !resolved {
                 waiting += 1;
             }
@@ -1827,7 +1886,26 @@ impl HubModel {
             path: data.get("path").cloned().unwrap_or_default(),
             waiting,
         });
+        Ok(())
     }
+}
+
+fn uncaught<T>(task: &'static str, result: Result<T, TabsError>, host: &mut dyn HubHost) {
+    if let Err(e) = result {
+        host.exception(task, e.to_string());
+    }
+}
+
+/// What upstream's sidebar throws where the port's stops with `outcome`.
+fn sidebar_result(outcome: EventOutcome) -> Result<(), TabsError> {
+    let message = match outcome {
+        EventOutcome::Ok => return Ok(()),
+        EventOutcome::HighlightAborted => "fieldElement.scrollIntoViewIfNeeded is not a function",
+        EventOutcome::MergedFilenameMissing => {
+            "Cannot read properties of undefined (reading 'replace')"
+        }
+    };
+    Err(TabsError::Thrown(JsError::new("TypeError", message)))
 }
 
 /// What `set-assets` reports about load failures.
@@ -1884,34 +1962,24 @@ pub fn assets_alert(old: &JsValue, new: &JsValue) -> AssetsAlert {
     }
 }
 
-fn type_memory_from_js(data: &JsValue) -> Option<SourceListTypeMemory> {
-    let JsValue::Object(ids) = data else {
-        return None;
-    };
+fn type_memory_entries(data: &JsValue) -> SourceListTypeMemory {
     let mut memory = SourceListTypeMemory::new();
+    let JsValue::Object(ids) = data else {
+        return memory;
+    };
     for (id, entries) in ids.iter() {
         let JsValue::Object(entries) = entries else {
-            return None;
+            continue;
         };
         let mut map = JsObject::new();
         for (key, entry) in entries.iter() {
-            map.insert(key.clone(), SourceListTypeMemoryEntry::from_js(entry)?);
+            if let Some(entry) = SourceListTypeMemoryEntry::from_js(entry) {
+                map.insert(key.clone(), entry);
+            }
         }
         memory.insert(id.clone(), map);
     }
-    Some(memory)
-}
-
-fn type_memory_to_js(memory: &SourceListTypeMemory) -> JsValue {
-    let mut out = JsObject::new();
-    for (id, entries) in memory.iter() {
-        let mut map = JsObject::new();
-        for (key, entry) in entries.iter() {
-            map.insert(key.clone(), entry.to_js());
-        }
-        out.insert(id.clone(), JsValue::Object(map));
-    }
-    JsValue::Object(out)
+    memory
 }
 
 #[cfg(test)]
