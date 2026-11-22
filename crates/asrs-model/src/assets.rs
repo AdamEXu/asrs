@@ -1,9 +1,12 @@
 //! `src/shared/AdvantageScopeAssets.ts` (asset types, field constants,
-//! `BuiltIn3dFields`) and the `src/main/assetUtil.ts` config parsers.
+//! `BuiltIn3dFields`) and `src/main/assetUtil.ts` (config parsers, `filterAndSortAssets`).
 
+use std::cmp::Ordering;
 use std::sync::OnceLock;
 
+use asrs_js::collation::locale_compare_numeric;
 use asrs_js::number;
+use asrs_js::sort::{array_sort, code_unit_cmp};
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue, array_index};
 use asrs_log::util::check_array_type;
@@ -1430,4 +1433,63 @@ impl AdvantageScopeAssets {
         );
         JsValue::Object(o)
     }
+}
+
+fn unique_by<T>(items: Vec<T>, key: impl Fn(&T) -> &JsString) -> Vec<T> {
+    let mut unique: Vec<T> = Vec::new();
+    for item in items {
+        if !unique.iter().any(|other| key(other) == key(&item)) {
+            unique.push(item);
+        }
+    }
+    unique
+}
+
+/// `a > b ? -1 : b > a ? 1 : 0` on strings.
+fn descending(a: &JsString, b: &JsString) -> i32 {
+    match code_unit_cmp(a.units(), b.units()) {
+        Ordering::Greater => -1,
+        Ordering::Less => 1,
+        Ordering::Equal => 0,
+    }
+}
+
+fn starts_with_digit(name: &JsString) -> bool {
+    name.units()
+        .first()
+        .is_some_and(|&u| (u16::from(b'0')..=u16::from(b'9')).contains(&u))
+}
+
+/// `filterAndSortAssets`: drops later duplicates (fields by `id`, robots and joysticks by
+/// `name`), then sorts each list with upstream's comparators.
+pub fn filter_and_sort_assets(assets: AdvantageScopeAssets) -> AdvantageScopeAssets {
+    let mut unique = AdvantageScopeAssets {
+        field2ds: unique_by(assets.field2ds, |a| &a.id),
+        field3ds: unique_by(assets.field3ds, |a| &a.id),
+        robots: unique_by(assets.robots, |a| &a.name),
+        joysticks: unique_by(assets.joysticks, |a| &a.name),
+        load_failures: assets.load_failures,
+    };
+    let evergreen = JsString::from("Evergreen");
+    array_sort(&mut unique.field2ds, |a, b| {
+        if a.name == evergreen {
+            1
+        } else if b.name == evergreen {
+            -1
+        } else {
+            descending(&a.name, &b.name)
+        }
+    });
+    array_sort(&mut unique.field3ds, |a, b| descending(&a.name, &b.name));
+    array_sort(&mut unique.robots, |a, b| {
+        let order = locale_compare_numeric(&a.name, &b.name);
+        if starts_with_digit(&a.name) && starts_with_digit(&b.name) {
+            order.reverse()
+        } else {
+            order
+        }
+    });
+    array_sort(&mut unique.joysticks, |a, b| descending(&a.name, &b.name));
+    array_sort(&mut unique.load_failures, locale_compare_numeric);
+    unique
 }

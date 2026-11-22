@@ -19,6 +19,7 @@ pub struct BuiltItem {
     pub visible: bool,
     pub register_accelerator: bool,
     pub accelerator_works_when_hidden: bool,
+    pub icon: Option<[u8; 3]>,
     pub command: Option<Command>,
     pub submenu: Option<Vec<BuiltItem>>,
 }
@@ -229,6 +230,15 @@ pub fn build_from_template(
         .collect()
 }
 
+/// `new Menu()` followed by `menu.append(new MenuItem(options))` for each item: unlike
+/// `buildFromTemplate`, appending folds no separators at this level.
+pub fn build_appended(items: &[MenuItem], platform: Platform, app_name: &str) -> Vec<BuiltItem> {
+    items
+        .iter()
+        .map(|item| new_item(item, platform, app_name))
+        .collect()
+}
+
 fn is_separator(item: &MenuItem) -> bool {
     item.item_type == Some(ItemType::Separator)
 }
@@ -292,6 +302,7 @@ fn new_item(item: &MenuItem, platform: Platform, app_name: &str) -> BuiltItem {
             .and_then(|r| r.register_accelerator)
             .unwrap_or(true),
         accelerator_works_when_hidden: true,
+        icon: item.icon,
         command: item.command,
         role: role_name,
         submenu,
