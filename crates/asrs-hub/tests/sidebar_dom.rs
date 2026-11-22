@@ -2,22 +2,27 @@
 
 //! Replays `parity/specs/dom/sidebar/<case>.entry.json` against the ported
 //! `asrs_hub::sidebar::Sidebar` and compares the emitted records with the
-//! committed `dom/sidebar/<case>` vector, line for line. The runner only
-//! converts fixture inputs to model calls and the resulting view state back to
-//! CVE-1 nodes; all sidebar behavior lives in `asrs-hub`.
+//! committed `dom/sidebar/<case>` vector, line for line. The vectors are Blink runs
+//! with `"geometry": "real"`: the sidebar's layout reads are answered from their
+//! `read` records and its scroll writes checked against their `write` records, in
+//! order, and the `/*sidebar:recorder*/` eval logs what Blink did on its own (native
+//! `scroll` events, `blur` events, mouse offsets) as inputs. The runner only converts
+//! fixture inputs to model calls and the resulting view state back to CVE-1 nodes;
+//! all sidebar behavior lives in `asrs-hub`.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use asrs_hub::drag::{Drag, DragPayload};
 use asrs_hub::sidebar::{
-    EventOutcome, INDENT_SIZE_PX, RowRect, RowValue, Sidebar, SidebarEnv, SidebarRow, Tuner,
+    EventOutcome, INDENT_SIZE_PX, RowRect, RowRef, RowValue, Sidebar, SidebarEnv, SidebarGeometry,
+    Tuner,
 };
 use asrs_js::number;
 use asrs_js::string::JsString;
@@ -28,9 +33,10 @@ use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_parity::cve1::Value;
+use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
-use asrs_parity::vectors;
+use asrs_parity::vectors::{self, Record};
 
 fn err(msg: impl Into<String>) -> String {
     msg.into()
@@ -125,178 +131,151 @@ impl Tuner for StubTuner {
     }
 }
 
-/// The element shape `env.ts::rectOf` reasons about: tag, class list, hidden
-/// flag, position among same-tag siblings and parent for ancestor checks.
-struct ElDesc {
-    tag: &'static str,
-    classes: &'static [&'static str],
-    hidden: bool,
-    pos: usize,
-    parent: Option<Box<ElDesc>>,
+/// `body`'s element children in `www/hub.html` that the sidebar reads or scrolls.
+const SIDE_BAR: &str = "div.side-bar:18";
+const SEARCH_RESULTS: &str = "div.search-results:17";
+const SIDEBAR_ROOTS: [&str; 3] = [
+    "div.side-bar:",
+    "div.search-results:",
+    "div.title-bar-menu:",
+];
+
+/// Answers the sidebar's layout reads from Blink's `read` records and checks its scroll writes
+/// against the `write` records, in recorded order (oracle/README.md, "Blink backend").
+struct Recorded {
+    reads: ScriptedReads,
+    inputs: Inputs,
 }
 
-fn el(
-    tag: &'static str,
-    classes: &'static [&'static str],
-    hidden: bool,
-    pos: usize,
-    parent: ElDesc,
-) -> ElDesc {
-    ElDesc {
-        tag,
-        classes,
-        hidden,
-        pos,
-        parent: Some(Box::new(parent)),
+impl Recorded {
+    /// Whether Blink dispatched a `blur` to the search input next.
+    fn take_blur(&mut self) -> bool {
+        let blur = matches!(self.inputs.front(), Some((_, Input::Blur)));
+        if blur {
+            self.inputs.pop_front();
+        }
+        blur
     }
-}
 
-fn matches_compound(el: &ElDesc, compound: &str) -> bool {
-    let (compound, nth) = match compound.split_once(":nth-of-type(") {
-        Some((head, arg)) => (head, Some(arg.trim_end_matches(')'))),
-        None => (compound, None),
-    };
-    let mut parts = compound.split('.');
-    let tag = parts.next().unwrap_or("");
-    if !tag.is_empty() && tag != el.tag {
-        return false;
+    fn row(row: RowRef<'_>, tail: &str) -> String {
+        format!("{}>{tail}", row.container_path())
     }
-    for class in parts {
-        if !el.classes.iter().any(|c| c == &class) {
-            return false;
+
+    fn rect(&mut self, target: &str) -> RowRect {
+        let [x, y, width, height] = self.reads.read_rect(target);
+        RowRect {
+            x,
+            y,
+            width,
+            height,
         }
     }
-    if let Some(arg) = nth {
-        let arg = arg.trim();
-        let pos = el.pos as f64;
-        let ok = match arg {
-            "odd" => pos % 2.0 == 1.0,
-            "even" => pos % 2.0 == 0.0,
-            _ if arg.contains('n') => {
-                let mut it = arg.splitn(2, 'n');
-                let a_raw = it.next().unwrap_or("").trim().trim_end_matches('+');
-                let a = match a_raw {
-                    "" | "+" => 1.0,
-                    "-" => -1.0,
-                    _ => a_raw.parse::<f64>().unwrap_or(f64::NAN),
-                };
-                let b = it
-                    .next()
-                    .unwrap_or("0")
-                    .trim()
-                    .parse::<f64>()
-                    .unwrap_or(0.0);
-                let k = (pos - b) / a;
-                a != 0.0 && k >= 0.0 && k.fract() == 0.0
-            }
-            _ => pos == arg.parse::<f64>().unwrap_or(f64::NAN),
+}
+
+impl SidebarGeometry for Recorded {
+    fn field_item_rect(&mut self, row: RowRef<'_>) -> RowRect {
+        self.rect(&Self::row(row, "div.field-item:0"))
+    }
+
+    fn value_client_width(&mut self, row: RowRef<'_>, _value: &RowValue, _hidden: bool) -> f64 {
+        self.reads
+            .read_f64("clientWidth", &Self::row(row, "div.field-value:1"))
+    }
+
+    fn label_rect(&mut self, row: RowRef<'_>) -> RowRect {
+        self.rect(&Self::row(row, "div.field-item:0>div.field-item-label:3"))
+    }
+
+    fn scroll_into_view_if_needed(&mut self, row: RowRef<'_>) {
+        self.reads.write(
+            "scrollIntoViewIfNeeded",
+            &Self::row(row, "div.field-item:0"),
+            &Value::Array(Vec::new()),
+        );
+    }
+
+    fn search_input_rect(&mut self) -> RowRect {
+        self.rect(&format!(
+            "{SIDE_BAR}>div.side-bar-search-container:1>input.side-bar-search:0"
+        ))
+    }
+
+    fn scroll_search_item_into_view(&mut self, index: usize) {
+        let options = Value::object([("block", cve_string(&js("nearest")))]);
+        self.reads.write(
+            "scrollIntoView",
+            &format!("{SEARCH_RESULTS}>div.search-results-item:{index}"),
+            &Value::Array(vec![options]),
+        );
+    }
+
+    fn reset_search_results_scroll(&mut self) {
+        self.reads
+            .write("scrollTop", SEARCH_RESULTS, &Value::number(0.0));
+    }
+
+    fn scroll_top(&mut self) -> f64 {
+        self.reads.read_f64("scrollTop", SIDE_BAR)
+    }
+
+    fn set_scroll_top(&mut self, value: f64) {
+        self.reads
+            .write("scrollTop", SIDE_BAR, &Value::number(value));
+    }
+
+    fn menu_button_rect(&mut self, index: usize) -> RowRect {
+        self.rect(&format!(
+            "div.title-bar-menu:1>table:0>tbody:0>tr:0>td:{index}>button:0"
+        ))
+    }
+
+    fn blur_search_input(&mut self) -> bool {
+        self.take_blur()
+    }
+}
+
+/// Which records of a Blink run the sidebar replay consumes. The page also runs `Tabs` and
+/// the default tab, whose geometry records (under `div.viewer`) belong to their own families;
+/// any other geometry record is the sidebar's, including reads of rows a rebuild removed.
+enum Kind {
+    Geometry,
+    Foreign,
+    Input,
+    Output,
+}
+
+fn kind(record: &Record) -> Result<Kind, String> {
+    if let Some(g) = GeometryRecord::parse(record)? {
+        let attached = g.el.starts_with("body");
+        let ours = if attached {
+            SIDEBAR_ROOTS.iter().any(|r| g.el.contains(r))
+        } else {
+            g.el.contains("div.field-item")
         };
-        if !ok {
-            return false;
-        }
+        return Ok(if ours {
+            Kind::Geometry
+        } else if !attached || g.el.contains(">div.viewer:") {
+            Kind::Foreign
+        } else {
+            return Err(format!("line {}: geometry record on {}", record.line, g.el));
+        });
     }
-    true
-}
-
-/// Descendant combinators only: each earlier compound must match some
-/// ancestor, scanning nearest-first like CSS.
-fn matches_selector(el: &ElDesc, selector: &str) -> bool {
-    let compounds: Vec<&str> = selector.split_whitespace().collect();
-    let Some(last) = compounds.last() else {
-        return false;
-    };
-    if !matches_compound(el, last) {
-        return false;
-    }
-    let mut cursor = el.parent.as_deref();
-    for compound in compounds[..compounds.len() - 1].iter().rev() {
-        let mut found = false;
-        while let Some(parent) = cursor {
-            if matches_compound(parent, compound) {
-                found = true;
-                cursor = parent.parent.as_deref();
-                break;
-            }
-            cursor = parent.parent.as_deref();
-        }
-        if !found {
-            return false;
-        }
-    }
-    true
-}
-
-fn is_hidden(el: &ElDesc) -> bool {
-    let mut cursor = Some(el);
-    while let Some(e) = cursor {
-        if e.hidden {
-            return true;
-        }
-        cursor = e.parent.as_deref();
-    }
-    false
-}
-
-struct Layout {
-    rules: Vec<(String, [f64; 4])>,
-}
-
-impl Layout {
-    fn rect_of(&self, el: &ElDesc) -> RowRect {
-        if is_hidden(el) {
-            return RowRect::default();
-        }
-        for (selector, rect) in &self.rules {
-            if matches_selector(el, selector) {
-                return RowRect {
-                    x: rect[0],
-                    y: rect[1],
-                    width: rect[2],
-                    height: rect[3],
-                };
-            }
-        }
-        RowRect::default()
-    }
-}
-
-/// Ancestors of a `.field-item`: `html > body > div.side-bar > #fieldList`,
-/// then one `childSpan` per enclosing level (hidden when that ancestor row is
-/// collapsed), then the row's own `.field-item-container`.
-fn field_item_el(row: &SidebarRow, ancestors_collapsed: &[bool]) -> ElDesc {
-    let html = ElDesc {
-        tag: "html",
-        classes: &[],
-        hidden: false,
-        pos: 1,
-        parent: None,
-    };
-    let body = el("body", &[], false, 1, html);
-    let side_bar = el("div", &["side-bar"], false, 1, body);
-    let mut top = el("span", &[], false, 1, side_bar);
-    for &collapsed in ancestors_collapsed {
-        top = el("span", &[], collapsed, 1, top);
-    }
-    let container = el("div", &["field-item-container"], false, row.position, top);
-    let classes: &[&str] = if row.generated {
-        &["field-item", "generated"]
+    Ok(if record.field("sb").is_some() {
+        Kind::Input
     } else {
-        &["field-item"]
-    };
-    el("div", classes, false, 1, container)
+        Kind::Output
+    })
 }
 
-fn menu_button_rect(layout: &Layout) -> RowRect {
-    let menu = ElDesc {
-        tag: "div",
-        classes: &["title-bar-menu"],
-        hidden: false,
-        pos: 1,
-        parent: None,
-    };
-    let table = el("table", &[], false, 1, menu);
-    let button = el("button", &[], false, 1, table);
-    layout.rect_of(&button)
+/// `{"sb": ...}` lines of the `/*sidebar:recorder*/` eval: what Blink did that the fixture
+/// steps do not say, each at its position among the compared records.
+/// Each input with the numbers of compared and geometry records before it.
+type Inputs = VecDeque<((usize, usize), Input)>;
+
+enum Input {
+    Scroll,
+    MouseDown(f64, f64),
+    Blur,
 }
 
 struct Emit {
@@ -348,50 +327,6 @@ fn dom_emit(selector: &str, nodes: Vec<Value>) -> Emit {
             ("nodes", Value::Array(vec![Value::Array(nodes)])),
         ],
     }
-}
-
-const FIXED_ADVANCE_JSON: &str = include_str!("../../../oracle/src/canvas/fixedAdvance.json");
-
-/// `recordingCanvas.ts::fixedWidth`: f32 sum of the shared table's advances.
-fn fixed_width(size: f32, text: &JsString) -> f32 {
-    thread_local! {
-        static TABLE: (Vec<(u16, u16, f32)>, f32) = {
-            let json = asrs_parity::json::parse(FIXED_ADVANCE_JSON).expect("fixedAdvance.json");
-            let advances = json
-                .get("advances")
-                .and_then(Json::as_array)
-                .expect("advances")
-                .iter()
-                .map(|r| {
-                    let r = r.as_array().expect("advance range");
-                    let n = |i: usize| r[i].as_f64().expect("advance number");
-                    (n(0) as u16, n(1) as u16, n(2) as f32)
-                })
-                .collect();
-            let default = json.get("defaultAdvance").and_then(Json::as_f64).expect("defaultAdvance");
-            (advances, default as f32)
-        };
-    }
-    TABLE.with(|(advances, default)| {
-        text.units().iter().fold(0.0f32, |x, &unit| {
-            let em = advances
-                .iter()
-                .find(|(first, last, _)| unit >= *first && unit <= *last)
-                .map_or(*default, |(_, _, em)| *em);
-            x + em * size
-        })
-    })
-}
-
-/// `clientWidth` of `.field-value` under the default layout's `"text": 12` rule: the rounded
-/// fixed-table width of its `textContent`.
-fn value_client_width(value: &RowValue) -> f64 {
-    let text = match value {
-        RowValue::Number { span_text, .. } => span_text.clone(),
-        RowValue::Text { text } => text.clone(),
-        RowValue::None | RowValue::Bool { .. } => JsString::new(),
-    };
-    (fixed_width(12.0, &text) as f64).round()
 }
 
 fn display(shown: bool) -> Option<Value> {
@@ -899,9 +834,6 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
 fn exception_emit(where_: &str, outcome: EventOutcome) -> Option<Emit> {
     let error = match outcome {
         EventOutcome::Ok => return None,
-        EventOutcome::HighlightAborted => {
-            "TypeError: fieldElement.scrollIntoViewIfNeeded is not a function"
-        }
         EventOutcome::MergedFilenameMissing => {
             "TypeError: Cannot read properties of undefined (reading 'replace')"
         }
@@ -917,16 +849,15 @@ fn exception_emit(where_: &str, outcome: EventOutcome) -> Option<Emit> {
 /// Build a `SidebarEnv` inline so the `RefMut` temporaries never escape their
 /// statement.
 macro_rules! senv {
-    ($ctx:expr) => {
+    ($runner:expr) => {
         SidebarEnv {
-            log: $ctx.log,
-            selection: &mut *$ctx.selection.borrow_mut(),
-            tuner: $ctx.tuner.borrow().as_ref().map(|t| t as &dyn Tuner),
-            dark_theme: $ctx.dark_theme,
-            inner_height: $ctx.inner_height,
-            can_scroll_into_view: false,
-            loading_fields: &$ctx.loading_fields,
-            measure_value: &value_client_width,
+            log: $runner.ctx.log,
+            selection: &mut *$runner.ctx.selection.borrow_mut(),
+            tuner: $runner.ctx.tuner.borrow().as_ref().map(|t| t as &dyn Tuner),
+            dark_theme: $runner.ctx.dark_theme,
+            inner_height: $runner.ctx.inner_height,
+            loading_fields: &$runner.ctx.loading_fields,
+            geometry: &mut $runner.geometry,
         }
     };
 }
@@ -944,7 +875,7 @@ struct Runner<'a> {
     ctx: Ctx<'a>,
     sidebar: &'a mut Sidebar,
     drag: Drag,
-    layout: Layout,
+    geometry: Recorded,
     emitted: Vec<Emit>,
     now: f64,
     last_frame: f64,
@@ -953,17 +884,23 @@ struct Runner<'a> {
 }
 
 impl Runner<'_> {
-    fn row_rects(&self) -> Vec<RowRect> {
-        let rows = self.sidebar.rows();
-        let mut rects = Vec::with_capacity(rows.len());
-        let mut collapsed: Vec<bool> = Vec::new();
-        for row in &rows {
-            let depth = (row.indent / INDENT_SIZE_PX) as usize;
-            collapsed.truncate(depth);
-            rects.push(self.layout.rect_of(&field_item_el(row, &collapsed)));
-            collapsed.push(!row.expanded);
+    /// The native `scroll` events Blink dispatched once the last step settled.
+    fn native_scrolls(&mut self) {
+        while let Some(((outputs, geometry), Input::Scroll)) = self.geometry.inputs.front()
+            && *outputs <= self.emitted.len()
+            && *geometry <= self.geometry.reads.consumed()
+        {
+            self.geometry.inputs.pop_front();
+            self.sidebar.sidebar_scroll(&mut self.geometry);
         }
-        rects
+    }
+
+    /// The `offsetX` and `offsetY` Blink gave a label `mousedown`.
+    fn mouse_down_offset(&mut self) -> Result<(f64, f64), String> {
+        match self.geometry.inputs.pop_front() {
+            Some((_, Input::MouseDown(x, y))) => Ok((x, y)),
+            _ => Err(err("a label mousedown with no recorded offsets")),
+        }
     }
 
     fn drain(&mut self) {
@@ -996,12 +933,11 @@ impl Runner<'_> {
             let frame_at = self.last_frame + self.frame_period;
             if timer_due.is_some_and(|due| due <= end && due <= frame_at) {
                 self.now = self.now.max(timer_due.unwrap_or(end));
-                self.sidebar.fire_timers(self.now, &mut senv!(self.ctx));
+                self.sidebar.fire_timers(self.now, &mut senv!(self));
             } else if frame_at <= end {
                 self.now = frame_at;
                 self.last_frame = frame_at;
-                let rects = self.row_rects();
-                self.sidebar.periodic(&mut senv!(self.ctx), &rects);
+                self.sidebar.periodic(&mut senv!(self));
                 if self.show_pending {
                     self.show_pending = false;
                     self.emitted.push(Emit {
@@ -1081,8 +1017,6 @@ impl Runner<'_> {
                 .and_then(|p| p.get(name))
                 .and_then(|v| js_string(&json_to_cve(v)).ok())
         };
-        let prop_num =
-            |name: &str| -> Option<f64> { props.and_then(|p| p.get(name)).and_then(Json::as_f64) };
         let now = self.now;
 
         match (target.as_str(), etype.as_str()) {
@@ -1099,20 +1033,19 @@ impl Runner<'_> {
             ("window", "touchend") => self.drag.end(),
             ("div.side-bar-handle", "mousedown") => self.sidebar.handle_mouse_down(),
             ("div.side-bar-handle", "click") => self.sidebar.handle_click(now),
-            ("div.side-bar", "scroll") => {
-                self.sidebar
-                    .sidebar_scroll(prop_num("scrollTop").unwrap_or(0.0));
-            }
             ("input.side-bar-search", "focus") => self.sidebar.search_focus(),
-            ("input.side-bar-search", "blur") => self.sidebar.search_blur(),
+            ("input.side-bar-search", "blur") => {
+                if !self.geometry.take_blur() {
+                    return Err(err("a blur event Blink did not record"));
+                }
+                self.sidebar.search_blur();
+            }
             ("input.side-bar-search", "input") => {
                 let value = prop_str("value").unwrap_or_default();
-                self.sidebar.search_input(&mut senv!(self.ctx), value);
+                self.sidebar.search_input(&mut senv!(self), value);
             }
             ("input.side-bar-search", "keydown") => {
-                let outcome = self
-                    .sidebar
-                    .search_key_down(&mut senv!(self.ctx), &code, now);
+                let outcome = self.sidebar.search_key_down(&mut senv!(self), &code, now);
                 self.outcome(outcome);
             }
             (".search-results-item", "mousemove") => {
@@ -1121,19 +1054,19 @@ impl Runner<'_> {
             (".search-results-item", "mousedown") | (".search-results-item", "touchdown") => {
                 let outcome = self
                     .sidebar
-                    .search_item_activate(&mut senv!(self.ctx), index, now);
+                    .search_item_activate(&mut senv!(self), index, now);
                 self.outcome(outcome);
             }
             ("#fieldList svg.field-item-icon", "click") => {
-                let outcome =
-                    self.sidebar
-                        .icon_click(&mut senv!(self.ctx), index / 3, index % 3, now);
+                let outcome = self
+                    .sidebar
+                    .icon_click(&mut senv!(self), index / 3, index % 3, now);
                 self.outcome(outcome);
             }
             ("div.field-item-label", "mousedown") => {
-                // jsdom has no layout, so a MouseEvent's offsetX/offsetY equal its clientX/clientY.
-                let (x, y) = (iv("clientX"), iv("clientY"));
-                self.sidebar.label_mouse_down(index, x, y, x, y);
+                let (ox, oy) = self.mouse_down_offset()?;
+                self.sidebar
+                    .label_mouse_down(index, iv("clientX"), iv("clientY"), ox, oy);
             }
             ("div.field-item-label", "mouseup") => {
                 self.sidebar
@@ -1144,13 +1077,12 @@ impl Runner<'_> {
                     .label_context_menu(index, iv("clientX"), iv("clientY"));
             }
             ("div.field-item-label", "touchstart") => {
-                let rect = self.row_rects().get(index).copied().unwrap_or_default();
                 self.sidebar.label_touch_start(
+                    &mut self.geometry,
                     &mut self.drag,
                     index,
                     iv("clientX"),
                     iv("clientY"),
-                    rect,
                 );
             }
             (".field-item-container input", "focus")
@@ -1172,15 +1104,14 @@ impl Runner<'_> {
                 }
             }
             (".side-bar-tuning-button", "click") => {
-                self.sidebar.tuning_button_click(&senv!(self.ctx));
+                self.sidebar.tuning_button_click(&mut senv!(self));
             }
             (".side-bar-tuning-button", "contextmenu") => {
                 self.sidebar
                     .tuning_button_context_menu(iv("clientX"), iv("clientY"));
             }
             (".title-bar-menu button", "click") => {
-                self.sidebar
-                    .menu_button_click(index, menu_button_rect(&self.layout));
+                self.sidebar.menu_button_click(&mut self.geometry, index);
             }
             (".title-bar-menu button", "mouseleave") => {
                 self.sidebar.menu_button_mouse_leave(index);
@@ -1190,7 +1121,7 @@ impl Runner<'_> {
                 else {
                     return Err(err(format!("no boolean svg at index {index}")));
                 };
-                self.sidebar.svg_click(&mut senv!(self.ctx), flat);
+                self.sidebar.svg_click(&mut senv!(self), flat);
             }
             ("div.field-item-label span", "click") => {
                 // The type-warning span: index counts full-key rows' warning spans.
@@ -1224,34 +1155,48 @@ fn drag_payload(payload: &DragPayload) -> Value {
     ])
 }
 
-const DEFAULT_LAYOUT_JSON: &str = include_str!("../../../oracle/src/dom/layout.json");
-
 fn load_json(path: &Path) -> Result<Json, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     asrs_parity::json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn load_layout_rules(source: &Json) -> Vec<(String, [f64; 4])> {
-    let mut rules = Vec::new();
-    if let Some(list) = source.as_array() {
-        for rule in list {
-            let Some(selector) = rule.get("selector").and_then(Json::as_str) else {
-                continue;
-            };
-            let Some(rect) = rule.get("rect").and_then(Json::as_array) else {
-                continue;
-            };
-            if rect.len() != 4 {
-                continue;
+/// The run's compared records, its sidebar geometry records and its inputs.
+fn split(records: &[Record]) -> Result<(Vec<&Record>, ScriptedReads, Inputs), String> {
+    let mut outputs = Vec::new();
+    let mut geometry = Vec::new();
+    let mut inputs = VecDeque::new();
+    for record in records {
+        match kind(record)? {
+            Kind::Geometry => geometry.push(record.clone()),
+            Kind::Foreign => {}
+            Kind::Output => outputs.push(record),
+            Kind::Input => {
+                let input = match record.string("sb").as_deref() {
+                    Some("scroll") => Input::Scroll,
+                    Some("blur") => Input::Blur,
+                    Some("mousedown") => match record
+                        .value("offset")
+                        .map_err(|e| format!("line {}: {e}", record.line))?
+                    {
+                        Value::Array(xy) if xy.len() == 2 => {
+                            Input::MouseDown(number(&xy[0])?, number(&xy[1])?)
+                        }
+                        other => return Err(format!("line {}: offset {other:?}", record.line)),
+                    },
+                    other => return Err(format!("line {}: unknown sb {other:?}", record.line)),
+                };
+                inputs.push_back(((outputs.len(), geometry.len()), input));
             }
-            let n = |i: usize| rect[i].as_f64().unwrap_or(0.0);
-            rules.push((selector.to_string_lossy(), [n(0), n(1), n(2), n(3)]));
         }
     }
-    rules
+    Ok((outputs, ScriptedReads::from_records(&geometry)?, inputs))
 }
 
-fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
+fn replay(
+    spec_path: &Path,
+    geometry: ScriptedReads,
+    inputs: Inputs,
+) -> Result<(Vec<Emit>, ScriptedReads), String> {
     let spec = load_json(spec_path)?;
     let spec_dir = spec_path.parent().unwrap_or_else(|| Path::new("."));
     let fixture = spec
@@ -1276,14 +1221,14 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         .and_then(|w| w.get("theme"))
         .and_then(Json::as_str)
         .is_some_and(|t| t.to_string_lossy() == "dark");
-
-    let mut rules = Vec::new();
-    if let Some(layout) = fixture.get("layout") {
-        rules.extend(load_layout_rules(layout));
+    if fixture
+        .get("geometry")
+        .and_then(Json::as_str)
+        .map(|g| g.to_string_lossy())
+        != Some("real".to_owned())
+    {
+        return Err(err("sidebar fixtures run with \"geometry\": \"real\""));
     }
-    let defaults = asrs_parity::json::parse(DEFAULT_LAYOUT_JSON).map_err(|e| e.to_string())?;
-    rules.extend(load_layout_rules(&defaults));
-    let layout = Layout { rules };
 
     let log = Rc::new(RefCell::new(Log::new(true)));
     let now_cell = Rc::new(Cell::new(start));
@@ -1309,7 +1254,10 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         },
         sidebar: &mut sidebar,
         drag: Drag::default(),
-        layout,
+        geometry: Recorded {
+            reads: geometry,
+            inputs,
+        },
         emitted: Vec::new(),
         now: start,
         last_frame: start,
@@ -1324,7 +1272,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         if let Some(sidebar_state) = data.get("sidebar").and_then(SidebarState::from_js) {
             let outcome = runner
                 .sidebar
-                .restore_state(&mut senv!(runner.ctx), &sidebar_state);
+                .restore_state(&mut senv!(runner), &sidebar_state);
             runner
                 .emitted
                 .extend(exception_emit("main restore-state", outcome));
@@ -1357,7 +1305,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                     .collect(),
             };
             run_log_step(&log, &calls).map_err(|e| format!("{}: {e}", where_()))?;
-            if let Err(outcome) = runner.sidebar.refresh(&mut senv!(runner.ctx), false) {
+            if let Err(outcome) = runner.sidebar.refresh(&mut senv!(runner), false) {
                 runner.emitted.extend(exception_emit("log", outcome));
             }
         } else if let Some(sel_step) = step.get("selection") {
@@ -1433,7 +1381,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                     {
                         let outcome = runner
                             .sidebar
-                            .restore_state(&mut senv!(runner.ctx), &sidebar_state);
+                            .restore_state(&mut senv!(runner), &sidebar_state);
                         runner.outcome(outcome);
                     }
                 }
@@ -1451,6 +1399,11 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                 );
                 runner.now
             });
+        } else if let Some(expr) = step.get("eval").and_then(Json::as_str) {
+            let expr = expr.to_string_lossy();
+            if !expr.starts_with("/*sidebar:recorder*/") && !is_scroll_input(&expr) {
+                return Err(format!("{}: unsupported eval {expr}", where_()));
+            }
         } else if let Some(event) = step.get("event") {
             runner
                 .dispatch_event(event)
@@ -1529,17 +1482,14 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
                             "window.sidebar.saveState()" => {
                                 js_json::from_js(&runner.sidebar.save_state().to_js())
                             }
-                            "[...window.sidebar.getActiveFields()]" => {
-                                let rects = runner.row_rects();
-                                Value::Array(
-                                    runner
-                                        .sidebar
-                                        .get_active_fields(&senv!(runner.ctx), &rects)
-                                        .iter()
-                                        .map(cve_string)
-                                        .collect(),
-                                )
-                            }
+                            "[...window.sidebar.getActiveFields()]" => Value::Array(
+                                runner
+                                    .sidebar
+                                    .get_active_fields(&mut senv!(runner))
+                                    .iter()
+                                    .map(cve_string)
+                                    .collect(),
+                            ),
                             other => return Err(format!("{}: unsupported eval {other}", where_())),
                         };
                         runner.emitted.push(Emit {
@@ -1556,14 +1506,33 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         if let Some(t) = runner.ctx.tuner.borrow().as_ref() {
             runner.emitted.extend(t.events.borrow_mut().drain(..));
         }
+        runner.native_scrolls();
     }
 
-    Ok(runner.emitted)
+    if !runner.geometry.inputs.is_empty() {
+        return Err(format!(
+            "{} recorded inputs never replayed",
+            runner.geometry.inputs.len()
+        ));
+    }
+    Ok((runner.emitted, runner.geometry.reads))
+}
+
+/// A fixture eval that scrolls `.side-bar` inside `__oracleQuiet`: an input, whose `scroll`
+/// event the recorder logs.
+fn is_scroll_input(expr: &str) -> bool {
+    expr.strip_prefix(
+        "window.__oracleQuiet(() => { document.getElementsByClassName(\"side-bar\")[0].scrollTop = ",
+    )
+    .and_then(|rest| rest.strip_suffix("; })"))
+    .is_some_and(|value| value.parse::<f64>().is_ok())
 }
 
 fn compare(spec: &Path, vector_id: &str) -> Result<(), String> {
-    let emitted = replay(spec)?;
-    let records = vectors::load(vector_id)?;
+    let all = vectors::load(vector_id)?;
+    let (records, geometry, inputs) = split(&all)?;
+    let (emitted, geometry) = replay(spec, geometry, inputs)?;
+    geometry.finish()?;
     if emitted.len() != records.len() {
         return Err(format!(
             "emitted {} records, vector has {}",

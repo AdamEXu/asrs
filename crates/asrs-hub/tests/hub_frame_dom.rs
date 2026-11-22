@@ -31,7 +31,7 @@ use asrs_hub::frame::{
 use asrs_hub::hub::{
     HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView, LiveSourceKind,
 };
-use asrs_hub::sidebar::{RowRect, RowValue, Sidebar};
+use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::number;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SetClock};
@@ -89,8 +89,8 @@ struct Geometry {
 }
 
 struct View {
-    width: f64,
     height: f64,
+    sidebar: NoLayout,
     geometry: Rc<RefCell<Geometry>>,
 }
 
@@ -111,21 +111,8 @@ impl HubView for View {
         false
     }
 
-    fn can_scroll_into_view(&self) -> bool {
-        true
-    }
-
-    fn sidebar_rects(&self, sidebar: &Sidebar) -> Vec<RowRect> {
-        assert!(
-            sidebar.rows().is_empty(),
-            "the frame fixtures load no log, so the sidebar has no rows ({} wide)",
-            self.width
-        );
-        Vec::new()
-    }
-
-    fn measure_value(&self, _value: &RowValue) -> f64 {
-        panic!("the frame fixtures show no field values")
+    fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
+        &mut self.sidebar
     }
 }
 
@@ -551,8 +538,8 @@ fn replay(spec: &Path, id: &str) -> Result<(usize, usize), String> {
         JsRealm::new(Box::new(rng)),
         Rc::new(PageClock(clock)),
         Box::new(View {
-            width,
             height,
+            sidebar: NoLayout,
             geometry: geometry.clone(),
         }),
         &mut host,
