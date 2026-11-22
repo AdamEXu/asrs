@@ -18,7 +18,7 @@ use asrs_log::log::robot_state::{self, ALLIANCE_KEYS, DRIVER_STATION_KEYS};
 use asrs_model::assets::{Config3dField, CoordinateSystem as FieldCoordinates, built_in_3d_fields};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::CoordinateSystemPreference;
-use asrs_model::source_list::{SourceList, configs};
+use asrs_model::source_list::{ListInput, ListOutput, SourceList, configs};
 use asrs_model::source_list_config::{SourceListItemState, SourceListOptionValueConfig};
 use asrs_model::tab_controller::{Command, TabCommand, TabController};
 
@@ -880,6 +880,19 @@ impl<Cx: SourceListCx> TabController<Cx> for Field3dController {
 
     fn show_timeline(&self, _cx: &Cx) -> bool {
         true
+    }
+
+    fn source_lists(&self) -> Vec<&SourceList> {
+        vec![&self.source_list]
+    }
+
+    fn source_list_input(
+        &mut self,
+        cx: &mut Cx,
+        input: ListInput<'_>,
+        errors: &mut Vec<JsError>,
+    ) -> ListOutput {
+        list_cx::route_lists(&mut [&mut self.source_list], cx, input, errors)
     }
 
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError> {

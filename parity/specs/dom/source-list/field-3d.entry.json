@@ -45,7 +45,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "added"
       },
@@ -142,7 +146,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "children"
       },
@@ -157,7 +165,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "dark-no-values"
       },
@@ -170,7 +182,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "assets-removed"
       }

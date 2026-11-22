@@ -40,6 +40,10 @@ impl HubView for FrameView {
     fn measure_value(&self, _value: &RowValue) -> f64 {
         0.0
     }
+
+    fn source_list_dom(&mut self) -> &mut dyn asrs_model::source_list::SourceListDom {
+        asrs_model::source_list::Undisplayed::dom()
+    }
 }
 
 pub struct HubEntityHost {

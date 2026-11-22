@@ -67,7 +67,8 @@ impl GeometryRecord {
     /// Whether `target` names this record's element: a tail of its path, segment by segment,
     /// where a target segment `tag.class:index` matches a recorded one with the same tag and
     /// index and at least those classes (`div.data-table-container:2`, `tbody:0>tr:3` matches
-    /// `...>tbody:0>tr.selected:3`).
+    /// `...>tbody:0>tr.selected:3`). A target index `*` matches any index, for an element
+    /// appended to a parent whose child count the port does not model.
     pub fn is_on(&self, target: &str) -> bool {
         let recorded: Vec<&str> = self.el.split('>').collect();
         let wanted: Vec<&str> = target.split('>').collect();
@@ -89,7 +90,9 @@ fn segment_matches(recorded: &str, wanted: &str) -> bool {
         Some((classes, index.to_owned()))
     };
     match (split(recorded), split(wanted)) {
-        (Some((have, i)), Some((want, j))) => i == j && want.iter().all(|c| have.contains(c)),
+        (Some((have, i)), Some((want, j))) => {
+            (i == j || j == "*") && want.iter().all(|c| have.contains(c))
+        }
         _ => false,
     }
 }
@@ -118,6 +121,11 @@ impl ScriptedReads {
 
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
+    }
+
+    /// The next access upstream made, which the port has not asked for yet.
+    pub fn peek(&self) -> Option<&GeometryRecord> {
+        self.queue.front()
     }
 
     fn fail(&mut self, message: String) {
@@ -272,6 +280,15 @@ mod tests {
         let mut r = reads();
         r.read_f64("scrollTop", "div.c.selected:0");
         assert!(r.finish().is_err(), "a target class the element lacks");
+
+        let mut r = reads();
+        assert_eq!(r.peek().map(|g| g.line), Some(1));
+        r.read_f64("scrollTop", "body:*>div.c:*");
+        r.read_rect("div.c:*>tr:3");
+        assert!(
+            r.finish().is_err(),
+            "a wildcard index still needs the other segments"
+        );
 
         let mut r = reads();
         r.read_f64("scrollTop", "div.c:0");

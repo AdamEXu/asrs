@@ -11,6 +11,7 @@ use asrs_js::number;
 use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::selection_impl::ControlButton;
+use asrs_model::source_list::{ItemDragPayload, ItemDragStart, ItemView, ListInput};
 
 use crate::drag::{Drag, DragItem, DragPayload};
 use crate::hub::HubModel;
@@ -861,12 +862,18 @@ impl FpsMeter {
 pub enum DragData {
     Fields(DragPayload),
     Tab(TabDragData),
+    ListItem(ItemDragPayload),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DragContent {
     Field(DragItem),
     Tab(TabDragStart),
+    /// A copy of the dragged source list item, `width` wide (its `clientWidth`).
+    ListItem {
+        item: ItemView,
+        width: f64,
+    },
 }
 
 /// Which resize handle a pointer event targets.
@@ -973,12 +980,51 @@ impl HubShell {
         let result = tabs.window_mouse_move(page, y);
         sync(hub);
         self.drag.move_to(x, y);
+        result.and(self.dispatch_drag(hub))
+    }
+
+    /// The `drag-update` events `dragMove` and `dragEnd` dispatched, for the source lists.
+    fn dispatch_drag(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
+        let mut result = Ok(());
+        for update in self.drag.take_updates() {
+            let (x, y, end) = (update.x, update.y, update.end);
+            let input = match &update.data {
+                DragData::Fields(fields) => ListInput::FieldDrag {
+                    fields: &fields.fields,
+                    children: &fields.children,
+                    x,
+                    y,
+                    end,
+                },
+                DragData::ListItem(payload) => ListInput::ItemDrag { payload, x, y, end },
+                DragData::Tab(_) => continue,
+            };
+            let (_, errors) = hub.source_list_input(input);
+            if let (Ok(()), Some(e)) = (&result, errors.into_iter().next()) {
+                result = Err(TabsError::Thrown(e));
+            }
+        }
         result
+    }
+
+    /// A list item drag the source list started: `window.startDrag` with a copy of the item.
+    pub fn start_list_drag(&mut self, start: ItemDragStart, item: ItemView) {
+        self.start_drag(
+            start.x,
+            start.y,
+            start.offset_x,
+            start.offset_y,
+            DragContent::ListItem {
+                item,
+                width: start.client_width,
+            },
+            DragData::ListItem(start.payload),
+        );
     }
 
     /// The window's `mouseup` listeners: the sidebar handle's, the controls handle's, then
     /// hub.ts's `dragEnd`.
-    pub fn window_mouse_up(&mut self, hub: &mut HubModel) {
+    pub fn window_mouse_up(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
         hub.with_sidebar(|sidebar, _| sidebar.handle_mouse_up());
         self.cursor = BodyCursor::Initial;
         hub.tabs_mut().0.window_mouse_up();
@@ -987,6 +1033,7 @@ impl HubShell {
             self.drag.end();
             self.cursor = BodyCursor::Unset;
         }
+        self.dispatch_drag(hub)
     }
 
     /// The document's `drop` listener: the dropped files' paths as `open-files-request`, or

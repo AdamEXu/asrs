@@ -249,7 +249,9 @@ impl<H: FrameHost> HubFrame<H> {
 
     fn mouse_up(&mut self, cx: &mut Context<'_, Self>) {
         let shell = &mut self.shell;
-        self.host.input(cx, |hub| shell.window_mouse_up(hub));
+        if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
+            eprintln!("asrs: {e}");
+        }
         cx.notify();
     }
 
@@ -600,6 +602,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     Some(tab) => item.opacity(0.5).child(tab).into_any_element(),
                     None => item.into_any_element(),
                 },
+                DragContent::ListItem { .. } => item.into_any_element(),
             };
             root = root.child(item);
         }

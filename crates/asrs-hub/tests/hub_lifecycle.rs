@@ -104,6 +104,10 @@ impl HubView for View {
     fn measure_value(&self, _value: &RowValue) -> f64 {
         0.0
     }
+
+    fn source_list_dom(&mut self) -> &mut dyn asrs_model::source_list::SourceListDom {
+        asrs_model::source_list::Undisplayed::dom()
+    }
 }
 
 struct Emit(Vec<(&'static str, Value)>);

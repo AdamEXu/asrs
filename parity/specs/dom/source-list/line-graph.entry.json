@@ -64,7 +64,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "added"
       },
@@ -159,7 +163,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "field-drag"
       },
@@ -199,7 +207,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "reorder-down"
       },
@@ -239,7 +251,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "reorder-up"
       },
@@ -282,7 +298,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "cross-list"
       },
@@ -352,7 +372,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "rejected-drags"
       },
@@ -446,7 +470,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "interactions"
       },
@@ -458,7 +486,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "dark"
       },
@@ -488,7 +520,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "availability"
       },
@@ -513,7 +549,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "restored-field"
       },
@@ -528,7 +568,11 @@
       },
       {
         "capture": [
-          "sourceLists"
+          "sourceLists",
+          {
+            "kind": "eval",
+            "expr": "/*sl:widths*/ Array.from(document.querySelectorAll('div.source-list > div.list'), (list) => [list.parentElement.className, Array.from(list.children, (item) => [item.querySelector('div.type-name').innerText, item.querySelector('div.key-container').style.getPropertyValue('--type-width')])])"
+          }
         ],
         "label": "set-state"
       }
