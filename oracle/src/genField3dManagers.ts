@@ -78,7 +78,7 @@ for (const setup of setups) {
 
 // Game pieces: instances per variant; an unknown variant keeps the disposed instances.
 const pieces = {
-  Note: { geometry: ["TorusGeometry", 0.18, 0.025, 6, 12], color: 0xff8800 },
+  Note: { geometry: ["BoxGeometry", 0.36, 0.36, 0.05], color: 0xff8800 },
   Algae: { geometry: ["SphereGeometry", 0.2, 8, 6], color: 0x22aa88 },
   Coral: { geometry: ["CylinderGeometry", 0.05, 0.05, 0.3, 8], color: 0xeeeeee }
 };
@@ -200,8 +200,12 @@ emit("cone", "cone/blank", setups[0], [
     ["field", ftc],
     hm(spread(8)),
     ["preferences", { coordinateSystem: "wall-alliance" }],
+    hm(first),
     ["redAlliance", false],
-    hm(spread(8)),
+    hm(first),
+    ["field", frc],
+    ["redAlliance", true],
+    hm(first),
     ["field", systemcore],
     ["preferences", {}],
     hm([]),
