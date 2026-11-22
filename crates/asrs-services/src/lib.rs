@@ -5,6 +5,7 @@ pub mod ds_layout;
 pub mod fs;
 pub mod historical_start;
 pub mod layout;
+pub mod lifecycle;
 pub mod path;
 pub mod recent_units;
 pub mod state_tracker;

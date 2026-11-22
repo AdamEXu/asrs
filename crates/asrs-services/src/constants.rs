@@ -13,6 +13,7 @@ pub const SATELLITE_DEFAULT_WIDTH: f64 = 900.0;
 pub const SATELLITE_DEFAULT_HEIGHT: f64 = 500.0;
 pub const SAVE_PERIOD_MS: f64 = 250.0;
 pub const MAX_RECENT_UNITS: usize = 5;
+pub const AKIT_PATH_INPUT_PERIOD_MS: f64 = 250.0;
 
 fn join(style: PathStyle, dir: &str, name: &str) -> String {
     style
@@ -42,6 +43,45 @@ pub fn type_memory_filename(style: PathStyle, user_data: &str) -> String {
 /// `path.join(app.getPath("userData"), "recent-units.json")`.
 pub fn recent_units_filename(style: PathStyle, user_data: &str) -> String {
     join(style, user_data, "recent-units.json")
+}
+
+/// `APP_VERSION`: `app.getVersion()` in a packaged build, `"dev"` otherwise.
+pub fn app_version(packaged: bool) -> &'static str {
+    if packaged {
+        asrs_model::build_constants::VERSION
+    } else {
+        "dev"
+    }
+}
+
+/// `path.join(app.getPath("userData"), "autoAssets")`.
+pub fn auto_assets_dir(style: PathStyle, user_data: &str) -> String {
+    join(style, user_data, "autoAssets")
+}
+
+/// `path.join(app.getPath("userData"), "userAssets")`.
+pub fn default_user_assets_dir(style: PathStyle, user_data: &str) -> String {
+    join(style, user_data, "userAssets")
+}
+
+/// `path.join(app.getPath("temp"), "akit-log-path.txt")`: the log path AdvantageKit reads back.
+pub fn akit_path_output(style: PathStyle, temp: &str) -> String {
+    join(style, temp, "akit-log-path.txt")
+}
+
+/// `path.join(app.getPath("temp"), "ascope-log-path.txt")`: a log path AdvantageKit asks to open.
+pub fn akit_path_input(style: PathStyle, temp: &str) -> String {
+    join(style, temp, "ascope-log-path.txt")
+}
+
+/// `path.join(app.getPath("temp"), "advantagescope-video-cache")`.
+pub fn video_cache_dir(style: PathStyle, temp: &str) -> String {
+    join(style, temp, "advantagescope-video-cache")
+}
+
+/// `path.join(app.getPath("userData"), "video-cache")`.
+pub fn video_cache_fallback_dir(style: PathStyle, user_data: &str) -> String {
+    join(style, user_data, "video-cache")
 }
 
 /// `path.join(app.getPath("userData"), \`beta-${BETA_CONFIG.year}.json\`)`.
