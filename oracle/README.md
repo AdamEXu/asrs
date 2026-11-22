@@ -176,7 +176,7 @@ different lines.
 
 A generator hash covers only what that vector's generator uses: the harness files its entry
 point bundles (esbuild's metafile, recorded by `build.mjs` in `target/oracle/dist/inputs.json`
-as paths under `oracle/`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
+as paths under `oracle/`; `gen` keeps a committed copy in `oracle/inputs.json`), the bundles it starts at runtime (`runtimeLoads` in `build.mjs`:
 `protoRenderer` spawns the renderer check, `canvasMain` loads the canvas page, `dom` evaluates
 the hub page bundle; a Blink `dom` vector adds the `dom` and `domBlinkMain` entries' inputs),
 `build.mjs`
@@ -236,7 +236,13 @@ manifest's upstream commit, Electron version or environment policy differs from 
 one, or if any vector's generator hash, spec, zone or content hash (against the committed
 file) is stale, or a manifest entry has no spec. So an edit to a spec or to the oracle
 sources without a regenerate fails even when it would not change the output. Only then does
-it regenerate in memory and compare content with the differ.
+it regenerate in memory and compare content with the differ. It also fails when
+`oracle/inputs.json` differs from the graph the build just recorded.
+
+`gen --check-hashes` is the first stage alone, computed from `oracle/inputs.json` and
+repository files, so it needs no oracle install, upstream checkout or Electron. CI runs it, so
+an edit to `build.mjs`, `package-lock.json`, a harness source or a spec cannot merge without
+regenerating the vectors it touches.
 
 Rust tests read vectors without the oracle: `asrs_parity::fn_vectors!(test, "<id>", |case| ...)`
 checks each recorded response, `asrs_parity::record_vectors!` hands over raw records, and a
