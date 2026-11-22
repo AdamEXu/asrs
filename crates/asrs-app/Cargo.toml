@@ -24,6 +24,7 @@ asrs-ui.workspace = true
 [dev-dependencies]
 asrs-field3d = { path = "../asrs-field3d" }
 asrs-parity = { path = "../asrs-parity" }
+asrs-tabs = { path = "../asrs-tabs" }
 async-channel = "=2.5.0"
 image = { version = "=0.25.10", default-features = false }
 

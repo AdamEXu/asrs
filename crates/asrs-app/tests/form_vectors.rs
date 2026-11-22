@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_methods)]
-
 //! Replays the Blink `form/number-input` and `form/range-input` vectors through the value path
 //! the input components use: a [`FieldValue`] over `asrs_tabs::form::NumberInput` for number
 //! fields, and the slider's [`RangeModel`] over `asrs_tabs::form::RangeInput`. A record with

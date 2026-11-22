@@ -3,10 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use asrs_js::string::JsString;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
-use asrs_tabs::form;
 use asrs_ui::button::IconButton;
 use asrs_ui::capture::{Capture, HeadlessCapture};
 use asrs_ui::icon::{Icon, IconFit, IconSource};
@@ -190,15 +188,17 @@ fn probe_svg(p: &Probe) -> String {
 /// `div.video-timeline-container { border-radius: 5px; overflow: hidden }` in `hub.css`.
 const VIDEO_TIMELINE_RADIUS: f32 = 5.0;
 
-struct Number(form::NumberInput);
+/// The number scenes only show valid values, which a number input's value sanitization keeps
+/// as written.
+struct Number(String);
 
 impl FieldModel for Number {
     fn value(&self) -> String {
-        self.0.value().to_string_lossy()
+        self.0.clone()
     }
 
     fn set_value(&mut self, value: &str) {
-        self.0.set_value(JsString::from(value));
+        self.0 = value.to_owned();
     }
 
     fn accepts(&self, c: char) -> bool {
@@ -257,7 +257,7 @@ fn field<M: FieldModel>(
 }
 
 fn number(c: &Control) -> Number {
-    Number(form::NumberInput::new(c.value.as_deref().unwrap_or("")))
+    Number(c.value.clone().unwrap_or_default())
 }
 
 enum Part {

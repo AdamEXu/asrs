@@ -30,7 +30,6 @@ tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", 
 [dev-dependencies]
 asrs-js = { path = "../asrs-js" }
 asrs-parity = { path = "../asrs-parity" }
-asrs-tabs = { path = "../asrs-tabs" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
