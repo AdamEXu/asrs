@@ -6,6 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::math;
 use crate::number;
+use crate::string::JsString;
+use crate::value::JsValue;
 
 /// `msPerDay`.
 pub const MS_PER_DAY: f64 = 86_400_000.0;
@@ -505,10 +507,10 @@ pub fn format_date(epoch_ms: f64, zone: &impl LocalZone) -> String {
 pub fn format_time_with_ms(time: f64) -> String {
     let seconds = math::floor(time);
     let milliseconds = math::floor((time - seconds) * 1000.0);
-    let ms = crate::string::JsString::from(number::to_string(milliseconds));
+    let ms = JsString::from(number::to_string(milliseconds));
     let padded = ms
-        .pad_start(3.0, Some(&crate::string::JsString::from("0")))
-        .unwrap_or_else(|_| crate::string::JsString::new());
+        .pad_start(3.0, Some(&JsString::from("0")))
+        .unwrap_or_else(|_| JsString::new());
     format!(
         "{}.{}",
         number::to_string(seconds),
@@ -643,8 +645,8 @@ pub fn local_date(fields: &[f64], zone: &impl LocalZone) -> f64 {
 /// `abcdefghijklmnopqrstuvwxyz0123456789`, `charAt` semantics included.
 pub fn create_uuid(rng: &mut dyn Rng) -> String {
     const OPTIONS: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let options = crate::string::JsString::from(OPTIONS);
-    let mut out = crate::string::JsString::new();
+    let options = JsString::from(OPTIONS);
+    let mut out = JsString::new();
     for _ in 0..32 {
         let index = math::floor(rng.next_f64() * OPTIONS.len() as f64);
         out.push_str(&options.char_at(index));
@@ -707,4 +709,20 @@ mod tests {
         assert_eq!(draws[64], 0x3fde_1f7a_c97a_0320);
         assert_eq!(draws[129], 0x3fcd_016b_bed4_84d4);
     }
+}
+
+/// `Date.parse(text)`, which is also what `new Date(text)` does with a string: V8's `DateParser`
+/// (`src/date/dateparser*.{h,cc}`), the ES date-time format first and its legacy fallback after,
+/// then `ParseDateTimeString` (`src/date/date.cc`): a result without an offset is local time
+/// resolved through `zone`. `NaN` when V8 rejects the text.
+pub fn parse_date(text: &JsString, zone: &impl LocalZone) -> f64 {
+    let _ = (text, zone);
+    todo!("P07: port V8's DateParser")
+}
+
+/// `new Date(value)` with one argument that is not a `Date`: `ToPrimitive`, then
+/// [`parse_date`] for a string and `TimeClip(ToNumber(value))` otherwise.
+pub fn date_from_value(value: &JsValue, zone: &impl LocalZone) -> f64 {
+    let _ = (value, zone);
+    todo!("P07: new Date(value)")
 }

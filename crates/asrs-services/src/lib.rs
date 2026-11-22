@@ -1,13 +1,17 @@
+pub mod about;
 pub mod asset_loader;
 pub mod beta;
 pub mod constants;
+pub mod dialog;
 pub mod ds_layout;
 pub mod fs;
 pub mod historical_start;
 pub mod layout;
+pub mod licenses;
 pub mod path;
 pub mod recent_units;
 pub mod state_tracker;
 pub mod type_memory;
+pub mod update;
 pub mod window_manager;
 pub mod windows;
