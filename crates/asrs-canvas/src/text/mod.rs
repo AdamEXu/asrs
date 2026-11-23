@@ -5,10 +5,14 @@ pub mod font;
 pub mod inline;
 pub mod layout;
 pub mod line_break;
+#[cfg(target_os = "linux")]
+pub mod linux;
 pub mod lut;
 #[cfg(target_os = "macos")]
 mod mac;
 pub mod metrics;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod shaping;
 
 use std::sync::Arc;
 
@@ -24,6 +28,17 @@ pub struct Mask {
     pub data: Vec<u8>,
     /// `data` is a colour glyph's premultiplied RGBA, four bytes a pixel, not coverage.
     pub color: bool,
+}
+
+/// A glyph's coverage for an RGB-ordered LCD, one value per colour channel, `3 * width * height`
+/// bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LcdMask {
+    pub left: i32,
+    pub top: i32,
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u8>,
 }
 
 /// A glyph of one sized font instance. `face` is the backend's id for that instance: the primary
@@ -107,6 +122,27 @@ pub trait TextBackend {
         matrix: [f64; 4],
         phase: (u8, u8),
     ) -> Option<Arc<Mask>>;
+
+    /// `raw_mask` as three-channel LCD coverage, or `None` where the backend has no LCD text or
+    /// the glyph is a colour glyph.
+    fn raw_lcd_mask(
+        &mut self,
+        glyph: Glyph,
+        scale: f64,
+        x_scale: f64,
+        phase: u8,
+    ) -> Option<Arc<LcdMask>> {
+        let _ = (glyph, scale, x_scale, phase);
+        None
+    }
+
+    /// The display scale the app runs at, returning whether it changes what the backend answers.
+    /// Chromium turns hinting off for every font, canvas fonts included, on a Linux display scaled
+    /// above 1.
+    fn set_device_scale(&mut self, scale: f32) -> bool {
+        let _ = scale;
+        false
+    }
 }
 
 impl<T: TextBackend + ?Sized> TextBackend for Box<T> {
@@ -142,13 +178,30 @@ impl<T: TextBackend + ?Sized> TextBackend for Box<T> {
     ) -> Option<Arc<Mask>> {
         (**self).raw_mask_transformed(glyph, matrix, phase)
     }
+
+    fn raw_lcd_mask(
+        &mut self,
+        glyph: Glyph,
+        scale: f64,
+        x_scale: f64,
+        phase: u8,
+    ) -> Option<Arc<LcdMask>> {
+        (**self).raw_lcd_mask(glyph, scale, x_scale, phase)
+    }
+
+    fn set_device_scale(&mut self, scale: f32) -> bool {
+        (**self).set_device_scale(scale)
+    }
 }
 
 /// The platform backend behind a glyph and shaping cache.
 pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
     #[cfg(target_os = "macos")]
     return Some(Box::new(cache::Cached::new(mac::CoreText::new())));
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    return linux::Fontations::new()
+        .map(|b| Box::new(cache::Cached::new(b)) as Box<dyn TextBackend>);
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     return None;
 }
 

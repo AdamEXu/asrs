@@ -335,7 +335,11 @@ pub fn canvas_view(
     let paint_state = state.clone();
     canvas(
         move |bounds, window, cx| {
-            let metrics = CanvasMetrics::measure(bounds, window.scale_factor());
+            let dpr = window.scale_factor();
+            if let Some(backend) = &mut cx.default_global::<CanvasText>().backend {
+                backend.set_device_scale(dpr);
+            }
+            let metrics = CanvasMetrics::measure(bounds, dpr);
             state.update(cx, |this, _| this.metrics = Some(metrics));
             if let Some(frame) = painter(&metrics, cx) {
                 state.update(cx, |this, cx| this.draw(frame, window, cx));

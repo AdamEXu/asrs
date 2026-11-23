@@ -21,6 +21,8 @@ commands:
   lut [--check]         calibrate parity/vectors/canvas/lut-<os>.bin from the calibration scenes and
                         the platform text backend (asrs-cli canvas lut)
   measure [--check]     write parity/vectors/canvas/measure-<os>.jsonl.zst
+  scenes                write parity/vectors/canvas/scenes-<os>/: the display lists and CPU
+                        references of the text scenes `asrs-cli` tests against on that platform
   diff <port dir> [<scene>...]
                         gate <port dir>/<scene>.png (straight RGBA, like getImageData) against the
                         references; writes <port dir>/report.json and diff/<scene>.png
@@ -50,6 +52,7 @@ pub fn run(args: &[String]) -> Result {
         Some("ref") => reference(&paths, &reference_dir(&paths), rest),
         Some("lut") => lut(&paths, check),
         Some("measure") => measure(&paths, check),
+        Some("scenes") => pin_scenes(&paths),
         Some("diff") => match rest.split_first() {
             Some((port, scenes)) => diff(&reference_dir(&paths), Path::new(port), scenes),
             None => Err(USAGE.to_owned()),
@@ -126,6 +129,7 @@ fn references_current(paths: &Paths, dir: &Path) -> Result<bool> {
 }
 
 pub(crate) fn reference(paths: &Paths, out: &Path, scenes: &[String]) -> Result {
+    check_fonts(paths)?;
     oracle::build_harness(paths)?;
     let stamp = out.join(GENERATOR_STAMP);
     if scenes.is_empty() {
@@ -168,6 +172,7 @@ fn asrs_cli(paths: &Paths) -> Result<Command> {
 }
 
 fn fit_lut(paths: &Paths, scratch: &Path) -> Result<Vec<u8>> {
+    check_fonts(paths)?;
     oracle::build_harness(paths)?;
     electron(paths, &["canvas-lut".to_owned(), path_arg(scratch)])?;
     let out = scratch.join("lut.bin");
@@ -210,7 +215,101 @@ pub(crate) fn lut(paths: &Paths, check: bool) -> Result {
     Ok(())
 }
 
+/// The scenes whose references are small enough to commit and that only differ between platforms
+/// in their text.
+const PINNED_SCENES: &[&str] = &[
+    "text-light-1x",
+    "text-dark-1x",
+    "text-light-2x",
+    "textstyles-light-1x",
+    "textstyles-dark-1x",
+    "textstyles-light-2x",
+    "textemoji-light-1x",
+    "textemoji-dark-1x",
+    "textemoji-light-2x",
+    "gradienttext-light-1x",
+    "transforms-1x",
+    "transforms-2x",
+];
+
+fn pin_scenes(paths: &Paths) -> Result {
+    check_fonts(paths)?;
+    let reference = reference_dir(paths);
+    if !references_current(paths, &reference)? {
+        self::reference(paths, &reference, &[])?;
+    }
+    write_pinned(paths, &reference)
+}
+
+fn write_pinned(paths: &Paths, reference: &Path) -> Result {
+    let dir = vectors_dir(paths).join(format!("scenes-{}", platform()));
+    let mut entries = Vec::new();
+    for name in PINNED_SCENES {
+        let scene = oracle::read(&reference.join(format!("scenes/{name}.json")))?;
+        let image = oracle::read(&reference.join(format!("ref/{name}.cpu.png")))?;
+        write(&dir.join(format!("{name}.json")), &scene)?;
+        write(&dir.join(format!("{name}.png")), &image)?;
+        entries.push(Json::object([
+            ("scene", Json::string(name)),
+            ("content", Json::string(&oracle::hash_bytes(&image))),
+        ]));
+    }
+    update_manifest(
+        paths,
+        &reference.join("info.json"),
+        "scenes",
+        Json::Array(entries),
+    )?;
+    eprintln!("wrote {} scenes to {}", PINNED_SCENES.len(), dir.display());
+    Ok(())
+}
+
+/// Refuses a Linux host whose fontconfig does not serve the font files the manifest records for
+/// the render host, wherever they are installed.
+pub(crate) fn check_fonts(paths: &Paths) -> Result {
+    if platform() != "linux" {
+        return Ok(());
+    }
+    let manifest = read_json(&vectors_dir(paths).join("linux.json"))?;
+    let Some(Json::Object(fonts)) = manifest.get("host").and_then(|h| h.get("fonts")).cloned()
+    else {
+        return Err("linux.json records no host fonts".to_owned());
+    };
+    let listed = Command::new("fc-list")
+        .args(["-f", "%{file}\n"])
+        .output()
+        .map_err(|e| format!("fc-list: {e}"))?;
+    let listed = String::from_utf8_lossy(&listed.stdout).into_owned();
+    let mut problems = Vec::new();
+    for (path, hash) in &fonts {
+        let path = path.to_string_lossy();
+        let name = path.rsplit('/').next().unwrap_or_default();
+        let want = hash.as_str().map(|h| h.to_string_lossy());
+        let found: Vec<&str> = listed
+            .lines()
+            .filter(|l| l.rsplit('/').next() == Some(name))
+            .collect();
+        if found.is_empty() {
+            problems.push(format!("{name}: not installed"));
+        }
+        for file in found {
+            if Some(crate::sha256_hex(&oracle::read(Path::new(file))?)) != want {
+                problems.push(format!("{file}: not the recorded file"));
+            }
+        }
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "the fonts differ from the render host's (set FONTCONFIG_FILE):\n  {}",
+            problems.join("\n  ")
+        ))
+    }
+}
+
 fn measure(paths: &Paths, check: bool) -> Result {
+    check_fonts(paths)?;
     oracle::build_harness(paths)?;
     let scratch = reference_dir(paths).join("measure");
     electron(paths, &["measure".to_owned(), path_arg(&scratch)])?;
