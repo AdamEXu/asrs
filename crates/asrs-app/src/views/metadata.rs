@@ -11,7 +11,9 @@ use asrs_ui::theme::Appearance;
 use super::cell_text::css;
 use super::frame::{FrameHost, HubFrame};
 use super::large_table::Grid;
-use super::metadata_layout::{CellKind, MetadataLayout, Placed, alert_style, cell_style};
+use super::metadata_layout::{
+    CellKind, MetadataLayout, Placed, alert_style, cell_style, satellite_alert_style,
+};
 use super::statistics::text_lines;
 
 #[derive(Default)]
@@ -96,7 +98,9 @@ impl<H: FrameHost> HubFrame<H> {
         scale: f32,
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
-        let table = displayed(self.host().hub(cx))?.clone();
+        let hub = self.host().hub(cx);
+        let satellite = hub.page().is_satellite();
+        let table = displayed(hub)?.clone();
         let grid = Grid {
             origin: [rect[0], rect[1]],
             scale: f64::from(scale),
@@ -106,13 +110,18 @@ impl<H: FrameHost> HubFrame<H> {
             let placed = layout.place(&table, rect[2], scale);
             return Some(table_element(grid, placed, rect, appearance));
         }
-        let alert = layout.alert([rect[2], rect[3]], scale);
+        let (alert, style) = if satellite {
+            let alert = layout.satellite_alert(rect[2], scale);
+            (alert, satellite_alert_style())
+        } else {
+            (layout.alert([rect[2], rect[3]], scale), alert_style())
+        };
         let at = [rect[0] + alert.origin[0], rect[1] + alert.origin[1]];
         let [w, h] = alert.size.map(|v| css(v, scale));
         let color = appearance.theme().text;
         let layer = div().absolute().inset_0();
         Some(
-            text_lines(grid, &alert.text, &alert_style(), at, color, layer)
+            text_lines(grid, &alert.text, &style, at, color, layer)
                 .child(probed("div.tab-centered", grid.place([at[0], at[1], w, h])))
                 .into_any_element(),
         )

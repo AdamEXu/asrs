@@ -11,8 +11,22 @@ type Size = (f64, f64);
 /// `INT_MAX`, which Electron puts in for a maximum size dimension that is not given.
 const UNBOUNDED: f64 = i32::MAX as f64;
 
+/// How much taller a framed window's bounds are than its content, where that is not the
+/// platform's own to say.
+fn scripted_frame(options: &WindowOptions, cx: &App) -> f64 {
+    #[cfg(feature = "parity")]
+    if options.kind == WindowKind::Satellite
+        && let Some(frame) = cx.try_global::<super::ScriptedFrame>()
+    {
+        return frame.title_bar;
+    }
+    let _ = (options, cx);
+    0.0
+}
+
 fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui::WindowOptions {
-    let content = size(px(options.width as f32), px(options.height as f32));
+    let height = options.height - scripted_frame(options, cx);
+    let content = size(px(options.width as f32), px(height as f32));
     let origin = options
         .x
         .zip(options.y)
@@ -85,7 +99,20 @@ fn bounds(window: &Window) -> Rect {
     }
 }
 
-fn track<V: Render>(id: WindowId, window: &mut Window, entity: &Entity<V>, cx: &mut App) {
+fn track<V: Render>(
+    id: WindowId,
+    frame: f64,
+    window: &mut Window,
+    entity: &Entity<V>,
+    cx: &mut App,
+) {
+    let bounds = move |window: &Window| {
+        let content = bounds(window);
+        Rect {
+            height: content.height + frame,
+            ..content
+        }
+    };
     let opened = bounds(window);
     cx.global_mut::<Windows>().manager.set_bounds(id, opened);
     entity.update(cx, |_, cx| {
@@ -159,6 +186,7 @@ pub(super) fn open<V: Render>(
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> asrs_ui::gpui::Result<(AnyWindowHandle, Entity<V>)> {
     let deferred = cfg!(target_os = "macos");
+    let frame = scripted_frame(&options, cx);
     let parent = options
         .parent
         .and_then(|parent| Windows::handle(cx, parent))
@@ -178,17 +206,20 @@ pub(super) fn open<V: Render>(
             if options.always_on_top {
                 platform::keep_visible_when_inactive(window);
             }
-            track(id, window, &entity, cx);
+            track(id, frame, window, &entity, cx);
             native = platform::native_window(window);
             entity
         })?;
     if let Some(native) = native {
+        cx.global_mut::<Windows>().hidden.push(id);
         cx.spawn(async move |cx| {
             finish(&native, &options, parent.as_ref());
             handle
                 .update(cx, |_, window, cx| {
                     let bounds = bounds(window);
-                    cx.global_mut::<Windows>().manager.set_bounds(id, bounds);
+                    let windows = cx.global_mut::<Windows>();
+                    windows.manager.set_bounds(id, bounds);
+                    windows.hidden.retain(|hidden| *hidden != id);
                 })
                 .ok();
         })

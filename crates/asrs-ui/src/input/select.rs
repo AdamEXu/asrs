@@ -588,6 +588,9 @@ impl<M: SelectModel> Select<M> {
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if window.default_prevented() {
+            return;
+        }
         let time = self.epoch.elapsed().as_secs_f64() * 1000.0;
         if self.key(&event.keystroke, time, window, cx) {
             cx.stop_propagation();

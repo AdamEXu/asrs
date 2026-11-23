@@ -395,6 +395,7 @@ impl WindowManager {
                 (options.x, options.y) = (Some(state.x), Some(state.y));
                 (options.width, options.height) = (state.width, state.height);
             }
+            SatellitePlacement::Unplaced => {}
         }
         let id = self.add(WindowKind::Satellite);
         match self.satellites.get_mut(uuid) {
@@ -539,4 +540,6 @@ impl WindowManager {
 pub enum SatellitePlacement {
     Parent(WindowId),
     Saved(Rect),
+    /// A saved state without numeric bounds.
+    Unplaced,
 }

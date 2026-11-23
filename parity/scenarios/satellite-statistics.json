@@ -1,0 +1,277 @@
+{
+  "about": "Interaction (U23): a statistics tab popped out. The chart draws from its own animation frames: it animates in, a bar is hovered and left, and a change of the hub's fields reaches the satellite",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [],
+                "timeRange": "full",
+                "rangeMin": 0,
+                "rangeMax": 10,
+                "stepSize": 1
+              },
+              "controllerUUID": "statistics0000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 246
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "wait": 600
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "mouse": "click",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "stats",
+      "probes": [
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "wait": 50
+    },
+    {
+      "mouse": "move",
+      "x": 605,
+      "y": 380
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "hover",
+      "probes": [
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "left",
+      "probes": [
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 212
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 212
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 216
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "more",
+      "probes": [
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas"
+      ]
+    }
+  ]
+}

@@ -170,6 +170,8 @@ pub struct StatisticsViews {
     hovered: bool,
     pointer: Option<[f64; 2]>,
     pressed: bool,
+    /// A satellite's next frame runs the chart's callbacks.
+    frame_requested: bool,
 }
 
 fn inside([left, top, w, h]: [f64; 4], x: f64, y: f64) -> bool {
@@ -213,13 +215,14 @@ fn with_controller<R>(
     tab.controller.downcast_mut::<StatisticsController>().map(f)
 }
 
-fn displayed(hub: &HubModel) -> Option<(&StatisticsRenderer, &StatisticsController)> {
+/// The displayed statistics tab, whose controller a satellite does not have.
+fn displayed(hub: &HubModel) -> Option<(&StatisticsRenderer, Option<&StatisticsController>)> {
     hub.tabs().tabs().find_map(|tab| {
         if tab.content_hidden() || tab.tab_type() != Some(TabType::Statistics) {
             return None;
         }
         let renderer = tab.renderer().downcast_ref::<StatisticsRenderer>()?;
-        let controller = tab.controller().downcast_ref::<StatisticsController>()?;
+        let controller = tab.controller().downcast_ref::<StatisticsController>();
         Some((renderer, controller))
     })
 }
@@ -483,12 +486,22 @@ impl<H: FrameHost> HubFrame<H> {
         };
         self.statistics.shown = Some(shown);
         self.statistics_layout_changed(cx);
-        // The hub's own frame loop runs the chart's callbacks.
+        // The hub's own frame loop runs the chart's callbacks, which a satellite does not have.
         let pending = displayed(self.host().hub(cx))
             .and_then(|(r, _)| r.histogram())
             .is_some_and(|chart| chart.callbacks() > 0);
         if scrolling || pending {
             window.request_animation_frame();
+        }
+        let satellite = self.host().hub(cx).page().is_satellite();
+        if satellite && pending && !std::mem::replace(&mut self.statistics.frame_requested, true) {
+            let frame = cx.entity().downgrade();
+            window.on_next_frame(move |_, cx| {
+                let _ = frame.update(cx, |frame, cx| {
+                    frame.statistics.frame_requested = false;
+                    frame.host_mut().animation_frame(cx);
+                });
+            });
         }
 
         let tab = self.statistics.tabs.get_mut(&key)?;
@@ -800,6 +813,7 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let (renderer, controller) = displayed(self.host().hub(cx))?;
+        let controller = controller?;
         let key = renderer_key(renderer);
         let time_range = controller.time_range().clone();
         let inputs: [NumberInput; 3] = [
