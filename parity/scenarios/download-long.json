@@ -1,6 +1,5 @@
 {
   "about": "Interaction (U21): a list longer than the download window, so it has no filler rows and scrolls by the wheel, with rows hovered and selected where it was scrolled to, and then shown at its end",
-  "themes": ["light"],
   "prefs": {
     "robotAddress": "127.0.0.1",
     "remotePath": "/media/sda1/logs/",

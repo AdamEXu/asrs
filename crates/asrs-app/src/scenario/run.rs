@@ -369,6 +369,8 @@ fn modifiers(names: &[String]) -> Result<Modifiers, String> {
             "control" | "ctrl" => m.control = true,
             "alt" => m.alt = true,
             "meta" | "cmd" | "command" => m.platform = true,
+            "commandOrControl" if cfg!(target_os = "macos") => m.platform = true,
+            "commandOrControl" => m.control = true,
             other => return Err(format!("unknown modifier {other:?}")),
         }
     }

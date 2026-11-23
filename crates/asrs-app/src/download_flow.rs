@@ -1,14 +1,16 @@
 //! `main.ts`'s side of the download window: the window, the [`DownloadService`] behind it, and the
 //! dialogs its saves show.
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use asrs_model::preferences::Preferences;
 use asrs_services::download::downloader::{OpenLogBox, SaveLogDialog, Token, WindowMessage};
 use asrs_services::download::page::PageEvent;
 use asrs_services::download::{DownloadConfig, DownloadEvent, DownloadService};
 use asrs_services::path::PathStyle;
-use asrs_ui::gpui::{App, Context, Entity, Global, Window};
+use asrs_ui::gpui::{App, Context, Entity, Global, Subscription, Window};
 
 use crate::main_process::{MainProcess, process_platform};
 use crate::menus::dispatch;
@@ -130,10 +132,13 @@ fn on_closed(id: WindowId, cx: &mut App) {
     let Some(window) = Windows::handle(cx, id).map(|handle| handle.window_id()) else {
         return;
     };
-    cx.on_window_closed(move |cx, closed| {
+    let subscription: Rc<RefCell<Option<Subscription>>> = Rc::default();
+    let held = subscription.clone();
+    *subscription.borrow_mut() = Some(cx.on_window_closed(move |cx, closed| {
         if closed != window {
             return;
         }
+        held.borrow_mut().take();
         let downloads = cx.global_mut::<Downloads>();
         if downloads
             .window
@@ -143,8 +148,7 @@ fn on_closed(id: WindowId, cx: &mut App) {
             downloads.window = None;
             downloads.service.window_closed();
         }
-    })
-    .detach();
+    }));
 }
 
 /// The download window's `set-preferences` in `sendAllPreferences`.

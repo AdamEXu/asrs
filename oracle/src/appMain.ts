@@ -250,6 +250,10 @@ function clickAppMenu(labels: string[]) {
   (found[0].click as any)({}, target, target!.webContents);
 }
 
+function hostModifiers(names: string[] = []): string[] {
+  return names.map((name) => (name !== "commandOrControl" ? name : process.platform === "darwin" ? "meta" : "control"));
+}
+
 async function switchPrompt(name: string | null, width?: number, height?: number) {
   if (name === null) {
     await until("the prompt to close", READY_TIMEOUT_MS, async () => prompt === null || prompt.isDestroyed());
@@ -543,7 +547,7 @@ async function perform(action: Action) {
       // A real mouse reports the held button on its down and moves (PointerEvent.buttons).
       if (type === "mouseDown") pressedButton = button;
       if (type === "mouseUp") pressedButton = null;
-      const modifiers = [...(action.modifiers ?? []), ...(pressedButton === null ? [] : [`${pressedButton}ButtonDown`])];
+      const modifiers = [...hostModifiers(action.modifiers), ...(pressedButton === null ? [] : [`${pressedButton}ButtonDown`])];
       sendScripted(contents, { type, x: action.x, y: action.y, button, clickCount: action.clickCount ?? 1, modifiers } as any);
     }
   } else if ("wheel" in action) {
@@ -560,7 +564,7 @@ async function perform(action: Action) {
       canScroll: true
     } as any);
   } else if ("key" in action) {
-    const modifiers = (action.modifiers ?? []) as any;
+    const modifiers = hostModifiers(action.modifiers) as any;
     const send = (type: "keyDown" | "char" | "keyUp", keyCode = action.key) => {
       if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode, modifiers });
     };

@@ -1283,7 +1283,7 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 `{"selection": [method, ...args]}`,
 `{"mouse": "move"|"down"|"up"|"click", "x", "y", "modifiers": [...]}`,
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
-`{"key": keyCode, "modifiers": [...]}`, `{"dialog": button index | file name | null}` (queued
+`{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
 answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the
 context menu that popped up; neither side shows menus natively), `{"appMenu": [label, ...]}`
 (clicks, for the hub window, the one application menu item that has one of these labels, which
