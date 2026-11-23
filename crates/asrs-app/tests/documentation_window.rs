@@ -346,20 +346,21 @@ async fn hub_tab(cx: &mut AsyncApp, report: &mut Report) {
     restore(cx, 1.0, "#/tab-reference/line-graph");
     sleep(cx, 1500).await;
     report.equal("a tab never shown", &saved(cx), &JsValue::string(""));
-    restore(cx, 0.0, "#/tab-reference/line-graph");
-    sleep(cx, 3000).await;
-    report.equal(
-        "a tab shown",
-        &saved(cx),
-        &JsValue::string("#/tab-reference/line-graph"),
-    );
-    restore(cx, 0.0, "#/whats-new");
-    sleep(cx, 3000).await;
-    report.equal(
-        "a layout restored over it",
-        &saved(cx),
-        &JsValue::string("#/whats-new"),
-    );
+    for (name, hash) in [
+        ("a tab shown", "#/tab-reference/line-graph"),
+        ("a layout restored over it", "#/whats-new"),
+    ] {
+        restore(cx, 0.0, hash);
+        let expected = JsValue::string(hash);
+        for _ in 0..TIMEOUT_MS / 50 {
+            if saved(cx) == expected {
+                break;
+            }
+            sleep(cx, 50).await;
+        }
+        sleep(cx, QUIET_MS).await;
+        report.equal(name, &saved(cx), &expected);
+    }
     let _ = window.update(cx, |_, window, _| window.remove_window());
     drop((frame, hub));
     sleep(cx, 500).await;
@@ -381,6 +382,7 @@ fn main() {
     );
     asrs_ui::gpui::application().run(move |cx: &mut App| {
         asrs_ui::init(cx);
+        cx.activate(true);
         cx.set_global(DocumentationRoot {
             build,
             user_data: PathBuf::from(std::env::temp_dir()),
