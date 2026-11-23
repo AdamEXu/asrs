@@ -39,7 +39,9 @@ const RECORDS: usize = 29;
 const STEPS: usize = 212;
 const SIZE: [f64; 2] = [1100.0, 650.0];
 const TIMEOUT_MS: u64 = 20_000;
-const QUIET_MS: u64 = 300;
+const POLL_MS: u64 = 50;
+const TURNS: u32 = 20;
+const TURN_MS: u32 = 15;
 
 struct Shown {
     frame: Rc<RefCell<DocumentationFrame>>,
@@ -168,14 +170,33 @@ impl Page {
         panic!("the page did not load");
     }
 
+    /// Until the page has shown a route and kept its hash over `TURNS` of its own timer turns,
+    /// with that hash being the one saved here. An assignment is saved before the page has it.
     async fn settle(&self, cx: &mut AsyncApp) {
-        for _ in 0..TIMEOUT_MS / QUIET_MS {
-            let before = self.saved();
-            sleep(cx, QUIET_MS).await;
-            let shown = self
-                .query(cx, "document.querySelector('main') !== null")
-                .await;
-            if shown == "true" && self.saved() == before {
+        let watch = format!(
+            "(() => {{ \
+               const watch = window.watch = {{ turns: 0, hash: location.hash }}; \
+               const turn = () => {{ \
+                 if (window.watch !== watch) return; \
+                 const still = location.hash === watch.hash && document.querySelector('main'); \
+                 watch.turns = still ? watch.turns + 1 : 0; \
+                 watch.hash = location.hash; \
+                 setTimeout(turn, {TURN_MS}); \
+               }}; \
+               turn(); \
+             }})(); 1"
+        );
+        self.query(cx, &watch).await;
+        for _ in 0..TIMEOUT_MS / POLL_MS {
+            sleep(cx, POLL_MS).await;
+            let saved = match &self.saved() {
+                JsValue::String(hash) => hash.to_string_lossy(),
+                other => panic!("{other:?} is no hash"),
+            };
+            let quoted = saved.replace('\\', "\\\\").replace('\'', "\\'");
+            let script =
+                format!("(window.watch?.turns ?? 0) >= {TURNS} && location.hash === '{quoted}'");
+            if self.query(cx, &script).await == "true" {
                 return;
             }
         }
@@ -425,7 +446,7 @@ async fn hub_tab(cx: &mut AsyncApp, report: &mut Report) {
             }
             sleep(cx, 50).await;
         }
-        sleep(cx, QUIET_MS).await;
+        sleep(cx, 300).await;
         report.equal(name, &saved(cx), &expected);
     }
     let _ = window.update(cx, |_, window, _| window.remove_window());
