@@ -46,6 +46,7 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{
     ConsoleController, ConsoleDom, ConsoleGeometry, ConsoleRenderer,
 };
+use asrs_tabs::console::view::ConsoleRow;
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::field3d::Field3dController;
@@ -344,16 +345,16 @@ impl ConsoleGeometry for RecordedConsole {
         }
     }
 
-    fn scroll_top(&mut self) -> f64 {
+    fn scroll_top(&mut self, _: &[ConsoleRow]) -> f64 {
         self.0.borrow_mut().read_f64("scrollTop", CONSOLE_CONTAINER)
     }
 
-    fn set_scroll_top(&mut self, value: f64) {
+    fn set_scroll_top(&mut self, _: &[ConsoleRow], value: f64) {
         let mut reads = self.0.borrow_mut();
         reads.write_f64("scrollTop", CONSOLE_CONTAINER, value);
     }
 
-    fn scroll_height(&mut self) -> f64 {
+    fn scroll_height(&mut self, _: &[ConsoleRow]) -> f64 {
         let mut reads = self.0.borrow_mut();
         reads.read_f64("scrollHeight", CONSOLE_CONTAINER)
     }
@@ -363,7 +364,7 @@ impl ConsoleGeometry for RecordedConsole {
         reads.read_f64("clientHeight", CONSOLE_CONTAINER)
     }
 
-    fn row_client_height(&mut self, index: usize) -> f64 {
+    fn row_client_height(&mut self, _: &[ConsoleRow], index: usize) -> f64 {
         let mut reads = self.0.borrow_mut();
         reads.read_f64("clientHeight", &format!("{CONSOLE_BODY}>tr:{}", index + 1))
     }
@@ -1302,7 +1303,7 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         let scroll_top = match (container, dom) {
             ("data-table-container", DomKind::Table(dom)) => dom.borrow().scroll_top,
             ("console-table-container", DomKind::Console(dom)) => match &mut r.console_reads {
-                Some(reads) => reads.scroll_top(),
+                Some(reads) => reads.scroll_top(&[]),
                 None => dom.borrow().scroll_top,
             },
             _ => return Err(err(format!("unsupported eval {expr}"))),
