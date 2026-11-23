@@ -60,7 +60,8 @@ pub enum Property {
     LineCap(String),
     LineJoin(String),
     MiterLimit(f64),
-    LineDashOffset(f64),
+    /// `None` is `undefined` assigned to the property: recorded, and ignored like any NaN.
+    LineDashOffset(Option<f64>),
     GlobalAlpha(f64),
     Font(String),
     TextAlign(String),
@@ -110,6 +111,8 @@ pub enum Call {
     Scale(f64, f64),
     Rotate(f64),
     Translate(f64, f64),
+    SetTransform([f64; 6]),
+    ResetTransform,
     BeginPath,
     ClosePath,
     MoveTo(f64, f64),
@@ -136,7 +139,9 @@ pub enum Call {
         anticlockwise: Option<bool>,
     },
     Fill,
+    FillEvenOdd,
     Stroke,
+    Clip,
     FillRect(f64, f64, f64, f64),
     StrokeRect(f64, f64, f64, f64),
     ClearRect(f64, f64, f64, f64),
@@ -227,7 +232,7 @@ impl Canvas2d {
     }
 
     pub fn set_line_dash_offset(&mut self, offset: f64) {
-        self.set(Property::LineDashOffset(offset));
+        self.set(Property::LineDashOffset(Some(offset)));
     }
 
     pub fn set_global_alpha(&mut self, alpha: f64) {
@@ -352,12 +357,24 @@ impl Canvas2d {
         });
     }
 
+    pub fn set_transform(&mut self, matrix: [f64; 6]) {
+        self.push(Call::SetTransform(matrix));
+    }
+
+    pub fn reset_transform(&mut self) {
+        self.push(Call::ResetTransform);
+    }
+
     pub fn fill(&mut self) {
         self.push(Call::Fill);
     }
 
     pub fn stroke(&mut self) {
         self.push(Call::Stroke);
+    }
+
+    pub fn clip(&mut self) {
+        self.push(Call::Clip);
     }
 
     pub fn fill_rect(&mut self, x: f64, y: f64, w: f64, h: f64) {
