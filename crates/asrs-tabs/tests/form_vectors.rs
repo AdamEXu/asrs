@@ -421,3 +421,91 @@ record_vectors!(number_insert, "form/number-insert", |record: &Record| {
         input.value().to_string_lossy()
     ))
 });
+
+#[test]
+fn arrow_keys_step_number_inputs_as_in_blink() {
+    let specs = std::fs::read_to_string(
+        asrs_parity::vectors::workspace_root().join("parity/specs/form/number-keys.entry.json"),
+    )
+    .unwrap();
+    let spec = asrs_parity::json::parse(&specs).unwrap();
+    let steps = spec.get("fixture").and_then(|f| f.get("steps")).unwrap();
+    let markup: Vec<String> = steps
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| {
+            s.get("markup")
+                .and_then(Json::as_str)
+                .unwrap()
+                .to_string_lossy()
+        })
+        .collect();
+    let attribute = |step: usize, name: &str| {
+        let rest = markup[step].split_once(&format!(" {name}=\""))?.1;
+        Some(rest.split_once('"').unwrap().0.to_owned())
+    };
+    let records = asrs_parity::vectors::load("form/number-keys").unwrap();
+    let mut input = NumberInput::default();
+    let mut visible = String::new();
+    let mut committed = JsString::new();
+    let mut stepped = 0;
+    for record in records.iter() {
+        let at = format!("line {}", record.line);
+        let op = record.field("op").unwrap();
+        let events: Vec<String> = record
+            .field("events")
+            .and_then(Json::as_array)
+            .unwrap()
+            .iter()
+            .map(|e| e.as_str().unwrap().to_string_lossy())
+            .filter(|e| e == "input" || e == "change")
+            .collect();
+        let mut expected: Vec<&str> = Vec::new();
+        if let Some(op) = op.as_array() {
+            let word = |i: usize| op[i].as_str().unwrap().to_string_lossy();
+            match word(0).as_str() {
+                "set" if word(1) == "step" => input.set_step(JsString::from(word(2))),
+                "set" => {
+                    assert_eq!(word(1), "value", "{at}");
+                    input.set_value(JsString::from(word(2)));
+                    visible = input.value().to_string_lossy();
+                    committed = input.value().clone();
+                }
+                "char" => {
+                    visible.push_str(&word(1));
+                    input.set_visible_value(&JsString::from(visible.as_str()));
+                    expected.push("input");
+                }
+                "key" => {
+                    let alt = op.get(3).is_some_and(|m| m.to_compact().contains("alt"));
+                    let up = word(1) == "ArrowUp";
+                    if (up || !alt) && input.arrow_key(up) {
+                        visible = input.value().to_string_lossy();
+                        committed = input.value().clone();
+                        expected.extend(["input", "change"]);
+                    }
+                    stepped += 1;
+                }
+                "blur" => {
+                    if committed != *input.value() {
+                        committed = input.value().clone();
+                        expected.push("change");
+                    }
+                }
+                "focus" => {}
+                other => panic!("{at}: unknown op {other}"),
+            }
+        } else {
+            let step = record.field("step").and_then(Json::as_f64).unwrap() as usize;
+            input = NumberInput::new(&attribute(step, "value").unwrap_or_default());
+            input.set_step(JsString::from(attribute(step, "step").unwrap_or_default()));
+            visible = input.value().to_string_lossy();
+            committed = input.value().clone();
+        }
+        let value = record.string("value").unwrap();
+        assert_eq!(input.value().to_string_lossy(), value, "{at}: value");
+        assert_eq!(events, expected, "{at}: events");
+    }
+    assert!(stepped > 800, "{stepped} keys");
+}

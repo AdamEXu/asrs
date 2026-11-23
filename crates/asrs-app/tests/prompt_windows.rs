@@ -328,6 +328,8 @@ impl Prompt<'_> {
                     "Backspace" => ("backspace", None),
                     "ArrowLeft" => ("left", None),
                     "ArrowRight" => ("right", None),
+                    "ArrowUp" => ("up", None),
+                    "ArrowDown" => ("down", None),
                     " " => ("space", Some(" ")),
                     other => return Err(format!("no GPUI key for {other:?}")),
                 };
