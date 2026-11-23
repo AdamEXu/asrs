@@ -189,3 +189,7 @@ required-features = ["parity"]
 [[test]]
 name = "menu_view"
 harness = false
+
+[[test]]
+name = "scheduler_locks"
+required-features = ["parity"]
