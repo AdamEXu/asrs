@@ -32,7 +32,15 @@
             {
               "type": 10,
               "title": "Mechanism",
-              "controller": [],
+              "controller": [
+                {
+                  "type": "mechanism",
+                  "logKey": "/Mech/Arm",
+                  "logType": "Mechanism2d",
+                  "visible": true,
+                  "options": {}
+                }
+              ],
               "controllerUUID": "mechanism00000000000000000000000",
               "renderer": null,
               "controlsHeight": 200
@@ -49,46 +57,6 @@
     },
     {
       "idle": true
-    },
-    {
-      "mouse": "move",
-      "x": 90,
-      "y": 152
-    },
-    {
-      "mouse": "down",
-      "x": 90,
-      "y": 152
-    },
-    {
-      "mouse": "move",
-      "x": 100,
-      "y": 156
-    },
-    {
-      "mouse": "move",
-      "x": 345,
-      "y": 376
-    },
-    {
-      "mouse": "move",
-      "x": 598,
-      "y": 597
-    },
-    {
-      "mouse": "move",
-      "x": 600,
-      "y": 600
-    },
-    {
-      "mouse": "up",
-      "x": 600,
-      "y": 600
-    },
-    {
-      "mouse": "move",
-      "x": 700,
-      "y": 620
     },
     {
       "wait": 200
