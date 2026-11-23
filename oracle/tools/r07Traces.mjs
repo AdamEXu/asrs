@@ -15,8 +15,8 @@ const WIDE = { "/Users/pilot/Assets/Joystick_Wide/image.png": [1250, 800] };
 const TALL = { "bundledAssets/Joystick_Tall/image.png": [333, 1000] };
 
 // [scene name, fixture, painted-frame index within the fixture, {image path: natural size}].
-// Frames 4, 6 and 10 of joysticks/generic, 1 and 2 of joysticks/dpr2-dark and 44 of joysticks/many
-// hit the text and image residuals of #257.
+// Chosen among frames that pass the GPU-distance rule of the canvas gate. In a sample of 85 frames
+// 18 fail that rule (17 of them Joysticks) and all pass the CPU-canvas gate: #257.
 const PICKS = [
   ["swerve-trace-typical-light-1x", "swerve/basic", 5, {}],
   ["swerve-trace-many-light-1x", "swerve/many", 13, {}],

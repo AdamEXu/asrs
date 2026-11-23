@@ -32,9 +32,12 @@ pub struct JoysticksDom {
     pub client_size: [f64; 2],
     /// `window.devicePixelRatio`.
     pub device_pixel_ratio: f64,
-    /// Natural `[width, height]` per layout `path`; a missing entry is a broken image.
+    /// Natural `[width, height]` per layout `path`; a missing entry is a broken image. An entry
+    /// added after a render that missed it does not repaint until the render state changes.
     pub images: HashMap<JsString, [f64; 2]>,
     /// The last painted frame, until the host takes it. It draws each image under its path.
+    /// While a layout is shown every animation frame paints one, mostly equal to the last, so
+    /// the host should compare before it rasterizes.
     pub painted: Option<Canvas2d>,
 }
 

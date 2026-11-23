@@ -291,6 +291,7 @@ swerveFixtures.push({
     steps: [
       ...START(SWERVE),
       ...ROBOTS.map(([vx, vy, omega]) => render(SWERVE, swerve(0.2, 0.9, [], [speeds("#00aa00", vx, vy, omega)]))),
+      render(SWERVE, swerve(0.5, 0.9, [], [speeds("#00aa00", 0, 0, -0.5)])),
       render(SWERVE, swerve(0.2, 0.9, [], ROBOTS.map(([vx, vy, omega], i) => speeds(i % 2 === 0 ? "#00aa00" : "#aa0000", vx, vy, omega))))
     ]
   }
@@ -565,7 +566,8 @@ joystickFixtures.push({
         render(JOY, [generic({ touchpads: [[finger(x, y)]] })])
       ),
       ...[0, 10, 123, 4294967295].map((id) => render(JOY, [generic({ buttons: [button(id, true)], axes: [axis(id, 0)], povs: [pov(id, 90)] })])),
-      render(JOY, [stick("Missing layout", FULL)])
+      render(JOY, [stick("Missing layout", FULL)]),
+      render(JOY, [generic({ buttons: [button(1, 1), button(2, 0), button(3, "x"), button(4, "")] })])
     ]
   }
 });
