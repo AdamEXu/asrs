@@ -987,6 +987,22 @@ and captures `scrollTop` (`/*console-layout:top*/`), which Chromium's scroll anc
 macOS's Courier, so the test runs there only; the log leaves out CJK, whose fallback advance differs
 from Blink's.
 
+### Statistics and Metadata layout, line breaking
+
+`dom/statistics-layout/*` and `dom/metadata-layout/*`
+(`crates/asrs-app/tests/statistics_metadata_layout.rs`) record what Blink lays the two tabs' tables
+out as, with `"geometry": "real"` at 1x, 1.5x, 2x and in a narrow window. `node
+oracle/tools/u14Specs.mjs` writes the specs; edit the script, not the specs. Before each capture a
+`/*layout:command*/` eval replaces the controller's `getCommand` and returns the command; the
+capture's eval returns the container's boxes and every row as `[height, cells]`, a cell as its rect
+and its text nodes with their line rects. The text is macOS's, so the test runs there only. CJK
+advances in Courier differ (#273): only the vertical positions of those cells are compared, and the
+1.5x fixture leaves CJK out.
+
+`dom/line-break/*` (`crates/asrs-canvas/tests/line_break.rs`) record where Blink starts a line in a
+box of width 0: `pairs` for every pair of printable ASCII characters between two letters, `strings`
+for words, punctuation, other scripts and random mixtures of them.
+
 ### Mechanism and Points renderers
 
 `dom/mechanism/<case>` and `dom/points/<case>` (`crates/asrs-tabs/tests/mechanism_points_dom.rs`)
@@ -1165,6 +1181,10 @@ space outside a type-ahead session, a press on an enabled select) would block in
 loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift`; `meta` combinations
 can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
 `selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
+`form/number-keys` is the same entry on the number inputs of the Statistics tab: the element may
+be an `<input>`, for which `ArrowUp` and `ArrowDown` are keys too. Its fixture is written by
+`oracle/tools/u14Specs.mjs` and covers `step` attributes, start values and modifiers.
 
 ### Range pointer vectors
 

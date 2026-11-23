@@ -20,6 +20,10 @@ impl FieldModel for FormNumber {
         self.0.set_visible_value(&JsString::from(visible));
     }
 
+    fn arrow_key(&mut self, up: bool) -> bool {
+        self.0.arrow_key(up)
+    }
+
     fn insertable(left: &str, text: &str, right: &str) -> String {
         let units = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
         let kept = form::insertable_number_text(&units(left), &units(text), &units(right));

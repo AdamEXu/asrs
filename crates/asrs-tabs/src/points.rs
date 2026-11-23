@@ -78,8 +78,8 @@ impl PointsController {
         };
         PointsController {
             source_list: SourceList::new(configs::points(), uuid, false),
-            width: NumberInput::new("960"),
-            height: NumberInput::new("720"),
+            width: NumberInput::new("960").with_step("1"),
+            height: NumberInput::new("720").with_step("1"),
             orientation: options(&[
                 ("xr,yd", "+X right, +Y down"),
                 ("xr,yu", "+X right, +Y up"),

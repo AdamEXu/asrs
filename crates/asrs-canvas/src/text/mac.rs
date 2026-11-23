@@ -249,34 +249,43 @@ fn vertical_metrics(font: &CTFont) -> FontMetrics {
     }
 }
 
-/// The clusters of `text` in UTF-16 `[from, to)`, each with whether Blink's
+/// The byte offset in `text` of each UTF-16 offset, the one past a surrogate pair's first unit
+/// being the next character's.
+fn byte_offsets(text: &str) -> Vec<usize> {
+    let mut out = Vec::with_capacity(text.len() + 1);
+    out.push(0);
+    for (byte, c) in text.char_indices() {
+        out.resize(out.len() + c.len_utf16(), byte + c.len_utf8());
+    }
+    out
+}
+
+/// The clusters of `text`, which starts at UTF-16 offset `from`, each with whether Blink's
 /// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
 /// sequence with VS16, a skin tone modifier, a keycap or a ZWJ; VS15 forces text.
-fn emoji_clusters(text: &str, from: isize, to: isize) -> Vec<(isize, isize, bool)> {
+fn emoji_clusters(text: &str, from: isize) -> Vec<(isize, isize, bool)> {
     let presentation = CodePointSetData::new::<EmojiPresentation>();
     let mut clusters: Vec<(isize, isize, bool)> = Vec::new();
-    let mut at = 0isize;
+    let mut at = from;
     let mut joined = false;
     for c in text.chars() {
         let units = c.len_utf16() as isize;
-        if at >= from && at < to {
-            let extends = matches!(c, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
-                || ('\u{1f3fb}'..='\u{1f3ff}').contains(&c)
-                || ('\u{e0020}'..='\u{e007f}').contains(&c);
-            match clusters.last_mut() {
-                Some(last) if last.1 == at && (extends || joined) => {
-                    last.1 = at + units;
-                    match c {
-                        '\u{fe0e}' => last.2 = false,
-                        '\u{fe0f}' | '\u{200d}' | '\u{20e3}' => last.2 = true,
-                        _ if extends => last.2 = true,
-                        _ => {}
-                    }
+        let extends = matches!(c, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
+            || ('\u{1f3fb}'..='\u{1f3ff}').contains(&c)
+            || ('\u{e0020}'..='\u{e007f}').contains(&c);
+        match clusters.last_mut() {
+            Some(last) if last.1 == at && (extends || joined) => {
+                last.1 = at + units;
+                match c {
+                    '\u{fe0e}' => last.2 = false,
+                    '\u{fe0f}' | '\u{200d}' | '\u{20e3}' => last.2 = true,
+                    _ if extends => last.2 = true,
+                    _ => {}
                 }
-                _ => clusters.push((at, at + units, presentation.contains(c))),
             }
-            joined = c == '\u{200d}';
+            _ => clusters.push((at, at + units, presentation.contains(c))),
         }
+        joined = c == '\u{200d}';
         at += units;
     }
     clusters
@@ -491,13 +500,18 @@ impl CoreText {
             })
             .collect();
         let mut overrides = Vec::new();
+        if runs.iter().all(|(_, font)| font.is_none()) {
+            return overrides;
+        }
+        let bytes = byte_offsets(word);
         for (k, (start, font)) in runs.iter().enumerate() {
             let Some(font) = font else {
                 continue;
             };
             let end = runs.get(k + 1).map_or(len, |r| r.0);
             let fallback = exact_copy(font, size);
-            for (from, to, emoji) in emoji_clusters(word, *start, end) {
+            let run = word.get(bytes[*start as usize]..bytes[end as usize]);
+            for (from, to, emoji) in emoji_clusters(run.unwrap_or_default(), *start) {
                 let font = if emoji {
                     let named = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
                     exact_copy(&named, size)
