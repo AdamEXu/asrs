@@ -179,7 +179,7 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
-  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and
+  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
   `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)

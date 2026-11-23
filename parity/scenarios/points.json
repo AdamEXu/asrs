@@ -1,0 +1,616 @@
+{
+  "about": "Interaction (U16): the generated panels log on a restored Points tab with large circles at a selected time; /Vision/Corners dragged from the sidebar into the source list with the pointer, the width typed to 480.6 (which its change listener rounds) and the height to 500, then restored states with every shape and size, split components, groups, each orientation and other origins, and the controls resized so the background sits on half pixels and its settings overflow. Saved HubState is compared at each capture; nothing is masked but a focused input",
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Vision"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 11,
+              "title": "Points",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "circle",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "large",
+                      "groupSize": "0"
+                    }
+                  }
+                ],
+                "width": 960,
+                "height": 720,
+                "orientation": "xr,yd",
+                "origin": "ul"
+              },
+              "controllerUUID": "points00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "circles",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 376
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 597
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "dragged",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 982,
+      "y": 490
+    },
+    {
+      "mouse": "click",
+      "x": 982,
+      "y": 490
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "4"
+    },
+    {
+      "key": "8"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "6"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1082,
+      "y": 490
+    },
+    {
+      "mouse": "click",
+      "x": 1082,
+      "y": 490
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "typing",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "edited",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Vision"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 11,
+              "title": "Points",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "plus",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "medium",
+                      "groupSize": "2"
+                    }
+                  },
+                  {
+                    "type": "cross",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "small",
+                      "groupSize": "0"
+                    }
+                  },
+                  {
+                    "type": "crossSplit",
+                    "logKey": "/Vision/ListX",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "x",
+                      "size": "large",
+                      "groupSize": "1"
+                    }
+                  },
+                  {
+                    "type": "component",
+                    "logKey": "/Vision/ListY",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "y"
+                    }
+                  }
+                ],
+                "width": 960,
+                "height": 720,
+                "orientation": "xr,yu",
+                "origin": "ll"
+              },
+              "controllerUUID": "points00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        1.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "shapes",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Vision"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 11,
+              "title": "Points",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "plusSplit",
+                    "logKey": "/Vision/ListX",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "x",
+                      "size": "small",
+                      "groupSize": "3"
+                    }
+                  },
+                  {
+                    "type": "component",
+                    "logKey": "/Vision/ListY",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "y"
+                    }
+                  },
+                  {
+                    "type": "circle",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "medium",
+                      "groupSize": "1"
+                    }
+                  },
+                  {
+                    "type": "plus",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "large",
+                      "groupSize": "0"
+                    }
+                  }
+                ],
+                "width": 1000,
+                "height": 900,
+                "orientation": "xu,yl",
+                "origin": "lr"
+              },
+              "controllerUUID": "points00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "oriented",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 449
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 449
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "odd",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 424
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "taller",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 440
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 480
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 480
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "shorter",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".points-background-container",
+        ".points-background",
+        ".points-settings",
+        ".points-settings input",
+        ".points-settings select"
+      ]
+    }
+  ]
+}

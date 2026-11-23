@@ -1,0 +1,531 @@
+{
+  "about": "Interaction (U16): the generated panels log on a restored Swerve tab with module velocities at a selected time; /Swerve/Speeds and /Swerve/Heading dragged from the sidebar into the source list with the pointer, the maximum speed typed to 0 (which its change listener clamps to 0.1) and then to 3, the frame length typed to 0.9, a clockwise rotation clicked and then repeated with Enter, and the controls resized so the canvas sits on half pixels and so its settings overflow. Saved HubState is compared at each capture; nothing is masked but a focused input",
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Swerve"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 9,
+              "title": "Swerve",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "moduleVelocities",
+                    "logKey": "/Swerve/Modules",
+                    "logType": "SwerveModuleState[]",
+                    "visible": true,
+                    "options": {
+                      "color": "#ff0000",
+                      "arrangement": "0,1,2,3"
+                    }
+                  }
+                ],
+                "maxSpeed": 4.5,
+                "sizeX": 0.7,
+                "sizeY": 0.5,
+                "orientation": 0
+              },
+              "controllerUUID": "swerve00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "modules",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 246
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 421
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 597
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "speeds",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 182
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 182
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 186
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 391
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 597
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "heading",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1060,
+      "y": 490
+    },
+    {
+      "mouse": "click",
+      "x": 1060,
+      "y": 490
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "clamped",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1060,
+      "y": 490
+    },
+    {
+      "mouse": "click",
+      "x": 1060,
+      "y": 490
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "3"
+    },
+    {
+      "mouse": "move",
+      "x": 982,
+      "y": 550
+    },
+    {
+      "mouse": "click",
+      "x": 982,
+      "y": 550
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "9"
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "typing",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 640
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1040,
+      "y": 620
+    },
+    {
+      "mouse": "click",
+      "x": 1040,
+      "y": 620
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "rotated",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "keyboard",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 449
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 449
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "odd",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 424
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "taller",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 440
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 480
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 480
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "shorter",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    }
+  ]
+}

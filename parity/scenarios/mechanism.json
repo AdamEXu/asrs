@@ -1,0 +1,281 @@
+{
+  "about": "Interaction (U16): an empty restored Mechanism tab on the generated panels log at a selected time, its SVG hidden; /Mech/Arm and then /Mech/Claw dragged from the sidebar into the source list with the pointer (one mechanism, then both merged), an earlier time, and the controls resized so the SVG sits on half pixels and at another size. Saved HubState is compared at each capture; nothing is masked",
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Mech"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 10,
+              "title": "Mechanism",
+              "controller": [],
+              "controllerUUID": "mechanism00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 376
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 597
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "arm",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 182
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 182
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 186
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 391
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 597
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "both",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        0.7
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "earlier",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 449
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 449
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "odd",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 448
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 409
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 371
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 371
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "taller",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    }
+  ]
+}
