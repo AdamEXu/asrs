@@ -5,12 +5,14 @@ use gpui_kit::{Pixels, Point, Window, point, px};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use x11rb::CURRENT_TIME;
 use x11rb::connection::{Connection as _, RequestConnection as _};
-use x11rb::properties::{AspectRatio, WmSizeHints};
+use x11rb::properties::{AspectRatio, WmSizeHints, WmSizeHintsSpecification};
 use x11rb::protocol::xinput::{self, ConnectionExt as _};
 use x11rb::protocol::xproto::{
-    AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _, EventMask, GrabMode,
-    GrabStatus, MapState, PropMode,
+    AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ClientMessageEvent, ConfigureWindowAux,
+    ConnectionExt as _, EventMask, GrabMode, GrabStatus, Gravity, KEY_PRESS_EVENT,
+    KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT, MapState, PropMode,
 };
+use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::xcb_ffi::XCBConnection;
 
@@ -49,6 +51,16 @@ impl X11Window {
             root,
             scale: window.scale_factor(),
         })
+    }
+
+    pub fn id(&self) -> u32 {
+        self.window
+    }
+
+    /// Another window of the same display.
+    pub fn with_id(mut self, window: u32) -> X11Window {
+        self.window = window;
+        self
     }
 
     fn atom(&self, name: &str) -> Result<u32> {
@@ -101,6 +113,21 @@ impl X11Window {
             .y(self.device(f64::from(f32::from(origin.y))));
         self.connection.configure_window(self.window, &aux)?;
         Ok(self.connection.flush()?)
+    }
+
+    /// Puts the content at a screen position with the static gravity Chromium sets, under which
+    /// the window manager's frame goes around it.
+    pub fn place(&self, x: f64, y: f64) -> Result<()> {
+        let mut hints = self.size_hints()?;
+        let (device_x, device_y) = (self.device(x), self.device(y));
+        hints.position = Some((
+            WmSizeHintsSpecification::ProgramSpecified,
+            device_x,
+            device_y,
+        ));
+        hints.win_gravity = Some(Gravity::STATIC);
+        self.set_size_hints(&hints)?;
+        self.move_to(point(px(x as f32), px(y as f32)))
     }
 
     /// Mapped, which a minimized window is not.
@@ -246,4 +273,50 @@ impl X11Window {
             .reply()?;
         Ok(reply.status == GrabStatus::SUCCESS)
     }
+}
+
+/// Moves the pointer and presses or releases a button as a device would, for live checks.
+pub fn fake_pointer(position: Option<(f64, f64)>, button: Option<(u8, bool)>) -> Result<()> {
+    let (connection, screen) = x11rb::connect(None)?;
+    let root = connection.setup().roots[screen].root;
+    if let Some((x, y)) = position {
+        let (x, y) = (x.round() as i16, y.round() as i16);
+        connection
+            .xtest_fake_input(MOTION_NOTIFY_EVENT, 0, CURRENT_TIME, root, x, y, 0)?
+            .check()?;
+    }
+    if let Some((button, down)) = button {
+        let event = if down {
+            BUTTON_PRESS_EVENT
+        } else {
+            BUTTON_RELEASE_EVENT
+        };
+        connection
+            .xtest_fake_input(event, button, CURRENT_TIME, root, 0, 0, 0)?
+            .check()?;
+    }
+    Ok(())
+}
+
+/// Presses and releases the key `keysym` is on.
+pub fn fake_key(keysym: u32) -> Result<()> {
+    let (connection, screen) = x11rb::connect(None)?;
+    let setup = connection.setup();
+    let root = setup.roots[screen].root;
+    let count = setup.max_keycode - setup.min_keycode + 1;
+    let keys = connection
+        .get_keyboard_mapping(setup.min_keycode, count)?
+        .reply()?;
+    let index = keys
+        .keysyms
+        .chunks(usize::from(keys.keysyms_per_keycode))
+        .position(|syms| syms.contains(&keysym))
+        .ok_or("no key for the keysym")?;
+    let code = setup.min_keycode + index as u8;
+    for event in [KEY_PRESS_EVENT, KEY_RELEASE_EVENT] {
+        connection
+            .xtest_fake_input(event, code, CURRENT_TIME, root, 0, 0, 0)?
+            .check()?;
+    }
+    Ok(())
 }

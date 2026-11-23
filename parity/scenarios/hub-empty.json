@@ -5,6 +5,8 @@
       "capture": "launch",
       "probes": [
         ".title-bar",
+        ".title-bar-menu",
+        ".title-bar-menu button",
         ".side-bar",
         ".tab-bar",
         ".renderer-content",

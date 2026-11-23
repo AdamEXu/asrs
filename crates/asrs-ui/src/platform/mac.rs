@@ -1648,7 +1648,11 @@ pub(super) mod probe {
         CGPreflightScreenCaptureAccess()
     }
 
-    pub fn size_hints(_window: &Window) -> Option<super::super::probe::SizeHints> {
+    pub fn size_hints(_window: &Window, _number: u32) -> Option<super::super::probe::SizeHints> {
         None
+    }
+
+    pub fn post_key(_keysym: u32) -> bool {
+        false
     }
 }

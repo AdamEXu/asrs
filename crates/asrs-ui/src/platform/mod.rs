@@ -236,6 +236,12 @@ impl NativeWindow {
         self.0.set_content_size(width, height);
     }
 
+    /// Puts the content's top-left corner at a screen position where the window manager places
+    /// windows (X11). AppKit opens them where they ask.
+    pub fn set_content_origin(&self, x: f64, y: f64) {
+        self.0.set_content_origin(x, y);
+    }
+
     /// Minimum and maximum content sizes, enforced during live resize.
     pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
         self.0.set_content_size_limits(min, max);
@@ -257,8 +263,8 @@ impl NativeWindow {
         self.0.end_sheet();
     }
 
-    /// Electron's `isVisible()`: on screen and, on macOS, not minimized. Being covered by other
-    /// windows does not count, whatever its documentation says.
+    /// Electron's `isVisible()`: on screen and not minimized. Being covered by other windows does
+    /// not count, whatever its documentation says.
     pub fn is_visible(&self) -> bool {
         self.0.is_visible()
     }

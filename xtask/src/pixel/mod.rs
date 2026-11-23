@@ -870,10 +870,19 @@ fn port_binary() -> Result<PathBuf> {
         .join(format!("asrs{}", std::env::consts::EXE_SUFFIX)))
 }
 
+/// The driver's `WINDOW_ORIGIN`: how far into the work area it places its window.
+const WINDOW_ORIGIN: f64 = 16.0;
+
 /// The work-area origin of the display at the global origin (Electron's primary) in an upstream
-/// run, where the driver placed its window.
+/// run, where the driver placed its window. An X11 window manager puts its frame there instead,
+/// so on Linux it is the origin that gives the window's recorded place.
 fn primary_work_area(run_json: &Path) -> Option<(f64, f64)> {
     let run = read_json(run_json).ok()?;
+    if string(&run, "platform").as_deref() == Some("linux") {
+        let bounds = run.get("targetWindow")?.get("bounds")?;
+        let origin = |key: &str| Some(bounds.get(key)?.as_f64()? - WINDOW_ORIGIN);
+        return Some((origin("x")?, origin("y")?));
+    }
     list(&run, "displays").iter().find_map(|display| {
         let bounds = display.get("bounds")?;
         let origin = (bounds.get("x")?.as_f64()?, bounds.get("y")?.as_f64()?);

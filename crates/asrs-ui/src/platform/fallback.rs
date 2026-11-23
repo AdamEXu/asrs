@@ -103,6 +103,10 @@ pub(super) mod window {
             match *self {}
         }
 
+        pub fn set_content_origin(&self, _x: f64, _y: f64) {
+            match *self {}
+        }
+
         pub fn set_content_size_limits(&self, _min: Option<(f64, f64)>, _max: Option<(f64, f64)>) {
             match *self {}
         }
@@ -374,7 +378,11 @@ pub(super) mod probe {
         false
     }
 
-    pub fn size_hints(_window: &Window) -> Option<super::super::probe::SizeHints> {
+    pub fn size_hints(_window: &Window, _number: u32) -> Option<super::super::probe::SizeHints> {
         None
+    }
+
+    pub fn post_key(_keysym: u32) -> bool {
+        false
     }
 }

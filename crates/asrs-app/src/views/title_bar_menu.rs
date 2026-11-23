@@ -182,7 +182,6 @@ fn menu_button(
         .child(
             Text::new(text, label_style())
                 .color(color)
-                .form_control()
                 .subpixel(snap_remainder(label_x as f32, scale), 0.0)
                 .absolute()
                 .left(px(label[0] as f32))

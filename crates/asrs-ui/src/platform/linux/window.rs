@@ -34,6 +34,10 @@ impl NativeWindow {
         self.0.resize(width, height).ok();
     }
 
+    pub fn set_content_origin(&self, x: f64, y: f64) {
+        self.0.place(x, y).ok();
+    }
+
     pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
         self.0.set_size_limits(min, max).ok();
     }
@@ -46,9 +50,8 @@ impl NativeWindow {
 
     pub fn end_sheet(&self) {}
 
-    /// `X11Window::IsVisible`, which a minimized window is.
     pub fn is_visible(&self) -> bool {
-        true
+        self.0.is_mapped().unwrap_or(true)
     }
 
     pub fn show(&self, _focus: bool) {}

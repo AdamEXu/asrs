@@ -336,6 +336,12 @@ pub struct SizeHints {
     pub above: bool,
 }
 
-pub fn size_hints(window: &Window) -> Option<SizeHints> {
-    imp::probe::size_hints(window)
+/// The hints of the X11 window `number` (see [`window_number`]) on `window`'s display.
+pub fn size_hints(window: &Window, number: u32) -> Option<SizeHints> {
+    imp::probe::size_hints(window, number)
+}
+
+/// Presses and releases the key of an X11 keysym.
+pub fn post_key(keysym: u32) -> bool {
+    imp::probe::post_key(keysym)
 }
