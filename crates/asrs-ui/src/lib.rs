@@ -48,6 +48,19 @@ pub fn open_window<V: Render>(
     cx: &mut App,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> gpui_kit::Result<(AnyWindowHandle, Entity<V>)> {
+    #[cfg(target_os = "linux")]
+    {
+        use gpui::AppContext as _;
+        let mut built = None;
+        let (handle, _) = gpui_kit::open_window(options, cx, |window, cx| {
+            platform::tag_srgb_colorspace(window);
+            let view = build(window, cx);
+            built = Some(view.clone());
+            cx.new(|_| menu::MenuGuard::new(view))
+        })?;
+        Ok((handle, built.expect("open_window ran its build closure")))
+    }
+    #[cfg(not(target_os = "linux"))]
     gpui_kit::open_window(options, cx, |window, cx| {
         platform::tag_srgb_colorspace(window);
         build(window, cx)

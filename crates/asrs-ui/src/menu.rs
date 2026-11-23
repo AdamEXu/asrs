@@ -1017,6 +1017,41 @@ impl Render for MenuView {
     }
 }
 
+/// A window's contents, in which a press closes the menu open for the window and does nothing
+/// else, as under Chromium's menus. A Wayland popup's grab leaves the events of the client's other
+/// surfaces to them.
+#[cfg(target_os = "linux")]
+pub(crate) struct MenuGuard<V> {
+    view: Entity<V>,
+}
+
+#[cfg(target_os = "linux")]
+impl<V> MenuGuard<V> {
+    pub(crate) fn new(view: Entity<V>) -> Self {
+        MenuGuard { view }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl<V: Render> Render for MenuGuard<V> {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        let presses = canvas(
+            |_, _, _| (),
+            |_, _, window, _| {
+                window.on_mouse_event(|_: &MouseDownEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture && platform::dismiss_popup(window) {
+                        cx.stop_propagation();
+                    }
+                });
+            },
+        );
+        div()
+            .size_full()
+            .child(presses.absolute())
+            .child(self.view.clone())
+    }
+}
+
 fn remove_window(handle: Option<AnyWindowHandle>, cx: &mut App) {
     if let Some(handle) = handle {
         cx.defer(move |cx| {

@@ -247,10 +247,16 @@ fn close_open_popup() {
 }
 
 pub(super) fn close_popup_menu(window: &Window) {
+    dismiss_popup(window);
+}
+
+pub(super) fn dismiss_popup(window: &Window) -> bool {
     let id = handle_of(window).window_id();
-    if OPEN.with_borrow(|open| open.as_ref().is_some_and(|open| open.parent == id)) {
+    let open = OPEN.with_borrow(|open| open.as_ref().is_some_and(|open| open.parent == id));
+    if open {
         close_open_popup();
     }
+    open
 }
 
 /// GPUI shifts new X11 windows by 2 px; `bounds` is where the menu belongs. The outermost menu

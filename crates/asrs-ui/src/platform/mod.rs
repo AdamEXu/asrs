@@ -368,6 +368,12 @@ pub(crate) fn popup_window_opened(
     imp::popup_window_opened(window, bounds, root, cx);
 }
 
+/// Closes the drawn menu open for `window`, if any.
+#[cfg(target_os = "linux")]
+pub(crate) fn dismiss_popup(window: &Window) -> bool {
+    imp::dismiss_popup(window)
+}
+
 /// Electron's `menu.closePopup(window)`.
 pub fn close_popup_menu(window: &Window) {
     imp::close_popup_menu(window);
