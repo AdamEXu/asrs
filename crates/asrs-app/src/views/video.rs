@@ -186,6 +186,11 @@ fn lu(v: f64) -> f64 {
     math::trunc(v * 64.0) / 64.0
 }
 
+/// `percent` of `v` as `MinimumValueForLength` resolves it, in single precision.
+fn percent(v: f64, percent: f64) -> f64 {
+    lu(f64::from((v * percent / 100.0) as f32))
+}
+
 /// Where the controls sit in `div.controls-content`, in client coordinates.
 #[derive(Clone, Debug, PartialEq)]
 struct ControlsLayout {
@@ -203,18 +208,18 @@ struct ControlsLayout {
 impl ControlsLayout {
     /// `space` is the width of the white space between two inline buttons.
     fn new([x, y, w, h]: [f64; 4], transport: usize, space: f64) -> ControlsLayout {
-        let source_width = lu(w * 0.3);
-        let button_width = lu(source_width * 0.8 / 3.0);
-        let button_top = y + lu(h * 0.15);
+        let source_width = percent(w, 30.0);
+        let button_width = percent(source_width, 80.0 / 3.0);
+        let button_top = y + percent(h, 15.0);
         let sources = std::array::from_fn(|i| {
             let i = i as f64;
-            let left = lu(source_width * (0.05 * (i + 1.0) + 0.8 / 3.0 * i));
-            [x + left, button_top, button_width, lu(h * 0.7)]
+            let left = percent(source_width, 5.0 * (i + 1.0) + 80.0 / 3.0 * i);
+            [x + left, button_top, button_width, percent(h, 70.0)]
         });
-        let sync = x + lu(w * 0.3);
-        let sync_width = lu(w * 0.7);
-        let half = lu(h * 0.5);
-        let middle = lu(half * 0.5) - BUTTON / 2.0;
+        let sync = x + percent(w, 30.0);
+        let sync_width = percent(w, 70.0);
+        let half = percent(h, 50.0);
+        let middle = percent(half, 50.0) - BUTTON / 2.0;
         let timeline = [
             sync + TIMELINE_LEFT,
             y + TIMELINE_INSET,
@@ -249,8 +254,8 @@ impl ControlsLayout {
 /// `width` the empty box shrinks to nothing.
 fn progress_width(style: &JsString, width: f64) -> f64 {
     let style = style.to_string_lossy();
-    let percent = style.strip_suffix('%').and_then(|v| v.parse::<f64>().ok());
-    percent.map_or(0.0, |percent| math::max2(lu(width * percent / 100.0), 0.0))
+    let share = style.strip_suffix('%').and_then(|v| v.parse::<f64>().ok());
+    share.map_or(0.0, |share| math::max2(percent(width, share), 0.0))
 }
 
 /// The stroke of a source button, as its transition and animation leave it.
@@ -839,6 +844,7 @@ impl<H: FrameHost> HubFrame<H> {
                     (snap(rect[0] + rect[2]) - snap(rect[0])) as f32,
                     (snap(rect[1] + rect[3]) - snap(rect[1])) as f32,
                 )
+                .box_size(rect[2], rect[3])
                 .subpixel(rect[0] - snap(rect[0]), rect[1] - snap(rect[1]))
                 .tint(SOURCE_TINT)
                 .fit(SOURCE_FIT)

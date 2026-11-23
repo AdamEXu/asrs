@@ -35,6 +35,7 @@ pub struct IconButton {
     fit: IconFit,
     translate: [f64; 2],
     subpixel: [f64; 2],
+    box_size: Option<[f64; 2]>,
     disabled: bool,
     blurred: bool,
     appearance: Option<Appearance>,
@@ -55,6 +56,7 @@ impl IconButton {
             fit: IconFit::BUTTON,
             translate: [0.0, 0.0],
             subpixel: [0.0, 0.0],
+            box_size: None,
             disabled: false,
             blurred: false,
             appearance: None,
@@ -91,6 +93,12 @@ impl IconButton {
     /// The button's CSS position less where GPUI's pixel snapping put it, for its icon.
     pub fn subpixel(mut self, dx: f64, dy: f64) -> Self {
         self.subpixel = [dx, dy];
+        self
+    }
+
+    /// The button's CSS size, where its size on whole pixels differs, for its icon.
+    pub fn box_size(mut self, width: f64, height: f64) -> Self {
+        self.box_size = Some([width, height]);
         self
     }
 
@@ -175,7 +183,8 @@ impl RenderOnce for IconButton {
                 Icon::new(self.icon, chain)
                     .fit(self.fit)
                     .translate(self.translate[0], self.translate[1])
-                    .subpixel(self.subpixel[0], self.subpixel[1]),
+                    .subpixel(self.subpixel[0], self.subpixel[1])
+                    .box_size(self.box_size),
             );
         button = button.children(self.overlay);
         let (rest, hover, active) = match self.backgrounds {
