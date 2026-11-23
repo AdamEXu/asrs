@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U12): a restored empty Table tab; three sidebar fields dragged into it with the pointer, the last in front; a selected time, a row hover, a row click; trackpad scrolling; the close button's hover; a column dragged in front of the first, captured mid-drag; a column closed; a timestamp typed into the jump input and entered; a row's context menu, which goes idle. Then a restored tab with array, boolean, missing and nested fields whose keys are cut with an ellipsis, scrolled right and to the end, and an empty one again. Saved HubState (the field list) and the written files are compared; waits after scrolling let macOS fade the scrollbar, which gate 5 leaves out",
+  "about": "Interaction (U12): a restored empty Table tab; three sidebar fields dragged into it with the pointer, the last in front; a selected time, a row hover, a row click; trackpad scrolling; the close button's hover; a column dragged in front of the first, captured mid-drag; a column closed; a timestamp typed into the jump input and entered; a row's context menu, which goes idle; and the last columns closed, after which the hand icon fades in. Then a restored tab with array, boolean, missing and nested fields whose keys are cut with an ellipsis, scrolled right and to the end, and an empty one again. Saved HubState (the field list) and the written files are compared; waits after scrolling let macOS fade the scrollbar, which gate 5 leaves out",
   "actions": [
     {
       "open": [
@@ -477,6 +477,51 @@
     },
     {
       "capture": "idle",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 735,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 735,
+      "y": 103
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 560,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "capture": "emptied",
       "probes": [
         ".side-bar",
         ".tab-bar",

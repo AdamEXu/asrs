@@ -54,7 +54,8 @@ const HAND_SIZE: f64 = 100.0;
 const HAND_OPACITY: f64 = 0.15;
 const HAND_DELAY_MS: f64 = 1000.0;
 const HAND_FADE_MS: f64 = 1000.0;
-const WIDTH_CACHE: usize = 8192;
+const CELL_CACHE: usize = 8192;
+const PIECE_CHARS: usize = 200;
 
 fn cell_style(bold: bool) -> TextStyle {
     let font = if bold {
@@ -115,6 +116,9 @@ impl Palette {
 
 /// `cubic-bezier(0.42, 0, 1, 1)` (`ease-in`) at `t`.
 fn ease_in(t: f64) -> f64 {
+    if t <= 0.0 {
+        return 0.0;
+    }
     let (x1, x2) = (0.42, 1.0);
     let (y1, y2) = (0.0, 1.0);
     let bezier = |a: f64, b: f64, s: f64| {
@@ -160,32 +164,65 @@ impl HandFade {
             self.since = None;
             return (HAND_OPACITY, false);
         }
-        (HAND_OPACITY * ease_in(math::max2(t, 0.0)), true)
+        (HAND_OPACITY * ease_in(t), true)
     }
 }
 
-/// The max-content widths of cell texts.
-#[derive(Default)]
-struct Widths {
-    scale: f32,
-    cells: [HashMap<String, f64>; 2],
+/// The pieces one cell's text is painted in, each with its offset. One glyph run image would
+/// outgrow the GPU's textures, so long text is split, between two visible ASCII characters where
+/// there are any: those neither join nor kern, and no space at an end is there to collapse.
+fn pieces(text: &str, mut measure: impl FnMut(&str) -> f64) -> Vec<(String, f64)> {
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    if chars.len() <= PIECE_CHARS {
+        return vec![(text.to_owned(), 0.0)];
+    }
+    let mut out = Vec::new();
+    let (mut start, mut last) = (0, 0);
+    for i in 1..chars.len() {
+        let safe = chars[i - 1].1.is_ascii_graphic() && chars[i].1.is_ascii_graphic();
+        if i - last >= 2 * PIECE_CHARS || (safe && i - last >= PIECE_CHARS) {
+            let at = chars[i].0;
+            out.push((text[start..at].to_owned(), start));
+            (start, last) = (at, i);
+        }
+    }
+    out.push((text[start..].to_owned(), start));
+    out.into_iter()
+        .map(|(piece, at)| (piece, if at == 0 { 0.0 } else { measure(&text[..at]) }))
+        .collect()
 }
 
-impl Widths {
-    fn cell(&mut self, text: &str, bold: bool, scale: f32, cx: &mut App) -> f64 {
-        if self.scale != scale || self.cells.iter().any(|c| c.len() > WIDTH_CACHE) {
-            *self = Widths {
+struct Cell {
+    width: f64,
+    pieces: Vec<(String, f64)>,
+}
+
+/// Measured cell texts, by whether they are bold.
+#[derive(Default)]
+struct Cells {
+    scale: f32,
+    texts: [HashMap<String, Rc<Cell>>; 2],
+}
+
+impl Cells {
+    fn get(&mut self, text: &str, bold: bool, scale: f32, cx: &mut App) -> Rc<Cell> {
+        if self.scale != scale || self.texts.iter().any(|c| c.len() > CELL_CACHE) {
+            *self = Cells {
                 scale,
-                ..Widths::default()
+                ..Cells::default()
             };
         }
-        let cells = &mut self.cells[usize::from(bold)];
-        if let Some(width) = cells.get(text) {
-            return *width;
+        let texts = &mut self.texts[usize::from(bold)];
+        if let Some(cell) = texts.get(text) {
+            return cell.clone();
         }
-        let width = text::measure(cx, &cell_style(bold), text, scale).0;
-        cells.insert(text.to_owned(), width);
-        width
+        let mut measure = |text: &str| text::measure(cx, &cell_style(bold), text, scale).0;
+        let cell = Rc::new(Cell {
+            width: measure(text),
+            pieces: pieces(text, measure),
+        });
+        texts.insert(text.to_owned(), cell.clone());
+        cell
     }
 }
 
@@ -221,7 +258,7 @@ struct TabView {
     jump: Option<(Entity<TextField<NumberValue>>, Subscription)>,
     wheel: WheelScroll,
     hand: HandFade,
-    widths: Widths,
+    cells: Cells,
 }
 
 #[derive(Clone, Debug)]
@@ -442,7 +479,7 @@ impl<H: FrameHost> HubFrame<H> {
             };
             layout.device_pixel_ratio = f64::from(scale);
             layout.columns = column_widths(&view, layout.border_px(), |text, bold| {
-                tab.widths.cell(text, bold, scale, cx)
+                tab.cells.get(text, bold, scale, cx).width
             });
             layout.key_text = view
                 .headers
@@ -502,7 +539,7 @@ impl<H: FrameHost> HubFrame<H> {
     ) -> AnyElement {
         let palette = Palette::of(appearance);
         let text_color = appearance.theme().text;
-        let [_, y, _, height] = rect;
+        let [x, y, width, height] = rect;
         let mut dom = dom.borrow_mut();
         let layout = &mut dom.layout;
         let count = layout.columns.len();
@@ -515,13 +552,9 @@ impl<H: FrameHost> HubFrame<H> {
         let rows_top = layout.row_top(0);
         let rows_height = rows.len() as f64 * row_height;
         let first = columns[0];
-        let widths = (self.table.shown.as_ref()).and_then(|s| self.table.tabs.get(&s.key));
-        let cell_width = |text: &str, bold: bool| {
-            widths
-                .and_then(|t| t.widths.cells[usize::from(bold)].get(text))
-                .copied()
-                .unwrap_or_default()
-        };
+        let measured = (self.table.shown.as_ref()).and_then(|s| self.table.tabs.get(&s.key));
+        let measured =
+            |text: &str, bold: bool| measured?.cells.texts[usize::from(bold)].get(text).cloned();
 
         let mut cells = div().absolute().inset_0();
         let mut first_cells = div().absolute().inset_0().child(
@@ -558,24 +591,35 @@ impl<H: FrameHost> HubFrame<H> {
                     *layer = out;
                 }
             }
+            if !visible && !cfg!(feature = "parity") {
+                continue;
+            }
             for (column, text) in row.cells.iter().take(count).enumerate() {
-                if text.is_empty() {
-                    continue;
-                }
-                let [left, w] = columns[column];
                 let bold = column == 0;
+                let Some(cell) = measured(text, bold).filter(|_| !text.is_empty()) else {
+                    continue;
+                };
+                let [left, w] = columns[column];
                 let cell_border = if column + 1 == count { 0.0 } else { border };
                 let text_left = if bold {
-                    left + w - cell_border - CELL_PADDING - cell_width(text, true)
+                    left + w - cell_border - CELL_PADDING - cell.width
                 } else {
                     left + CELL_PADDING
                 };
-                let at = [text_left, top + CELL_PADDING];
-                let element = grid.text(text, cell_style(bold), text_color, at);
-                if bold {
-                    first_cells = first_cells.child(element);
-                } else {
-                    cells = cells.child(element);
+                for (i, (piece, dx)) in cell.pieces.iter().enumerate() {
+                    let from = text_left + dx;
+                    let to = cell.pieces.get(i + 1).map_or(cell.width, |next| next.1);
+                    let cut = cell.pieces.len() > 1;
+                    if cut && (text_left + to < x || from >= x + width) {
+                        continue;
+                    }
+                    let at = [from, top + CELL_PADDING];
+                    let element = grid.text(piece, cell_style(bold), text_color, at);
+                    if bold {
+                        first_cells = first_cells.child(element);
+                    } else {
+                        cells = cells.child(element);
+                    }
                 }
             }
         }
@@ -1104,6 +1148,80 @@ mod tests {
         let (mid, _) = hand.opacity(true, 1520.0);
         assert!((0.3..0.33).contains(&(mid / HAND_OPACITY)));
         assert_eq!(hand.opacity(true, 2020.0), (HAND_OPACITY, false));
+    }
+
+    #[test]
+    fn long_text_is_cut_between_visible_ascii() {
+        let text = format!("{} {}", "ab".repeat(150), "c".repeat(260));
+        let cut = pieces(&text, |prefix| prefix.len() as f64);
+        let joined: String = cut.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(joined, text);
+        assert_eq!(
+            cut.iter().map(|(p, at)| (p.len(), *at)).collect::<Vec<_>>(),
+            [(200, 0.0), (200, 200.0), (161, 400.0)]
+        );
+        let spaces = " ".repeat(1000);
+        assert_eq!(pieces(&spaces, |p| p.len() as f64)[1].1, 400.0);
+        assert_eq!(pieces("short", |_| unreachable!()).len(), 1);
+    }
+
+    /// The columns of `dom/tabs/table-wide` before its first drop, recorded on macOS.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn column_widths_are_blinks() {
+        use asrs_parity::geometry::GeometryRecord;
+        use asrs_tabs::table::view::{TableHeader, TableRow};
+
+        let header = |key: &str| TableHeader {
+            title: key.into(),
+            text: key.into(),
+            available: true,
+        };
+        let text = format!(
+            "[\"{}\", \"{}\", \"10\"]",
+            "alpha".repeat(6),
+            "beta".repeat(8)
+        );
+        let cells = ["+1.000", "15", &text, "\u{1f7e9} true", "null"];
+        let view = TableView {
+            has_controller: true,
+            show_hand: false,
+            headers: ["/V", "/T", "/F", "/M"].map(header).to_vec(),
+            filler_upper_px: 0.0,
+            filler_lower_px: 0.0,
+            rows: vec![TableRow {
+                cells: cells.map(str::to_owned).to_vec(),
+                hidden: false,
+                selected: false,
+                hovered: false,
+            }],
+            jump_placeholder: String::new(),
+        };
+        for (vector, scale) in [
+            ("dom/tabs/table-wide", 1.0f32),
+            ("dom/tabs/table-wide-2x", 2.0),
+        ] {
+            let mut measurer = text::Measurer::default();
+            let widths = column_widths(&view, 1.0, |text, bold| {
+                measurer.measure(&cell_style(bold), text, scale).0
+            });
+            let mut recorded = vec![None; widths.len()];
+            for record in asrs_parity::vectors::load(vector).unwrap() {
+                let Some(g) = GeometryRecord::parse(&record).unwrap() else {
+                    continue;
+                };
+                let asrs_parity::Value::Array(rect) = &g.value else {
+                    continue;
+                };
+                for (i, slot) in recorded.iter_mut().enumerate() {
+                    if slot.is_none() && g.is_on(&format!("tbody:0>tr:0>th:{i}")) {
+                        *slot = rect[2].as_f64();
+                    }
+                }
+            }
+            let widths: Vec<_> = widths.into_iter().map(Some).collect();
+            assert_eq!(widths, recorded, "{vector}");
+        }
     }
 
     #[test]
