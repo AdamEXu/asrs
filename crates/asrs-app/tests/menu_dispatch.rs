@@ -5,6 +5,9 @@
 //! dialogs answered by a script. What the handlers do is `menu_click_vectors`' business; this
 //! checks that their effects reach the hubs, the windows, the files and the dialogs.
 
+#[path = "support/settle.rs"]
+mod settle;
+
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
 use std::sync::Arc;
@@ -73,7 +76,7 @@ impl AppUnderTest {
     }
 
     fn settle(&mut self) {
-        self.cx.run_until_parked();
+        settle::settle(&mut self.cx);
     }
 
     fn prefs_path(&self) -> PathBuf {
