@@ -11,9 +11,12 @@ pub trait FieldModel: 'static {
     fn edit(&mut self, visible: &str) {
         self.set_value(visible);
     }
-    /// Whether the editor accepts `c` as typed or pasted text.
-    fn accepts(&self, c: char) -> bool {
-        !matches!(c, '\n' | '\r')
+    /// What of `text`, typed or pasted between `left` and `right`, the editor inserts: by default
+    /// what `TextFieldInputType::HandleBeforeTextInsertedEvent` makes of it.
+    fn insertable(_left: &str, text: &str, _right: &str) -> String {
+        text.trim_end_matches(['\n', '\r'])
+            .replace("\r\n", " ")
+            .replace(['\n', '\r'], " ")
     }
 }
 
@@ -48,15 +51,14 @@ impl<M: FieldModel> FieldValue<M> {
         self.shown = self.model.value();
     }
 
-    /// The editor's text after a user edit, less the characters the model refuses. Returns
-    /// whether the shown text changed, which is when the DOM fires `input`.
+    /// The editor's text after a user edit. Returns whether it changed, which is when the DOM
+    /// fires `input`.
     pub fn edit(&mut self, text: &str) -> bool {
-        let accepted: String = text.chars().filter(|&c| self.model.accepts(c)).collect();
-        if accepted == self.shown {
+        if text == self.shown {
             return false;
         }
-        self.model.edit(&accepted);
-        self.shown = accepted;
+        self.model.edit(text);
+        self.shown = text.to_owned();
         true
     }
 
@@ -100,12 +102,6 @@ impl FieldModel for PlainText {
     }
 }
 
-/// `NumberInputType::HandleBeforeTextInsertedEvent` for an en-US locale: the characters a
-/// number input lets the user insert, until `asrs_tabs::form` models it (#159).
-pub fn number_accepts(c: char) -> bool {
-    matches!(c, '0'..='9' | '.' | 'e' | 'E' | '+' | '-')
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,7 +109,7 @@ mod tests {
     #[test]
     fn edits_show_the_typed_text_and_assignments_the_value() {
         let mut field = FieldValue::new(PlainText::new("a"));
-        assert!(field.edit("a\nb"));
+        assert!(field.edit("ab"));
         assert_eq!((field.value().as_str(), field.shown()), ("ab", "ab"));
         assert!(!field.edit("ab"));
         field.assign("c\r");
@@ -124,14 +120,5 @@ mod tests {
     fn plain_text_strips_line_breaks() {
         assert_eq!(PlainText::new("a\r\nb\nc").value(), "abc");
         assert_eq!(PlainText::new(" x\t").value(), " x\t");
-    }
-
-    #[test]
-    fn number_accepts_only_number_characters() {
-        let accepted: String = "1a.e-E+ ,5x"
-            .chars()
-            .filter(|&c| number_accepts(c))
-            .collect();
-        assert_eq!(accepted, "1.e-E+5");
     }
 }

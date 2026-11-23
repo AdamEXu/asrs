@@ -144,6 +144,24 @@ pub fn init(_cx: &mut App) {
     imp::init();
 }
 
+/// Whether the key event being handled is the numpad's Enter, which GPUI also calls `enter`.
+/// Off macOS nothing tells the two apart (#262).
+pub fn numpad_enter(cx: &App) -> bool {
+    #[cfg(feature = "parity")]
+    if let Some(scripted) = cx.try_global::<ScriptedNumpadEnter>() {
+        return scripted.0;
+    }
+    let _ = cx;
+    imp::numpad_enter()
+}
+
+/// What [`numpad_enter`] says where a test dispatches the keystrokes.
+#[cfg(feature = "parity")]
+pub struct ScriptedNumpadEnter(pub bool);
+
+#[cfg(feature = "parity")]
+impl gpui_kit::Global for ScriptedNumpadEnter {}
+
 /// Electron's `vibrancy: "sidebar"`. The window must be opened with a transparent background.
 pub fn install_sidebar_vibrancy(window: &Window) -> bool {
     imp::install_sidebar_vibrancy(window)

@@ -148,6 +148,47 @@ impl NumberInput {
     }
 }
 
+/// `NumberInputType::HandleBeforeTextInsertedEvent` for en-US: what of `text` the user can insert
+/// between `left` and `right` in a number field's editor.
+pub fn insertable_number_text(left: &[u16], text: &[u16], right: &[u16]) -> Vec<u16> {
+    let is_e = |u: u16| u == u16::from(b'e') || u == u16::from(b'E');
+    let is_sign = |u: u16| u == u16::from(b'+') || u == u16::from(b'-');
+    let point = u16::from(b'.');
+    let has_e = |s: &[u16]| s.iter().any(|&u| is_e(u));
+    let signs = |s: &[u16]| s.iter().filter(|&&u| is_sign(u)).count();
+    let after_e = |s: &[u16]| s.last().is_some_and(|&u| is_e(u));
+    let has_sign_not_after_e = |s: &[u16]| (0..s.len()).any(|i| is_sign(s[i]) && !after_e(&s[..i]));
+    let mut left = left.to_vec();
+    let start = left.len();
+    for &unit in text {
+        let unit = match unit {
+            0xFF10..=0xFF19 => unit - 0xFF10 + u16::from(b'0'),
+            0xFF0E => point,
+            0xFF0D | 0x30FC => u16::from(b'-'),
+            _ => unit,
+        };
+        let accepted = if unit == point {
+            !left.contains(&point)
+                && !right.contains(&point)
+                && !has_e(&left)
+                && !has_sign_not_after_e(right)
+        } else if is_e(unit) {
+            !has_e(&left) && !has_e(right) && !right.contains(&point)
+        } else if is_sign(unit) {
+            signs(&left) + signs(right) < 2
+                && (left.is_empty() || after_e(&left) || !(has_e(&left) || has_e(right)))
+        } else if is_digit(unit) {
+            !(right.first().is_some_and(|&u| is_sign(u)) && (left.is_empty() || after_e(&left)))
+        } else {
+            false
+        };
+        if accepted {
+            left.push(unit);
+        }
+    }
+    left.split_off(start)
+}
+
 /// `NumberInputType::ConvertFromVisibleValue` for en-US: text with an exponent as it is, else
 /// `Locale::ConvertFromLocalizedNumber`, which drops whitespace, one leading `+` and a trailing
 /// `.`, and reads anything but digits and points after an optional `-` as empty.

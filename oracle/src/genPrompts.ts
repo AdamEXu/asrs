@@ -14,7 +14,8 @@ const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n"
 // driven the way main.ts's create*Window drives it: a "port" message carrying a MessageChannel
 // port, then the messages main posts on it. The scripted user steps are real input sent over the
 // DevTools protocol (typed characters, keys, clicks at an element's centre), so focus changes and
-// "change" events come in Chromium's order; "select" is script focus with the whole text selected,
+// "change" events come in Chromium's order; "insert" inserts a text at once, as pasting it does,
+// without the clipboard; "select" is script focus with the whole text selected,
 // "pick" is what choosing an option in a select's native popup does (the new value, then "input"
 // and "change"), and "post" is another message from main. After the open and after every step it
 // records every control, the focused element, the buttons' "blurred" class, and every reply posted
@@ -22,7 +23,7 @@ const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n"
 // which main.ts destroys the window, which is the first one except for export.html's help URL.
 
 interface Step {
-  op: "select" | "text" | "key" | "click" | "pick" | "post";
+  op: "select" | "text" | "insert" | "key" | "click" | "pick" | "post";
   id?: string;
   value?: any;
 }
@@ -35,6 +36,7 @@ interface Flow {
 
 const select = (id: string): Step => ({ op: "select", id });
 const text = (value: string): Step => ({ op: "text", value });
+const insert = (value: string): Step => ({ op: "insert", value });
 const key = (value: string): Step => ({ op: "key", value });
 const click = (id: string): Step => ({ op: "click", id });
 const pick = (id: string, value: string): Step => ({ op: "pick", id, value });
@@ -44,7 +46,8 @@ function flows(): Flow[] {
   const list: Flow[] = [];
   const add = (page: string, name: string, posts: any[], steps: Step[]) => list.push({ page, name: `${page} ${name}`, posts, steps });
 
-  const numberTexts = ["5", "-5", "0", "-0", "1.5", ".5", "5.", "1e3", "1E-2", "1e", "-", "+5", "e", "", "00012", "1.0000000001", "9007199254740993", "1e400", "1e-400", "1a2", "1 2", "0x10", "-5.", "+", ".", "-.", "+.5", "-.5", "+5.", "+1e3", "1e+3", "5.5e2", "-1e-2", "+-5", "-+5"];
+  const numberTexts = ["5", "-5", "0", "-0", "1.5", ".5", "5.", "1e3", "1E-2", "1e", "-", "+5", "e", "", "00012", "1.0000000001", "9007199254740993", "1e400", "1e-400", "1a2", "1 2", "0x10", "-5.", "+", ".", "-.", "+.5", "-.5", "+5.", "+1e3", "1e+3", "5.5e2", "-1e-2", "+-5", "-+5", "1.2.3", "1..2", "--5", "1-2", "1e2e3", "1e2.5", "1e-5-2", "1ee2", "1e+-2", "e5", "5.e3", "1e5.", "1,000", "- 5", "\u00bd", "\uff15"];
+  const inserts = ["12", "1.2.3", "12a3", " 12 ", "1,234", "-5", "--5", "1-2", "1e5", "1e5e5", "abc", "5\n6", "\t7", "$5", "\u22125", "0x10", "Infinity"];
 
   const ranges: [number, number][] = [
     [-10, 10],
@@ -84,7 +87,24 @@ function flows(): Flow[] {
   numberTexts.forEach((t, i) => {
     add("editRange", `max ${JSON.stringify(t)}`, [[-100, 100]], [text(t), i % 2 === 0 ? key("Enter") : click("confirm")]);
     add("editRange", `min ${JSON.stringify(t)}`, [[-100, 1e308]], [select("min"), text(t), i % 2 === 0 ? click("confirm") : key("Enter")]);
+    add("editRange", `min below max ${JSON.stringify(t)}`, [[-100, 1e12]], [select("min"), text(t), i % 2 === 0 ? key("Enter") : click("confirm")]);
   });
+  add("export", "insert in the prefixes", [{ supportsAkit: true }], [select("prefixes"), insert("/A,\n/B\n"), click("confirm")]);
+  inserts.forEach((t, i) => {
+    const confirm = i % 2 === 0 ? click("confirm") : key("Enter");
+    add("editRange", `insert ${JSON.stringify(t)}`, [[-100, 1e12]], [select("min"), insert(t), confirm]);
+    add("editRange", `insert at the start ${JSON.stringify(t)}`, [[-100.5, 1e12]], [select("min"), key("ArrowLeft"), insert(t), confirm]);
+    add("editRange", `insert after the point ${JSON.stringify(t)}`, [[-1.5, 1e12]], [select("min"), key("ArrowRight"), key("ArrowLeft"), insert(t), confirm]);
+    add("editRange", `insert at the end ${JSON.stringify(t)}`, [[-0.25, 1e12]], [select("min"), key("ArrowRight"), insert(t), confirm]);
+  });
+  add("editRange", "insert then type", [[-100, 1e12]], [select("min"), insert("1.2.3"), text(".4"), key("ArrowLeft"), text("."), text("-"), text("5"), key("Backspace"), key("Enter")]);
+  add("editRange", "enter on exit", [[2, 8]], [key("Tab"), key("Tab"), key("Enter")]);
+  add("editRange", "enter on confirm", [[2, 8]], [key("Tab"), key("Tab"), key("Tab"), key("Enter")]);
+  add("editRange", "enter on exit alerts", [[3, 3]], [key("Tab"), key("Tab"), key("Enter")]);
+  add("editRange", "enter on confirm alerts", [[3, 3]], [key("Tab"), key("Tab"), key("Tab"), key("Enter"), key(" "), click("exit")]);
+  add("editRange", "numpad enter", [[2, 8]], [text("9"), key("NumpadEnter"), key("Enter")]);
+  add("editRange", "numpad enter on exit", [[2, 8]], [text("9"), key("Tab"), key("Tab"), key("NumpadEnter")]);
+  add("editRange", "numpad enter on confirm", [[2, 8]], [text("9"), key("Tab"), key("Tab"), key("Tab"), key("NumpadEnter")]);
 
   for (const fov of [50, 0, -0, 1.5, 0.1 + 0.2, 1e21, 1e-7, 1 / 3, NaN, Infinity]) {
     add("editFov", `confirm ${String(Object.is(fov, -0) ? "-0" : fov)}`, [fov], [click("confirm")]);
@@ -97,6 +117,8 @@ function flows(): Flow[] {
   add("editFov", "tab order", [50], [key("Tab"), key("Tab"), key("Shift+Tab"), key(" ")]);
   add("editFov", "focus messages", [50], [focused(false), focused(true), click("confirm")]);
   numberTexts.forEach((t, i) => add("editFov", `text ${JSON.stringify(t)}`, [60], [text(t), i % 2 === 0 ? click("confirm") : key("Enter")]));
+
+  add("editFov", "numpad enter", [50], [text("75"), key("NumpadEnter"), key("NumpadEnter"), click("exit")]);
 
   const names = ["Line Graph", "", " ", "  padded  ", "café 日本", "a\nb\r\nc", "📈 Graph", "x".repeat(60), "<b>&amp;</b>", "\"quoted\""];
   for (const name of names) {
@@ -112,6 +134,9 @@ function flows(): Flow[] {
   add("renameTab", "other keys", ["Line Graph"], [key("Escape"), key("ArrowLeft"), text("!"), key("Enter")]);
   add("renameTab", "focus messages", ["Line Graph"], [focused(false), focused(true), click("confirm")]);
 
+  add("renameTab", "numpad enter", ["Line Graph"], [text("A"), key("NumpadEnter"), text("B"), key("Enter")]);
+  add("renameTab", "insert", ["Line Graph"], [insert("a\nb\r\n\rc\td\n\r\n"), key("ArrowLeft"), insert(" 1.2.3 "), insert("\n"), key("Enter")]);
+
   const akit = [{ supportsAkit: true }];
   add("export", "defaults", akit, [click("confirm")]);
   add("export", "defaults without akit", [{ supportsAkit: false }], [click("confirm")]);
@@ -119,6 +144,13 @@ function flows(): Flow[] {
   add("export", "enter", akit, [key("Enter")]);
   add("export", "exit", akit, [click("exit")]);
   add("export", "help then exit", akit, [click("help"), click("help"), click("exit")]);
+  add("export", "enter on exit", akit, [key("Shift+Tab"), key("Shift+Tab"), key("Shift+Tab"), key("Enter")]);
+  add("export", "enter on confirm", akit, [key("Shift+Tab"), key("Shift+Tab"), key("Enter")]);
+  add("export", "enter on help", akit, [key("Shift+Tab"), key("Enter")]);
+  add("export", "enter on select", akit, [key("Tab"), key("Enter")]);
+  add("export", "space and numpad enter on help", akit, [key("Shift+Tab"), key(" "), key("NumpadEnter"), click("exit")]);
+  add("export", "numpad enter on exit", akit, [key("Shift+Tab"), key("Shift+Tab"), key("Shift+Tab"), key("NumpadEnter")]);
+  add("export", "numpad enter commits the period", akit, [pick("samplingMode", "fixed"), select("samplingPeriod"), text("0"), key("NumpadEnter"), text("0"), key("Enter")]);
   add("export", "focus messages", akit, [focused(false), focused(true), focused(false), key("Enter")]);
   add("export", "akit toggles", [{ supportsAkit: false }], [{ op: "post", value: { supportsAkit: true } }, pick("samplingMode", "akit"), click("confirm")]);
   add("export", "focused and akit in one message", akit, [{ op: "post", value: { isFocused: false, supportsAkit: false } }, click("confirm")]);
@@ -154,6 +186,8 @@ function flows(): Flow[] {
   add("unitConversion", "type-ahead", [noop], [key("Tab"), text("le"), key("Tab"), text("f"), key("Tab"), text("y"), select("extraFactor"), text("1/2"), key("Enter")]);
   add("unitConversion", "picks", [noop], [pick("unitType", "angle"), pick("fromUnit", "degrees"), pick("toUnit", "rotations"), click("confirm")]);
   add("unitConversion", "alert then fix", [length], [select("extraFactor"), text("oops"), key("Enter"), select("extraFactor"), text("4/3"), click("confirm")]);
+  add("unitConversion", "enter on a select alerts", [length], [select("extraFactor"), text("oops"), select("fromUnit"), key("Enter"), text("c"), key("Enter"), key("NumpadEnter"), click("exit")]);
+  add("unitConversion", "numpad enter", [length], [select("extraFactor"), text("3"), key("NumpadEnter"), click("confirm")]);
   add("unitConversion", "type change", [length], [pick("unitType", "none"), pick("unitType", "length"), click("confirm")]);
   add("unitConversion", "focus messages", [length], [focused(false), focused(true), click("confirm")]);
   return list;
@@ -200,6 +234,7 @@ import { fileURLToPath } from "node:url";
 const request = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], "utf8"));
 const KEYS = {
   Enter: { code: "Enter", keyCode: 13, text: "\\r" },
+  NumpadEnter: { key: "Enter", code: "NumpadEnter", keyCode: 13, text: "\\r" },
   Tab: { code: "Tab", keyCode: 9 },
   Escape: { code: "Escape", keyCode: 27 },
   Backspace: { code: "Backspace", keyCode: 8 },
@@ -229,7 +264,7 @@ app.whenReady().then(async () => {
     const modifiers = parts.includes("Shift") ? 8 : 0;
     const k = KEYS[key];
     if (k === undefined) throw new Error("unknown key " + name);
-    const down = { key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers };
+    const down = { key: k.key ?? key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers };
     await send("Input.dispatchKeyEvent", k.text === undefined ? { type: "rawKeyDown", ...down } : { type: "keyDown", text: k.text, ...down });
     await send("Input.dispatchKeyEvent", { type: "keyUp", ...down });
   };
@@ -244,6 +279,9 @@ app.whenReady().then(async () => {
           await send("Input.dispatchKeyEvent", { type: "keyDown", key: c, text: c, unmodifiedText: c });
           await send("Input.dispatchKeyEvent", { type: "keyUp", key: c });
         }
+        break;
+      case "insert":
+        await send("Input.insertText", { text: step.value });
         break;
       case "key":
         await press(step.value);

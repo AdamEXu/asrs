@@ -26,10 +26,11 @@ use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::prompts::{ControlValue, PromptEvent};
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Bounds, Entity, HeadlessAppContext, Keystroke, Modifiers,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NoopTextSystem, PlatformInput,
-    WindowBounds, WindowOptions, point, px, size,
+    AnyWindowHandle, AppContext, Bounds, ClipboardItem, Entity, HeadlessAppContext, Keystroke,
+    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NoopTextSystem,
+    PlatformInput, WindowBounds, WindowOptions, point, px, size,
 };
+use asrs_ui::platform::ScriptedNumpadEnter;
 
 const WIDTH: f32 = 300.0;
 
@@ -194,12 +195,9 @@ impl Prompt<'_> {
         self.cx.run_until_parked();
     }
 
-    fn keystroke(&mut self, key: &str, key_char: Option<&str>, shift: bool) {
+    fn keystroke(&mut self, key: &str, key_char: Option<&str>, modifiers: Modifiers) {
         let keystroke = Keystroke {
-            modifiers: Modifiers {
-                shift,
-                ..Modifiers::default()
-            },
+            modifiers,
             key: key.to_owned(),
             key_char: key_char.map(str::to_owned),
         };
@@ -256,7 +254,7 @@ impl Prompt<'_> {
         let fields = [id.is_some(), value.is_some()];
         let expected = match op.as_str() {
             "select" | "click" => [true, false],
-            "text" | "key" | "post" => [false, true],
+            "text" | "insert" | "key" | "post" => [false, true],
             "pick" => [true, true],
             other => return Err(format!("unknown step op {other:?}")),
         };
@@ -274,8 +272,15 @@ impl Prompt<'_> {
                 for c in string(value, "value")?.chars() {
                     let typed = c.to_string();
                     let key = if c == ' ' { "space" } else { typed.as_str() };
-                    self.keystroke(&key.to_lowercase(), Some(&typed), false);
+                    self.keystroke(&key.to_lowercase(), Some(&typed), Modifiers::default());
                 }
+            }
+            "insert" => {
+                let pasted = string(value, "value")?;
+                self.cx
+                    .update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(pasted)));
+                let command = self.cx.update(|cx| Modifiers::secondary_key(cx));
+                self.keystroke("v", None, command);
             }
             "key" => {
                 let name = string(value, "value")?;
@@ -283,8 +288,11 @@ impl Prompt<'_> {
                     Some(rest) => (true, rest),
                     None => (false, name.as_str()),
                 };
+                let numpad = name == "NumpadEnter";
+                self.cx
+                    .update(|cx| cx.set_global(ScriptedNumpadEnter(numpad)));
                 let (key, key_char) = match name {
-                    "Enter" => ("enter", Some("\n")),
+                    "Enter" | "NumpadEnter" => ("enter", Some("\n")),
                     "Tab" => ("tab", Some("\t")),
                     "Escape" => ("escape", None),
                     "Backspace" => ("backspace", None),
@@ -293,7 +301,11 @@ impl Prompt<'_> {
                     " " => ("space", Some(" ")),
                     other => return Err(format!("no GPUI key for {other:?}")),
                 };
-                self.keystroke(key, key_char, shift);
+                let modifiers = Modifiers {
+                    shift,
+                    ..Modifiers::default()
+                };
+                self.keystroke(key, key_char, modifiers);
             }
             "click" => {
                 let id = string(id, "id")?;

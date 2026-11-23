@@ -401,6 +401,10 @@
     "src/genMsgpack.ts",
     "src/shims.ts"
   ],
+  "genNumberInsert": [
+    "src/environment.ts",
+    "src/genNumberInsert.ts"
+  ],
   "genPath": [
     "src/genPath.ts"
   ],

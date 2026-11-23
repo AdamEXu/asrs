@@ -7,14 +7,15 @@ use asrs_tabs::form::NumberInput;
 use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage};
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Context, Div, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled,
-    Subscription, Window, div, px, rgb,
+    AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, FocusHandle,
+    Focusable, InteractiveElement, IntoElement, KeyboardButton, ParentElement, Render,
+    StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
 };
 use asrs_ui::input::{
     FieldEvent, FieldKind, FieldModel, FieldStyle, PlainText, Select, SelectEvent, TextField,
 };
 use asrs_ui::parity::probed;
+use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, snap_remainder};
 use asrs_ui::theme::Appearance;
@@ -23,32 +24,12 @@ use super::layout::{
     self, BUTTON_BOTTOM, BUTTON_SIZE, CONFIRM_RIGHT, ControlHeights, EXIT_RIGHT, HELP_RIGHT,
     HELP_WIDTH, help_style, label_style,
 };
+use crate::views::number::FormNumber;
 use crate::views::select::FormSelect;
-
-/// A number input's value, through `asrs_tabs::form`.
-pub struct NumberField(NumberInput);
-
-impl FieldModel for NumberField {
-    fn value(&self) -> String {
-        self.0.value().to_string_lossy()
-    }
-
-    fn set_value(&mut self, value: &str) {
-        self.0.set_value(JsString::from(value));
-    }
-
-    fn edit(&mut self, visible: &str) {
-        self.0.set_visible_value(&JsString::from(visible));
-    }
-
-    fn accepts(&self, c: char) -> bool {
-        asrs_ui::input::number_accepts(c)
-    }
-}
 
 enum Widget {
     Text(Entity<TextField<PlainText>>),
-    Number(Entity<TextField<NumberField>>),
+    Number(Entity<TextField<FormNumber>>),
     Select(Entity<Select<FormSelect>>),
 }
 
@@ -130,7 +111,7 @@ impl PromptWindow {
     }
 
     /// Keys reach the page before the focused control: its `keydown` listener is on the window
-    /// and takes Enter whatever has focus, and Tab moves between the controls from anywhere.
+    /// and takes the main Enter key whatever has focus, and Tab moves between the controls from anywhere.
     fn keys(window: &Window, cx: &mut Context<'_, Self>) -> Subscription {
         let handle = window.window_handle();
         let this = cx.entity().downgrade();
@@ -141,7 +122,9 @@ impl PromptWindow {
             let modifiers = event.keystroke.modifiers;
             let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {
                 "enter" => {
-                    view.act(|page| page.click_confirm(), window, cx);
+                    if !platform::numpad_enter(cx) {
+                        view.act(|page| page.click_confirm(), window, cx);
+                    }
                     if view.commit(window, cx) {
                         cx.stop_propagation();
                     }
@@ -173,7 +156,7 @@ impl PromptWindow {
             ControlValue::Number(value) => {
                 let mut input = NumberInput::default();
                 input.set_value(value);
-                let model = NumberField(input);
+                let model = FormNumber(input);
                 let field =
                     cx.new(|cx| TextField::new(model, FieldKind::Number, style, window, cx));
                 subscriptions.push(Self::on_field(id, &field, window, cx));
@@ -467,8 +450,13 @@ impl PromptWindow {
             .w(px(w as f32))
             .h(px(h as f32))
             .cursor_pointer()
-            .on_click(cx.listener(|view, _, window, cx| {
-                view.click(|page| page.click_help(), window, cx);
+            .on_click(cx.listener(|view, event: &ClickEvent, window, cx| {
+                // Space clicks a button and scrolls from a link.
+                let space =
+                    matches!(event, ClickEvent::Keyboard(e) if e.button == KeyboardButton::Space);
+                if !space {
+                    view.click(|page| page.click_help(), window, cx);
+                }
             }))
             .child(
                 Text::new("Help", help_style())

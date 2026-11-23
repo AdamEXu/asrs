@@ -5,31 +5,16 @@
 //! current element. Each recorded read the components expose is compared; the reads they do
 //! not expose are listed in [`UNEXPOSED`] and counted, and any other read, op or element fails.
 
+use asrs_app::views::number::FormNumber;
 use asrs_js::string::JsString;
 use asrs_parity::json::Json;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::form::{NumberInput, RangeInput};
-use asrs_ui::input::{FieldModel, FieldValue, RangeModel, number_accepts};
+use asrs_ui::input::{FieldValue, RangeModel};
 
 /// Reads upstream never makes, so the components have no API for them: upstream reads
 /// `Number(input.value)`, never `valueAsNumber`, and never reads back a range's attributes.
 const UNEXPOSED: [&str; 4] = ["valueAsNumber", "min", "max", "step"];
-
-struct Number(NumberInput);
-
-impl FieldModel for Number {
-    fn value(&self) -> String {
-        self.0.value().to_string_lossy()
-    }
-
-    fn set_value(&mut self, value: &str) {
-        self.0.set_value(JsString::from(value));
-    }
-
-    fn accepts(&self, c: char) -> bool {
-        number_accepts(c)
-    }
-}
 
 struct Range(RangeInput);
 
@@ -52,7 +37,7 @@ impl RangeModel for Range {
 }
 
 enum Element {
-    Number(FieldValue<Number>),
+    Number(FieldValue<FormNumber>),
     Range(Range),
 }
 
@@ -67,9 +52,9 @@ fn attribute<'a>(markup: &'a str, name: &str) -> Option<&'a str> {
 fn parse(markup: &str) -> Result<Element, String> {
     let attr = |name: &str| attribute(markup, name).unwrap_or("");
     match attribute(markup, "type") {
-        Some("number") => Ok(Element::Number(FieldValue::new(Number(NumberInput::new(
-            attr("value"),
-        ))))),
+        Some("number") => Ok(Element::Number(FieldValue::new(FormNumber(
+            NumberInput::new(attr("value")),
+        )))),
         Some("range") => Ok(Element::Range(Range(range_input(
             attr("value"),
             attr("min"),

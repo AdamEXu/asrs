@@ -1,12 +1,17 @@
-use gpui_kit::base::input::{Input, InputEvent, InputState};
+use std::cell::RefCell;
+use std::ops::Range;
+use std::rc::Rc;
+
+use gpui_kit::base::input::{Input, InputEvent, InputState, Paste};
 use gpui_kit::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
-    InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, px, rgba,
+    AnyWindowHandle, App, AppContext, Context, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
+    canvas, div, px, rgba,
 };
 
 use crate::icon::{IconSource, Placement, paint_icon};
-use crate::input::model::{FieldModel, FieldValue, number_accepts};
+use crate::input::model::{FieldModel, FieldValue};
 use crate::input::native::paint_text_field;
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::symbols::Symbol;
@@ -98,6 +103,82 @@ fn split(v: f32, scale: f32) -> (f32, f32) {
     (snapped / scale, (v - snapped) / scale)
 }
 
+/// What an edit from `old` to `new` replaced: the range of `old`, and what it is now.
+fn edited<'a>(old: &str, new: &'a str) -> (Range<usize>, &'a str) {
+    let start: usize = (old.chars().zip(new.chars()))
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum();
+    let tail: usize = (old[start..].chars().rev().zip(new[start..].chars().rev()))
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum();
+    (start..old.len() - tail, &new[start..new.len() - tail])
+}
+
+/// The editor refuses an edit that inserts more than [`FieldModel::insertable`] and, once the
+/// refused edit has ended, inserts only that. `text` is what the editor shows.
+fn filter_insertions<M: FieldModel>(
+    text: Rc<RefCell<String>>,
+    editor: WeakEntity<InputState>,
+    window: AnyWindowHandle,
+) -> impl Fn(&str, &mut App) -> bool + 'static {
+    move |new, cx| {
+        let old = text.borrow().clone();
+        let (range, inserted) = edited(&old, new);
+        if M::insertable(&old[..range.start], inserted, &old[range.end..]) == inserted {
+            return true;
+        }
+        let (text, editor, new) = (text.clone(), editor.clone(), new.to_owned());
+        cx.defer(move |cx| {
+            let _ = window.update(cx, |_, window, cx| {
+                editor.update(cx, |editor, cx| {
+                    insert_filtered::<M>(&text, &new, editor, window, cx);
+                })
+            });
+        });
+        false
+    }
+}
+
+fn insert_filtered<M: FieldModel>(
+    text: &RefCell<String>,
+    new: &str,
+    editor: &mut InputState,
+    window: &mut Window,
+    cx: &mut Context<'_, InputState>,
+) {
+    let old = editor.value();
+    let selected = editor.selected_range();
+    let (left, right) = (&old[..selected.start], &old[selected.end..]);
+    let (range, inserted) = match new.strip_prefix(left).and_then(|s| s.strip_suffix(right)) {
+        Some(inserted) => (selected, inserted),
+        None => edited(&old, new),
+    };
+    insert::<M>(text, range, inserted, editor, window, cx);
+}
+
+fn insert<M: FieldModel>(
+    text: &RefCell<String>,
+    range: Range<usize>,
+    inserted: &str,
+    editor: &mut InputState,
+    window: &mut Window,
+    cx: &mut Context<'_, InputState>,
+) {
+    let old = editor.value();
+    let (left, right) = (&old[..range.start], &old[range.end..]);
+    let kept = M::insertable(left, inserted, right);
+    if kept == old[range.clone()] {
+        return;
+    }
+    *text.borrow_mut() = format!("{left}{kept}{right}");
+    let utf16 = |s: &str| s.encode_utf16().count();
+    let start = utf16(left);
+    let end = start + utf16(&old[range]);
+    editor.replace_text_in_range(Some(start..end), &kept, window, cx);
+}
+
 /// An `<input type="text|number|search">`. The editor (gpui-base's, for IME) is always
 /// present and takes clicks; its glyphs show only while it has focus. Unfocused, the shown
 /// text or the placeholder is painted with [`Text`], as Chromium paints it.
@@ -110,6 +191,7 @@ pub struct TextField<M: FieldModel> {
     placeholder: SharedString,
     disabled: bool,
     editor: Entity<InputState>,
+    editor_text: Rc<RefCell<String>>,
     committed: String,
     hovered: bool,
     _subscription: Subscription,
@@ -132,12 +214,16 @@ impl<M: FieldModel> TextField<M> {
         cx: &mut Context<'_, Self>,
     ) -> Self {
         let shown = model.value();
+        let editor_text = Rc::new(RefCell::new(shown.clone()));
         let editor = cx.new(|cx| {
-            let mut state = InputState::new(window, cx).default_value(shown.clone());
-            if kind == FieldKind::Number {
-                state = state.validate(|text, _| text.chars().all(number_accepts));
-            }
-            state
+            let filter = filter_insertions::<M>(
+                editor_text.clone(),
+                cx.weak_entity(),
+                window.window_handle(),
+            );
+            InputState::new(window, cx)
+                .default_value(shown.clone())
+                .validate(filter)
         });
         let subscription = cx.subscribe_in(&editor, window, Self::on_editor);
         TextField {
@@ -149,6 +235,7 @@ impl<M: FieldModel> TextField<M> {
             placeholder: SharedString::default(),
             disabled: false,
             editor,
+            editor_text,
             committed: shown,
             hovered: false,
             _subscription: subscription,
@@ -165,6 +252,7 @@ impl<M: FieldModel> TextField<M> {
         match event {
             InputEvent::Change => {
                 let text = editor.read(cx).value();
+                *self.editor_text.borrow_mut() = text.to_string();
                 if !self.value.edit(&text) {
                     return;
                 }
@@ -215,6 +303,7 @@ impl<M: FieldModel> TextField<M> {
         self.value.assign(value);
         let shown = self.value.shown().to_owned();
         self.committed = self.value.value();
+        self.editor_text.borrow_mut().clone_from(&shown);
         self.editor
             .update(cx, |editor, cx| editor.set_value(shown, window, cx));
         cx.notify();
@@ -278,10 +367,29 @@ impl<M: FieldModel> TextField<M> {
 
     fn clear(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.value.edit("");
+        self.editor_text.borrow_mut().clear();
         self.editor
             .update(cx, |editor, cx| editor.set_value("", window, cx));
         cx.emit(FieldEvent::Input);
         cx.notify();
+    }
+
+    /// The editor itself drops the line breaks of a paste before [`FieldModel::insertable`] can
+    /// see them.
+    fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let pasted = cx.read_from_clipboard().and_then(|item| item.text());
+        let Some(pasted) = pasted.filter(|text| text.contains(['\n', '\r'])) else {
+            return;
+        };
+        cx.stop_propagation();
+        if self.disabled {
+            return;
+        }
+        let text = self.editor_text.clone();
+        self.editor.update(cx, |editor, cx| {
+            let selected = editor.selected_range();
+            insert::<M>(&text, selected, &pasted, editor, window, cx);
+        });
     }
 
     fn text_style(&self) -> TextStyle {
@@ -387,6 +495,7 @@ impl<M: FieldModel> Render for TextField<M> {
 
         let mut root = div()
             .id("text-field")
+            .capture_action(cx.listener(Self::paste))
             .relative()
             .w(px(width))
             .h(px(height))
