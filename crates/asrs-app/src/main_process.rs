@@ -114,15 +114,16 @@ pub fn documentation_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/docs/build")
 }
 
-/// `asrs-webview`, beside the executable.
+/// `asrs-webview`: beside the executable, and for tests in the build directory above them.
 pub fn webview_host() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_default();
     let dir = exe.parent().unwrap_or(Path::new("."));
-    let name = "asrs-webview";
-    if !PACKAGED && dir.ends_with("deps") {
-        return dir.with_file_name(name);
-    }
-    dir.join(name)
+    let depth = if PACKAGED { 1 } else { usize::MAX };
+    dir.ancestors()
+        .take(depth)
+        .map(|dir| dir.join("asrs-webview"))
+        .find(|host| host.is_file())
+        .unwrap_or_else(|| dir.join("asrs-webview"))
 }
 
 /// The host's `app.getPath` values, with the user-data directory created as Chromium does at

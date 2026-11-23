@@ -10,6 +10,7 @@
 //! Linux, `asrs-webview` and an X11 session; skipped under `ASRS_CI=1` and on Windows.
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -269,6 +270,43 @@ async fn confined(cx: &mut AsyncApp, report: &mut Report) {
     page.close(cx);
 }
 
+/// With a host process that ends at once on Linux, and no documentation elsewhere.
+async fn unavailable(cx: &mut AsyncApp, report: &mut Report) {
+    let set = |cx: &mut AsyncApp, build: PathBuf, host: PathBuf| {
+        cx.update(|cx| {
+            cx.set_global(DocumentationRoot {
+                build,
+                user_data: std::env::temp_dir(),
+                host,
+            });
+        });
+    };
+    let build = if cfg!(target_os = "linux") {
+        documentation_dir()
+    } else {
+        documentation_dir().join("none")
+    };
+    set(cx, build, PathBuf::from("/bin/false"));
+    let mut page = Page::open(cx);
+    page.restore(&JsValue::string("#/a b"));
+    page.render();
+    page.loaded(cx).await;
+    page.render();
+    let state = JsValue::string("#/a%20b");
+    report.equal("a queued hash without a page", &page.saved(), &state);
+    let gone = cx.update(|cx| {
+        let shown = page.view.read(cx).page.as_ref();
+        shown.is_some_and(|page| page.page().is_none())
+    });
+    report.equal(
+        "no page is left open",
+        &JsValue::Bool(gone),
+        &JsValue::Bool(true),
+    );
+    page.close(cx);
+    set(cx, documentation_dir(), webview_host());
+}
+
 async fn scroll(cx: &mut AsyncApp, report: &mut Report) {
     let mut page = Page::open(cx);
     page.render();
@@ -435,6 +473,7 @@ fn main() {
             });
             replay(cx, &mut report).await;
             confined(cx, &mut report).await;
+            unavailable(cx, &mut report).await;
             scroll(cx, &mut report).await;
             hub_tab(cx, &mut report).await;
             drop(keep);
