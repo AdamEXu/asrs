@@ -446,6 +446,7 @@ version = "0.1.0"
 dependencies = [
  "asrs-js",
  "asrs-parity",
+ "asrs-services",
  "miniz_oxide 0.9.1",
  "wasmtime",
 ]

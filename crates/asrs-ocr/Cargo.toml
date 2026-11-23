@@ -13,6 +13,7 @@ wasmtime = { version = "=51.0.0", default-features = false, features = ["craneli
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
+asrs-services = { path = "../asrs-services" }
 
 [lints]
 workspace = true

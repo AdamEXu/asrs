@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
-use asrs_js::number::to_int32;
+use asrs_js::math::{max2, min2, rem, shift_right_unsigned, to_int32};
 use wasmtime::{
-    AsContext, AsContextMut, Caller, Config, Engine, Extern, FuncType, Instance, Linker, Memory,
-    Module, OptLevel, Ref, Store, Table, Trap, TypedFunc, Val,
+    AsContext, AsContextMut, Caller, Config, Engine, Extern, Instance, Linker, Memory, Module,
+    OptLevel, Ref, Store, Table, Trap, TypedFunc, Val,
 };
 
 const CORE_WASM: &[u8] = include_bytes!("../data/tesseract-core-simd-lstm.wasm");
@@ -19,7 +19,10 @@ const ENOENT: i32 = 44;
 const EBADF: i32 = 8;
 const EINVAL: i32 = 28;
 const ENOTTY: i32 = 59;
-const O_WRONLY: i32 = 1;
+const ESPIPE: i32 = 70;
+const ENXIO: i32 = 6;
+const O_CREAT: i32 = 0o100;
+const O_TRUNC: i32 = 0o1000;
 
 mod export {
     pub const MEMORY: &str = "Y";
@@ -35,7 +38,6 @@ mod export {
     pub const GET_UTF8_TEXT: &str = "Md";
     pub const MEAN_TEXT_CONF: &str = "Td";
     pub const OEM: &str = "ce";
-    pub const ERRNO_LOCATION: &str = "Bf";
     pub const MALLOC: &str = "Df";
     pub const STACK_SAVE: &str = "Ff";
     pub const STACK_RESTORE: &str = "Gf";
@@ -77,7 +79,7 @@ fn abort(what: &str) -> wasmtime::Error {
 
 fn to_ocr_error(error: &wasmtime::Error) -> OcrError {
     if let Some(thrown) = error.downcast_ref::<Thrown>() {
-        return OcrError(thrown.to_string());
+        return OcrError(format!("{thrown}"));
     }
     let message = match error.downcast_ref::<Trap>() {
         Some(Trap::MemoryOutOfBounds) => "memory access out of bounds".to_owned(),
@@ -110,7 +112,6 @@ struct Host {
     table: Option<Table>,
     stack_save: Option<TypedFunc<(), i32>>,
     stack_restore: Option<TypedFunc<i32, ()>>,
-    errno_location: Option<TypedFunc<(), i32>>,
 }
 
 type HostCaller<'a> = Caller<'a, Host>;
@@ -199,13 +200,13 @@ fn open(caller: &mut HostCaller<'_>, path: u32, flags: i32) -> i32 {
     }
     let path = absolute(&path);
     let host = caller.data_mut();
-    if flags & 64 != 0 {
+    if flags & O_CREAT != 0 {
         host.files.entry(path.clone()).or_default();
     }
     if !host.files.contains_key(&path) {
         return -ENOENT;
     }
-    if flags & 512 != 0 {
+    if flags & O_TRUNC != 0 {
         host.files.insert(path.clone(), Vec::new());
     }
     let fd = Some(Fd::File { path, position: 0 });
@@ -265,14 +266,17 @@ fn fd_read(
         return Ok(EBADF);
     };
     let Fd::File { path, position } = entry else {
-        return Ok(6);
+        return Ok(ENXIO);
     };
-    let contents = caller.data().files[&path].clone();
+    let vectors = io_vectors(caller, iov, count)?;
+    let (data, host) = memory(caller).data_and_store_mut(&mut *caller);
+    let contents = &host.files[&path];
     let mut at = (position as usize).min(contents.len());
     let mut total = 0;
-    for (pointer, len) in io_vectors(caller, iov, count)? {
+    for (pointer, len) in vectors {
         let read = (len as usize).min(contents.len() - at);
-        write_bytes(caller, pointer, &contents[at..at + read])?;
+        let target = range(data.len(), pointer, read as u32)?;
+        data[target].copy_from_slice(&contents[at..at + read]);
         at += read;
         total += read as u32;
         if read < len as usize {
@@ -325,7 +329,7 @@ fn fd_seek(
         return Ok(EBADF);
     };
     let Fd::File { path, position } = entry else {
-        return Ok(70);
+        return Ok(ESPIPE);
     };
     let base = match whence {
         0 => 0,
@@ -365,11 +369,14 @@ fn resize_heap(caller: &mut HostCaller<'_>, requested: u32) -> bool {
         return false;
     }
     for cut_down in [1.0, 2.0, 4.0] {
-        let over = (old * (1.0 + 0.2 / cut_down)).min(requested + 100_663_296.0);
-        let target = requested.max(over);
-        let target = MAX.min(target + (65_536.0 - target % 65_536.0) % 65_536.0);
-        let pages = to_int32((target - old + 65_535.0) / 65_536.0);
-        if memory.grow(&mut *caller, pages as u64).is_ok() {
+        let over = min2(old * (1.0 + 0.2 / cut_down), requested + 100_663_296.0);
+        let target = max2(requested, over);
+        let target = min2(
+            MAX,
+            target + rem(65_536.0 - rem(target, 65_536.0), 65_536.0),
+        );
+        let pages = shift_right_unsigned(target - old + 65_535.0, 16.0);
+        if memory.grow(&mut *caller, u64::from(pages)).is_ok() {
             return true;
         }
     }
@@ -397,12 +404,7 @@ fn environ_get(caller: &mut HostCaller<'_>, pointers: u32, buffer: u32) -> HostR
     Ok(())
 }
 
-fn invoke(
-    caller: &mut HostCaller<'_>,
-    args: &[Val],
-    ty: &FuncType,
-    results: &mut [Val],
-) -> HostResult<()> {
+fn invoke(caller: &mut HostCaller<'_>, args: &[Val], results: &mut [Val]) -> HostResult<()> {
     let host = caller.data();
     let (save, restore, table) = (
         host.stack_save.clone().expect("exports are resolved"),
@@ -415,13 +417,9 @@ fn invoke(
         Some(Ref::Func(Some(callee))) => callee,
         _ => {
             restore.call(&mut *caller, stack)?;
-            return Err(Thrown::Error(format!(
-                "TypeError: invoke of table entry {index}"
-            ))
-            .into());
+            return Err(Thrown::Error(format!("TypeError: invoke of table entry {index}")).into());
         }
     };
-    debug_assert_eq!(ty.results().len(), results.len());
     match callee.call(&mut *caller, &args[1..], results) {
         Ok(()) => Ok(()),
         Err(error) => {
@@ -450,7 +448,6 @@ fn uint(args: &[Val], index: usize) -> u32 {
 
 fn call_import(
     name: &str,
-    ty: &FuncType,
     caller: &mut HostCaller<'_>,
     args: &[Val],
     results: &mut [Val],
@@ -458,7 +455,7 @@ fn call_import(
     let mut answer = |value: i32| results[0] = Val::I32(value);
     match name {
         "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "s" | "t" => {
-            invoke(caller, args, ty, results)?;
+            invoke(caller, args, results)?;
         }
         "a" => {
             let [condition, file, function] =
@@ -472,11 +469,10 @@ fn call_import(
             )));
         }
         "k" => return Err(abort("")),
-        "l" => return Err(Thrown::Number(uint(args, 0).to_string()).into()),
+        "l" => return Err(Thrown::Number(format!("{}", int(args, 0))).into()),
         "x" => return Err(Thrown::Number("Infinity".to_owned()).into()),
         "F" | "P" | "U" | "X" => return Err(abort("-1")),
-        "m" => results[0] = Val::F64(now_ms().to_bits()),
-        "O" => results[0] = Val::F64(now_ms().to_bits()),
+        "m" | "O" => results[0] = Val::F64(now_ms().to_bits()),
         "n" => answer(fd_write(
             caller,
             int(args, 0),
@@ -587,26 +583,25 @@ fn gunzip(data: &[u8]) -> Result<Vec<u8>, OcrError> {
     miniz_oxide::inflate::decompress_to_vec(&data[at..data.len() - 8]).map_err(|_| bad())
 }
 
-/// The EXIF orientation `setImage.js` finds in the first 500 bytes.
+/// `setImage.js` looks for the orientation tag in the decimal text of the first 500 bytes, so its
+/// match can start inside a byte ("1" of 201) and takes one digit of the value.
 fn exif_orientation(image: &[u8]) -> i32 {
-    const MARKER: [u8; 9] = [18, 0, 3, 0, 0, 0, 1, 0, 0];
-    let head = &image[..image.len().min(500)];
-    let text = head
-        .iter()
-        .map(u8::to_string)
-        .collect::<Vec<_>>()
-        .join(" ");
-    let _ = MARKER;
-    let needle = "1 18 0 3 0 0 0 1 0 ";
-    let mut from = 0;
-    while let Some(found) = text[from..].find(needle) {
-        let after = from + found + needle.len();
-        if let Some(digit) = text[after..].chars().next().and_then(|c| c.to_digit(10)) {
-            return if digit == 0 { 1 } else { digit as i32 };
+    const TAG: &str = "1 18 0 3 0 0 0 1 0 ";
+    let mut text = String::new();
+    for byte in &image[..image.len().min(500)] {
+        if !text.is_empty() {
+            text.push(' ');
         }
-        from += found + 1;
+        text.push_str(&format!("{byte}"));
     }
-    1
+    let orientation = text.match_indices(TAG).find_map(|(at, _)| {
+        let digit = *text.as_bytes().get(at + TAG.len())?;
+        digit.is_ascii_digit().then(|| i32::from(digit - b'0'))
+    });
+    match orientation {
+        None | Some(0) => 1,
+        Some(orientation) => orientation,
+    }
 }
 
 /// A tesseract.js worker created by `createWorker("eng")`.
@@ -637,14 +632,11 @@ impl Worker {
                 return Err(abort("unexpected import"));
             };
             let name = import.name().to_owned();
-            let signature = ty.clone();
             linker.func_new(
                 import.module(),
                 import.name(),
                 ty,
-                move |mut caller, args, results| {
-                    call_import(&name, &signature, &mut caller, args, results)
-                },
+                move |mut caller, args, results| call_import(&name, &mut caller, args, results),
             )?;
         }
         let mut store = Store::new(&core.engine, Host::default());
@@ -659,13 +651,11 @@ impl Worker {
         };
         let stack_save = instance.get_typed_func(&mut store, export::STACK_SAVE)?;
         let stack_restore = instance.get_typed_func(&mut store, export::STACK_RESTORE)?;
-        let errno_location = instance.get_typed_func(&mut store, export::ERRNO_LOCATION)?;
         let host = store.data_mut();
         host.memory = Some(memory);
         host.table = Some(table);
         host.stack_save = Some(stack_save);
         host.stack_restore = Some(stack_restore);
-        host.errno_location = Some(errno_location);
 
         let ctors: TypedFunc<(), ()> = instance.get_typed_func(&mut store, export::CALL_CTORS)?;
         ctors.call(&mut store, ())?;
