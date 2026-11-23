@@ -265,7 +265,6 @@ fn message(context: &mut Canvas2d, is_light: bool, text: &str, [x, y]: [f64; 2])
     context.fill_text(text, x, y);
 }
 
-/// `items.find((item) => item.id === id)`.
 fn find_id(items: &JsValue, id: f64) -> Result<Option<&JsValue>, JsError> {
     for item in array(items, "find")? {
         if ops::strict_equals(member(item, "id")?, &JsValue::Number(id)) {
@@ -275,7 +274,6 @@ fn find_id(items: &JsValue, id: f64) -> Result<Option<&JsValue>, JsError> {
     Ok(None)
 }
 
-/// `id.toString()`.
 fn id_text(item: &JsValue) -> Result<JsString, JsError> {
     match member(item, "id")? {
         JsValue::Number(id) => Ok(JsString::from(number::to_string(*id))),
@@ -343,7 +341,6 @@ impl Painter<'_> {
         self.context.set_line_width(5.0);
     }
 
-    /// `drawButton`, which returns the scaled center and size.
     fn button(
         &mut self,
         is_yellow: bool,
@@ -378,7 +375,6 @@ impl Painter<'_> {
         [x, y, width, height]
     }
 
-    /// `drawJoystick`.
     fn stick(&mut self, stick: &ConfigJoystickStick, x_value: f64, y_value: f64, pressed: bool) {
         let ConfigJoystickStick {
             center_px: [center_x, center_y],
@@ -417,7 +413,6 @@ impl Painter<'_> {
         }
     }
 
-    /// `drawAxis`, which returns the scaled rectangle.
     fn axis(
         &mut self,
         is_yellow: bool,
@@ -657,7 +652,6 @@ impl Painter<'_> {
     }
 }
 
-/// `[index % 6, Math.floor(index / 6)]`.
 fn cell(index: usize) -> (f64, f64) {
     ((index % 6) as f64, (index / 6) as f64)
 }
@@ -692,7 +686,6 @@ fn button_active(
 /// A source index and whether it is inverted.
 type AxisSource = (Option<f64>, Option<bool>);
 
-/// The x and y axes and the button of a stick.
 fn stick_sources(stick: &ConfigJoystickStick, is_sdl: bool) -> ([AxisSource; 2], Option<f64>) {
     if is_sdl {
         (

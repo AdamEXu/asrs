@@ -30,7 +30,6 @@ pub struct SwerveDom {
 }
 
 impl SwerveDom {
-    /// `[CANVAS.style.width, CANVAS.style.height]`.
     pub fn canvas_style(&self) -> Option<[String; 2]> {
         let size = format!("{}px", number::to_string(self.canvas_size?));
         Some([size.clone(), size])
@@ -268,7 +267,6 @@ struct Module {
     full_circle: bool,
 }
 
-/// `drawModuleData`.
 fn draw_module(
     context: &mut Canvas2d,
     state: &JsValue,

@@ -14,7 +14,6 @@ pub(crate) fn unmodeled(what: impl Into<String>) -> JsError {
     JsError::new("Unmodeled", what)
 }
 
-/// `value[key]`.
 pub(crate) fn member<'a>(value: &'a JsValue, key: &str) -> Result<&'a JsValue, JsError> {
     static UNDEFINED: JsValue = JsValue::Undefined;
     match value {
