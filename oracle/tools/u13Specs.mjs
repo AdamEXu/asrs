@@ -122,3 +122,31 @@ const write = (name, value) =>
 write("wrap", spec({ width: 1100, height: 650 }));
 write("wrap-2x", spec({ width: 900, height: 650, devicePixelRatio: 2 }));
 write("wrap-narrow", spec({ width: 520, height: 400 }));
+
+// Scroll anchoring: lines of different heights filtered away above the first row in view.
+const CONTAINER = 'document.querySelector("div.renderer-content > :not([hidden]) div.console-table-container")';
+const anchorLines = Array.from({ length: 80 }, (_, i) => {
+  const value = i === 0 ? "tall\n".repeat(9) + "tall" : i % 7 === 3 ? `row ${i} pair\nsecond` : `row ${i}`;
+  return ["putString", "/Wrap", i, value];
+});
+const top = { capture: [{ kind: "eval", expr: `/*console-layout:top*/ window.__oracleQuiet(() => ${CONTAINER}.scrollTop)` }] };
+fs.writeFileSync(path.join(SPECS, "logs/console-anchor.json"), JSON.stringify(anchorLines) + "\n");
+const anchorSteps = [
+  { log: "../logs/console-anchor.json" },
+  { main: "new-tab", data: 5 },
+  { eval: "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Wrap\")" },
+  { frames: 3 }
+];
+for (const start of [0, 10, 100, 190, 191, 200, 301, 655, 2000]) {
+  for (const filter of ["!tall", "!pair", "row 2", "absent"]) {
+    anchorSteps.push(
+      { eval: `/*console-layout:scroll ${start}*/ window.__oracleQuiet(() => { ${CONTAINER}.scrollTop = ${start}; })` },
+      { frames: 2 },
+      top
+    );
+    for (const value of [filter, ""]) {
+      anchorSteps.push({ event: { target: "input.filter", type: "input", props: { value } } }, { frames: 2 }, top);
+    }
+  }
+}
+write("anchor", { entry: "dom", inputs: ["../logs/console-anchor.json"], fixture: { geometry: "real", seed: 1305, steps: anchorSteps } });

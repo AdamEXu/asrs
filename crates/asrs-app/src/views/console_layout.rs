@@ -131,6 +131,8 @@ struct State {
     /// The scroll offset before it is snapped to the device pixel grid.
     offset: f64,
     wheel: WheelScroll,
+    /// The scroll anchor: a row and its top relative to the scroll position.
+    anchor: Option<(usize, f64)>,
 }
 
 /// One console tab's layout, shared by the view, the renderer and the controller.
@@ -150,6 +152,7 @@ impl Default for ConsoleLayout {
             cells: HashMap::new(),
             offset: 0.0,
             wheel: WheelScroll::default(),
+            anchor: None,
         })))
     }
 }
@@ -187,12 +190,17 @@ impl State {
         }
     }
 
-    /// Lays out the rows that changed. Scroll anchoring keeps the first row in view where it was.
+    /// Lays out the rows that changed. Scroll anchoring keeps the row that was first in view
+    /// where it was; Blink keeps the anchor, and where it belongs, until something scrolls.
     fn sync(&mut self, rows: &[ConsoleRow]) {
-        let anchor = (self.scroll_top() > 0.0)
-            .then(|| self.first_row_below(self.scroll_top()))
-            .flatten()
-            .map(|index| (index, self.tops[index]));
+        let scroll_top = self.scroll_top();
+        if scroll_top == 0.0 {
+            self.anchor = None;
+        } else if self.anchor.is_none() {
+            self.anchor = self
+                .first_row_below(scroll_top)
+                .map(|index| (index, self.row_top(index) - scroll_top));
+        }
         let block = Block {
             width: self.container[2],
             scale: self.scale,
@@ -229,14 +237,18 @@ impl State {
             let top = self.tops.last().copied().unwrap_or(0);
             self.tops.push(top + row.lines);
         }
-        if let Some((index, old_top)) = anchor
-            && index < self.rows.len()
-            && self.tops[index] != old_top
-        {
-            let moved = self.tops[index] as f64 - old_top as f64;
-            self.offset += moved * LINE_HEIGHT;
+        self.anchor = self.anchor.filter(|(index, _)| *index < self.rows.len());
+        if let Some((index, position)) = self.anchor {
+            let moved = self.row_top(index) - position;
+            if moved != self.scroll_top() {
+                self.offset = moved;
+            }
         }
         self.offset = self.clamp(self.offset);
+    }
+
+    fn row_top(&self, index: usize) -> f64 {
+        HEADER_HEIGHT + self.tops[index] as f64 * LINE_HEIGHT
     }
 
     /// The first row whose bottom is past `y` px from the scrolled content's top.
@@ -270,8 +282,16 @@ impl State {
 
     fn set_scroll_top(&mut self, top: f64) {
         self.wheel.stop();
-        self.offset = self.clamp(top);
+        self.scroll_to(top);
         self.offset = self.scroll_top();
+    }
+
+    fn scroll_to(&mut self, offset: f64) {
+        let before = self.scroll_top();
+        self.offset = self.clamp(offset);
+        if self.scroll_top() != before {
+            self.anchor = None;
+        }
     }
 }
 
@@ -299,7 +319,7 @@ impl ConsoleLayout {
         let offset = [0.0, state.offset];
         let client = [state.container[2], state.container[3]];
         if let Some([_, to]) = state.wheel.wheel(wheel, now, offset, client) {
-            state.offset = state.clamp(to);
+            state.scroll_to(to);
         }
     }
 
@@ -307,7 +327,7 @@ impl ConsoleLayout {
     pub fn animate(&self, now: f64) -> bool {
         let mut state = self.0.borrow_mut();
         if let Some([_, to]) = state.wheel.animate(now) {
-            state.offset = state.clamp(to);
+            state.scroll_to(to);
         }
         state.wheel.animating()
     }

@@ -402,38 +402,61 @@ impl<H: FrameHost> HubFrame<H> {
                     index,
                     container: rect,
                 },
-                renderer.view().clone(),
                 renderer.dom().clone(),
             )
         });
         let blurred = !hub.is_focused();
         let key = shown.as_ref().map(|(s, ..)| s.key);
         let left = self.console.shown.filter(|s| Some(s.key) != key);
-        self.console.tabs.retain(|key, _| live.contains(key));
         if let Some(left) = left {
             self.console_hidden(left, window, cx);
         }
-        self.console.shown = shown.as_ref().map(|(s, ..)| *s);
-        let (shown, view, dom) = shown?;
+        self.console.tabs.retain(|key, _| live.contains(key));
+        self.console.shown = shown.as_ref().map(|(s, _)| *s);
+        let (shown, dom) = shown?;
         self.console.editing = self.console_field_focused(shown, window, cx);
 
         let now = self.host().frame_time(cx);
-        let tabs = &mut self.console.tabs;
-        let tab = tabs.entry(shown.key).or_insert_with(|| TabView::new(dom));
-        let (hand, fading) = tab.hand.opacity(view.show_hand, now);
-        let layout = tab.layout.clone();
+        let layout = match self.console.tabs.get(&shown.key) {
+            Some(tab) => tab.layout.clone(),
+            None => {
+                let tab = TabView::new(dom);
+                let layout = tab.layout.clone();
+                self.console.tabs.insert(shown.key, tab);
+                self.host_mut().input(cx, |hub| {
+                    with_renderer(hub, shown.index, |renderer, _| {
+                        renderer.set_geometry(Box::new(layout.clone()))
+                    });
+                    with_controller(hub, shown.index, |controller| {
+                        controller.set_geometry(Box::new(layout.clone()))
+                    });
+                });
+                layout
+            }
+        };
+        let scrolling = layout.animate(now);
+        let (_, renderer) = displayed(self.host().hub(cx))?;
+        let view = renderer.view();
         layout.sync(rect, scale, &view.rows);
-        if layout.animate(now) || fading {
+        let top = layout.scroll_top() - HEADER_HEIGHT;
+        let visible = layout.rows_between(top, top + rect[3]);
+        let recorded = record_rows(view, &layout, shown, scale);
+        // Only the rows in view: a log can have many thousands.
+        let view = ConsoleView {
+            rows: view.rows[visible.clone()].to_vec(),
+            has_controller: view.has_controller,
+            field_text: view.field_text.clone(),
+            field_line_through: view.field_line_through,
+            field_delete_hidden: view.field_delete_hidden,
+            show_hand: view.show_hand,
+            highlight_active: view.highlight_active,
+            jump_placeholder: view.jump_placeholder.clone(),
+        };
+        let tab = self.console.tabs.get_mut(&shown.key)?;
+        let (hand, fading) = tab.hand.opacity(view.show_hand, now);
+        if scrolling || fading {
             window.request_animation_frame();
         }
-        self.host_mut().input(cx, |hub| {
-            with_renderer(hub, shown.index, |renderer, _| {
-                renderer.set_geometry(Box::new(layout.clone()))
-            });
-            with_controller(hub, shown.index, |controller| {
-                controller.set_geometry(Box::new(layout.clone()))
-            });
-        });
 
         let grid = Grid {
             origin: [rect[0], rect[1]],
@@ -446,7 +469,8 @@ impl<H: FrameHost> HubFrame<H> {
             .top_0()
             .size_full()
             .child(hand_icon(rect, hand, dark, grid))
-            .child(self.console_table(shown, &view, &layout, appearance, grid, cx))
+            .child(self.console_table(shown, &view, visible, &layout, appearance, grid, cx))
+            .children(recorded)
             .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
@@ -456,10 +480,12 @@ impl<H: FrameHost> HubFrame<H> {
         Some(root.into_any_element())
     }
 
+    #[expect(clippy::too_many_arguments)]
     fn console_table(
         &self,
         shown: Shown,
         view: &ConsoleView,
+        visible: Range<usize>,
         layout: &ConsoleLayout,
         appearance: Appearance,
         grid: Grid,
@@ -475,16 +501,12 @@ impl<H: FrameHost> HubFrame<H> {
             scroll_top,
             text_box: layout.text_box(),
         };
-        let visible: Range<usize> = layout.rows_between(
-            scroll_top - HEADER_HEIGHT,
-            scroll_top + height - HEADER_HEIGHT,
-        );
         layout.keep_cells(&visible);
         let mut layer = div().absolute().inset_0();
-        for index in visible {
-            layer = rows.cell(index, &view.rows[index], layer);
+        for (index, row) in visible.zip(&view.rows) {
+            layer = rows.cell(index, row, layer);
         }
-        let mut container = div()
+        div()
             .id("console-table-container")
             .absolute()
             .left_0()
@@ -501,12 +523,8 @@ impl<H: FrameHost> HubFrame<H> {
             .child(probed(
                 ".console-table-container",
                 grid.place([x, y, width, height]),
-            ));
-        if cfg!(feature = "parity") {
-            container =
-                container.child(record_rows(view.rows.clone(), layout.clone(), shown, grid));
-        }
-        container.into_any_element()
+            ))
+            .into_any_element()
     }
 
     #[expect(clippy::too_many_arguments)]
@@ -659,15 +677,23 @@ impl<H: FrameHost> HubFrame<H> {
     }
 }
 
-/// Records every row's boxes and text runs for a parity capture, also those scrolled out of
-/// view, as the DOM dump lists them.
+/// Records every row's text runs for a parity capture, also those scrolled out of view, as the
+/// DOM dump lists them.
 fn record_rows(
-    rows: Vec<ConsoleRow>,
-    layout: ConsoleLayout,
+    view: &ConsoleView,
+    layout: &ConsoleLayout,
     shown: Shown,
-    grid: Grid,
-) -> impl IntoElement {
-    asrs_ui::gpui::canvas(
+    scale: f32,
+) -> Option<impl IntoElement + use<>> {
+    if !cfg!(feature = "parity") {
+        return None;
+    }
+    let (rows, layout) = (view.rows.clone(), layout.clone());
+    let grid = Grid {
+        origin: [shown.container[0], shown.container[1]],
+        scale: f64::from(scale),
+    };
+    let record = asrs_ui::gpui::canvas(
         move |_, _, cx| {
             if !cx.has_global::<asrs_ui::parity::Recorder>() {
                 return;
@@ -712,9 +738,8 @@ fn record_rows(
             }
         },
         |_, _, _, _| {},
-    )
-    .absolute()
-    .size_0()
+    );
+    Some(record.absolute().size_0())
 }
 
 impl<H: FrameHost> HubFrame<H> {
@@ -807,13 +832,13 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     fn console_blur(&mut self, key: usize, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.console.editing = false;
         let Some(fields) = self.console.tabs.get(&key).and_then(|t| t.fields.as_ref()) else {
             return;
         };
         let (jump, filter) = (fields.jump.clone(), fields.filter.clone());
         jump.update(cx, |field, cx| field.blur(window, cx));
         filter.update(cx, |field, cx| field.blur(window, cx));
-        self.console.editing = false;
     }
 
     /// A console that stopped being displayed: its focused input blurs and its rows are left.

@@ -32,8 +32,7 @@ fn load(path: &str) -> Json {
     json::parse(&std::fs::read_to_string(&path).unwrap()).unwrap()
 }
 
-fn lines() -> Vec<ConsoleLine> {
-    let log = load("logs/console-wrap.json");
+fn lines(log: &Json) -> Vec<ConsoleLine> {
     log.as_array()
         .unwrap()
         .iter()
@@ -133,6 +132,21 @@ fn same(a: &[(String, Vec<Rect>)], b: &[(String, Vec<Rect>)]) -> bool {
         })
 }
 
+fn renderer(host: &mut dyn TabCx, lines: Vec<ConsoleLine>) -> ConsoleRenderer {
+    let mut renderer = ConsoleRenderer::new(Rc::new(RefCell::new(ConsoleDom::default())), true);
+    let command = ConsoleCommand {
+        key: JsValue::string("/Wrap"),
+        key_available: true,
+        lines,
+        display_offset: 0.0,
+        selection_mode: SelectionMode::Idle,
+        selected_time: None,
+        hovered_time: None,
+    };
+    TabRenderer::<dyn TabCx>::render(&mut renderer, host, &command).unwrap();
+    renderer
+}
+
 fn replay(name: &str) -> (usize, usize) {
     let spec = load(&format!("console-layout/{name}.entry.json"));
     let window = spec.get("fixture").unwrap().get("window").unwrap();
@@ -145,18 +159,8 @@ fn replay(name: &str) -> (usize, usize) {
         number("height").unwrap() - 88.0,
     ];
     let mut host = Host::default();
-    let mut renderer = ConsoleRenderer::new(Rc::new(RefCell::new(ConsoleDom::default())), true);
-    let command = ConsoleCommand {
-        key: JsValue::string("/Wrap"),
-        key_available: true,
-        lines: lines(),
-        display_offset: 0.0,
-        selection_mode: SelectionMode::Idle,
-        selected_time: None,
-        hovered_time: None,
-    };
     let host: &mut dyn TabCx = &mut host;
-    TabRenderer::<dyn TabCx>::render(&mut renderer, host, &command).unwrap();
+    let mut renderer = renderer(host, lines(&load("logs/console-wrap.json")));
 
     let (mut rows_compared, mut nodes_compared) = (0, 0);
     let mut failures = Vec::new();
@@ -230,4 +234,49 @@ fn rows_lay_out_as_in_blink() {
             "{name}: {rows} rows, {nodes} nodes"
         );
     }
+}
+
+#[test]
+fn scroll_anchoring_follows_blink() {
+    if !cfg!(target_os = "macos") {
+        println!("console scroll anchoring: skipped, the recording uses macOS's Courier");
+        return;
+    }
+    let spec = load("console-layout/anchor.entry.json");
+    let steps = spec.get("fixture").and_then(|f| f.get("steps")).unwrap();
+    let steps = steps.as_array().unwrap();
+    let mut host = Host::default();
+    let host: &mut dyn TabCx = &mut host;
+    let mut renderer = renderer(host, lines(&load("logs/console-anchor.json")));
+    let layout = ConsoleLayout::default();
+    let container = [300.0, 88.0, 800.0, 562.0];
+    layout.sync(container, 1.0, &renderer.view().rows);
+    let records = vectors::load("dom/console-layout/anchor").unwrap();
+    let mut expected = records.iter().filter(|r| {
+        r.string("eval")
+            .is_some_and(|e| e.starts_with("/*console-layout:top*/"))
+    });
+    let mut compared = 0;
+    for step in &steps[1..] {
+        if let Some(eval) = step.get("eval").and_then(Json::as_str) {
+            let eval = eval.to_string_lossy();
+            if let Some(rest) = eval.strip_prefix("/*console-layout:scroll ") {
+                let top = rest.split("*/").next().unwrap().parse().unwrap();
+                layout.set_scroll_top(top);
+            }
+        } else if let Some(event) = step.get("event") {
+            let value = event.get("props").and_then(|p| p.get("value")).unwrap();
+            let value = JsString::from_units(value.as_str().unwrap().units().to_vec());
+            renderer.filter_input(host, &value).unwrap();
+            layout.sync(container, 1.0, &renderer.view().rows);
+        } else if step.get("capture").is_some() {
+            let record = expected.next().expect("a recorded scroll position");
+            let top = record.value("value").unwrap().as_f64().unwrap();
+            assert_eq!(layout.scroll_top(), top, "line {}", record.line);
+            compared += 1;
+        }
+    }
+    assert!(expected.next().is_none());
+    println!("{compared} scroll positions equal");
+    assert!(compared > 20);
 }

@@ -1,0 +1,1969 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/console-anchor.json"
+  ],
+  "fixture": {
+    "geometry": "real",
+    "seed": 1305,
+    "steps": [
+      {
+        "log": "../logs/console-anchor.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Wrap\")"
+      },
+      {
+        "frames": 3
+      },
+      {
+        "eval": "/*console-layout:scroll 0*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 0; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 0*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 0; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 0*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 0; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 0*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 0; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 10*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 10; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 10*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 10; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 10*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 10; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 10*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 10; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 100*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 100; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 100*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 100; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 100*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 100; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 100*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 100; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 190*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 190; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 190*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 190; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 190*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 190; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 190*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 190; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 191*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 191; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 191*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 191; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 191*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 191; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 191*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 191; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 200*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 200; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 200*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 200; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 200*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 200; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 200*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 200; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 301*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 301; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 301*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 301; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 301*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 301; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 301*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 301; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 655*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 655; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 655*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 655; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 655*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 655; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 655*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 655; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 2000*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 2000; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!tall"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 2000*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 2000; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "!pair"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 2000*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 2000; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "row 2"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "eval": "/*console-layout:scroll 2000*/ window.__oracleQuiet(() => { document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop = 2000; })"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "absent"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:top*/ window.__oracleQuiet(() => document.querySelector(\"div.renderer-content > :not([hidden]) div.console-table-container\").scrollTop)"
+          }
+        ]
+      }
+    ]
+  }
+}

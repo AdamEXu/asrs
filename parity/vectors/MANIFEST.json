@@ -26,6 +26,7 @@
     "cve1/identity": {"cases":7,"content":"c50fd3a6eb87c9e4","generator":"9ddc9d76b019d017","spec":"parity/specs/cve1/identity.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "cve1/torture": {"cases":471,"content":"3bf51e863655d3d2","generator":"b92754947817bf7a","spec":"parity/specs/cve1/torture.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "dom/canvas/fixed-advance": {"cases":361,"content":"087b4f943edbf74e","generator":"9e335f5dbf3452d1","spec":"parity/specs/dom/canvas/fixed-advance.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/console-layout/anchor": {"cases":2732,"content":"58475032e9e49b6a","generator":"f873f92106a47824","spec":"parity/specs/dom/console-layout/anchor.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/console-layout/wrap": {"cases":68,"content":"3de06e4861c69f10","generator":"834c0e106fcc1f96","spec":"parity/specs/dom/console-layout/wrap.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/console-layout/wrap-2x": {"cases":68,"content":"c43f5b12c7a978c3","generator":"e4086862cffe439c","spec":"parity/specs/dom/console-layout/wrap-2x.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/console-layout/wrap-narrow": {"cases":68,"content":"2264e2d277f2e6a4","generator":"1dcc9933edfd7b94","spec":"parity/specs/dom/console-layout/wrap-narrow.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
