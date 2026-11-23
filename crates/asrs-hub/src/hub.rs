@@ -89,7 +89,8 @@ pub enum HubFrame {
     Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
-    /// Every source list's own loop (previews, and re-rendering on a theme change).
+    /// Every source list's own loop (previews, and re-rendering on a theme change), then what the
+    /// renderers requested themselves.
     SourceLists,
     /// `show-when-ready`.
     Show,
@@ -1365,9 +1366,10 @@ impl HubModel {
                 }
             }
             HubFrame::SourceLists => {
-                let (_, errors) = self
+                let (_, mut errors) = self
                     .tabs
                     .source_list_input(&mut self.page, ListInput::Frame);
+                errors.extend(self.tabs.animation_frame(&mut self.page));
                 for e in errors {
                     uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
                 }
