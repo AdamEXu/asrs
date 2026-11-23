@@ -1,7 +1,7 @@
 //! Compares `asrs_canvas::text::line_break` with Blink's line breaking: `dom/line-break/*`,
 //! written by `oracle/tools/u14Specs.mjs`.
 
-use asrs_canvas::text::line_break::opportunities;
+use asrs_canvas::text::line_break::LineBreaks;
 use asrs_parity::vectors::load;
 use asrs_parity::{Record, Value};
 
@@ -33,10 +33,12 @@ fn text(value: &Value) -> String {
 /// Where lines start when every line takes as little as it can.
 fn line_starts(text: &str) -> Vec<usize> {
     let mut out = Vec::new();
-    let mut start = 0;
-    while let Some(&next) = opportunities(&text[start..]).first() {
-        start += next;
-        out.push(start);
+    let mut breaks = LineBreaks::new(text);
+    while let Some(&next) = breaks.ends().front()
+        && next < text.len()
+    {
+        out.push(next);
+        breaks.restart(next);
     }
     out
 }
