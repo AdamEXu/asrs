@@ -92,6 +92,10 @@ impl NativeWindow {
         }
     }
 
+    pub fn is_visible(&self) -> bool {
+        self.0.isVisible() && !self.0.isMiniaturized()
+    }
+
     pub fn show(&self, focus: bool) {
         if focus {
             self.0.makeKeyAndOrderFront(None);

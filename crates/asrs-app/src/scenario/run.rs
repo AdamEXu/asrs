@@ -5,10 +5,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use asrs_js::value::JsValue;
-use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::messages::{HubToMain, MainToHub, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
+use asrs_services::download::page::alert_runs;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{AppPaths, MainState};
 use asrs_services::path::PathStyle;
@@ -28,9 +29,10 @@ use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, BETA_FILE, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Seed, Theme,
-    Wheel, patch_colours,
+    Action, BETA_FILE, Button, COLUMNS, DialogReply, DownloadShows, MouseKind, PATCH, Page,
+    Scenario, Seed, Theme, Wheel, patch_colours,
 };
+use crate::download_flow::{self, RobotPort};
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
@@ -40,27 +42,32 @@ use crate::menus::app_menu;
 use crate::menus::bridge::{MenuAction, ScriptedMenu};
 use crate::menus::dispatch::dispatch;
 use crate::menus::model::{Command, MenuItem};
+use crate::satellite::{Satellite, SatelliteEvent};
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
-use crate::windows::{self, WindowKind, Windows};
+use crate::views::satellite_host::SatelliteHost;
+use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--licenses <file>] [--work-area <x>,<y>]
+[--bundled-assets <dir>] [--licenses <file>] [--work-area <x>,<y>] [--robot <port>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
-lists; --work-area is the primary display's work area
-origin on the Electron driver's host, which places its window 16 px inside it (default 0,0).";
+lists; --work-area is the primary display's work area origin on the Electron driver's host, which
+places its window 16 px inside it (default 0,0); --robot is where the scenario's robot listens on 127.0.0.1.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
 const FRAME: Duration = Duration::from_millis(16);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// Long enough for a satellite's last state to reach `state.json`.
+const SAVE_SETTLE: Duration = Duration::from_millis(1500);
 const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(90);
 const STABLE_ATTEMPTS: usize = 120;
 /// The Electron driver's `--js-flags=--random-seed`.
 const RANDOM_SEED: u64 = 1;
@@ -72,14 +79,35 @@ const BETA_TIME: f64 = 1_793_491_200_000.0;
 const HUB_WINDOW_ID: f64 = 1.0;
 
 /// What `StateTracker` reads of the screen in a run: the hub window where the Electron driver
-/// places its own.
+/// places its own, and the satellites main placed around it.
+#[derive(Clone)]
 struct Screen {
     window: Rect,
+    satellites: Vec<(WindowId, Rect)>,
+}
+
+impl Screen {
+    fn with_satellites(&self, cx: &App) -> Screen {
+        let manager = Windows::manager(cx);
+        let ids = manager.satellites().into_iter().flat_map(|(_, list)| list);
+        Screen {
+            window: self.window,
+            satellites: ids
+                .filter_map(|id| Some((*id, manager.bounds(*id)?)))
+                .collect(),
+        }
+    }
 }
 
 impl WindowSystem for Screen {
     fn window_bounds(&self, id: f64) -> Option<Rect> {
-        (id == HUB_WINDOW_ID).then_some(self.window)
+        if id == HUB_WINDOW_ID {
+            return Some(self.window);
+        }
+        let mut satellites = self.satellites.iter();
+        satellites
+            .find(|(window, _)| *window as f64 == id)
+            .map(|(_, bounds)| *bounds)
     }
 
     fn displays(&self) -> Vec<Rect> {
@@ -121,12 +149,14 @@ struct Options {
     bundled_assets: Option<PathBuf>,
     licenses: Option<PathBuf>,
     work_area: (f64, f64),
+    robot: Option<u16>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_area = (0.0, 0.0);
+    let mut robot = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -140,6 +170,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
+            "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--work-area" => {
                 let text = value()?;
                 work_area = text
@@ -160,6 +191,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         bundled_assets,
         licenses,
         work_area,
+        robot,
     })
 }
 
@@ -210,6 +242,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
             .context()
             .update(|cx| cx.set_global(LicensesFile(file)));
     }
+    match options.robot {
+        Some(port) => headless
+            .context()
+            .update(|cx| cx.set_global(RobotPort(port))),
+        None if scenario.robot => return Err(format!("{name} needs --robot")),
+        None => {}
+    }
     for &scale in &scenario.scales {
         if !options.scales.is_empty() && !options.scales.contains(&scale) {
             continue;
@@ -235,6 +274,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 hub: None,
                 frame: None,
                 saves: Rc::default(),
+                saved: Vec::new(),
                 exceptions: Rc::default(),
                 pressed: None,
             };
@@ -270,6 +310,8 @@ struct Variant<'a> {
     hub: Option<(Entity<Hub>, crate::views::frame::FrameGeometry)>,
     frame: Option<WindowHandle<HubFrame<HubEntityHost>>>,
     saves: Rc<RefCell<Saves>>,
+    /// What each satellite saves.
+    saved: Vec<(AnyWindowHandle, Rc<RefCell<Saves>>)>,
     exceptions: Rc<RefCell<Vec<String>>>,
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
     pressed: Option<MouseButton>,
@@ -367,6 +409,8 @@ fn modifiers(names: &[String]) -> Result<Modifiers, String> {
             "control" | "ctrl" => m.control = true,
             "alt" => m.alt = true,
             "meta" | "cmd" | "command" => m.platform = true,
+            "commandOrControl" if cfg!(target_os = "macos") => m.platform = true,
+            "commandOrControl" => m.control = true,
             other => return Err(format!("unknown modifier {other:?}")),
         }
     }
@@ -451,34 +495,110 @@ impl Variant<'_> {
         self.prompt.unwrap_or(self.window())
     }
 
-    /// The hub, then the prompt while it is open.
+    /// The hub, then the prompt while it is open, then the satellites.
     fn open_windows(&mut self) -> Vec<AnyWindowHandle> {
         let mut windows = vec![self.window(), self.active()];
-        windows.dedup();
+        windows.extend(self.satellites().iter().map(|(window, _)| *window));
+        let mut seen = Vec::new();
+        windows.retain(|window| {
+            let new = !seen.contains(window);
+            seen.push(*window);
+            new
+        });
         windows
     }
 
-    fn switch_prompt(&mut self, page: Option<WindowKind>) -> Result<(), String> {
+    fn satellites(&mut self) -> Vec<(AnyWindowHandle, Entity<Satellite>)> {
+        self.headless.context().update(|cx| {
+            let pages = MainProcess::satellite_windows(cx);
+            let pages = pages.into_iter();
+            pages
+                .filter_map(|(id, page)| Some((Windows::handle(cx, id)?, page)))
+                .collect()
+        })
+    }
+
+    /// New satellites get the run's scale before anything is rendered in them, and their saved
+    /// states are kept.
+    fn adopt_satellites(&mut self) -> Result<(), String> {
+        for (window, page) in self.satellites() {
+            if self.saved.iter().any(|(known, _)| *known == window) {
+                continue;
+            }
+            let saves = Rc::<RefCell<Saves>>::default();
+            let kept = saves.clone();
+            self.headless.context().update(|cx| {
+                cx.subscribe(&page, move |_, event, _| {
+                    if let SatelliteEvent::Main(message) = event
+                        && message.name == SatelliteToMain::SaveState
+                    {
+                        let mut kept = kept.borrow_mut();
+                        kept.count += 1;
+                        kept.last = Some(message.data.clone());
+                    }
+                })
+                .detach();
+            });
+            self.saved.push((window, saves));
+            self.headless
+                .set_scale_factor(window, self.scale as f32)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn switch_to_hub(&mut self) -> Result<(), String> {
         self.settle();
+        let active = self.active();
+        if active != self.window() && !self.satellites().iter().any(|(w, _)| *w == active) {
+            return Err("the prompt is still open".to_owned());
+        }
+        self.prompt = None;
+        self.tick()
+    }
+
+    fn switch_prompt(
+        &mut self,
+        page: Option<WindowKind>,
+        index: usize,
+        content: Option<(f64, f64)>,
+    ) -> Result<(), String> {
+        self.settle();
+        self.adopt_satellites()?;
         self.prompt = match page {
             Some(kind) => {
                 let window = self
                     .headless
                     .context()
-                    .update(|cx| Windows::of_kind(cx, kind))
+                    .update(|cx| Windows::of_kind(cx, kind, index))
                     .ok_or_else(|| format!("no {kind:?} prompt is open"))?;
                 if matches!(kind, WindowKind::Licenses | WindowKind::SourceListHelp) {
                     self.leave_title_bar(window)?;
+                }
+                if let Some((width, height)) = content {
+                    self.headless
+                        .context()
+                        .update_window(window, |_, window, _| {
+                            window.resize(size(px(width as f32), px(height as f32)));
+                        })
+                        .map_err(|e| e.to_string())?;
                 }
                 self.headless
                     .set_scale_factor(window, self.scale as f32)
                     .map_err(|e| e.to_string())?;
                 Some(window)
             }
-            None if self.active() != self.window() => {
-                return Err("the prompt is still open".to_owned());
+            None => {
+                let start = Instant::now();
+                while self.active() != self.window() {
+                    if start.elapsed() > IDLE_TIMEOUT {
+                        return Err("the prompt is still open".to_owned());
+                    }
+                    std::thread::sleep(Duration::from_millis(1));
+                    self.tick()?;
+                }
+                None
             }
-            None => None,
         };
         self.tick()
     }
@@ -504,6 +624,7 @@ impl Variant<'_> {
 
     /// One animation frame, `FRAME` of executor time, and everything that then runs.
     fn tick(&mut self) -> Result<(), String> {
+        self.adopt_satellites()?;
         self.headless.context().advance_clock(FRAME);
         for window in self.open_windows() {
             self.headless
@@ -513,6 +634,50 @@ impl Variant<'_> {
         }
         self.settle();
         Ok(())
+    }
+
+    /// The download service runs on its own thread, so this waits in real time.
+    fn wait_download(&mut self, shows: &DownloadShows) -> Result<(), String> {
+        let view = self
+            .headless
+            .context()
+            .update(|cx| download_flow::view(cx))
+            .ok_or("the download window is not open")?;
+        let start = Instant::now();
+        loop {
+            self.tick()?;
+            let shown = self.headless.context().update(|cx| {
+                let page = view.read(cx).page();
+                let alert = page.alert().map(|html| {
+                    let runs = alert_runs(html).into_iter().map(|run| run.text);
+                    runs.collect::<String>()
+                });
+                let progress = page.progress();
+                match shows {
+                    DownloadShows::Listed => {
+                        !page.loading() && alert.is_none() && progress.is_none()
+                    }
+                    DownloadShows::Text(text) => alert
+                        .as_deref()
+                        .into_iter()
+                        .chain(progress.map(|(_, details)| details))
+                        .any(|shown| shown.starts_with(text)),
+                    DownloadShows::Progress(value) => {
+                        progress.is_some_and(|(shown, _)| shown == *value)
+                    }
+                }
+            });
+            if shown {
+                return Ok(());
+            }
+            if start.elapsed() > DOWNLOAD_TIMEOUT {
+                return Err(format!(
+                    "the download window did not show {shows:?} within {} s",
+                    DOWNLOAD_TIMEOUT.as_secs()
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     fn with_hub<R>(
@@ -567,6 +732,16 @@ impl Variant<'_> {
                     .context()
                     .update(|cx| frame.read_with(cx, |frame, _| frame.field3d_busy()))
                     .map_err(|e| e.to_string())?;
+                let mut busy = busy;
+                for (window, _) in self.satellites() {
+                    if let Some(frame) = window.downcast::<HubFrame<SatelliteHost>>() {
+                        busy |= self
+                            .headless
+                            .context()
+                            .update(|cx| frame.read_with(cx, |frame, _| frame.field3d_busy()))
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
                 if busy {
                     reasons.push("3D loading or rendering");
                 }
@@ -635,7 +810,9 @@ impl Variant<'_> {
         y: f64,
         button: Button,
         click_count: usize,
+        names: &[String],
     ) -> Result<(), String> {
+        let modifiers = modifiers(names)?;
         let position = point(px(x as f32), px(y as f32));
         let button = match button {
             Button::Left => MouseButton::Left,
@@ -645,21 +822,21 @@ impl Variant<'_> {
         let down = PlatformInput::MouseDown(MouseDownEvent {
             button,
             position,
-            modifiers: Modifiers::default(),
+            modifiers,
             click_count,
             first_mouse: false,
         });
         let up = PlatformInput::MouseUp(MouseUpEvent {
             button,
             position,
-            modifiers: Modifiers::default(),
+            modifiers,
             click_count,
         });
         match kind {
             MouseKind::Move => self.dispatch(PlatformInput::MouseMove(MouseMoveEvent {
                 position,
                 pressed_button: self.pressed,
-                modifiers: Modifiers::default(),
+                modifiers,
             }))?,
             MouseKind::Down => {
                 self.dispatch(down)?;
@@ -742,7 +919,8 @@ impl Variant<'_> {
                 y,
                 button,
                 click_count,
-            } => self.mouse(*kind, *x, *y, *button, *click_count)?,
+                modifiers,
+            } => self.mouse(*kind, *x, *y, *button, *click_count, modifiers)?,
             Action::Wheel(wheel) => {
                 let delta = scroll_delta(wheel)?;
                 self.dispatch(PlatformInput::Scroll(ScrollEvent {
@@ -761,8 +939,13 @@ impl Variant<'_> {
                     DialogReply::File(name) => {
                         let file = std::path::absolute(self.dir.join("files/dialog").join(name))
                             .map_err(|e| e.to_string())?;
-                        if let Some(parent) = file.parent() {
-                            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                        let folder = if name.ends_with('/') {
+                            Some(file.as_path())
+                        } else {
+                            file.parent()
+                        };
+                        if let Some(folder) = folder {
+                            std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
                         }
                         Reply::Save(Some(file))
                     }
@@ -783,7 +966,9 @@ impl Variant<'_> {
                     .update(|cx| click_app_menu(labels, cx))?;
                 self.settle();
             }
-            Action::Prompt { page } => self.switch_prompt(*page)?,
+            Action::Prompt { page, index, size } => self.switch_prompt(*page, *index, *size)?,
+            Action::Hub => self.switch_to_hub()?,
+            Action::Download(shows) => self.wait_download(shows)?,
             Action::Capture {
                 name,
                 probes,
@@ -837,7 +1022,7 @@ impl Variant<'_> {
             .map_err(|e| format!("prefs.json: {e:?}"))?;
         self.headless
             .context()
-            .update(|cx| cx.set_global(MainProcess::headless(main)));
+            .update(|cx| cx.set_global(MainProcess::headless(main, RANDOM_SEED)));
         Ok((assets, preferences))
     }
 
@@ -849,6 +1034,7 @@ impl Variant<'_> {
                 width: self.scenario.width,
                 height: self.scenario.height,
             },
+            satellites: Vec::new(),
         }
     }
 
@@ -927,14 +1113,22 @@ impl Variant<'_> {
                 let handle = window.into();
                 let screen = self.screen();
                 self.headless.context().update(|cx| {
-                    let id = Windows::adopt_hub(cx, window.into());
+                    let id = Windows::adopt_hub(cx, window.into(), screen.window);
+                    cx.set_global(ScriptedFrame {
+                        title_bar: platform::probe::framed_title_bar().unwrap_or(0.0),
+                    });
                     cx.global_mut::<MainProcess>()
                         .adopt_hub(id, hub.downgrade());
                     cx.set_global(ScriptedMenu::default());
                     cx.set_global(Script::default());
                     cx.subscribe(&hub, move |_, event, cx| match event {
+                        HubEvent::SatelliteUpdate(_) => {
+                            MainProcess::satellite_request(cx, id, event)
+                        }
                         HubEvent::Main(m) => {
+                            MainProcess::satellite_request(cx, id, event);
                             hub_dialogs::show(m, handle, cx);
+                            let screen = screen.with_satellites(cx);
                             let main = cx.global_mut::<MainProcess>().state_mut();
                             let saved =
                                 main.hub_message(&RealFs, HUB_WINDOW_ID, m)
@@ -990,6 +1184,13 @@ impl Variant<'_> {
             self.perform(action)
                 .map_err(|e| format!("action {i} ({}): {e}", capture::kind(action)))?;
         }
+        if !self.satellites().is_empty() {
+            let mut waited = Duration::ZERO;
+            while waited < SAVE_SETTLE {
+                self.tick()?;
+                waited += FRAME;
+            }
+        }
         for window in self.open_windows() {
             self.headless
                 .context()
@@ -1019,18 +1220,25 @@ impl Variant<'_> {
         )
     }
 
-    /// Waits for the hub's next `save-state` (every 250 ms) and returns its data.
+    /// Waits for the next `save-state` (every 250 ms) of the satellite input goes to, or of the
+    /// hub, and returns its data.
     fn fresh_state(&mut self) -> Result<JsValue, String> {
-        let before = self.saves.borrow().count;
+        let active = self.active();
+        let mut satellites = self.saved.iter();
+        let saves = satellites
+            .find(|(window, _)| *window == active)
+            .map_or_else(|| self.saves.clone(), |(_, saves)| saves.clone());
+        let before = saves.borrow().count;
         let mut waited = Duration::ZERO;
-        while self.saves.borrow().count == before {
+        while saves.borrow().count == before {
             if waited > STATE_SAVE_TIMEOUT {
                 return Err("no save-state within 5 s of the capture".into());
             }
             self.tick()?;
             waited += FRAME;
         }
-        Ok(self.saves.borrow().last.clone().unwrap_or_default())
+        let last = saves.borrow().last.clone();
+        Ok(last.unwrap_or_default())
     }
 
     fn shoot(&mut self) -> Result<Shot, String> {
@@ -1067,7 +1275,8 @@ impl Variant<'_> {
         for _ in 0..STABLE_ATTEMPTS {
             self.tick()?;
             let next = self.shoot()?;
-            let same = next.same_as(&shot);
+            let rects = next.masks(self.probes, masks)?;
+            let same = next.same_as(&shot, &rects, f64::from(self.scale));
             shot = next;
             if same {
                 stable = true;

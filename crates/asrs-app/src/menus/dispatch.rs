@@ -1,8 +1,8 @@
 //! Runs the application menu's clicks in the app: [`click`]'s effects against the main process,
 //! the windows and the platform's dialogs, and the roles Electron executes itself.
 //!
-//! [`open_window`], [`open_satellite`] and [`MainProcess::open_files`] are where the windows and services of other units plug in. A
-//! command without one yet says so in a message box.
+//! [`open_window`] and [`MainProcess::open_files`] are where the windows and services of other units plug in. A
+//! command this build does not have says so in a message box.
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -17,8 +17,9 @@ use super::bridge::{self, MenuAction};
 use super::click::{self, ClickEnv, Effect, Failure, Reply, Then};
 use super::context;
 use super::model::Command;
+use crate::download_flow;
 use crate::export_flow;
-use crate::main_process::MainProcess;
+use crate::main_process::{MainProcess, SatelliteConfig};
 use crate::windows::{
     self, FileFilter, MessageBoxOptions, MessageBoxType, OpenDialogOptions, SaveDialogOptions,
     Windows,
@@ -50,16 +51,8 @@ fn run(
     let Some(result) = MainProcess::with_click_env(cx, |env| handler(env, &mut effects)) else {
         return;
     };
-    let mut missing = Vec::new();
     for effect in effects {
-        if let Err(Unavailable(name)) = perform(effect, &what, cx)
-            && !missing.contains(&name)
-        {
-            missing.push(name);
-        }
-    }
-    for name in missing {
-        show_unavailable(name, cx);
+        perform(effect, &what, cx);
     }
     match result {
         Ok(()) => {}
@@ -71,10 +64,7 @@ fn run(
     }
 }
 
-/// A command whose window or service this build does not have.
-struct Unavailable(&'static str);
-
-fn perform(effect: Effect, what: &str, cx: &mut App) -> Result<(), Unavailable> {
+fn perform(effect: Effect, what: &str, cx: &mut App) {
     match effect {
         Effect::Send { window, name, data } => MainProcess::send_to_hub(cx, window, name, data),
         Effect::SendAllPreferences => MainProcess::send_all_preferences(cx),
@@ -129,17 +119,20 @@ fn perform(effect: Effect, what: &str, cx: &mut App) -> Result<(), Unavailable> 
         }
         Effect::CheckForUpdate => {
             if !MainProcess::check_for_update(cx, true) {
-                return Err(Unavailable("Checking for updates"));
+                show_unavailable("Checking for updates", cx);
             }
         }
         Effect::OpenHub(state) => {
             MainProcess::open_hub(cx, state.as_ref(), Vec::new());
         }
-        Effect::OpenSatellite(_) => return open_satellite(),
-        Effect::OpenWindow { kind, parent } => return open_window(kind, parent, cx),
+        Effect::OpenSatellite(state) => {
+            MainProcess::open_satellite(cx, SatelliteConfig::State(state));
+        }
+        Effect::OpenWindow { kind, parent } => open_window(kind, parent, cx),
         Effect::NewTabPopup { window, rect } => new_tab_popup(window, &rect, cx),
         Effect::Close(window) => {
             if export_flow::may_close(window, cx) {
+                MainProcess::before_unload(cx, window);
                 windows::close(cx, window);
             }
         }
@@ -156,7 +149,6 @@ fn perform(effect: Effect, what: &str, cx: &mut App) -> Result<(), Unavailable> 
         Effect::OpenExternal(url) => cx.open_url(&url),
         Effect::WriteClipboard(text) => cx.write_to_clipboard(ClipboardItem::new_string(text)),
     }
-    Ok(())
 }
 
 fn resume(cx: &mut App, what: String, then: Then, reply: Reply) {
@@ -164,26 +156,17 @@ fn resume(cx: &mut App, what: String, then: Then, reply: Reply) {
 }
 
 /// `openPreferences`, `openDownload` and `openLicenses`.
-fn open_window(kind: WindowKind, parent: WindowId, cx: &mut App) -> Result<(), Unavailable> {
-    Err(Unavailable(match kind {
+fn open_window(kind: WindowKind, parent: WindowId, cx: &mut App) {
+    match kind {
         WindowKind::Preferences => {
             if let Err(e) = MainProcess::open_preferences(cx, parent) {
                 show_failure(&e, cx);
             }
-            return Ok(());
         }
-        WindowKind::Download => "Downloading logs",
-        WindowKind::Licenses => {
-            MainProcess::open_licenses(cx, parent);
-            return Ok(());
-        }
+        WindowKind::Download => download_flow::open(parent, cx),
+        WindowKind::Licenses => MainProcess::open_licenses(cx, parent),
         other => panic!("{other:?} does not open from the application menu"),
-    }))
-}
-
-/// `createSatellite({ state })`.
-fn open_satellite() -> Result<(), Unavailable> {
-    Err(Unavailable("Opening pop-out windows"))
+    }
 }
 
 /// `newTabPopup(window, rect)`.
@@ -313,16 +296,20 @@ fn path_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+pub(crate) fn message_box_type(kind: &str) -> MessageBoxType {
+    match kind {
+        "info" => MessageBoxType::Info,
+        "warning" => MessageBoxType::Warning,
+        "error" => MessageBoxType::Error,
+        "question" => MessageBoxType::Question,
+        _ => MessageBoxType::None,
+    }
+}
+
 pub(crate) fn message_box_options(options: &MessageBox) -> MessageBoxOptions {
     let index = |id: Option<f64>| id.map(|id| id as usize);
     MessageBoxOptions {
-        kind: match options.kind {
-            "info" => MessageBoxType::Info,
-            "warning" => MessageBoxType::Warning,
-            "error" => MessageBoxType::Error,
-            "question" => MessageBoxType::Question,
-            _ => MessageBoxType::None,
-        },
+        kind: message_box_type(options.kind),
         title: options.title.to_owned(),
         message: options.message.to_string_lossy(),
         detail: options.detail.to_string_lossy(),
@@ -345,7 +332,7 @@ fn file_filter(filter: &services::FileFilter) -> FileFilter {
     }
 }
 
-fn open_dialog_options(options: &services::OpenDialog) -> OpenDialogOptions {
+pub(crate) fn open_dialog_options(options: &services::OpenDialog) -> OpenDialogOptions {
     let has = |property| options.properties.contains(&property);
     OpenDialogOptions {
         title: options.title.clone(),

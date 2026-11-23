@@ -1,0 +1,10 @@
+{
+  "entry": "genTimer",
+  "args": [
+    "rects",
+    "parity/specs/video/timer/banner-lower-2025.clip",
+    "parity/specs/video/timer/small-2023-2997.clip",
+    "parity/specs/video/timer/web-lower-2025-lowbitrate.clip"
+  ],
+  "inputs": ["timer/banner-lower-2025.clip", "timer/small-2023-2997.clip", "timer/web-lower-2025-lowbitrate.clip"]
+}

@@ -310,6 +310,14 @@ pub fn measure(cx: &mut App, style: &TextStyle, text: &str, scale: f32) -> (f64,
     (l.width_px(), l.height_px())
 }
 
+/// The width in CSS px of what an ellipsis leaves of `text`, one inline box of a line that has
+/// `room` CSS px before the ellipsis. [`Text::cut`] draws it.
+pub fn cut_width(cx: &mut App, style: &TextStyle, text: &str, scale: f32, room: f64) -> f64 {
+    let mut l = layout(cx, style, text, scale, None);
+    let end = dom::cut(&mut l, dom::lu_round((room * f64::from(scale)) as f32));
+    f64::from(end) / 64.0 / f64::from(scale)
+}
+
 /// Measures text outside a render, with its own backend: for layout reads a model makes
 /// while no `App` is at hand.
 pub struct Measurer(Box<dyn TextBackend>);
@@ -344,6 +352,7 @@ pub struct Text {
     form_control: bool,
     content_width: Option<f64>,
     underline: bool,
+    cut: Option<f64>,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -361,6 +370,7 @@ impl Text {
             form_control: false,
             content_width: None,
             underline: false,
+            cut: None,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -401,6 +411,12 @@ impl Text {
     /// `text-decoration: underline`, as on links.
     pub fn underline(mut self) -> Self {
         self.underline = true;
+        self
+    }
+
+    /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
+    pub fn cut(mut self, room: f64) -> Self {
+        self.cut = Some(room);
         self
     }
 
@@ -493,7 +509,10 @@ impl Element for Text {
             Some(width) => dom::lu_round((width * f64::from(scale)) as f32),
             None => exact_width(&self.measured, bounds.size.width, scale),
         };
-        let layout = layout_lu(cx, &self.style, &self.text, scale, Some(available));
+        let mut layout = layout_lu(cx, &self.style, &self.text, scale, Some(available));
+        if let Some(room) = self.cut {
+            dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
+        }
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
             dom::lu_round((f32::from(bounds.origin.y) + self.subpixel.1) * scale),
@@ -580,7 +599,11 @@ impl Element for Text {
                 probe::record(cx, id, bounds, layout, *origin);
             }
             if !self.form_control {
-                crate::parity::record_text(cx, probe::text_run(layout, *origin));
+                let mut run = probe::text_run(layout, *origin);
+                if run.text.is_empty() && self.cut.is_some() {
+                    run.text = self.text.to_string();
+                }
+                crate::parity::record_text(cx, run);
             }
         }
     }

@@ -9,7 +9,7 @@ export type Action =
   | { selection: [string, ...unknown[]] }
   | { wait: number }
   | { idle: true }
-  | { mouse: "move" | "down" | "up" | "click"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number }
+  | { mouse: "move" | "down" | "up" | "click"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[] }
   | {
       wheel: { x: number; y: number; deltaX?: number; deltaY?: number; wheelTicksX?: number; wheelTicksY?: number; precise?: boolean };
     }
@@ -17,7 +17,8 @@ export type Action =
   | { dialog: number | string | null }
   | { menu: string[] }
   | { appMenu: string[] }
-  | { prompt: string | null }
+  | { prompt: string | null; index?: number; width?: number; height?: number }
+  | { download: string | number }
   | { capture: string; probes?: string[]; masks?: string[] };
 
 export type Scenario = {
@@ -29,11 +30,13 @@ export type Scenario = {
   gl: boolean;
   prefs: Record<string, unknown>;
   userData: Record<string, unknown>;
+  /** Served by robotServer.ts; the driver sends connections to it. */
+  robot: boolean;
   actions: Action[];
 };
 
-const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "appMenu", "prompt", "capture"];
-const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "actions", "about"];
+const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "appMenu", "prompt", "download", "capture"];
+const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about"];
 
 export function actionKind(action: Action): string {
   return ACTION_KEYS.find((k) => k in action)!;
@@ -80,6 +83,7 @@ export function parseScenario(name: string, text: string): Scenario {
     gl: raw.gl === true,
     prefs: raw.prefs ?? {},
     userData: raw.userData ?? {},
+    robot: raw.robot !== undefined,
     actions
   };
 }

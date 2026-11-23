@@ -21,13 +21,24 @@ export function busyReasons(): string[] {
   if (document.documentElement.style.getPropertyValue("--show-loading-glow") === "1") reasons.push("log loading");
   if (/\((Loading)\)/.test(document.title)) reasons.push("title loading");
   if (document.querySelector(".spinner-cubes-container.visible") !== null) reasons.push("3D field or robot loading");
-  if (w.selection && typeof w.selection.getMode === "function" && [2, 3].includes(w.selection.getMode())) reasons.push("playback or live");
+  const satellite = document.body.classList.contains("satellite");
+  if (!satellite && w.selection && typeof w.selection.getMode === "function" && [2, 3].includes(w.selection.getMode())) reasons.push("playback or live");
   return reasons;
 }
 
 export function sendMainMessage(name: string, data: unknown) {
   const port = (window as any).messagePort as MessagePort;
   port.dispatchEvent(new MessageEvent("message", { data: { name, data } }));
+}
+
+/** Whether the download window shows its list ("listed"), an alert or progress text starting with this, or this much of its progress bar. */
+export function downloadShows(expected: string | number): boolean {
+  const alert = document.querySelector("div.alert-text") as HTMLElement;
+  const progress = document.querySelector("progress") as HTMLProgressElement;
+  const details = document.querySelector("div.progress-details") as HTMLElement;
+  if (typeof expected === "number") return !progress.hidden && progress.value === expected;
+  if (expected === "listed") return (document.querySelector("div.loading") as HTMLElement).hidden && alert.hidden && progress.hidden;
+  return [alert, details].some((el) => !el.hidden && el.innerText.startsWith(expected));
 }
 
 export function domDump(probes: string[], maskSelectors: string[]) {

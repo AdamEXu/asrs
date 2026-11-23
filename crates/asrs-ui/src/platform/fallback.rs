@@ -116,6 +116,10 @@ pub(super) mod window {
             match *self {}
         }
 
+        pub fn is_visible(&self) -> bool {
+            match *self {}
+        }
+
         pub fn show(&self, _focus: bool) {
             match *self {}
         }
@@ -251,6 +255,14 @@ pub(super) mod probe {
 
     pub fn perform_key_equivalent(_key: &str, _modifiers: u32) -> bool {
         false
+    }
+
+    pub fn will_resize(_window: &Window, _size: (f64, f64)) -> Option<(f64, f64)> {
+        None
+    }
+
+    pub fn framed_title_bar() -> Option<f64> {
+        None
     }
 
     pub fn numpad_enter_for(_key_code: u16) -> Option<bool> {

@@ -10,6 +10,8 @@ use std::process::Command;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 
+use crate::app::Robot;
+use crate::oracle::Paths;
 use crate::{Result, app, cargo, workspace_root};
 pub(crate) use gates::TIMELINE_TOLERANCE;
 use gates::{Capture, Dump, GlDump, Outcome, Patch, PlatformMask, Rect, RenderMode};
@@ -521,12 +523,22 @@ fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
         .collect();
     let chosen = variant.join("files/dialog");
     if chosen.is_dir() {
-        for path in sorted_entries(&chosen)? {
-            let name = path.file_name().unwrap_or_default().to_string_lossy();
-            files.push((format!("dialog/{name}"), true));
-        }
+        list_files(&chosen, "dialog", &mut files)?;
     }
     Ok(files)
+}
+
+fn list_files(dir: &Path, prefix: &str, files: &mut Vec<(String, bool)>) -> Result {
+    for path in sorted_entries(dir)? {
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        let name = format!("{prefix}/{name}");
+        if path.is_dir() {
+            list_files(&path, &name, files)?;
+        } else {
+            files.push((name, true));
+        }
+    }
+    Ok(())
 }
 
 /// `text` with every `YYYY-MM-DD` replaced, since the two sides may run on different days.
@@ -910,9 +922,11 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
         let work_area = variants
             .iter()
             .find_map(|v| primary_work_area(&v.join("run.json")));
+        let file = scenarios.join(format!("{name}.json"));
+        let robot = Robot::start(&Paths::new()?, &file)?;
         let status = Command::new(&exe)
             .arg("--parity-scenario")
-            .arg(scenarios.join(format!("{name}.json")))
+            .arg(&file)
             .arg("--out")
             .arg(&out)
             .args(
@@ -928,6 +942,11 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
                 work_area
                     .iter()
                     .flat_map(|(x, y)| ["--work-area".to_owned(), format!("{x},{y}")]),
+            )
+            .args(
+                robot
+                    .iter()
+                    .flat_map(|r| ["--robot".to_owned(), r.port.to_string()]),
             )
             .args(&options.flags)
             .current_dir(workspace_root())

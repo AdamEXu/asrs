@@ -1180,6 +1180,35 @@ pub(super) mod probe {
         true
     }
 
+    pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {
+        let window = ns_window(window)?;
+        let delegate = window.delegate()?;
+        let size = NSSize::new(size.0, size.1);
+        // SAFETY: `windowWillResize:toSize:` takes and returns these types, and is sent only to a
+        // delegate that implements it.
+        let frame: NSSize = unsafe {
+            if !msg_send![&*delegate, respondsToSelector: objc2::sel!(windowWillResize:toSize:)] {
+                return None;
+            }
+            msg_send![&*delegate, windowWillResize: &*window, toSize: size]
+        };
+        Some((frame.width, frame.height))
+    }
+
+    pub fn framed_title_bar() -> Option<f64> {
+        let mtm = MainThreadMarker::new()?;
+        let style = objc2_app_kit::NSWindowStyleMask::Titled
+            | objc2_app_kit::NSWindowStyleMask::Closable
+            | objc2_app_kit::NSWindowStyleMask::Miniaturizable
+            | objc2_app_kit::NSWindowStyleMask::Resizable;
+        let content = objc2_foundation::NSRect::new(
+            objc2_foundation::NSPoint::new(0.0, 0.0),
+            NSSize::new(100.0, 100.0),
+        );
+        let frame = objc2_app_kit::NSWindow::frameRectForContentRect_styleMask(content, style, mtm);
+        Some(frame.size.height - content.size.height)
+    }
+
     pub fn numpad_enter_for(key_code: u16) -> Option<bool> {
         let app = NSApplication::sharedApplication(MainThreadMarker::new()?);
         let event = key_down("\r", 0, key_code)?;

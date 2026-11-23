@@ -366,6 +366,18 @@ impl FrameLayout {
             .and_then(|(_, r)| *r)
     }
 
+    /// A satellite window's page, whose renderer element's children fill the viewport.
+    pub fn satellite(width: f64, height: f64) -> FrameLayout {
+        let viewport = Some([0.0, 0.0, width, height]);
+        FrameLayout {
+            rects: vec![
+                (FrameElement::ViewerBackground, viewport),
+                (FrameElement::Viewer, viewport),
+                (FrameElement::RendererContent, viewport),
+            ],
+        }
+    }
+
     /// `getBoundingClientRect()` as upstream reads it.
     pub fn client_rect(&self, element: FrameElement) -> ClientRect {
         self.rect(element).unwrap_or([0.0; 4])

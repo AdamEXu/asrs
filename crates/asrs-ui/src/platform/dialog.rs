@@ -135,6 +135,7 @@ pub fn open_dialog(
         || Shown::Open(options.clone()),
         |reply| match reply {
             Reply::Open(paths) => paths,
+            Reply::Save(path) => path.into_iter().collect(),
             other => panic!("{other:?} for {options:?}"),
         },
         on_done,

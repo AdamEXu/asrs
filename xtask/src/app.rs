@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, Command, Stdio};
 
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
@@ -141,6 +142,45 @@ impl RunOptions {
     }
 }
 
+/// `oracle/src/robotServer.ts` for one run, stopped when dropped.
+pub(crate) struct Robot {
+    child: Child,
+    pub(crate) port: u16,
+}
+
+impl Robot {
+    /// `None` for a scenario without a `robot`.
+    pub(crate) fn start(paths: &Paths, scenario: &Path) -> Result<Option<Robot>> {
+        if read_json(scenario)?.get("robot").is_none() {
+            return Ok(None);
+        }
+        let mut child = oracle::oracle_command_in(paths, "robotServer", oracle::DEFAULT_ZONE)?
+            .arg(scenario)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("running robotServer: {e}"))?;
+        let mut line = String::new();
+        let stdout = child.stdout.take().ok_or("robotServer has no stdout")?;
+        let read = BufReader::new(stdout).read_line(&mut line);
+        let mut robot = Robot { child, port: 0 };
+        read.map_err(|e| format!("robotServer: {e}"))?;
+        robot.port = line
+            .trim()
+            .strip_prefix("{\"port\":")
+            .and_then(|rest| rest.strip_suffix('}')?.parse().ok())
+            .ok_or_else(|| format!("robotServer printed {line:?}"))?;
+        Ok(Some(robot))
+    }
+}
+
+impl Drop for Robot {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 struct Scenario {
     name: String,
     file: PathBuf,
@@ -253,6 +293,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         colour,
     } = variant;
     let gl_switch = scenario.gl.then_some(*gl);
+    let robot = Robot::start(paths, &scenario.file)?;
     let mut command = Command::new(paths.electron()?);
     command
         .args(electron_switches(*scale, gl_switch, colour))
@@ -263,6 +304,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         .arg(format!("--theme={theme}"))
         .arg(format!("--gl={gl}"))
         .arg(format!("--colour={colour}"))
+        .args(robot.iter().map(|r| format!("--robot={}", r.port)))
         .current_dir(&paths.root)
         .env_remove("ELECTRON_RUN_AS_NODE");
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);

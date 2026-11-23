@@ -22,6 +22,9 @@ use crate::path::PathStyle;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DownloadEvent {
+    /// The answer to [`DownloadService::window_opened`]: what came before it was for an earlier
+    /// window.
+    WindowOpened,
     /// A message to the download window.
     Window(WindowMessage),
     /// Answered by [`DownloadService::save_location`].
@@ -80,7 +83,7 @@ enum Command {
     WindowClosed,
     Start { address: String, path: String },
     Close,
-    Save(Vec<String>),
+    Save(Vec<Option<String>>),
     SaveLocation(Token, Option<String>),
     OpenLog(Token, usize),
     Stop,
@@ -144,8 +147,8 @@ impl DownloadService {
         self.command(Command::Close);
     }
 
-    /// The window's `save` message: the selected names, in selection order.
-    pub fn save(&self, files: Vec<String>) {
+    /// The window's `save` message: the selected names, in selection order. `None` is `undefined`.
+    pub fn save(&self, files: Vec<Option<String>>) {
         self.command(Command::Save(files));
     }
 
@@ -350,11 +353,18 @@ async fn run(
 
 fn handle(command: Command, downloader: &mut Downloader, host: &mut Host) {
     match command {
-        Command::WindowOpened => downloader.window_opened(),
+        Command::WindowOpened => {
+            host.event(DownloadEvent::WindowOpened);
+            downloader.window_opened();
+        }
         Command::WindowClosed => downloader.window_closed(host),
         Command::Start { address, path } => downloader.start_message(&address, &path, host),
         Command::Close => downloader.close_message(host),
-        Command::Save(files) => downloader.save_message(files, host),
+        Command::Save(files) => {
+            if let Err(message) = downloader.save_message(files, host) {
+                host.event(DownloadEvent::Uncaught(message));
+            }
+        }
         Command::SaveLocation(token, path) => downloader.on_save_location(token, path, host),
         Command::OpenLog(token, response) => downloader.on_open_log(token, response, host),
         Command::Stop => downloader.stop(host),

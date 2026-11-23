@@ -1,0 +1,119 @@
+{
+  "about": "Interaction (U23): a mechanism tab popped out, whose window takes the mechanism's aspect ratio, at two times",
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Mech"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 10,
+              "title": "Mechanism",
+              "controller": [
+                {
+                  "type": "mechanism",
+                  "logKey": "/Mech/Arm",
+                  "logType": "Mechanism2d",
+                  "visible": true,
+                  "options": {}
+                }
+              ],
+              "controllerUUID": "mechanism00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 200
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "mouse": "click",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "mechanism",
+      "probes": [
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        1.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "later",
+      "probes": [
+        ".mechanism-svg-container",
+        ".mechanism-svg"
+      ]
+    }
+  ]
+}

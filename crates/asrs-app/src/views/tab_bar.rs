@@ -14,6 +14,8 @@ use asrs_ui::gpui::{
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::FONT_FAMILY;
 
+use super::source_list::place_in;
+
 /// `div.tab`: `margin-top: 10px`, `height: 30px` plus a 1 px border.
 const TAB_TOP: f64 = 10.0;
 const TAB_HEIGHT: f64 = 32.0;
@@ -123,10 +125,12 @@ fn tab_colors(element: &TitleElement, dark: bool) -> (u32, u32) {
     }
 }
 
-/// One `div.tab`, `width` wide, at the origin of its parent.
+/// One `div.tab`, `width` wide, at the origin of its parent; `dx` is what snapping the origin
+/// dropped.
 pub fn tab(
     element: &TitleElement,
-    width: f64,
+    width: f32,
+    dx: f64,
     first: bool,
     last: bool,
     dark: bool,
@@ -135,7 +139,7 @@ pub fn tab(
     let (background, border) = tab_colors(element, dark);
     let mut tab = div()
         .absolute()
-        .w(px(width as f32))
+        .w(px(width))
         .h(px(TAB_HEIGHT as f32))
         .bg(rgb(background))
         .border_1()
@@ -150,6 +154,7 @@ pub fn tab(
     tab.child(
         Text::new(label, tab_style())
             .color(text_color)
+            .subpixel(dx as f32, 0.0)
             .absolute()
             .left(px((TAB_INSET - 1.0) as f32))
             .top(px(0.0)),
@@ -174,9 +179,13 @@ pub fn titles(
     for (i, element) in elements.iter().enumerate() {
         let x = geometry.left_of(i) - geometry.scroll_left;
         let width = geometry.widths.get(i).copied().unwrap_or(0.0);
+        // Blink snaps the title's edges in the window; GPUI would round its width.
+        let place = |x| place_in(geometry.bar[0], x, geometry.device_pixel_ratio);
+        let ((left, dx), (right, _)) = (place(x), place(x + width));
+        let (first, last) = (i == 0, i + 1 == count);
         row = row.child(
-            tab(element, width, i == 0, i + 1 == count, dark, text_color)
-                .left(px(x as f32))
+            tab(element, right - left, dx, first, last, dark, text_color)
+                .left(px(left))
                 .top(px(TAB_TOP as f32)),
         );
     }

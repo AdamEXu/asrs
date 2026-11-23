@@ -9,6 +9,9 @@
 #[allow(dead_code)]
 mod js_json;
 
+#[path = "support/child.rs"]
+mod child;
+
 #[path = "support/settle.rs"]
 mod settle;
 
@@ -59,7 +62,7 @@ fn in_fresh_home(test: &str) {
     ] {
         child.env(variable, &home);
     }
-    let status = child.status().expect("the test binary");
+    let status = child::run(&mut child, test);
     let _ = std::fs::remove_dir_all(&home);
     assert!(status.success(), "{test}: {status}");
 }
@@ -276,7 +279,7 @@ impl AppUnderTest {
 
     fn prompt(&mut self) -> Option<AnyWindowHandle> {
         self.cx
-            .update(|cx| Windows::of_kind(cx, WindowKind::Export))
+            .update(|cx| Windows::of_kind(cx, WindowKind::Export, 0))
     }
 
     fn write(&self, name: &str, contents: &[u8]) -> PathBuf {
