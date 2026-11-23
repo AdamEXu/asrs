@@ -282,7 +282,10 @@ const ODD = [
   command([1e17, 1e17, 1e17 + 16], 1, [field("/Dup", COLORS[5], [2, 6, 2]), field("/Dup2", COLORS[6], [1, 1, 1])]),
   command([0, 1, 2], Infinity, [field("/InfStep", COLORS[7], [1, 2, 3])]),
   command([-1e308, 1e308], 1e308, [field("/Huge", COLORS[8], [1, 2])]),
-  command([5e-324, 1e-323], 5e-324, [field("/Tiny", COLORS[9], [1, 2])])
+  command([5e-324, 1e-323], 5e-324, [field("/Tiny", COLORS[9], [1, 2])]),
+  command([0, 1, 2], 1e-4, [field("/Limited", COLORS[0], [1, 2, 3])]),
+  command([1.05, 1.15, 1.25], 0.1, [field("/ThreeTicks", COLORS[1], [1, 2, 3])]),
+  command(bins(0, 1e15, 1e14), 1e14, [field("/MaxTick", COLORS[2], range(10, (i) => i))])
 ];
 spec("odd", [...START, ...ODD.flatMap((c) => draw(c, 16)), ...draw(THREE)]);
 
@@ -404,6 +407,19 @@ spec("hover-bottom", [
     ...mouse("mousemove", 5, 5, 48),
     ...mouse("mouseout", -1, -1, 100)
   ])
+]);
+
+// A bar whose top is 2.8e-14 px below the pointer, then clicks away from the last move.
+spec("hover-exact", [
+  ...START,
+  ...draw(command([0, 1, 2], 1, [field("/Top", COLORS[0], [10, 34, 5])])),
+  ...size(465, 339),
+  ...hover(0, 0, 0.5, 0, 64),
+  ...hover(0, 1, 0.5, 0.5, 64),
+  ...hover(0, 2, 0.5, 0.5, 64, "click"),
+  ...theme("dark", 64),
+  ...hover(0, 0, 0.5, 0.5, 64, "click"),
+  ...size(464, 338, 64)
 ]);
 
 spec("hover-colors", [...START, ...draw(BLACK), ...colorHover, ...theme("dark"), ...draw(BLACK), ...colorHover, ...mouse("mouseout", -1, -1, 600)], {
