@@ -6,16 +6,19 @@ mod bundle;
 mod canvas;
 mod check;
 mod corpus;
+mod coverage;
 mod docs;
 mod dom;
 mod field3d;
 mod glb;
 mod gpui;
+mod harness;
 mod historical;
 mod host;
 mod layout;
 mod libm;
 mod licenses;
+mod mutate;
 mod oracle;
 mod pack;
 mod parity;
@@ -36,8 +39,9 @@ const USAGE: &str = "usage: cargo xtask <command>
 
 commands:
   app       Electron scenario driver: run upstream on parity/scenarios, compare, normalize (see `cargo xtask app`)
-  check     layout rules, gpui vendor and features, rustfmt, clippy, tests
+  check     layout rules, harness strictness, gpui vendor and features, rustfmt, clippy, tests
   layout    crate dependency and lint opt-out rules only
+  harness   strictness lint over replay harnesses only (see `cargo xtask harness help`)
   assets    copy upstream assets into assets/
   docs      build upstream's embedded documentation into target/docs/build (see `cargo xtask docs help`)
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
@@ -47,6 +51,7 @@ commands:
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
   host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
+  mutate    mutation testing of port files or recorded vectors (see `cargo xtask mutate`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
   pixel     section 2.5 pixel gates between upstream and port runs, port scenarios, selftest
             (see `cargo xtask pixel`)
@@ -62,6 +67,7 @@ fn main() -> ExitCode {
         Some("app") => app::run(&args[1..]),
         Some("check") => check::run(),
         Some("layout") => layout::run(),
+        Some("harness") => harness::run(&args[1..]),
         Some("assets") => assets::run(),
         Some("docs") => docs::run(&args[1..]),
         Some("licenses") => licenses::run(),
@@ -70,6 +76,7 @@ fn main() -> ExitCode {
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         Some("gpui") => gpui::run(&args[1..]),
+        Some("mutate") => mutate::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
         Some("pixel") => pixel::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),

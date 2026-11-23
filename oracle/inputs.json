@@ -557,6 +557,13 @@
     "src/genThree.ts",
     "src/shims.ts"
   ],
+  "genTimer": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genTimer.ts",
+    "src/video/bundle.ts",
+    "src/video/world.ts"
+  ],
   "genUnitDialog": [
     "src/cve1.ts",
     "src/environment.ts",

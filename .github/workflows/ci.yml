@@ -108,6 +108,7 @@ jobs:
       - name: Layout, vendored gpui-pre and generated tables
         run: |
           cargo xtask layout
+          cargo xtask harness
           cargo xtask gpui verify
           cargo xtask gpui features
           cargo xtask tables units --check

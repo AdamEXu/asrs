@@ -17,6 +17,7 @@ use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_model::json_file;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
+use asrs_parity::tally::Tally;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_services::beta::{self, BetaConfig};
@@ -380,10 +381,13 @@ impl Env {
             )?;
             return Ok(());
         }
-        if name.to_string_lossy() == "save-state" {
-            self.trackers[0].save_renderer_state(id, data.clone());
-        } else if name.to_string_lossy() == "save-type-memory" {
-            let _ = type_memory::save(&self.fs, &self.tm_file, data);
+        match name.to_string_lossy().as_str() {
+            "save-state" => self.trackers[0].save_renderer_state(id, data.clone()),
+            "save-type-memory" => {
+                let _ = type_memory::save(&self.fs, &self.tm_file, data);
+            }
+            "ask-edit-axis" => {}
+            other => panic!("message {other} is not modeled"),
         }
         Ok(())
     }
@@ -902,15 +906,17 @@ fn check(id: &str, zone_name: &str) {
     let records = vectors::load(id).unwrap_or_else(|e| panic!("{e}"));
     let mut env = Env::new(zone);
     let mut failures = Vec::new();
+    let mut tally = Tally::by_field(id, &records, "op");
     for record in &records {
-        if let Err(e) = check_record(&mut env, record) {
-            failures.push(format!(
+        match check_record(&mut env, record) {
+            Ok(()) => tally.compared(&record.string("op").expect("the tally read it")),
+            Err(e) => failures.push(format!(
                 "line {} (case {:?} step {:?}): {}",
                 record.line,
                 record.string("case"),
                 record.string("step"),
                 e
-            ));
+            )),
         }
     }
     if !failures.is_empty() {
@@ -926,6 +932,7 @@ fn check(id: &str, zone_name: &str) {
                 .join("\n\n")
         );
     }
+    tally.finish();
 }
 
 #[test]
