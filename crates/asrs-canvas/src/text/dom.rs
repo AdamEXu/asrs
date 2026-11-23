@@ -795,7 +795,7 @@ pub fn layout(
 }
 
 /// `InlineBoxState::AccumulateUsedFonts`: under `line-height: normal` a line box also holds the
-/// ascent and descent, with half the line gap each side, of every fallback font its glyphs use.
+/// ascent and descent, with about half the line gap each side, of every fallback font its glyphs use.
 fn used_fonts(
     backend: &mut dyn TextBackend,
     fragments: &[Fragment],
@@ -806,8 +806,9 @@ fn used_fonts(
         if let Some(m) = backend.fallback_metrics(glyph.glyph, scale) {
             let (a, d) = (m.ascent as Lu * LU_PER_PX, m.descent as Lu * LU_PER_PX);
             let gap = m.line_gap as Lu * LU_PER_PX;
-            above = above.max(a + gap / 2);
-            below = below.max(d + gap - gap / 2);
+            let leading = lu_floor_px(gap / 2);
+            above = above.max(a + leading);
+            below = below.max(d + gap - leading);
         }
     }
     (above, below)

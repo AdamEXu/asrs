@@ -57,7 +57,12 @@ const STATISTICS = `/*statistics-layout*/ ${quiet(`
   const origin = container.getBoundingClientRect();
   ${ROWS}
   const table = container.firstElementChild;
+  container.scrollTo(1e6, 1e6);
+  const end = [container.scrollLeft, container.scrollTop];
+  container.scrollTo(0, 0);
   return {
+    root: box(root.parentElement.getBoundingClientRect()),
+    end,
     container: [origin.x, origin.y, origin.width, origin.height],
     sizes: sizes(container),
     table: box(table.getBoundingClientRect()),
@@ -136,13 +141,16 @@ for (const [name, window] of Object.entries(WINDOWS)) {
 }
 
 const WORDS = ["main", "frc-6328", "2026-11-22", "16:04:05", "(dirty)", "src/main/java/frc/robot", "a1b2c3d4e5f60718293a4b5c6d7e8f9001122334", "Robot", "v1.2.3", "WPILib,", "don't", "\"quoted\"", "50%", "x=y+z;", "https://github.com/Mechanical-Advantage/AdvantageScope/blob/main/README.md?plain=1#L10-L20", "All", "changes", "committed", "--", "[1,2,3]", "{a:b}", "C++", "$5", "e-mail", "-5", "3-4", "A-1"];
-const OTHER = ["café", "µs", "20°C", "→", "✓", "em—dash", "wait…", "no break", "日本語のテキスト、改行。", "\u{1f916}\u{1f600}", "«quoted»", "soft­hyphen", "zero​width"];
+const OTHER = ["café", "µs", "20°C", "→", "✓", "em—dash", "wait…", "no break", "日本語のテキスト、改行。", "\u{1f916}\u{1f600}", "«quoted»", "zero\u200bwidth"];
+const SOFT_HYPHEN = "soft\u00adhyphen";
+// Blink's advance for CJK in Courier differs from the port's (#273), which at 1.5x moves a line break.
+let others = OTHER;
 const pick = (list) => list[Math.floor(random() * list.length)];
 function value() {
   const kind = random();
   if (kind < 0.06) return "";
   if (kind < 0.12) return pick(WORDS);
-  const words = range(1 + Math.floor(random() * 24), () => (random() < 0.12 ? pick(OTHER) : pick(WORDS)));
+  const words = range(1 + Math.floor(random() * 24), () => (random() < 0.12 ? pick(others) : pick(WORDS)));
   return words.join(pick([" ", " ", " ", "  ", "/", "_", "\t", "\n"]));
 }
 function metadata(rows, columns, text = value) {
@@ -164,6 +172,7 @@ const metadataShown = (value, label) => [
   { capture: [{ kind: "eval", expr: METADATA }], label }
 ];
 for (const [name, window] of Object.entries(WINDOWS)) {
+  others = name === "hidpi" ? OTHER.filter((s) => !/[\u3000-\u9fff]/.test(s)) : OTHER;
   write("metadata-layout", name, {
     geometry: "real",
     window,
@@ -216,7 +225,7 @@ const breaks = (label, body) => ({
   label
 });
 const sentence = (words) => range(2 + Math.floor(random() * 9), () => pick(words)).join(pick([" ", "", "-", "/", ","]));
-const strings = [...WORDS, ...OTHER, ...range(150, () => sentence(WORDS)), ...range(150, () => sentence([...WORDS, ...OTHER, ...OTHER]))];
+const strings = [...WORDS, ...OTHER, SOFT_HYPHEN, ...range(150, () => sentence(WORDS)), ...range(150, () => sentence([...WORDS, ...OTHER, ...OTHER, SOFT_HYPHEN]))];
 write("line-break", "pairs", {
   geometry: "real",
   steps: [
@@ -230,3 +239,28 @@ write("line-break", "strings", {
   geometry: "real",
   steps: strings.map((text, i) => breaks(`string ${i}`, `[${JSON.stringify(text)}, breaks(${JSON.stringify(text)})]`))
 });
+
+// The arrow keys in the number inputs upstream sets `step` on.
+const STEPS = ["", "1", "0.1", "0.01", "0.001", "10", "1e-7", "1e+21", "2.5", "any", "0", "-1", "abc"];
+const NUMBERS = ["0", "10", "0.25", "-0.05", "3.14159", "", "1e21", "-1e21", "0.30000000000000004", "123456789.123", "1e-10", "9007199254740993", "-7"];
+const keys = (...names) => names.map((name) => ["key", name]);
+const input = (markup, ops) => ({ markup, ops });
+const RANGE_MIN = '<input class="range-min" type="number" title="Minimum histogram value" />';
+const numberKeys = [
+  ...STEPS.map((step) =>
+    input(RANGE_MIN, [
+      ["set", "step", step],
+      ...NUMBERS.flatMap((n) => [["set", "value", n], ...keys("ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowDown")])
+    ])
+  ),
+  input('<input type="number" value="5">', keys("ArrowUp", "ArrowDown", "ArrowDown")),
+  input('<input type="number" value="5.5" step="2">', [...keys("ArrowUp"), ["set", "value", "6"], ...keys("ArrowUp"), ["set", "value", "6"], ...keys("ArrowDown")]),
+  input('<input type="number" value="x" step="0.5">', [["set", "value", "0.7"], ...keys("ArrowDown", "ArrowUp")]),
+  input(RANGE_MIN, [["char", "1"], ["char", "2"], ...keys("ArrowUp"), ["char", "5"], ["blur"], ["focus"], ...keys("ArrowDown"), ["blur"]]),
+  input(RANGE_MIN, [["char", "1"], ["char", "e"], ...keys("ArrowUp")]),
+  input(RANGE_MIN, ["shift", "alt", "ctrl", "meta"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]])))
+];
+fs.writeFileSync(
+  path.join(ROOT, "parity/specs/form/number-keys.entry.json"),
+  JSON.stringify({ entry: "selectKeys", fixture: { steps: numberKeys } }, null, 1) + "\n"
+);

@@ -1,3 +1,4 @@
+pub mod cell_text;
 pub mod console;
 pub mod console_layout;
 pub mod field3d;
@@ -7,9 +8,11 @@ pub mod frame;
 pub mod hub_host;
 mod large_table;
 pub mod line_graph;
+pub mod metadata_layout;
 pub mod number;
 pub mod prompts;
 pub mod select;
 pub mod sidebar;
 pub mod source_list;
+pub mod statistics_layout;
 pub mod tab_bar;

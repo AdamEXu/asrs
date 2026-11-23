@@ -66,9 +66,6 @@ pub struct StatisticsController {
     range_min: NumberInput,
     range_max: NumberInput,
     step_size: NumberInput,
-    range_min_step: JsString,
-    range_max_step: JsString,
-    step_size_step: JsString,
     command: StatisticsCommand,
     should_update: bool,
     last_source_str: String,
@@ -90,12 +87,9 @@ impl StatisticsController {
                     .map(|(value, text)| SelectOption::new(Some(value), text))
                     .collect(),
             ),
-            range_min: NumberInput::new("0"),
-            range_max: NumberInput::new("10"),
-            step_size: NumberInput::new("1"),
-            range_min_step: JsString::new(),
-            range_max_step: JsString::new(),
-            step_size_step: JsString::new(),
+            range_min: NumberInput::with_value("0"),
+            range_max: NumberInput::with_value("10"),
+            step_size: NumberInput::with_value("1"),
             command: StatisticsCommand {
                 step_size: 1.0,
                 ..StatisticsCommand::default()
@@ -128,9 +122,9 @@ impl StatisticsController {
             range_min: self.range_min.value().clone(),
             range_max: self.range_max.value().clone(),
             step_size: self.step_size.value().clone(),
-            range_min_step: self.range_min_step.clone(),
-            range_max_step: self.range_max_step.clone(),
-            step_size_step: self.step_size_step.clone(),
+            range_min_step: self.range_min.step().clone(),
+            range_max_step: self.range_max.step().clone(),
+            step_size_step: self.step_size.step().clone(),
             time_range: (self.time_range.selected_index() >= 0).then(|| self.time_range.value()),
         }
     }
@@ -221,7 +215,7 @@ impl StatisticsController {
         if self.step_size.number() <= 0.0 {
             self.step_size
                 .set_value(JsString::from(number::to_string(clean_float(
-                    value_to_number(&self.step_size_step) * 0.9,
+                    value_to_number(self.step_size.step()) * 0.9,
                 ))));
         }
         let range = math::abs(self.range_max.number() - self.range_min.number());
@@ -232,10 +226,12 @@ impl StatisticsController {
                 ))));
         }
         let step = math::pow(10.0, math::floor(math::log10(self.step_size.number())));
-        self.step_size_step = JsString::from(number::to_string(step));
+        self.step_size
+            .set_step(JsString::from(number::to_string(step)));
         let min_max_step = math::pow(10.0, math::ceil(math::log10(self.step_size.number())));
-        self.range_min_step = JsString::from(number::to_string(min_max_step));
-        self.range_max_step = JsString::from(number::to_string(min_max_step));
+        let min_max_step = JsString::from(number::to_string(min_max_step));
+        self.range_min.set_step(min_max_step.clone());
+        self.range_max.set_step(min_max_step);
     }
 
     fn is_valid(

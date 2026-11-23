@@ -8,7 +8,7 @@ use asrs_tabs::metadata::MetadataTable;
 use asrs_ui::text::TextStyle;
 use asrs_ui::theme::{FONT_FAMILY, MONOSPACE_FAMILY};
 
-use super::cell_text::{CellText, border, length};
+use super::cell_text::{CellText, border, css, length};
 
 const KEY_WIDTH: f64 = 150.0;
 const PADDING: f64 = 6.0;
@@ -26,8 +26,8 @@ pub fn cell_style(kind: CellKind) -> TextStyle {
     let (font, align) = match kind {
         CellKind::Header => (format!("bold 16px {family}"), "left"),
         CellKind::Key => (format!("bold 16px {family}"), "right"),
-        CellKind::Value => (format!("14px {MONOSPACE_FAMILY}"), "left"),
-        CellKind::NoData => (format!("italic 14px {MONOSPACE_FAMILY}"), "left"),
+        CellKind::Value => (format!("14px {}", MONOSPACE_FAMILY.join(", ")), "left"),
+        CellKind::NoData => (format!("italic 14px {}", MONOSPACE_FAMILY.join(", ")), "left"),
     };
     TextStyle::from_css([
         ("font", font.as_str()),
@@ -81,6 +81,23 @@ impl Placed {
     }
 }
 
+pub const ALERT: &str =
+    "No metadata found. Check the documentation for details on metadata publishing.";
+
+/// `div.tab-centered` in the renderer element.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlacedAlert {
+    /// CSS px: `translate(-50%, -50%)` is not laid out.
+    pub origin: [f64; 2],
+    pub size: [Lu; 2],
+    pub text: CellText,
+}
+
+pub fn alert_style() -> TextStyle {
+    let font = format!("italic 16px {}", FONT_FAMILY.join(", "));
+    TextStyle::from_css([("font", font.as_str()), ("text-align", "center")]).expect("alert style")
+}
+
 pub struct MetadataLayout {
     backend: Box<dyn TextBackend>,
     key: Option<(MetadataTable, f64, f32)>,
@@ -109,6 +126,27 @@ impl MetadataLayout {
             self.key = Some((table.clone(), width, scale));
         }
         &self.placed
+    }
+
+    /// The no-data alert, which shrinks to fit the half of the tab right of its centre.
+    pub fn alert(&mut self, [width, height]: [f64; 2], scale: f32) -> PlacedAlert {
+        let [width, height] = [width, height].map(|v| (v as f32 * scale * 64.0).round() as Lu);
+        let backend = self.backend.as_mut();
+        let style = alert_style();
+        let max = CellText::new(backend, &style, ALERT, None, scale).width;
+        let min = CellText::min_content(backend, &style, ALERT, scale);
+        let left = width / 2;
+        let used = max.min((width - left).max(min));
+        let text = CellText::new(backend, &style, ALERT, Some(used), scale);
+        let size = [used, text.height];
+        PlacedAlert {
+            origin: [
+                css(left, scale) - css(size[0], scale) / 2.0,
+                css(height / 2, scale) - css(size[1], scale) / 2.0,
+            ],
+            size,
+            text,
+        }
     }
 
     fn lay_out(&mut self, table: &MetadataTable, width: f64, scale: f32) -> Placed {

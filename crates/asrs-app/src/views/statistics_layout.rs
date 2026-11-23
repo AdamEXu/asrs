@@ -32,7 +32,7 @@ pub fn cell_style(kind: CellKind) -> TextStyle {
     let (font, align) = match kind {
         CellKind::Section => (format!("600 14px {family}"), "center"),
         CellKind::Title => (format!("12px {family}"), "right"),
-        CellKind::Value => (format!("14px {MONOSPACE_FAMILY}"), "start"),
+        CellKind::Value => (format!("14px {}", MONOSPACE_FAMILY.join(", ")), "start"),
     };
     TextStyle::from_css([
         ("font", font.as_str()),
@@ -83,7 +83,7 @@ impl Placed {
         ]
     }
 
-    fn scroll_size(&self) -> [Lu; 2] {
+    pub fn scroll_size(&self) -> [Lu; 2] {
         [0, 1].map(|axis| (self.table[axis] + 2 * self.margin).max(self.container[axis]))
     }
 
@@ -335,6 +335,13 @@ impl StatisticsLayout {
             (right - left).max(0.0),
             (height - MARGIN).max(0.0),
         ]
+    }
+
+    /// `scrollTo` past the end on both axes.
+    pub fn scroll_to_end(&self) {
+        let mut state = self.0.borrow_mut();
+        state.wheel.stop();
+        state.scroll_to([f64::INFINITY; 2]);
     }
 
     pub fn scroll(&self) -> [f64; 2] {
