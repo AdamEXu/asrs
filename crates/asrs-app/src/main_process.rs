@@ -914,10 +914,10 @@ impl MainProcess {
             return;
         };
         let data = main.state.assets.set_assets_data();
+        Self::send_satellites(cx, MainToSatellite::SetAssets, &data);
         for (_, hub) in Self::hub_windows(cx) {
             Self::send(cx, &hub, MainToHub::SetAssets, data.clone());
         }
-        Self::send_satellites(cx, MainToSatellite::SetAssets, &data);
     }
 
     fn save_state(cx: &mut App) {

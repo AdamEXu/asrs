@@ -398,7 +398,7 @@ fn satellites_open_close_and_round_trip(app: &mut AppUnderTest) {
     let file = app.home.join("satellites.json");
     app.cx.advance_clock(Duration::from_secs(2));
     app.settle();
-    let mut export = |app: &mut AppUnderTest| {
+    let export = |app: &mut AppUnderTest| {
         let _ = std::fs::remove_file(&file);
         app.click(Command::ExportLayout, &[Reply::Save(Some(file.clone()))]);
         std::fs::read(&file).expect("the exported layout")
