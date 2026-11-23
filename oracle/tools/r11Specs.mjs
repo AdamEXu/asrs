@@ -151,17 +151,21 @@ const RECORDER = String.raw`(() => {
       return el;
     };
     const end = { r11: "end", id: tree(instance.id) };
+    const labels = () => instance.renderer.histogram.data.labels;
+    const before = instance.kind === "statistics" ? labels() : undefined;
     try {
       const result = run();
       if (op[0] === "save") end.result = tree(result);
     } catch (e) {
-      end.threw = tree(e.name + ": " + e.message);
+      // The bundler renames shadowed variables, so a message can name "color2" for "color".
+      end.threw = tree(e.name + ": " + e.message.replace(/^([a-z]+)\d+(\.\w+ is not a function)$/, "$1$2"));
       throw e;
     } finally {
       document.createElement = createElement;
       WATCHED.forEach((name, i) => (sel[name] = saved[i]));
       active = false;
       if (instance.kind === "table") end.range = tree(instance.renderer.getTimestampRange());
+      if (instance.kind === "statistics") end.histogram = labels() !== before;
       end.dom = tree(quiet(() => DUMP[instance.kind](instance.renderer)));
       write(end);
     }
@@ -390,7 +394,12 @@ spec(
       r11("render", id, command([field("u", false, null)], [-2, -1, 1], { selectionMode: 3, selectedTime: 1, hoveredTime: 1 })),
       r11("render", id, command([field("u", false, null)], [], { selectionMode: 3, selectedTime: 1, hoveredTime: 1 })),
       r11("render", id, command([field("u", false, 2, [1], [5])], [1, 2], { selectedTime: 1, hoveredTime: 2 })),
-      r11("render", id, command([field("u", false, null)], [4], { selectionMode: 1, selectedTime: null, hoveredTime: null }))
+      r11("render", id, command([field("u", false, null)], [4], { selectionMode: 1, selectedTime: null, hoveredTime: null })),
+      r11("render", id, command([field("v", false, null)], [4])),
+      r11("render", id, command([field(null, false, null)], [4])),
+      r11("render", id, command([field("null", false, null)], [4])),
+      r11("render", id, command([field("v", false, null), field("w", false, null)], [4])),
+      r11("render", id, command([field("w", false, null), field("v", false, null)], [4]))
     ])
   ],
   TABLE_FIXTURE
@@ -435,6 +444,13 @@ spec(
     frames(2),
     r11("scroll", 0, 4000),
     frames(1),
+    step(`document.head.appendChild(document.createElement("style")).textContent = "table.data-table tr:not(:first-child) { height: 31.5px; }"`),
+    frames(2),
+    r11("scroll", 0, 5000),
+    frames(2),
+    r11("mousemove", 0, 300),
+    frames(2),
+    r11("mouseleave", 0),
     { log: [["clearBeforeTime", 8]] },
     frames(2),
     { log: [["clearBeforeTime", 36]] },
@@ -625,6 +641,12 @@ spec(
     r11("render", 1, lines([A, C])),
     r11("render", 1, lines([A, B])),
     r11("render", 1, lines([A, line(2, "alpha one")])),
+    // Equal timestamps by value keep a stale value that equal bits would refresh.
+    r11("render", 1, lines([line(0, "x"), line(0, "old")])),
+    r11("render", 1, lines([line(0, "x")])),
+    r11("render", 1, lines([line(0, "x"), line(0, "new")])),
+    r11("render", 1, lines([line(0, "x"), line(-0, "new")], { displayOffset: 1 })),
+    r11("render", 1, lines([line(0, "x"), line(-0, "old")], { displayOffset: 1 })),
     r11("render", 1, lines([line(1, "İx"), line(2, "i̇x")])),
     r11("filter", 1, "İ"),
     r11("filter", 1, "i̇")
@@ -728,6 +750,8 @@ spec(
       r11("render", id, lines([line(-1.5, "neg"), line(0, "zero")], { selectionMode: 2, selectedTime: -1, hoveredTime: -1 })),
       r11("render", id, lines([], { selectionMode: 1, selectedTime: 3, hoveredTime: 3 })),
       r11("jump", id, "5", true),
+      r11("render", id, lines([A, B, line(4, "four"), line(6, "six")], { selectionMode: 1, selectedTime: 5, hoveredTime: 1 })),
+      r11("jump", id, "", true),
       r11("render", id, lines([A], { selectionMode: 1, selectedTime: 3, hoveredTime: 3 })),
       r11("render", id, lines([A, B], { selectionMode: 1, selectedTime: 3, hoveredTime: 1 })),
       r11("render", id, lines([A], { selectionMode: 3, selectedTime: 3, hoveredTime: 3 })),
@@ -815,6 +839,7 @@ spec(
     r11("render", 1, statsCommand([statField("/A", "#2b66a2", [1, true])])),
     r11("render", 1, statsCommand([statField("/A", "#2b66a2", [1]), statField("/B", undefined, [2])])),
     r11("render", 1, statsCommand([statField("/A", null, [1])])),
+    r11("render", 1, statsCommand([statField("/A", "#2b66a2", [1]), statField("/B", 5, [2])])),
     r11("render", 1, statsCommand([statField("/A", "#2b66a2", [3])]))
   ],
   { seed: 1113 }

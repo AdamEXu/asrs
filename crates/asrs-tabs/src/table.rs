@@ -775,7 +775,8 @@ impl TableRenderer {
                 row.push(match next.checked_sub(1) {
                     None => "null".to_owned(),
                     Some(index) => {
-                        let text = get_log_value_text_at(data, index).unwrap_or_default();
+                        let text = get_log_value_text_at(data, index)
+                            .expect("a range holds one value per timestamp");
                         match data {
                             LogValueSetAny::Boolean(set) => {
                                 format!("{} {text}", boolean_icon(set.values[index]))

@@ -963,7 +963,7 @@ on one directly (`render`) or the current one of the tab's controller (`share`).
 | `{"r11": "create", "id", "kind", "hasController", "dom"}` | when a renderer is hooked |
 | `{"r11": "begin", "id", "op", "dark", "timestamps"}` | before an operation: `op` is `["render", command]` or the event and its arguments, `timestamps` is `window.preferences.timestamps` |
 | `{"r11": "selection", "call"}` | a `window.selection` call the operation made |
-| `{"r11": "end", "id", "threw"?, "result"?, "range"?, "dom"}` | after it, with `saveState()`'s result or `getTimestampRange()` where they apply |
+| `{"r11": "end", "id", "threw"?, "result"?, "range"?, "histogram"?, "dom"}` | after it, with `saveState()`'s result, `getTimestampRange()` or whether the Statistics renderer replaced its histogram's data, where they apply |
 
 `dom` per kind: the Table's header cells, fillers (`style.height` as assigned) and pooled rows
 `[classes, hidden, cell texts]`; the Console's field cell, buttons and rows `[classes,

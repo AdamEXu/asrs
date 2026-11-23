@@ -95,7 +95,10 @@ impl StatisticsController {
             range_min_step: JsString::new(),
             range_max_step: JsString::new(),
             step_size_step: JsString::new(),
-            command: StatisticsCommand::default(),
+            command: StatisticsCommand {
+                step_size: 1.0,
+                ..StatisticsCommand::default()
+            },
             should_update: true,
             last_source_str: String::new(),
             last_timeline_range: [0.0, 0.0],

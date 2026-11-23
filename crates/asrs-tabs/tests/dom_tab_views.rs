@@ -438,6 +438,14 @@ struct ConsoleInstance {
     reads: Rc<RefCell<ScriptedReads>>,
 }
 
+#[derive(Debug, PartialEq)]
+enum Outcome {
+    Nothing,
+    Saved(JsValue),
+    /// Whether the histogram's data was replaced.
+    Histogram(bool),
+}
+
 enum Instance {
     Table(TableInstance),
     Console(ConsoleInstance),
@@ -476,13 +484,9 @@ impl Instance {
         }
     }
 
-    /// Runs one operation; `Ok` carries `saveState()`'s result.
-    fn run(
-        &mut self,
-        host: &mut Host,
-        op: &[Value],
-        dark: bool,
-    ) -> Result<Option<JsValue>, JsError> {
+    /// Runs one operation, returning the members besides `threw`, `range` and `dom` its `end`
+    /// record has.
+    fn run(&mut self, host: &mut Host, op: &[Value], dark: bool) -> Result<Outcome, JsError> {
         let name = string(&op[0]).to_string_lossy();
         let args = &op[1..];
         match (self, name.as_str(), args) {
@@ -514,7 +518,10 @@ impl Instance {
                 TabRenderer::<Host>::restore_state(&mut c.renderer, host, &to_js(state))?
             }
             (Instance::Console(c), "save", []) => {
-                return Ok(Some(TabRenderer::<Host>::save_state(&c.renderer, host)));
+                return Ok(Outcome::Saved(TabRenderer::<Host>::save_state(
+                    &c.renderer,
+                    host,
+                )));
             }
             (Instance::Console(c), "row", [event, index]) => {
                 let index = number(index) as usize;
@@ -533,14 +540,15 @@ impl Instance {
             }
             (Instance::Console(c), "export", []) => c.renderer.export_click(host),
             (Instance::Statistics(table), "render", [command]) => {
-                table.render(&statistics_command(command), dark)?;
+                let replaced = table.render(&statistics_command(command), dark)?;
+                return Ok(Outcome::Histogram(replaced));
             }
             (Instance::Metadata(m), "render", [command]) => {
                 TabRenderer::<Host>::render(m, host, &to_js(command))?
             }
             (_, other, _) => panic!("unknown operation {other:?}"),
         }
-        Ok(None)
+        Ok(Outcome::Nothing)
     }
 
     fn range(&self, host: &Host) -> Option<Value> {
@@ -853,11 +861,19 @@ fn replay(id: &str, tally: &mut Tally) {
                     .err()
                     .map(|e| format!("{}: {}", e.name, e.message));
                 assert_eq!(error, threw, "{at}: throw");
-                let saved = record
-                    .field("result")
-                    .map(|_| to_js(&record.value("result").unwrap()));
-                if let Ok(result) = result {
-                    assert_eq!(result, saved, "{at}: saveState()");
+                let member = |key| record.field(key).map(|_| record.value(key).unwrap());
+                let recorded = match (member("result"), member("histogram")) {
+                    (None, None) => Outcome::Nothing,
+                    (Some(saved), None) => Outcome::Saved(to_js(&saved)),
+                    (None, Some(replaced)) => Outcome::Histogram(boolean(&replaced)),
+                    both => panic!("{at}: {both:?}"),
+                };
+                match result {
+                    Ok(outcome) => assert_eq!(outcome, recorded, "{at}: outcome"),
+                    Err(_) => assert!(
+                        matches!(recorded, Outcome::Nothing | Outcome::Histogram(false)),
+                        "{at}: a throw with {recorded:?}"
+                    ),
                 }
                 assert_eq!(host.selection.calls, calls, "{at}: selection calls");
                 let sent: Vec<(String, JsValue)> = host
