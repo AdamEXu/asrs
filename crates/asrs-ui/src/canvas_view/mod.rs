@@ -2,11 +2,12 @@ pub mod geometry;
 pub mod presenter;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use asrs_canvas::raster::CanvasError;
 use asrs_canvas::text::lut::MaskGammaLut;
 use asrs_canvas::text::{TextBackend, platform_backend};
-use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, TextRaster};
+use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, ShadeCache, TextRaster};
 use gpui_kit::{App, Bounds, Context, Entity, Global, Pixels, Point, Window, canvas};
 
 use geometry::{bitmap_side, client_rect_coord, client_size, mouse_client, valid_bitmap};
@@ -103,11 +104,13 @@ pub fn with_text_backend<R>(
 
 /// The pixmap a display list draws through the app's canvas text stack, or `None` for a canvas
 /// Chromium would leave blank (an invalid size or a failed allocation). `state` is what the
-/// canvas's earlier frames left and receives what this one leaves.
+/// canvas's earlier frames left and receives what this one leaves, and so do `shades` with the
+/// images they resampled.
 pub fn rasterize(
     frame: &Canvas2d,
-    images: &HashMap<String, Pixmap>,
+    images: &HashMap<String, Arc<Pixmap>>,
     state: &mut RasterState,
+    shades: &mut ShadeCache,
     cx: &mut App,
 ) -> Option<(Pixmap, Vec<(usize, CanvasError)>)> {
     let raster = valid_bitmap(frame.width, frame.height)
@@ -115,9 +118,12 @@ pub fn rasterize(
         .flatten();
     let Some(raster) = raster else {
         *state = RasterState::default();
+        *shades = ShadeCache::default();
         return None;
     };
-    let mut raster = raster.with_state(*state);
+    let mut raster = raster
+        .with_state(*state)
+        .with_shades(std::mem::take(shades));
     for (id, pixmap) in images {
         raster.add_image(id, pixmap.clone());
     }
@@ -127,6 +133,7 @@ pub fn rasterize(
     }
     raster.run(&frame.calls);
     *state = raster.state();
+    *shades = raster.take_shades();
     let errors = raster.errors().to_vec();
     Some((raster.into_pixmap(), errors))
 }
@@ -137,8 +144,9 @@ pub fn rasterize(
 pub struct CanvasState {
     presenter: FramePresenter,
     raster: RasterState,
+    shades: ShadeCache,
     frame: Option<Canvas2d>,
-    images: HashMap<String, Pixmap>,
+    images: HashMap<String, Arc<Pixmap>>,
     images_changed: bool,
     errors: Vec<(usize, CanvasError)>,
     metrics: Option<CanvasMetrics>,
@@ -152,6 +160,7 @@ impl CanvasState {
         CanvasState {
             presenter: FramePresenter::default(),
             raster: RasterState::default(),
+            shades: ShadeCache::default(),
             frame: None,
             images: HashMap::new(),
             images_changed: false,
@@ -184,8 +193,8 @@ impl CanvasState {
         self.draws
     }
 
-    pub fn set_image(&mut self, id: impl Into<String>, pixmap: Pixmap) {
-        self.images.insert(id.into(), pixmap);
+    pub fn set_image(&mut self, id: impl Into<String>, pixmap: impl Into<Arc<Pixmap>>) {
+        self.images.insert(id.into(), pixmap.into());
         self.images_changed = true;
     }
 
@@ -200,7 +209,8 @@ impl CanvasState {
         }
         self.images_changed = false;
         self.draws += 1;
-        match rasterize(&frame, &self.images, &mut self.raster, cx) {
+        let shades = &mut self.shades;
+        match rasterize(&frame, &self.images, &mut self.raster, shades, cx) {
             None => {
                 self.errors.clear();
                 self.presenter.clear(window, cx);

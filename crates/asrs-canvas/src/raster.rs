@@ -16,6 +16,7 @@ use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::gradient;
 use crate::hairline;
+use crate::mip::Mip;
 use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
 use crate::scan::{self, Blend, Coverage};
@@ -164,6 +165,66 @@ pub struct Raster<'a> {
     text: Option<TextRaster<'a>>,
     errors: Vec<(usize, CanvasError)>,
     calls: usize,
+    shades: ShadeCache,
+}
+
+/// The resampled images the last frame of a canvas drew, so a frame that draws the same image
+/// through the same transform does not sample it again.
+#[derive(Clone, Default)]
+pub struct ShadeCache {
+    entries: Vec<Shade>,
+}
+
+#[derive(Clone)]
+struct Shade {
+    image: Arc<Pixmap>,
+    key: ShadeKey,
+    scratch: Arc<Pixmap>,
+    used: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct ShadeKey {
+    transform: Affine,
+    quality: FilterQuality,
+    opacity: f32,
+    mip: Option<Mip>,
+    bounds: [i32; 4],
+}
+
+impl ShadeCache {
+    fn get(&mut self, image: &Arc<Pixmap>, key: ShadeKey) -> Option<Arc<Pixmap>> {
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|e| Arc::ptr_eq(&e.image, image) && e.key == key)?;
+        entry.used = true;
+        Some(entry.scratch.clone())
+    }
+
+    fn insert(&mut self, image: &Arc<Pixmap>, key: ShadeKey, scratch: Arc<Pixmap>) {
+        self.entries.push(Shade {
+            image: image.clone(),
+            key,
+            scratch,
+            used: true,
+        });
+    }
+
+    fn next_frame(mut self) -> ShadeCache {
+        for entry in &mut self.entries {
+            entry.used = false;
+        }
+        self
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 /// An exception Blink throws from a canvas call instead of drawing.
@@ -188,6 +249,7 @@ enum Source {
         transform: Affine,
         quality: FilterQuality,
         opacity: f32,
+        mip: Option<Mip>,
     },
 }
 
@@ -376,7 +438,21 @@ impl<'a> Raster<'a> {
             text: None,
             errors: Vec::new(),
             calls: 0,
+            shades: ShadeCache::default(),
         })
+    }
+
+    /// Reuses the images an earlier frame of the same canvas resampled.
+    pub fn with_shades(mut self, shades: ShadeCache) -> Raster<'a> {
+        self.shades = shades.next_frame();
+        self
+    }
+
+    /// The resampled images this frame drew, to hand to the next frame of this canvas.
+    pub fn take_shades(&mut self) -> ShadeCache {
+        let mut shades = std::mem::take(&mut self.shades);
+        shades.entries.retain(|e| e.used);
+        shades
     }
 
     /// Continues from the state an earlier frame of the same canvas left; a state from a
@@ -973,7 +1049,7 @@ impl<'a> Raster<'a> {
     /// the spans into a scratch pixmap first, then blended with the same 8-bit arithmetic as
     /// solid colours.
     fn paint_spans(&mut self, spans: &Spans, source: &Source) {
-        let shader = match source {
+        let scratch = match source {
             Source::Solid(color) => {
                 scan::blit_spans_solid(&mut self.pixmap, spans, *color);
                 return;
@@ -987,24 +1063,47 @@ impl<'a> Raster<'a> {
                 });
                 return;
             }
-            Source::Shader(shader) => shader.clone(),
+            Source::Shader(shader) => spans
+                .bounds()
+                .and_then(|bounds| shade(bounds, shader.clone()))
+                .map(Arc::new),
             Source::Image {
                 pixmap,
                 transform,
                 quality,
                 opacity,
-            } => Pattern::new(
-                pixmap.as_ref().as_ref(),
-                SpreadMode::Pad,
-                *quality,
-                *opacity,
-                transform.to_skia(),
-            ),
+                mip,
+            } => spans.bounds().and_then(|bounds| {
+                let key = ShadeKey {
+                    transform: *transform,
+                    quality: *quality,
+                    opacity: *opacity,
+                    mip: *mip,
+                    bounds,
+                };
+                self.shades.get(pixmap, key).or_else(|| {
+                    let level = match mip {
+                        Some(mip) => Some((mip, mip.build(pixmap)?)),
+                        None => None,
+                    };
+                    let (source, transform) = match &level {
+                        Some((mip, level)) => (level.as_ref(), mip.placed(transform)),
+                        None => (pixmap.as_ref().as_ref(), *transform),
+                    };
+                    let pattern = Pattern::new(
+                        source,
+                        SpreadMode::Pad,
+                        *quality,
+                        *opacity,
+                        transform.to_skia(),
+                    );
+                    let scratch = Arc::new(shade(bounds, pattern)?);
+                    self.shades.insert(pixmap, key, scratch.clone());
+                    Some(scratch)
+                })
+            }),
         };
-        let Some(bounds) = spans.bounds() else {
-            return;
-        };
-        let Some(scratch) = shade(bounds, shader) else {
+        let (Some(bounds), Some(scratch)) = (spans.bounds(), scratch) else {
             return;
         };
         let stride = scratch.width() as usize;
@@ -1776,6 +1875,12 @@ impl<'a> Raster<'a> {
             self.blit_decal_image(&image, src, m.e, m.f);
             return;
         }
+        let mip = if quality == FilterQuality::Bilinear {
+            let scale = [m.a.hypot(m.b), m.c.hypot(m.d)];
+            Mip::of(src, scale, [image.width(), image.height()])
+        } else {
+            None
+        };
         let anti_alias = if ctm.is_scale_translate() {
             dst[2] * ctm.a.abs() < 1.0 || dst[3] * ctm.d.abs() < 1.0
         } else if ctm.a == 0.0 && ctm.d == 0.0 {
@@ -1788,6 +1893,7 @@ impl<'a> Raster<'a> {
             transform: m,
             quality,
             opacity: self.state.alpha as f32,
+            mip,
         };
         let dst = [
             dst[0] as f32,

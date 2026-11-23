@@ -35,6 +35,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::canvas_tabs::CanvasTabViews;
 use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
@@ -141,6 +142,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) line_graph: LineGraphViews,
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
+    pub(super) canvas_tabs: CanvasTabViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -199,6 +201,33 @@ fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
     }
 }
 
+/// `div.controls-content`'s dark `box-shadow: 0px 0px 0px 0.7px black`.
+const CONTROLS_SPREAD: f32 = 0.7;
+
+/// A black `spread` px wide unblurred shadow above a box, whose last device row is only partly
+/// covered; GPUI would snap it to whole pixels.
+fn spread_rows(spread: f32, scale: f32) -> Vec<asrs_ui::gpui::Div> {
+    let device = spread * scale;
+    let whole = device.floor();
+    let row = |top: f32, rows: f32, alpha: f32| {
+        div()
+            .absolute()
+            .left_0()
+            .w_full()
+            .top(px(-top / scale))
+            .h(px(rows / scale))
+            .bg(rgba((alpha * 255.0 + 0.5) as u32))
+    };
+    let mut out = Vec::new();
+    if whole > 0.0 {
+        out.push(row(whole, whole, 1.0));
+    }
+    if device > whole {
+        out.push(row(whole + 1.0, 1.0, device - whole));
+    }
+    out
+}
+
 fn place(rect: [f64; 4], origin: (f64, f64)) -> asrs_ui::gpui::Div {
     div()
         .absolute()
@@ -225,6 +254,7 @@ impl<H: FrameHost> HubFrame<H> {
             line_graph: LineGraphViews::default(),
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
+            canvas_tabs: CanvasTabViews::default(),
         }
     }
 
@@ -869,17 +899,18 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(field) = self.field3d_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(field);
                 }
+                if let Some(tab) = self.canvas_tab_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(tab);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
-                let shadow = if dark {
-                    box_shadow(0x000000ff, 0.0, 0.7)
+                let mut controls = place(rect, origin).bg(rgb(theme.background));
+                if dark {
+                    controls = controls.children(spread_rows(CONTROLS_SPREAD, scale));
                 } else {
-                    box_shadow(0x00000022, 3.0, 2.0)
-                };
-                let mut controls = place(rect, origin)
-                    .bg(rgb(theme.background))
-                    .shadow(vec![shadow]);
+                    controls = controls.shadow(vec![box_shadow(0x00000022, 3.0, 2.0)]);
+                }
                 if let Some(content) = self.host.slot(FrameSlot::ControlsContent, window, cx) {
                     controls = controls.child(content);
                 }
@@ -891,6 +922,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(settings) = self.field3d_settings(rect, appearance, scale, window, cx) {
                     controls = controls.child(settings);
+                }
+                if let Some(tab) = self.canvas_tab_controls(rect, appearance, scale, window, cx) {
+                    controls = controls.child(tab);
                 }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }

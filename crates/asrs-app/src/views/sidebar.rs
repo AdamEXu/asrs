@@ -279,8 +279,8 @@ impl SidebarGeometry for ViewGeometry {
     }
 }
 
-/// A sidebar number input's value, through `asrs_tabs::form`.
-struct NumberValue(NumberInput);
+/// A number input's value, through `asrs_tabs::form`.
+pub(super) struct NumberValue(pub(super) NumberInput);
 
 impl FieldModel for NumberValue {
     fn value(&self) -> String {

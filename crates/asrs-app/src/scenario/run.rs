@@ -14,17 +14,17 @@ use asrs_services::path::PathStyle;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
-    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
-    point, px, rgb, size,
+    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke, Modifiers,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, PlatformInput,
+    Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div, point, px,
+    rgb, size,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Theme, Wheel, patch_colours,
+    Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Seed, Theme, Wheel, patch_colours,
 };
 use crate::hub::{Hub, HubEvent};
 use crate::main_process::process_platform;
@@ -197,6 +197,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let mut variant = Variant {
                 headless: &mut headless,
                 scenario: &scenario,
+                scenario_dir: options.scenario.parent().unwrap_or(Path::new("")),
                 probes: &probes,
                 inputs: options.inputs.as_deref(),
                 bundled_assets: options.bundled_assets.as_deref(),
@@ -230,6 +231,7 @@ struct Saves {
 struct Variant<'a> {
     headless: &'a mut HeadlessCapture,
     scenario: &'a Scenario,
+    scenario_dir: &'a Path,
     probes: &'a Probes,
     inputs: Option<&'a Path>,
     bundled_assets: Option<&'a Path>,
@@ -568,11 +570,17 @@ impl Variant<'_> {
             key: gpui_key(key),
             key_char,
         };
-        self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
-            keystroke: keystroke.clone(),
-            is_held: false,
-            prefer_character_input: false,
-        }))?;
+        // Unlike `dispatch_event`, which is the keydown alone, this also hands an unhandled
+        // character to the focused input, as the platform's text input does after it.
+        let window = self.window();
+        let typed = keystroke.clone();
+        self.headless
+            .context()
+            .update_window(window, |_, window, cx| {
+                window.dispatch_keystroke(typed, cx);
+            })
+            .map_err(|e| e.to_string())?;
+        self.settle();
         self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }))
     }
 
@@ -648,7 +656,14 @@ impl Variant<'_> {
     fn start_main(&self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
         std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
-        capture::write(&user_data.join("prefs.json"), &self.prefs_seed()?)?;
+        for (file, bytes) in self.seeds()? {
+            let file = user_data.join(file);
+            if let Some(parent) = file.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("{}: {e}", parent.display()))?;
+            }
+            std::fs::write(&file, bytes).map_err(|e| format!("{}: {e}", file.display()))?;
+        }
         let absolute = |p: &Path| {
             std::path::absolute(p)
                 .map(|p| p.to_string_lossy().into_owned())
@@ -683,10 +698,24 @@ impl Variant<'_> {
         Ok((assets, preferences))
     }
 
-    fn prefs_seed(&self) -> Result<String, String> {
-        asrs_js::json::stringify(&seeded_prefs(self.scenario, self.theme)?)
-            .map_err(|e| format!("prefs: {e:?}"))
-            .map(Option::unwrap_or_default)
+    /// What the Electron driver seeds in userData.
+    fn seeds(&self) -> Result<Vec<(String, Vec<u8>)>, String> {
+        let json = |file: &str, value: &JsValue| {
+            asrs_js::json::stringify(value)
+                .map_err(|e| format!("{file}: {e:?}"))
+                .map(|text| text.unwrap_or_default().into_bytes())
+        };
+        let prefs = seeded_prefs(self.scenario, self.theme)?;
+        let mut seeds = vec![("prefs.json".to_owned(), json("prefs", &prefs)?)];
+        for (file, seed) in &self.scenario.user_assets {
+            let bytes = match seed {
+                Seed::Json(value) => json(file, value)?,
+                Seed::File(path) => std::fs::read(self.scenario_dir.join(path))
+                    .map_err(|e| format!("{file}: {path}: {e}"))?,
+            };
+            seeds.push((file.clone(), bytes));
+        }
+        Ok(seeds)
     }
 
     fn open(&mut self) -> Result<(), String> {
@@ -811,10 +840,7 @@ impl Variant<'_> {
                 self.scale,
                 self.theme,
                 &exceptions,
-                &capture::collect_files(
-                    self.dir,
-                    &[("prefs.json", self.prefs_seed()?.into_bytes())],
-                )?,
+                &capture::collect_files(self.dir, &self.seeds()?)?,
             ),
         )
     }
