@@ -209,16 +209,17 @@ fn composite(
     let cx = (container[0] + container[2] / 2.0) * scale - x0;
     let cy = (container[1] + container[3] / 2.0) * scale - y0;
     let (bw, bh) = (f64::from(bitmap.width()), f64::from(bitmap.height()));
-    let kx = style.width * scale / bw;
-    let ky = style.height * scale / bh;
+    let [w, h] = [style.width * scale, style.height * scale];
+    let kx = math::round(w) / bw;
+    let ky = math::round(h) / bh;
     let (sin, cos) = quarter_sin_cos(style.rotation);
     let inverse = [
         cos / kx,
         -sin / ky,
         sin / kx,
         cos / ky,
-        bw / 2.0 - (cos * cx + sin * cy) / kx,
-        bh / 2.0 - (-sin * cx + cos * cy) / ky,
+        (w / 2.0 - (cos * cx + sin * cy)) / kx,
+        (h / 2.0 - (-sin * cx + cos * cy)) / ky,
     ];
     transform_bilinear(bitmap, width as u32, height as u32, inverse)
 }

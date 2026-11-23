@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U16): the generated panels log on a restored Swerve tab with module velocities at a selected time; /Swerve/Speeds and /Swerve/Heading dragged from the sidebar into the source list with the pointer, the maximum speed typed to 0 (which its change listener clamps to 0.1) and then to 3, the frame length typed to 0.9, a clockwise rotation clicked, and the controls resized so the canvas sits on half pixels and so its settings overflow. Saved HubState is compared at each capture; nothing is masked but a focused input",
+  "about": "Interaction (U16): the generated panels log on a restored Swerve tab with module velocities at a selected time; /Swerve/Speeds and /Swerve/Heading dragged from the sidebar into the source list with the pointer, the maximum speed typed to 0 (which its change listener clamps to 0.1) and then to 3, the frame length typed to 0.9, a clockwise rotation clicked and then repeated with Enter, and the controls resized so the canvas sits on half pixels and so its settings overflow. Saved HubState is compared at each capture; nothing is masked but a focused input",
   "window": {
     "width": 1300,
     "height": 650
@@ -358,6 +358,26 @@
     },
     {
       "capture": "rotated",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".swerve-canvas-container",
+        ".swerve-canvas",
+        ".swerve-settings",
+        ".swerve-settings input",
+        ".orientation-switcher"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "keyboard",
       "probes": [
         ".side-bar",
         ".tab-bar",

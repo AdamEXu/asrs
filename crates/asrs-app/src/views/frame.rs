@@ -21,7 +21,9 @@ use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::selection_impl::ControlButton;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
-use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
+use asrs_ui::canvas_view::{
+    CanvasBorder, CanvasMetrics, CanvasState, canvas_view, with_text_backend,
+};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
     Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
@@ -200,6 +202,12 @@ fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
         inset: false,
     }
 }
+
+/// `canvas.timeline-canvas`'s `border` and `border-radius`.
+const TIMELINE_BORDER: CanvasBorder = CanvasBorder {
+    width: 1.0,
+    radius: 10.0,
+};
 
 /// `div.controls-content`'s dark `box-shadow: 0px 0px 0px 0.7px black`.
 const CONTROLS_SPREAD: f32 = 0.7;
@@ -662,8 +670,13 @@ impl<H: FrameHost> HubFrame<H> {
     fn timeline_element(&mut self, dark: bool, cx: &mut Context<'_, Self>) -> AnyElement {
         let state = self
             .timeline_canvas
-            .get_or_insert_with(|| cx.new(CanvasState::new))
+            .get_or_insert_with(|| cx.new(|cx| CanvasState::bordered(TIMELINE_BORDER, cx)))
             .clone();
+        let (background, border) = if dark {
+            (0x444444, 0xeeeeee)
+        } else {
+            (0xeeeeee, 0x222222)
+        };
         let entity = cx.entity().downgrade();
         let painter = move |metrics: &CanvasMetrics, cx: &mut App| {
             entity
@@ -674,6 +687,15 @@ impl<H: FrameHost> HubFrame<H> {
         div()
             .id("timeline-scroll")
             .size_full()
+            .child(
+                div()
+                    .absolute()
+                    .size_full()
+                    .rounded(px(TIMELINE_BORDER.radius))
+                    .border(px(TIMELINE_BORDER.width))
+                    .border_color(rgb(border))
+                    .bg(rgb(background)),
+            )
             .child(canvas_view(state, painter).size_full())
             .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                 frame.timeline_mouse_down(event, cx)
