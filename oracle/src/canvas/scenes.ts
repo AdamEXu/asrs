@@ -1,6 +1,7 @@
 import field2dTraces from "./field2dTraces.json";
 import histogramTraces from "./histogramTraces.json";
 import lineGraphTraces from "./lineGraphTraces.json";
+import r07Traces from "./r07Traces.json";
 import timelineTraces from "./timelineTraces.json";
 
 export type Cmd = unknown[];
@@ -1465,6 +1466,16 @@ function field2dScenes(): Scene[] {
   });
 }
 
+// Frames recorded from upstream's SwerveRenderer and JoysticksRenderer in dom/swerve and
+// dom/joysticks vectors, which asrs-tabs's renderers reproduce call for call. Each layout image
+// is `fieldImage` at its recorded size.
+function r07Scenes(): Scene[] {
+  return r07Traces.map((t) => {
+    const sources: Cmd[] = Object.entries(t.images as { [src: string]: number[] }).map(([src, [w, h]]) => ["image", src, w, h, fieldImage(w, h)]);
+    return scene(t.name, t.name.split("-")[0], "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, [...sources, ...(t.cmds as Cmd[])]);
+  });
+}
+
 export function allScenes(): Scene[] {
   const out: Scene[] = [
     lineGraph("linegraph-light-2x", 2, false),
@@ -1481,6 +1492,7 @@ export function allScenes(): Scene[] {
     ...timelineScenes(),
     ...lineGraphScenes(),
     ...field2dScenes(),
+    ...r07Scenes(),
     ...histogramScenes(),
     clipping("clip-1x", 1),
     clipping("clip-1.5x", 1.5),
