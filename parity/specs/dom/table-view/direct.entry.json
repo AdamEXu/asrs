@@ -1572,6 +1572,9 @@
     "eval": "window.__r11.render(1, {\"timestamps\":[],\"displayOffset\":0,\"fields\":[{\"key\":\"u\",\"isAvailable\":false,\"data\":null,\"type\":null}],\"selectionMode\":3,\"selectedTime\":1,\"hoveredTime\":1})"
    },
    {
+    "eval": "window.__r11.render(1, {\"timestamps\":[1,2],\"displayOffset\":0,\"fields\":[{\"key\":\"u\",\"isAvailable\":false,\"data\":{\"timestamps\":[1],\"values\":[5]},\"type\":2}],\"selectionMode\":0,\"selectedTime\":1,\"hoveredTime\":2})"
+   },
+   {
     "eval": "window.__r11.render(1, {\"timestamps\":[4],\"displayOffset\":0,\"fields\":[{\"key\":\"u\",\"isAvailable\":false,\"data\":null,\"type\":null}],\"selectionMode\":1,\"selectedTime\":null,\"hoveredTime\":null})"
    },
    {
@@ -1603,6 +1606,9 @@
    },
    {
     "eval": "window.__r11.render(2, {\"timestamps\":[],\"displayOffset\":0,\"fields\":[{\"key\":\"u\",\"isAvailable\":false,\"data\":null,\"type\":null}],\"selectionMode\":3,\"selectedTime\":1,\"hoveredTime\":1})"
+   },
+   {
+    "eval": "window.__r11.render(2, {\"timestamps\":[1,2],\"displayOffset\":0,\"fields\":[{\"key\":\"u\",\"isAvailable\":false,\"data\":{\"timestamps\":[1],\"values\":[5]},\"type\":2}],\"selectionMode\":0,\"selectedTime\":1,\"hoveredTime\":2})"
    },
    {
     "eval": "window.__r11.render(2, {\"timestamps\":[4],\"displayOffset\":0,\"fields\":[{\"key\":\"u\",\"isAvailable\":false,\"data\":null,\"type\":null}],\"selectionMode\":1,\"selectedTime\":null,\"hoveredTime\":null})"

@@ -50,6 +50,9 @@
     "eval": "window.__r11.render(1, {\"/A\":{\"generic\":\"a\\nb\\r\\nc\\rd\",\"real\":\"\",\"replay\":\" spaced  text \"}})"
    },
    {
+    "eval": "window.__r11.render(1, {\"/Carriage\\r\\nreturn\\rs\":{\"generic\":\"v\",\"real\":null,\"replay\":null}})"
+   },
+   {
     "eval": "window.__r11.render(1, {\"/Multi\\nline\":{\"generic\":\"😀\\ud800\\u0000<b>&\",\"real\":null,\"replay\":null}})"
    },
    {

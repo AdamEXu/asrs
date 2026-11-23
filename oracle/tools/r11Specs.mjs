@@ -389,6 +389,7 @@ spec(
       r11("render", id, command([field("u", false, null)], [-2, -1, 1], { selectionMode: 1, selectedTime: NaN, hoveredTime: -3 })),
       r11("render", id, command([field("u", false, null)], [-2, -1, 1], { selectionMode: 3, selectedTime: 1, hoveredTime: 1 })),
       r11("render", id, command([field("u", false, null)], [], { selectionMode: 3, selectedTime: 1, hoveredTime: 1 })),
+      r11("render", id, command([field("u", false, 2, [1], [5])], [1, 2], { selectedTime: 1, hoveredTime: 2 })),
       r11("render", id, command([field("u", false, null)], [4], { selectionMode: 1, selectedTime: null, hoveredTime: null }))
     ])
   ],
@@ -869,6 +870,7 @@ const metaCommands = [
   { "/A": slot(undefined), "/B": slot("v") },
   { "/A": slot(undefined) },
   { "/A": slot("a\nb\r\nc\rd", "", " spaced  text ") },
+  { "/Carriage\r\nreturn\rs": slot("v") },
   { "/Multi\nline": slot("\u{1f600}\ud800\u0000<b>&") },
   { "": slot("empty"), X: slot("one"), "5": slot("index"), "10": slot("ten"), "/": slot("slash") },
   {
