@@ -1,9 +1,10 @@
-use crate::{Result, cargo, gpui, layout, tables};
+use crate::{Result, cargo, gpui, harness, layout, tables};
 
 const PARITY_FEATURES: &str = "asrs-ui/parity,asrs-app/parity";
 
 pub fn run() -> Result {
     layout::run()?;
+    harness::run(&[])?;
     gpui::verify_vendor()?;
     gpui::check_features()?;
     tables::run(&["units".to_owned(), "--check".to_owned()])?;
