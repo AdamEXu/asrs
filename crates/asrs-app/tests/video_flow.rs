@@ -44,7 +44,7 @@ fn in_fresh_home(test: &str) {
     ] {
         child.env(variable, &home);
     }
-    let path = std::env::var_os("PATH").unwrap_or_default();
+    let path = std::env::var_os("PATH").expect("PATH");
     let dirs = std::iter::once(home.join("bin")).chain(std::env::split_paths(&path));
     child.env("PATH", std::env::join_paths(dirs).expect("PATH"));
     let status = child.status().expect("the test binary");
