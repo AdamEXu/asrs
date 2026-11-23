@@ -79,6 +79,9 @@ impl TableGeometry for Scripted {
 }
 
 impl ConsoleGeometry for Scripted {
+    fn container_rect(&mut self) -> Rect {
+        self.rect(CONSOLE_CONTAINER)
+    }
     fn scroll_top(&mut self) -> f64 {
         self.0.borrow_mut().read_f64("scrollTop", CONSOLE_CONTAINER)
     }

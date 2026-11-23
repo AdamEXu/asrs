@@ -122,6 +122,7 @@ fn console_children(field: &JsString) -> Vec<JsString> {
 
 pub struct ConsoleController {
     dom: Rc<RefCell<ConsoleDom>>,
+    geometry: Option<Box<dyn ConsoleGeometry>>,
     field: JsValue,
 }
 
@@ -131,8 +132,14 @@ impl ConsoleController {
     pub fn new(dom: Rc<RefCell<ConsoleDom>>) -> Self {
         Self {
             dom,
+            geometry: None,
             field: JsValue::Null,
         }
+    }
+
+    /// Answers the controller's layout read from `geometry` instead of the shared `ConsoleDom`.
+    pub fn set_geometry(&mut self, geometry: Box<dyn ConsoleGeometry>) {
+        self.geometry = Some(geometry);
     }
 
     /// The `close-field` event on `ROOT`.
@@ -155,7 +162,10 @@ impl ConsoleController {
         }
         let x = ops::value_to_number(&ops::get(detail, "x")?).unwrap_or(f64::NAN);
         let y = ops::value_to_number(&ops::get(detail, "y")?).unwrap_or(f64::NAN);
-        let rect = self.dom.borrow().container;
+        let rect = match self.geometry.as_deref_mut() {
+            Some(geometry) => geometry.container_rect(),
+            None => self.dom.borrow_mut().container_rect(),
+        };
         let active = x > rect.left() && x < rect.right() && y > rect.top() && y < rect.bottom();
         let first = ops::index(&ops::get(&data, "fields")?, 0)?;
         let valid_type = match &first {
@@ -363,9 +373,11 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for ConsoleController {
     }
 }
 
-/// The layout reads `ConsoleRenderer` makes and the scroll position it writes, one call per
-/// upstream access and in upstream's order.
+/// The layout reads `ConsoleController` and `ConsoleRenderer` make and the scroll position the
+/// renderer writes, one call per upstream access and in upstream's order.
 pub trait ConsoleGeometry {
+    /// `TABLE_CONTAINER.getBoundingClientRect()`.
+    fn container_rect(&mut self) -> Rect;
     /// `TABLE_CONTAINER.scrollTop`.
     fn scroll_top(&mut self) -> f64;
     fn set_scroll_top(&mut self, value: f64);
@@ -378,6 +390,10 @@ pub trait ConsoleGeometry {
 }
 
 impl ConsoleGeometry for ConsoleDom {
+    fn container_rect(&mut self) -> Rect {
+        self.container
+    }
+
     fn scroll_top(&mut self) -> f64 {
         self.scroll_top
     }

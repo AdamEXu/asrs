@@ -39,10 +39,13 @@ use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryE
 use asrs_model::tab_controller::{TabCommand, TabController, TabRenderer, keyboard_clicks};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
+use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::json::{self, Json};
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
-use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
+use asrs_tabs::console::controller::{
+    ConsoleController, ConsoleDom, ConsoleGeometry, ConsoleRenderer,
+};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::field3d::Field3dController;
@@ -321,6 +324,49 @@ fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
         2,
         root_el(hidden, pos),
     )
+}
+
+const CONSOLE_CONTAINER: &str = "div.console-table-container:2";
+const CONSOLE_BODY: &str = "div.console-table-container:2>table.console-table:0>tbody:0";
+
+/// Answers a Console tab's layout reads from the recording.
+#[derive(Clone)]
+struct RecordedConsole(Rc<RefCell<ScriptedReads>>);
+
+impl ConsoleGeometry for RecordedConsole {
+    fn container_rect(&mut self) -> Rect {
+        let [x, y, width, height] = self.0.borrow_mut().read_rect(CONSOLE_CONTAINER);
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn scroll_top(&mut self) -> f64 {
+        self.0.borrow_mut().read_f64("scrollTop", CONSOLE_CONTAINER)
+    }
+
+    fn set_scroll_top(&mut self, value: f64) {
+        let mut reads = self.0.borrow_mut();
+        reads.write_f64("scrollTop", CONSOLE_CONTAINER, value);
+    }
+
+    fn scroll_height(&mut self) -> f64 {
+        let mut reads = self.0.borrow_mut();
+        reads.read_f64("scrollHeight", CONSOLE_CONTAINER)
+    }
+
+    fn container_client_height(&mut self) -> f64 {
+        let mut reads = self.0.borrow_mut();
+        reads.read_f64("clientHeight", CONSOLE_CONTAINER)
+    }
+
+    fn row_client_height(&mut self, index: usize) -> f64 {
+        let mut reads = self.0.borrow_mut();
+        reads.read_f64("clientHeight", &format!("{CONSOLE_BODY}>tr:{}", index + 1))
+    }
 }
 
 /// `div.controls-content > #controller7 > .video-source > button`: the three source
@@ -720,6 +766,8 @@ struct Runner {
     ignored: Vec<String>,
     device_pixel_ratio: f64,
     images: HashMap<JsString, [f64; 2]>,
+    /// The console containers' layout accesses of a real-geometry fixture.
+    console_reads: Option<RecordedConsole>,
 }
 
 impl Runner {
@@ -773,6 +821,20 @@ impl Runner {
                 DomKind::Console(dom) => {
                     let mut dom = dom.borrow_mut();
                     dom.hidden = hidden;
+                    if let Some(reads) = self.console_reads.clone() {
+                        let index = JsValue::Number(i as f64);
+                        if let Ok(r) = self.tabs.renderer_mut(&index)
+                            && let Some(r) = inner_mut::<ConsoleRenderer>(r)
+                        {
+                            r.set_geometry(Box::new(reads.clone()));
+                        }
+                        if let Ok(c) = self.tabs.controller_mut(&index)
+                            && let Some(c) = c.downcast_mut::<ConsoleController>()
+                        {
+                            c.set_geometry(Box::new(reads));
+                        }
+                        continue;
+                    }
                     dom.container = self.layout.rect_of(&console_container_el(hidden, pos));
                     dom.scroll_height = asrs_js::math::round(dom.container.height);
                 }
@@ -1212,6 +1274,13 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         r.sync_dom();
         return Ok(JsValue::Undefined);
     }
+    // The scroll is an input; the position it leaves comes back from the recorded reads.
+    if expr.starts_with("/*console:scroll*/") {
+        if r.console_reads.is_none() {
+            return Err(err("console:scroll needs real geometry"));
+        }
+        return Ok(JsValue::Undefined);
+    }
     if expr.starts_with("/*video:view*/") {
         return Ok(video_view(r));
     }
@@ -1232,7 +1301,10 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
             .map_or(DomKind::Other, |i| r.tab_dom(i));
         let scroll_top = match (container, dom) {
             ("data-table-container", DomKind::Table(dom)) => dom.borrow().scroll_top,
-            ("console-table-container", DomKind::Console(dom)) => dom.borrow().scroll_top,
+            ("console-table-container", DomKind::Console(dom)) => match &mut r.console_reads {
+                Some(reads) => reads.scroll_top(),
+                None => dom.borrow().scroll_top,
+            },
             _ => return Err(err(format!("unsupported eval {expr}"))),
         };
         return Ok(JsValue::Number(scroll_top));
@@ -1590,6 +1662,27 @@ fn skippable(record: &Record) -> bool {
         || record.field("sourceLists").is_some()
         || record.field("measure").is_some()
         || record.field("tuner").is_some()
+        || record.field("read").is_some()
+        || record.field("write").is_some()
+}
+
+/// The recording's accesses to Console containers and rows. A real-geometry run also records
+/// what the rest of the hub reads (tab bar, sidebar, timeline, source lists), which other suites
+/// replay.
+fn console_reads(records: &[Record]) -> Result<RecordedConsole, String> {
+    let mut console = Vec::new();
+    for record in records {
+        if GeometryRecord::parse(record)?.is_some_and(|g| g.el.contains("console-table-container"))
+        {
+            console.push(record.clone());
+        }
+    }
+    if console.is_empty() {
+        return Err(err("a real-geometry Console fixture reads no layout"));
+    }
+    Ok(RecordedConsole(Rc::new(RefCell::new(
+        ScriptedReads::from_records(&console)?,
+    ))))
 }
 
 fn selection_step(
@@ -1657,7 +1750,7 @@ fn selection_step(
     Ok(())
 }
 
-fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
+fn replay(spec_path: &Path, console_reads: Option<RecordedConsole>) -> Result<Vec<Emit>, String> {
     let spec = load_json(spec_path)?;
     let fixture = spec.get("fixture").ok_or_else(|| err("no fixture"))?;
     let start = fixture
@@ -1821,6 +1914,7 @@ fn replay(spec_path: &Path) -> Result<Vec<Emit>, String> {
         ignored,
         device_pixel_ratio,
         images,
+        console_reads,
     };
 
     // `fixture.state` boots through `restore-state`.
@@ -2173,8 +2267,8 @@ impl Runner {
                 }
             }
             (t, "scroll") => self.scroll_event(t, props),
-            // `asrs-tabs/tests/dom_tab_views.rs` replays the console's row filter and jump.
-            (t, "input") if t.contains("input.filter") => {}
+            (t, "input") if t.contains("input.filter") => self.console_filter_input(props)?,
+            // `asrs-tabs/tests/dom_tab_views.rs` replays the console's jump.
             (t, "keydown" | "click") if t.contains("console-table-jump") => {}
             (t, "change") if t.contains("input.max-speed") => {
                 self.swerve_change(SwerveInput::MaxSpeed, props)?
@@ -2619,6 +2713,21 @@ impl Runner {
         }
     }
 
+    fn console_filter_input(&mut self, props: Option<&Json>) -> Result<(), String> {
+        let value = Self::prop_value(props)?.ok_or_else(|| err("filter input sets no value"))?;
+        let i = self
+            .tabs
+            .selected_index()
+            .ok_or_else(|| err("no tab is selected"))?;
+        self.tabs
+            .renderer_mut(&JsValue::Number(i as f64))
+            .ok()
+            .and_then(|r| inner_mut::<ConsoleRenderer>(r))
+            .ok_or_else(|| err("filter input without a Console tab"))?
+            .filter_input(&self.host, &value)
+            .map_err(|e| format!("{}: {}", e.name, e.message))
+    }
+
     /// `.video-source button` clicks on the selected Video tab. `index` is the
     /// `children[]` position: 0 local, 1 YouTube, 2 TBA (which also reads the
     /// button's `getBoundingClientRect`).
@@ -2799,8 +2908,14 @@ impl Runner {
 }
 
 fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
-    let emitted = replay(spec)?;
     let records = vectors::load(vector_id)?;
+    let reads = real_geometry(spec)
+        .then(|| console_reads(&records))
+        .transpose()?;
+    let emitted = replay(spec, reads.clone())?;
+    if let Some(RecordedConsole(reads)) = reads {
+        reads.take().finish()?;
+    }
     let mut expected = records.iter().peekable();
     let mut skipped = 0;
     for emit in &emitted {
@@ -2862,14 +2977,14 @@ fn spec_files() -> Vec<(PathBuf, String)> {
                 .to_owned();
             (p, format!("dom/tabs/{name}"))
         })
-        .filter(|(p, _)| !real_geometry(p))
+        .filter(|(p, id)| id != "dom/tabs/table-real" || !real_geometry(p))
         .collect();
     out.sort();
     out
 }
 
-/// Real-geometry fixtures answer layout from recorded reads, which this harness's scripted
-/// layout cannot; `asrs-tabs/tests/table_real_dom.rs` replays `dom/tabs/table-real`.
+/// Console fixtures answer layout from recorded reads; `asrs-tabs/tests/table_real_dom.rs`
+/// replays `dom/tabs/table-real`.
 fn real_geometry(spec: &Path) -> bool {
     let text = std::fs::read_to_string(spec).unwrap_or_else(|e| panic!("{}: {e}", spec.display()));
     let json = json::parse(&text).unwrap_or_else(|e| panic!("{}: {e}", spec.display()));
