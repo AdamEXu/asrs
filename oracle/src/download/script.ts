@@ -24,6 +24,7 @@ const FILE = 0o100644;
 const LINK = 0o120777;
 
 export async function runScript(platform: "darwin" | "win32", count: number, seed: number): Promise<void> {
+  const bundle = await buildMain(platform === "win32" ? "win32" : "posix");
   Object.defineProperty(process, "platform", { value: platform });
   const style = platform === "win32" ? path.win32 : path.posix;
   const save = platform === "win32" ? "C:\\save" : "/save";
@@ -140,7 +141,7 @@ export async function runScript(platform: "darwin" | "win32", count: number, see
   };
   console.error = () => undefined;
 
-  world = new World(await buildMain(platform === "win32" ? "win32" : "posix"));
+  world = new World(bundle);
   await world.start();
   timers.clear();
   nextTimer = 1;
