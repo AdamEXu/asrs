@@ -302,6 +302,15 @@
     "src/heatmap/record.ts",
     "src/shims.ts"
   ],
+  "genInfoWindows": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rng.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genInfoWindows.ts",
+    "src/info/bundle.ts",
+    "src/shims.ts"
+  ],
   "genJson": [
     "src/cve1.ts",
     "src/environment.ts",
