@@ -100,13 +100,84 @@ fn ease_in_out(t: f64) -> f64 {
     bezier(y1, y2, s)
 }
 
+/// How Chromium turns wheel input over a scroller into scroll offsets.
+#[derive(Clone, Debug, Default)]
+pub struct WheelScroll(Option<Animation>);
+
+impl WheelScroll {
+    pub fn animating(&self) -> bool {
+        self.0.is_some()
+    }
+
+    pub fn stop(&mut self) {
+        self.0 = None;
+    }
+
+    /// A wheel event at `now` (ms) over a scroller at `offset`, of at most `max`, with a
+    /// `client_size` box: the offset a precise event scrolls to at once, or nothing when a
+    /// notched one started an animation.
+    pub fn wheel(
+        &mut self,
+        wheel: Wheel,
+        now: f64,
+        offset: [f64; 2],
+        max: [f64; 2],
+        client_size: [f64; 2],
+    ) -> Option<[f64; 2]> {
+        let delta = [-wheel.delta[0], -wheel.delta[1]];
+        if wheel.precise {
+            self.0 = None;
+            return Some([offset[0] + delta[0], offset[1] + delta[1]]);
+        }
+        let capped = [0, 1].map(|axis| {
+            let size = client_size[axis];
+            math::min2(math::max2(delta[axis], -size), size)
+        });
+        let base = self.0.map_or(offset, |a| a.to);
+        let to = [0, 1].map(|axis| {
+            let target = math::max2(base[axis] + capped[axis], 0.0);
+            math::min2(target, math::max2(max[axis], 0.0))
+        });
+        if to == offset {
+            self.0 = None;
+            return None;
+        }
+        self.0 = Some(Animation {
+            from: offset,
+            to,
+            start: now,
+            duration: duration_ms([to[0] - offset[0], to[1] - offset[1]]),
+        });
+        None
+    }
+
+    /// Where the animation has the scroller at the frame at `now` (ms).
+    pub fn animate(&mut self, now: f64) -> Option<[f64; 2]> {
+        let a = self.0?;
+        let t = if a.duration > 0.0 {
+            math::min2(math::max2((now - a.start) / a.duration, 0.0), 1.0)
+        } else {
+            1.0
+        };
+        if t >= 1.0 {
+            self.0 = None;
+            return Some(a.to);
+        }
+        let p = ease_in_out(t);
+        Some([
+            a.from[0] + (a.to[0] - a.from[0]) * p,
+            a.from[1] + (a.to[1] - a.from[1]) * p,
+        ])
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ScrollSensor {
     raw: [f64; 2],
     position: [f64; 2],
     client_size: [f64; 2],
     device_pixel_ratio: f64,
-    animation: Option<Animation>,
+    animation: WheelScroll,
     scroll_event: bool,
     last_scroll_update: f64,
     reset_next: bool,
@@ -120,7 +191,7 @@ impl Default for ScrollSensor {
             position: [0.0, 0.0],
             client_size: [0.0, 0.0],
             device_pixel_ratio: 1.0,
-            animation: None,
+            animation: WheelScroll::default(),
             scroll_event: false,
             last_scroll_update: 0.0,
             reset_next: true,
@@ -145,15 +216,19 @@ impl ScrollSensor {
     /// Whether a notched wheel animation is still moving the overlay, so the host keeps
     /// producing frames.
     pub fn animating(&self) -> bool {
-        self.animation.is_some()
+        self.animation.animating()
+    }
+
+    fn max(&self) -> [f64; 2] {
+        self.client_size.map(|size| math::max2(SIZE_PX - size, 0.0))
     }
 
     fn scroll_to(&mut self, target: [f64; 2]) {
         let mut next = self.position;
+        let max = self.max();
         for axis in 0..2 {
-            let max = math::max2(SIZE_PX - self.client_size[axis], 0.0);
-            self.raw[axis] = math::min2(math::max2(target[axis], 0.0), max);
-            next[axis] = assign_scroll_offset(self.raw[axis], max, self.device_pixel_ratio);
+            self.raw[axis] = math::min2(math::max2(target[axis], 0.0), max[axis]);
+            next[axis] = assign_scroll_offset(self.raw[axis], max[axis], self.device_pixel_ratio);
         }
         if next != self.position {
             self.position = next;
@@ -163,53 +238,22 @@ impl ScrollSensor {
 
     /// Assigns the overlay's `scrollLeft` and `scrollTop`, which stops any wheel animation.
     pub fn assign(&mut self, position: [f64; 2]) {
-        self.animation = None;
+        self.animation.stop();
         self.scroll_to(position);
     }
 
     /// A wheel event over the overlay at `now` (ms).
     pub fn wheel(&mut self, wheel: Wheel, now: f64) {
-        let delta = [-wheel.delta[0], -wheel.delta[1]];
-        if wheel.precise {
-            self.animation = None;
-            self.scroll_to([self.raw[0] + delta[0], self.raw[1] + delta[1]]);
-            return;
+        let (offset, max, size) = (self.raw, self.max(), self.client_size);
+        if let Some(to) = self.animation.wheel(wheel, now, offset, max, size) {
+            self.scroll_to(to);
         }
-        let capped = [0, 1].map(|axis| {
-            let size = self.client_size[axis];
-            math::min2(math::max2(delta[axis], -size), size)
-        });
-        let base = self.animation.map_or(self.raw, |a| a.to);
-        let to = [base[0] + capped[0], base[1] + capped[1]];
-        let from = self.raw;
-        self.animation = Some(Animation {
-            from,
-            to,
-            start: now,
-            duration: duration_ms([to[0] - from[0], to[1] - from[1]]),
-        });
     }
 
     /// Advances a notched wheel animation to the frame at `now` (ms).
     pub fn animate(&mut self, now: f64) {
-        let Some(a) = self.animation else {
-            return;
-        };
-        let t = if a.duration > 0.0 {
-            math::min2(math::max2((now - a.start) / a.duration, 0.0), 1.0)
-        } else {
-            1.0
-        };
-        let p = ease_in_out(t);
-        let target = [
-            a.from[0] + (a.to[0] - a.from[0]) * p,
-            a.from[1] + (a.to[1] - a.from[1]) * p,
-        ];
-        if t >= 1.0 {
-            self.animation = None;
-            self.scroll_to(a.to);
-        } else {
-            self.scroll_to(target);
+        if let Some(to) = self.animation.animate(now) {
+            self.scroll_to(to);
         }
     }
 
@@ -247,7 +291,7 @@ impl ScrollSensor {
 
     fn reset(&mut self) {
         let middle = SIZE_PX / 2.0;
-        self.animation = None;
+        self.animation.stop();
         self.scroll_to([middle, middle]);
         self.last_scroll = [middle, middle];
     }
@@ -287,6 +331,20 @@ mod tests {
         assert!(steps.len() > 4);
         assert!(steps[0] < steps[steps.len() / 2]);
         assert!(steps.iter().all(|d| (d * 2.0).fract() == 0.0));
+    }
+
+    #[test]
+    fn notched_target_stays_in_range() {
+        let mut scroll = WheelScroll::default();
+        let (max, size) = ([0.0, 100.0], [400.0, 400.0]);
+        let mut offset = [0.0, 50.0];
+        for lines in [-10.0, 1.0] {
+            assert_eq!(scroll.wheel(notch(lines), 0.0, offset, max, size), None);
+        }
+        offset = scroll.animate(1000.0).unwrap();
+        assert_eq!((offset, scroll.animating()), ([0.0, 60.0], false));
+        scroll.wheel(notch(-10.0), 2000.0, [0.0, 100.0], max, size);
+        assert!(!scroll.animating());
     }
 
     #[test]

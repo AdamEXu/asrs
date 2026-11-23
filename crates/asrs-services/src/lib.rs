@@ -10,6 +10,7 @@ mod ext_list;
 pub mod file_type;
 pub mod fs;
 pub mod historical_start;
+pub mod hub_dialogs;
 pub mod layout;
 pub mod legacy_url;
 pub mod licenses;

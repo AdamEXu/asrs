@@ -1,9 +1,5 @@
 {
   "about": "Interaction (U16): the generated panels log on a restored Swerve tab with module velocities at a selected time; /Swerve/Speeds and /Swerve/Heading dragged from the sidebar into the source list with the pointer, the maximum speed typed to 0 (which its change listener clamps to 0.1) and then to 3, the frame length typed to 0.9, a clockwise rotation clicked and then repeated with Enter, and the controls resized so the canvas sits on half pixels and so its settings overflow. Saved HubState is compared at each capture; nothing is masked but a focused input",
-  "window": {
-    "width": 1300,
-    "height": 650
-  },
   "actions": [
     {
       "open": [
@@ -201,12 +197,12 @@
     },
     {
       "mouse": "move",
-      "x": 1260,
+      "x": 1060,
       "y": 490
     },
     {
       "mouse": "click",
-      "x": 1260,
+      "x": 1060,
       "y": 490
     },
     {
@@ -255,12 +251,12 @@
     },
     {
       "mouse": "move",
-      "x": 1260,
+      "x": 1060,
       "y": 490
     },
     {
       "mouse": "click",
-      "x": 1260,
+      "x": 1060,
       "y": 490
     },
     {
@@ -277,12 +273,12 @@
     },
     {
       "mouse": "move",
-      "x": 1182,
+      "x": 982,
       "y": 550
     },
     {
       "mouse": "click",
-      "x": 1182,
+      "x": 982,
       "y": 550
     },
     {
@@ -340,12 +336,12 @@
     },
     {
       "mouse": "move",
-      "x": 1240,
+      "x": 1040,
       "y": 620
     },
     {
       "mouse": "click",
-      "x": 1240,
+      "x": 1040,
       "y": 620
     },
     {

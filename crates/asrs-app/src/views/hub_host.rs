@@ -51,6 +51,10 @@ impl HubView for FrameView {
         self.geometry.renderer_top(show_timeline)
     }
 
+    fn table_box(&self) -> Option<(Rect, f64)> {
+        self.geometry.table_box()
+    }
+
     fn dark(&self) -> bool {
         self.dark
     }

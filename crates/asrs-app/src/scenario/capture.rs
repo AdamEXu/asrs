@@ -6,6 +6,7 @@ use std::path::Path;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_ui::capture::Capture;
 use asrs_ui::parity::{Recorder, Rect};
+use asrs_ui::platform::dialog::{FileFilter, MessageBoxType, Shown};
 
 use super::{Action, COLUMNS, PATCH, Page, Scenario, Theme, patch_colours};
 
@@ -92,6 +93,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Mouse { .. } => "mouse",
         Action::Wheel(_) => "wheel",
         Action::Key { .. } => "key",
+        Action::Dialog(_) => "dialog",
         Action::Menu { .. } => "menu",
         Action::Prompt { .. } => "prompt",
         Action::Capture { .. } => "capture",
@@ -217,12 +219,121 @@ pub fn collect_files(dir: &Path, seeds: &[(String, Vec<u8>)]) -> Result<Vec<Writ
     Ok(written)
 }
 
+/// A dialog the port showed, as the Electron driver records one. Options that Electron treats
+/// like an absent one when empty are left out when empty; `icon` and the `properties` the port's
+/// platform dialogs have no switch for are not recorded.
+pub fn dialog_record(shown: &Shown) -> JsValue {
+    let list =
+        |items: &[String]| JsValue::Array(items.iter().map(|s| JsValue::string(s)).collect());
+    let mut options = JsObject::new();
+    let mut text = |key: &str, value: &str| {
+        if !value.is_empty() {
+            options.insert(key, JsValue::string(value));
+        }
+    };
+    let kind = match shown {
+        Shown::Message(o) => {
+            let kind = match o.kind {
+                MessageBoxType::None => "",
+                MessageBoxType::Info => "info",
+                MessageBoxType::Warning => "warning",
+                MessageBoxType::Error => "error",
+                MessageBoxType::Question => "question",
+            };
+            text("type", kind);
+            text("title", &o.title);
+            text("message", &o.message);
+            text("detail", &o.detail);
+            text("checkboxLabel", &o.checkbox_label);
+            if !o.buttons.is_empty() {
+                options.insert("buttons", list(&o.buttons));
+            }
+            let mut index = |key: &str, value: Option<usize>| {
+                if let Some(value) = value {
+                    options.insert(key, JsValue::Number(value as f64));
+                }
+            };
+            index("defaultId", o.default_id);
+            index("cancelId", o.cancel_id);
+            if o.checkbox_checked {
+                options.insert("checkboxChecked", JsValue::Bool(true));
+            }
+            "showMessageBox"
+        }
+        Shown::Open(o) => {
+            text("title", &o.title);
+            text("message", &o.message);
+            text("buttonLabel", &o.button_label);
+            let properties = [
+                (o.open_file, "openFile"),
+                (o.open_directory, "openDirectory"),
+                (o.multi_selections, "multiSelections"),
+                (o.create_directory, "createDirectory"),
+            ];
+            panel_options(
+                &mut options,
+                o.default_path.as_deref(),
+                &o.filters,
+                &properties,
+            );
+            "showOpenDialog"
+        }
+        Shown::Save(o) => {
+            text("title", &o.title);
+            text("message", &o.message);
+            text("buttonLabel", &o.button_label);
+            let properties = [(o.create_directory, "createDirectory")];
+            panel_options(
+                &mut options,
+                o.default_path.as_deref(),
+                &o.filters,
+                &properties,
+            );
+            "showSaveDialog"
+        }
+    };
+    asrs_js::ops::object([
+        ("kind", JsValue::string(kind)),
+        ("options", JsValue::Object(options)),
+    ])
+}
+
+fn panel_options(
+    options: &mut JsObject,
+    default_path: Option<&Path>,
+    filters: &[FileFilter],
+    properties: &[(bool, &str)],
+) {
+    if let Some(path) = default_path {
+        options.insert("defaultPath", JsValue::string(&path.to_string_lossy()));
+    }
+    if !filters.is_empty() {
+        let filters = filters.iter().map(|f| {
+            let extensions = f.extensions.iter().map(|e| JsValue::string(e)).collect();
+            asrs_js::ops::object([
+                ("name", JsValue::string(&f.name)),
+                ("extensions", JsValue::Array(extensions)),
+            ])
+        });
+        options.insert("filters", JsValue::Array(filters.collect()));
+    }
+    let on: Vec<JsValue> = properties
+        .iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, name)| JsValue::string(name))
+        .collect();
+    if !on.is_empty() {
+        options.insert("properties", JsValue::Array(on));
+    }
+}
+
 pub fn run_record(
     scenario: &Scenario,
     scale: u32,
     theme: Theme,
     exceptions: &[String],
     files: &[WrittenFile],
+    dialogs: &[JsValue],
 ) -> String {
     let record = asrs_js::ops::object([
         ("scenario", JsValue::string(&scenario.name)),
@@ -254,6 +365,7 @@ pub fn run_record(
                     .collect(),
             ),
         ),
+        ("dialogs", JsValue::Array(dialogs.to_vec())),
         (
             "exceptions",
             JsValue::Array(exceptions.iter().map(|e| JsValue::string(e)).collect()),

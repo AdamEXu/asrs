@@ -1,11 +1,12 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
+  "backend": "blink",
   "inputs": [
     "../assets/minimal.json",
     "../logs/robot.json"
   ],
   "fixture": {
+    "geometry": "real",
     "seed": 1005,
     "assets": "../assets/minimal.json",
     "images": {

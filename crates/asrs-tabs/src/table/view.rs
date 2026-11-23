@@ -55,8 +55,8 @@ impl TableView {
             has_controller,
             show_hand: has_controller,
             headers: Vec::new(),
-            filler_upper_px: 500.0,
-            filler_lower_px: 1000.0,
+            filler_upper_px: super::FILLER_UPPER_PX,
+            filler_lower_px: super::FILLER_LOWER_PX,
             rows: Vec::new(),
             jump_placeholder: "0.000".to_owned(),
         }

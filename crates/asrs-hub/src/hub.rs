@@ -42,11 +42,13 @@ use asrs_model::source_list_config::{
 };
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::console::controller::ConsoleController;
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::Field2dRenderer;
 use asrs_tabs::line_graph::LineGraphController;
 use asrs_tabs::list_cx::{ListParts, SourceListCx};
 use asrs_tabs::statistics::StatisticsCx;
+use asrs_tabs::table::{TableController, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
 
 use crate::factory::{CanvasEnv, HubTabFactory};
@@ -179,6 +181,11 @@ pub trait HubView {
     fn inner_height(&self) -> f64;
     /// `RENDERER_CONTENT.getBoundingClientRect().top` while `--show-timeline` is `show_timeline`.
     fn renderer_top(&self, show_timeline: bool) -> f64;
+    /// `RENDERER_CONTENT.getBoundingClientRect()` while a Table tab is displayed, which has
+    /// neither timeline nor controls, and `devicePixelRatio`; `None` before the first layout.
+    fn table_box(&self) -> Option<(Rect, f64)> {
+        None
+    }
     /// `prefers-color-scheme: dark`.
     fn dark(&self) -> bool;
     /// What the sidebar reads from its layout and scrolls.
@@ -736,6 +743,26 @@ impl HubModel {
         self.tabs.source_list_input(&mut self.page, input)
     }
 
+    /// The `drag-update` listeners of the tab controllers; `detail` is the event's.
+    pub fn tab_drag_update(&mut self, detail: &JsValue) -> Result<(), JsError> {
+        let mut result = Ok(());
+        for index in 0..self.tabs.len() {
+            let hidden = self.tabs.tab(index).is_none_or(|t| t.content_hidden());
+            let Some(tab) = self.tabs.tab_mut(index) else {
+                continue;
+            };
+            if let Some(table) = tab.controller.downcast_mut::<TableController>() {
+                table.dom().borrow_mut().hidden = hidden;
+                result = result.and(table.handle_drag(&mut self.page, detail));
+            }
+            if let Some(console) = tab.controller.downcast_mut::<ConsoleController>() {
+                console.dom().borrow_mut().hidden = hidden;
+                result = result.and(console.handle_drag(&mut self.page, detail));
+            }
+        }
+        result
+    }
+
     /// The tabs with the page they run against.
     pub fn tabs_mut(&mut self) -> (&mut Tabs<HubPage>, &mut HubPage) {
         (&mut self.tabs, &mut self.page)
@@ -1279,6 +1306,29 @@ impl HubModel {
         self.flush(host);
     }
 
+    /// The displayed table's box, which upstream's render reads from a fresh layout: the view's
+    /// last one may be from before the tab was selected, and a box that then changes looks like
+    /// scrolling up.
+    fn lay_out_table(&mut self) {
+        let Some((container, device_pixel_ratio)) = self.page.view.table_box() else {
+            return;
+        };
+        let Some(index) = self.tabs.selected_index() else {
+            return;
+        };
+        let tab = self.tabs.tab(index);
+        if let Some(table) = tab.and_then(|tab| {
+            tab.renderer()
+                .downcast_ref::<TableRenderer>()
+                .map(TableRenderer::dom)
+                .cloned()
+        }) {
+            let layout = &mut table.borrow_mut().layout;
+            layout.container = container;
+            layout.device_pixel_ratio = device_pixel_ratio;
+        }
+    }
+
     /// Runs one animation-frame callback the hub requested.
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
@@ -1293,6 +1343,7 @@ impl HubModel {
             HubFrame::Tabs => {
                 let now = host.frame_time();
                 self.tabs.scroll_step(&self.page, now);
+                self.lay_out_table();
                 let out = self.tabs.periodic(&mut self.page, now);
                 for update in out.satellite_updates {
                     host.send_main_message(update.to_message());

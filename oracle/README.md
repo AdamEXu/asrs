@@ -971,6 +971,18 @@ timestamp, value nodes]` with nodes as `[localName, attributes, children]` or te
 Statistics rows `[classes, [[text, colSpan, style.color as assigned], ...]]`; the Metadata
 headers and rows `[[text, classes], ...]` with the alert's and table's `hidden`.
 
+### Console layout
+
+`dom/console-layout/*` (`crates/asrs-app/tests/console_layout.rs`) record what Blink lays the Console
+tab's rows out as, with `"geometry": "real"`. `node oracle/tools/u13Specs.mjs` writes the specs and
+their logs; edit the script, not the specs. `wrap`, `wrap-2x` and `wrap-narrow` capture an
+`/*console-layout:rows*/` eval: per row its `clientHeight` and per cell its width and each text
+node with its client rects, for 220 lines of random text, tabs, line breaks and ANSI renditions, then
+with a filter typed. `anchor` scrolls (`/*console-layout:scroll N*/`), filters rows away and back,
+and captures `scrollTop` (`/*console-layout:top*/`), which Chromium's scroll anchoring moves. The text is
+macOS's Courier, so the test runs there only; the log leaves out CJK, whose fallback advance differs
+from Blink's.
+
 ### Mechanism and Points renderers
 
 `dom/mechanism/<case>` and `dom/points/<case>` (`crates/asrs-tabs/tests/mechanism_points_dom.rs`)
@@ -1098,7 +1110,9 @@ Geometry, fixture key `"geometry"`:
   that are inputs rather than upstream behaviour. `asrs_parity::geometry::ScriptedReads`
   answers a port's reads from these records in order and checks its writes, failing on any read
   or write upstream did not make; `dom/tabs/table-real` replays the Table renderer this way
-  (`crates/asrs-tabs/tests/table_real_dom.rs`).
+  (`crates/asrs-tabs/tests/table_real_dom.rs`), as do the other `dom/tabs/table*` fixtures the
+  whole tab (`crates/asrs-hub/tests/dom_tabs.rs`). Both also check every vertical read against
+  `asrs_tabs::table::layout::TableLayout`, the model of Blink's layout the app answers from.
 
 `window.__oracleTree(value)` gives fixture evals the CVE-1 tree of a value.
 
@@ -1259,10 +1273,12 @@ The port's side is `asrs --parity-scenario` (built with the `parity` feature; `c
 port` runs it). It reads the same files and writes the same layout headless. Actions go through
 the hub's model APIs (`main` and `open` as main messages, `selection` on the model's
 `SelectionImpl`) and the window's input dispatch (`mouse`, `wheel`, `key`; a notched wheel event
-becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); `eval`,
-`dialog` and any `userData` outside `userAssets/` are refused because the port has no page script
-and no dialogs yet. Before the window opens it seeds `prefs.json` and the scenario's user assets as
-the driver does and runs main's own
+becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); a `dialog`
+action answers the next dialog the port shows, and `run.json` lists those it showed, which `xtask
+pixel compare` checks against the driver's together with the files under `files/dialog/`. `eval`
+and any `userData` outside `userAssets/` are refused because the port has no page script and main's
+other userData reads are not seeded. Before the window opens it seeds `prefs.json` and the
+scenario's user assets as the driver does and runs main's own
 startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
 rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's

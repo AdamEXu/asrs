@@ -2,6 +2,7 @@ pub mod cache;
 pub mod coverage;
 pub mod dom;
 pub mod font;
+pub mod inline;
 pub mod layout;
 pub mod lut;
 #[cfg(target_os = "macos")]

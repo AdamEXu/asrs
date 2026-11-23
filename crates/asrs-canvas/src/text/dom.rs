@@ -198,6 +198,8 @@ pub struct Line {
     pub height: Lu,
     /// Alphabetic baseline from the content box's top edge.
     pub baseline: Lu,
+    /// Where the text an ellipsis cut starts, whose full size `width` keeps.
+    pub cut_at: Option<Lu>,
     /// Inline size of the whole line before any ellipsis, as alignment sees it.
     pub width: Lu,
     pub fragments: Vec<Fragment>,
@@ -314,7 +316,7 @@ fn break_opportunities(text: &str) -> Vec<(usize, usize)> {
     out
 }
 
-fn utf16_len(s: &str) -> usize {
+pub(super) fn utf16_len(s: &str) -> usize {
     s.encode_utf16().count()
 }
 
@@ -340,7 +342,7 @@ fn align_offset(align: Align, direction: Direction, space: Lu) -> Lu {
 
 /// Positions of the character boundaries of `shaped` in CSS px, by UTF-16 offset, for the
 /// `len` code units it covers; offsets inside a cluster share their cluster's start.
-fn boundaries(shaped: &Shaped, len: usize) -> Vec<f32> {
+pub(super) fn boundaries(shaped: &Shaped, len: usize) -> Vec<f32> {
     let mut at = vec![f32::NAN; len + 1];
     for g in &shaped.glyphs {
         let c = g.cluster as usize;
@@ -371,7 +373,7 @@ fn byte_offset(text: &str, utf16: usize) -> usize {
     text.len()
 }
 
-const ELLIPSIS: &str = "\u{2026}";
+pub const ELLIPSIS: &str = "\u{2026}";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Class {
@@ -760,7 +762,8 @@ pub fn layout(
         for (f, _) in &mut runs {
             f.x += offset;
         }
-        let fragments = if style.overflow == Overflow::Ellipsis && width > room {
+        let cut = style.overflow == Overflow::Ellipsis && width > room;
+        let fragments = if cut {
             truncate(backend, style, runs, room, scale)
         } else {
             runs.into_iter().map(|(f, _)| f).collect()
@@ -774,6 +777,7 @@ pub fn layout(
             top,
             height: above + below,
             baseline: top + above,
+            cut_at: cut.then_some(offset),
             width,
             fragments,
         });

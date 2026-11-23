@@ -8,12 +8,14 @@
 //! `getBoundingClientRect` divided by the zoom.
 
 use asrs_js::number;
+use asrs_js::ops::object;
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::selection_impl::ControlButton;
 use asrs_model::source_list::{ItemDragPayload, ItemDragStart, ItemView, ListInput};
 
-use crate::drag::{Drag, DragItem, DragPayload};
+use crate::drag::{Drag, DragItem, DragPayload, DragUpdate};
 use crate::hub::HubModel;
 use crate::tabs::{TabDragData, TabDragStart, TabsError};
 
@@ -863,6 +865,8 @@ pub enum DragData {
     Fields(DragPayload),
     Tab(TabDragData),
     ListItem(ItemDragPayload),
+    /// A Table tab's column, as `tableIndex`.
+    Column(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -874,6 +878,32 @@ pub enum DragContent {
         item: ItemView,
         width: f64,
     },
+    /// A copy of a Table column's key container in a box `width` wide.
+    Column {
+        text: JsString,
+        available: bool,
+        width: f64,
+    },
+}
+
+/// A `drag-update` event's `detail`, as the controllers that take field and column drags read it.
+fn drag_detail(update: &DragUpdate<DragData>) -> JsValue {
+    let strings =
+        |keys: &[JsString]| JsValue::Array(keys.iter().cloned().map(JsValue::String).collect());
+    let data = match &update.data {
+        DragData::Fields(fields) => object([
+            ("fields", strings(&fields.fields)),
+            ("children", strings(&fields.children)),
+        ]),
+        DragData::Column(index) => object([("tableIndex", JsValue::Number(*index as f64))]),
+        DragData::Tab(_) | DragData::ListItem(_) => object([]),
+    };
+    object([
+        ("end", JsValue::Bool(update.end)),
+        ("x", JsValue::Number(update.x)),
+        ("y", JsValue::Number(update.y)),
+        ("data", data),
+    ])
 }
 
 impl From<DragPayload> for DragData {
@@ -1008,6 +1038,10 @@ impl HubShell {
         let mut result = Ok(());
         for update in self.drag.take_updates() {
             let (x, y, end) = (update.x, update.y, update.end);
+            let thrown = hub.tab_drag_update(&drag_detail(&update));
+            if let (Ok(()), Err(e)) = (&result, thrown) {
+                result = Err(TabsError::Thrown(e));
+            }
             let input = match &update.data {
                 DragData::Fields(fields) => ListInput::FieldDrag {
                     fields: &fields.fields,
@@ -1017,7 +1051,7 @@ impl HubShell {
                     end,
                 },
                 DragData::ListItem(payload) => ListInput::ItemDrag { payload, x, y, end },
-                DragData::Tab(_) => continue,
+                DragData::Tab(_) | DragData::Column(_) => continue,
             };
             let (_, errors) = hub.source_list_input(input);
             if let (Ok(()), Some(e)) = (&result, errors.into_iter().next()) {
@@ -1046,7 +1080,7 @@ impl HubShell {
     fn dispatch_tab_drag(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
         let updates = self.drag.take_updates_with(|data| match data {
             DragData::Tab(tab) => Some(*tab),
-            DragData::Fields(_) | DragData::ListItem(_) => None,
+            DragData::Fields(_) | DragData::ListItem(_) | DragData::Column(_) => None,
         });
         let mut result = Ok(());
         for update in updates {
@@ -1080,16 +1114,11 @@ impl HubShell {
         let mut data = asrs_js::value::JsObject::new();
         data.insert(
             "files",
-            asrs_js::value::JsValue::Array(
-                paths
-                    .into_iter()
-                    .map(asrs_js::value::JsValue::String)
-                    .collect(),
-            ),
+            JsValue::Array(paths.into_iter().map(JsValue::String).collect()),
         );
         Some(NamedMessage::new(
             HubToMain::OpenFilesRequest,
-            asrs_js::value::JsValue::Object(data),
+            JsValue::Object(data),
         ))
     }
 }

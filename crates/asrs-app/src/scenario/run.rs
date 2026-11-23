@@ -20,13 +20,16 @@ use asrs_ui::gpui::{
     point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
+use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Seed, Theme, Wheel, patch_colours,
+    Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Seed, Theme, Wheel,
+    patch_colours,
 };
 use crate::hub::{Hub, HubEvent};
+use crate::hub_dialogs;
 use crate::main_process::{MainProcess, process_platform};
 use crate::menus::bridge::ScriptedMenu;
 use crate::views::field3d::WwwRoot;
@@ -703,6 +706,23 @@ impl Variant<'_> {
                 }))?;
             }
             Action::Key { key, modifiers } => self.key(key, modifiers)?,
+            Action::Dialog(reply) => {
+                let reply = match reply {
+                    DialogReply::Button(index) => Reply::Button(*index),
+                    DialogReply::Cancel => Reply::Save(None),
+                    DialogReply::File(name) => {
+                        let file = std::path::absolute(self.dir.join("files/dialog").join(name))
+                            .map_err(|e| e.to_string())?;
+                        if let Some(parent) = file.parent() {
+                            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                        }
+                        Reply::Save(Some(file))
+                    }
+                };
+                self.headless.context().update(|cx| {
+                    cx.default_global::<Script>().replies.push_back(reply);
+                });
+            }
             Action::Menu { path } => {
                 self.headless
                     .context()
@@ -848,12 +868,15 @@ impl Variant<'_> {
                     })
                     .map_err(|e| e.to_string())?;
                 let (saves, exceptions) = (self.saves.clone(), self.exceptions.clone());
+                let handle = window.into();
                 let screen = self.screen();
                 self.headless.context().update(|cx| {
                     let id = Windows::adopt_hub(cx, window.into());
                     cx.set_global(ScriptedMenu::default());
+                    cx.set_global(Script::default());
                     cx.subscribe(&hub, move |hub, event, cx| match event {
                         HubEvent::Main(m) => {
+                            hub_dialogs::show(m, handle, cx);
                             let main = cx.global_mut::<MainProcess>().state_mut();
                             let saved =
                                 main.hub_message(&RealFs, HUB_WINDOW_ID, m)
@@ -917,6 +940,14 @@ impl Variant<'_> {
         }
         self.settle();
         let exceptions = self.exceptions.borrow().clone();
+        let dialogs: Vec<JsValue> = self.headless.context().update(|cx| {
+            let script = cx.try_global::<Script>();
+            let shown = script.map_or(&[][..], |s| &s.shown);
+            shown
+                .iter()
+                .map(|(_, s)| capture::dialog_record(s))
+                .collect()
+        });
         capture::write(
             &self.dir.join("run.json"),
             &capture::run_record(
@@ -925,6 +956,7 @@ impl Variant<'_> {
                 self.theme,
                 &exceptions,
                 &capture::collect_files(self.dir, &self.seeds()?)?,
+                &dialogs,
             ),
         )
     }

@@ -28,6 +28,7 @@ use asrs_tabs::console::ConsoleNode;
 use asrs_tabs::console::controller::{
     ConsoleCommand, ConsoleDom, ConsoleGeometry, ConsoleLine, ConsoleRenderer,
 };
+use asrs_tabs::console::view::ConsoleRow;
 use asrs_tabs::metadata::MetadataRenderer;
 use asrs_tabs::statistics::values::{StatisticsRow, StatisticsTable};
 use asrs_tabs::statistics::{StatisticsCommand, StatisticsField};
@@ -76,17 +77,32 @@ impl TableGeometry for Scripted {
     fn data_row_rect(&mut self, index: usize, _hidden: bool) -> Rect {
         self.rect(&format!("{TABLE_BODY}>tr:{}", index + 2))
     }
+    fn container_rect(&mut self) -> Rect {
+        unreachable!("a controller read")
+    }
+    fn header_cell_rect(&mut self, _index: usize) -> Rect {
+        unreachable!("a controller read")
+    }
+    fn header_key_client_width(&mut self, _index: usize) -> f64 {
+        unreachable!("a controller read")
+    }
+    fn header_key_text_width(&mut self, _index: usize) -> f64 {
+        unreachable!("a controller read")
+    }
 }
 
 impl ConsoleGeometry for Scripted {
-    fn scroll_top(&mut self) -> f64 {
+    fn container_rect(&mut self) -> Rect {
+        self.rect(CONSOLE_CONTAINER)
+    }
+    fn scroll_top(&mut self, _: &[ConsoleRow]) -> f64 {
         self.0.borrow_mut().read_f64("scrollTop", CONSOLE_CONTAINER)
     }
-    fn set_scroll_top(&mut self, value: f64) {
+    fn set_scroll_top(&mut self, _: &[ConsoleRow], value: f64) {
         let mut reads = self.0.borrow_mut();
         reads.write_f64("scrollTop", CONSOLE_CONTAINER, value);
     }
-    fn scroll_height(&mut self) -> f64 {
+    fn scroll_height(&mut self, _: &[ConsoleRow]) -> f64 {
         let mut reads = self.0.borrow_mut();
         reads.read_f64("scrollHeight", CONSOLE_CONTAINER)
     }
@@ -94,6 +110,7 @@ impl ConsoleGeometry for Scripted {
         let mut reads = self.0.borrow_mut();
         reads.read_f64("clientHeight", CONSOLE_CONTAINER)
     }
+    fn lay_out(&mut self, _: &[ConsoleRow]) {}
     fn row_client_height(&mut self, index: usize) -> f64 {
         let mut reads = self.0.borrow_mut();
         reads.read_f64("clientHeight", &format!("{CONSOLE_BODY}>tr:{}", index + 1))

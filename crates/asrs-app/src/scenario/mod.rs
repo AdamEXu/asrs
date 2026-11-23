@@ -1,7 +1,7 @@
 //! Parity scenarios (`parity/scenarios/*.json`, the format `oracle/src/app/scenario.ts` reads):
 //! the port runs the same file headless and writes the capture layout `cargo xtask pixel`
 //! compares with the Electron driver's. Actions go through the hub's model APIs and the
-//! window's input dispatch; `eval` and `dialog` exist only on the Electron side.
+//! window's input dispatch; `eval` exists only on the Electron side.
 
 #[cfg(feature = "parity")]
 mod capture;
@@ -99,6 +99,8 @@ pub enum Action {
         key: String,
         modifiers: Vec<String>,
     },
+    /// The answer to the next dialog.
+    Dialog(DialogReply),
     /// Clicks the item at this label path of the context menu that popped up.
     Menu {
         path: Vec<String>,
@@ -113,6 +115,15 @@ pub enum Action {
         probes: Vec<String>,
         masks: Vec<String>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DialogReply {
+    /// A message box's button.
+    Button(usize),
+    /// A save dialog's file, under `files/dialog/` of the run.
+    File(String),
+    Cancel,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -326,11 +337,12 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                     .into(),
             );
         }
-        "dialog" => {
-            return Err(
-                "dialog answers a main-process dialog, and the port has no main yet".into(),
-            );
-        }
+        "dialog" => Action::Dialog(match value {
+            JsValue::Null => DialogReply::Cancel,
+            JsValue::String(file) => DialogReply::File(file.to_string_lossy()),
+            JsValue::Number(n) if *n >= 0.0 && n.fract() == 0.0 => DialogReply::Button(*n as usize),
+            _ => return Err("dialog is not a button index, a file name or null".into()),
+        }),
         _ => unreachable!("filtered to ACTION_KEYS"),
     })
 }
@@ -549,8 +561,8 @@ mod tests {
         let e =
             Scenario::parse("e", r#"{"actions": [{"idle": true}, {"eval": "1"}]}"#).unwrap_err();
         assert!(e.contains("action 1: eval"), "{e}");
-        let e =
-            Scenario::parse("d", r#"{"actions": [{"dialog": 0}, {"capture": "c"}]}"#).unwrap_err();
+        let e = Scenario::parse("d", r#"{"actions": [{"dialog": true}, {"capture": "c"}]}"#)
+            .unwrap_err();
         assert!(e.contains("dialog"), "{e}");
         let e = Scenario::parse(
             "u",
