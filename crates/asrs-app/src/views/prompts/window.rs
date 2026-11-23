@@ -141,7 +141,7 @@ impl PromptWindow {
             let modifiers = event.keystroke.modifiers;
             let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {
                 "enter" => {
-                    view.act(|page| page.key_down("Enter"), window, cx);
+                    view.act(|page| page.click_confirm(), window, cx);
                     if view.commit(window, cx) {
                         cx.stop_propagation();
                     }

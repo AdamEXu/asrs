@@ -102,17 +102,10 @@ pub trait PromptPage: 'static {
     /// The user selects the option at `index`, which fires the select's `change` event.
     fn pick(&mut self, id: &str, index: usize) -> Vec<PromptEvent>;
     fn click_exit(&mut self) -> Vec<PromptEvent>;
+    /// Clicking `#confirm`, which a `keydown` of Enter anywhere in the window also does.
     fn click_confirm(&mut self) -> Vec<PromptEvent>;
     fn click_help(&mut self) -> Vec<PromptEvent> {
         Vec::new()
-    }
-    /// A `keydown` on the window with this `KeyboardEvent.code`.
-    fn key_down(&mut self, code: &str) -> Vec<PromptEvent> {
-        if code == "Enter" {
-            self.click_confirm()
-        } else {
-            Vec::new()
-        }
     }
 }
 
