@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, libm, licenses, workspace_root};
+use crate::{Result, docs, libm, licenses, workspace_root};
 
 const USAGE: &str = "usage: cargo xtask bundle [--target <triple>]
 
@@ -10,7 +10,8 @@ Builds a release directory in target/bundle/<triple or host>/: the asrs binary
 (built with ASRS_LIBM_LGPL_SHIP=1, so it only loads the library next to it or from
 ASRS_LIBM_LGPL, and ASRS_PACKAGED=1, so it runs as a packaged app with bundledAssets/ beside
 it), the asrs-libm-lgpl shared library, upstream's bundledAssets/ (from assets/ or
-reference/AdvantageScope), and the `cargo xtask licenses` bundle including the library's LGPL
+reference/AdvantageScope), the documentation `cargo xtask docs` built (as docs/build), and the
+`cargo xtask licenses` bundle including the library's LGPL
 text and source. Needs cargo-about.";
 
 pub fn run(args: &[String]) -> Result {
@@ -27,6 +28,10 @@ pub fn run(args: &[String]) -> Result {
     .into_iter()
     .find(|dir| dir.is_dir())
     .ok_or("upstream bundledAssets not found; link reference/AdvantageScope or run `cargo xtask assets`")?;
+    let documentation = docs::build_dir();
+    if !documentation.join("index.html").is_file() {
+        return Err("the documentation is not built; run `cargo xtask docs`".to_owned());
+    }
     let mut cargo_args = vec!["build", "--locked", "--release", "-p", "asrs-app"];
     if let Some(target) = target {
         cargo_args.extend(["--target", target]);
@@ -68,6 +73,7 @@ pub fn run(args: &[String]) -> Result {
     copy(&release.join(exe), &dest.join(exe))?;
     copy(&library, &dest.join(libm::file_name(target)))?;
     copy_tree(&bundled_assets, &dest.join("bundledAssets"))?;
+    copy_tree(&documentation, &dest.join("docs/build"))?;
     eprintln!("wrote {}", dest.display());
     Ok(())
 }
