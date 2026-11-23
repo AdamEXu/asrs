@@ -27,10 +27,10 @@ use asrs_ui::canvas_view::{
 };
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
-    Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
-    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
-    ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window, canvas,
-    div, point, px, rgb, rgba,
+    Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
+    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Render, ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window,
+    canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::parity::{Probed, probed};
@@ -47,6 +47,7 @@ use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
 use super::table::{self, TableViews};
+use super::video::VideoViews;
 
 /// `element` under its parity id, which is its selector in `www/hub.html` (`div.title-bar`).
 fn probe(element: FrameElement, child: impl IntoElement) -> Probed {
@@ -157,6 +158,10 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) canvas_tabs: CanvasTabViews,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
+    pub(super) video: VideoViews,
+    /// `document.body`, which has the focus while nothing else does: key events go to whatever
+    /// has the focus and its ancestors.
+    body: FocusHandle,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -277,6 +282,8 @@ impl<H: FrameHost> HubFrame<H> {
             canvas_tabs: CanvasTabViews::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
+            video: VideoViews::default(),
+            body: cx.focus_handle(),
         }
     }
 
@@ -730,6 +737,9 @@ impl<H: FrameHost> HubFrame<H> {
 
 impl<H: FrameHost> Render for HubFrame<H> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        if window.focused(cx).is_none() {
+            window.focus(&self.body, cx);
+        }
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();
         let dark = appearance == Appearance::Dark;
@@ -841,29 +851,28 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         });
                     }
                 });
-                let frame = entity.clone();
-                window.on_key_event(move |event: &KeyDownEvent, phase, window, cx| {
-                    if phase == DispatchPhase::Bubble {
-                        let _ = frame.update(cx, |frame, cx| {
-                            frame.field3d_key_down(event, cx);
-                            frame.console_key_down(event, window, cx);
-                        });
-                    }
-                });
-                window.on_key_event(move |event: &KeyUpEvent, phase, _, cx| {
-                    if phase == DispatchPhase::Bubble {
-                        let _ = entity.update(cx, |frame, cx| frame.field3d_key_up(event, cx));
-                    }
-                });
             },
         )
         .absolute()
         .size_full();
         let mut root = div()
             .id("hub-frame")
+            .track_focus(&self.body)
             .relative()
             .size_full()
             .child(window_listeners)
+            // Before a focused button takes the key, whose default action the selection's
+            // listener prevents.
+            .capture_key_down(cx.listener(|frame, event: &KeyDownEvent, window, cx| {
+                frame.playback_key_down(event, window, cx)
+            }))
+            .on_key_down(cx.listener(|frame, event: &KeyDownEvent, window, cx| {
+                frame.field3d_key_down(event, cx);
+                frame.console_key_down(event, window, cx);
+            }))
+            .on_key_up(cx.listener(|frame, event: &KeyUpEvent, _, cx| {
+                frame.field3d_key_up(event, cx);
+            }))
             .on_drop(
                 cx.listener(|frame, paths: &ExternalPaths, _, cx| frame.drop_files(paths, cx)),
             );
@@ -987,6 +996,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(tab) = self.canvas_tab_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(tab);
                 }
+                if let Some(video) = self.video_element(rect, scale, window, cx) {
+                    renderer = renderer.child(video);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
@@ -1010,6 +1022,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(tab) = self.canvas_tab_controls(rect, appearance, scale, window, cx) {
                     controls = controls.child(tab);
+                }
+                if let Some(video) = self.video_controls(rect, appearance, scale, window, cx) {
+                    controls = controls.child(video);
                 }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }

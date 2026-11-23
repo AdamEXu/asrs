@@ -29,6 +29,8 @@ asrs-tabs = { path = "../asrs-tabs" }
 asrs-ui.workspace = true
 async-channel = "=2.5.0"
 png = "=0.18.1"
+zune-core = "=0.5.3"
+zune-jpeg = "=0.5.15"
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }

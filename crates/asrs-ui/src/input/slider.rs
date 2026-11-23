@@ -320,9 +320,7 @@ struct Clip {
     height: f32,
 }
 
-/// Fills `part` of the slider at `bounds` as clipped by `clip`. The clip's round rect is painted
-/// whole and masked to the part, so a 4 px thumb keeps the clip's corner where a quad of its own
-/// would clamp the radius to half its width.
+/// Fills `part` of the slider at `bounds` as clipped by `clip`.
 fn paint_clipped(
     part: Bounds<Pixels>,
     bounds: Bounds<Pixels>,
@@ -330,20 +328,32 @@ fn paint_clipped(
     color: u32,
     window: &mut Window,
 ) {
-    let (shape, radius) = match clip {
-        Some(clip) => (
-            Bounds {
+    match clip {
+        Some(clip) => {
+            let shape = Bounds {
                 origin: bounds.origin,
                 size: size(bounds.size.width, px(clip.height)),
-            },
-            px(clip.radius),
-        ),
-        None => (part, px(0.0)),
-    };
+            };
+            paint_in_rounded(part, shape, clip.radius, color, window);
+        }
+        None => paint_in_rounded(part, part, 0.0, color, window),
+    }
+}
+
+/// Fills `part` as a rounded box `shape` with `overflow: hidden` leaves it. The shape is painted
+/// whole and masked to the part, so a 4 px thumb keeps the shape's corner where a quad of its
+/// own would clamp the radius to half its width.
+pub fn paint_in_rounded(
+    part: Bounds<Pixels>,
+    shape: Bounds<Pixels>,
+    radius: f32,
+    color: u32,
+    window: &mut Window,
+) {
     window.with_content_mask(Some(ContentMask { bounds: part }), |window| {
         window.paint_quad(quad(
             shape,
-            Corners::all(radius),
+            Corners::all(px(radius)),
             rgb(color),
             px(0.0),
             transparent_black(),

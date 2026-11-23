@@ -68,6 +68,11 @@ impl VideoImage {
             .map_or([0.0; 2], Content::natural_size)
     }
 
+    /// Whether the element has no image, loaded or on its way.
+    pub fn cleared(&self) -> bool {
+        self.content.is_none() && self.pending.is_none()
+    }
+
     pub fn shown(&self) -> Option<&Shown> {
         self.shown.as_ref().filter(|_| !self.hidden)
     }
@@ -82,13 +87,20 @@ impl VideoImage {
         Some(src)
     }
 
-    /// The load of `src` ended with the image's natural size, or failed. Ignored once the element
-    /// has moved on to another image.
+    /// The load of `src` ended with the image's natural size, or failed. A load the element has
+    /// moved on from is still painted while its successor runs, so a clip that plays faster than
+    /// its frames decode drops frames instead of freezing.
     pub fn loaded(&mut self, src: &JsString, size: Option<[f64; 2]>) {
         let Some(content) = &mut self.content else {
             return;
         };
-        if content.src != *src || content.state != State::Loading {
+        if content.state != State::Loading {
+            return;
+        }
+        if content.src != *src {
+            if size.is_some() {
+                self.shown = Some(Shown::Image(src.clone()));
+            }
             return;
         }
         let (state, shown) = match size {

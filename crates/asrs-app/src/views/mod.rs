@@ -16,3 +16,5 @@ pub mod sidebar;
 pub mod source_list;
 pub mod tab_bar;
 pub mod table;
+pub mod video;
+pub mod video_frame;

@@ -20,6 +20,7 @@ pub use select::{
     geometry as select_geometry, paint_select, popup_menu, select_key,
 };
 pub use slider::{
-    RangeControl, Slider, SliderEvent, SliderTrack, pointer_proportion, thumb_offset,
+    RangeControl, Slider, SliderEvent, SliderTrack, paint_in_rounded, pointer_proportion,
+    thumb_offset,
 };
 pub use style::{FieldStyle, Frame, SliderStyle, SplitStyle};
