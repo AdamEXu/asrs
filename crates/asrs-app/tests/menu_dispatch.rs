@@ -20,11 +20,15 @@ use asrs_hub::hub::HubModel;
 use asrs_js::value::JsValue;
 use asrs_model::json_file;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Theme, Timestamps};
+use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::tab_type::TabType;
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::lifecycle;
 use asrs_services::window_manager::Platform;
-use asrs_ui::gpui::{HeadlessAppContext, Keystroke, NoopTextSystem};
+use asrs_ui::gpui::{
+    HeadlessAppContext, KeyUpEvent, Keystroke, Modifiers, MouseButton, MouseDownEvent,
+    MouseUpEvent, NoopTextSystem, PlatformInput, point, px,
+};
 use asrs_ui::platform::dialog::{Reply, Script, Shown};
 use asrs_ui::theme::ThemeSource;
 
@@ -252,6 +256,57 @@ impl AppUnderTest {
         }
     }
 
+    fn send(&mut self, window: WindowId, inputs: Vec<PlatformInput>) {
+        let handle = self.cx.update(|cx| Windows::handle(cx, window));
+        let handle = handle.expect("open");
+        self.cx
+            .update_window(handle, |_, window, _| window.refresh())
+            .expect("open");
+        self.settle();
+        self.cx
+            .update_window(handle, |_, window, cx| {
+                for input in inputs {
+                    window.dispatch_event(input, cx);
+                }
+            })
+            .expect("open");
+        self.settle();
+    }
+
+    fn click_at(&mut self, window: WindowId, x: f64, y: f64) {
+        let position = point(px(x as f32), px(y as f32));
+        let (button, modifiers) = (MouseButton::Left, Modifiers::default());
+        self.send(
+            window,
+            vec![
+                PlatformInput::MouseDown(MouseDownEvent {
+                    button,
+                    position,
+                    modifiers,
+                    click_count: 1,
+                    first_mouse: false,
+                }),
+                PlatformInput::MouseUp(MouseUpEvent {
+                    button,
+                    position,
+                    modifiers,
+                    click_count: 1,
+                }),
+            ],
+        );
+    }
+
+    /// A key pressed and released.
+    fn key(&mut self, window: WindowId, key: &'static str) {
+        assert!(self.press(window, key, &[]).is_empty());
+        let keystroke = Keystroke::parse(key).expect("a keystroke");
+        self.send(window, vec![PlatformInput::KeyUp(KeyUpEvent { keystroke })]);
+    }
+
+    fn mode(&mut self, hub: WindowId) -> SelectionMode {
+        self.hub(hub, |hub| hub.page().selection().get_mode())
+    }
+
     fn type_text(&mut self, window: WindowId, text: &str) {
         let handle = self.cx.update(|cx| Windows::handle(cx, window));
         let handle = handle.expect("open");
@@ -311,6 +366,7 @@ fn in_a_fresh_home() {
     };
     app.focus(hub);
 
+    keys_reach_the_page_unless_a_text_field_has_focus(&mut app, hub);
     messages_reach_the_focused_hub(&mut app, hub);
     preferences_reach_the_file_the_hubs_and_the_menu(&mut app, hub);
     dialogs_show_and_resume(&mut app, hub);
@@ -447,6 +503,48 @@ fn satellites_open_close_and_round_trip(app: &mut AppUnderTest) {
     app.settle();
     assert!(app.hubs().is_empty());
     assert_eq!(app.satellites().len(), 2, "satellites outlive their hub");
+}
+
+fn keys_reach_the_page_unless_a_text_field_has_focus(app: &mut AppUnderTest, hub: WindowId) {
+    use SelectionMode::{Idle, Playback, Static};
+    let width = app.bounds(hub).width;
+    let (play, popup) = ((width - 130.0, 22.0), (width - 59.0, 22.0));
+    let search_top = if cfg!(target_os = "macos") { 73.0 } else { 35.0 };
+    let (search, below) = ((100.0, search_top + 14.0), (100.0, 400.0));
+    assert_eq!(app.mode(hub), Idle);
+    app.key(hub, "space");
+    assert_eq!(app.mode(hub), Playback);
+    app.key(hub, "space");
+    assert_eq!(app.mode(hub), Static);
+
+    app.click_at(hub, play.0, play.1);
+    assert_eq!(app.mode(hub), Playback);
+    app.key(hub, "space");
+    assert_eq!(app.mode(hub), Static, "with the pressed button hidden");
+
+    app.click_at(hub, search.0, search.1);
+    for key in ["space", "l", "left"] {
+        app.key(hub, key);
+        assert_eq!(app.mode(hub), Static, "{key} in the search field");
+    }
+    app.click_at(hub, below.0, below.1);
+    app.key(hub, "space");
+    assert_eq!(app.mode(hub), Playback, "with the search field blurred");
+
+    app.click_at(hub, popup.0, popup.1);
+    let [satellite] = app.satellites()[..] else {
+        panic!("{:?}", app.satellites());
+    };
+    app.focus(hub);
+    app.key(hub, "space");
+    assert_eq!(app.mode(hub), Static, "with a button focused");
+    assert_eq!(app.satellites(), [satellite], "the button is not clicked");
+    app.focus(satellite);
+    app.key(satellite, "space");
+    assert_eq!(app.mode(hub), Playback, "from a satellite");
+    app.key(satellite, "space");
+    app.close(satellite);
+    app.focus(hub);
 }
 
 fn messages_reach_the_focused_hub(app: &mut AppUnderTest, hub: WindowId) {

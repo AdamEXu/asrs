@@ -252,7 +252,8 @@ impl NativeWindow {
         self.0.end_sheet();
     }
 
-    /// Electron's `isVisible()`: on screen, not minimized and not covered by other windows.
+    /// Electron's `isVisible()`: on screen and not minimized. Being covered by other windows does
+    /// not count, whatever its documentation says.
     pub fn is_visible(&self) -> bool {
         self.0.is_visible()
     }

@@ -25,7 +25,6 @@ struct SatelliteView {
     canvas_text: Rc<RefCell<dyn TextBackend>>,
     lists: ListsGeometry,
     sidebar: NoLayout,
-    dark: bool,
 }
 
 impl HubView for SatelliteView {
@@ -50,7 +49,7 @@ impl HubView for SatelliteView {
     }
 
     fn dark(&self) -> bool {
-        self.dark
+        self.geometry.dark()
     }
 
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
@@ -90,13 +89,13 @@ impl SatelliteHost {
         cx: &mut App,
     ) -> Entity<HubFrame<SatelliteHost>> {
         let geometry = FrameGeometry::default();
+        geometry.set_dark(dark);
         let lists = ListsGeometry::default();
         let view = Box::new(SatelliteView {
             geometry: geometry.clone(),
             canvas_text: hub_host::canvas_text(),
             lists: lists.clone(),
             sidebar: NoLayout,
-            dark,
         });
         let satellite = cx.new(|cx| Satellite::new(view, scenario_seed, cx));
         satellite.update(cx, |satellite, cx| {

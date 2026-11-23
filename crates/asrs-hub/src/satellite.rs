@@ -341,11 +341,11 @@ impl SatelliteModel {
 
     /// `render`: one frame's command and title of the hub's tab.
     pub fn render(&mut self, command: Command, title: &JsValue) -> Result<(), TabsError> {
-        if self
-            .title
-            .as_ref()
-            .is_none_or(|old| *title != JsValue::String(old.clone()))
-        {
+        let unchanged = match &self.title {
+            Some(old) => *title == JsValue::String(old.clone()),
+            None => title.is_null(),
+        };
+        if !unchanged {
             ops::get(title, "replace")?;
             let JsValue::String(title) = title else {
                 return Err(JsError::type_error("text.replace is not a function").into());

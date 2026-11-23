@@ -43,7 +43,6 @@ struct FrameView {
     geometry: FrameGeometry,
     canvas_text: Rc<RefCell<dyn TextBackend>>,
     lists: ListsGeometry,
-    dark: bool,
     sidebar: ViewGeometry,
 }
 
@@ -61,7 +60,7 @@ impl HubView for FrameView {
     }
 
     fn dark(&self) -> bool {
-        self.dark
+        self.geometry.dark()
     }
 
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
@@ -272,13 +271,13 @@ impl HubEntityHost {
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
+        geometry.set_dark(dark);
         let sidebar_geometry = ViewGeometry::new();
         let lists = ListsGeometry::default();
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
             canvas_text: canvas_text(),
             lists: lists.clone(),
-            dark,
             sidebar: sidebar_geometry.clone(),
         });
         let mut config = HubConfig::new(view);
@@ -299,10 +298,13 @@ impl HubEntityHost {
         let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
         let handle = window.window_handle();
         let weak = hub.downgrade();
+        let scheme = geometry.clone();
         cx.subscribe(&hub, move |_, event, cx| match event {
             HubEvent::Console { warn: true, text } => eprintln!("asrs: {text}"),
             HubEvent::Exception { task, error } => eprintln!("asrs: {task}: {error}"),
-            HubEvent::Main(message) => show_context_menu(handle, weak.clone(), dark, message, cx),
+            HubEvent::Main(message) => {
+                show_context_menu(handle, weak.clone(), scheme.dark(), message, cx);
+            }
             _ => {}
         })
         .detach();
@@ -469,11 +471,6 @@ impl FrameHost for HubEntityHost {
 
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {
         self.hub.read(cx).model()
-    }
-
-    fn editable_focused(&self, cx: &App) -> bool {
-        self.sidebar_geometry.search_focused()
-            || FrameHost::hub(self, cx).sidebar().number_input_focused()
     }
 
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {

@@ -65,6 +65,23 @@ app.whenReady().then(() => {
       out("aspect " + JSON.stringify(frames));
       win.destroy();
       await wait(200);
+    } else if (request.op === "visible") {
+      const win = new BrowserWindow({ ...request.options, show: false });
+      win.loadURL("data:text/html,");
+      win.show();
+      await wait(1000);
+      const cover = new BrowserWindow({ ...request.cover, show: false });
+      cover.show();
+      await wait(2000);
+      const seen = [win.isVisible()];
+      const page = await win.webContents.executeJavaScript("document.visibilityState");
+      cover.destroy();
+      win.minimize();
+      await wait(1500);
+      seen.push(win.isVisible());
+      out("visible " + JSON.stringify([page, ...seen]));
+      win.destroy();
+      await wait(200);
     } else if (request.op === "cancelId") {
       const controller = new AbortController();
       controller.abort();
@@ -560,6 +577,41 @@ async fn aspects(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     sleep(cx, 300).await;
 }
 
+/// `isVisible()`, which decides whether main sends a satellite `render`, of a covered and of a
+/// minimized window.
+async fn visibility(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+    let rect = |x, y, width, height| Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    let build = |_: &mut Window, cx: &mut App| cx.new(|_| Blank);
+    let mut open = |uuid: &str, rect: Rect, cx: &mut AsyncApp| {
+        cx.update(|cx| windows::open_satellite(cx, uuid, SatellitePlacement::Saved(rect), build))
+            .expect("open window")
+            .0
+    };
+    let window = open("covered", rect(300.0, 300.0, 300.0, 200.0), cx);
+    sleep(cx, 1000).await;
+    let cover = open("cover", rect(150.0, 150.0, 800.0, 600.0), cx);
+    sleep(cx, 2000).await;
+    let mut ours = vec![cx.update(|cx| Windows::is_visible(cx, window))];
+    cx.update(|cx| windows::close(cx, cover));
+    let handle = cx.update(|cx| Windows::handle(cx, window)).expect("handle");
+    with_window(cx, handle, |w| w.minimize_window());
+    sleep(cx, 1500).await;
+    ours.push(cx.update(|cx| Windows::is_visible(cx, window)));
+    cx.update(|cx| windows::close(cx, window));
+    let request = r#"{"op":"visible","options":{"x":300,"y":300,"width":300,"height":200},"cover":{"x":150,"y":150,"width":800,"height":600}}"#;
+    let reply = electron.request(cx, request, "visible ").await;
+    report.check(
+        "isVisible() covered and minimized",
+        reply == format!("[\"hidden\",{},{}]", ours[0], ours[1]),
+        format!("ours {ours:?}, Electron {reply}"),
+    );
+}
+
 fn case_rect(case: &Case, origin: Option<(f64, f64)>) -> Rect {
     let (x, y) = origin.unwrap_or((140.0, 140.0));
     Rect {
@@ -897,6 +949,7 @@ fn main() {
             let mut report = Report::default();
             report.check("Electron is upstream's", version == "39.2.7", &version);
             aspects(cx, &electron, &mut report).await;
+            visibility(cx, &electron, &mut report).await;
             if std::env::args().any(|a| a == "aspects") {
                 drop(electron);
                 println!("{} failed {:?}", report.failed.len(), report.failed);

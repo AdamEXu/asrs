@@ -297,14 +297,8 @@ app.on("browser-window-created", (_event, win) => {
       target = win;
       placeWindow(win);
     }
-    // Windows of other apps can cover a satellite, which stops its frames and makes main skip its
-    // updates (isVisible() is false while a window is covered).
-    if (event.isMainFrame && /\/www\/satellite\.html$/.test(new URL(event.url).pathname)) {
-      let shown = false;
-      win.webContents.setBackgroundThrottling(false);
-      win.once("show", () => (shown = true));
-      win.isVisible = () => shown;
-    }
+    // Windows of other apps can cover a satellite, which hides its page and stops its frames.
+    if (event.isMainFrame && /\/www\/satellite\.html$/.test(new URL(event.url).pathname)) win.webContents.setBackgroundThrottling(false);
   });
 });
 
