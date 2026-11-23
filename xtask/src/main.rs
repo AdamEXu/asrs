@@ -17,6 +17,7 @@ mod host;
 mod layout;
 mod libm;
 mod licenses;
+mod mutate;
 mod oracle;
 mod pack;
 mod parity;
@@ -48,6 +49,7 @@ commands:
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
   host      Windows and Linux render hosts: start, sync, run, fetch, check (see `cargo xtask host`)
   gpui      vendored gpui-pre patch and parity feature checks (see `cargo xtask gpui`)
+  mutate    mutation testing of port files or recorded vectors (see `cargo xtask mutate`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
   pixel     section 2.5 pixel gates between upstream and port runs, port scenarios, selftest
             (see `cargo xtask pixel`)
@@ -71,6 +73,7 @@ fn main() -> ExitCode {
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         Some("gpui") => gpui::run(&args[1..]),
+        Some("mutate") => mutate::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
         Some("pixel") => pixel::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
