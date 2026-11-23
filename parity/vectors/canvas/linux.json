@@ -1,4 +1,69 @@
 {
+  "electron": "39.2.7",
+  "chrome": "142.0.7444.235",
+  "platform": "linux",
+  "arch": "arm64",
+  "osRelease": "7.0.0-38-generic",
+  "generator": "009b37b0d9cfaf3c",
+  "lut": {
+    "file": "lut-linux.bin",
+    "content": "4b0396f48bb8d8e9"
+  },
+  "measure": {
+    "file": "measure-linux.jsonl.zst",
+    "cases": 7656,
+    "content": "9e69e7202dc35365"
+  },
+  "scenes": [
+    {
+      "scene": "text-light-1x",
+      "content": "c1f3a50cdb4f22f9"
+    },
+    {
+      "scene": "text-dark-1x",
+      "content": "d313d858c29478f7"
+    },
+    {
+      "scene": "text-light-2x",
+      "content": "d0e4a34162b85b8d"
+    },
+    {
+      "scene": "textstyles-light-1x",
+      "content": "00a284894a6deaf1"
+    },
+    {
+      "scene": "textstyles-dark-1x",
+      "content": "5a4f0bd6e4984969"
+    },
+    {
+      "scene": "textstyles-light-2x",
+      "content": "6d58b504939804ec"
+    },
+    {
+      "scene": "textemoji-light-1x",
+      "content": "1cfa7b2060fb635a"
+    },
+    {
+      "scene": "textemoji-dark-1x",
+      "content": "4783396e17a5d314"
+    },
+    {
+      "scene": "textemoji-light-2x",
+      "content": "c706274000a7d35d"
+    },
+    {
+      "scene": "gradienttext-light-1x",
+      "content": "a951d22afe3739ab"
+    },
+    {
+      "scene": "transforms-1x",
+      "content": "5bbee3498e405acf"
+    },
+    {
+      "scene": "transforms-2x",
+      "content": "bc11e0a15c5a1bb1"
+    }
+  ],
   "host": {
     "os": "linux",
     "arch": "aarch64",
@@ -58,7 +123,13 @@
       "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf": "3a3c502eeff669a231549e80df9f7c49de109bafe303170409e905d0b31a38fe",
       "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf": "395fa5ab8d40c8eba390ced528744ea75a7f69aabf3e68b6f925ca0e39a27370",
       "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf": "626655e94dd82f3f42549daf995c921b0915fa8ab1f4b839559e8892ea41d240",
-      "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477"
+      "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Oblique.ttf": "3d7955616e69721f7edb8e1b7a580f8fbd7d737111c6b54266ddc1d9ef13202f",
+      "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf": "4659bc0c58c5028dd488ec928d41d9265db43d9b669fc14ca8b0832daca7b144",
+      "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf": "3973aa5054fb467dd5627245d3dc82e37bf16fe075756156a570455871351582",
+      "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf": "830c5fa600505fb4c1a271b4271c53c44bae43f492b2a240d0e98a3a7a380121",
+      "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf": "c80fa7f2ffa0e01d4d8dcd6a6d1e43eda665222d1b4db597dde1174c456006cf",
+      "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf": "705903ae1382f0150f115d6f10a30f5b2f3d6ade649c474afe6366c39174fb65"
     }
   }
 }

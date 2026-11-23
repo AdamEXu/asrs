@@ -102,8 +102,7 @@ pub fn split(size: f32, skew: bool, post: &M2) -> Option<Split> {
         sy: size,
     };
     let total = post.concat(&local);
-    let skewed_or_flipped =
-        total.kx != 0.0 || total.ky != 0.0 || total.sx < 0.0 || total.sy < 0.0;
+    let skewed_or_flipped = total.kx != 0.0 || total.ky != 0.0 || total.sx < 0.0 || total.sy < 0.0;
     let upright = if skewed_or_flipped {
         let (x, y) = total.map(1.0, 0.0);
         givens(x, y).concat(&total)

@@ -20,7 +20,6 @@ pub struct Cached<B> {
     bounds: HashMap<Glyph, Option<Bounds>>,
     masks: HashMap<MaskKey, Option<Arc<Mask>>>,
     lcd_masks: HashMap<MaskKey, Option<Arc<LcdMask>>>,
-    device_scale: f32,
 }
 
 impl<B: TextBackend> Cached<B> {
@@ -34,7 +33,6 @@ impl<B: TextBackend> Cached<B> {
             bounds: HashMap::new(),
             masks: HashMap::new(),
             lcd_masks: HashMap::new(),
-            device_scale: 1.0,
         }
     }
 
@@ -149,12 +147,10 @@ impl<B: TextBackend> TextBackend for Cached<B> {
         mask
     }
 
-    fn set_device_scale(&mut self, scale: f32) {
-        if scale == self.device_scale {
-            return;
+    fn set_device_scale(&mut self, scale: f32) -> bool {
+        if !self.backend.set_device_scale(scale) {
+            return false;
         }
-        self.device_scale = scale;
-        self.backend.set_device_scale(scale);
         self.shapes.clear();
         self.runs.clear();
         self.metrics.clear();
@@ -162,5 +158,6 @@ impl<B: TextBackend> TextBackend for Cached<B> {
         self.bounds.clear();
         self.masks.clear();
         self.lcd_masks.clear();
+        true
     }
 }

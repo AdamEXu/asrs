@@ -213,6 +213,7 @@ impl Breaker {
         tab_size: u8,
         scale: f32,
     ) -> Vec<Line> {
+        backend.set_device_scale(scale);
         let mut lines = Vec::new();
         let mut paragraph: Vec<Segment> = Vec::new();
         let block = (available, tab_size, scale);
@@ -358,5 +359,6 @@ pub fn glyphs(
     text: &str,
     scale: f32,
 ) -> Vec<ShapedGlyph> {
+    backend.set_device_scale(scale);
     backend.shape(font, &normalize_space(text), scale).glyphs
 }

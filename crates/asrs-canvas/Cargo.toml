@@ -26,5 +26,8 @@ yeslogic-fontconfig-sys = "=6.0.1"
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+sha2 = "=0.10.9"
+
 [lints]
 workspace = true

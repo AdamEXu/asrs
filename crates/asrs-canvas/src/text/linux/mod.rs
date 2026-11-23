@@ -118,16 +118,19 @@ impl Fontations {
         loaded
     }
 
-    /// The family and face of a font, with Chromium's default families for the generic names and
-    /// `GetLastResortFallbackFont` behind them.
+    /// The family and face of a font: Chromium's default family for a generic name or the named
+    /// one, Blink's alternate name for it, then `GetLastResortFallbackFont`.
     fn resolve(&mut self, spec: &FontSpec) -> Option<(String, Match, usize)> {
-        let family = match spec.family {
-            Family::System => self.system_family.clone(),
-            Family::SansSerif | Family::Arial | Family::HelveticaNeue => "Arial".to_owned(),
-            Family::Serif => "Times New Roman".to_owned(),
-            Family::Monospace => "Monospace".to_owned(),
+        let system = self.system_family.clone();
+        let families = match spec.family {
+            Family::System => [system.as_str(), ""],
+            Family::SansSerif | Family::Arial | Family::HelveticaNeue => ["Arial", "Helvetica"],
+            Family::Serif => ["Times New Roman", "Times"],
+            Family::Monospace => ["Monospace", ""],
+            Family::Courier => ["Courier", "Courier New"],
         };
-        for family in [family.as_str(), "Sans", "Serif", ""] {
+        let named = families.into_iter().filter(|f| !f.is_empty());
+        for family in named.chain(["Sans", "Serif", ""]) {
             if let Some(found) = fontconfig::match_family(family, spec.weight, spec.italic)
                 && let Some(typeface) = self.typeface(&found)
             {
@@ -270,10 +273,7 @@ impl Fontations {
             });
         }
         if phase != (0.0, 0.0) {
-            path = path.transformed(&Affine::translation(
-                f64::from(phase.0),
-                f64::from(phase.1),
-            ));
+            path = path.transformed(&Affine::translation(f64::from(phase.0), f64::from(phase.1)));
         }
         Some(path)
     }
@@ -291,26 +291,24 @@ impl Fontations {
         scaler::gray_mask(&path).map(Arc::new)
     }
 
-    fn color_mask(
-        &self,
-        glyph: Glyph,
-        size: f32,
-        post: &M2,
-        phase: (f32, f32),
-    ) -> Option<Mask> {
+    fn color_mask(&self, glyph: Glyph, size: f32, post: &M2, phase: (f32, f32)) -> Option<Mask> {
         let face = &self.faces[glyph.face as usize];
         let split = matrix::split(size, face.skew, post)?;
         let font = &self.typefaces[face.typeface].font;
         let strike = bitmap::strike(font, glyph.id, split.size)?;
         let (width, height) = strike.dimensions()?;
-        let (matrix, translate) = strike.placement(split.size, &split.remaining, phase);
-        let [l, t, r, b] = bitmap::bounds(width, height, &matrix, translate);
+        let (matrix, (x, y)) = strike.placement(split.size, &split.remaining);
+        let moved = (x + phase.0, y + phase.1);
+        let [l, t, r, b] = bitmap::bounds(width, height, &matrix, moved);
         let (left, top) = (l.floor() as i32, t.floor() as i32);
         let (w, h) = (
             (r.ceil() as i32 - left) as u32,
             (b.ceil() as i32 - top) as u32,
         );
-        let local = (translate.0 - left as f32, translate.1 - top as f32);
+        // `generatePngImage` moves the glyph by its phase before the remaining matrix, where
+        // `generateMetrics` moves its bounds after it.
+        let (px, py) = split.remaining.map(phase.0, phase.1);
+        let local = (x + px - left as f32, y + py - top as f32);
         Some(Mask {
             left,
             top,
@@ -329,8 +327,7 @@ impl Fontations {
             let split = matrix::split(size, face.skew, &M2::IDENTITY)?;
             if let Some(strike) = bitmap::strike(&typeface.font, glyph.id, split.size) {
                 let (width, height) = strike.dimensions()?;
-                let (matrix, translate) =
-                    strike.placement(split.size, &split.remaining, (0.0, 0.0));
+                let (matrix, translate) = strike.placement(split.size, &split.remaining);
                 let [l, t, r, b] = bitmap::bounds(width, height, &matrix, translate);
                 return Some([l.floor(), t.floor(), r.ceil(), b.ceil()]);
             }
@@ -400,15 +397,8 @@ impl Fontations {
         let mut starts: Vec<usize> = glyphs.iter().map(|g| g.cluster).collect();
         starts.sort_unstable();
         starts.dedup();
-        let end_of = |cluster: usize| {
-            starts
-                .iter()
-                .copied()
-                .find(|&s| s > cluster)
-                .unwrap_or(to)
-        };
-        let is_missing =
-            |cluster: usize| glyphs.iter().any(|g| g.cluster == cluster && g.id == 0);
+        let end_of = |cluster: usize| starts.iter().copied().find(|&s| s > cluster).unwrap_or(to);
+        let is_missing = |cluster: usize| glyphs.iter().any(|g| g.cluster == cluster && g.id == 0);
         let mut missing: Vec<(usize, usize)> = Vec::new();
         let mut run: Option<ShapedRun> = None;
         for &cluster in &starts {
@@ -507,10 +497,7 @@ impl Fontations {
         let mut runs = Vec::new();
         let clusters = emoji_clusters(word, 0, units);
         for segment in clusters.chunk_by(|a, b| a.2 == b.2) {
-            let range = (
-                bytes[&segment[0].0],
-                bytes[&segment[segment.len() - 1].1],
-            );
+            let range = (bytes[&segment[0].0], bytes[&segment[segment.len() - 1].1]);
             self.shape_segment(spec, primary, word, range, segment[0].2, &mut runs);
         }
         runs.sort_by_key(|r| r.start);
@@ -589,13 +576,14 @@ impl TextBackend for Fontations {
 
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
         let size = self.faces.get(glyph.face as usize)?.size;
-        let [left, top, right, bottom] = if self.linear() {
+        let bounds = if self.linear() {
             let scale = size / CANONICAL_SIZE;
-            self.strike_bounds(glyph, CANONICAL_SIZE, false)?
-                .map(|v| v * scale)
+            self.strike_bounds(glyph, CANONICAL_SIZE, false)
+                .map(|b| b.map(|v| v * scale))
         } else {
-            self.strike_bounds(glyph, size, true)?
+            self.strike_bounds(glyph, size, true)
         };
+        let [left, top, right, bottom] = bounds.unwrap_or_default();
         Some(Bounds {
             left,
             top,
@@ -641,7 +629,9 @@ impl TextBackend for Fontations {
         scaler::lcd_mask(&path).map(Arc::new)
     }
 
-    fn set_device_scale(&mut self, scale: f32) {
+    fn set_device_scale(&mut self, scale: f32) -> bool {
+        let changed = (scale > 1.0) != self.linear();
         self.device_scale = scale;
+        changed
     }
 }

@@ -1,4 +1,4 @@
-// Ported from Blink, Skia and HarfBuzz, Chromium m142 (BSD-3-Clause and MIT, Copyright The Chromium Authors, Google Inc. and the HarfBuzz authors). See THIRD_PARTY_NOTICES.md.
+// Ported from Blink and Skia, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors and Google Inc.). See THIRD_PARTY_NOTICES.md.
 
 use icu_properties::CodePointSetData;
 use icu_properties::props::EmojiPresentation;

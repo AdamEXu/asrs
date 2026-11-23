@@ -4,9 +4,9 @@ pub mod dom;
 pub mod font;
 pub mod inline;
 pub mod layout;
-pub mod lut;
 #[cfg(target_os = "linux")]
 pub mod linux;
+pub mod lut;
 #[cfg(target_os = "macos")]
 mod mac;
 pub mod metrics;
@@ -135,10 +135,12 @@ pub trait TextBackend {
         None
     }
 
-    /// The display scale the app runs at. Chromium turns hinting off for every font, canvas fonts
-    /// included, on a Linux display scaled above 1.
-    fn set_device_scale(&mut self, scale: f32) {
+    /// The display scale the app runs at, returning whether it changes what the backend answers.
+    /// Chromium turns hinting off for every font, canvas fonts included, on a Linux display scaled
+    /// above 1.
+    fn set_device_scale(&mut self, scale: f32) -> bool {
         let _ = scale;
+        false
     }
 }
 
@@ -186,8 +188,8 @@ impl<T: TextBackend + ?Sized> TextBackend for Box<T> {
         (**self).raw_lcd_mask(glyph, scale, x_scale, phase)
     }
 
-    fn set_device_scale(&mut self, scale: f32) {
-        (**self).set_device_scale(scale);
+    fn set_device_scale(&mut self, scale: f32) -> bool {
+        (**self).set_device_scale(scale)
     }
 }
 

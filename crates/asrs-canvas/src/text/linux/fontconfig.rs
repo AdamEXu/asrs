@@ -10,9 +10,9 @@ use std::ptr;
 use fontconfig_sys::{
     FcBool, FcCharSet, FcCharSetHasChar, FcConfig, FcConfigSubstitute, FcDefaultSubstitute,
     FcFontMatch, FcFontSet, FcFontSetDestroy, FcFontSort, FcMatchPattern, FcPattern,
-    FcPatternAddBool, FcPatternAddDouble, FcPatternAddInteger, FcPatternAddString,
-    FcPatternCreate, FcPatternDestroy, FcPatternGetBool, FcPatternGetCharSet,
-    FcPatternGetInteger, FcPatternGetString, FcResult, FcResultMatch,
+    FcPatternAddBool, FcPatternAddDouble, FcPatternAddInteger, FcPatternAddString, FcPatternCreate,
+    FcPatternDestroy, FcPatternGetBool, FcPatternGetCharSet, FcPatternGetInteger,
+    FcPatternGetString, FcResult, FcResultMatch,
 };
 
 const FAMILY: &CStr = c"family";
@@ -176,8 +176,8 @@ impl FontSet {
     }
 }
 
-/// SAFETY for the getters below: `pattern` is a live pattern, and the strings and charsets they
-/// read stay owned by it.
+// SAFETY for the getters below: `pattern` is a live pattern, and the strings and charsets they
+// read stay owned by it.
 fn get_string(pattern: *mut FcPattern, key: &CStr, n: c_int) -> Option<String> {
     let mut value = ptr::null_mut();
     unsafe {
@@ -315,7 +315,10 @@ pub fn render_style(family: &str, size: f32, bold: bool, italic: bool) -> Render
     }
     pattern.double(PIXEL_SIZE, f64::from(size.trunc()));
     pattern.integer(STYLE_SLANT, if italic { SLANT_ITALIC } else { SLANT_ROMAN });
-    pattern.integer(STYLE_WEIGHT, if bold { WEIGHT_BOLD } else { WEIGHT_REGULAR });
+    pattern.integer(
+        STYLE_WEIGHT,
+        if bold { WEIGHT_BOLD } else { WEIGHT_REGULAR },
+    );
     pattern.substitute();
     let Some(found) = pattern.font_match() else {
         return style;
@@ -379,7 +382,6 @@ impl Fallback {
         Some(list)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

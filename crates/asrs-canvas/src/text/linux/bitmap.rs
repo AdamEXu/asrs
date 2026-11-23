@@ -101,11 +101,10 @@ impl Strike<'_> {
 
     /// The matrix from strike pixels to device pixels around the glyph origin, for text of
     /// `size` px under `remaining`, and its translation.
-    pub fn placement(&self, size: f32, remaining: &M2, phase: (f32, f32)) -> (M2, (f32, f32)) {
+    pub fn placement(&self, size: f32, remaining: &M2) -> (M2, (f32, f32)) {
         let scale = size / self.ppem;
         let matrix = remaining.pre_scale(scale, scale);
-        let (x, y) = matrix.map(self.bearing.0, -self.bearing.1);
-        (matrix, (x + phase.0, y + phase.1))
+        (matrix, matrix.map(self.bearing.0, -self.bearing.1))
     }
 }
 
@@ -138,8 +137,8 @@ pub fn draw(
     height: u32,
 ) -> Option<Vec<u8>> {
     let (iw, ih) = (image.width(), image.height());
-    let det = f64::from(matrix.sx) * f64::from(matrix.sy)
-        - f64::from(matrix.kx) * f64::from(matrix.ky);
+    let det =
+        f64::from(matrix.sx) * f64::from(matrix.sy) - f64::from(matrix.kx) * f64::from(matrix.ky);
     if det == 0.0 || !det.is_finite() {
         return None;
     }
@@ -153,12 +152,10 @@ pub fn draw(
         let (x, y) = inverse.map(tx, ty);
         (-x, -y)
     };
-    let scale = (
-        inverse.sx.hypot(inverse.ky),
-        inverse.kx.hypot(inverse.sy),
-    );
-    let level = -(1.0 / scale.0 * (1.0 / scale.1)).sqrt().log2();
-    let mut level = if level > 0.0 { (level + 0.5).floor() as u32 } else { 0 };
+    let scale = (inverse.sx.hypot(inverse.ky), inverse.kx.hypot(inverse.sy));
+    let mean = (1.0 / scale.0 * (1.0 / scale.1)).sqrt();
+    let level = (-mean.log2() - 0.5).max(0.0);
+    let mut level = (level + 0.5).floor() as u32;
     let mut pixels = image;
     while level > 0 && (pixels.width() > 1 || pixels.height() > 1) {
         pixels = downsample(&pixels)?;
@@ -204,9 +201,8 @@ pub fn draw(
             let (v0, v1, wy) = pack(fy, ph);
             let i = ((y as u32 * width) as usize + x as usize) * 4;
             for c in 0..4 {
-                let row = |v: i32| {
-                    u32::from(tap(u0, v)[c]) * (16 - wx) + u32::from(tap(u1, v)[c]) * wx
-                };
+                let row =
+                    |v: i32| u32::from(tap(u0, v)[c]) * (16 - wx) + u32::from(tap(u1, v)[c]) * wx;
                 out[i + c] = ((row(v0) * (16 - wy) + row(v1) * wy) >> 8) as u8;
             }
             fx += dx;

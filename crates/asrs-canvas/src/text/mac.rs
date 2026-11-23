@@ -158,7 +158,7 @@ fn create_font(spec: &FontSpec) -> Face {
         family => {
             let name = match family {
                 Family::SansSerif => "Helvetica",
-                Family::Monospace => "Courier",
+                Family::Monospace | Family::Courier => "Courier",
                 Family::Arial => "Arial",
                 Family::HelveticaNeue => "Helvetica Neue",
                 _ => "Times",

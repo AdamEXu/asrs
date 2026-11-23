@@ -86,11 +86,7 @@ impl OutlinePen for Pen {
     }
 
     fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        let (c0, c1, p) = (
-            Pen::point(cx0, cy0),
-            Pen::point(cx1, cy1),
-            Pen::point(x, y),
-        );
+        let (c0, c1, p) = (Pen::point(cx0, cy0), Pen::point(cx1, cy1), Pen::point(x, y));
         if !(self.is_current(c0) && self.is_current(c1) && self.is_current(p)) {
             self.going_to(p);
             self.path.cubic_to(c0, c1, p);

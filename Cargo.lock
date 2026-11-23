@@ -369,6 +369,7 @@ dependencies = [
  "icu_properties 2.4.0",
  "png 0.18.1",
  "rustybuzz",
+ "sha2 0.10.9",
  "skrifa 0.37.0",
  "tiny-skia",
  "yeslogic-fontconfig-sys",
