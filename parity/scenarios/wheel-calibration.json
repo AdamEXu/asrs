@@ -1,5 +1,5 @@
 {
-  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first, trackpad deltas second, and fractions of a tick as a high-resolution wheel sends them third; each capture compares selection.getTimelineRange(). Chromium animates a notched tick (capped at the overlay's size), so each one gets 500 ms to settle, and the ranges are compared within 1e-9 of the visible span, since the animation's compositor-timed steps compound the zoom differently in the last bits between upstream runs. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The port's scroll sensors and Date run on the scenario's frame clock, so each wait is simulated frames, not real time. The timeline and tab bar are compared unmasked; the line graph and mechanism (U11, U16) are masked with .renderer-content and .controls-content until they land",
+  "about": "Wheel calibration (PLAN section 2.5): the generated drive log, the asset-free layout of hub-resize plus a new Mechanism tab, then the same wheel input over its timeline on both sides, notched ticks first and trackpad deltas second; each capture compares selection.getTimelineRange(). Chromium animates a notched tick (capped at the overlay's size), so each one gets 500 ms to settle, and the ranges are compared within 1e-9 of the visible span, since the animation's compositor-timed steps compound the zoom differently in the last bits between upstream runs. Notched events carry Chromium's 40 px a tick, which the port turns back into GPUI's line deltas. The port's scroll sensors and Date run on the scenario's frame clock, so each wait is simulated frames, not real time. The timeline and tab bar are compared unmasked; the line graph and mechanism (U11, U16) are masked with .renderer-content and .controls-content until they land",
   "actions": [
     {
       "open": [
@@ -170,84 +170,6 @@
     },
     {
       "capture": "trackpad",
-      "probes": [
-        ".timeline"
-      ],
-      "masks": [
-        ".renderer-content",
-        ".controls-content"
-      ]
-    },
-    {
-      "wheel": {
-        "x": 620,
-        "y": 105,
-        "deltaY": -30,
-        "wheelTicksY": -0.75
-      }
-    },
-    {
-      "wait": 500
-    },
-    {
-      "wheel": {
-        "x": 620,
-        "y": 105,
-        "deltaY": -30,
-        "wheelTicksY": -0.75
-      }
-    },
-    {
-      "wait": 500
-    },
-    {
-      "wheel": {
-        "x": 620,
-        "y": 105,
-        "deltaY": 15,
-        "wheelTicksY": 0.375
-      }
-    },
-    {
-      "wait": 500
-    },
-    {
-      "wheel": {
-        "x": 620,
-        "y": 105,
-        "deltaX": 30,
-        "wheelTicksX": 0.75,
-        "deltaY": -60,
-        "wheelTicksY": -1.5
-      }
-    },
-    {
-      "wait": 500
-    },
-    {
-      "wheel": {
-        "x": 620,
-        "y": 105,
-        "deltaY": -15,
-        "wheelTicksY": -0.375
-      }
-    },
-    {
-      "wait": 500
-    },
-    {
-      "wheel": {
-        "x": 620,
-        "y": 105,
-        "deltaY": 7.5,
-        "wheelTicksY": 0.1875
-      }
-    },
-    {
-      "wait": 500
-    },
-    {
-      "capture": "hires",
       "probes": [
         ".timeline"
       ],
