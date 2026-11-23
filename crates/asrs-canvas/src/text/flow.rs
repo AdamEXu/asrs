@@ -7,7 +7,7 @@
 
 use super::TextBackend;
 use super::dom::{
-    Lu, Style, align_offset, boundaries, extend_with_fallbacks, line_leading, line_metrics,
+    LineHeight, Lu, Style, align_offset, boundaries, extend_with_fallbacks, line_leading, line_metrics,
     lu_ceil, utf16_len,
 };
 use super::layout::normalize_space;
@@ -141,14 +141,17 @@ pub fn layout(
             pieces: Vec::new(),
         };
         let (mut above, mut below) = strut;
-        for (item, from, to) in joined.parts(range.start, content(range.end)) {
+        let end = content(range.end);
+        let text = &joined.text[range.start..end];
+        let shaped = backend.shape_run(&style.font, &normalize_space(text), scale);
+        if style.line_height == LineHeight::Normal {
+            (above, below) = extend_with_fallbacks(backend, &shaped.glyphs, scale, (above, below));
+        }
+        let at = boundaries(&shaped, utf16_len(text));
+        for (item, from, to) in joined.parts(range.start, end) {
             let text = &joined.text[from..to];
-            let shaped = backend.shape(&style.font, &normalize_space(text), scale);
-            let width = lu_ceil(shaped.width * scale);
-            if style.line_height == super::dom::LineHeight::Normal {
-                (above, below) =
-                    extend_with_fallbacks(backend, &shaped.glyphs, scale, (above, below));
-            }
+            let first = utf16_len(&joined.text[range.start..from]);
+            let width = lu_ceil((at[first + utf16_len(text)] - at[first]) * scale);
             line.pieces.push(Piece {
                 item,
                 text: text.to_owned(),
@@ -186,7 +189,7 @@ fn line_ranges(
     let Some(available) = available.filter(|_| len > 0) else {
         return (len > 0).then_some(0..len).into_iter().collect();
     };
-    let shaped = backend.shape(&style.font, &normalize_space(text), scale);
+    let shaped = backend.shape_run(&style.font, &normalize_space(text), scale);
     let at = boundaries(&shaped, utf16_len(text));
     let mut units = vec![0usize; len + 1];
     let mut count = 0;

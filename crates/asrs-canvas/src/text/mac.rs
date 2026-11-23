@@ -510,10 +510,30 @@ impl CoreText {
         overrides
     }
 
-    /// One word as HarfBuzz shapes it in Chromium: CoreText's glyphs and kerning, with each
+    fn shape_pieces<'a>(
+        &mut self,
+        spec: &FontSpec,
+        pieces: impl IntoIterator<Item = &'a str>,
+        zoom: f32,
+    ) -> Shaped {
+        let mut glyphs = Vec::new();
+        let mut width = 0.0f32;
+        if spec.size <= 0.0 {
+            return Shaped { glyphs, width };
+        }
+        let primary = self.primary(spec);
+        let mut start = 0;
+        for piece in pieces {
+            width += self.shape_piece(spec, primary, piece, zoom, width, start, &mut glyphs);
+            start += piece.encode_utf16().count() as u32;
+        }
+        Shaped { glyphs, width }
+    }
+
+    /// One piece as HarfBuzz shapes it in Chromium: CoreText's glyphs and kerning, with each
     /// advance taken from the scaler and truncated to 16.16, accumulated in `f32`.
     #[allow(clippy::too_many_arguments)]
-    fn shape_word(
+    fn shape_piece(
         &mut self,
         spec: &FontSpec,
         primary: u32,
@@ -677,21 +697,11 @@ impl CoreText {
 
 impl TextBackend for CoreText {
     fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
-        if spec.size <= 0.0 {
-            return Shaped {
-                glyphs: Vec::new(),
-                width: 0.0,
-            };
-        }
-        let primary = self.primary(spec);
-        let mut glyphs = Vec::new();
-        let mut width = 0.0f32;
-        let mut start = 0;
-        for word in words(text) {
-            width += self.shape_word(spec, primary, word, zoom, width, start, &mut glyphs);
-            start += word.encode_utf16().count() as u32;
-        }
-        Shaped { glyphs, width }
+        self.shape_pieces(spec, words(text), zoom)
+    }
+
+    fn shape_run(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        self.shape_pieces(spec, [text], zoom)
     }
 
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {

@@ -13,7 +13,7 @@ type MaskKey = (Glyph, [u64; 4], (u8, u8));
 /// wholesale when a table outgrows its cap, so memory stays bounded across long sessions.
 pub struct Cached<B> {
     backend: B,
-    shapes: HashMap<(FontKey, u32, String), Shaped>,
+    shapes: HashMap<(FontKey, u32, bool, String), Shaped>,
     metrics: HashMap<FontKey, FontMetrics>,
     fallback_metrics: HashMap<(Glyph, u32), Option<FontMetrics>>,
     bounds: HashMap<Glyph, Option<Bounds>>,
@@ -30,6 +30,23 @@ impl<B: TextBackend> Cached<B> {
             bounds: HashMap::new(),
             masks: HashMap::new(),
         }
+    }
+
+    fn shaped(&mut self, font: &FontSpec, text: &str, zoom: f32, run: bool) -> Shaped {
+        let key = (font.key(), zoom.to_bits(), run, text.to_owned());
+        if let Some(shaped) = self.shapes.get(&key) {
+            return shaped.clone();
+        }
+        if self.shapes.len() >= MAX_SHAPES {
+            self.shapes.clear();
+        }
+        let shaped = if run {
+            self.backend.shape_run(font, text, zoom)
+        } else {
+            self.backend.shape(font, text, zoom)
+        };
+        self.shapes.insert(key, shaped.clone());
+        shaped
     }
 
     fn mask(
@@ -51,16 +68,11 @@ impl<B: TextBackend> Cached<B> {
 
 impl<B: TextBackend> TextBackend for Cached<B> {
     fn shape(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped {
-        let key = (font.key(), zoom.to_bits(), text.to_owned());
-        if let Some(shaped) = self.shapes.get(&key) {
-            return shaped.clone();
-        }
-        if self.shapes.len() >= MAX_SHAPES {
-            self.shapes.clear();
-        }
-        let shaped = self.backend.shape(font, text, zoom);
-        self.shapes.insert(key, shaped.clone());
-        shaped
+        self.shaped(font, text, zoom, false)
+    }
+
+    fn shape_run(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        self.shaped(font, text, zoom, true)
     }
 
     fn metrics(&mut self, font: &FontSpec) -> FontMetrics {

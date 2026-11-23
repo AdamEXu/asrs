@@ -260,7 +260,7 @@ pub(super) fn line_leading(line_height: Lu, ascent: Lu, descent: Lu) -> Lu {
 /// `text` shaped in `style`'s font, with `letter-spacing` added after every character as
 /// Blink's `ShapeResultSpacing` does, the last one included.
 fn shape(backend: &mut dyn TextBackend, style: &Style, text: &str, scale: f32) -> Shaped {
-    let mut shaped = backend.shape(&style.font, text, scale);
+    let mut shaped = backend.shape_run(&style.font, text, scale);
     if style.letter_spacing != 0.0 {
         let mut chars_before = vec![0u32; utf16_len(text) + 1];
         let mut count = 0;
