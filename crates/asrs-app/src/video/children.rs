@@ -139,19 +139,34 @@ fn start(command: &str, args: &[JsString], cwd: Option<&str>) -> io::Result<Chil
     command.spawn()
 }
 
+/// Emits whole lines, each ended by a CR or an LF. ffmpeg writes a line in many small pieces, and
+/// the processor, like upstream, looks for a stream's size and rate, or a report's `frame=`, at
+/// once in one chunk: Node's event loop is slow enough to find the pieces joined, a blocking read
+/// is not.
 fn pump(
     mut pipe: impl Read + Send + 'static,
     emit: impl Fn(Vec<u8>) + Send + 'static,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let mut buffer = vec![0; CHUNK];
+        let mut line = Vec::new();
         loop {
             match pipe.read(&mut buffer) {
                 Ok(0) => break,
-                Ok(n) => emit(buffer[..n].to_vec()),
+                Ok(n) => {
+                    for part in buffer[..n].split_inclusive(|b| matches!(b, b'\r' | b'\n')) {
+                        line.extend_from_slice(part);
+                        if matches!(line.last(), Some(b'\r' | b'\n')) {
+                            emit(std::mem::take(&mut line));
+                        }
+                    }
+                }
                 Err(e) if e.kind() == ErrorKind::Interrupted => {}
                 Err(_) => break,
             }
+        }
+        if !line.is_empty() {
+            emit(line);
         }
     })
 }
@@ -256,6 +271,24 @@ mod tests {
             signal: None,
         };
         assert_eq!(events.last(), Some(&close));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lines_written_in_pieces_arrive_whole() {
+        let script = "for p in '320x180, ' '25 fps, ' 'x\nframe= 1\r' 'frame= 2\rtail'; do \
+                      printf \"$p\" >&2; sleep 0.05; done";
+        let lines: Vec<String> = run("/bin/sh", &["-c", script])
+            .into_iter()
+            .filter_map(|e| match e {
+                VideoEvent::Stderr { data, .. } => String::from_utf8(data).ok(),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            ["320x180, 25 fps, x\n", "frame= 1\r", "frame= 2\r", "tail"]
+        );
     }
 
     #[cfg(unix)]
