@@ -443,6 +443,9 @@
       "prompt": null
     },
     {
+      "wait": 500
+    },
+    {
       "appMenu": [
         "Settings...",
         "Show Preferences..."

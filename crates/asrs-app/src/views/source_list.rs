@@ -309,7 +309,7 @@ fn hand_icon() -> IconSource {
 
 /// A symbol without its 24 px intrinsic size, so an `<img>` sized by CSS draws it across its
 /// width at its aspect ratio.
-fn ratio_symbol(name: &str) -> IconSource {
+pub(super) fn ratio_symbol(name: &str) -> IconSource {
     let svg = std::str::from_utf8(symbol(name).svg()).unwrap_or_default();
     IconSource::Svg(
         svg.replacen(r#" height="24px""#, "", 1)

@@ -6,12 +6,13 @@ pub mod gpui {
         Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, Corners, CursorStyle, DispatchPhase,
         Div, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, Global, Hsla,
         InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, KeyboardButton, Keystroke,
-        Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-        Pixels, PlatformInput, Point, Render, RenderImage, Result, ScrollDelta, ScrollEvent,
-        ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Styled, Subscription,
-        Task, TitlebarOptions, TouchPhase, WeakEntity, Window, WindowBackgroundAppearance,
-        WindowBounds, WindowHandle, WindowKind, WindowOptions, anchored, application, canvas,
-        deferred, div, fill, linear_color_stop, linear_gradient, point, px, rgb, rgba, size,
+        Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent,
+        ParentElement, Pixels, PlatformInput, Point, Render, RenderImage, Result, ScrollDelta,
+        ScrollEvent, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Styled,
+        Subscription, Task, TitlebarOptions, TouchPhase, WeakEntity, Window,
+        WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions,
+        anchored, application, canvas, deferred, div, fill, linear_color_stop, linear_gradient,
+        point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
     pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};

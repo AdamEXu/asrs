@@ -15,6 +15,7 @@ pub mod msaa;
 pub mod path;
 pub mod pixels;
 pub mod raster;
+pub mod raster_clip;
 pub mod scan;
 pub mod skpath;
 pub mod stroke;

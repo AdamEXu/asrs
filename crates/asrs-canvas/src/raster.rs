@@ -18,6 +18,7 @@ use crate::gradient;
 use crate::hairline;
 use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
+use crate::raster_clip::RasterClip;
 use crate::scan::{self, Blend, Coverage};
 use crate::skpath::SkPath;
 use crate::stroke;
@@ -77,6 +78,7 @@ struct State {
     align: String,
     baseline: String,
     smoothing: bool,
+    clip: Option<RasterClip>,
 }
 
 impl Default for State {
@@ -96,6 +98,7 @@ impl Default for State {
             align: "start".to_owned(),
             baseline: "alphabetic".to_owned(),
             smoothing: true,
+            clip: None,
         }
     }
 }
@@ -453,6 +456,15 @@ impl<'a> Raster<'a> {
                     self.set_transform(self.state.transform.then(&Affine::translation(x, y)));
                 }
             }
+            Call::ResetTransform => self.set_transform(Affine::IDENTITY),
+            Call::SetTransform(m) => {
+                if finite(m) {
+                    self.set_transform(Affine::IDENTITY);
+                    let [a, b, c, d, e, f] = m.map(|v| f64::from(clamp32(v)));
+                    self.set_transform(Affine { a, b, c, d, e, f });
+                }
+            }
+            Call::Clip => self.clip_current_path(),
             Call::BeginPath => {
                 self.path = Path::new();
                 self.fast = Fast::None;
@@ -547,7 +559,8 @@ impl<'a> Raster<'a> {
                     );
                 }
             }
-            Call::Fill => self.fill_current_path(),
+            Call::Fill => self.fill_current_path(false),
+            Call::FillEvenOdd => self.fill_current_path(true),
             Call::Stroke => self.stroke_current_path(),
             &Call::FillRect(x, y, w, h) => self.fill_rect(x, y, w, h),
             &Call::StrokeRect(x, y, w, h) => self.stroke_rect(x, y, w, h),
@@ -666,7 +679,7 @@ impl<'a> Raster<'a> {
                 }
             }
             &Property::LineDashOffset(offset) => {
-                if offset.is_finite() {
+                if let Some(offset) = offset.filter(|v| v.is_finite()) {
                     s.dash_offset = f64::from(clamp32(offset));
                 }
             }
@@ -973,6 +986,14 @@ impl<'a> Raster<'a> {
     /// the spans into a scratch pixmap first, then blended with the same 8-bit arithmetic as
     /// solid colours.
     fn paint_spans(&mut self, spans: &Spans, source: &Source) {
+        let clipped;
+        let spans = match &self.state.clip {
+            None => spans,
+            Some(clip) => {
+                clipped = clip.apply(spans.clone());
+                &clipped
+            }
+        };
         let shader = match source {
             Source::Solid(color) => {
                 scan::blit_spans_solid(&mut self.pixmap, spans, *color);
@@ -1018,6 +1039,10 @@ impl<'a> Raster<'a> {
 
     /// Fills a device path with Skia's analytic AA.
     fn fill_sk(&mut self, path: &SkPath, fill: &Fill) {
+        self.fill_sk_rule(path, fill, false);
+    }
+
+    fn fill_sk_rule(&mut self, path: &SkPath, fill: &Fill, even_odd: bool) {
         if !dev_path_drawable(path) {
             return;
         }
@@ -1025,17 +1050,45 @@ impl<'a> Raster<'a> {
             return;
         };
         let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
-        aaa::fill_path(
-            path,
-            self.pixmap.width(),
-            self.pixmap.height(),
-            false,
-            &mut spans,
-        );
+        let (bounds, force_rle) = match &self.state.clip {
+            None => (self.canvas_rect(), false),
+            Some(clip) => (clip.bounds(), clip.force_rle()),
+        };
+        aaa::fill_path_clipped(path, bounds, force_rle, even_odd, &mut spans);
         self.paint_spans(&spans, &source);
     }
 
-    fn fill_current_path(&mut self) {
+    fn canvas_rect(&self) -> [i32; 4] {
+        [
+            0,
+            0,
+            self.pixmap.width() as i32,
+            self.pixmap.height() as i32,
+        ]
+    }
+
+    /// Blink's `clip()`: antialiased, and a rect path that the transform keeps axis-aligned
+    /// clips as a rect.
+    fn clip_current_path(&mut self) {
+        if !self.invertible() {
+            return;
+        }
+        let clip = self
+            .state
+            .clip
+            .take()
+            .unwrap_or_else(|| RasterClip::Rect(self.canvas_rect()));
+        let user = self.path.to_sk(None);
+        let device = user
+            .is_rect()
+            .and_then(|r| self.device_rect([r.left, r.top, r.right, r.bottom]));
+        self.state.clip = Some(match device {
+            Some(device) => clip.intersect_rect(ltrb(device)),
+            None => clip.intersect_path(&self.path.to_sk(Some(&self.state.transform))),
+        });
+    }
+
+    fn fill_current_path(&mut self, even_odd: bool) {
         if !self.invertible() {
             return;
         }
@@ -1053,7 +1106,7 @@ impl<'a> Raster<'a> {
         let ctm = self.state.transform;
         let device = self.path.to_sk(Some(&ctm));
         let fill = self.state.fill.clone();
-        self.fill_sk(&device, &fill);
+        self.fill_sk_rule(&device, &fill, even_odd);
     }
 
     /// `SkDrawTreatAsHairline`: a stroke whose width maps to at most one device pixel on both
@@ -1638,7 +1691,14 @@ impl<'a> Raster<'a> {
         }
         let [x, y, w, h] = rect32(rect);
         if let Some(coverage) = self.rect_coverage(sorted([x, y, x + w, y + h]), false) {
-            scan::blit(&mut self.pixmap, &coverage, Blend::Clear, |_, _| [0; 4]);
+            match &self.state.clip {
+                None => scan::blit(&mut self.pixmap, &coverage, Blend::Clear, |_, _| [0; 4]),
+                Some(clip) => {
+                    let spans = coverage.to_spans(self.pixmap.width(), self.pixmap.height());
+                    let spans = clip.apply(spans);
+                    scan::blit_spans(&mut self.pixmap, &spans, Blend::Clear, |_, _| [0; 4]);
+                }
+            }
         }
     }
 
@@ -1705,6 +1765,9 @@ impl<'a> Raster<'a> {
         let row = vec![alpha; mask.width as usize];
         for y in 0..mask.height as i32 {
             spans.anti_h(left, top + y, &row);
+        }
+        if let Some(clip) = &self.state.clip {
+            spans = clip.apply(spans);
         }
         let w = mask.width as usize;
         scan::blit_spans(&mut self.pixmap, &spans, Blend::SourceOver, |x, y| {
@@ -1773,7 +1836,19 @@ impl<'a> Raster<'a> {
         let pure_translate = m.a == 1.0 && m.d == 1.0 && m.b == 0.0 && m.c == 0.0;
         if quality == FilterQuality::Bilinear && pure_translate {
             let image = image.clone();
+            let before = self.state.clip.is_some().then(|| self.pixmap.clone());
             self.blit_decal_image(&image, src, m.e, m.f);
+            if let (Some(before), Some(clip)) = (before, &self.state.clip) {
+                let stride = before.width() as usize;
+                let (new, _) = self.pixmap.data_mut().as_chunks_mut::<4>();
+                let (old, _) = before.data().as_chunks::<4>();
+                for (i, (new, old)) in new.iter_mut().zip(old).enumerate() {
+                    let c = u32::from(clip.at((i % stride) as i32, (i / stride) as i32));
+                    for (n, &o) in new.iter_mut().zip(old) {
+                        *n = scan::div255(u32::from(*n) * c + u32::from(o) * (255 - c)) as u8;
+                    }
+                }
+            }
             return;
         }
         let anti_alias = if ctm.is_scale_translate() {
@@ -1959,6 +2034,19 @@ mod tests {
             gradient_luminance(&[(0.0, white), (0.5, dark), (1.0, dark)]),
             [0x6c; 3]
         );
+    }
+
+    #[test]
+    fn set_transform_with_a_number_that_is_not_finite_does_nothing() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut c = Canvas2d::new(20, 10);
+            c.translate(10.0, 0.0);
+            c.set_transform([1.0, 0.0, 0.0, 1.0, bad, 0.0]);
+            c.fill_rect(0.0, 0.0, 10.0, 10.0);
+            let pixmap = render(&c);
+            assert_eq!(pixmap.pixel(5, 5).unwrap().alpha(), 0);
+            assert_eq!(pixmap.pixel(15, 5).unwrap().alpha(), 255);
+        }
     }
 
     fn render(canvas: &Canvas2d) -> Pixmap {

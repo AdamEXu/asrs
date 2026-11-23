@@ -8,12 +8,14 @@
 //! `getBoundingClientRect` divided by the zoom.
 
 use asrs_js::number;
+use asrs_js::ops::object;
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::selection_impl::ControlButton;
 use asrs_model::source_list::{ItemDragPayload, ItemDragStart, ItemView, ListInput};
 
-use crate::drag::{Drag, DragItem, DragPayload};
+use crate::drag::{Drag, DragItem, DragPayload, DragUpdate};
 use crate::hub::HubModel;
 use crate::tabs::{TabDragData, TabDragStart, TabsError};
 
@@ -876,6 +878,25 @@ pub enum DragContent {
     },
 }
 
+/// A `drag-update` event's `detail`, as the controllers that take field drags read it.
+fn drag_detail(update: &DragUpdate<DragData>) -> JsValue {
+    let strings =
+        |keys: &[JsString]| JsValue::Array(keys.iter().cloned().map(JsValue::String).collect());
+    let data = match &update.data {
+        DragData::Fields(fields) => object([
+            ("fields", strings(&fields.fields)),
+            ("children", strings(&fields.children)),
+        ]),
+        DragData::Tab(_) | DragData::ListItem(_) => object([]),
+    };
+    object([
+        ("end", JsValue::Bool(update.end)),
+        ("x", JsValue::Number(update.x)),
+        ("y", JsValue::Number(update.y)),
+        ("data", data),
+    ])
+}
+
 impl From<DragPayload> for DragData {
     fn from(payload: DragPayload) -> Self {
         DragData::Fields(payload)
@@ -1008,6 +1029,10 @@ impl HubShell {
         let mut result = Ok(());
         for update in self.drag.take_updates() {
             let (x, y, end) = (update.x, update.y, update.end);
+            let thrown = hub.tab_drag_update(&drag_detail(&update));
+            if let (Ok(()), Err(e)) = (&result, thrown) {
+                result = Err(TabsError::Thrown(e));
+            }
             let input = match &update.data {
                 DragData::Fields(fields) => ListInput::FieldDrag {
                     fields: &fields.fields,
@@ -1080,16 +1105,11 @@ impl HubShell {
         let mut data = asrs_js::value::JsObject::new();
         data.insert(
             "files",
-            asrs_js::value::JsValue::Array(
-                paths
-                    .into_iter()
-                    .map(asrs_js::value::JsValue::String)
-                    .collect(),
-            ),
+            JsValue::Array(paths.into_iter().map(JsValue::String).collect()),
         );
         Some(NamedMessage::new(
             HubToMain::OpenFilesRequest,
-            asrs_js::value::JsValue::Object(data),
+            JsValue::Object(data),
         ))
     }
 }
