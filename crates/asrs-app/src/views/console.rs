@@ -100,9 +100,12 @@ fn over(top: u32, alpha: f64, under: u32) -> u32 {
     channel(16) | channel(8) | channel(0)
 }
 
+type JumpField = Entity<TextField<NumberValue>>;
+type FilterField = Entity<TextField<PlainText>>;
+
 struct Fields {
-    jump: Entity<TextField<NumberValue>>,
-    filter: Entity<TextField<PlainText>>,
+    jump: JumpField,
+    filter: FilterField,
     _subscriptions: [Subscription; 2],
 }
 
@@ -749,7 +752,7 @@ impl<H: FrameHost> HubFrame<H> {
         view: &ConsoleView,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
-    ) -> Option<(Entity<TextField<NumberValue>>, Entity<TextField<PlainText>>)> {
+    ) -> Option<(JumpField, FilterField)> {
         let tab = self.console.tabs.get_mut(&shown.key)?;
         let fields = tab.fields.get_or_insert_with(|| {
             let jump = cx.new(|cx| {
