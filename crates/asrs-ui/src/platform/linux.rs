@@ -2,7 +2,7 @@
 //! with the pointer grabbed, on Wayland in popup surfaces that the compositor places and grabs
 //! for. Window work goes through the X11 connection; on Wayland it has no equivalent.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -29,6 +29,7 @@ const GRAB_ATTEMPTS: usize = 20;
 const GRAB_RETRY: Duration = Duration::from_millis(10);
 
 struct OpenPopup {
+    id: u64,
     parent: WindowId,
     view: WeakEntity<MenuView>,
     window: AnyWindowHandle,
@@ -38,6 +39,7 @@ struct OpenPopup {
 
 thread_local! {
     static OPEN: RefCell<Option<OpenPopup>> = const { RefCell::new(None) };
+    static NEXT_ID: Cell<u64> = const { Cell::new(0) };
 }
 
 /// `Window` has a method of this name in two traits.
@@ -168,10 +170,11 @@ fn show(
             return on_close(None, cx);
         };
         close_open_popup();
-        let on_close = Rc::new(std::cell::Cell::new(Some(on_close)));
+        let id = NEXT_ID.replace(NEXT_ID.get() + 1);
+        let on_close = Rc::new(Cell::new(Some(on_close)));
         let close = on_close.clone();
         let handler: CloseHandler = Rc::new(move |path, _, cx| {
-            OPEN.take();
+            OPEN.with_borrow_mut(|open| open.take_if(|open| open.id == id));
             if let Some(on_close) = close.take() {
                 cx.defer(move |cx| on_close(path, cx));
             }
@@ -191,6 +194,7 @@ fn show(
         }
         let keys = intercept_keys(&view, cx);
         OPEN.set(Some(OpenPopup {
+            id,
             parent: parent.window_id(),
             view: view.downgrade(),
             window: popup,

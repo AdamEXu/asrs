@@ -488,7 +488,8 @@ impl<M: SelectModel> Select<M> {
             .detach();
         cx.on_blur(&focus, window, |this, window, cx| {
             this.model.end_type_ahead();
-            if this.popup_open {
+            // A window that is only inactive, as under a Wayland popup's grab, keeps its focus.
+            if this.popup_open && !this.focus.is_focused(window) {
                 platform::close_popup_menu(window);
             }
             cx.emit(SelectEvent::Blur);
