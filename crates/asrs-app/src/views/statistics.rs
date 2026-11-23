@@ -24,6 +24,7 @@ use asrs_ui::gpui::{
     IntoElement, ParentElement, ScrollEvent, StatefulInteractiveElement, Styled, Subscription,
     Window, canvas, div, px, rgb,
 };
+use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, Select, SelectEvent, TextField};
 use asrs_ui::parity::probed;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
@@ -48,9 +49,8 @@ const LAST_MAX: f64 = 120.0;
 const CONTROL_MARGIN: f64 = 5.0;
 const CONTROL_WIDTH: f64 = 0.7;
 const SELECT_HEIGHT: f64 = 25.0;
-/// A number input's padding and borders.
-const FIELD_CHROME: f64 = 8.0;
-const FIELD_HEIGHT: f64 = 21.0;
+/// A number input's padding and borders, across and down.
+const FIELD_CHROME: [f64; 2] = [8.0, 6.0];
 const TITLES: [&str; 3] = ["Time Range", "Data Range", "Step Size"];
 const FIELD_PROBES: [&str; 3] = ["input.range-min", "input.range-max", "input.step-size"];
 
@@ -82,7 +82,8 @@ struct SettingsLayout {
 }
 
 impl SettingsLayout {
-    fn new([x, y, w, h]: [f64; 4]) -> SettingsLayout {
+    /// `line` is the height of a number input's line of text.
+    fn new([x, y, w, h]: [f64; 4], line: f64) -> SettingsLayout {
         let width = math::min2(lu(w * 0.4), SETTINGS_MAX_WIDTH);
         let panel = [x + w - width - 1.0, y, width + 1.0, h];
         let left = panel[0] + 1.0;
@@ -96,7 +97,7 @@ impl SettingsLayout {
             [left, control_top(i), width, height]
         };
         let field = |left: f64, available: f64, i: f64| {
-            control(left, available, FIELD_CHROME, i, FIELD_HEIGHT)
+            control(left, available, FIELD_CHROME[0], i, line + FIELD_CHROME[1])
         };
         let last = math::max2(math::min2(h - LAST_INSET, LAST_MAX), INPUT_HEIGHT);
         let content = title_top(2.0) - y + TITLE_HEIGHT + last;
@@ -241,7 +242,7 @@ impl Palette {
             Palette {
                 table: 0x999999,
                 cell: 0x333333,
-                sections: [0x999999, 0x999999],
+                sections: [0x999999, 0x555555],
             },
         )
     }
@@ -805,7 +806,8 @@ impl<H: FrameHost> HubFrame<H> {
             controller.range_max().clone(),
             controller.step_size().clone(),
         ];
-        let layout = SettingsLayout::new(controls);
+        let (_, line) = text::measure(cx, &TextStyle::new(CONTROL_FONT), "0", scale);
+        let layout = SettingsLayout::new(controls, line);
         if let Some(shown) = &mut self.statistics.shown {
             shown.settings = Some(layout);
         }
@@ -937,7 +939,7 @@ mod tests {
 
     #[test]
     fn settings_boxes_match_blink() {
-        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0]);
+        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0);
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(layout.select, [930.0, 480.0, 140.0, 25.0]);
         assert_eq!(
@@ -950,7 +952,7 @@ mod tests {
         );
         assert_eq!(layout.max_scroll, 0.0);
         assert_eq!(
-            SettingsLayout::new([300.0, 550.0, 800.0, 100.0]).max_scroll,
+            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0).max_scroll,
             85.0
         );
     }
