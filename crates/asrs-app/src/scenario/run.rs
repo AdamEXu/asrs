@@ -6,18 +6,20 @@ use std::time::{Duration, Instant};
 
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{AppPaths, MainState};
 use asrs_services::path::PathStyle;
+use asrs_services::window_manager::Platform;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke, Modifiers,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, PlatformInput,
-    Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div, point, px,
-    rgb, size,
+    AnyWindowHandle, App, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke,
+    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
+    point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::platform::dialog::{Reply, Script};
@@ -32,7 +34,10 @@ use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
 use crate::main_process::{MainProcess, process_platform};
-use crate::menus::bridge::ScriptedMenu;
+use crate::menus::app_menu;
+use crate::menus::bridge::{MenuAction, ScriptedMenu};
+use crate::menus::dispatch::dispatch;
+use crate::menus::model::{Command, MenuItem};
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
@@ -379,6 +384,36 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
     )))
 }
 
+fn click_app_menu(labels: &[String], cx: &mut App) -> Result<(), String> {
+    fn find(items: &[MenuItem], labels: &[String], found: &mut Vec<Command>) {
+        for item in items {
+            if let Some(submenu) = &item.submenu {
+                find(submenu, labels, found);
+            } else if item.label.as_ref().is_some_and(|l| labels.contains(l)) {
+                found.extend(item.command);
+            }
+        }
+    }
+    let prefs = Preferences::default();
+    let menu = app_menu::template(Platform::current(), &prefs, crate::IDENTITY);
+    let mut found = Vec::new();
+    find(&menu, labels, &mut found);
+    let &[command] = found.as_slice() else {
+        return Err(format!(
+            "{} application menu items are labelled {labels:?}",
+            found.len()
+        ));
+    };
+    dispatch(
+        MenuAction::Command {
+            command,
+            checked: false,
+        },
+        cx,
+    );
+    Ok(())
+}
+
 impl Variant<'_> {
     fn window(&self) -> AnyWindowHandle {
         self.window.expect("the window is open")
@@ -707,6 +742,12 @@ impl Variant<'_> {
                 self.headless
                     .context()
                     .update(|cx| ScriptedMenu::click(cx, path))?;
+                self.settle();
+            }
+            Action::AppMenu { labels } => {
+                self.headless
+                    .context()
+                    .update(|cx| click_app_menu(labels, cx))?;
                 self.settle();
             }
             Action::Prompt { page } => self.switch_prompt(*page)?,

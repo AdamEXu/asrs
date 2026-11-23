@@ -95,6 +95,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Key { .. } => "key",
         Action::Dialog(_) => "dialog",
         Action::Menu { .. } => "menu",
+        Action::AppMenu { .. } => "appMenu",
         Action::Prompt { .. } => "prompt",
         Action::Capture { .. } => "capture",
     }

@@ -1,11 +1,13 @@
 #![allow(clippy::disallowed_methods)]
 
-//! Replays `prompts/flows` (oracle/src/genPrompts.ts: upstream's prompt pages in Blink, driven
-//! with real input) through the prompt windows: each flow opens the page's [`PromptWindow`] in a
-//! headless app, gets main's messages, and then the recorded user input as GPUI input events.
+//! Replays `prompts/flows` and `prompts/preferences` (oracle/src/genPrompts.ts: upstream's prompt
+//! pages in Blink, driven with real input) through the prompt windows: each flow opens the page's
+//! [`PromptWindow`] in a headless app, gets main's messages, and then the recorded user input as
+//! GPUI input events.
 //! After the open and after every step the controls, the focused element, the buttons' class,
-//! and the replies, alerts and errors since the previous record must equal the recording. Every
-//! flow runs in an active and in an inactive window, whose blur events GPUI does not deliver.
+//! and the replies, alerts and errors since the previous record must equal the recording, and so
+//! must the bytes a preferences flow's replies leave in `prefs.json`. Every flow runs in an active
+//! and in an inactive window, whose blur events GPUI does not deliver.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
@@ -20,10 +22,12 @@ use asrs_app::views::prompts::{self, PromptWindow};
 use asrs_app::windows::WindowKind;
 use asrs_js::string::JsString;
 use asrs_model::app_identity::AppIdentity;
+use asrs_model::json_file;
 use asrs_parity::cve1::Value as Cve;
 use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
+use asrs_tabs::form::SelectOption;
 use asrs_tabs::prompts::{ControlValue, PromptEvent};
 use asrs_ui::gpui::{
     AnyWindowHandle, AppContext, Bounds, ClipboardItem, Entity, HeadlessAppContext, Keystroke,
@@ -32,15 +36,14 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::platform::ScriptedNumpadEnter;
 
-const WIDTH: f32 = 300.0;
-
-fn kind(page: &str) -> (WindowKind, f32) {
+fn kind(page: &str) -> (WindowKind, f32, f32) {
     match page {
-        "editRange" => (WindowKind::EditRange, 108.0),
-        "editFov" => (WindowKind::EditFov, 81.0),
-        "renameTab" => (WindowKind::RenameTab, 81.0),
-        "unitConversion" => (WindowKind::UnitConversion, 162.0),
-        "export" => (WindowKind::Export, 189.0),
+        "editRange" => (WindowKind::EditRange, 300.0, 108.0),
+        "editFov" => (WindowKind::EditFov, 300.0, 81.0),
+        "renameTab" => (WindowKind::RenameTab, 300.0, 81.0),
+        "unitConversion" => (WindowKind::UnitConversion, 300.0, 162.0),
+        "export" => (WindowKind::Export, 300.0, 189.0),
+        "preferences" => (WindowKind::Preferences, 400.0, 473.0),
         other => panic!("unknown page {other:?}"),
     }
 }
@@ -90,35 +93,47 @@ fn cve(record: &Record, key: &str) -> Result<Cve, String> {
         .map_err(|e| format!("line {}: {key}: {e}", record.line))
 }
 
-fn control(value: &ControlValue, disabled: bool) -> Cve {
+/// `el.hidden` of each option and `el.placeholder` are in the preferences records only.
+fn control(
+    value: &ControlValue,
+    disabled: bool,
+    hidden: &[bool],
+    placeholder: &str,
+    preferences: bool,
+) -> Cve {
     match value {
-        ControlValue::Text(v) | ControlValue::Number(v) => obj(vec![
-            ("value", js_text(v)),
-            ("disabled", Cve::Bool(disabled)),
-        ]),
-        ControlValue::Select(select) => obj(vec![
-            (
-                "options",
-                Cve::Array(
-                    select
-                        .options()
-                        .map(|o| {
-                            obj(vec![
-                                ("text", js_text(&o.text())),
-                                ("value", js_text(&o.value())),
-                                ("disabled", Cve::Bool(o.is_disabled())),
-                            ])
-                        })
-                        .collect(),
+        ControlValue::Text(v) | ControlValue::Number(v) => {
+            let mut pairs = vec![("value", js_text(v)), ("disabled", Cve::Bool(disabled))];
+            if preferences {
+                pairs.push(("placeholder", text(placeholder)));
+            }
+            obj(pairs)
+        }
+        ControlValue::Select(select) => {
+            let option = |(i, o): (usize, &SelectOption)| {
+                let mut pairs = vec![
+                    ("text", js_text(&o.text())),
+                    ("value", js_text(&o.value())),
+                    ("disabled", Cve::Bool(o.is_disabled())),
+                ];
+                if preferences {
+                    pairs.push(("hidden", Cve::Bool(hidden[i])));
+                }
+                obj(pairs)
+            };
+            obj(vec![
+                (
+                    "options",
+                    Cve::Array(select.options().enumerate().map(option).collect()),
                 ),
-            ),
-            ("value", js_text(&select.value())),
-            (
-                "selectedIndex",
-                Cve::Number(f64::from(select.selected_index()).to_bits()),
-            ),
-            ("disabled", Cve::Bool(disabled)),
-        ]),
+                ("value", js_text(&select.value())),
+                (
+                    "selectedIndex",
+                    Cve::Number(f64::from(select.selected_index()).to_bits()),
+                ),
+                ("disabled", Cve::Bool(disabled)),
+            ])
+        }
     }
 }
 
@@ -127,16 +142,20 @@ struct Prompt<'a> {
     window: AnyWindowHandle,
     view: Entity<PromptWindow>,
     events: Rc<RefCell<Vec<PromptEvent>>>,
+    /// The bytes main leaves in `prefs.json`.
+    written: Option<String>,
+    preferences: bool,
+    width: f32,
     height: f32,
 }
 
 impl Prompt<'_> {
     fn open<'a>(cx: &'a mut HeadlessAppContext, page: &str, active: bool) -> Prompt<'a> {
-        let (kind, height) = kind(page);
+        let (kind, width, height) = kind(page);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                 point(px(0.0), px(0.0)),
-                size(px(WIDTH), px(height)),
+                size(px(width), px(height)),
             ))),
             focus: false,
             show: false,
@@ -165,6 +184,9 @@ impl Prompt<'_> {
             window,
             view,
             events,
+            written: None,
+            preferences: kind == WindowKind::Preferences,
+            width,
             height,
         }
     }
@@ -284,10 +306,18 @@ impl Prompt<'_> {
             }
             "key" => {
                 let name = string(value, "value")?;
-                let (shift, name) = match name.strip_prefix("Shift+") {
-                    Some(rest) => (true, rest),
-                    None => (false, name.as_str()),
-                };
+                let mut modifiers = Modifiers::default();
+                let mut name = name.as_str();
+                while let Some((modifier, rest)) = name.split_once('+') {
+                    match modifier {
+                        "Shift" => modifiers.shift = true,
+                        "Control" => modifiers.control = true,
+                        "Alt" => modifiers.alt = true,
+                        "Meta" => modifiers.platform = true,
+                        other => return Err(format!("unknown modifier {other:?}")),
+                    }
+                    name = rest;
+                }
                 let numpad = name == "NumpadEnter";
                 self.cx
                     .update(|cx| cx.set_global(ScriptedNumpadEnter(numpad)));
@@ -301,10 +331,6 @@ impl Prompt<'_> {
                     " " => ("space", Some(" ")),
                     other => return Err(format!("no GPUI key for {other:?}")),
                 };
-                let modifiers = Modifiers {
-                    shift,
-                    ..Modifiers::default()
-                };
                 self.keystroke(key, key_char, modifiers);
             }
             "click" => {
@@ -315,7 +341,7 @@ impl Prompt<'_> {
                     "help" => (78.0 + 25.0, 8.0 + 15.0),
                     other => return Err(format!("no position for {other:?}")),
                 };
-                self.click(WIDTH - right, self.height - bottom);
+                self.click(self.width - right, self.height - bottom);
             }
             "pick" => {
                 let id = string(id, "id")?;
@@ -349,6 +375,7 @@ impl Prompt<'_> {
     }
 
     fn state(&mut self) -> Cve {
+        let preferences = self.preferences;
         let (controls, active, blurred) = self.update(|view, window, cx| {
             let controls: Vec<(Utf16String, Cve)> = view
                 .page()
@@ -356,7 +383,11 @@ impl Prompt<'_> {
                 .into_iter()
                 .map(|c| {
                     let shown = view.shown(c.id, cx).expect("every control has a widget");
-                    (utf16(c.id), control(&shown, view.disabled(c.id, cx)))
+                    let select = view.select_widget(c.id).map(|s| s.read(cx));
+                    let hidden = select.map_or(&[][..], |s| s.model().hidden());
+                    let disabled = view.disabled(c.id, cx);
+                    let state = control(&shown, disabled, hidden, c.placeholder, preferences);
+                    (utf16(c.id), state)
                 })
                 .collect();
             (controls, view.active(window, cx), view.page().blurred())
@@ -366,7 +397,11 @@ impl Prompt<'_> {
         let mut errors = Vec::new();
         for event in self.events.borrow_mut().drain(..) {
             match event {
-                PromptEvent::Reply(value) => replies.push(js_json::from_js(&value)),
+                PromptEvent::Reply(value) => {
+                    let bytes = json_file::stringify(&value).expect("a JSON reply");
+                    self.written = Some(String::from_utf8(bytes).expect("UTF-8"));
+                    replies.push(js_json::from_js(&value));
+                }
                 PromptEvent::Alert(message) => alerts.push(js_text(&message)),
                 PromptEvent::Error(e) => errors.push(obj(vec![
                     ("name", text(e.name)),
@@ -457,7 +492,21 @@ fn replay(
         )?;
         count(record);
     }
-    if field_names(end) != ["kind", "flow", "replied"]
+    let mut end_fields = vec!["kind", "flow", "replied"];
+    if prompt.preferences {
+        end_fields.push("written");
+        let expected = match end.field("written") {
+            Some(Json::Null) => None,
+            _ => Some(end.string("written").ok_or("written is not a string")?),
+        };
+        if expected != prompt.written {
+            return Err(format!(
+                "line {}: prefs.json\n  expected {expected:?}\n       got {:?}",
+                end.line, prompt.written
+            ));
+        }
+    }
+    if field_names(end) != end_fields
         || end.string("flow").as_deref() != Some(flow.as_str())
         || end.field("replied") != Some(&Json::Bool(replied))
     {
@@ -476,9 +525,7 @@ fn replay(
     Ok(())
 }
 
-fn main() {
-    assert_eq!(asrs_app::IDENTITY, AppIdentity::UPSTREAM);
-    let id = "prompts/flows";
+fn run(cx: &mut HeadlessAppContext, id: &str) {
     let records = vectors::load(id).unwrap_or_else(|e| panic!("{e}"));
     let mut recorded: BTreeMap<String, usize> = BTreeMap::new();
     for record in &records {
@@ -486,9 +533,6 @@ fn main() {
             .entry(record.string("kind").unwrap_or_default())
             .or_default() += 1;
     }
-    let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
-    cx.update(asrs_ui::init);
-    cx.run_until_parked();
     for active in [true, false] {
         let mut compared = BTreeMap::new();
         let mut failures = Vec::new();
@@ -500,7 +544,7 @@ fn main() {
                 .position(|r| r.string("kind").as_deref() == Some("end"))
                 .map_or(records.len(), |i| start + i + 1);
             flows += 1;
-            if let Err(e) = replay(&mut cx, &records[start..end], active, &mut compared) {
+            if let Err(e) = replay(cx, &records[start..end], active, &mut compared) {
                 let flow = records[start].string("flow").unwrap_or_default();
                 failures.push(format!("flow {flow:?}: {e}"));
             }
@@ -519,4 +563,13 @@ fn main() {
         );
         println!("{id}: window active {active}: {flows} flows, {compared:?} records equal");
     }
+}
+
+fn main() {
+    assert_eq!(asrs_app::IDENTITY, AppIdentity::UPSTREAM);
+    let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
+    cx.update(asrs_ui::init);
+    cx.run_until_parked();
+    run(&mut cx, "prompts/flows");
+    run(&mut cx, "prompts/preferences");
 }
