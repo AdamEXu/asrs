@@ -392,6 +392,12 @@ impl Text {
         self
     }
 
+    /// Text whose boxes the view reports to parity captures itself, with
+    /// [`record_text`](crate::parity::record_text).
+    pub fn unrecorded(self) -> Self {
+        self.form_control()
+    }
+
     /// `text-decoration: underline`, as on links.
     pub fn underline(mut self) -> Self {
         self.underline = true;

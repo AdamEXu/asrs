@@ -1286,8 +1286,9 @@ answer for the next dialog), `{"menu": [label, ...]}` (clicks the item at that l
 context menu that popped up; neither side shows menus natively), `{"appMenu": [label, ...]}`
 (clicks, for the hub window, the one application menu item that has one of these labels, which
 differ per platform), `{"prompt": page | null}`
-(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export` or `preferences`: later input and captures go to
-that prompt window, whose content size is its own; `null` waits until it has closed),
+(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export`, `preferences`, `licenses`,
+`sourceListHelp` or `betaWelcome`: later input and captures go to that window, whose content size
+is its own; `null` waits until it has closed),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 
@@ -1315,8 +1316,8 @@ the hub's model APIs (`main` and `open` as main messages, `selection` on the mod
 becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); a `dialog`
 action answers the next dialog the port shows, and `run.json` lists those it showed, which `xtask
 pixel compare` checks against the driver's together with the files under `files/dialog/`. `eval`
-and a non-empty `userData` are refused because the port has no page script and main's userData
-reads are not seeded. Before the window opens it seeds `prefs.json` as the driver does and runs main's own
+is refused because the port has no page script, and so are `userData` seeds other than
+`beta-2027.json`. Before the window opens it seeds `prefs.json` and `beta-2027.json` as the driver does and runs main's own
 startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
 rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's

@@ -1,8 +1,7 @@
 //! Runs the application menu's clicks in the app: [`click`]'s effects against the main process,
 //! the windows and the platform's dialogs, and the roles Electron executes itself.
 //!
-//! [`open_window`], [`check_for_update`], [`open_satellite`] and
-//! [`MainProcess::open_files`] are where the windows and services of other units plug in. A
+//! [`open_window`], [`open_satellite`] and [`MainProcess::open_files`] are where the windows and services of other units plug in. A
 //! command without one yet says so in a message box.
 
 use std::path::{Path, PathBuf};
@@ -128,7 +127,11 @@ fn perform(effect: Effect, what: &str, cx: &mut App) -> Result<(), Unavailable> 
         Effect::OpenFilesSmart { files, window } => {
             MainProcess::open_files(cx, files, Some(window));
         }
-        Effect::CheckForUpdate => return check_for_update(),
+        Effect::CheckForUpdate => {
+            if !MainProcess::check_for_update(cx, true) {
+                return Err(Unavailable("Checking for updates"));
+            }
+        }
         Effect::OpenHub(state) => {
             MainProcess::open_hub(cx, state.as_ref(), Vec::new());
         }
@@ -170,14 +173,12 @@ fn open_window(kind: WindowKind, parent: WindowId, cx: &mut App) -> Result<(), U
             return Ok(());
         }
         WindowKind::Download => "Downloading logs",
-        WindowKind::Licenses => "The licenses window",
+        WindowKind::Licenses => {
+            MainProcess::open_licenses(cx, parent);
+            return Ok(());
+        }
         other => panic!("{other:?} does not open from the application menu"),
     }))
-}
-
-/// `checkForUpdate(true)`.
-fn check_for_update() -> Result<(), Unavailable> {
-    Err(Unavailable("Checking for updates"))
 }
 
 /// `createSatellite({ state })`.

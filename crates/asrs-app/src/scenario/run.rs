@@ -22,17 +22,19 @@ use asrs_ui::gpui::{
     point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
+use asrs_ui::platform;
 use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Theme, Wheel,
-    patch_colours,
+    Action, BETA_FILE, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Theme,
+    Wheel, patch_colours,
 };
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
+use crate::licenses::LicensesFile;
 use crate::main_process::{MainProcess, process_platform};
 use crate::menus::app_menu;
 use crate::menus::bridge::{MenuAction, ScriptedMenu};
@@ -45,12 +47,13 @@ use crate::windows::{self, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--work-area <x>,<y>]
+[--bundled-assets <dir>] [--licenses <file>] [--work-area <x>,<y>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
-automatic folders of each variant's userData/; --work-area is the primary display's work area
+automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
+lists; --work-area is the primary display's work area
 origin on the Electron driver's host, which places its window 16 px inside it (default 0,0).";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
@@ -114,12 +117,13 @@ struct Options {
     inputs: Option<PathBuf>,
     probes: Option<PathBuf>,
     bundled_assets: Option<PathBuf>,
+    licenses: Option<PathBuf>,
     work_area: (f64, f64),
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
-    let mut bundled_assets = None;
+    let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_area = (0.0, 0.0);
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
@@ -133,6 +137,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--inputs" => inputs = Some(PathBuf::from(value()?)),
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
+            "--licenses" => licenses = Some(PathBuf::from(value()?)),
             "--work-area" => {
                 let text = value()?;
                 work_area = text
@@ -151,6 +156,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         inputs,
         probes,
         bundled_assets,
+        licenses,
         work_area,
     })
 }
@@ -197,6 +203,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let probes = Probes::load(&probes_file)?;
     let mut headless = HeadlessCapture::new(Arc::new(())).map_err(|e| e.to_string())?;
     headless.context().update(windows::init);
+    if let Some(file) = options.licenses.clone() {
+        headless
+            .context()
+            .update(|cx| cx.set_global(LicensesFile(file)));
+    }
     for &scale in &scenario.scales {
         if !options.scales.is_empty() && !options.scales.contains(&scale) {
             continue;
@@ -452,6 +463,9 @@ impl Variant<'_> {
                     .context()
                     .update(|cx| Windows::of_kind(cx, kind))
                     .ok_or_else(|| format!("no {kind:?} prompt is open"))?;
+                if matches!(kind, WindowKind::Licenses | WindowKind::SourceListHelp) {
+                    self.leave_title_bar(window)?;
+                }
                 self.headless
                     .set_scale_factor(window, self.scale as f32)
                     .map_err(|e| e.to_string())?;
@@ -463,6 +477,21 @@ impl Variant<'_> {
             None => None,
         };
         self.tick()
+    }
+
+    /// Electron sizes windows without `useContentSize` by their frame, and a headless window has
+    /// none to take the title bar from.
+    fn leave_title_bar(&mut self, window: AnyWindowHandle) -> Result<(), String> {
+        self.headless
+            .context()
+            .update_window(window, |_, window, _| {
+                let frame = window.viewport_size();
+                let side = |v| f64::from(f32::from(v));
+                let (width, height) =
+                    platform::titled_content_size(side(frame.width), side(frame.height));
+                window.resize(size(px(width as f32), px(height as f32)));
+            })
+            .map_err(|e| e.to_string())
     }
 
     fn settle(&mut self) {
@@ -767,13 +796,14 @@ impl Variant<'_> {
         Ok(())
     }
 
-    /// Main's startup in the variant's `userData/`: the Electron driver's seeded `prefs.json`,
-    /// then module load and `whenReady` up to the windows. Returns the `set-assets` and
+    /// Main's startup in the variant's `userData/`: the Electron driver's seeded files, then module load and `whenReady` up to the windows. Returns the `set-assets` and
     /// `set-preferences` data.
     fn start_main(&mut self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
         std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
-        capture::write(&user_data.join("prefs.json"), &self.prefs_seed()?)?;
+        for (file, seed) in self.seeds()? {
+            capture::write(&user_data.join(file), &seed)?;
+        }
         let absolute = |p: &Path| {
             std::path::absolute(p)
                 .map(|p| p.to_string_lossy().into_owned())
@@ -813,10 +843,17 @@ impl Variant<'_> {
         }
     }
 
-    fn prefs_seed(&self) -> Result<String, String> {
-        asrs_js::json::stringify(&seeded_prefs(self.scenario, self.theme)?)
-            .map_err(|e| format!("prefs: {e:?}"))
-            .map(Option::unwrap_or_default)
+    /// The files the Electron driver seeds, with their text.
+    fn seeds(&self) -> Result<[(&'static str, String); 2], String> {
+        let text = |file, value: &JsValue| {
+            asrs_js::json::stringify(value)
+                .map(|text| (file, text.unwrap_or_default()))
+                .map_err(|e| format!("{file}: {e:?}"))
+        };
+        Ok([
+            text("prefs.json", &seeded_prefs(self.scenario, self.theme)?)?,
+            text(BETA_FILE, &self.scenario.beta)?,
+        ])
     }
 
     fn open(&mut self) -> Result<(), String> {
@@ -904,6 +941,7 @@ impl Variant<'_> {
                         _ => {}
                     })
                     .detach();
+                    MainProcess::beta_init(cx, id);
                 });
                 self.window = Some(window.into());
                 self.hub = Some((hub, geometry));
@@ -957,7 +995,7 @@ impl Variant<'_> {
                 &exceptions,
                 &capture::collect_files(
                     self.dir,
-                    &[("prefs.json", self.prefs_seed()?.into_bytes())],
+                    &self.seeds()?.map(|(file, seed)| (file, seed.into_bytes())),
                 )?,
                 &dialogs,
             ),

@@ -1,0 +1,436 @@
+//! The beta welcome prompt's page (`www/betaWelcome.html`).
+
+use std::time::{Duration, Instant};
+
+use asrs_canvas::text::dom::Lu;
+use asrs_js::value::JsValue;
+use asrs_tabs::info::BetaWelcome;
+use asrs_tabs::info::beta_welcome::CHECKBOXES;
+use asrs_ui::gpui::{
+    AnyElement, App, Context, Div, EventEmitter, FocusHandle, Focusable, HoverListenerMode,
+    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement,
+    Render, StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
+};
+use asrs_ui::input::{Checkbox, PointerState};
+use asrs_ui::parity::probed;
+use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH};
+
+use super::layout::{BetaLayout, BetaRow, LuRect, TextBlock};
+use super::page::{self, PageScroll, Placer, ScrolledPage};
+
+/// `h2` and `button`: a colour per theme, light then dark.
+const ACCENT: [u32; 2] = [0x012be5, 0x446ce3];
+const BUTTON_HOVER: [u32; 2] = [0x274cf2, 0x2751cf];
+const BUTTON_ACTIVE: [u32; 2] = [0x5f7bf5, 0x0e37b3];
+const PURPLE: [u32; 2] = [0xc566e2, 0xb560cd];
+const BUTTON_RADIUS: f32 = 6.0;
+const DISABLED_OPACITY: f64 = 0.35;
+const OPACITY_TRANSITION: Duration = Duration::from_millis(200);
+
+/// The button posted `null` to main.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Acknowledged;
+
+/// `document.activeElement`, unless it is the body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Control {
+    Checkbox(usize),
+    Button,
+}
+
+/// The button's `transition: opacity 0.2s` from `from` since `start`.
+#[derive(Clone, Copy)]
+struct Fade {
+    from: f64,
+    start: Instant,
+}
+
+pub struct BetaWelcomePage {
+    page: BetaWelcome,
+    app_name: &'static str,
+    scroll: PageScroll,
+    body: FocusHandle,
+    checkboxes: [FocusHandle; CHECKBOXES],
+    button: FocusHandle,
+    button_from_keyboard: bool,
+    /// GPUI's own hover styles end at a key press.
+    hovered: Option<Control>,
+    pressed: Option<Control>,
+    fade: Option<Fade>,
+    _keys: Subscription,
+}
+
+impl EventEmitter<Acknowledged> for BetaWelcomePage {}
+
+impl BetaWelcomePage {
+    pub fn new(app_name: &'static str, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
+        let body = cx.focus_handle();
+        window.focus(&body, cx);
+        BetaWelcomePage {
+            page: BetaWelcome::default(),
+            app_name,
+            scroll: PageScroll::new(cx),
+            body,
+            checkboxes: std::array::from_fn(|_| cx.focus_handle()),
+            button: cx.focus_handle(),
+            button_from_keyboard: false,
+            hovered: None,
+            pressed: None,
+            fade: None,
+            _keys: Self::keys(window, cx),
+        }
+    }
+
+    /// Tab moves between the controls from anywhere, and Space and Enter act at the press: GPUI
+    /// would click at the release.
+    fn keys(window: &Window, cx: &mut Context<'_, Self>) -> Subscription {
+        let handle = window.window_handle();
+        let this = cx.entity().downgrade();
+        cx.intercept_keystrokes(move |event, window, cx| {
+            if window.window_handle() != handle {
+                return;
+            }
+            let modifiers = event.keystroke.modifiers;
+            let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {
+                "tab" if !modifiers.control && !modifiers.alt && !modifiers.platform => {
+                    view.tab(modifiers.shift, window, cx);
+                    cx.stop_propagation();
+                }
+                key @ ("space" | "enter") => match view.active(window) {
+                    Some(Control::Checkbox(index)) => {
+                        if key == "space" {
+                            view.toggle(index, cx);
+                        }
+                        cx.stop_propagation();
+                    }
+                    Some(Control::Button) => {
+                        view.click_continue(cx);
+                        cx.stop_propagation();
+                    }
+                    None => {}
+                },
+                _ => {}
+            });
+        })
+    }
+
+    pub fn page(&self) -> &BetaWelcome {
+        &self.page
+    }
+
+    /// `port2.postMessage(isAlpha())` from main.
+    pub fn message(&mut self, is_alpha: bool, cx: &mut Context<'_, Self>) {
+        self.page.message(&JsValue::Bool(is_alpha));
+        cx.notify();
+    }
+
+    pub fn active(&self, window: &Window) -> Option<Control> {
+        let mut checkboxes = self.checkboxes.iter();
+        if let Some(index) = checkboxes.position(|handle| handle.is_focused(window)) {
+            return Some(Control::Checkbox(index));
+        }
+        (self.page.enabled() && self.button.is_focused(window)).then_some(Control::Button)
+    }
+
+    fn focus_on(&mut self, control: Option<Control>, window: &mut Window, cx: &mut App) {
+        let handle = match control {
+            Some(Control::Checkbox(index)) => &self.checkboxes[index],
+            Some(Control::Button) => &self.button,
+            None => &self.body,
+        };
+        window.focus(handle, cx);
+    }
+
+    /// Past either end the focus leaves the page, and from there enters at the other.
+    fn tab(&mut self, back: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let mut stops: Vec<Control> = (0..CHECKBOXES).map(Control::Checkbox).collect();
+        if self.page.enabled() {
+            stops.push(Control::Button);
+        }
+        let at = self
+            .active(window)
+            .and_then(|active| stops.iter().position(|stop| *stop == active));
+        let next = match (at, back) {
+            (None, false) => Some(0),
+            (None, true) => Some(stops.len() - 1),
+            (Some(i), false) => (i + 1 < stops.len()).then_some(i + 1),
+            (Some(i), true) => i.checked_sub(1),
+        };
+        self.focus_on(next.map(|i| stops[i]), window, cx);
+        cx.notify();
+    }
+
+    fn toggle(&mut self, index: usize, cx: &mut Context<'_, Self>) {
+        let opacity = self.opacity(cx);
+        let enabled = self.page.enabled();
+        self.page.toggle(index);
+        if self.page.enabled() != enabled {
+            self.fade = Some(Fade {
+                from: opacity,
+                start: cx.background_executor().now(),
+            });
+        }
+        cx.notify();
+    }
+
+    fn click_continue(&mut self, cx: &mut Context<'_, Self>) {
+        if self.page.click_continue() {
+            cx.emit(Acknowledged);
+        }
+    }
+
+    /// The button's `opacity` in its transition.
+    fn opacity(&self, cx: &App) -> f64 {
+        let to = if self.page.enabled() {
+            1.0
+        } else {
+            DISABLED_OPACITY
+        };
+        let Some(Fade { from, start }) = self.fade else {
+            return to;
+        };
+        let elapsed = cx.background_executor().now() - start;
+        let t = elapsed.as_secs_f64() / OPACITY_TRANSITION.as_secs_f64();
+        if t >= 1.0 {
+            return to;
+        }
+        from + (to - from) * ease(t)
+    }
+}
+
+/// `cubic-bezier(0.25, 0.1, 0.25, 1)` (`ease`) at `t`.
+fn ease(t: f64) -> f64 {
+    let (x1, y1, x2, y2) = (0.25, 0.1, 0.25, 1.0);
+    let bezier = |a: f64, b: f64, s: f64| {
+        let r = 1.0 - s;
+        3.0 * r * r * s * a + 3.0 * r * s * s * b + s * s * s
+    };
+    let (mut low, mut high) = (0.0, 1.0);
+    for _ in 0..48 {
+        let s = (low + high) / 2.0;
+        if bezier(x1, x2, s) < t {
+            low = s;
+        } else {
+            high = s;
+        }
+    }
+    bezier(y1, y2, (low + high) / 2.0)
+}
+
+/// `over` at `opacity` on `under`.
+fn mix(over: u32, under: u32, opacity: f64) -> u32 {
+    [16, 8, 0].into_iter().fold(0, |out, shift| {
+        let channel = |color: u32| f64::from(color >> shift & 0xff);
+        let mixed = channel(over) * opacity + channel(under) * (1.0 - opacity);
+        out | (mixed.round() as u32) << shift
+    })
+}
+
+impl Focusable for BetaWelcomePage {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.body.clone()
+    }
+}
+
+impl ScrolledPage for BetaWelcomePage {
+    fn scroll(&mut self) -> &mut PageScroll {
+        &mut self.scroll
+    }
+}
+
+impl BetaWelcomePage {
+    fn pointer(&self, control: Control) -> PointerState {
+        match (self.hovered == Some(control), self.pressed == Some(control)) {
+            (true, true) => PointerState::Pressed,
+            (true, false) => PointerState::Hovered,
+            _ => PointerState::Normal,
+        }
+    }
+
+    fn on_hover(
+        control: Control,
+        cx: &mut Context<'_, Self>,
+    ) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+        cx.listener(move |view, hovered: &bool, _, cx| {
+            if *hovered {
+                view.hovered = Some(control);
+            } else if view.hovered == Some(control) {
+                view.hovered = None;
+            }
+            cx.notify();
+        })
+    }
+
+    fn on_press(
+        control: Control,
+        cx: &mut Context<'_, Self>,
+    ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
+        cx.listener(move |view, _: &MouseDownEvent, window, cx| {
+            view.pressed = Some(control);
+            view.focus_on(Some(control), window, cx);
+            cx.stop_propagation();
+            cx.notify();
+        })
+    }
+
+    fn checkbox(
+        &self,
+        index: usize,
+        bounds: LuRect,
+        placer: Placer,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let pointer = self.pointer(Control::Checkbox(index));
+        let checkbox = Checkbox::new(("mark", index), self.page.checked()[index]).pointer(pointer);
+        let control = div()
+            .id(("checkbox", index))
+            .track_focus(&self.checkboxes[index])
+            .size_full()
+            .on_hover(Self::on_hover(Control::Checkbox(index), cx))
+            .hover_listener_mode(HoverListenerMode::InputModalityIndependent)
+            .on_mouse_down(
+                MouseButton::Left,
+                Self::on_press(Control::Checkbox(index), cx),
+            )
+            .on_click(cx.listener(move |view, _, _, cx| view.toggle(index, cx)))
+            .child(checkbox);
+        probed("input", placer.place(bounds).child(control)).into_any_element()
+    }
+
+    fn continue_button(
+        &mut self,
+        bounds: LuRect,
+        text: &TextBlock,
+        placer: Placer,
+        window: &Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let appearance = Appearance::of(window, cx);
+        let background = appearance.theme().background;
+        let opacity = self.opacity(cx);
+        let pick =
+            |colors: [u32; 2]| mix(appearance.pick(colors[0], colors[1]), background, opacity);
+        let focused = self.active(window) == Some(Control::Button);
+        self.button_from_keyboard =
+            focused && (self.button_from_keyboard || window.last_input_was_keyboard());
+        let ring = self.button_from_keyboard && window.is_window_active();
+        let radius = if ring {
+            FOCUS_RING_RADIUS
+        } else {
+            BUTTON_RADIUS
+        };
+        let color = match self.pointer(Control::Button) {
+            PointerState::Hovered if self.page.enabled() => BUTTON_HOVER,
+            PointerState::Pressed if self.page.enabled() => BUTTON_ACTIVE,
+            _ => ACCENT,
+        };
+        let mut button = div()
+            .id("continue")
+            .track_focus(&self.button)
+            .size_full()
+            .rounded(px(radius))
+            .bg(rgb(pick(color)))
+            .on_hover(Self::on_hover(Control::Button, cx))
+            .hover_listener_mode(HoverListenerMode::InputModalityIndependent);
+        if self.page.enabled() {
+            button = button
+                .on_mouse_down(MouseButton::Left, Self::on_press(Control::Button, cx))
+                .on_click(cx.listener(|view, _, _, cx| view.click_continue(cx)));
+        }
+        let mut boxed = placer.place(bounds).child(button);
+        if ring {
+            boxed = boxed.child(
+                div()
+                    .absolute()
+                    .top(px(-FOCUS_RING_WIDTH))
+                    .left(px(-FOCUS_RING_WIDTH))
+                    .right(px(-FOCUS_RING_WIDTH))
+                    .bottom(px(-FOCUS_RING_WIDTH))
+                    .border(px(FOCUS_RING_WIDTH))
+                    .border_color(rgb(appearance.theme().focus_ring))
+                    .rounded(px(FOCUS_RING_RADIUS + FOCUS_RING_WIDTH)),
+            );
+        }
+        let label = placer.block(text, |_| mix(0xffffff, background, opacity), cx);
+        div()
+            .child(probed("button", boxed))
+            .children(label)
+            .into_any_element()
+    }
+
+    fn row(
+        &self,
+        index: usize,
+        row: &BetaRow,
+        placer: Placer,
+        color: u32,
+        cx: &mut Context<'_, Self>,
+    ) -> Div {
+        let [first, second] = row.cells;
+        let text = placer.block(&row.text, |_| color, cx);
+        div()
+            .child(probed("td", placer.place(first)))
+            .child(probed("td", placer.place(second)))
+            .child(self.checkbox(index, row.checkbox, placer, cx))
+            .children(text)
+    }
+}
+
+impl Render for BetaWelcomePage {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let (width, scale): (Lu, f32) = (page::device_width(window), window.scale_factor());
+        let layout = BetaLayout::new(&self.page, self.app_name, width, scale);
+        self.scroll.lay_out(layout.height, window, cx);
+        if let Some(fade) = self.fade {
+            if cx.background_executor().now() - fade.start < OPACITY_TRANSITION {
+                window.request_animation_frame();
+            } else {
+                self.fade = None;
+            }
+        }
+        let placer = Placer::new(&self.scroll);
+        let appearance = Appearance::of(window, cx);
+        let theme = appearance.theme();
+        let pick = |colors: [u32; 2]| appearance.pick(colors[0], colors[1]);
+        let mut root = page::root("beta-welcome", cx)
+            .track_focus(&self.body)
+            .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
+                if view.scroll.key(&event.keystroke, cx) {
+                    cx.notify();
+                }
+            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|view, _, window, cx| {
+                    view.focus_on(None, window, cx);
+                    cx.notify();
+                }),
+            )
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|view, _, _, cx| {
+                    view.pressed = None;
+                    cx.notify();
+                }),
+            )
+            .bg(rgb(theme.background));
+        let titles = [(&layout.title, "h1", theme.text)];
+        let headings = layout.headings.iter().map(|h| (h, "h2", pick(ACCENT)));
+        let paragraphs = [
+            (&layout.intro, "p", theme.text),
+            (&layout.outro, "p", theme.text),
+        ];
+        for ((rect, block), id, color) in titles.into_iter().chain(headings).chain(paragraphs) {
+            let purple = pick(PURPLE);
+            let color = |item: usize| if item == 1 { purple } else { color };
+            root = root
+                .child(probed(id, placer.place(*rect)))
+                .children(placer.block(block, color, cx));
+        }
+        root = root.child(probed("table", placer.place(layout.table)));
+        for (index, row) in layout.rows.iter().enumerate() {
+            root = root.child(self.row(index, row, placer, theme.text, cx));
+        }
+        root.child(self.continue_button(layout.button, &layout.button_text, placer, window, cx))
+    }
+}

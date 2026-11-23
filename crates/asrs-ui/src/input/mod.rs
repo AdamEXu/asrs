@@ -13,7 +13,9 @@ pub mod style;
 
 pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry};
 pub use model::{FieldModel, FieldValue, PlainText, RangeModel};
-pub use native::{Checkbox, Progress, paint_checkbox, paint_progress, paint_text_field};
+pub use native::{
+    Checkbox, PointerState, Progress, paint_checkbox, paint_progress, paint_text_field,
+};
 pub use segmented::{Segment, SegmentedControl, segment_boxes};
 pub use select::{
     Select, SelectEvent, SelectGeometry, SelectItem, SelectKey, SelectModel, SelectState,

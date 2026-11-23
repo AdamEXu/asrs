@@ -70,5 +70,17 @@
   "td.input > select": ["select"],
   "#exit": ["button#exit"],
   "#confirm": ["button#confirm"],
-  "div.help-div": ["div.help-div"]
+  "div.help-div": ["div.help-div"],
+  "div.type-header": ["div.type-header"],
+  "div.type-title": ["div.type-title"],
+  "div.parent-warning": ["div.parent-warning"],
+  "table.options": ["table.options"],
+  "div.source-types": ["div.source-types"],
+  "h1": ["h1"],
+  "h2.alpha-only": ["h2"],
+  "p": ["p"],
+  "table": ["table"],
+  "td": ["td"],
+  "input": ["input"],
+  "button": ["button"]
 }

@@ -1,0 +1,148 @@
+{
+  "about": "Interaction (U22): the beta welcome window, which a hub opens on itself while beta-2027.json does not say it was acknowledged. Checkboxes and the button hovered, pressed, clicked while disabled and driven by the keyboard; the button then closes it. beta-2027.json is compared byte for byte",
+  "userData": {
+    "beta-2027.json": {
+      "surveyStatus": false,
+      "extra": [
+        1,
+        "x"
+      ]
+    }
+  },
+  "actions": [
+    {
+      "idle": true
+    },
+    {
+      "prompt": "betaWelcome"
+    },
+    {
+      "capture": "opened",
+      "probes": [
+        "h1",
+        "h2.alpha-only",
+        "p",
+        "table",
+        "td",
+        "input",
+        "button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 46,
+      "y": 220
+    },
+    {
+      "capture": "hover",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "mouse": "down",
+      "x": 46,
+      "y": 220
+    },
+    {
+      "capture": "pressed"
+    },
+    {
+      "mouse": "up",
+      "x": 46,
+      "y": 220
+    },
+    {
+      "capture": "checked",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "mouse": "click",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "capture": "disabled-click"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "capture": "second"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "enabled"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "focused"
+    },
+    {
+      "mouse": "move",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "wait": 400
+    },
+    {
+      "capture": "button-hover"
+    },
+    {
+      "mouse": "down",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "wait": 400
+    },
+    {
+      "capture": "button-pressed"
+    },
+    {
+      "mouse": "up",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "prompt": null
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hub"
+    }
+  ]
+}

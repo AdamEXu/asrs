@@ -166,7 +166,8 @@ struct Laid {
 
 impl Laid {
     fn named(&mut self, name: &str, r: LuRect) {
-        self.items.push(Item::Box(name.to_owned(), css_rect(r, self.scale)));
+        self.items
+            .push(Item::Box(name.to_owned(), css_rect(r, self.scale)));
     }
 
     fn text(&mut self, rects: Vec<LuRect>) {
@@ -207,7 +208,10 @@ fn same(page: &Page, laid: &Laid, height: Lu, failures: &mut Vec<String>) -> usi
         if matches {
             equal += 1;
         } else {
-            failures.push(format!("{} #{i}:\n  want {want:?}\n  got  {got:?}", page.case));
+            failures.push(format!(
+                "{} #{i}:\n  want {want:?}\n  got  {got:?}",
+                page.case
+            ));
         }
     }
     if page.items.len() != laid.items.len() {
@@ -216,14 +220,21 @@ fn same(page: &Page, laid: &Laid, height: Lu, failures: &mut Vec<String>) -> usi
     }
     let scroll = css(snapped(height), page.scale).max(page.viewport_height);
     if (scroll - page.scroll_height).abs() > 0.5 + 1e-6 {
-        failures.push(format!("{}: {scroll} tall, not {}", page.case, page.scroll_height));
+        failures.push(format!(
+            "{}: {scroll} tall, not {}",
+            page.case, page.scroll_height
+        ));
     }
     equal
 }
 
 fn report(failures: &[String], equal: usize) {
     let shown: Vec<&String> = failures.iter().take(12).collect();
-    assert!(failures.is_empty(), "{} differ, {equal} equal: {shown:#?}", failures.len());
+    assert!(
+        failures.is_empty(),
+        "{} differ, {equal} equal: {shown:#?}",
+        failures.len()
+    );
 }
 
 #[test]
@@ -243,7 +254,11 @@ fn licenses() {
             ..Laid::default()
         };
         for block in &layout.blocks {
-            let class = if block.module { "module-text" } else { "license-text" };
+            let class = if block.module {
+                "module-text"
+            } else {
+                "license-text"
+            };
             let [x, w] = [layout.left, layout.width];
             laid.named(class, [x, block.top, w, block.text.height]);
             let mut lines = block.text.lines.iter().peekable();
@@ -253,7 +268,9 @@ fn licenses() {
                     rects.push(more);
                 }
                 let height = block.text.box_height;
-                let boxes = rects.iter().map(|l| [x, block.top + l.box_top, l.width, height]);
+                let boxes = rects
+                    .iter()
+                    .map(|l| [x, block.top + l.box_top, l.width, height]);
                 laid.text(boxes.collect());
             }
         }

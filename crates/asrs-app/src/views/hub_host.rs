@@ -301,8 +301,7 @@ impl HubEntityHost {
 }
 
 /// What a click in a context menu of the hub window `handle` does: messages sent back to the
-/// hub, and prompts whose reply has further effects. The source list help window is not wired
-/// yet.
+/// hub, prompts whose reply has further effects, and the source list help window.
 fn menu_effects(handle: AnyWindowHandle, hub: WeakEntity<Hub>) -> EffectHandler {
     Rc::new(move |effects, cx| {
         for effect in effects {
@@ -337,6 +336,11 @@ fn run_effect(effect: Effect, handle: AnyWindowHandle, hub: &WeakEntity<Hub>, cx
             });
             if let Err(error) = opened {
                 eprintln!("asrs: opening a prompt: {error}");
+            }
+        }
+        Effect::OpenSourceListHelp(config) => {
+            if let Some(parent) = Windows::id_of(cx, handle) {
+                MainProcess::open_source_list_help(cx, parent, &config);
             }
         }
         other => eprintln!("asrs: context menu effect not available yet: {other:?}"),

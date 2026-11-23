@@ -113,6 +113,14 @@ pub struct Paragraphs {
 }
 
 impl Paragraphs {
+    /// The lines whose boxes overlap `from..to` of the block.
+    pub fn lines_between(&self, from: Lu, to: Lu) -> &[ParagraphLine] {
+        let bottom = |line: &ParagraphLine| line.box_top + self.box_height;
+        let first = self.lines.partition_point(|line| bottom(line) <= from);
+        let last = self.lines.partition_point(|line| line.box_top < to);
+        &self.lines[first..last.max(first)]
+    }
+
     fn new(typesetter: &mut Typesetter, style: &TextStyle, parts: &[String], width: Lu) -> Self {
         let backend = typesetter.backend.as_mut();
         let scale = typesetter.scale;
@@ -191,10 +199,12 @@ impl LicensesLayout {
         for license in licenses {
             for (module, text) in [(true, &license.module), (false, &license.parts)] {
                 let parts: Vec<String> = text.iter().map(|t| t.to_string_lossy()).collect();
-                let text = known.entry((module, parts)).or_insert_with_key(|(_, parts)| {
-                    let style = &styles[usize::from(module)];
-                    Rc::new(Paragraphs::new(&mut typesetter, style, parts, out.width))
-                });
+                let text = known
+                    .entry((module, parts))
+                    .or_insert_with_key(|(_, parts)| {
+                        let style = &styles[usize::from(module)];
+                        Rc::new(Paragraphs::new(&mut typesetter, style, parts, out.width))
+                    });
                 out.blocks.push(LicenseBlock {
                     module,
                     top: out.height,
@@ -209,7 +219,9 @@ impl LicensesLayout {
 
     /// The blocks that overlap `from..to`.
     pub fn blocks_between(&self, from: Lu, to: Lu) -> &[LicenseBlock] {
-        let first = self.blocks.partition_point(|b| b.top + b.text.height <= from);
+        let first = self
+            .blocks
+            .partition_point(|b| b.top + b.text.height <= from);
         let last = self.blocks.partition_point(|b| b.top < to).max(first);
         &self.blocks[first..last]
     }
@@ -336,9 +348,10 @@ impl HelpItemLayout {
             if line.cut_at.is_some() {
                 out.push(rect(line.width));
             }
-            let kept = line.fragments.iter().filter(|f| {
-                line.cut_at.is_none() || f.text != dom::ELLIPSIS
-            });
+            let kept = line
+                .fragments
+                .iter()
+                .filter(|f| line.cut_at.is_none() || f.text != dom::ELLIPSIS);
             out.push(rect(kept.map(|f| f.width).sum()));
         }
         out

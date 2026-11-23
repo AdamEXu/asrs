@@ -15,6 +15,8 @@ pub use asrs_ui::platform::dialog::{
 use asrs_services::window_manager::{Opened, WindowManager};
 use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, Render, Window};
 
+use crate::main_process::MainProcess;
+
 pub struct Windows {
     manager: WindowManager,
     handles: Vec<(WindowId, AnyWindowHandle)>,
@@ -44,9 +46,15 @@ pub fn init(cx: &mut App) {
             .position(|(_, h)| h.window_id() == closed)
         {
             let (id, _) = windows.handles.remove(i);
+            let kind = windows.manager.kind(id);
             windows.manager.closed(id);
             windows.modals.retain(|(modal, _)| *modal != id);
             close_modals(cx, id);
+            if let Some(WindowKind::Download | WindowKind::Licenses | WindowKind::SourceListHelp) =
+                kind
+            {
+                MainProcess::download_stop(cx);
+            }
         }
     })
     .detach();

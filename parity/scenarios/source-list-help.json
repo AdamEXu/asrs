@@ -1,0 +1,152 @@
+{
+  "about": "Interaction (U22): the help window of the 2D field's source list, opened with the list's help button and scrolled with the wheel and the keyboard. Every box and line box of the document is compared in every capture",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 810,
+      "y": 465
+    },
+    {
+      "mouse": "click",
+      "x": 810,
+      "y": 465
+    },
+    {
+      "prompt": "sourceListHelp"
+    },
+    {
+      "capture": "opened",
+      "probes": [
+        "div.type-header",
+        "div.type-title",
+        "div.parent-warning",
+        "table.options",
+        "div.source-types"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 170,
+        "y": 200,
+        "deltaX": 0,
+        "deltaY": -333,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        "div.type-header",
+        "div.type-title",
+        "div.parent-warning",
+        "table.options",
+        "div.source-types"
+      ]
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "lines-down",
+      "probes": [
+        "div.type-header",
+        "div.type-title",
+        "div.parent-warning",
+        "table.options",
+        "div.source-types"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "end",
+      "probes": [
+        "div.type-header",
+        "div.type-title",
+        "div.parent-warning",
+        "table.options",
+        "div.source-types"
+      ]
+    },
+    {
+      "wait": 1500
+    }
+  ]
+}

@@ -13,6 +13,7 @@ pub use patches::{COLUMNS, PATCH, patch_colours};
 #[cfg(feature = "parity")]
 pub use run::{run, run_from_args};
 
+use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
 use asrs_services::window_manager::{WindowKind, WindowManager};
@@ -141,8 +142,12 @@ pub struct Scenario {
     pub gl: bool,
     /// Merged over the default preferences, as main merges `prefs.json`.
     pub prefs: JsValue,
+    /// `beta-2027.json` before the run.
+    pub beta: JsValue,
     pub actions: Vec<Action>,
 }
+
+pub const BETA_FILE: &str = "beta-2027.json";
 
 /// The content size of a hub window opened with no saved state, which is the Electron
 /// driver's default window too.
@@ -295,6 +300,9 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("unitConversion") => Some(WindowKind::UnitConversion),
                 Some("export") => Some(WindowKind::Export),
                 Some("preferences") => Some(WindowKind::Preferences),
+                Some("licenses") => Some(WindowKind::Licenses),
+                Some("sourceListHelp") => Some(WindowKind::SourceListHelp),
+                Some("betaWelcome") => Some(WindowKind::BetaWelcome),
                 None if value.is_null() => None,
                 other => return Err(format!("unknown prompt page {other:?}")),
             },
@@ -333,11 +341,14 @@ impl Scenario {
         if let Some(key) = keys(&root).iter().find(|k| !TOP_KEYS.contains(&k.as_str())) {
             return Err(format!("{name}: unknown key {key:?}"));
         }
-        if root.get("userData").is_some_and(|u| !keys(u).is_empty()) {
+        let user_data = root.get("userData");
+        let seeds = user_data.map(keys).unwrap_or_default();
+        if let Some(file) = seeds.iter().find(|file| *file != BETA_FILE) {
             return Err(format!(
-                "{name}: userData seeds files main reads, and the port has no main yet"
+                "{name}: userData seeds {file}, which the port does not"
             ));
         }
+        let beta = user_data.and_then(|u| u.get(BETA_FILE)).cloned();
         let page = match root.get("page").and_then(JsValue::as_str) {
             None => Page::App,
             Some(p) if p.to_string_lossy() == "app" => Page::App,
@@ -399,6 +410,12 @@ impl Scenario {
             scales,
             themes,
             gl: root.get("gl") == Some(&JsValue::Bool(true)),
+            beta: beta.unwrap_or_else(|| {
+                ops::object([
+                    ("welcomeComplete", JsValue::Bool(true)),
+                    ("surveyStatus", JsValue::Bool(true)),
+                ])
+            }),
             prefs: root
                 .get("prefs")
                 .cloned()
@@ -553,10 +570,10 @@ mod tests {
         assert!(e.contains("dialog"), "{e}");
         let e = Scenario::parse(
             "u",
-            r#"{"userData": {"state.json": {}}, "actions": [{"capture": "c"}]}"#,
+            r#"{"userData": {"beta-2027.json": {}, "state.json": {}}, "actions": [{"capture": "c"}]}"#,
         )
         .unwrap_err();
-        assert!(e.contains("userData"), "{e}");
+        assert!(e.contains("state.json"), "{e}");
         let e = Scenario::parse("m", r#"{"actions": [{"main": "nope"}, {"capture": "c"}]}"#)
             .unwrap_err();
         assert!(e.contains("nope"), "{e}");

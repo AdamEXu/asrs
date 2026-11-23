@@ -7,8 +7,8 @@
 
 use super::TextBackend;
 use super::dom::{
-    LineHeight, Lu, Style, align_offset, boundaries, extend_with_fallbacks, line_leading, line_metrics,
-    lu_ceil, utf16_len,
+    LineHeight, Lu, Style, align_offset, boundaries, extend_with_fallbacks, line_leading,
+    line_metrics, lu_ceil, utf16_len,
 };
 use super::layout::normalize_space;
 use super::line_break::breaks;

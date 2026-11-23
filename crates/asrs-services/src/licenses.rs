@@ -4,7 +4,7 @@
 use asrs_js::collation;
 use asrs_js::json;
 use asrs_js::ops;
-use asrs_js::sort::{self, array_sort};
+use asrs_js::sort::{array_sort, default_compare};
 use asrs_js::string::{JsError, JsString, TextDecoder, encode_uri_component, response_text};
 use asrs_js::value::JsValue;
 
@@ -54,6 +54,41 @@ fn join(a: &str, b: &str) -> String {
 
 fn thrown(error: json::JsonError) -> JsError {
     JsError::new(error.name, error.message.to_string_lossy())
+}
+
+/// The order the list is saved in: `first`, then by name.
+pub fn sort<T>(licenses: &mut Vec<(JsString, T)>, first: &JsString) {
+    array_sort(licenses, |(a, _), (b, _)| {
+        if a == first {
+            return -1.0;
+        }
+        if b == first {
+            return 1.0;
+        }
+        match collation::locale_compare(a, b) {
+            std::cmp::Ordering::Less => -1.0,
+            std::cmp::Ordering::Equal => 0.0,
+            std::cmp::Ordering::Greater => 1.0,
+        }
+    });
+}
+
+/// The entries of a licenses.json.
+pub fn parse(text: &JsString) -> Result<Vec<(JsString, JsString)>, JsError> {
+    let list = json::parse(text).map_err(thrown)?;
+    let entries = list
+        .as_array()
+        .ok_or_else(|| JsError::type_error("not a list"))?;
+    entries
+        .iter()
+        .map(|entry| {
+            let field = |key: &str| match &ops::get(entry, key)? {
+                JsValue::String(text) => Ok(text.clone()),
+                _ => Err(JsError::type_error(format!("{key} is not a string"))),
+            };
+            Ok((field("module")?, field("text")?))
+        })
+        .collect()
 }
 
 /// Runs the script once against `host`. `Err` is the exception that ends upstream's script (an
@@ -171,7 +206,7 @@ pub fn generate(host: &mut dyn LicenseHost) -> Result<(), JsError> {
             .filter(|name| JsString::from(name.as_str()).ends_with(&JsString::from(".txt"), None))
             .collect();
         array_sort(&mut names, |a, b| {
-            sort::default_compare(&JsString::from(a.as_str()), &JsString::from(b.as_str()))
+            default_compare(&JsString::from(a.as_str()), &JsString::from(b.as_str()))
         });
         for name in names {
             let module_name = JsString::from(name.as_str()).slice(0.0, Some(-4.0));
@@ -182,19 +217,7 @@ pub fn generate(host: &mut dyn LicenseHost) -> Result<(), JsError> {
         }
     }
 
-    array_sort(&mut licenses, |(a, _), (b, _)| {
-        if a == &advantage_scope {
-            return -1.0;
-        }
-        if b == &advantage_scope {
-            return 1.0;
-        }
-        match collation::locale_compare(a, b) {
-            std::cmp::Ordering::Less => -1.0,
-            std::cmp::Ordering::Equal => 0.0,
-            std::cmp::Ordering::Greater => 1.0,
-        }
-    });
+    sort(&mut licenses, &advantage_scope);
 
     let array: Vec<JsValue> = licenses
         .iter()
