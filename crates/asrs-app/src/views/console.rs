@@ -123,10 +123,10 @@ fn inside([left, top, w, h]: [f64; 4], x: f64, y: f64) -> bool {
 }
 
 impl TabView {
-    fn new(dom: Rc<RefCell<ConsoleDom>>) -> Self {
+    fn new(dom: Rc<RefCell<ConsoleDom>>, layout: ConsoleLayout) -> Self {
         TabView {
             _dom: dom,
-            layout: ConsoleLayout::default(),
+            layout,
             fields: None,
             hand: HandFade::default(),
         }
@@ -412,6 +412,7 @@ impl<H: FrameHost> HubFrame<H> {
                     container: rect,
                 },
                 renderer.dom().clone(),
+                renderer.geometry_ref::<ConsoleLayout>().cloned(),
             )
         });
         let blurred = !hub.is_focused();
@@ -421,28 +422,16 @@ impl<H: FrameHost> HubFrame<H> {
             self.console_hidden(left, window, cx);
         }
         self.console.tabs.retain(|key, _| live.contains(key));
-        self.console.shown = shown.as_ref().map(|(s, _)| *s);
-        let (shown, dom) = shown?;
+        self.console.shown = shown.as_ref().map(|(s, ..)| *s);
+        let (shown, dom, layout) = shown?;
+        let layout = layout?;
         self.console.editing = self.console_field_focused(shown, window, cx);
 
         let now = self.host().frame_time(cx);
-        let layout = match self.console.tabs.get(&shown.key) {
-            Some(tab) => tab.layout.clone(),
-            None => {
-                let tab = TabView::new(dom);
-                let layout = tab.layout.clone();
-                self.console.tabs.insert(shown.key, tab);
-                self.host_mut().input(cx, |hub| {
-                    with_renderer(hub, shown.index, |renderer, _| {
-                        renderer.set_geometry(Box::new(layout.clone()))
-                    });
-                    with_controller(hub, shown.index, |controller| {
-                        controller.set_geometry(Box::new(layout.clone()))
-                    });
-                });
-                layout
-            }
-        };
+        self.console
+            .tabs
+            .entry(shown.key)
+            .or_insert_with(|| TabView::new(dom, layout.clone()));
         let scrolling = layout.animate(now);
         let (_, renderer) = displayed(self.host().hub(cx))?;
         let view = renderer.view();
@@ -856,7 +845,21 @@ impl<H: FrameHost> HubFrame<H> {
     /// A console that stopped being displayed: its focused input blurs and its rows are left.
     fn console_hidden(&mut self, left: Shown, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.console_blur(left.key, window, cx);
-        self.console.hovered = None;
+        let index = self.host().hub(cx).tabs().tabs().position(|tab| {
+            tab.renderer()
+                .downcast_ref::<ConsoleRenderer>()
+                .is_some_and(|renderer| renderer_key(renderer) == left.key)
+        });
+        let hovered = self.console.hovered.take();
+        if let (Some(index), Some(hovered)) = (index, hovered) {
+            self.host_mut().input(cx, |hub| {
+                with_renderer(hub, index, |renderer, page| {
+                    if hovered < renderer.view().rows.len() {
+                        renderer.row_mouse_leave(page);
+                    }
+                })
+            });
+        }
         self.console.pressed_row = None;
         if let Some(tab) = self.console.tabs.get_mut(&left.key) {
             tab.hand = HandFade::default();

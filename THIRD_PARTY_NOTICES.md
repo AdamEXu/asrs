@@ -251,6 +251,16 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Used in: `crates/asrs-formats/src/mcap.rs` (`McapWriter`, `McapRecordBuilder`,
   `ChunkBuilder`, `BufferBuilder` and the CRC-32, translated to Rust)
 
+## ssh2
+
+- License: MIT ([`licenses/ssh2.txt`](licenses/ssh2.txt))
+- Copyright Brian White
+- Version: 1.14.0
+- Used in: `crates/asrs-services/src/download/sftp.rs` (`lib/protocol/SFTP.js`: the client session,
+  `readdir` and `fastGet`), `handshake.rs` (the ident, packet and key exchange parsing of
+  `lib/protocol`) and `client.rs` (the event order of `lib/client.js`), translated to Rust. The SSH
+  transport is the `russh` crate (Apache-2.0)
+
 ## lzma-native
 
 - License: MIT ([`licenses/lzma-native.txt`](licenses/lzma-native.txt))

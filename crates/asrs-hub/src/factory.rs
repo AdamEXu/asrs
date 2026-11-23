@@ -158,10 +158,10 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
             }
             Some(TabType::Console) => {
                 let dom = Rc::new(RefCell::new(ConsoleDom::default()));
-                (
-                    Box::new(ConsoleController::new(dom.clone())),
-                    Box::new(ConsoleRenderer::new(dom, true)),
-                )
+                let mut controller = ConsoleController::new(dom.clone());
+                let mut renderer = ConsoleRenderer::new(dom, true);
+                cx.lay_out_console(&mut controller, &mut renderer);
+                (Box::new(controller), Box::new(renderer))
             }
             Some(TabType::Statistics) => (
                 Box::new(StatisticsController::new(cx)),
