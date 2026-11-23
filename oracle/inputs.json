@@ -511,6 +511,12 @@
     "src/logRun.ts",
     "src/shims.ts"
   ],
+  "genSatellite": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genSatellite.ts",
+    "src/shims.ts"
+  ],
   "genSimpleStatistics": [
     "src/cve1.ts",
     "src/environment.ts",
@@ -559,6 +565,13 @@
     "src/environment.ts",
     "src/genThree.ts",
     "src/shims.ts"
+  ],
+  "genTimer": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genTimer.ts",
+    "src/video/bundle.ts",
+    "src/video/world.ts"
   ],
   "genUnitDialog": [
     "src/cve1.ts",

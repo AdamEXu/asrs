@@ -27,7 +27,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::text::{self, TextStyle, WhiteSpace};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, FONT_SIZE, IconTint, chains};
 
-use super::frame::{FrameHost, HubFrame, key_target};
+use super::frame::{FrameHost, HubFrame};
 use super::large_table::symbol;
 use super::range::FormRange;
 use super::video_frame;
@@ -414,9 +414,10 @@ pub struct VideoViews {
     tabs: HashMap<usize, TabView>,
 }
 
-/// A tab by the address of its controller, which stays put while the tab exists.
-fn controller_key(controller: &VideoController) -> usize {
-    std::ptr::from_ref(controller).cast::<()>() as usize
+/// A tab by the address of its renderer, which stays put while the tab exists; a satellite's has
+/// no controller.
+fn renderer_key(renderer: &VideoRenderer) -> usize {
+    std::ptr::from_ref(renderer) as usize
 }
 
 /// Every Video tab's index and key, and whether it is displayed.
@@ -425,8 +426,8 @@ fn video_tabs(hub: &HubModel) -> Vec<(usize, usize, bool)> {
         .tabs()
         .enumerate()
         .filter_map(|(i, tab)| {
-            let controller = tab.controller().downcast_ref::<VideoController>()?;
-            Some((i, controller_key(controller), !tab.content_hidden()))
+            let renderer = tab.renderer().downcast_ref::<VideoRenderer>()?;
+            Some((i, renderer_key(renderer), !tab.content_hidden()))
         })
         .collect()
 }
@@ -465,22 +466,6 @@ fn with_image<R>(
     Some(f(&mut renderer.image().borrow_mut()))
 }
 
-/// `KeyboardEvent.code` for the keys the video and playback shortcuts read.
-fn key_code(key: &str) -> Option<&'static str> {
-    Some(match key {
-        "up" => "ArrowUp",
-        "down" => "ArrowDown",
-        "left" => "ArrowLeft",
-        "right" => "ArrowRight",
-        "space" => "Space",
-        "l" => "KeyL",
-        "/" | "?" => "Slash",
-        "," | "<" => "Comma",
-        "." | ">" => "Period",
-        _ => return None,
-    })
-}
-
 fn device_bounds([x, y, w, h]: [i32; 4], scale: f32) -> Bounds<Pixels> {
     let to_px = |v: i32| px(v as f32 / scale);
     Bounds {
@@ -490,29 +475,25 @@ fn device_bounds([x, y, w, h]: [i32; 4], scale: f32) -> Bounds<Pixels> {
 }
 
 impl<H: FrameHost> HubFrame<H> {
-    /// The window `keydown` listeners of the selection and of the displayed Video tab.
+    /// The hub window's `keydown` listeners of the selection and of the displayed Video tab.
+    /// Returns whether `preventDefault` was called.
     pub(super) fn playback_key_down(
         &mut self,
         event: &KeyDownEvent,
-        window: &mut Window,
+        code: &str,
+        target: KeyTarget,
         cx: &mut Context<'_, Self>,
-    ) {
-        let Some(code) = key_code(&event.keystroke.key) else {
-            return;
-        };
-        let Some(target) = key_target(window) else {
-            return;
-        };
+    ) -> bool {
         let m = event.keystroke.modifiers;
+        let command = if cfg!(target_os = "macos") {
+            m.platform
+        } else {
+            m.control
+        };
         let shown = displayed(self.host().hub(cx));
         let prevented = self.host_mut().input(cx, |hub| {
             let selection = hub.page_mut().selection_mut();
             let prevented = selection.key_down(code, m.platform, m.control, target);
-            let command = if cfg!(target_os = "macos") {
-                m.platform
-            } else {
-                m.control
-            };
             if let Some((index, _)) = shown
                 && target == KeyTarget::Other
                 && !command
@@ -521,10 +502,8 @@ impl<H: FrameHost> HubFrame<H> {
             }
             prevented
         });
-        if prevented {
-            window.prevent_default();
-        }
         cx.notify();
+        prevented
     }
 
     /// Starts and tracks the image loads of every Video tab.

@@ -1,0 +1,252 @@
+{
+  "about": "Interaction (U23): a line graph popped out with the tab bar's button; the satellite's plot hovered, clicked, stepped with the arrow keys, idled by a right click, zoomed with the trackpad and grab-zoomed with shift held back (a drag pan), all of which drive the hub's selection and timeline; the hub's own captures hold what the satellite set. Each satellite capture compares the state the satellite saved, and state.json at the end holds both windows",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Speeds <a> & b",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "mouse": "click",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "graph",
+      "probes": [
+        ".line-graph-canvas",
+        ".line-graph-scroll",
+        ".line-graph-help"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "graph-hover",
+      "probes": [
+        ".line-graph-canvas"
+      ]
+    },
+    {
+      "mouse": "click",
+      "x": 500,
+      "y": 220
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "graph-clicked",
+      "probes": [
+        ".line-graph-canvas"
+      ]
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "capture": "graph-stepped",
+      "probes": []
+    },
+    {
+      "wheel": {
+        "x": 500,
+        "y": 220,
+        "deltaX": 0,
+        "deltaY": 300,
+        "precise": true
+      }
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "capture": "graph-zoomed",
+      "probes": [
+        ".line-graph-canvas",
+        ".line-graph-help"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "hub",
+      "probes": [
+        ".timeline",
+        ".line-graph-canvas"
+      ]
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 220
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "click",
+      "x": 500,
+      "y": 220,
+      "button": "right"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "graph-idle",
+      "probes": []
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "hub-idle",
+      "probes": [
+        ".timeline"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,928 @@
+# Findings of `cargo xtask harness` that stay, with why each cannot let a wrong port pass.
+# "hole" marks the ones that can; they name the issue that tracks the fix.
+
+[[allow]]
+file = "crates/asrs-app/tests/console_layout.rs"
+function = "scroll_anchoring_follows_blink"
+rule = "open-chain"
+reason = "walks the fixture's own steps (the input), and every recorded scroll position must be consumed"
+
+[[allow]]
+file = "crates/asrs-app/tests/hub_entity.rs"
+function = "expected"
+rule = "default-slot"
+count = 2
+reason = "an empty first key is not 'step' or 'end', and the next branch asserts it is a known record; an absent status equals none the entity reports"
+
+[[allow]]
+file = "crates/asrs-app/tests/hub_entity.rs"
+function = "text"
+rule = "default-slot"
+reason = "reads strings out of two traces that are compared with each other"
+
+[[allow]]
+file = "crates/asrs-app/tests/hub_entity.rs"
+function = "upstream_titles"
+rule = "open-chain"
+reason = "picks the title lists out of the vector; the caller asserts how many were compared"
+
+[[allow]]
+file = "crates/asrs-app/tests/menu_vectors.rs"
+function = "electron_builds_the_darwin_menu"
+rule = "skipped-kind"
+reason = "the config record is the run's input description; every other op fails"
+
+[[allow]]
+file = "crates/asrs-app/tests/prompt_windows.rs"
+function = "replay"
+rule = "default-slot"
+reason = 'a missing kind is counted under "" and the counts per kind then differ'
+
+[[allow]]
+file = "crates/asrs-app/tests/prompt_windows.rs"
+function = "run"
+rule = "default-slot"
+count = 2
+reason = 'a missing kind is counted under "" and the counts per kind then differ; the flow name is a label'
+
+[[allow]]
+file = "crates/asrs-app/tests/routing_vectors.rs"
+function = "replay"
+rule = "catch-all"
+count = 2
+reason = "the first two of three matches on the same op: the last one panics on an unknown op"
+
+[[allow]]
+file = "crates/asrs-app/tests/select_vectors.rs"
+function = "modifiers"
+rule = "default-slot"
+reason = "the recorded op leaves the list out when no modifier is held; an unknown name fails"
+
+[[allow]]
+file = "crates/asrs-app/tests/source_list_text.rs"
+function = "type_name_widths_match_blink"
+rule = "silent-return"
+reason = "picks the width records out of the source-list vectors, which asrs-model replays; asserts some were compared"
+
+[[allow]]
+file = "crates/asrs-app/tests/source_list_view.rs"
+function = "blink_outcomes"
+rule = "silent-return"
+reason = "picks the list dumps out of a vector; the test asserts every capture was compared"
+
+[[allow]]
+file = "crates/asrs-app/tests/tab_bar_layout.rs"
+function = "titles"
+rule = "silent-return"
+reason = "parses one read's value; the caller asserts how many titles were compared"
+
+[[allow]]
+file = "crates/asrs-app/tests/window_sizes.rs"
+function = "cases"
+rule = "silent-return"
+reason = "collects the windows upstream created, the test's inputs; asrs-services replays the vector itself"
+
+[[allow]]
+file = "crates/asrs-canvas/tests/dom_boxes.rs"
+function = "dom_text_boxes_match_chromium"
+rule = "default-slot"
+reason = "no lines means no expected boxes, and the port's boxes are compared with that list"
+
+[[allow]]
+file = "crates/asrs-field3d/tests/camera_controls_vectors.rs"
+function = "check"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-field3d/tests/three_vectors.rs"
+function = "check"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-formats/tests/urcl_vectors.rs"
+function = "replay"
+rule = "silent-return"
+reason = "mirrors the generator (genUrcl.ts), which parses no record whose getter threw or gave null"
+
+[[allow]]
+file = "crates/asrs-formats/tests/urcl_vectors.rs"
+function = "urcl"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-formats/tests/wpilog_vectors.rs"
+function = "*"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-formats/tests/wpilog_vectors.rs"
+function = "compare_blocks"
+rule = "default-slot"
+reason = "absent blocks become an empty list, and the two lists are compared by length too"
+
+[[allow]]
+file = "crates/asrs-formats/tests/wpilog_vectors.rs"
+function = "compare_fields"
+rule = "silent-return"
+reason = "the key list is the union over record shapes; a key this shape lacks is not recorded"
+
+[[allow]]
+file = "crates/asrs-formats/tests/wpilog_vectors.rs"
+function = "public_record"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-formats/tests/wpilog_vectors.rs"
+function = "search_key_set"
+rule = "default-slot"
+count = 2
+reason = "the case is a label; an absent key string becomes an empty name, and the name lists are compared"
+
+[[allow]]
+file = "crates/asrs-formats/tests/wpilog_vectors.rs"
+function = "search_key_set"
+rule = "silent-return"
+reason = "queries over generated key lists have no source file; the search vectors test covers them"
+
+[[allow]]
+file = "crates/asrs-hub/tests/common/mod.rs"
+function = "replay"
+rule = "default-slot"
+count = 4
+reason = "fixture inputs: an absent platform or key code is the empty string, as in the page; no layout scripts no rects"
+
+[[allow]]
+file = "crates/asrs-hub/tests/common/mod.rs"
+function = "replay"
+rule = "skipped-kind"
+reason = "main messages that change no state this harness models, listed by name; any other fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/common/mod.rs"
+function = "timeline_rect"
+rule = "default-slot"
+reason = 'an empty selector contains no "timeline", so the rule is not one that needs modelling'
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "*"
+rule = "no-tally"
+reason = "compare() walks the port's records and the vector's together and fails on either leftover; kinds it skips are #305"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "capture"
+rule = "default-slot"
+reason = "an empty expression is one run_eval does not know, and fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "capture"
+rule = "skipped-kind"
+reason = "kinds other harnesses compare (dom_tab_views, the canvas suites, asrs-model source lists); counting them is #305"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "dispatch_event"
+rule = "default-slot"
+count = 2
+reason = "an event init without the key has the empty string, as in Blink, and rsplit always yields a piece; the effects are compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "eval_selection_expr"
+rule = "catch-all"
+reason = 'None is "not a selection expression"; the caller fails on an expression nothing knows'
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "main_message"
+rule = "default-slot"
+count = 4
+reason = "JsValue's default is undefined, what reading an absent property gives upstream; an empty selection method is not known, and fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "main_message"
+rule = "skipped-kind"
+reason = "main messages that change no state this harness models, listed by name; any other fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "rect_of"
+rule = "default-slot"
+reason = "an element without a parent has an empty rect, as detached elements have"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "replay"
+rule = "default-slot"
+count = 3
+reason = "fixture inputs: no steps replays nothing and leaves every record unmatched; the others label exceptions, which are compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "replay"
+rule = "skipped-kind"
+reason = "main messages that change no state this harness models, listed by name; any other fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "root_event"
+rule = "catch-all"
+reason = "the tab type and event pairs upstream registers a root listener for; the others reach none"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "window_mouse"
+rule = "catch-all"
+reason = "events with no window drag listener upstream; dispatch_event rejects the unknown ones"
+
+[[allow]]
+file = "crates/asrs-hub/tests/hub_frame_dom.rs"
+function = "hub_frame_vectors"
+rule = "default-slot"
+reason = "an empty name is a vector id that does not load"
+
+[[allow]]
+file = "crates/asrs-hub/tests/hub_lifecycle.rs"
+function = "*"
+rule = "no-tally"
+reason = "compare() matches records one by one, keys included, and fails on either leftover"
+
+[[allow]]
+file = "crates/asrs-hub/tests/hub_lifecycle.rs"
+function = "eval"
+rule = "default-slot"
+reason = "a progress style upstream never set reads as the empty string in the DOM; the value is compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/hub_lifecycle.rs"
+function = "export_options"
+rule = "catch-all"
+count = 2
+reason = "None makes the caller report the options as unmodeled, which fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/hub_lifecycle.rs"
+function = "read_glow"
+rule = "default-slot"
+reason = "a progress style upstream never set reads as the empty string in the DOM; the value is compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/sidebar_dom.rs"
+function = "dispatch_event"
+rule = "default-slot"
+count = 3
+reason = "an event init without the key has the empty string, as in Blink; the result is compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/sidebar_dom.rs"
+function = "dispatch_event"
+rule = "catch-all"
+reason = "the outer arm lists the four events; input has no key or focus to pass on"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "eval"
+rule = "default-slot"
+reason = "a selection call without an argument list has no arguments; the result is compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "eval_capture"
+rule = "default-slot"
+reason = "an unset select reads as the empty string in the DOM; the value is compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "eval_capture"
+rule = "catch-all"
+reason = "the first of two matches on the expression: the second fails on an unknown one"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "main"
+rule = "default-slot"
+count = 4
+reason = "JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "main"
+rule = "skipped-kind"
+reason = "main messages that change no state this harness models, listed by name; any other fails"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "replay"
+rule = "default-slot"
+count = 4
+reason = "fixture inputs: no steps replays nothing and leaves every record unmatched, no layout is the default one; JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-hub/tests/statistics_dom.rs"
+function = "selection_call"
+rule = "default-slot"
+reason = "JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "main"
+rule = "default-slot"
+count = 4
+reason = "JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "owned_by_tabs"
+rule = "default-slot"
+reason = "an element path of one segment has no parent classes"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "replay"
+rule = "default-slot"
+count = 2
+reason = "fixture inputs: no steps replays nothing and leaves every record unmatched; split always yields a first piece, and the numbers read from it are compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "run_event"
+rule = "default-slot"
+reason = "an event init without the key has the empty string, as in Blink; the result is compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "view"
+rule = "default-slot"
+reason = "no drag item is an empty list in upstream's view too, and the views are compared"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "window_mouse"
+rule = "catch-all"
+reason = "events with no window listener upstream; run_event rejects the unknown ones"
+
+[[allow]]
+file = "crates/asrs-js/tests/math_vectors.rs"
+function = "dispatch"
+rule = "default-slot"
+reason = "an absent name finds no port entry and the record fails"
+
+[[allow]]
+file = "crates/asrs-js/tests/regex_vectors.rs"
+function = "dispatch"
+rule = "default-slot"
+reason = "an absent name finds no port entry and the record fails"
+
+[[allow]]
+file = "crates/asrs-js/tests/string_vectors.rs"
+function = "check_utf8_record"
+rule = "default-slot"
+count = 3
+reason = "no bytes is the empty input, and an absent error name or message equals none the port throws"
+
+[[allow]]
+file = "crates/asrs-live/tests/ftc_sessions.rs"
+function = "op"
+rule = "skipped-kind"
+reason = "ops for the parts of the hub this source does not read; an unknown op fails"
+
+[[allow]]
+file = "crates/asrs-live/tests/nt4_drivers/mod.rs"
+function = "string_list"
+rule = "default-slot"
+reason = "a session op without a list passes none; the resulting trace is compared line by line"
+
+[[allow]]
+file = "crates/asrs-live/tests/phoenix_sessions.rs"
+function = "op"
+rule = "skipped-kind"
+reason = "an op for the parts of the hub this source does not read; an unknown op fails"
+
+[[allow]]
+file = "crates/asrs-live/tests/phoenix_sessions.rs"
+function = "string_list"
+rule = "default-slot"
+reason = "a session op without a list passes none; the resulting trace is compared line by line"
+
+[[allow]]
+file = "crates/asrs-live/tests/rlog_sessions.rs"
+function = "op"
+rule = "skipped-kind"
+reason = "ops for the parts of the hub this source does not read; an unknown op fails"
+
+[[allow]]
+file = "crates/asrs-live/tests/support/mod.rs"
+function = "*"
+rule = "no-tally"
+reason = "check_trace compares whole lines up to the longer of the two traces"
+
+[[allow]]
+file = "crates/asrs-live/tests/support/mod.rs"
+function = "column"
+rule = "default-slot"
+reason = "a column of another type has no values, and the dump it goes into is compared"
+
+[[allow]]
+file = "crates/asrs-log/tests/search_vectors.rs"
+function = "search_queries"
+rule = "default-slot"
+reason = "the case names a key set or is a label"
+
+[[allow]]
+file = "crates/asrs-log/tests/struct_vectors.rs"
+function = "replay"
+rule = "silent-return"
+reason = "the generator marks geometry values over 5000 bytes, which upstream does not decode"
+
+[[allow]]
+file = "crates/asrs-model/tests/model_vectors.rs"
+function = "schema_value"
+rule = "catch-all"
+reason = "None fails the caller unless the name is BUILD_DATE in a dated build"
+
+[[allow]]
+file = "crates/asrs-model/tests/model_vectors.rs"
+function = "schema_value"
+rule = "skipped-kind"
+reason = "a dated build has its own date; undated ones compare the constant"
+
+[[allow]]
+file = "crates/asrs-model/tests/model_vectors.rs"
+function = "typed_merge_matches_raw_merge"
+rule = "silent-return"
+reason = "compares two port paths on the update records; the first test compares every record with upstream"
+
+[[allow]]
+file = "crates/asrs-model/tests/source_list_vectors.rs"
+function = "record"
+rule = "default-slot"
+reason = "compared with the port's error, which is never empty, so an absent one fails"
+
+[[allow]]
+file = "crates/asrs-model/tests/source_list_vectors.rs"
+function = "record"
+rule = "silent-return"
+reason = "hole: a record kind the harness does not know passes; #305"
+
+[[allow]]
+file = "crates/asrs-model/tests/unit_dialog_vectors.rs"
+function = "unit_conversion_dialog_flows"
+rule = "default-slot"
+count = 2
+reason = 'the flow is a label, and a missing kind is not "step", which fails'
+
+[[allow]]
+file = "crates/asrs-parity/src/live/mod.rs"
+function = "parse"
+rule = "default-slot"
+reason = "an empty protocol matches none, and parsing fails"
+
+[[allow]]
+file = "crates/asrs-parity/src/live/nt4.rs"
+function = "new"
+rule = "default-slot"
+reason = "a session without topics serves none; its trace is compared"
+
+[[allow]]
+file = "crates/asrs-parity/src/live/nt4.rs"
+function = "ws_message"
+rule = "catch-all"
+reason = "the mock server ignores unknown methods, as the NT4 server does"
+
+[[allow]]
+file = "crates/asrs-parity/src/live/nt4.rs"
+function = "ws_message"
+rule = "silent-return"
+reason = "the mock server ignores messages without parameters, as the NT4 server does"
+
+[[allow]]
+file = "crates/asrs-parity/src/live/server.rs"
+function = "check_json_numbers"
+rule = "catch-all"
+reason = "strings, booleans and null hold no number"
+
+[[allow]]
+file = "crates/asrs-parity/src/live/simple.rs"
+function = "op_name"
+rule = "default-slot"
+reason = "an empty op name matches none, and the session fails"
+
+[[allow]]
+file = "crates/asrs-parity/src/live/simple.rs"
+function = "plot"
+rule = "default-slot"
+count = 2
+reason = "an absent signal list names no signal, and a signal without values plots zero, as the recorded server does"
+
+[[allow]]
+file = "crates/asrs-parity/tests/live_sessions.rs"
+function = "*"
+rule = "no-tally"
+reason = "live::replay compares every server event with the vector and returns how many"
+
+[[allow]]
+file = "crates/asrs-services/tests/asset_downloader.rs"
+function = "replay"
+rule = "default-slot"
+reason = 'a missing kind is counted under "" and the counts per kind then differ'
+
+[[allow]]
+file = "crates/asrs-services/tests/asset_downloader.rs"
+function = "step"
+rule = "skipped-kind"
+reason = "reads nothing; every step's status is compared after the match"
+
+[[allow]]
+file = "crates/asrs-services/tests/asset_loader.rs"
+function = "asset_loader_vectors"
+rule = "default-slot"
+reason = 'a missing kind is counted under "" and the counts per kind then differ'
+
+[[allow]]
+file = "crates/asrs-services/tests/download_live.rs"
+function = "run_main"
+rule = "default-slot"
+reason = "without the ssh tools the run uses the fixture server only, which needs no user name"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_support/mod.rs"
+function = "array"
+rule = "default-slot"
+reason = "a scenario without the list has none of it; the run it describes is compared with the recording"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_support/mod.rs"
+function = "raw"
+rule = "skipped-kind"
+reason = "a scripted server that does nothing more; an unknown word fails"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_vectors.rs"
+function = "step"
+rule = "catch-all"
+reason = "effects that change no harness state; all of them are compared below as one list"
+
+[[allow]]
+file = "crates/asrs-services/tests/files_vectors.rs"
+function = "check_record"
+rule = "default-slot"
+count = 5
+reason = "an empty op is not known, and the others are compared whole with what the port sent or threw"
+
+[[allow]]
+file = "crates/asrs-services/tests/files_vectors.rs"
+function = "json_f64_array"
+rule = "default-slot"
+reason = "an absent recorded list is an empty one, compared whole with what the port did"
+
+[[allow]]
+file = "crates/asrs-services/tests/files_vectors.rs"
+function = "json_str_array"
+rule = "default-slot"
+reason = "an absent recorded list is an empty one, compared whole with what the port did"
+
+[[allow]]
+file = "crates/asrs-services/tests/files_vectors.rs"
+function = "rect_from"
+rule = "default-slot"
+count = 4
+reason = "JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-services/tests/historical_start_revlog.rs"
+function = "historical_start_revlog_vectors"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-services/tests/historical_start_revlog.rs"
+function = "start"
+rule = "skipped-kind"
+reason = "cases whose file does not exist need no file system setup"
+
+[[allow]]
+file = "crates/asrs-services/tests/video_vectors.rs"
+function = "recorded_error"
+rule = "default-slot"
+reason = "an error without a code has the empty code, and Fields::finish rejects unread fields"
+
+[[allow]]
+file = "crates/asrs-services/tests/window_vectors.rs"
+function = "ready"
+rule = "default-slot"
+reason = "a saved state without a window list opens none; the windows opened are compared"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/console_vectors.rs"
+function = "dispatch"
+rule = "default-slot"
+reason = "an absent name finds no port entry and the record fails"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/dom_tab_views.rs"
+function = "replay"
+rule = "skipped-kind"
+reason = "layout records and messages the dom_tabs and table harnesses compare; unknown kinds fail"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "apply_context"
+rule = "default-slot"
+reason = "the hub's preferences are the recorded input of the call; the base is only for fields the record does not carry"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "bracket"
+rule = "default-slot"
+reason = "an empty bracket name has no matching end, and fails"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "f2d_bracket"
+rule = "silent-return"
+reason = "source-list ops inside a controller call replay with the call; the list's state is compared after"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "f2dr_bracket"
+rule = "silent-return"
+reason = "the nested render is compared as part of its bracket"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "handle_f2dr"
+rule = "default-slot"
+count = 2
+reason = "an unknown kind moves no camera in the port, and the fixtures' camera records compare what it should have moved"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "main_record"
+rule = "default-slot"
+reason = "compared with the name of the message the port sent, which is never empty"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "op"
+rule = "default-slot"
+reason = "take() moves the items out once; an empty list is compared with the recorded one"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/field_2d_dom.rs"
+function = "record_in"
+rule = "default-slot"
+count = 3
+reason = "compared with the port's error, which is never empty, so an absent one fails"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/line_graph_dom.rs"
+function = "bracket"
+rule = "silent-return"
+count = 2
+reason = "source-list ops and the nested command are compared as part of their bracket"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/line_graph_dom.rs"
+function = "event"
+rule = "catch-all"
+reason = "mouseleave reaches no window listener; the match above rejects unknown events"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/line_graph_dom.rs"
+function = "op"
+rule = "default-slot"
+reason = "take() moves the items out once; an empty list is compared with the recorded one"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/line_graph_dom.rs"
+function = "record_in"
+rule = "default-slot"
+reason = "compared with the port's error, which is never empty, so an absent one fails"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/line_graph_dom.rs"
+function = "record_in"
+rule = "silent-return"
+reason = "hole: a record kind the harness does not know passes; #305"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/mechanism_points_dom.rs"
+function = "eval_value"
+rule = "open-chain"
+reason = "the last branch fails on every other record, and exactly one eval record must remain"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/mechanism_points_dom.rs"
+function = "r08_records"
+rule = "default-slot"
+reason = "an empty kind is not in OTHER_KINDS, and fails"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/statistics_vectors.rs"
+function = "call"
+rule = "catch-all"
+reason = "None is an unknown function, which fails the record"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/table_real_dom.rs"
+function = "table_real_geometry_replays_through_scripted_reads"
+rule = "skipped-kind"
+reason = "records between renders, which belong to other harnesses; geometry inside renders is counted"
+
+[[allow]]
+file = "crates/asrs-ui/tests/tints.rs"
+function = "every_opaque_probe_matches_chromium_exactly"
+rule = "silent-return"
+count = 2
+reason = "picks the opaque filter probes; the test asserts exactly how many there are"
+
+[[allow]]
+file = "crates/asrs-ui/tests/tints.rs"
+function = "hover_and_active_backgrounds"
+rule = "silent-return"
+reason = "the button backgrounds are the rows with a button; the rest are compared by the probe test"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "every record of form/number-keys is asserted in order inside the loop"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "arrow_keys_step_number_inputs_as_in_blink"
+rule = "default-slot"
+count = 2
+reason = "an input without the attribute has the empty string, as in Blink"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "arrow_keys_step_number_inputs_as_in_blink"
+rule = "skipped-kind"
+reason = "focusing a number input changes neither its value nor its events, which are asserted below"
+
+[[allow]]
+file = "crates/asrs-app/tests/documentation_window.rs"
+function = "replay"
+rule = "skipped-kind"
+reason = "saving reads the state, which is compared after every step"
+
+[[allow]]
+file = "crates/asrs-app/tests/download_window.rs"
+function = "main"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-app/tests/download_window.rs"
+function = "replay"
+rule = "default-slot"
+reason = "a missing kind is counted under \"\" and the counts per kind then differ"
+
+[[allow]]
+file = "crates/asrs-app/tests/download_window.rs"
+function = "row"
+rule = "default-slot"
+reason = "an icon without a class has the empty className, as in the page; the row is compared"
+
+[[allow]]
+file = "crates/asrs-app/tests/info_layout.rs"
+function = "pages"
+rule = "silent-return"
+count = 2
+reason = "picks the laid-out dumps; each caller asserts exactly how many, and another test compares every record"
+
+[[allow]]
+file = "crates/asrs-hub/tests/satellite_page.rs"
+function = "step"
+rule = "default-slot"
+reason = "JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-ocr/tests/timer_vectors.rs"
+function = "queued_reads_interleave_and_a_failed_one_costs_only_itself"
+rule = "catch-all"
+reason = "picks the reads and their texts, and asserts there are as many of one as of the other"
+
+[[allow]]
+file = "crates/asrs-app/tests/bundled_assets.rs"
+function = "asset_paths"
+rule = "default-slot"
+reason = "a missing list gives fewer paths on that side, and the two path lists are compared by length too"
+
+[[allow]]
+file = "crates/asrs-app/tests/form_vectors.rs"
+function = "parse"
+rule = "default-slot"
+reason = "an input without the attribute has the empty string, as in Blink"
+
+[[allow]]
+file = "crates/asrs-app/tests/select_vectors.rs"
+function = "parse"
+rule = "default-slot"
+reason = "an optgroup without a label has the empty one, as in Blink"
+
+[[allow]]
+file = "crates/asrs-app/tests/source_list_text.rs"
+function = "*"
+rule = "no-tally"
+reason = "picks the width records, which asrs-model's source_list_vectors compares whole; asserts some had a name"
+
+[[allow]]
+file = "crates/asrs-field3d/tests/glb_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "every record is a file or a compared case, and any other kind fails; finish() asserts there were cases"
+
+[[allow]]
+file = "crates/asrs-formats/tests/revlog_vectors.rs"
+function = "describe_record"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-formats/tests/spark_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "every record is the header, a compared sweep or a compared edge; the sweeps are counted against the header"
+
+[[allow]]
+file = "crates/asrs-formats/tests/urcl_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "walks the records as a header and pairs of case and dump, and fails on anything else"
+
+[[allow]]
+file = "crates/asrs-formats/tests/urcl_vectors.rs"
+function = "urcl"
+rule = "silent-return"
+reason = "the vector's header record, which holds nothing to compare"
+
+[[allow]]
+file = "crates/asrs-hub/tests/dom_tabs.rs"
+function = "matches_compound"
+rule = "default-slot"
+count = 2
+reason = "split always yields a first piece"
+
+[[allow]]
+file = "crates/asrs-hub/tests/tabs_dom.rs"
+function = "capture"
+rule = "default-slot"
+reason = "an opacity never set reads as the empty string in the DOM; the value is compared"
+
+[[allow]]
+file = "crates/asrs-log/tests/msgpack_vectors.rs"
+function = "of"
+rule = "default-slot"
+reason = "a call that drew no random number records none, and the number of draws is compared"
+
+[[allow]]
+file = "crates/asrs-model/tests/source_list_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "hole: record kinds are not counted; #305"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "every record after the header is a step whose whole effect list is compared, and an unknown op fails"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "parse"
+rule = "default-slot"
+reason = "an input without the attribute has the empty string, as in Blink"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "select_items"
+rule = "default-slot"
+reason = "an optgroup without a label has the empty one, as in Blink"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/mechanism_points_dom.rs"
+function = "css_color_syntax"
+rule = "default-slot"
+reason = "a value the port rejects leaves the style empty, as in Blink; the two are compared"
+
+[[allow]]
+file = "crates/asrs-ui/tests/icon_capture.rs"
+function = "*"
+rule = "no-tally"
+reason = "every probe selected is checked, and each scene asserts it has some"
+
+[[allow]]
+file = "crates/asrs-services/tests/files_vectors.rs"
+function = "emit"
+rule = "skipped-kind"
+reason = "opens a menu, which touches no file; its clicks are operations of their own, and an unknown message fails"

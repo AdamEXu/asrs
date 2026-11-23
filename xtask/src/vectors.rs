@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use asrs_parity::json::{self, Json};
 use asrs_parity::utf16::Utf16String;
@@ -1122,32 +1123,127 @@ fn string_list(
     Ok(Some(items))
 }
 
-fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
-    let zone = &vector.zone;
-    match &vector.spec.kind {
+/// The oracle run that generates `vector`: its command and its stdin.
+fn vector_command(paths: &Paths, vector: &Vector<'_>) -> Result<(Command, Vec<u8>)> {
+    let mut command = oracle::oracle_command_in(paths, vector.spec.entry(), &vector.zone)?;
+    let input = match &vector.spec.kind {
         Kind::Entry { args, .. } => {
+            command
+                .args(args)
+                .env(SPEC_VARIABLE, &vector.spec.path)
+                .env(LOCAL_VARIABLE, if vector.spec.local { "1" } else { "0" })
+                .current_dir(&paths.root);
+            Vec::new()
+        }
+        Kind::Fn { requests } => oracle::read(requests)?,
+    };
+    Ok((command, input))
+}
+
+fn run_vector(paths: &Paths, vector: &Vector<'_>) -> Result<String> {
+    let (mut command, input) = vector_command(paths, vector)?;
+    match &vector.spec.kind {
+        Kind::Entry { .. } => {
             let entry = vector.spec.entry();
-            let text = oracle::pipe(
-                oracle::oracle_command_in(paths, entry, zone)?
-                    .args(args)
-                    .env(SPEC_VARIABLE, &vector.spec.path)
-                    .env(LOCAL_VARIABLE, if vector.spec.local { "1" } else { "0" })
-                    .current_dir(&paths.root),
-                Vec::new(),
-            )?;
+            let text = oracle::pipe(&mut command, input)?;
             for (i, line) in text.lines().enumerate() {
                 json::parse(line).map_err(|e| format!("{entry} output line {}: {e}", i + 1))?;
             }
             Ok(text)
         }
         Kind::Fn { requests } => {
-            let bytes = oracle::read(requests)?;
-            let request_text = String::from_utf8(bytes.clone()).map_err(|e| e.to_string())?;
-            let responses =
-                oracle::pipe(&mut oracle::oracle_command_in(paths, "fn", zone)?, bytes)?;
+            let request_text = String::from_utf8(input.clone()).map_err(|e| e.to_string())?;
+            let responses = oracle::pipe(&mut command, input)?;
             merge_fn_records(&request_text, &responses)
                 .map_err(|e| format!("{}: {e}", requests.display()))
         }
+    }
+}
+
+/// One oracle run of a spec, for `oracle coverage`.
+pub(crate) struct SpecRun {
+    pub(crate) id: String,
+    pub(crate) entry: String,
+    pub(crate) zone: String,
+    pub(crate) command: Command,
+    pub(crate) input: Vec<u8>,
+    /// What an unchanged spec must print, for a committed vector this host can generate.
+    pub(crate) committed: Option<String>,
+}
+
+/// The runs of `wanted`, each a spec or vector id, an id prefix ending at a `/`, or the path of a
+/// spec file or of a directory of specs. A spec with several zones runs once, in its first.
+/// Specs under `parity/specs` are compared with their committed vector.
+pub(crate) fn spec_runs(paths: &Paths, wanted: &[String]) -> Result<Vec<SpecRun>> {
+    let specs = specs_dir(&paths.root);
+    let mut out: Vec<SpecRun> = Vec::new();
+    for name in wanted {
+        let path = Path::new(name);
+        let (found, in_tree) = if path.exists() {
+            let path = path.canonicalize().map_err(|e| format!("{name}: {e}"))?;
+            let in_tree = path.starts_with(&specs);
+            let base = match in_tree {
+                true => specs.as_path(),
+                false if path.is_dir() => path.as_path(),
+                false => path.parent().expect("a file has a directory"),
+            };
+            let mut found = discover(base)?;
+            found.retain(|s| s.path.starts_with(&path));
+            (found, in_tree)
+        } else {
+            let prefix = format!("{}/", name.trim_end_matches('/'));
+            let mut found = discover(&specs)?;
+            found.retain(|s| {
+                s.id == *name
+                    || s.id.starts_with(&prefix)
+                    || s.vectors().iter().any(|v| v.id == *name)
+            });
+            (found, true)
+        };
+        if found.is_empty() {
+            return Err(format!("oracle coverage: {name:?} names no spec"));
+        }
+        for spec in &found {
+            let vectors = spec.vectors();
+            let Some(vector) = vectors
+                .iter()
+                .find(|v| v.id == *name)
+                .or_else(|| vectors.iter().find(|v| !v.is_foreign()))
+                .filter(|v| !v.is_foreign())
+            else {
+                return Err(format!("{}: generated on another platform only", spec.id));
+            };
+            if out.iter().any(|r| r.id == vector.id) {
+                continue;
+            }
+            corpus::ensure(paths, &spec.corpora(&corpus::names(&paths.root)?))?;
+            let (command, input) = vector_command(paths, vector)?;
+            let committed = if in_tree && !spec.local {
+                vectors::vector_path(&paths.root.join("parity/vectors"), &vector.id)
+                    .map(|p| vectors::read_text(&p))
+                    .transpose()?
+            } else {
+                None
+            };
+            out.push(SpecRun {
+                id: vector.id.clone(),
+                entry: spec.entry().to_owned(),
+                zone: vector.zone.clone(),
+                command,
+                input,
+                committed,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// The vector an oracle run of `run` prints, for the comparison with the committed one.
+pub(crate) fn printed_vector(run: &SpecRun, stdout: &str) -> Result<String> {
+    if run.entry == "fn" {
+        merge_fn_records(&String::from_utf8_lossy(&run.input), stdout)
+    } else {
+        Ok(stdout.to_owned())
     }
 }
 

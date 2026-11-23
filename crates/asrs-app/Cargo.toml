@@ -24,6 +24,7 @@ asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
+asrs-ocr = { path = "../asrs-ocr" }
 asrs-services = { path = "../asrs-services" }
 asrs-tabs = { path = "../asrs-tabs" }
 asrs-ui.workspace = true

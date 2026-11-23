@@ -23,7 +23,6 @@ use asrs_js::value::JsValue;
 use asrs_model::assets::built_in_3d_fields;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Field3dMode, Preferences};
-use asrs_model::selection_impl::KeyTarget;
 use asrs_model::tab_controller::{TabCommand, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::field3d::Field3dController;
@@ -45,7 +44,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
 
-use super::frame::{FrameHost, HubFrame, key_target};
+use super::frame::{FrameHost, HubFrame};
 use super::select::FormSelect;
 
 /// `div.field-3d-canvas-container`'s `height: calc(100% + 26px)`, or `+ 10px` when `.fixed`.
@@ -356,7 +355,7 @@ fn ease_in_out(t: f64) -> f64 {
 }
 
 /// `KeyboardEvent.code` for the key GPUI reports.
-fn key_code(key: &str) -> String {
+pub(super) fn key_code(key: &str) -> String {
     let mut chars = key.chars();
     match (chars.next(), chars.next()) {
         (Some(c), None) if c.is_ascii_alphabetic() => format!("Key{}", c.to_ascii_uppercase()),
@@ -371,6 +370,9 @@ fn key_code(key: &str) -> String {
             "down" => "ArrowDown".into(),
             "left" => "ArrowLeft".into(),
             "right" => "ArrowRight".into(),
+            "/" | "?" => "Slash".into(),
+            "," | "<" => "Comma".into(),
+            "." | ">" => "Period".into(),
             other => other.to_owned(),
         },
     }
@@ -833,7 +835,9 @@ impl<H: FrameHost> HubFrame<H> {
         let dark = appearance == Appearance::Dark;
         let now = self.host().frame_time(cx);
 
-        let extra = if dom.container_fixed {
+        let extra = if hub.page().is_satellite() {
+            0.0
+        } else if dom.container_fixed {
             CONTAINER_EXTRA_FIXED
         } else {
             CONTAINER_EXTRA
@@ -1138,13 +1142,9 @@ impl<H: FrameHost> HubFrame<H> {
         key: &str,
         down: bool,
         command_modifier: bool,
-        window: &Window,
+        editable: bool,
         cx: &mut Context<'_, Self>,
     ) {
-        let Some(target) = key_target(window) else {
-            return;
-        };
-        let editable = target != KeyTarget::Other;
         let code = key_code(key);
         let shown = self.field3d.shown;
         let tabs = field3d_tabs(self.host().hub(cx));
@@ -1169,7 +1169,7 @@ impl<H: FrameHost> HubFrame<H> {
     pub(super) fn field3d_key_down(
         &mut self,
         event: &KeyDownEvent,
-        window: &Window,
+        editable: bool,
         cx: &mut Context<'_, Self>,
     ) {
         let m = event.keystroke.modifiers;
@@ -1178,16 +1178,16 @@ impl<H: FrameHost> HubFrame<H> {
         } else {
             m.control
         };
-        self.field3d_key(&event.keystroke.key, true, command, window, cx);
+        self.field3d_key(&event.keystroke.key, true, command, editable, cx);
     }
 
     pub(super) fn field3d_key_up(
         &mut self,
         event: &KeyUpEvent,
-        window: &Window,
+        editable: bool,
         cx: &mut Context<'_, Self>,
     ) {
-        self.field3d_key(&event.keystroke.key, false, false, window, cx);
+        self.field3d_key(&event.keystroke.key, false, false, editable, cx);
     }
 
     /// `div.field-3d-settings` over the right of `controls` (`div.controls-content`).

@@ -15,6 +15,7 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Rng, V8MathRandom};
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_ocr::{OcrError, TimerError, TimerReader};
 use asrs_services::lifecycle::AppPaths;
 use asrs_services::video::{
     Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent, VideoHost,
@@ -47,11 +48,14 @@ struct Io {
     children: Children,
     random: V8MathRandom,
     events: async_channel::Sender<VideoEvent>,
+    timers: Option<TimerReader>,
+    uncaught: async_channel::Sender<OcrError>,
 }
 
 /// `VideoProcessor`'s module: it lives as long as the app.
 pub fn init(paths: &AppPaths, cx: &mut App) {
     let (events, receive) = async_channel::unbounded();
+    let (uncaught, thrown) = async_channel::unbounded();
     cx.set_global(Videos {
         processor: Some(VideoProcessor::new(config(paths))),
         io: Io {
@@ -60,6 +64,8 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
             children: Children::default(),
             random: V8MathRandom::from_entropy(),
             events,
+            timers: None,
+            uncaught,
         },
     });
     cx.spawn(async move |cx| {
@@ -68,6 +74,25 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
         }
     })
     .detach();
+    cx.spawn(async move |cx| {
+        while let Ok(error) = thrown.recv().await {
+            cx.update(|cx| show_uncaught(&error, cx));
+        }
+    })
+    .detach();
+}
+
+/// Electron's `uncaughtException` handler, for the `Error` tesseract.js throws when a job fails;
+/// the stack under its message has no counterpart here.
+fn show_uncaught(error: &OcrError, cx: &mut App) {
+    let options = MessageBoxOptions {
+        kind: MessageBoxType::Error,
+        title: "Error".to_owned(),
+        message: "A JavaScript error occurred in the main process".to_owned(),
+        detail: format!("Uncaught Exception:\nError: {error}"),
+        ..MessageBoxOptions::default()
+    };
+    dispatch::show_message_box(None, options, cx, |_, _| {});
 }
 
 /// `select-video` from a hub window.
@@ -86,6 +111,10 @@ pub fn hub_message(window: WindowId, message: &NamedMessage<HubToMain>, cx: &mut
         return;
     };
     let uuid = ops::to_string(&uuid);
+    // Upstream's workers start with the app. They are ready well before a conversion's first
+    // sample, 2 s of frames in.
+    let io = &mut cx.global_mut::<Videos>().io;
+    io.timers.get_or_insert_with(TimerReader::new);
     with_processor(window, cx, |processor, host| {
         processor.prepare(host, &uuid, &source, &match_info, &menu);
     });
@@ -148,6 +177,9 @@ fn deliver(event: VideoEvent, cx: &mut App) {
         return;
     };
     let closed = matches!(event, VideoEvent::Close { .. });
+    if matches!(event, VideoEvent::TimerText { .. }) {
+        cx.global_mut::<Videos>().io.owners.remove(&handle);
+    }
     with_processor(window, cx, |processor, host| processor.handle(host, event));
     if closed && cx.has_global::<Videos>() {
         let io = &mut cx.global_mut::<Videos>().io;
@@ -454,9 +486,25 @@ impl VideoHost for Host<'_> {
         handle
     }
 
-    /// The job never settles: timers are read by P06 (#52), and without one no clip locks itself.
-    fn read_timer_text(&mut self, _: &JsString, _: f64, _: f64) -> Handle {
-        self.handle()
+    fn read_timer_text(&mut self, path: &JsString, width: f64, height: f64) -> Handle {
+        let job = self.handle();
+        let events = self.sender();
+        let io = self.io();
+        let uncaught = io.uncaught.clone();
+        let path = path.to_string_lossy();
+        let timers = io.timers.get_or_insert_with(TimerReader::new);
+        timers.read_timer_text(path, width, height, move |result| match result {
+            Ok(text) => {
+                let text = JsString::from(text.as_str());
+                let _ = events.try_send(VideoEvent::TimerText { job, text });
+            }
+            // main.ts ignores unhandled rejections.
+            Err(TimerError::Read(_)) => {}
+            Err(TimerError::Job(error)) => {
+                let _ = uncaught.try_send(error);
+            }
+        });
+        job
     }
 
     fn log(&mut self, _: LogLevel, args: &[LogArg]) {

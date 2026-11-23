@@ -1,5 +1,5 @@
 //! `src/main/electron/VideoProcessor.ts` (everything but the OCR inside `readTimerText`, which is
-//! P06) and `src/main/electron/getElectronPlatform.ts`.
+//! `asrs_ocr`) and `src/main/electron/getElectronPlatform.ts`.
 //!
 //! The processor is sans-IO: every call upstream makes into Node, Electron or an npm package is a
 //! [`VideoHost`] call, and everything upstream awaits comes back later as a [`VideoEvent`] naming
@@ -200,7 +200,7 @@ pub trait VideoHost {
     fn popup_menu(&mut self, labels: &[JsString], x: f64, y: f64) -> Handle;
     /// `setTimeout(callback, ms)`.
     fn set_timeout(&mut self, ms: f64) -> Handle;
-    /// `VideoProcessor.readTimerText(path, width, height)` (P06 ports its body).
+    /// `VideoProcessor.readTimerText(path, width, height)`, ported as `asrs_ocr::TimerReader`.
     fn read_timer_text(&mut self, path: &JsString, width: f64, height: f64) -> Handle;
     /// `console.log` / `console.warn` / `console.error`.
     fn log(&mut self, level: LogLevel, args: &[LogArg]);

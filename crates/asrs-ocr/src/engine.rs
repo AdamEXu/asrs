@@ -1,0 +1,758 @@
+//! One tesseract.js worker: `tesseract-core-simd.wasm` and the parts of its Emscripten glue
+//! and of `worker-script/index.js` that `createWorker("eng")` and `recognize` reach.
+
+use std::collections::BTreeMap;
+use std::fmt;
+use std::sync::{Arc, OnceLock};
+
+use asrs_js::math::{max2, min2, rem, shift_right_unsigned, to_int32};
+use wasmtime::{
+    AsContext, AsContextMut, Caller, Config, Engine, Extern, Instance, Linker, Memory, Module,
+    OptLevel, Ref, Store, Table, Trap, TypedFunc, Val,
+};
+
+const CORE_WASM: &[u8] = include_bytes!("../data/tesseract-core-simd.wasm");
+const ENG_TRAINEDDATA_GZ: &[u8] = include_bytes!("../data/eng.traineddata.gz");
+
+const OEM_LSTM_ONLY: i32 = 1;
+const ENOENT: i32 = 44;
+const EBADF: i32 = 8;
+const EINVAL: i32 = 28;
+const ENOTTY: i32 = 59;
+const ESPIPE: i32 = 70;
+const ENXIO: i32 = 6;
+const EOVERFLOW: i32 = 61;
+const MAX_FILE: usize = 1 << 31;
+const MAX_IO_VECTORS: u32 = 1024;
+const O_CREAT: i32 = 0o100;
+const O_TRUNC: i32 = 0o1000;
+
+mod export {
+    pub const MEMORY: &str = "U";
+    pub const TABLE: &str = "rf";
+    pub const CALL_CTORS: &str = "V";
+    pub const NEW_TESS_BASE_API: &str = "Kc";
+    pub const VERSION: &str = "Lc";
+    pub const INIT_3: &str = "ad";
+    pub const GET_PAGE_SEG_MODE: &str = "hd";
+    pub const SET_IMAGE_FILE: &str = "md";
+    pub const SET_RECTANGLE: &str = "od";
+    pub const RECOGNIZE: &str = "Ed";
+    pub const GET_UTF8_TEXT: &str = "Id";
+    pub const MEAN_TEXT_CONF: &str = "Pd";
+    pub const OEM: &str = "_d";
+    pub const FREE: &str = "yf";
+    pub const MALLOC: &str = "zf";
+    pub const STACK_SAVE: &str = "Bf";
+    pub const STACK_RESTORE: &str = "Cf";
+}
+
+/// What tesseract.js rejects a job with: `err.toString()`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OcrError(pub String);
+
+impl fmt::Display for OcrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for OcrError {}
+
+#[derive(Debug)]
+enum Thrown {
+    Number(String),
+    Error(String),
+}
+
+impl fmt::Display for Thrown {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(text) | Self::Error(text) => f.write_str(text),
+        }
+    }
+}
+
+impl std::error::Error for Thrown {}
+
+fn abort(what: &str) -> wasmtime::Error {
+    wasmtime::Error::from(Thrown::Error(format!(
+        "RuntimeError: Aborted({what}). Build with -sASSERTIONS for more info."
+    )))
+}
+
+fn to_ocr_error(error: &wasmtime::Error) -> OcrError {
+    if let Some(thrown) = error.downcast_ref::<Thrown>() {
+        return OcrError(format!("{thrown}"));
+    }
+    let message = match error.downcast_ref::<Trap>() {
+        Some(Trap::MemoryOutOfBounds) => "memory access out of bounds".to_owned(),
+        Some(Trap::TableOutOfBounds) => "table index is out of bounds".to_owned(),
+        Some(Trap::IndirectCallToNull | Trap::BadSignature) => {
+            "null function or function signature mismatch".to_owned()
+        }
+        Some(Trap::IntegerDivisionByZero) => "divide by zero".to_owned(),
+        Some(Trap::IntegerOverflow) => "divide result unrepresentable".to_owned(),
+        Some(Trap::UnreachableCodeReached) => "unreachable".to_owned(),
+        Some(Trap::StackOverflow) => {
+            return OcrError("RangeError: Maximum call stack size exceeded".to_owned());
+        }
+        _ => format!("{error:?}"),
+    };
+    OcrError(format!("RuntimeError: {message}"))
+}
+
+#[derive(Clone)]
+enum Fd {
+    Tty,
+    File { path: String, position: u64 },
+}
+
+#[derive(Default)]
+struct Host {
+    files: BTreeMap<String, Vec<u8>>,
+    fds: Vec<Option<Fd>>,
+    memory: Option<Memory>,
+    table: Option<Table>,
+    stack_save: Option<TypedFunc<(), i32>>,
+    stack_restore: Option<TypedFunc<i32, ()>>,
+}
+
+type HostCaller<'a> = Caller<'a, Host>;
+type HostResult<T> = wasmtime::Result<T>;
+
+fn absolute(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            part => parts.push(part),
+        }
+    }
+    format!("/{}", parts.join("/"))
+}
+
+fn memory(caller: &HostCaller<'_>) -> Memory {
+    caller
+        .data()
+        .memory
+        .expect("memory is set right after instantiation")
+}
+
+fn range(len: usize, at: u32, count: u32) -> HostResult<std::ops::Range<usize>> {
+    let start = at as usize;
+    let end = start + count as usize;
+    if end > len {
+        return Err(Trap::MemoryOutOfBounds.into());
+    }
+    Ok(start..end)
+}
+
+fn read_u32(caller: &HostCaller<'_>, at: u32) -> HostResult<u32> {
+    let data = memory(caller).data(caller);
+    let range = range(data.len(), at, 4)?;
+    Ok(u32::from_le_bytes(data[range].try_into().expect("4 bytes")))
+}
+
+fn write_u32(caller: &mut HostCaller<'_>, at: u32, value: u32) -> HostResult<()> {
+    write_bytes(caller, at, &value.to_le_bytes())
+}
+
+fn write_bytes(caller: &mut HostCaller<'_>, at: u32, bytes: &[u8]) -> HostResult<()> {
+    let data = memory(caller).data_mut(caller);
+    let range = range(data.len(), at, bytes.len() as u32)?;
+    data[range].copy_from_slice(bytes);
+    Ok(())
+}
+
+fn c_string(data: &[u8], at: u32) -> String {
+    if at == 0 {
+        return String::new();
+    }
+    let bytes = data.get(at as usize..).unwrap_or_default();
+    let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..end]).into_owned()
+}
+
+fn read_string(caller: &HostCaller<'_>, at: u32) -> String {
+    c_string(memory(caller).data(caller), at)
+}
+
+fn load_embedded_files(caller: &mut HostCaller<'_>, mut at: u32) -> HostResult<()> {
+    loop {
+        let name = read_u32(caller, at)?;
+        let len = read_u32(caller, at.wrapping_add(4))?;
+        let content = read_u32(caller, at.wrapping_add(8))?;
+        at = at.wrapping_add(12);
+        let path = absolute(&read_string(caller, name));
+        let data = memory(caller).data(&mut *caller);
+        let bytes = data[range(data.len(), content, len)?].to_vec();
+        caller.data_mut().files.insert(path, bytes);
+        if read_u32(caller, at)? == 0 {
+            return Ok(());
+        }
+    }
+}
+
+fn open(caller: &mut HostCaller<'_>, path: u32, flags: i32) -> i32 {
+    let path = read_string(caller, path);
+    if path.is_empty() {
+        return -ENOENT;
+    }
+    let path = absolute(&path);
+    let host = caller.data_mut();
+    if flags & O_CREAT != 0 {
+        host.files.entry(path.clone()).or_default();
+    }
+    if !host.files.contains_key(&path) {
+        return -ENOENT;
+    }
+    if flags & O_TRUNC != 0 {
+        host.files.insert(path.clone(), Vec::new());
+    }
+    let fd = Some(Fd::File { path, position: 0 });
+    let slot = host.fds.iter().position(Option::is_none);
+    let slot = match slot {
+        Some(slot) => {
+            host.fds[slot] = fd;
+            slot
+        }
+        None => {
+            host.fds.push(fd);
+            host.fds.len() - 1
+        }
+    };
+    slot as i32
+}
+
+fn close(caller: &mut HostCaller<'_>, fd: i32) -> i32 {
+    match caller.data_mut().fds.get_mut(fd as usize) {
+        Some(slot @ Some(_)) => {
+            *slot = None;
+            0
+        }
+        _ => EBADF,
+    }
+}
+
+fn fd(caller: &HostCaller<'_>, fd: i32) -> Option<Fd> {
+    caller.data().fds.get(fd as usize).cloned().flatten()
+}
+
+fn set_position(caller: &mut HostCaller<'_>, fd: i32, to: u64) {
+    if let Some(Some(Fd::File { position, .. })) = caller.data_mut().fds.get_mut(fd as usize) {
+        *position = to;
+    }
+}
+
+fn io_vectors(caller: &HostCaller<'_>, iov: u32, count: u32) -> HostResult<Vec<(u32, u32)>> {
+    if count > MAX_IO_VECTORS {
+        return Err(Trap::MemoryOutOfBounds.into());
+    }
+    (0..count)
+        .map(|i| {
+            let at = iov.wrapping_add(i * 8);
+            Ok((read_u32(caller, at)?, read_u32(caller, at.wrapping_add(4))?))
+        })
+        .collect()
+}
+
+fn fd_read(
+    caller: &mut HostCaller<'_>,
+    handle: i32,
+    iov: u32,
+    count: u32,
+    result: u32,
+) -> HostResult<i32> {
+    let Some(entry) = fd(caller, handle) else {
+        return Ok(EBADF);
+    };
+    let Fd::File { path, position } = entry else {
+        return Ok(ENXIO);
+    };
+    let vectors = io_vectors(caller, iov, count)?;
+    let (data, host) = memory(caller).data_and_store_mut(&mut *caller);
+    let contents = &host.files[&path];
+    let mut at = (position as usize).min(contents.len());
+    let mut total = 0;
+    for (pointer, len) in vectors {
+        let read = (len as usize).min(contents.len() - at);
+        let target = range(data.len(), pointer, read as u32)?;
+        data[target].copy_from_slice(&contents[at..at + read]);
+        at += read;
+        total += read as u32;
+        if read < len as usize {
+            break;
+        }
+    }
+    set_position(caller, handle, position + u64::from(total));
+    write_u32(caller, result, total)?;
+    Ok(0)
+}
+
+fn fd_write(
+    caller: &mut HostCaller<'_>,
+    handle: i32,
+    iov: u32,
+    count: u32,
+    result: u32,
+) -> HostResult<i32> {
+    let Some(entry) = fd(caller, handle) else {
+        return Ok(EBADF);
+    };
+    let vectors = io_vectors(caller, iov, count)?;
+    let (data, host) = memory(caller).data_and_store_mut(&mut *caller);
+    let mut total = 0;
+    for (_, len) in &vectors {
+        total += *len as usize;
+    }
+    if let Fd::File { path, position } = entry {
+        let start = position as usize;
+        let end = start.saturating_add(total);
+        if end > MAX_FILE {
+            return Err(Thrown::Error("RangeError: Invalid typed array length".to_owned()).into());
+        }
+        let file = host.files.entry(path).or_default();
+        if file.len() < end {
+            file.resize(end, 0);
+        }
+        let mut at = start;
+        for (pointer, len) in vectors {
+            let source = &data[range(data.len(), pointer, len)?];
+            file[at..at + source.len()].copy_from_slice(source);
+            at += source.len();
+        }
+        set_position(caller, handle, end as u64);
+    }
+    write_u32(caller, result, total as u32)?;
+    Ok(0)
+}
+
+fn fd_seek(
+    caller: &mut HostCaller<'_>,
+    handle: i32,
+    low: i32,
+    high: i32,
+    whence: i32,
+    result: u32,
+) -> HostResult<i32> {
+    if !(-(1 << 21)..=1 << 21).contains(&high) {
+        return Ok(EOVERFLOW);
+    }
+    let offset = (i64::from(high) << 32) | i64::from(low as u32);
+    let Some(entry) = fd(caller, handle) else {
+        return Ok(EBADF);
+    };
+    let Fd::File { path, position } = entry else {
+        return Ok(ESPIPE);
+    };
+    let base = match whence {
+        0 => 0,
+        1 => position as i64,
+        2 => caller.data().files[&path].len() as i64,
+        _ => return Ok(EINVAL),
+    };
+    let Some(target) = base.checked_add(offset) else {
+        return Ok(EOVERFLOW);
+    };
+    if target < 0 {
+        return Ok(EINVAL);
+    }
+    set_position(caller, handle, target as u64);
+    write_bytes(caller, result, &target.to_le_bytes())?;
+    Ok(0)
+}
+
+fn fcntl(caller: &mut HostCaller<'_>, handle: i32, command: i32) -> HostResult<i32> {
+    if fd(caller, handle).is_none() {
+        return Ok(-EBADF);
+    }
+    match command {
+        1 | 2 | 6 | 7 => Ok(0),
+        3 => Ok(0),
+        8 | 16 => Ok(-EINVAL),
+        _ => Err(wasmtime::Error::from(Thrown::Error(format!(
+            "unported fcntl {command}"
+        )))),
+    }
+}
+
+fn resize_heap(caller: &mut HostCaller<'_>, requested: u32) -> bool {
+    const MAX: f64 = 2_147_483_648.0;
+    let memory = memory(caller);
+    let old = memory.data_size(&*caller) as f64;
+    let requested = f64::from(requested);
+    if requested > MAX {
+        return false;
+    }
+    for cut_down in [1.0, 2.0, 4.0] {
+        let over = min2(old * (1.0 + 0.2 / cut_down), requested + 100_663_296.0);
+        let target = max2(requested, over);
+        let target = min2(
+            MAX,
+            target + rem(65_536.0 - rem(target, 65_536.0), 65_536.0),
+        );
+        let pages = shift_right_unsigned(target - old + 65_535.0, 16.0);
+        if memory.grow(&mut *caller, u64::from(pages)).is_ok() {
+            return true;
+        }
+    }
+    false
+}
+
+const ENVIRONMENT: [&str; 7] = [
+    "USER=web_user",
+    "LOGNAME=web_user",
+    "PATH=/",
+    "PWD=/",
+    "HOME=/home/web_user",
+    "LANG=en_US.UTF-8",
+    "_=./this.program",
+];
+
+fn environ_get(caller: &mut HostCaller<'_>, pointers: u32, buffer: u32) -> HostResult<()> {
+    let (mut pointer, mut at) = (pointers, buffer);
+    for entry in ENVIRONMENT {
+        write_u32(caller, pointer, at)?;
+        write_bytes(caller, at, entry.as_bytes())?;
+        let end = at.wrapping_add(entry.len() as u32);
+        write_bytes(caller, end, &[0])?;
+        pointer = pointer.wrapping_add(4);
+        at = end.wrapping_add(1);
+    }
+    Ok(())
+}
+
+fn invoke(caller: &mut HostCaller<'_>, args: &[Val], results: &mut [Val]) -> HostResult<()> {
+    let host = caller.data();
+    let (save, restore, table) = (
+        host.stack_save.clone().expect("exports are resolved"),
+        host.stack_restore.clone().expect("exports are resolved"),
+        host.table.expect("exports are resolved"),
+    );
+    let stack = save.call(&mut *caller, ())?;
+    let index = args[0].unwrap_i32() as u32;
+    let callee = match table.get(&mut *caller, u64::from(index)) {
+        Some(Ref::Func(Some(callee))) => callee,
+        _ => {
+            restore.call(&mut *caller, stack)?;
+            return Err(Thrown::Error(format!("TypeError: invoke of table entry {index}")).into());
+        }
+    };
+    match callee.call(&mut *caller, &args[1..], results) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            restore.call(&mut *caller, stack)?;
+            match error.downcast_ref::<Thrown>() {
+                Some(Thrown::Number(_)) => Err(abort("-1")),
+                _ => Err(error),
+            }
+        }
+    }
+}
+
+fn now_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_millis() as f64)
+}
+
+fn int(args: &[Val], index: usize) -> i32 {
+    args[index].unwrap_i32()
+}
+
+fn uint(args: &[Val], index: usize) -> u32 {
+    int(args, index) as u32
+}
+
+fn call_import(
+    name: &str,
+    caller: &mut HostCaller<'_>,
+    args: &[Val],
+    results: &mut [Val],
+) -> HostResult<()> {
+    let mut answer = |value: i32| results[0] = Val::I32(value);
+    match name {
+        "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "u" | "v" => {
+            invoke(caller, args, results)?;
+        }
+        "a" => {
+            let [condition, file, function] =
+                [0, 1, 3].map(|i| (uint(args, i) != 0).then(|| read_string(caller, uint(args, i))));
+            return Err(abort(&format!(
+                "Assertion failed: {}, at: {},{},{}",
+                condition.unwrap_or_default(),
+                file.unwrap_or_else(|| "unknown filename".to_owned()),
+                int(args, 2),
+                function.unwrap_or_else(|| "unknown function".to_owned()),
+            )));
+        }
+        "l" => return Err(abort("")),
+        "n" => return Err(Thrown::Number(format!("{}", int(args, 0))).into()),
+        "y" => return Err(Thrown::Number("Infinity".to_owned()).into()),
+        "m" | "O" => results[0] = Val::F64(now_ms().to_bits()),
+        "o" => answer(fd_write(
+            caller,
+            int(args, 0),
+            uint(args, 1),
+            uint(args, 2),
+            uint(args, 3),
+        )?),
+        "p" => answer(close(caller, int(args, 0))),
+        "r" => answer(open(caller, uint(args, 1), int(args, 2))),
+        "s" => answer(fd_read(
+            caller,
+            int(args, 0),
+            uint(args, 1),
+            uint(args, 2),
+            uint(args, 3),
+        )?),
+        "t" => answer(fcntl(caller, int(args, 0), int(args, 1))?),
+        "q" => {
+            if let Some(result) = results.first_mut() {
+                *result = Val::I32(0);
+            }
+        }
+        "w" => answer(fd_seek(
+            caller,
+            int(args, 0),
+            int(args, 1),
+            int(args, 2),
+            int(args, 3),
+            uint(args, 4),
+        )?),
+        "z" => answer(i32::from(resize_heap(caller, uint(args, 0)))),
+        "I" => {
+            environ_get(caller, uint(args, 0), uint(args, 1))?;
+            answer(0);
+        }
+        "J" => {
+            write_u32(caller, uint(args, 0), ENVIRONMENT.len() as u32)?;
+            let size: usize = ENVIRONMENT.iter().map(|entry| entry.len() + 1).sum();
+            write_u32(caller, uint(args, 1), size as u32)?;
+            answer(0);
+        }
+        "Q" => {
+            let [to, from, count] = [0, 1, 2].map(|i| uint(args, i));
+            let data = memory(caller).data_mut(&mut *caller);
+            let source = range(data.len(), from, count)?;
+            range(data.len(), to, count)?;
+            data.copy_within(source, to as usize);
+        }
+        "R" => match fd(caller, int(args, 0)) {
+            None => answer(-EBADF),
+            Some(Fd::Tty) => answer(0),
+            Some(Fd::File { .. }) => answer(-ENOTTY),
+        },
+        "S" => load_embedded_files(caller, uint(args, 0))?,
+        _ => {
+            return Err(Thrown::Error(format!("unported import {name}")).into());
+        }
+    }
+    Ok(())
+}
+
+struct Core {
+    engine: Engine,
+    module: Module,
+    traineddata: Vec<u8>,
+}
+
+impl Core {
+    fn load() -> Result<Self, OcrError> {
+        let mut config = Config::new();
+        config.cranelift_opt_level(OptLevel::Speed);
+        config.max_wasm_stack(1 << 20);
+        let engine = Engine::new(&config).map_err(|e| to_ocr_error(&e))?;
+        let module = Module::new(&engine, CORE_WASM).map_err(|e| to_ocr_error(&e))?;
+        Ok(Self {
+            engine,
+            module,
+            traineddata: gunzip(ENG_TRAINEDDATA_GZ)?,
+        })
+    }
+
+    fn shared() -> Result<&'static Arc<Self>, OcrError> {
+        static CORE: OnceLock<Result<Arc<Core>, OcrError>> = OnceLock::new();
+        CORE.get_or_init(|| Core::load().map(Arc::new))
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+}
+
+fn gunzip(data: &[u8]) -> Result<Vec<u8>, OcrError> {
+    let bad = || OcrError("Error: incorrect header check".to_owned());
+    if data.len() < 18 || data[..3] != [0x1f, 0x8b, 8] {
+        return Err(bad());
+    }
+    let flags = data[3];
+    let mut at = 10;
+    if flags & 4 != 0 {
+        at += 2 + usize::from(u16::from_le_bytes([data[at], data[at + 1]]));
+    }
+    for flag in [8, 16] {
+        if flags & flag != 0 {
+            at += 1 + data[at..].iter().position(|b| *b == 0).ok_or_else(bad)?;
+        }
+    }
+    if flags & 2 != 0 {
+        at += 2;
+    }
+    miniz_oxide::inflate::decompress_to_vec(&data[at..data.len() - 8]).map_err(|_| bad())
+}
+
+/// `setImage.js` looks for the orientation tag in the decimal text of the first 500 bytes, so its
+/// match can start inside a byte ("1" of 201) and takes one digit of the value.
+fn exif_orientation(image: &[u8]) -> i32 {
+    const TAG: &str = "1 18 0 3 0 0 0 1 0 ";
+    let mut text = String::new();
+    for byte in &image[..image.len().min(500)] {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        text.push_str(&format!("{byte}"));
+    }
+    let orientation = text.match_indices(TAG).find_map(|(at, _)| {
+        let digit = *text.as_bytes().get(at + TAG.len())?;
+        digit.is_ascii_digit().then(|| i32::from(digit - b'0'))
+    });
+    match orientation {
+        None | Some(0) => 1,
+        Some(orientation) => orientation,
+    }
+}
+
+/// A tesseract.js worker created by `createWorker("eng")`.
+pub struct Worker {
+    store: Store<Host>,
+    memory: Memory,
+    api: i32,
+    set_image_file: TypedFunc<(i32, i32, f32), i32>,
+    set_rectangle: TypedFunc<(i32, i32, i32, i32, i32), ()>,
+    recognize: TypedFunc<(i32, i32), i32>,
+    get_utf8_text: TypedFunc<i32, i32>,
+    free: TypedFunc<i32, ()>,
+    mean_text_conf: TypedFunc<i32, i32>,
+    get_page_seg_mode: TypedFunc<i32, i32>,
+    oem: TypedFunc<i32, i32>,
+    version: TypedFunc<i32, i32>,
+}
+
+impl Worker {
+    pub fn new() -> Result<Self, OcrError> {
+        let core = Core::shared()?;
+        Self::create(core).map_err(|e| to_ocr_error(&e))
+    }
+
+    fn create(core: &Core) -> wasmtime::Result<Self> {
+        let mut linker: Linker<Host> = Linker::new(&core.engine);
+        for import in core.module.imports() {
+            let wasmtime::ExternType::Func(ty) = import.ty() else {
+                return Err(abort("unexpected import"));
+            };
+            let name = import.name().to_owned();
+            linker.func_new(
+                import.module(),
+                import.name(),
+                ty,
+                move |mut caller, args, results| call_import(&name, &mut caller, args, results),
+            )?;
+        }
+        let mut store = Store::new(&core.engine, Host::default());
+        store.data_mut().fds = vec![Some(Fd::Tty), Some(Fd::Tty), Some(Fd::Tty)];
+        let instance = linker.instantiate(&mut store, &core.module)?;
+        let memory = instance
+            .get_memory(&mut store, export::MEMORY)
+            .ok_or_else(|| abort("no memory export"))?;
+        let table = match instance.get_export(&mut store, export::TABLE) {
+            Some(Extern::Table(table)) => table,
+            _ => return Err(abort("no table export")),
+        };
+        let stack_save = instance.get_typed_func(&mut store, export::STACK_SAVE)?;
+        let stack_restore = instance.get_typed_func(&mut store, export::STACK_RESTORE)?;
+        let host = store.data_mut();
+        host.memory = Some(memory);
+        host.table = Some(table);
+        host.stack_save = Some(stack_save);
+        host.stack_restore = Some(stack_restore);
+
+        let ctors: TypedFunc<(), ()> = instance.get_typed_func(&mut store, export::CALL_CTORS)?;
+        ctors.call(&mut store, ())?;
+        store
+            .data_mut()
+            .files
+            .insert("/eng.traineddata".to_owned(), core.traineddata.clone());
+
+        let new_api: TypedFunc<(), i32> =
+            instance.get_typed_func(&mut store, export::NEW_TESS_BASE_API)?;
+        let api = new_api.call(&mut store, ())?;
+        Self::init(&mut store, &instance, memory, api)?;
+        Ok(Self {
+            set_image_file: instance.get_typed_func(&mut store, export::SET_IMAGE_FILE)?,
+            set_rectangle: instance.get_typed_func(&mut store, export::SET_RECTANGLE)?,
+            recognize: instance.get_typed_func(&mut store, export::RECOGNIZE)?,
+            get_utf8_text: instance.get_typed_func(&mut store, export::GET_UTF8_TEXT)?,
+            free: instance.get_typed_func(&mut store, export::FREE)?,
+            mean_text_conf: instance.get_typed_func(&mut store, export::MEAN_TEXT_CONF)?,
+            get_page_seg_mode: instance.get_typed_func(&mut store, export::GET_PAGE_SEG_MODE)?,
+            oem: instance.get_typed_func(&mut store, export::OEM)?,
+            version: instance.get_typed_func(&mut store, export::VERSION)?,
+            store,
+            memory,
+            api,
+        })
+    }
+
+    fn init(
+        store: &mut Store<Host>,
+        instance: &Instance,
+        memory: Memory,
+        api: i32,
+    ) -> wasmtime::Result<()> {
+        let malloc: TypedFunc<i32, i32> = instance.get_typed_func(&mut *store, export::MALLOC)?;
+        let buffer = malloc.call(&mut *store, 128)?;
+        memory.write(store.as_context_mut(), buffer as usize, b"eng\0")?;
+        let init: TypedFunc<(i32, i32, i32, i32), i32> =
+            instance.get_typed_func(&mut *store, export::INIT_3)?;
+        match init.call(&mut *store, (api, 0, buffer, OEM_LSTM_ONLY))? {
+            -1 => Err(Thrown::Error("initialization failed".to_owned()).into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// `recognize(image, { rectangle })` with `rectangle` as `[left, top, width, height]`;
+    /// resolves to `data.text`.
+    pub fn recognize(&mut self, image: &[u8], rectangle: [f64; 4]) -> Result<String, OcrError> {
+        self.run(image, rectangle).map_err(|e| to_ocr_error(&e))
+    }
+
+    fn run(&mut self, image: &[u8], rectangle: [f64; 4]) -> wasmtime::Result<String> {
+        let store = &mut self.store;
+        let api = self.api;
+        store
+            .data_mut()
+            .files
+            .insert("/input".to_owned(), image.to_vec());
+        let status = self
+            .set_image_file
+            .call(&mut *store, (api, exif_orientation(image), 0.0))?;
+        if status == 1 {
+            return Err(Thrown::Error("Error: Error attempting to read image.".to_owned()).into());
+        }
+        let [left, top, width, height] = rectangle.map(to_int32);
+        self.set_rectangle
+            .call(&mut *store, (api, left, top, width, height))?;
+        self.recognize.call(&mut *store, (api, 0))?;
+        let pointer = self.get_utf8_text.call(&mut *store, api)?;
+        let text = c_string(self.memory.data(store.as_context()), pointer as u32);
+        self.free.call(&mut *store, pointer)?;
+        self.mean_text_conf.call(&mut *store, api)?;
+        self.get_page_seg_mode.call(&mut *store, api)?;
+        self.oem.call(&mut *store, api)?;
+        self.version.call(&mut *store, api)?;
+        Ok(text)
+    }
+}

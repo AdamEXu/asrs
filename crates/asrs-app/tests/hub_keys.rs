@@ -97,6 +97,18 @@ fn space_toggles_playback(page: &mut Page<'_>, focused: &str, toggles: bool) {
     );
 }
 
+fn space_toggles_once(page: &mut Page<'_>) {
+    page.static_at(5.0);
+    for expected in [
+        SelectionMode::Playback,
+        SelectionMode::Static,
+        SelectionMode::Playback,
+    ] {
+        page.press("space");
+        assert_eq!(page.mode(), expected, "one Space, one toggle");
+    }
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub keys: skipped, no headless renderer on this platform");
@@ -123,6 +135,13 @@ fn main() {
     let top = page.scroll_top();
     space_toggles_playback(&mut page, "a button", true);
     assert_eq!(page.scroll_top(), top, "Space also clicked the button");
+    space_toggles_once(&mut page);
+
+    page.click(JUMP_INPUT);
+    space_toggles_playback(&mut page, "the jump input again", false);
+    page.select_documentation();
+    page.frames(2);
+    space_toggles_playback(&mut page, "an input its tab hid", true);
     page.close();
     println!("hub_keys: ok");
 }

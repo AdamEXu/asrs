@@ -10,7 +10,6 @@ use std::rc::Rc;
 use asrs_canvas::text::FontSpec;
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::string::{JsError, JsString};
-use asrs_model::selection_impl::KeyTarget;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::console::view::{ConsoleRow, ConsoleView};
@@ -30,7 +29,7 @@ use super::console_layout::{
     CELL_PADDING, Cell, CellNode, ConsoleLayout, HEADER_HEIGHT, LINE_HEIGHT, TIME_WIDTH, cell_font,
     cell_style,
 };
-use super::frame::{FrameHost, HubFrame, key_target, wheel_of};
+use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -1007,6 +1006,7 @@ impl<H: FrameHost> HubFrame<H> {
     pub(super) fn console_key_down(
         &mut self,
         event: &KeyDownEvent,
+        editable: bool,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
@@ -1019,7 +1019,7 @@ impl<H: FrameHost> HubFrame<H> {
         if !command || event.keystroke.key != "f" || m.shift {
             return;
         }
-        if key_target(window) != Some(KeyTarget::Other) {
+        if editable {
             return;
         }
         let Some(shown) = self.console.shown else {

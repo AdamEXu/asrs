@@ -149,6 +149,11 @@ impl Field2dRenderer {
         }
     }
 
+    /// The field the last command names.
+    pub fn field(&self) -> Option<&JsString> {
+        self.last_command.as_ref().map(|c| &c.field)
+    }
+
     pub fn dom(&self) -> &Rc<RefCell<Field2dDom>> {
         &self.dom
     }

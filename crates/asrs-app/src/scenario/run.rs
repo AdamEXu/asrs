@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use asrs_js::value::JsValue;
-use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::messages::{HubToMain, MainToHub, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
@@ -22,6 +22,7 @@ use asrs_ui::gpui::{
     point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
+use asrs_ui::platform;
 use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::theme::ThemeSource;
 
@@ -38,10 +39,12 @@ use crate::menus::app_menu;
 use crate::menus::bridge::{MenuAction, ScriptedMenu};
 use crate::menus::dispatch::dispatch;
 use crate::menus::model::{Command, MenuItem};
+use crate::satellite::{Satellite, SatelliteEvent};
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
-use crate::windows::{self, WindowKind, Windows};
+use crate::views::satellite_host::SatelliteHost;
+use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
@@ -57,6 +60,8 @@ origin on the Electron driver's host, which places its window 16 px inside it (d
 /// and its scroll sensors' frame clock both run on.
 const FRAME: Duration = Duration::from_millis(16);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+/// Long enough for a satellite's last state to reach `state.json`.
+const SAVE_SETTLE: Duration = Duration::from_millis(1500);
 const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
 const STABLE_ATTEMPTS: usize = 120;
 /// The Electron driver's `--js-flags=--random-seed`.
@@ -67,14 +72,35 @@ const WINDOW_ORIGIN: f64 = 16.0;
 const HUB_WINDOW_ID: f64 = 1.0;
 
 /// What `StateTracker` reads of the screen in a run: the hub window where the Electron driver
-/// places its own.
+/// places its own, and the satellites main placed around it.
+#[derive(Clone)]
 struct Screen {
     window: Rect,
+    satellites: Vec<(WindowId, Rect)>,
+}
+
+impl Screen {
+    fn with_satellites(&self, cx: &App) -> Screen {
+        let manager = Windows::manager(cx);
+        let ids = manager.satellites().into_iter().flat_map(|(_, list)| list);
+        Screen {
+            window: self.window,
+            satellites: ids
+                .filter_map(|id| Some((*id, manager.bounds(*id)?)))
+                .collect(),
+        }
+    }
 }
 
 impl WindowSystem for Screen {
     fn window_bounds(&self, id: f64) -> Option<Rect> {
-        (id == HUB_WINDOW_ID).then_some(self.window)
+        if id == HUB_WINDOW_ID {
+            return Some(self.window);
+        }
+        let mut satellites = self.satellites.iter();
+        satellites
+            .find(|(window, _)| *window as f64 == id)
+            .map(|(_, bounds)| *bounds)
     }
 
     fn displays(&self) -> Vec<Rect> {
@@ -222,6 +248,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 hub: None,
                 frame: None,
                 saves: Rc::default(),
+                saved: Vec::new(),
                 exceptions: Rc::default(),
                 pressed: None,
             };
@@ -257,6 +284,8 @@ struct Variant<'a> {
     hub: Option<(Entity<Hub>, crate::views::frame::FrameGeometry)>,
     frame: Option<WindowHandle<HubFrame<HubEntityHost>>>,
     saves: Rc<RefCell<Saves>>,
+    /// What each satellite saves.
+    saved: Vec<(AnyWindowHandle, Rc<RefCell<Saves>>)>,
     exceptions: Rc<RefCell<Vec<String>>>,
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
     pressed: Option<MouseButton>,
@@ -438,21 +467,77 @@ impl Variant<'_> {
         self.prompt.unwrap_or(self.window())
     }
 
-    /// The hub, then the prompt while it is open.
+    /// The hub, then the prompt while it is open, then the satellites.
     fn open_windows(&mut self) -> Vec<AnyWindowHandle> {
         let mut windows = vec![self.window(), self.active()];
-        windows.dedup();
+        windows.extend(self.satellites().iter().map(|(window, _)| *window));
+        let mut seen = Vec::new();
+        windows.retain(|window| {
+            let new = !seen.contains(window);
+            seen.push(*window);
+            new
+        });
         windows
     }
 
-    fn switch_prompt(&mut self, page: Option<WindowKind>) -> Result<(), String> {
+    fn satellites(&mut self) -> Vec<(AnyWindowHandle, Entity<Satellite>)> {
+        self.headless.context().update(|cx| {
+            let pages = MainProcess::satellite_windows(cx);
+            let pages = pages.into_iter();
+            pages
+                .filter_map(|(id, page)| Some((Windows::handle(cx, id)?, page)))
+                .collect()
+        })
+    }
+
+    /// New satellites get the run's scale before anything is rendered in them, and their saved
+    /// states are kept.
+    fn adopt_satellites(&mut self) -> Result<(), String> {
+        for (window, page) in self.satellites() {
+            if self.saved.iter().any(|(known, _)| *known == window) {
+                continue;
+            }
+            let saves = Rc::<RefCell<Saves>>::default();
+            let kept = saves.clone();
+            self.headless.context().update(|cx| {
+                cx.subscribe(&page, move |_, event, _| {
+                    if let SatelliteEvent::Main(message) = event
+                        && message.name == SatelliteToMain::SaveState
+                    {
+                        let mut kept = kept.borrow_mut();
+                        kept.count += 1;
+                        kept.last = Some(message.data.clone());
+                    }
+                })
+                .detach();
+            });
+            self.saved.push((window, saves));
+            self.headless
+                .set_scale_factor(window, self.scale as f32)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn switch_to_hub(&mut self) -> Result<(), String> {
         self.settle();
+        let active = self.active();
+        if active != self.window() && !self.satellites().iter().any(|(w, _)| *w == active) {
+            return Err("the prompt is still open".to_owned());
+        }
+        self.prompt = None;
+        self.tick()
+    }
+
+    fn switch_prompt(&mut self, page: Option<WindowKind>, index: usize) -> Result<(), String> {
+        self.settle();
+        self.adopt_satellites()?;
         self.prompt = match page {
             Some(kind) => {
                 let window = self
                     .headless
                     .context()
-                    .update(|cx| Windows::of_kind(cx, kind))
+                    .update(|cx| Windows::of_kind(cx, kind, index))
                     .ok_or_else(|| format!("no {kind:?} prompt is open"))?;
                 self.headless
                     .set_scale_factor(window, self.scale as f32)
@@ -473,6 +558,7 @@ impl Variant<'_> {
 
     /// One animation frame, `FRAME` of executor time, and everything that then runs.
     fn tick(&mut self) -> Result<(), String> {
+        self.adopt_satellites()?;
         self.headless.context().advance_clock(FRAME);
         for window in self.open_windows() {
             self.headless
@@ -536,6 +622,16 @@ impl Variant<'_> {
                     .context()
                     .update(|cx| frame.read_with(cx, |frame, _| frame.field3d_busy()))
                     .map_err(|e| e.to_string())?;
+                let mut busy = busy;
+                for (window, _) in self.satellites() {
+                    if let Some(frame) = window.downcast::<HubFrame<SatelliteHost>>() {
+                        busy |= self
+                            .headless
+                            .context()
+                            .update(|cx| frame.read_with(cx, |frame, _| frame.field3d_busy()))
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
                 if busy {
                     reasons.push("3D loading or rendering");
                 }
@@ -786,7 +882,8 @@ impl Variant<'_> {
                     .update(|cx| click_app_menu(labels, cx))?;
                 self.settle();
             }
-            Action::Prompt { page } => self.switch_prompt(*page)?,
+            Action::Prompt { page, index } => self.switch_prompt(*page, *index)?,
+            Action::Hub => self.switch_to_hub()?,
             Action::Capture {
                 name,
                 probes,
@@ -841,7 +938,7 @@ impl Variant<'_> {
             .map_err(|e| format!("prefs.json: {e:?}"))?;
         self.headless
             .context()
-            .update(|cx| cx.set_global(MainProcess::headless(main)));
+            .update(|cx| cx.set_global(MainProcess::headless(main, RANDOM_SEED)));
         Ok((assets, preferences))
     }
 
@@ -853,6 +950,7 @@ impl Variant<'_> {
                 width: self.scenario.width,
                 height: self.scenario.height,
             },
+            satellites: Vec::new(),
         }
     }
 
@@ -928,14 +1026,22 @@ impl Variant<'_> {
                 let handle = window.into();
                 let screen = self.screen();
                 self.headless.context().update(|cx| {
-                    let id = Windows::adopt_hub(cx, window.into());
+                    let id = Windows::adopt_hub(cx, window.into(), screen.window);
+                    cx.set_global(ScriptedFrame {
+                        title_bar: platform::probe::framed_title_bar().unwrap_or(0.0),
+                    });
                     cx.global_mut::<MainProcess>()
                         .adopt_hub(id, hub.downgrade());
                     cx.set_global(ScriptedMenu::default());
                     cx.set_global(Script::default());
                     cx.subscribe(&hub, move |_, event, cx| match event {
+                        HubEvent::SatelliteUpdate(_) => {
+                            MainProcess::satellite_request(cx, id, event)
+                        }
                         HubEvent::Main(m) => {
+                            MainProcess::satellite_request(cx, id, event);
                             hub_dialogs::show(m, handle, cx);
+                            let screen = screen.with_satellites(cx);
                             let main = cx.global_mut::<MainProcess>().state_mut();
                             let saved =
                                 main.hub_message(&RealFs, HUB_WINDOW_ID, m)
@@ -989,6 +1095,13 @@ impl Variant<'_> {
             self.perform(action)
                 .map_err(|e| format!("action {i} ({}): {e}", capture::kind(action)))?;
         }
+        if !self.satellites().is_empty() {
+            let mut waited = Duration::ZERO;
+            while waited < SAVE_SETTLE {
+                self.tick()?;
+                waited += FRAME;
+            }
+        }
         for window in self.open_windows() {
             self.headless
                 .context()
@@ -1018,18 +1131,25 @@ impl Variant<'_> {
         )
     }
 
-    /// Waits for the hub's next `save-state` (every 250 ms) and returns its data.
+    /// Waits for the next `save-state` (every 250 ms) of the satellite input goes to, or of the
+    /// hub, and returns its data.
     fn fresh_state(&mut self) -> Result<JsValue, String> {
-        let before = self.saves.borrow().count;
+        let active = self.active();
+        let mut satellites = self.saved.iter();
+        let saves = satellites
+            .find(|(window, _)| *window == active)
+            .map_or_else(|| self.saves.clone(), |(_, saves)| saves.clone());
+        let before = saves.borrow().count;
         let mut waited = Duration::ZERO;
-        while self.saves.borrow().count == before {
+        while saves.borrow().count == before {
             if waited > STATE_SAVE_TIMEOUT {
                 return Err("no save-state within 5 s of the capture".into());
             }
             self.tick()?;
             waited += FRAME;
         }
-        Ok(self.saves.borrow().last.clone().unwrap_or_default())
+        let last = saves.borrow().last.clone();
+        Ok(last.unwrap_or_default())
     }
 
     fn shoot(&mut self) -> Result<Shot, String> {

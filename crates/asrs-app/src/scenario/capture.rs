@@ -96,7 +96,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Dialog(_) => "dialog",
         Action::Menu { .. } => "menu",
         Action::AppMenu { .. } => "appMenu",
-        Action::Prompt { .. } => "prompt",
+        Action::Prompt { .. } | Action::Hub => "prompt",
         Action::Capture { .. } => "capture",
     }
 }

@@ -14,6 +14,7 @@ pub mod metadata_layout;
 pub mod number;
 pub mod prompts;
 pub mod range;
+pub mod satellite_host;
 pub mod select;
 pub mod sidebar;
 pub mod source_list;

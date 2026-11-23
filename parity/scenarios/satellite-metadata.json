@@ -1,0 +1,115 @@
+{
+  "about": "Interaction (U23): a metadata tab popped out, with its table and, after another log opens, without",
+  "actions": [
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 12,
+              "title": "Meta",
+              "controller": null,
+              "controllerUUID": "metadata000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "open": [
+        "app:metadata"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "mouse": "click",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "table",
+      "probes": [
+        ".metadata-table-container",
+        "table.metadata-table th"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "wheel": {
+        "x": 400,
+        "y": 200,
+        "deltaX": 0,
+        "deltaY": -150,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "wheel",
+      "probes": [
+        ".metadata-table-container",
+        "table.metadata-table th"
+      ]
+    },
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "cleared",
+      "probes": [
+        ".metadata-table-container",
+        "table.metadata-table th",
+        ".tab-centered"
+      ]
+    }
+  ]
+}

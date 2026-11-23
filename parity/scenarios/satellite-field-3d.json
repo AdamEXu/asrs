@@ -1,0 +1,149 @@
+{
+  "about": "Interaction (U23): a 3D field popped out; its camera orbited with a drag, then set to a field camera through the menu and the field of view through the prompt on the satellite, which the satellite's saved state holds",
+  "gl": true,
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "field",
+      "probes": [
+        "canvas.field-3d-canvas",
+        "div.field-3d-canvas-container"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 210
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 230
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 230
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "field-orbited",
+      "probes": [
+        "canvas.field-3d-canvas"
+      ]
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 200,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Set FOV..."
+      ]
+    },
+    {
+      "prompt": "editFov"
+    },
+    {
+      "key": "7"
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "field-fov",
+      "probes": [
+        "canvas.field-3d-canvas"
+      ]
+    }
+  ]
+}

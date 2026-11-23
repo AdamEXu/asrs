@@ -10,6 +10,7 @@ use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_model::scroll_sensor::ScrollSensor;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::cx::TabCx;
 use asrs_tabs::line_graph::{LineGraphRenderer, OverlayStyle, Pointer};
 use asrs_ui::canvas_view::geometry::{client_size, mouse_client};
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view};
@@ -276,7 +277,7 @@ impl<H: FrameHost> HubFrame<H> {
         if left_under_pointer {
             self.host_mut().input(cx, |hub| {
                 with_renderer(hub, index, |renderer, page| {
-                    renderer.mouse_leave(page.selection_mut())
+                    renderer.mouse_leave(page.tab_selection())
                 });
             });
         }
@@ -382,7 +383,7 @@ impl<H: FrameHost> HubFrame<H> {
                         false,
                         pointer,
                         preferences.as_ref(),
-                        page.selection_mut(),
+                        page.tab_selection(),
                     );
                 }
                 renderer.dom().borrow_mut().painted.take()
@@ -439,16 +440,16 @@ impl<H: FrameHost> HubFrame<H> {
             with_renderer(hub, shown.index, |renderer, page| {
                 let preferences = page.preferences().cloned();
                 if was_inside && !inside {
-                    renderer.mouse_leave(page.selection_mut());
+                    renderer.mouse_leave(page.tab_selection());
                 }
                 if inside {
                     renderer.overlay_mouse_move(
                         pointer,
                         preferences.as_ref(),
-                        page.selection_mut(),
+                        page.tab_selection(),
                     );
                 }
-                renderer.window_mouse_move(pointer, page.selection_mut());
+                renderer.window_mouse_move(pointer, page.tab_selection());
             });
         });
         cx.notify();
@@ -463,7 +464,7 @@ impl<H: FrameHost> HubFrame<H> {
         let pointer = shown.pointer(x, shift);
         self.host_mut().input(cx, |hub| {
             with_renderer(hub, shown.index, |renderer, page| {
-                renderer.window_mouse_up(pointer, page.selection_mut())
+                renderer.window_mouse_up(pointer, page.tab_selection())
             });
         });
         cx.notify();
@@ -480,7 +481,7 @@ impl<H: FrameHost> HubFrame<H> {
             with_renderer(hub, shown.index, |renderer, page| {
                 renderer.mouse_down(pointer);
                 if right {
-                    renderer.context_menu(page.selection_mut());
+                    renderer.context_menu(page.tab_selection());
                 }
             });
         });
@@ -505,7 +506,7 @@ impl<H: FrameHost> HubFrame<H> {
         let pointer = shown.pointer(x, event.modifiers().shift);
         self.host_mut().input(cx, |hub| {
             with_renderer(hub, shown.index, |renderer, page| {
-                renderer.click(pointer, page.selection_mut())
+                renderer.click(pointer, page.tab_selection())
             });
         });
         cx.notify();
@@ -552,7 +553,7 @@ fn help_overlay(
     let box_w = root[2];
     let box_h = math::max2(root[3] - DEFAULT_SCROLL_TOP - SCROLL_BOTTOM, 0.0);
     let left = lu((box_w - container_w) / 2.0);
-    let top = DEFAULT_SCROLL_TOP + lu((box_h - container_h) / 2.0);
+    let top = lu((box_h - container_h) / 2.0);
     let color = if dark { 0xffffff } else { 0x000000 };
     let chain = if dark { chains::INVERT_ONE } else { "" };
     let mut container = div()
@@ -578,7 +579,7 @@ fn help_overlay(
         let text_left = HELP_ICON + HELP_ICON_GAP;
         let text_top = row_top + lu((HELP_ICON - h) / 2.0);
         let abs_x = (root[0] + left + text_left) as f32;
-        let abs_y = (root[1] + top + text_top) as f32;
+        let abs_y = (root[1] + DEFAULT_SCROLL_TOP + top + text_top) as f32;
         container = container.child(
             div()
                 .absolute()
@@ -598,8 +599,9 @@ fn help_overlay(
         div()
             .absolute()
             .left_0()
-            .top_0()
-            .size_full()
+            .top(px(DEFAULT_SCROLL_TOP as f32))
+            .w_full()
+            .h(px(box_h as f32))
             .child(container),
     )
     .into_any_element()

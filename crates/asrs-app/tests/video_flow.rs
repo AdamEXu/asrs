@@ -70,6 +70,12 @@ fn an_installed_ffmpeg_converts_a_clip() {
     in_fresh_home("ffmpeg_in_a_fresh_home");
 }
 
+#[cfg(unix)]
+#[test]
+fn the_match_timer_locks_a_video() {
+    in_fresh_home("timer_in_a_fresh_home");
+}
+
 #[test]
 fn youtube_without_a_url_says_so() {
     in_fresh_home("youtube_in_a_fresh_home");
@@ -287,6 +293,76 @@ printf 'frame=    4 fps=0.0 q=2.0 size=N/A\r' >&2
     assert!(cache.is_dir());
     drop(app);
     assert!(!cache.exists(), "quitting deletes the frames");
+}
+
+/// Writes the frames of P06's recorded clip to `dir`.
+#[cfg(unix)]
+fn write_timer_frames(dir: &std::path::Path) {
+    use asrs_parity::json;
+    use asrs_parity::vectors::workspace_root;
+    let clip = workspace_root().join("parity/specs/video/timer/banner-lower-720p.clip");
+    let data = std::fs::read(clip).expect("the clip");
+    let header_end = 4 + u32::from_le_bytes(data[..4].try_into().expect("4 bytes")) as usize;
+    let header = std::str::from_utf8(&data[4..header_end]).expect("UTF-8");
+    let header = json::parse(header).expect("JSON");
+    let frames = header.get("frames").and_then(json::Json::as_array);
+    let mut at = header_end;
+    for entry in frames.expect("frames") {
+        let entry = entry.as_array().expect("a frame");
+        let [frame, length] = [0, 1].map(|i| entry[i].as_f64().expect("a number") as usize);
+        std::fs::write(dir.join(format!("{frame:08}.jpg")), &data[at..at + length]).expect("frame");
+        at += length;
+    }
+    assert_eq!(at, data.len());
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "run by the_match_timer_locks_a_video"]
+fn timer_in_a_fresh_home() {
+    let Some(home) = std::env::var_os(HOME).map(PathBuf::from) else {
+        return;
+    };
+    let frames = home.join("frames");
+    std::fs::create_dir_all(&frames).expect("frames");
+    write_timer_frames(&frames);
+    std::fs::write(frames.join("00000001.jpg"), [0; 1000]).expect("a damaged frame");
+    let stop = home.join("stop");
+    // The frames between the recorded ones are missing, as when ffmpeg has not written them yet.
+    let script = format!(
+        r#"#!/bin/sh
+[ "$1" = -version ] && exit 0
+for last; do :; done
+cp '{}'/*.jpg "${{last%/*}}"
+printf '  Duration: 00:00:20.00, start: 0.000000, bitrate: 1 kb/s\n  Stream #0:0: Video: mjpeg, yuvj420p, 1920x1080, 30 fps, 30 tbr\n' >&2
+while [ ! -e '{}' ]; do
+  printf 'frame=  600 fps=0.0 q=2.0 size=N/A\r' >&2
+  sleep 0.1
+done
+"#,
+        frames.display(),
+        stop.display(),
+    );
+    install_ffmpeg(&script).expect("ffmpeg");
+    let clip = PathBuf::from("/clips/match.mp4");
+    let replies = [Reply::Open(vec![clip]), Reply::Button(0)];
+    let mut app = AppUnderTest::start(&replies).expect("a fresh home");
+    app.video(|video, page, uuid| video.select_local(page, uuid));
+    app.until("the end of auto", |app| {
+        app.video(|video, _, _| video.data()[5] == &JsValue::Number(193.0))
+    });
+    app.until("the damaged frame's error", |app| app.shown().len() == 2);
+    std::fs::write(&stop, "").expect("stop");
+    app.until("the conversion to finish", |app| {
+        app.video(|video, _, _| video.data()[3] == &JsValue::Number(600.0))
+    });
+    let shown = app.shown();
+    assert!(
+        matches!(&shown[1..], [Shown::Message(m)]
+            if m.message == "A JavaScript error occurred in the main process"
+                && m.detail.starts_with("Uncaught Exception:\nError: ")),
+        "{shown:?}"
+    );
 }
 
 #[cfg(unix)]

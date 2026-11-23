@@ -54,6 +54,7 @@ pub struct StatisticsRenderer {
     first: usize,
     rest: Option<usize>,
     errors: Vec<JsError>,
+    rendered_in_frames: bool,
 }
 
 impl StatisticsRenderer {
@@ -69,7 +70,14 @@ impl StatisticsRenderer {
             first: 0,
             rest: None,
             errors: Vec::new(),
+            rendered_in_frames: true,
         }
+    }
+
+    /// Whether `render` is called in an animation frame, as the hub does, or by a message, as in
+    /// a satellite.
+    pub fn set_rendered_in_frames(&mut self, in_frames: bool) {
+        self.rendered_in_frames = in_frames;
     }
 
     pub fn table(&self) -> &StatisticsTable {
@@ -194,7 +202,14 @@ impl<Cx: StatisticsCx + ?Sized> TabRenderer<Cx> for StatisticsRenderer {
         let Some(command) = command.downcast_ref::<StatisticsCommand>() else {
             return Err(JsError::type_error("not a statistics command"));
         };
-        self.frame(command, cx.tab_dark())
+        let dark = cx.tab_dark();
+        if self.rendered_in_frames {
+            return self.frame(command, dark);
+        }
+        if !self.histogram().is_some_and(Histogram::is_attached) {
+            return Ok(());
+        }
+        self.render_command(command, dark)
     }
 
     fn animation_frame(&mut self, _cx: &mut Cx) -> Vec<JsError> {

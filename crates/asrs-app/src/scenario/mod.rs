@@ -109,11 +109,14 @@ pub enum Action {
     AppMenu {
         labels: Vec<String>,
     },
-    /// Sends input and captures to the prompt window of this page, or back to the hub once the
-    /// prompt has closed.
+    /// Sends input and captures to the `index`th open window of this page, or back to the hub
+    /// once the prompt has closed.
     Prompt {
         page: Option<WindowKind>,
+        index: usize,
     },
+    /// Sends input and captures back to the hub, with satellites left open.
+    Hub,
     Capture {
         name: String,
         probes: Vec<String>,
@@ -319,7 +322,9 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
         "appMenu" => Action::AppMenu {
             labels: strings(Some(value), "appMenu")?,
         },
+        "prompt" if text().as_deref() == Some("hub") => Action::Hub,
         "prompt" => Action::Prompt {
+            index: number(action, "index", Some(0.0))? as usize,
             page: match text().as_deref() {
                 Some("editRange") => Some(WindowKind::EditRange),
                 Some("editFov") => Some(WindowKind::EditFov),
@@ -327,6 +332,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("unitConversion") => Some(WindowKind::UnitConversion),
                 Some("export") => Some(WindowKind::Export),
                 Some("preferences") => Some(WindowKind::Preferences),
+                Some("satellite") => Some(WindowKind::Satellite),
                 None if value.is_null() => None,
                 other => return Err(format!("unknown prompt page {other:?}")),
             },
@@ -559,10 +565,17 @@ mod tests {
         assert_eq!(
             s.actions[9],
             Action::Prompt {
-                page: Some(WindowKind::UnitConversion)
+                page: Some(WindowKind::UnitConversion),
+                index: 0
             }
         );
-        assert_eq!(s.actions[10], Action::Prompt { page: None });
+        assert_eq!(
+            s.actions[10],
+            Action::Prompt {
+                page: None,
+                index: 0
+            }
+        );
         assert_eq!(
             s.actions[11],
             Action::AppMenu {

@@ -1,0 +1,177 @@
+{
+  "about": "Interaction (U23): a table popped out; its visible range reaches the hub's controller; a row hovered and clicked, trackpad scrolling, and a timestamp typed into the satellite's jump input, all through the hub's selection. The satellite has no close buttons",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Values",
+              "controller": [
+                "/Drive/LeftVelocity",
+                "/Drive/Mode"
+              ],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        0.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 460
+    },
+    {
+      "wait": 400
+    },
+    {
+      "capture": "table",
+      "probes": [
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "wait": 150
+    },
+    {
+      "capture": "table-hover",
+      "probes": []
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "wait": 200
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 400
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "table-clicked",
+      "probes": []
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 400,
+        "deltaX": 0,
+        "deltaY": -600,
+        "precise": true
+      }
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "capture": "table-scrolled",
+      "probes": []
+    },
+    {
+      "mouse": "click",
+      "x": 60,
+      "y": 17
+    },
+    {
+      "key": "4"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "capture": "table-jumped",
+      "probes": []
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "capture": "hub",
+      "probes": [
+        "table.data-table"
+      ]
+    }
+  ]
+}
