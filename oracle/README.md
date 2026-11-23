@@ -1131,6 +1131,15 @@ loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift
 can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
 `selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
+### Number insertion vectors
+
+`form/number-insert` (`src/genNumberInsert.ts`) records what Chromium lets the user insert into an
+en-US `<input type="number">` in an offscreen window: each record is the shown text, the selection
+(UTF-16 offsets), the inserted text, the text shown afterwards and the `value` then read. The
+insertions are `execCommand("insertText")`, which takes typing's and pasting's route through
+`BeforeTextInsertedEvent`. Fixed starting texts with every caret position come first, then seeded
+random ones.
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:

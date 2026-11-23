@@ -14,8 +14,9 @@ const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n"
 // driven the way main.ts's create*Window drives it: a "port" message carrying a MessageChannel
 // port, then the messages main posts on it. The scripted user steps are real input sent over the
 // DevTools protocol (typed characters, keys, clicks at an element's centre), so focus changes and
-// "change" events come in Chromium's order; "insert" inserts a text at once, as pasting it does,
-// without the clipboard; "select" is script focus with the whole text selected,
+// "change" events come in Chromium's order; "insert" is execCommand("insertText"), which
+// inserts a text at once and leaves the caret after it as pasting does, without the clipboard
+// (the protocol's Input.insertText counts the caret from the unfiltered text); "select" is script focus with the whole text selected,
 // "pick" is what choosing an option in a select's native popup does (the new value, then "input"
 // and "change"), and "post" is another message from main. After the open and after every step it
 // records every control, the focused element, the buttons' "blurred" class, and every reply posted
@@ -97,6 +98,8 @@ function flows(): Flow[] {
     add("editRange", `insert after the point ${JSON.stringify(t)}`, [[-1.5, 1e12]], [select("min"), key("ArrowRight"), key("ArrowLeft"), insert(t), confirm]);
     add("editRange", `insert at the end ${JSON.stringify(t)}`, [[-0.25, 1e12]], [select("min"), key("ArrowRight"), insert(t), confirm]);
   });
+  add("editRange", "insert beside the same digits", [[11, 1e12]], [select("min"), key("ArrowLeft"), insert("1a"), text("2"), click("confirm")]);
+  add("editRange", "insert over the same text", [[100, 1e12]], [select("min"), insert("100a"), text("5"), click("confirm")]);
   add("editRange", "insert then type", [[-100, 1e12]], [select("min"), insert("1.2.3"), text(".4"), key("ArrowLeft"), text("."), text("-"), text("5"), key("Backspace"), key("Enter")]);
   add("editRange", "enter on exit", [[2, 8]], [key("Tab"), key("Tab"), key("Enter")]);
   add("editRange", "enter on confirm", [[2, 8]], [key("Tab"), key("Tab"), key("Tab"), key("Enter")]);
@@ -281,7 +284,7 @@ app.whenReady().then(async () => {
         }
         break;
       case "insert":
-        await send("Input.insertText", { text: step.value });
+        await js("document.execCommand('insertText', false, " + JSON.stringify(step.value) + ")");
         break;
       case "key":
         await press(step.value);

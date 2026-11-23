@@ -169,7 +169,7 @@ fn insert<M: FieldModel>(
     let old = editor.value();
     let (left, right) = (&old[..range.start], &old[range.end..]);
     let kept = M::insertable(left, inserted, right);
-    if kept == old[range.clone()] {
+    if kept.is_empty() && range.is_empty() {
         return;
     }
     *text.borrow_mut() = format!("{left}{kept}{right}");
