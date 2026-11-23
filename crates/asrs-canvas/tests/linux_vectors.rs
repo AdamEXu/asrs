@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use asrs_canvas::text::linux::Fontations;
 use asrs_canvas::text::lut::{self, MaskGammaLut};
 use asrs_canvas::text::{FontSpec, TextBackend, TextMetrics, measure_text, platform_backend};
+use asrs_js::math::pow;
 use asrs_parity::json::{self, Json};
 use asrs_parity::vectors;
 use sha2::{Digest, Sha256};
@@ -19,12 +20,12 @@ fn skia_row(bucket: usize) -> Vec<u8> {
     let base = bucket << 5;
     let src = ((base | base >> 3 | base >> 6) & 255) as f64 / 255.0;
     let dst = 1.0 - src;
-    let (lin_src, lin_dst) = (src.powf(GAMMA), dst.powf(GAMMA));
+    let (lin_src, lin_dst) = (pow(src, GAMMA), pow(dst, GAMMA));
     (0..256)
         .map(|i| {
             let raw = f64::from(i) / 255.0;
             let a = raw + (1.0 - raw) * (CONTRAST * lin_dst) * raw;
-            let out = (lin_src * a + (1.0 - a) * lin_dst).powf(1.0 / GAMMA);
+            let out = pow(lin_src * a + (1.0 - a) * lin_dst, 1.0 / GAMMA);
             (255.0 * (out - dst) / (src - dst) + 0.5).floor() as u8
         })
         .collect()
