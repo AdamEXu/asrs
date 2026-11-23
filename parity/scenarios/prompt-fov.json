@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U19): the camera field of view set through the 3D camera menu's prompt, then a second edit cancelled; the saved HubState holds the new value at the later captures. Only the prompt is captured, since the hub's 3D view is field-3d's",
+  "about": "Interaction (U19): the camera field of view set through the 3D camera menu's prompt, a second edit cancelled, and a third one given Enter on the focused exit button, which confirms and then cancels; the saved HubState holds the first edit's value at the later captures. Only the prompt is captured, since the hub's 3D view is field-3d's",
   "actions": [
     {
       "main": "restore-state",
@@ -92,6 +92,9 @@
       ]
     },
     {
+      "key": "Tab"
+    },
+    {
       "key": "Enter"
     },
     {
@@ -169,6 +172,50 @@
     },
     {
       "capture": "fov-cancelled",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "8"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 250,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Set FOV..."
+      ]
+    },
+    {
+      "prompt": "editFov"
+    },
+    {
+      "capture": "fov-restored",
       "probes": [
         "td.label",
         "td.input",

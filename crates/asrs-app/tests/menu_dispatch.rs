@@ -15,17 +15,18 @@ use asrs_app::menus::app_menu;
 use asrs_app::menus::bridge::{self, MenuAction};
 use asrs_app::menus::dispatch::dispatch;
 use asrs_app::menus::model::{Command, HelpLink, MenuItem};
-use asrs_app::windows::{self, MessageBoxType, Rect, WindowId, Windows};
+use asrs_app::windows::{self, MessageBoxType, Rect, WindowId, WindowKind, Windows};
 use asrs_hub::hub::HubModel;
 use asrs_js::value::JsValue;
 use asrs_model::json_file;
-use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress};
+use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Theme, Timestamps};
 use asrs_model::tab_type::TabType;
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::lifecycle;
 use asrs_services::window_manager::Platform;
 use asrs_ui::gpui::{HeadlessAppContext, Keystroke, NoopTextSystem};
 use asrs_ui::platform::dialog::{Reply, Script, Shown};
+use asrs_ui::theme::ThemeSource;
 
 const HOME: &str = "ASRS_MENU_DISPATCH_HOME";
 
@@ -108,6 +109,18 @@ impl AppUnderTest {
         assert_eq!(focused, Some(window));
     }
 
+    fn preferences(&mut self) -> Option<WindowId> {
+        self.cx.update(|cx| {
+            let window = Windows::of_kind(cx, WindowKind::Preferences)?;
+            Windows::id_of(cx, window)
+        })
+    }
+
+    fn close(&mut self, window: WindowId) {
+        self.cx.update(|cx| windows::close(cx, window));
+        self.settle();
+    }
+
     fn hub<R>(&mut self, window: WindowId, read: impl FnOnce(&HubModel) -> R) -> R {
         self.cx.update(|cx| {
             let hubs = MainProcess::hub_windows(cx);
@@ -147,16 +160,10 @@ impl AppUnderTest {
                 script.replies
             );
             let shown = std::mem::take(&mut script.shown);
-            let ids: Vec<_> = Windows::manager(cx).hubs().to_vec();
             shown
                 .into_iter()
                 .map(|(window, shown)| {
-                    let id = window.map(|window| {
-                        let id = ids
-                            .iter()
-                            .find(|id| Windows::handle(cx, **id) == Some(window));
-                        *id.expect("a hub")
-                    });
+                    let id = window.map(|window| Windows::id_of(cx, window).expect("a window"));
                     (id, shown)
                 })
                 .collect()
@@ -193,6 +200,36 @@ impl AppUnderTest {
                 })
                 .expect("open");
         })
+    }
+
+    /// Tab, or Shift+Tab, `n` times.
+    fn tab(&mut self, window: WindowId, n: usize, back: bool) {
+        let key = if back { "shift-tab" } else { "tab" };
+        for _ in 0..n {
+            assert!(self.press(window, key, &[]).is_empty());
+        }
+    }
+
+    fn type_text(&mut self, window: WindowId, text: &str) {
+        let handle = self.cx.update(|cx| Windows::handle(cx, window));
+        let handle = handle.expect("open");
+        for c in text.chars() {
+            let keystroke = Keystroke {
+                key: if c == ' ' {
+                    "space".to_owned()
+                } else {
+                    c.to_string()
+                },
+                key_char: Some(c.to_string()),
+                modifiers: Default::default(),
+            };
+            self.cx
+                .update_window(handle, |_, window, cx| {
+                    window.dispatch_keystroke(keystroke, cx);
+                })
+                .expect("open");
+            self.settle();
+        }
     }
 
     fn fullscreen(&mut self, window: WindowId) -> bool {
@@ -235,6 +272,7 @@ fn in_a_fresh_home() {
     messages_reach_the_focused_hub(&mut app, hub);
     preferences_reach_the_file_the_hubs_and_the_menu(&mut app, hub);
     dialogs_show_and_resume(&mut app, hub);
+    the_preferences_window_writes_the_file(&mut app, hub);
     accelerators_reach_the_window_they_were_pressed_in(&mut app, hub);
     let hub = windows_open_and_close(&mut app, hub);
     layouts_round_trip(&mut app, hub);
@@ -311,6 +349,83 @@ fn preferences_reach_the_file_the_hubs_and_the_menu(app: &mut AppUnderTest, hub:
     std::fs::write(app.prefs_path(), saved).expect("prefs.json");
 }
 
+fn the_preferences_window_writes_the_file(app: &mut AppUnderTest, hub: WindowId) {
+    let path = app.prefs_path();
+    let read = || std::fs::read_to_string(&path).expect("prefs.json");
+    let held = |app: &mut AppUnderTest| {
+        app.hub(hub, |hub| {
+            let prefs = hub.page().preferences().expect("preferences");
+            (prefs.theme, prefs.timestamps)
+        })
+    };
+    let (theme, dark) = if cfg!(target_os = "linux") {
+        ("light", "d")
+    } else {
+        ("system", "always d")
+    };
+
+    let before = read();
+    assert!(app.click(Command::OpenPreferences, &[]).is_empty());
+    let window = app.preferences().expect("the preferences window");
+    let bounds = app.bounds(window);
+    let parent = app.bounds(hub);
+    assert_eq!((bounds.width, bounds.height), (400.0, 473.0));
+    let center = |start: f64, outer: f64, inner: f64| (start + outer / 2.0 - inner / 2.0).floor();
+    assert_eq!(bounds.x, center(parent.x, parent.width, 400.0));
+    assert_eq!(bounds.y, center(parent.y, parent.height, 473.0));
+    app.focus(window);
+    assert!(app.click(Command::OpenPreferences, &[]).is_empty());
+    assert_eq!(app.preferences(), Some(window));
+
+    app.tab(window, 1, false);
+    app.type_text(window, dark);
+    app.tab(window, 2, false);
+    app.type_text(window, "o");
+    assert!(app.press(window, "enter", &[]).is_empty());
+    assert_eq!(app.preferences(), None);
+    let after = before
+        .replace(&format!("\"theme\":\"{theme}\""), "\"theme\":\"dark\"")
+        .replace(
+            "\"timestamps\":\"start-zero\"",
+            "\"timestamps\":\"original\"",
+        );
+    assert_ne!(after, before);
+    assert_eq!(read(), after);
+    assert_eq!(held(app), (Theme::Dark, Timestamps::Original));
+    let source = app.cx.update(|cx| *cx.global::<ThemeSource>());
+    assert_eq!(source, ThemeSource::Dark);
+
+    app.focus(hub);
+    let spaced = after.replace(":", ": ");
+    std::fs::write(&path, &spaced).expect("prefs.json");
+    app.click(Command::OpenPreferences, &[]);
+    let window = app.preferences().expect("the preferences window");
+    app.tab(window, 1, false);
+    app.type_text(window, "m");
+    app.tab(window, 2, true);
+    assert!(app.press(window, "enter", &[]).is_empty());
+    assert_eq!(app.preferences(), None);
+    assert_eq!(
+        read(),
+        after,
+        "Enter on the exit button confirms, then cancels"
+    );
+    assert_eq!(held(app), (Theme::Dark, Timestamps::Original));
+
+    app.focus(hub);
+    std::fs::write(&path, "{").expect("prefs.json");
+    let shown = app.click(Command::OpenPreferences, &[Reply::Button(0)]);
+    assert_eq!(message(&shown).2, "The command failed");
+    let window = app.preferences().expect("the preferences window");
+    assert!(app.press(window, "enter", &[]).is_empty());
+    assert_eq!(app.preferences(), Some(window));
+    assert_eq!(read(), "{");
+    app.close(window);
+    assert_eq!(app.preferences(), None);
+    std::fs::write(&path, before).expect("prefs.json");
+    app.focus(hub);
+}
+
 fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     let log = app.home.join("opened.csv");
     std::fs::write(&log, "Timestamp,/Value\n0,1\n").expect("a log");
@@ -350,7 +465,6 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     assert_eq!(message(&shown).3, HOOT_UNSUPPORTED);
 
     for command in [
-        Command::OpenPreferences,
         Command::OpenLicenses,
         Command::DownloadLogs,
         Command::CheckForUpdates,
@@ -399,8 +513,10 @@ fn accelerators_reach_the_window_they_were_pressed_in(app: &mut AppUnderTest, hu
     assert_eq!(*parent, hub);
     assert_eq!(app.historical_paths(hub), [log.to_string_lossy()]);
 
-    let shown = app.press(hub, "ctrl-,", &[Reply::Button(0)]);
-    assert_eq!(message(&shown).0, Some(hub));
+    assert!(app.press(hub, "ctrl-,", &[]).is_empty());
+    let preferences = app.preferences().expect("the preferences window");
+    app.close(preferences);
+    app.focus(hub);
     let shown = app.press(hub, "ctrl-r", &[Reply::Button(0)]);
     assert_eq!(message(&shown).0, Some(hub));
 

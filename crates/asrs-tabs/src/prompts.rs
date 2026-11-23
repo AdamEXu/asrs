@@ -1,7 +1,7 @@
 //! The prompt pages as headless models: `src/editRange.ts`, `src/editFov.ts`, `src/renameTab.ts`,
-//! `src/export.ts` and, over `asrs_model::unit_conversion_dialog`, `src/unitConversion.ts`. A view
-//! shows [`PromptPage::controls`], reports what the user does to them and acts on the
-//! [`PromptEvent`]s it gets back; `main.ts`'s side of the port is the caller's.
+//! `src/export.ts`, `src/preferences.ts` and, over `asrs_model::unit_conversion_dialog`,
+//! `src/unitConversion.ts`. A view shows [`PromptPage::controls`], reports what the user does to
+//! them and acts on the [`PromptEvent`]s it gets back; `main.ts`'s side of the port is the caller's.
 
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
@@ -10,6 +10,10 @@ use asrs_log::util::clean_float;
 use asrs_model::unit_conversion_dialog::{self, DialogEvent, UnitConversionDialog};
 
 use crate::form::{NumberInput, Select, SelectOption};
+
+mod preferences;
+
+pub use preferences::Preferences;
 
 /// What the page does that main.ts, the user or the view sees.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,6 +58,20 @@ pub struct Control {
     pub label: &'static str,
     pub value: ControlValue,
     pub disabled: bool,
+    pub placeholder: &'static str,
+    /// The options of a select with the `hidden` attribute.
+    pub hidden_options: &'static [usize],
+}
+
+/// A `tr` of the page's table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TableRow {
+    /// The next of [`PromptPage::controls`].
+    Control,
+    /// `td.title`: an `hr` over this text.
+    Title(&'static str),
+    /// `td.subtitle`.
+    Subtitle(&'static str),
 }
 
 impl Control {
@@ -63,6 +81,8 @@ impl Control {
             label,
             value,
             disabled: false,
+            placeholder: "",
+            hidden_options: &[],
         }
     }
 
@@ -72,6 +92,16 @@ impl Control {
 
     fn disabled(mut self, disabled: bool) -> Control {
         self.disabled = disabled;
+        self
+    }
+
+    fn placeholder(mut self, placeholder: &'static str) -> Control {
+        self.placeholder = placeholder;
+        self
+    }
+
+    fn hidden_options(mut self, hidden_options: &'static [usize]) -> Control {
+        self.hidden_options = hidden_options;
         self
     }
 }
@@ -89,6 +119,10 @@ pub trait PromptPage: 'static {
     }
     /// The form controls in document order.
     fn controls(&self) -> Vec<Control>;
+    /// The table's rows, one per control unless the page has headings.
+    fn rows(&self) -> Vec<TableRow> {
+        vec![TableRow::Control; self.controls().len()]
+    }
     /// Whether the buttons have the `blurred` class.
     fn blurred(&self) -> bool;
     /// `messagePort.onmessage` with this data.

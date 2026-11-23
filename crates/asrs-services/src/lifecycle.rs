@@ -327,6 +327,11 @@ impl MainState {
         json_file::parse(&fs.read(&self.paths.prefs())?)
     }
 
+    /// `jsonfile.writeFileSync(PREFS_FILENAME, prefs)`.
+    pub fn write_preferences(&self, fs: &dyn Fs, prefs: &JsValue) -> Result<(), JsError> {
+        fs.write(&self.paths.prefs(), &json_file::stringify(prefs)?)
+    }
+
     /// `handleHubMessage`'s file effects for the hub window with numeric id `window`.
     pub fn hub_message(
         &mut self,
@@ -346,7 +351,7 @@ impl MainState {
             HubToMain::UpdatePreferences => {
                 let mut prefs = self.preferences(fs)?;
                 merge_preferences(&mut prefs, &message.data)?;
-                fs.write(&self.paths.prefs(), &json_file::stringify(&prefs)?)
+                self.write_preferences(fs, &prefs)
             }
             HubToMain::SetExporting => {
                 if ops::to_boolean(&message.data) {
