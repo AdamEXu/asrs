@@ -129,6 +129,25 @@ fn edges_within(a: Rect, b: Rect, tolerance: f64) -> bool {
         .all(|(p, q)| (p - q).abs() <= tolerance)
 }
 
+/// Boxes sorted by their top edge, to look ones near a box up in.
+struct Boxes(Vec<Rect>);
+
+impl Boxes {
+    fn new(boxes: &[Rect]) -> Boxes {
+        let mut boxes = boxes.to_vec();
+        boxes.sort_by(|a, b| a[1].total_cmp(&b[1]));
+        Boxes(boxes)
+    }
+
+    fn has(&self, near: Rect, tolerance: f64) -> bool {
+        let from = self.0.partition_point(|b| b[1] < near[1] - tolerance);
+        self.0[from..]
+            .iter()
+            .take_while(|b| b[1] <= near[1] + tolerance)
+            .any(|b| edges_within(near, *b, tolerance))
+    }
+}
+
 fn fmt_rect(r: Rect) -> String {
     format!("[{}, {}, {}, {}]", r[0], r[1], r[2], r[3])
 }
@@ -506,20 +525,15 @@ fn text_boxes(
         .copied()
         .filter(|t| !centre_masked(*t, reference, masked))
         .collect();
+    let (theirs_sorted, ours_sorted) = (Boxes::new(visible), Boxes::new(&ours));
     let mut problems = Vec::new();
     for r in visible {
-        if !ours
-            .iter()
-            .any(|o| edges_within(*r, *o, TEXT_BOX_TOLERANCE))
-        {
+        if !ours_sorted.has(*r, TEXT_BOX_TOLERANCE) {
             problems.push(format!("upstream run {} has no port run", fmt_rect(*r)));
         }
     }
     for o in &ours {
-        if !visible
-            .iter()
-            .any(|r| edges_within(*r, *o, TEXT_BOX_TOLERANCE))
-        {
+        if !theirs_sorted.has(*o, TEXT_BOX_TOLERANCE) {
             problems.push(format!("port run {} matches no upstream run", fmt_rect(*o)));
         }
     }

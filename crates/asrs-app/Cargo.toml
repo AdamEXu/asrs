@@ -102,5 +102,9 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "info_windows"
+required-features = ["parity"]
+
+[[test]]
 name = "export_flow"
 required-features = ["parity"]

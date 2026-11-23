@@ -35,7 +35,7 @@ use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
 use crate::licenses::LicensesFile;
-use crate::main_process::{MainProcess, process_platform};
+use crate::main_process::{BetaTime, MainProcess, process_platform};
 use crate::menus::app_menu;
 use crate::menus::bridge::{MenuAction, ScriptedMenu};
 use crate::menus::dispatch::dispatch;
@@ -66,6 +66,8 @@ const STABLE_ATTEMPTS: usize = 120;
 const RANDOM_SEED: u64 = 1;
 /// The Electron driver's `WINDOW_ORIGIN`: its window's offset into the primary work area.
 const WINDOW_ORIGIN: f64 = 16.0;
+/// 2026-11-01T00:00:00Z, before upstream's beta expires.
+const BETA_TIME: f64 = 1_793_491_200_000.0;
 /// The id `StateTracker` keys the one hub window's renderer state by.
 const HUB_WINDOW_ID: f64 = 1.0;
 
@@ -941,6 +943,7 @@ impl Variant<'_> {
                         _ => {}
                     })
                     .detach();
+                    cx.set_global(BetaTime(BETA_TIME));
                     MainProcess::beta_init(cx, id);
                 });
                 self.window = Some(window.into());

@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use asrs_app::main_process::{self, MainProcess};
+use asrs_app::main_process::{self, BetaTime, MainProcess};
 use asrs_app::menus::bridge::MenuAction;
 use asrs_app::menus::dispatch::dispatch;
 use asrs_app::menus::model::Command;
@@ -30,6 +30,8 @@ use asrs_model::tab_type::TabType;
 use asrs_parity::Value;
 use asrs_parity::vectors;
 use asrs_services::ds_layout::default_ds_layout;
+use asrs_services::lifecycle;
+use asrs_services::window_manager::Platform;
 use asrs_ui::gpui::{
     AnyWindowHandle, HeadlessAppContext, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, NoopTextSystem, PlatformInput, point, px,
@@ -86,9 +88,19 @@ impl AppUnderTest {
         let home = PathBuf::from(std::env::var_os(HOME)?);
         let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
         let (events, received) = async_channel::unbounded();
+        let user_data =
+            lifecycle::user_data_dir(Platform::current(), |name| std::env::var(name).ok());
+        let user_data = PathBuf::from(user_data.expect("a user-data directory"));
+        std::fs::create_dir_all(&user_data).expect("user data");
+        std::fs::write(
+            user_data.join("beta-2027.json"),
+            r#"{"welcomeComplete":true}"#,
+        )
+        .expect("beta-2027.json");
         cx.update(|cx| {
             asrs_ui::init(cx);
             windows::init(cx);
+            cx.set_global(BetaTime(0.0));
             cx.set_global(Script {
                 replies: replies.to_vec().into(),
                 ..Script::default()

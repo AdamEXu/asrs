@@ -359,7 +359,7 @@
     "hub/lifecycle-state-and-selection": {"cases":48,"content":"2f78d93307f82756","generator":"c3951a4f843a337b","spec":"parity/specs/hub/lifecycle-state-and-selection.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-type-memory": {"cases":9,"content":"a6e9442d61911444","generator":"aed7dd9d84799fa1","spec":"parity/specs/hub/lifecycle-type-memory.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "info/beta-welcome": {"cases":167,"content":"aed63d485db0a280","generator":"c685fd3d2c091ac6","spec":"parity/specs/info/beta-welcome.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "info/licenses": {"cases":38,"content":"e0f1bf74f2014782","generator":"93253194e146c71b","spec":"parity/specs/info/licenses.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "info/licenses": {"cases":38,"content":"305ab692a1c1427b","generator":"739da0a973a4f7d6","spec":"parity/specs/info/licenses.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "info/source-list-help": {"cases":192,"content":"06b4e0851be157c8","generator":"6de4d0fed5758d10","spec":"parity/specs/info/source-list-help.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/collation": {"cases":5002,"content":"87628654f82c6a0f","generator":"f0e2718df554a510","spec":"parity/specs/js/collation.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/collation-unsafe": {"cases":2,"content":"d83814ebe2b5110b","generator":"51c4a3c0ed810a3b","spec":"parity/specs/js/collation-unsafe.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

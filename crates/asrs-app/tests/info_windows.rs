@@ -1,0 +1,232 @@
+#![allow(clippy::disallowed_methods)]
+
+//! Replays the scripted flows of `info/beta-welcome` (oracle/src/genInfoWindows.ts: upstream's
+//! page in Blink, driven with real input) through the GPUI window. After every step the
+//! checkboxes, the button's state, the focused control and the replies must equal the recording.
+
+use std::cell::Cell;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use asrs_app::views::cell_text::{css, length};
+use asrs_app::views::info::beta_welcome::Control;
+use asrs_app::views::info::layout::{BetaLayout, LuRect};
+use asrs_app::views::info::{Acknowledged, BetaWelcomePage};
+use asrs_parity::cve1::Value;
+use asrs_parity::vectors;
+use asrs_ui::gpui::{
+    AnyWindowHandle, AppContext, Bounds, Entity, HeadlessAppContext, Keystroke, Modifiers,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NoopTextSystem, PlatformInput,
+    WindowBounds, WindowOptions, point, px, size,
+};
+
+const SIZE: (f32, f32) = (450.0, 490.0);
+
+fn items(value: &Value) -> &[Value] {
+    match value {
+        Value::Array(items) => items,
+        other => panic!("not an array: {}", other.kind()),
+    }
+}
+
+fn get<'a>(value: &'a Value, key: &str) -> &'a Value {
+    let Value::Object(pairs) = value else {
+        panic!("not an object: {}", value.kind());
+    };
+    let found = pairs.iter().find(|(k, _)| k.eq_str(key));
+    &found.unwrap_or_else(|| panic!("no {key}")).1
+}
+
+struct Beta {
+    cx: HeadlessAppContext,
+    window: AnyWindowHandle,
+    page: Entity<BetaWelcomePage>,
+    replies: Rc<Cell<usize>>,
+}
+
+impl Beta {
+    fn open(data: &Value) -> Beta {
+        let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
+        cx.update(asrs_ui::init);
+        let replies = Rc::new(Cell::new(0));
+        let mut page = None;
+        let window = cx.update(|cx| {
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    point(px(0.0), px(0.0)),
+                    size(px(SIZE.0), px(SIZE.1)),
+                ))),
+                ..Default::default()
+            };
+            let (window, entity) = asrs_ui::open_window(options, cx, |window, cx| {
+                cx.new(|cx| BetaWelcomePage::new("AdvantageScope", window, cx))
+            })
+            .expect("a window");
+            let count = replies.clone();
+            cx.subscribe(&entity, move |_, _: &Acknowledged, _| {
+                count.set(count.get() + 1);
+            })
+            .detach();
+            for message in items(data) {
+                let alpha = *message == Value::Bool(true);
+                entity.update(cx, |page, cx| page.message(alpha, cx));
+            }
+            page = Some(entity);
+            window
+        });
+        let mut beta = Beta {
+            cx,
+            window,
+            page: page.expect("the page"),
+            replies,
+        };
+        beta.settle();
+        beta
+    }
+
+    fn settle(&mut self) {
+        self.cx.run_until_parked();
+        self.cx
+            .update_window(self.window, |_, window, cx| window.draw(cx).clear(cx))
+            .expect("open");
+        self.cx.run_until_parked();
+    }
+
+    fn input(&mut self, input: PlatformInput) {
+        self.cx
+            .update_window(self.window, |_, window, cx| {
+                window.dispatch_event(input, cx);
+            })
+            .expect("open");
+        self.settle();
+    }
+
+    fn click(&mut self, rect: LuRect) {
+        let [x, y, w, h] = rect.map(|v| css(v, 1.0) as f32);
+        let position = point(px(x + w / 2.0), px(y + h / 2.0));
+        let modifiers = Modifiers::default();
+        self.input(PlatformInput::MouseMove(MouseMoveEvent {
+            position,
+            pressed_button: None,
+            modifiers,
+        }));
+        self.input(PlatformInput::MouseDown(MouseDownEvent {
+            button: MouseButton::Left,
+            position,
+            modifiers,
+            click_count: 1,
+            first_mouse: false,
+        }));
+        self.input(PlatformInput::MouseUp(MouseUpEvent {
+            button: MouseButton::Left,
+            position,
+            modifiers,
+            click_count: 1,
+        }));
+    }
+
+    fn key(&mut self, name: &str) {
+        let (shift, key) = match name.strip_prefix("Shift+") {
+            Some(key) => (true, key),
+            None => (false, name),
+        };
+        let key = match key {
+            "NumpadEnter" => "enter".to_owned(),
+            other => other.to_lowercase(),
+        };
+        let keystroke = Keystroke {
+            modifiers: Modifiers {
+                shift,
+                ..Modifiers::default()
+            },
+            key,
+            key_char: None,
+        };
+        self.cx
+            .update_window(self.window, |_, window, cx| {
+                window.dispatch_keystroke(keystroke, cx);
+            })
+            .expect("open");
+        self.settle();
+    }
+
+    fn step(&mut self, step: &str) {
+        let (op, what) = step.split_once(' ').expect("a step");
+        if op == "key" {
+            return self.key(what);
+        }
+        let layout = self.cx.update(|cx| {
+            let page = self.page.read(cx).page();
+            BetaLayout::new(page, "AdvantageScope", length(f64::from(SIZE.0), 1.0), 1.0)
+        });
+        self.click(match what {
+            "button" => layout.button,
+            "text" => layout.intro.0,
+            index => layout.rows[index.parse::<usize>().expect("a checkbox")].checkbox,
+        });
+    }
+
+    fn check(&mut self, state: &Value, step: &str) {
+        let page = self.page.clone();
+        let (checked, enabled, active) = self
+            .cx
+            .update_window(self.window, |_, window, cx| {
+                let view = page.read(cx);
+                (
+                    view.page().checked(),
+                    view.page().enabled(),
+                    view.active(window),
+                )
+            })
+            .expect("open");
+        let want: Vec<bool> = items(get(state, "checked"))
+            .iter()
+            .map(|c| *c == Value::Bool(true))
+            .collect();
+        assert_eq!(checked.as_slice(), want, "{step}");
+        assert_eq!(get(state, "disabled"), &Value::Bool(!enabled), "{step}");
+        let want = match get(state, "active") {
+            Value::Null => None,
+            Value::Number(bits) => Some(Control::Checkbox(f64::from_bits(*bits) as usize)),
+            Value::String(_) => Some(Control::Button),
+            other => panic!("{}", other.kind()),
+        };
+        assert_eq!(active, want, "{step}");
+        assert_eq!(
+            self.replies.take(),
+            items(get(state, "replies")).len(),
+            "{step}"
+        );
+    }
+}
+
+#[test]
+fn beta_welcome_flows() {
+    let records = vectors::load("info/beta-welcome").expect("the vector");
+    let (mut beta, mut flows, mut steps): (Option<Beta>, usize, usize) = (None, 0, 0);
+    for record in &records {
+        match record.string("kind").expect("a kind").as_str() {
+            "dump" => {
+                flows += 1;
+                beta = Some(Beta::open(&record.value("data").expect("data")));
+            }
+            "step" => {
+                steps += 1;
+                let case = record.string("case").expect("a case");
+                let step = record.string("step").expect("a step");
+                let beta = beta.as_mut().expect("a page");
+                beta.step(&step);
+                beta.check(
+                    &record.value("state").expect("state"),
+                    &format!("{case}: {step}"),
+                );
+            }
+            other => assert_eq!(other, "end"),
+        }
+    }
+    let recorded = records
+        .iter()
+        .filter(|r| r.string("kind").as_deref() == Some("step"));
+    assert_eq!(steps, recorded.count());
+    assert_eq!(flows, 26);
+}

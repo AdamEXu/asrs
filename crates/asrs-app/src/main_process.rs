@@ -40,7 +40,7 @@ use crate::menus::click::ClickEnv;
 use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
 use crate::views::hub_host::{HubEntityHost, boot_messages};
-use crate::views::info;
+use crate::views::info::{self, SourceListHelpPage};
 use crate::views::prompts;
 use crate::windows::{self, Rect, WindowId, Windows};
 
@@ -427,13 +427,18 @@ impl MainProcess {
     }
 
     /// `openSourceListHelp(parent, config)`.
-    pub fn open_source_list_help(cx: &mut App, parent: WindowId, config: &JsValue) {
+    pub fn open_source_list_help(
+        cx: &mut App,
+        parent: WindowId,
+        config: &JsValue,
+    ) -> Option<(WindowId, Entity<SourceListHelpPage>)> {
         let Some(config) = SourceListConfig::from_js(config) else {
-            return eprintln!("asrs: source list help: not a config: {config:?}");
+            eprintln!("asrs: source list help: not a config: {config:?}");
+            return None;
         };
-        if let Err(e) = info::open_source_list_help(cx, parent, &config) {
-            eprintln!("asrs: opening a source list help window: {e}");
-        }
+        info::open_source_list_help(cx, parent, &config)
+            .inspect_err(|e| eprintln!("asrs: opening a source list help window: {e}"))
+            .ok()
     }
 
     /// `downloadStop()`, which closing the download, licenses and source list help windows calls.
@@ -445,12 +450,12 @@ impl MainProcess {
         let Some(main) = cx.try_global::<MainProcess>() else {
             return;
         };
-        let beta = Beta::of(main);
+        let beta = Beta::of(main, cx);
         let startup = beta::beta_startup(
             &RealFs,
             beta.file.as_deref(),
             beta.config.as_ref(),
-            &SystemClock,
+            &beta,
             build_constants::DISTRIBUTION,
             crate::IDENTITY.name,
         );
@@ -472,7 +477,7 @@ impl MainProcess {
                         &RealFs,
                         beta.file.as_deref(),
                         beta.config.as_ref(),
-                        &SystemClock,
+                        &beta,
                         response,
                         |url| cx.open_url(url),
                     );
@@ -506,7 +511,7 @@ impl MainProcess {
                 &RealFs,
                 beta.file.as_deref(),
                 beta.config.as_ref(),
-                &SystemClock,
+                &beta,
             ));
         })
         .detach();
@@ -827,18 +832,31 @@ impl MainProcess {
     }
 }
 
+/// The time the beta flow reads in place of the system's, for runs that outlive the beta.
+pub struct BetaTime(pub f64);
+
+impl Global for BetaTime {}
+
 /// `BETA_CONFIG` and its state file; neither in a build that skips the beta flow.
 struct Beta {
     config: Option<BetaConfig>,
     file: Option<String>,
+    time: Option<f64>,
+}
+
+impl Clock for Beta {
+    fn now(&self) -> f64 {
+        self.time.unwrap_or_else(|| SystemClock.now())
+    }
 }
 
 impl Beta {
-    fn of(main: &MainProcess) -> Beta {
+    fn of(main: &MainProcess, cx: &App) -> Beta {
         let config = beta::beta_config(RELEASE_PROFILE.beta_survey, &NamedZone::system());
         Beta {
             file: config.as_ref().map(|c| main.state.paths.beta_state(c.year)),
             config,
+            time: cx.try_global::<BetaTime>().map(|time| time.0),
         }
     }
 

@@ -10,16 +10,18 @@ use std::process::Command as Process;
 use std::sync::Arc;
 use std::time::Duration;
 
-use asrs_app::main_process::{self, MainProcess};
+use asrs_app::licenses::{self, LicensesFile};
+use asrs_app::main_process::{self, BetaTime, MainProcess};
 use asrs_app::menus::app_menu;
 use asrs_app::menus::bridge::{self, MenuAction};
 use asrs_app::menus::dispatch::dispatch;
 use asrs_app::menus::model::{Command, HelpLink, MenuItem};
 use asrs_app::windows::{self, MessageBoxType, Rect, WindowId, WindowKind, Windows};
 use asrs_hub::hub::HubModel;
-use asrs_js::value::JsValue;
+use asrs_js::value::{JsValue, ToJs};
 use asrs_model::json_file;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Theme, Timestamps};
+use asrs_model::source_list::configs;
 use asrs_model::tab_type::TabType;
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::lifecycle;
@@ -65,6 +67,7 @@ impl AppUnderTest {
             asrs_ui::init(cx);
             windows::init(cx);
             cx.set_global(Script::default());
+            cx.set_global(BetaTime(0.0));
             main_process::start(cx, &[], events);
         });
         let mut app = AppUnderTest { cx, home };
@@ -76,10 +79,14 @@ impl AppUnderTest {
         self.cx.run_until_parked();
     }
 
-    fn prefs_path(&self) -> PathBuf {
+    fn user_data(&self, file: &str) -> PathBuf {
         let user_data =
             lifecycle::user_data_dir(Platform::current(), |name| std::env::var(name).ok());
-        Path::new(&user_data.expect("a user-data directory")).join("prefs.json")
+        Path::new(&user_data.expect("a user-data directory")).join(file)
+    }
+
+    fn prefs_path(&self) -> PathBuf {
+        self.user_data("prefs.json")
     }
 
     fn pref(&self, key: &str) -> JsValue {
@@ -109,11 +116,15 @@ impl AppUnderTest {
         assert_eq!(focused, Some(window));
     }
 
-    fn preferences(&mut self) -> Option<WindowId> {
+    fn window(&mut self, kind: WindowKind) -> Option<WindowId> {
         self.cx.update(|cx| {
-            let window = Windows::of_kind(cx, WindowKind::Preferences)?;
+            let window = Windows::of_kind(cx, kind)?;
             Windows::id_of(cx, window)
         })
+    }
+
+    fn preferences(&mut self) -> Option<WindowId> {
+        self.window(WindowKind::Preferences)
     }
 
     fn close(&mut self, window: WindowId) {
@@ -267,15 +278,107 @@ fn in_a_fresh_home() {
     let [hub] = hubs[..] else {
         panic!("{hubs:?}");
     };
+    the_beta_welcome_is_acknowledged(&mut app, hub);
     app.focus(hub);
 
     messages_reach_the_focused_hub(&mut app, hub);
     preferences_reach_the_file_the_hubs_and_the_menu(&mut app, hub);
     dialogs_show_and_resume(&mut app, hub);
     the_preferences_window_writes_the_file(&mut app, hub);
+    the_licenses_window_opens_once(&mut app, hub);
+    help_windows_open_beside_the_hub(&mut app, hub);
     accelerators_reach_the_window_they_were_pressed_in(&mut app, hub);
     let hub = windows_open_and_close(&mut app, hub);
     layouts_round_trip(&mut app, hub);
+}
+
+fn the_beta_welcome_is_acknowledged(app: &mut AppUnderTest, hub: WindowId) {
+    let file = app.user_data("beta-2027.json");
+    assert!(!file.exists());
+    let window = app.window(WindowKind::BetaWelcome).expect("the welcome");
+    let bounds = app.bounds(window);
+    let height = if cfg!(windows) { 530.0 } else { 490.0 };
+    assert_eq!((bounds.width, bounds.height), (450.0, height));
+    for _ in 0..3 {
+        app.tab(window, 1, false);
+        app.press(window, "enter", &[]);
+        assert!(!file.exists());
+        app.press(window, "space", &[]);
+    }
+    assert_eq!(app.window(WindowKind::BetaWelcome), Some(window));
+    app.tab(window, 1, false);
+    app.press(window, "enter", &[]);
+    assert_eq!(app.window(WindowKind::BetaWelcome), None);
+    let written = std::fs::read_to_string(&file).expect("beta-2027.json");
+    assert_eq!(
+        written,
+        "{\"welcomeComplete\":true,\"surveyStatus\":false}\n"
+    );
+    assert_eq!(app.hubs(), [hub]);
+}
+
+fn the_licenses_window_opens_once(app: &mut AppUnderTest, hub: WindowId) {
+    let file = app.home.join("licenses.json");
+    app.cx
+        .update(|cx| cx.set_global(LicensesFile(file.clone())));
+    let shown = app.click(Command::OpenLicenses, &[Reply::Button(0)]);
+    let (_, kind, text, _) = message(&shown);
+    assert_eq!(
+        (kind, text),
+        (MessageBoxType::Error, "The licenses could not be read")
+    );
+    assert_eq!(app.window(WindowKind::Licenses), None);
+
+    let list = r#"[{"module":"AdvantageScope","text":"a\n\nb"},{"module":"z","text":"- c"}]"#;
+    std::fs::write(&file, list).expect("licenses.json");
+    assert!(app.click(Command::OpenLicenses, &[]).is_empty());
+    let window = app.window(WindowKind::Licenses).expect("the licenses");
+    let (bounds, parent) = (app.bounds(window), app.bounds(hub));
+    assert_eq!((bounds.width, bounds.height), (600.0, 625.0));
+    let center = |start: f64, outer: f64, inner: f64| (start + outer / 2.0 - inner / 2.0).floor();
+    assert_eq!(bounds.x, center(parent.x, parent.width, 600.0));
+    assert_eq!(bounds.y, center(parent.y, parent.height, 625.0));
+    app.focus(hub);
+    assert!(app.click(Command::OpenLicenses, &[]).is_empty());
+    assert_eq!(app.window(WindowKind::Licenses), Some(window));
+    let modules = app.cx.update(|cx| {
+        let licenses = licenses::load(cx).expect("the list");
+        licenses
+            .iter()
+            .map(|l| (l.module.len(), l.parts.len()))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(modules, [(1, 3), (1, 1)]);
+    app.close(window);
+    assert_eq!(app.window(WindowKind::Licenses), None);
+    app.focus(hub);
+}
+
+fn help_windows_open_beside_the_hub(app: &mut AppUnderTest, hub: WindowId) {
+    let parent = app.bounds(hub);
+    let mut opened = Vec::new();
+    for config in [configs::line_graph_numeric(), configs::mechanism()] {
+        let data = config.to_js();
+        let opened_help = app
+            .cx
+            .update(|cx| MainProcess::open_source_list_help(cx, hub, &data));
+        let (window, page) = opened_help.expect("a help window");
+        app.settle();
+        let bounds = app.bounds(window);
+        assert_eq!((bounds.width, bounds.height), (350.0, 500.0));
+        assert_eq!(bounds.x, parent.x + 30.0);
+        assert_eq!(bounds.y, (parent.y + parent.height / 2.0 - 250.0).floor());
+        let help = app.cx.update(|cx| page.read(cx).help().clone());
+        assert_eq!(help.title(), format!("{} Help", config.title));
+        let documented = config.types.iter().filter(|t| t.show_docs).count();
+        assert_eq!(help.items().len(), documented);
+        opened.push(window);
+    }
+    assert_ne!(opened[0], opened[1]);
+    for window in opened {
+        app.close(window);
+    }
+    app.focus(hub);
 }
 
 fn messages_reach_the_focused_hub(app: &mut AppUnderTest, hub: WindowId) {
@@ -464,19 +567,18 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     let shown = app.click(Command::OwletDownloadStatus, &[Reply::Button(0)]);
     assert_eq!(message(&shown).3, HOOT_UNSUPPORTED);
 
-    for command in [
-        Command::OpenLicenses,
-        Command::DownloadLogs,
-        Command::CheckForUpdates,
-    ] {
-        let shown = app.click(command, &[Reply::Button(0)]);
-        let (window, kind, text, _) = message(&shown);
-        assert_eq!(
-            (window, kind, text),
-            (Some(hub), MessageBoxType::Error, "Not available yet"),
-            "{command:?}"
-        );
-    }
+    let shown = app.click(Command::CheckForUpdates, &[Reply::Button(0)]);
+    let (window, kind, text, detail) = message(&shown);
+    assert_eq!((window, kind), (unparented(hub), MessageBoxType::Info));
+    assert_eq!(text, "Cannot check for updates");
+    assert!(detail.contains("development environment"));
+
+    let shown = app.click(Command::DownloadLogs, &[Reply::Button(0)]);
+    let (window, kind, text, _) = message(&shown);
+    assert_eq!(
+        (window, kind, text),
+        (Some(hub), MessageBoxType::Error, "Not available yet")
+    );
 
     let before = app.tabs(hub);
     for (button, resets) in [(1, false), (0, true)] {

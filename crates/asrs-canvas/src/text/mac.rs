@@ -571,7 +571,10 @@ impl CoreText {
             }
             let face = self.run_face(spec, primary, run_font.clone());
             let varied = self.faces[face as usize].varied;
-            let zoomed = (self.faces[face as usize].color && zoom != 1.0).then(|| {
+            let Face {
+                color, fallback, ..
+            } = self.faces[face as usize];
+            let zoomed = ((color || fallback) && zoom != 1.0).then(|| {
                 let device = self.device_font(face, &run_font, spec.size * zoom);
                 let mut zoomed = vec![CGSize::new(0.0, 0.0); ids.len()];
                 // SAFETY: `ids` and `zoomed` both hold `ids.len()` elements.

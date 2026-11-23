@@ -17,7 +17,7 @@ use crate::views::frame::wheel_of;
 
 /// An arrow key's step in px.
 const LINE_STEP: f64 = 40.0;
-/// How much of the page a Page Up or Page Down goes by, and the most it leaves.
+/// How much of the window a Page Up or Page Down goes by at least, and the most device px it leaves.
 const PAGE_FRACTION: f64 = 0.875;
 const PAGE_OVERLAP: f64 = 40.0;
 
@@ -87,7 +87,7 @@ impl PageScroll {
             return false;
         }
         let page = (self.client * PAGE_FRACTION)
-            .max(self.client - PAGE_OVERLAP)
+            .max(self.client - PAGE_OVERLAP / f64::from(self.scale))
             .max(1.0);
         let end = self.max + self.client;
         let by = match keystroke.key.as_str() {
