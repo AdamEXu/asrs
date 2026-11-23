@@ -19,6 +19,7 @@ use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::selection_impl::ControlButton;
+use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
@@ -98,6 +99,7 @@ struct GeometryState {
     classes: BodyClasses,
     inner_height: f64,
     side_bar: [f64; 4],
+    table: Option<(Rect, f64)>,
 }
 
 impl FrameGeometry {
@@ -121,6 +123,11 @@ impl FrameGeometry {
     /// `RENDERER_CONTENT.getBoundingClientRect().top`.
     pub fn renderer_top(&self, show_timeline: bool) -> f64 {
         renderer_top(self.0.borrow().classes, show_timeline)
+    }
+
+    /// `div.renderer-content`'s box while a Table tab is displayed, and the window's scale.
+    pub fn table_box(&self) -> Option<(Rect, f64)> {
+        self.0.borrow().table
     }
 
     /// `div.side-bar`'s box as last laid out.
@@ -700,6 +707,22 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let inputs = self.inputs(cx, width, height, f64::from(scale), fps_size);
         let layout = FrameLayout::compute(&inputs);
         self.geometry.set_inner_height(height);
+        self.geometry.0.borrow_mut().table = FrameLayout::compute(&FrameInputs {
+            show_timeline: Some(false),
+            show_tab_controls: Some(false),
+            tab_controls_height: Some(0.0),
+            ..inputs.clone()
+        })
+        .rect(FrameElement::RendererContent)
+        .map(|[x, y, width, height]| {
+            let rect = Rect {
+                x,
+                y,
+                width,
+                height,
+            };
+            (rect, f64::from(scale))
+        });
         self.geometry.sync(self.host.hub(cx));
         let titles: Vec<TitleElement> = self.host.hub(cx).tabs().bar().map(|e| e.clone()).collect();
         if let Some(bar) = layout.rect(FrameElement::TabBar) {

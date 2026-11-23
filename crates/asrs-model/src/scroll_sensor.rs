@@ -113,15 +113,16 @@ impl WheelScroll {
         self.0 = None;
     }
 
-    /// A wheel event at `now` (ms) over a scroller at `offset` with a `client_size` box: the
-    /// offset a precise event scrolls to at once, or nothing when a notched one started an
-    /// animation.
+    /// A wheel event at `now` (ms) over a scroller at `offset` with a `client_size` box, which
+    /// scrolls up to `max`: the offset a precise event scrolls to at once, or nothing when a
+    /// notched one started an animation.
     pub fn wheel(
         &mut self,
         wheel: Wheel,
         now: f64,
         offset: [f64; 2],
         client_size: [f64; 2],
+        max: [f64; 2],
     ) -> Option<[f64; 2]> {
         let delta = [-wheel.delta[0], -wheel.delta[1]];
         if wheel.precise {
@@ -133,7 +134,11 @@ impl WheelScroll {
             math::min2(math::max2(delta[axis], -size), size)
         });
         let base = self.0.map_or(offset, |a| a.to);
-        let to = [base[0] + capped[0], base[1] + capped[1]];
+        let to =
+            [0, 1].map(|axis| math::min2(math::max2(base[axis] + capped[axis], 0.0), max[axis]));
+        if to == base {
+            return None;
+        }
         self.0 = Some(Animation {
             from: offset,
             to,
@@ -232,7 +237,11 @@ impl ScrollSensor {
 
     /// A wheel event over the overlay at `now` (ms).
     pub fn wheel(&mut self, wheel: Wheel, now: f64) {
-        if let Some(to) = self.animation.wheel(wheel, now, self.raw, self.client_size) {
+        let max = self.client_size.map(|size| math::max2(SIZE_PX - size, 0.0));
+        if let Some(to) = self
+            .animation
+            .wheel(wheel, now, self.raw, self.client_size, max)
+        {
             self.scroll_to(to);
         }
     }

@@ -239,6 +239,7 @@
     "dom/tabs/table-edit": {"cases":1036,"content":"0d35cce3b0ec3566","generator":"841b017b55c100e7","spec":"parity/specs/dom/tabs/table-edit.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/tabs/table-ranges": {"cases":1415,"content":"3d7da53a93636453","generator":"1a686eb48810b809","spec":"parity/specs/dom/tabs/table-ranges.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/tabs/table-real": {"cases":4084,"content":"bd90dffcd5ea3ef2","generator":"2e3fd02fec1c915b","spec":"parity/specs/dom/tabs/table-real.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/tabs/table-resize": {"cases":492,"content":"671732705ddc0f4d","generator":"ee0fba7dd3e68849","spec":"parity/specs/dom/tabs/table-resize.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/tabs/table-wide": {"cases":1206,"content":"5b5b9bb28fda4cea","generator":"11d5f00c75ecbc15","spec":"parity/specs/dom/tabs/table-wide.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/tabs/table-wide-2x": {"cases":1206,"content":"286a84bd37d20d45","generator":"a806a0bd09ff9ea8","spec":"parity/specs/dom/tabs/table-wide-2x.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/tabs/table-wide-hidpi": {"cases":1206,"content":"1c58d9a1977e0d68","generator":"018beea26b55dd5a","spec":"parity/specs/dom/tabs/table-wide-hidpi.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},

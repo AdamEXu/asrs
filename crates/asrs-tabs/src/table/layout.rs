@@ -75,8 +75,10 @@ impl TableLayout {
         self.css(self.row_device())
     }
 
-    pub fn table_width(&self) -> f64 {
-        self.columns.iter().sum()
+    /// The first `count` columns' width, each in whole layout units of 1/64 device px.
+    fn columns_device(&self, count: usize) -> f64 {
+        let device = |w: &f64| math::round(w * self.device_pixel_ratio * 64.0) / 64.0;
+        self.columns.iter().take(count).map(device).sum()
     }
 
     fn rows_device(&self, count: usize) -> f64 {
@@ -85,7 +87,7 @@ impl TableLayout {
 
     fn table_device(&self) -> [f64; 2] {
         [
-            self.table_width() * self.device_pixel_ratio,
+            self.columns_device(self.columns.len()),
             self.header_device()
                 + self.rows_device(self.rows.shown)
                 + self.lu(self.rows.filler_lower_px),
@@ -96,6 +98,12 @@ impl TableLayout {
         let content = self.table_device();
         let size = [self.container.width, self.container.height];
         [0, 1].map(|axis| math::max2(content[axis] - size[axis] * self.device_pixel_ratio, 0.0))
+    }
+
+    /// The largest `scrollLeft` and `scrollTop`, not on the pixel grid.
+    pub fn scroll_range(&self) -> [f64; 2] {
+        self.scroll_range_device()
+            .map(|v| v / self.device_pixel_ratio)
     }
 
     fn set_offset_device(&mut self, offset: [f64; 2]) {
@@ -148,8 +156,7 @@ impl TableLayout {
             return x;
         }
         let left = self.scroll_device()[0];
-        let before: f64 = self.columns.iter().take(index).sum();
-        x + before * self.device_pixel_ratio - left
+        x + self.columns_device(index) - left
     }
 
     /// The x of column `index`: the first is sticky, the others scroll under it.
@@ -219,7 +226,7 @@ impl TableGeometry for TableLayout {
         Rect {
             x: self.css(self.container.x * self.device_pixel_ratio - left),
             y: self.row_top(index),
-            width: self.table_width(),
+            width: self.css(self.table_device()[0]),
             height: self.row_height(),
         }
     }

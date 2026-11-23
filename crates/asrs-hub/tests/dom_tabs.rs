@@ -1194,9 +1194,9 @@ fn css_px(n: f64) -> String {
     format!("{text}px")
 }
 
-/// Reads and assignments of `TABLE_CONTAINER`'s scroll position, which are fixture input and
-/// leave no geometry records.
-fn eval_table_scroll(r: &mut Runner, body: &str) -> Option<JsValue> {
+/// Reads and assignments of `TABLE_CONTAINER`'s scroll position and of the `bottom` inset that
+/// sets its height, which are fixture input and leave no geometry records.
+fn eval_table_container(r: &mut Runner, body: &str) -> Option<JsValue> {
     const CONTAINER: &str =
         "window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.";
     let mut table = r.table.as_ref()?.0.borrow_mut();
@@ -1211,6 +1211,11 @@ fn eval_table_scroll(r: &mut Runner, body: &str) -> Option<JsValue> {
                 .trim()
                 .strip_prefix(CONTAINER)?
                 .split_once(" = ")?;
+            if name == "style.bottom" {
+                let bottom: f64 = value.trim_matches('"').strip_suffix("px")?.parse().ok()?;
+                table.layout.container.height = TABLE_CONTAINER.height - bottom;
+                continue;
+            }
             let axis = axis(name)?;
             let mut to = table.layout.scroll();
             to[axis] = value.parse().ok()?;
@@ -1228,7 +1233,8 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
         .strip_prefix("window.__oracleQuiet(() => ")
         .and_then(|e| e.strip_suffix(')'))
     {
-        return eval_table_scroll(r, body).ok_or_else(|| err(format!("unsupported eval {expr}")));
+        return eval_table_container(r, body)
+            .ok_or_else(|| err(format!("unsupported eval {expr}")));
     }
     if expr.starts_with("/*table:highlight*/") {
         let dom = r
@@ -2835,10 +2841,11 @@ impl Runner {
 
 /// Fixtures that ran on Blink with real geometry and hold one Table tab; their other geometry
 /// records are the sidebar's, tab bar's and timeline's, which other models replay.
-const TABLE_FIXTURES: [&str; 6] = [
+const TABLE_FIXTURES: [&str; 7] = [
     "dom/tabs/table",
     "dom/tabs/table-edit",
     "dom/tabs/table-ranges",
+    "dom/tabs/table-resize",
     "dom/tabs/table-wide",
     "dom/tabs/table-wide-2x",
     "dom/tabs/table-wide-hidpi",

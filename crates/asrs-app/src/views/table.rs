@@ -54,8 +54,10 @@ const HAND_SIZE: f64 = 100.0;
 const HAND_OPACITY: f64 = 0.15;
 const HAND_DELAY_MS: f64 = 1000.0;
 const HAND_FADE_MS: f64 = 1000.0;
-const CELL_CACHE: usize = 8192;
+const CACHED_CELLS: usize = 8192;
+const CACHED_BYTES: usize = 1 << 24;
 const PIECE_CHARS: usize = 200;
+const PIECES_MEASURED: usize = 16;
 
 fn cell_style(bold: bool) -> TextStyle {
     let font = if bold {
@@ -187,8 +189,21 @@ fn pieces(text: &str, mut measure: impl FnMut(&str) -> f64) -> Vec<(String, f64)
         }
     }
     out.push((text[start..].to_owned(), start));
+    // A piece's offset is the width before it, measured over a bounded stretch at a time: whole
+    // prefixes would make long text quadratic.
+    let (mut base, mut from) = (0.0, 0);
     out.into_iter()
-        .map(|(piece, at)| (piece, if at == 0 { 0.0 } else { measure(&text[..at]) }))
+        .enumerate()
+        .map(|(i, (piece, at))| {
+            if i == 0 {
+                return (piece, 0.0);
+            }
+            let offset = base + measure(&text[from..at]);
+            if i % PIECES_MEASURED == 0 {
+                (base, from) = (offset, at);
+            }
+            (piece, offset)
+        })
         .collect()
 }
 
@@ -197,31 +212,74 @@ struct Cell {
     pieces: Vec<(String, f64)>,
 }
 
+struct CachedCell {
+    cell: Rc<Cell>,
+    frame: u64,
+}
+
 /// Measured cell texts, by whether they are bold.
 #[derive(Default)]
 struct Cells {
     scale: f32,
-    texts: [HashMap<String, Rc<Cell>>; 2],
+    frame: u64,
+    bytes: usize,
+    texts: [HashMap<String, CachedCell>; 2],
 }
 
 impl Cells {
-    fn get(&mut self, text: &str, bold: bool, scale: f32, cx: &mut App) -> Rc<Cell> {
-        if self.scale != scale || self.texts.iter().any(|c| c.len() > CELL_CACHE) {
+    /// Drops what the last frame left unused once the cache is full. Nothing goes during a frame,
+    /// which measures its cells before it draws them.
+    fn start_frame(&mut self, scale: f32) {
+        if self.scale != scale {
             *self = Cells {
                 scale,
                 ..Cells::default()
             };
         }
-        let texts = &mut self.texts[usize::from(bold)];
-        if let Some(cell) = texts.get(text) {
-            return cell.clone();
+        let count: usize = self.texts.iter().map(HashMap::len).sum();
+        if count > CACHED_CELLS || self.bytes > CACHED_BYTES {
+            let last = self.frame;
+            for texts in &mut self.texts {
+                texts.retain(|_, cached| cached.frame == last);
+            }
+            self.bytes = self
+                .texts
+                .iter()
+                .flat_map(HashMap::keys)
+                .map(String::len)
+                .sum();
         }
-        let mut measure = |text: &str| text::measure(cx, &cell_style(bold), text, scale).0;
+        self.frame += 1;
+    }
+
+    fn get(&mut self, text: &str, bold: bool, cx: &mut App) -> Rc<Cell> {
+        let scale = self.scale;
+        self.get_with(text, bold, |text| {
+            text::measure(cx, &cell_style(bold), text, scale).0
+        })
+    }
+
+    fn get_with(
+        &mut self,
+        text: &str,
+        bold: bool,
+        mut measure: impl FnMut(&str) -> f64,
+    ) -> Rc<Cell> {
+        let texts = &mut self.texts[usize::from(bold)];
+        if let Some(cached) = texts.get_mut(text) {
+            cached.frame = self.frame;
+            return cached.cell.clone();
+        }
         let cell = Rc::new(Cell {
             width: measure(text),
             pieces: pieces(text, measure),
         });
-        texts.insert(text.to_owned(), cell.clone());
+        self.bytes += text.len();
+        let cached = CachedCell {
+            cell: cell.clone(),
+            frame: self.frame,
+        };
+        texts.insert(text.to_owned(), cached);
         cell
     }
 }
@@ -478,8 +536,9 @@ impl<H: FrameHost> HubFrame<H> {
                 height,
             };
             layout.device_pixel_ratio = f64::from(scale);
+            tab.cells.start_frame(scale);
             layout.columns = column_widths(&view, layout.border_px(), |text, bold| {
-                tab.cells.get(text, bold, scale, cx).width
+                tab.cells.get(text, bold, cx).width
             });
             layout.key_text = view
                 .headers
@@ -553,8 +612,9 @@ impl<H: FrameHost> HubFrame<H> {
         let rows_height = rows.len() as f64 * row_height;
         let first = columns[0];
         let measured = (self.table.shown.as_ref()).and_then(|s| self.table.tabs.get(&s.key));
-        let measured =
-            |text: &str, bold: bool| measured?.cells.texts[usize::from(bold)].get(text).cloned();
+        let measured = |text: &str, bold: bool| {
+            Some(&measured?.cells.texts[usize::from(bold)].get(text)?.cell)
+        };
 
         let mut cells = div().absolute().inset_0();
         let mut first_cells = div().absolute().inset_0().child(
@@ -800,6 +860,14 @@ impl<H: FrameHost> HubFrame<H> {
 
     /// A table that stopped being displayed: its focused input blurs and its body is left.
     fn table_hidden(&mut self, left: &Shown, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let index = self.host().hub(cx).tabs().tabs().position(|tab| {
+            tab.renderer()
+                .downcast_ref::<TableRenderer>()
+                .is_some_and(|renderer| renderer_key(renderer) == left.key)
+        });
+        if let Some(index) = index.filter(|_| self.table.over_body) {
+            self.table_leave(index, cx);
+        }
         self.table.over_body = false;
         self.table.pressed_row = None;
         let Some(tab) = self.table.tabs.get_mut(&left.key) else {
@@ -1026,7 +1094,8 @@ impl<H: FrameHost> HubFrame<H> {
         self.table_input(cx, |renderer, _| {
             let mut dom = renderer.dom().borrow_mut();
             let offset = dom.layout.wheel_offset();
-            if let Some(to) = state.wheel(wheel, now, offset, [width, height]) {
+            let max = dom.layout.scroll_range();
+            if let Some(to) = state.wheel(wheel, now, offset, [width, height], max) {
                 dom.layout.set_wheel_offset(to);
             }
         });
@@ -1167,9 +1236,37 @@ mod tests {
             cut.iter().map(|(p, at)| (p.len(), *at)).collect::<Vec<_>>(),
             [(200, 0.0), (200, 200.0), (161, 400.0)]
         );
+        let long = "x".repeat(100_000);
+        let mut measured = 0;
+        let cut = pieces(&long, |part| {
+            measured += part.len();
+            part.len() as f64
+        });
+        assert_eq!(cut.last().unwrap().1, 99_800.0);
+        assert!(measured < 10 * long.len(), "{measured} characters measured");
         let spaces = " ".repeat(1000);
         assert_eq!(pieces(&spaces, |p| p.len() as f64)[1].1, 400.0);
         assert_eq!(pieces("short", |_| unreachable!()).len(), 1);
+    }
+
+    #[test]
+    fn a_frame_keeps_every_cell_it_measured() {
+        let mut cells = Cells::default();
+        let frame = |cells: &mut Cells, from: usize| {
+            cells.start_frame(1.0);
+            let texts: Vec<String> = (from..from + CACHED_CELLS + 1)
+                .map(|i| i.to_string())
+                .collect();
+            for text in &texts {
+                cells.get_with(text, false, |text| text.len() as f64);
+            }
+            assert!(texts.iter().all(|text| cells.texts[0].contains_key(text)));
+        };
+        frame(&mut cells, 0);
+        frame(&mut cells, 0);
+        frame(&mut cells, 20_000);
+        frame(&mut cells, 40_000);
+        assert_eq!(cells.texts[0].len(), 2 * (CACHED_CELLS + 1));
     }
 
     /// The columns of `dom/tabs/table-wide` before its first drop, recorded on macOS.

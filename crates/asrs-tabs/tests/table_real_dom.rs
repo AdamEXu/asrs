@@ -4,8 +4,9 @@
 //! same command with its layout reads answered, in order, by the `read` records inside the
 //! bracket and its scroll writes checked against the `write` records, through
 //! `asrs_parity::geometry::ScriptedReads`, and every read is also checked against
-//! `asrs_tabs::table::layout::TableLayout`, the layout the app's view answers from. Geometry records outside a bracket belong to the
-//! tab bar, sidebar and timeline, which other models replay.
+//! `asrs_tabs::table::layout::TableLayout`, the layout the app's view answers from. Geometry
+//! records outside a bracket belong to the tab bar, sidebar and timeline, which other models
+//! replay.
 
 mod support;
 
@@ -20,6 +21,7 @@ use asrs_model::tab_controller::TabRenderer;
 use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::vectors::{Record, load};
 use asrs_parity::{Json, Value};
+use asrs_tabs::table::layout::TableLayout;
 use asrs_tabs::table::{TableCommand, TableCommandField, TableDom, TableGeometry, TableRenderer};
 use support::table_geometry::{CONTAINER, SharedTable};
 use support::{Host, field, number, opt};
@@ -178,4 +180,48 @@ fn table_real_geometry_replays_through_scripted_reads() {
         renders > 100 && geometry_compared > 1000,
         "{renders} renders, {geometry_compared} reads"
     );
+}
+
+/// The fixtures scroll the header row 250 px right before any read of it.
+#[test]
+fn header_cells_scroll_under_the_first_column() {
+    for (vector, scale) in [
+        ("dom/tabs/table-wide", 1.0),
+        ("dom/tabs/table-wide-hidpi", 1.5),
+        ("dom/tabs/table-wide-2x", 2.0),
+    ] {
+        let mut cells = [None; 5];
+        for record in load(vector).unwrap() {
+            let Some(g) = GeometryRecord::parse(&record).unwrap() else {
+                continue;
+            };
+            for (i, cell) in cells.iter_mut().enumerate() {
+                if cell.is_none() && g.is_on(&format!("tbody:0>tr:0>th:{i}")) {
+                    let Value::Array(rect) = &g.value else {
+                        panic!("{vector}: {} of a header cell", g.name)
+                    };
+                    *cell = Some([0, 1, 2, 3].map(|k| number(&rect[k])));
+                }
+            }
+        }
+        let cells = cells.map(|cell| cell.unwrap_or_else(|| panic!("{vector}: a cell is unread")));
+        let mut layout = TableLayout::default();
+        layout.container = Rect {
+            x: 300.0,
+            y: 88.0,
+            width: 800.0,
+            height: 562.0,
+        };
+        layout.device_pixel_ratio = scale;
+        layout.columns = cells.map(|[_, _, width, _]| width).to_vec();
+        layout.scroll_to([250.0, 0.0]);
+        for (i, recorded) in cells.into_iter().enumerate() {
+            let cell = layout.header_cell_rect(i);
+            assert_eq!(
+                [cell.x, cell.y, cell.width, cell.height],
+                recorded,
+                "{vector}: header cell {i}"
+            );
+        }
+    }
 }
