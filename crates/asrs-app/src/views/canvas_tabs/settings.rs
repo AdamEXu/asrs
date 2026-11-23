@@ -28,7 +28,7 @@ use super::super::frame::{FrameHost, HubFrame};
 use super::super::select::FormSelect;
 use super::super::sidebar::NumberValue;
 use super::super::source_list::{centred_offset, place_in};
-use super::{local, lu, tab_index, with_controller};
+use super::{local, lu, tab_index, tab_key, with_controller};
 
 const MAX_WIDTH: f64 = 200.0;
 const TOP_MARGIN: f64 = 5.0;
@@ -409,6 +409,22 @@ impl<H: FrameHost> HubFrame<H> {
             );
         });
         Some(select)
+    }
+
+    /// The displayed tab's select for `control`.
+    pub fn displayed_select(
+        &self,
+        control: Control,
+        cx: &App,
+    ) -> Option<Entity<Select<FormSelect>>> {
+        let hub = self.host().hub(cx);
+        let tab = hub.tabs().tabs().find(|tab| !tab.content_hidden())?;
+        let view = self
+            .canvas_tabs
+            .settings
+            .selects
+            .get(&(tab_key(&tab), control));
+        view.map(|view| view.select.clone())
     }
 
     /// The panel of the tab `key` in `controls` (`div.controls-content`).

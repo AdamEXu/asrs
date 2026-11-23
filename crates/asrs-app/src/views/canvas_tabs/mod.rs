@@ -22,6 +22,7 @@ use asrs_ui::theme::Appearance;
 use super::frame::{FrameHost, HubFrame};
 
 pub use joysticks::JoysticksTab;
+pub use settings::Control;
 
 /// `div.swerve-canvas-container`, `div.mechanism-svg-container` and
 /// `div.points-background-container` are `height: calc(100% + 10px)` from the bottom of the

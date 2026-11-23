@@ -48,12 +48,11 @@ fn paint(inputs: &SvgInputs) -> Option<Layer> {
         .filter_map(|e| inline_svg::painted(e, &inputs.tree, 1.0, inputs.text))
         .collect();
     let zoom = f64::from(inputs.scale);
-    let fit = |axis: usize| zoom * frame.size[axis] / frame.layout[axis];
     let ctm = Affine {
-        a: fit(0),
+        a: zoom,
         b: 0.0,
         c: 0.0,
-        d: fit(1),
+        d: zoom,
         e: frame.origin[0] - f64::from(layer.x),
         f: frame.origin[1] - f64::from(layer.y),
     };

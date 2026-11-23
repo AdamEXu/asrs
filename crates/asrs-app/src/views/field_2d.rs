@@ -368,7 +368,11 @@ fn rasterize(
     };
     raster = raster.with_state(*state);
     for (id, pixmap) in images {
-        raster.add_image(id, pixmap.clone());
+        if id == HEATMAP_IMAGE {
+            raster.add_image(id, pixmap.clone());
+        } else {
+            raster.add_image_element(id, pixmap.clone());
+        }
     }
     raster.run(&frame.calls);
     *state = raster.state();

@@ -125,7 +125,7 @@ pub fn rasterize(
         .with_state(*state)
         .with_shades(std::mem::take(shades));
     for (id, pixmap) in images {
-        raster.add_image(id, pixmap.clone());
+        raster.add_image_element(id, pixmap.clone());
     }
     let text = cx.default_global::<CanvasText>();
     if let (Some(backend), Some(lut)) = (text.backend.as_deref_mut(), text.lut.as_ref()) {
@@ -138,7 +138,7 @@ pub fn rasterize(
     Some((raster.into_pixmap(), errors))
 }
 
-/// One `<canvas>`: the display list it last drew, the images `drawImage` may name, and the frame
+/// One `<canvas>`: the display list it last drew, the `<img>` elements `drawImage` may name, and the frame
 /// it shows. A display list equal to the last one is not drawn again, which is the dirty check
 /// upstream renderers do by comparing `JSON.stringify` of their render state.
 pub struct CanvasState {
