@@ -7,6 +7,10 @@
 pub trait FieldModel: 'static {
     fn value(&self) -> String;
     fn set_value(&mut self, value: &str);
+    /// The user edits the field, whose editor now shows `visible`.
+    fn edit(&mut self, visible: &str) {
+        self.set_value(visible);
+    }
     /// Whether the editor accepts `c` as typed or pasted text.
     fn accepts(&self, c: char) -> bool {
         !matches!(c, '\n' | '\r')
@@ -51,7 +55,7 @@ impl<M: FieldModel> FieldValue<M> {
         if accepted == self.shown {
             return false;
         }
-        self.model.set_value(&accepted);
+        self.model.edit(&accepted);
         self.shown = accepted;
         true
     }

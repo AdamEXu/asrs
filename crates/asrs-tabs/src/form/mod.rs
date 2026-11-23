@@ -133,6 +133,11 @@ impl NumberInput {
         self.value = if keep { value } else { JsString::new() };
     }
 
+    /// The user edits the field, whose editor now shows `visible`.
+    pub fn set_visible_value(&mut self, visible: &JsString) {
+        self.set_value(convert_from_visible_value(visible));
+    }
+
     /// `Number(input.value)`.
     pub fn number(&self) -> f64 {
         number::to_number(self.value.units())
@@ -141,6 +146,41 @@ impl NumberInput {
     pub fn value_as_number(&self) -> f64 {
         value_as_number(&self.value)
     }
+}
+
+/// `NumberInputType::ConvertFromVisibleValue` for en-US: text with an exponent as it is, else
+/// `Locale::ConvertFromLocalizedNumber`, which drops whitespace, one leading `+` and a trailing
+/// `.`, and reads anything but digits and points after an optional `-` as empty.
+fn convert_from_visible_value(visible: &JsString) -> JsString {
+    let is = |u: u16, c: u8| u == u16::from(c);
+    if visible.units().iter().any(|&u| is(u, b'e') || is(u, b'E')) {
+        return visible.clone();
+    }
+    let input: Vec<u16> = visible
+        .units()
+        .iter()
+        .copied()
+        .filter(|u| !matches!(u, 0x09..=0x0D | 0x20))
+        .collect();
+    let (negative, mut digits) = match input.split_first() {
+        Some((&sign, rest)) if is(sign, b'-') => (true, rest),
+        _ => (false, &input[..]),
+    };
+    if !negative && digits.len() >= 2 && is(digits[0], b'+') {
+        digits = &digits[1..];
+    }
+    if !digits.iter().all(|&u| is_digit(u) || is(u, b'.')) {
+        return JsString::new();
+    }
+    let mut converted: Vec<u16> = Vec::with_capacity(digits.len() + 1);
+    if negative {
+        converted.push(u16::from(b'-'));
+    }
+    converted.extend_from_slice(digits);
+    if converted.len() >= 2 && converted.last() == Some(&u16::from(b'.')) {
+        converted.pop();
+    }
+    JsString::from_units(converted)
 }
 
 /// `StepRange` as `RangeInputType::CreateStepRange(kRejectAny)` builds it.

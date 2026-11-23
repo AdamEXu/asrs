@@ -62,13 +62,25 @@ impl Windows {
     }
 
     pub fn id(cx: &App, window: &Window) -> Option<WindowId> {
-        let target = window.window_handle().window_id();
-        let windows = cx.global::<Windows>();
+        Self::id_of(cx, window.window_handle())
+    }
+
+    pub fn id_of(cx: &App, handle: AnyWindowHandle) -> Option<WindowId> {
+        let windows = cx.try_global::<Windows>()?;
         windows
             .handles
             .iter()
-            .find(|(_, h)| h.window_id() == target)
+            .find(|(_, h)| h.window_id() == handle.window_id())
             .map(|(id, _)| *id)
+    }
+
+    /// Registers a hub window a parity scenario opened headless, so it can parent prompts.
+    #[cfg(feature = "parity")]
+    pub fn adopt_hub(cx: &mut App, handle: AnyWindowHandle) -> WindowId {
+        let windows = cx.global_mut::<Windows>();
+        let (id, _) = windows.manager.create_hub(None);
+        windows.handles.push((id, handle));
+        id
     }
 
     /// `hubWindows`: most recently focused first.

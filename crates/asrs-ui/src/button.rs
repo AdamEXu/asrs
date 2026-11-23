@@ -38,6 +38,7 @@ pub struct IconButton {
     disabled: bool,
     blurred: bool,
     appearance: Option<Appearance>,
+    focus: Option<FocusHandle>,
     on_click: Option<ClickHandler>,
 }
 
@@ -55,6 +56,7 @@ impl IconButton {
             disabled: false,
             blurred: false,
             appearance: None,
+            focus: None,
             on_click: None,
         }
     }
@@ -103,6 +105,12 @@ impl IconButton {
         self
     }
 
+    /// The handle that holds the button's focus, for a view that moves or reads it.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.focus = Some(handle.clone());
+        self
+    }
+
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -119,9 +127,10 @@ impl RenderOnce for IconButton {
             .unwrap_or_else(|| Appearance::of(window, cx));
         let theme = appearance.theme();
         let chain = self.tint.chain(appearance, self.blurred, self.disabled);
+        let given = self.focus;
         let focus = (!self.disabled).then(|| {
             window.use_keyed_state(self.id.clone(), cx, |_, cx| FocusState {
-                handle: cx.focus_handle().tab_stop(true),
+                handle: given.unwrap_or_else(|| cx.focus_handle()).tab_stop(true),
                 from_keyboard: false,
             })
         });

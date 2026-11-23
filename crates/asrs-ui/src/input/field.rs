@@ -187,11 +187,18 @@ impl<M: FieldModel> TextField<M> {
     }
 
     fn commit(&mut self, cx: &mut Context<'_, Self>) {
-        let value = self.value.value();
-        if value != self.committed {
-            self.committed = value;
+        if self.take_change() {
             cx.emit(FieldEvent::Change);
         }
+    }
+
+    /// Commits the value as blur does, before the blur reaches the field: returns whether the
+    /// field owes its `change` event, which the caller then handles in its place.
+    pub fn take_change(&mut self) -> bool {
+        let value = self.value.value();
+        let changed = value != self.committed;
+        self.committed = value;
+        changed
     }
 
     pub fn model(&self) -> &M {

@@ -420,6 +420,12 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genPrompts": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genPrompts.ts",
+    "src/shims.ts"
+  ],
   "genProto": [
     "src/corpus/bytes.ts",
     "src/corpus/corpus.ts",
