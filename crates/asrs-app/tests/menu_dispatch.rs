@@ -312,8 +312,8 @@ fn preferences_reach_the_file_the_hubs_and_the_menu(app: &mut AppUnderTest, hub:
 }
 
 fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
-    let log = app.home.join("empty.csv");
-    std::fs::write(&log, "").expect("a log");
+    let log = app.home.join("opened.csv");
+    std::fs::write(&log, "Timestamp,/Value\n0,1\n").expect("a log");
     assert_eq!(app.click(Command::OpenLogs, &[open(&[])]).len(), 1);
     assert!(app.historical_paths(hub).is_empty());
     let shown = app.click(Command::OpenLogs, &[open(&[&log])]);
@@ -380,7 +380,7 @@ fn accelerators_reach_the_window_they_were_pressed_in(app: &mut AppUnderTest, hu
         );
     });
     let log = app.home.join("pressed.csv");
-    std::fs::write(&log, "").expect("a log");
+    std::fs::write(&log, "Timestamp,/Value\n0,1\n").expect("a log");
     let shown = app.press(hub, "ctrl-o", &[open(&[&log])]);
     let [(Some(parent), Shown::Open(_))] = &shown[..] else {
         panic!("ctrl-o: {shown:?}");

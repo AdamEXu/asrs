@@ -139,6 +139,9 @@ pub(super) fn header_cell(grid: Grid, cell: [f64; 4], right: bool, palette: &Hea
 
 /// `cubic-bezier(0.42, 0, 1, 1)` (`ease-in`) at `t`.
 fn ease_in(t: f64) -> f64 {
+    if t <= 0.0 {
+        return 0.0;
+    }
     let (x1, x2) = (0.42, 1.0);
     let (y1, y2) = (0.0, 1.0);
     let bezier = |a: f64, b: f64, s: f64| {
