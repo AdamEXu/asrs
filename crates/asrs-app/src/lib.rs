@@ -8,6 +8,7 @@ mod hub_dialogs;
 pub mod main_process;
 pub mod menus;
 pub mod scenario;
+mod video;
 pub mod views;
 pub mod windows;
 

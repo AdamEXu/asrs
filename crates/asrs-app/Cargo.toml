@@ -29,6 +29,9 @@ asrs-tabs = { path = "../asrs-tabs" }
 asrs-ui.workspace = true
 async-channel = "=2.5.0"
 png = "=0.18.1"
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+sha2 = "=0.10.9"
+ureq = { version = "=3.5.2", default-features = false, features = ["gzip", "platform-verifier", "rustls-no-provider"] }
 zune-core = "=0.5.3"
 zune-jpeg = "=0.5.15"
 
@@ -111,6 +114,10 @@ required-features = ["parity"]
 [[test]]
 name = "prompt_windows"
 harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "video_flow"
 required-features = ["parity"]
 
 [[test]]

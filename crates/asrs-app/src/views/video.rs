@@ -298,6 +298,9 @@ impl Stroke {
 
 /// CSS `ease`, `cubic-bezier(0.25, 0.1, 0.25, 1)`.
 fn ease(x: f64) -> f64 {
+    if x <= 0.0 || x >= 1.0 {
+        return x.clamp(0.0, 1.0);
+    }
     let bezier = |t: f64, a: f64, b: f64| {
         let u = 1.0 - t;
         3.0 * u * u * t * a + 3.0 * u * t * t * b + t * t * t
