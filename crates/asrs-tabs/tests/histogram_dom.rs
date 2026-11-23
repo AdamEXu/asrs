@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use asrs_canvas::text::{FixedAdvance, TextBackend};
-use asrs_canvas::{Call, trace};
+use asrs_canvas::{Call, Raster, trace};
 use asrs_js::string::{JsError, JsString};
 use asrs_parity::vectors::{load, vectors_dir};
 use asrs_parity::{Json, Record, Utf16String, Value};
@@ -221,6 +221,8 @@ struct Replay {
     work: Vec<(Work, Result<(), JsError>, bool, Vec<Call>)>,
     tally: BTreeMap<&'static str, usize>,
     calls: usize,
+    /// Every call since the canvas was last reset.
+    since_reset: Vec<Call>,
 }
 
 impl Replay {
@@ -255,6 +257,10 @@ impl Replay {
         let expected_reset = boolean(record, "reset");
         assert_eq!(expected_reset, reset, "{what}: canvas reset");
         self.check_calls(record, &calls, &what);
+        if reset {
+            self.since_reset.clear();
+        }
+        self.since_reset.extend(calls);
     }
 
     fn check_calls(&mut self, record: &Record, calls: &[Call], what: &str) {
@@ -465,11 +471,18 @@ fn replay(id: &str) -> Replay {
         work: Vec::new(),
         tally: BTreeMap::new(),
         calls: 0,
+        since_reset: Vec::new(),
     };
     for (n, record) in vector.iter().enumerate() {
         replay.record(n, record);
     }
     replay.no_pending_work("end");
+    let compared: usize = replay.tally.values().sum();
+    let states = vector
+        .iter()
+        .filter(|r| r.field("state").is_some() && r.field("threw").is_none())
+        .count();
+    assert_eq!(compared, vector.len() + states, "{id}: compared records");
     replay
 }
 
@@ -499,5 +512,27 @@ fn charts_draw_what_upstream_draws() {
         "exception",
     ] {
         assert!(total.contains_key(kind), "no {kind} record in any vector");
+    }
+}
+
+#[test]
+fn the_kept_display_list_paints_what_the_whole_history_paints() {
+    for id in case_ids() {
+        let mut replay = replay(&id);
+        let since_reset = std::mem::take(&mut replay.since_reset);
+        let canvas = replay.chart().canvas();
+        if canvas.width == 0 || canvas.height == 0 {
+            continue;
+        }
+        let paint = |calls: &[Call]| {
+            let mut raster = Raster::new(canvas.width, canvas.height).expect("a canvas");
+            raster.run(calls);
+            raster.into_pixmap()
+        };
+        assert!(canvas.calls.len() <= since_reset.len(), "{id}");
+        assert!(
+            paint(&canvas.calls) == paint(&since_reset),
+            "{id}: the kept calls paint something else"
+        );
     }
 }

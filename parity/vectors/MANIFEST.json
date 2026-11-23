@@ -416,6 +416,7 @@
     "node/path-join": {"cases":3079,"content":"46163267da176e35","generator":"b732e28173485a99","spec":"parity/specs/node/path-join.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/numberformat": {"cases":182,"content":"44a96cd7bef54d21","generator":"43c0a123dcce7628","spec":"parity/specs/number/numberformat.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/parse": {"cases":569,"content":"495136adba4d37f3","generator":"460e8cebad54668e","spec":"parity/specs/number/parse.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "number/tickformat": {"cases":690,"content":"598a504ac2bc7120","generator":"eb50e32758acaba4","spec":"parity/specs/number/tickformat.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/toexponential": {"cases":880,"content":"2ab4522ddb392cc2","generator":"548c5e399f0f786f","spec":"parity/specs/number/toexponential.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/tofixed": {"cases":1033,"content":"fa7343e79bca3fb7","generator":"cd23062154ae5491","spec":"parity/specs/number/tofixed.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
     "number/toprecision": {"cases":1104,"content":"f658c6cab73cb999","generator":"3ef9b2cb91c44cfc","spec":"parity/specs/number/toprecision.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},

@@ -65,3 +65,4 @@ fn_vectors!(number_toprecision, "number/toprecision", dispatch);
 fn_vectors!(number_toexponential, "number/toexponential", dispatch);
 fn_vectors!(number_parse, "number/parse", dispatch);
 fn_vectors!(number_numberformat, "number/numberformat", dispatch);
+fn_vectors!(number_tickformat, "number/tickformat", dispatch);
