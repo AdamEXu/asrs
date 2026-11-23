@@ -182,6 +182,12 @@ for (const [name, window] of Object.entries(WINDOWS)) {
       { frames: 3 },
       ...metadataShown({}, "empty"),
       ...metadataShown(metadata(3, "g", () => pick(WORDS)), "short"),
+      ...metadataShown(
+        Object.fromEntries(
+          ["", "end\n", "\n", "\n\n", "a\n\nb", "\nstart", " \n x ", "a\n  ", "  ", "\t\n"].map((text, i) => [`/Line${i}`, { generic: text, real: null, replay: null }])
+        ),
+        "lines"
+      ),
       ...metadataShown(metadata(40, "g"), "generic"),
       ...metadataShown(metadata(30, "rp"), "real and replay"),
       ...metadataShown(metadata(30, "grp"), "all")
