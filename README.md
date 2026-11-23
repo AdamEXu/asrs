@@ -16,17 +16,21 @@ formats use (the NetworkTables client name and the WPILOG exporter metadata both
 
 ```sh
 cargo xtask assets      # copy upstream assets from reference/AdvantageScope
+cargo xtask docs        # build upstream's documentation for the Documentation tab (needs Node)
 cargo run -p asrs-app   # the asrs binary
 cargo xtask check       # layout rules, replay-harness lint, formatting, clippy and tests
 cargo xtask licenses    # third-party license bundle for release builds
 cargo xtask libm        # build the LGPL sin/cos library asrs loads at runtime
-cargo xtask bundle      # release directory: app, sin/cos library, licenses
+cargo xtask bundle      # release directory: app, sin/cos library, documentation, licenses
 ```
 
 Building needs a checkout of upstream AdvantageScope at the commit pinned in
 `xtask/src/oracle.rs` in `reference/AdvantageScope` (its icons and tables are read at build
 time). On Linux, GPUI needs the X11, Wayland, xkbcommon, fontconfig, FreeType and Vulkan
-development packages; `.github/workflows/ci.yml` lists them for Ubuntu.
+development packages; `.github/workflows/ci.yml` lists them for Ubuntu. It also lists GTK 3 and
+WebKitGTK 4.1, which only `asrs-webview` links: the process that shows the Documentation tab's
+page. Without it (not built, no WebKitGTK, or a Wayland window) the tab links to the online
+documentation instead.
 
 ## Public logs and local vectors
 
@@ -47,8 +51,8 @@ Without them, the tests that use them (`wpilog_vectors::public` and `::search_ke
 ## Continuous integration
 
 CI builds and tests natively on Windows (x64, arm64), macOS (arm64) and Linux (x64, arm64),
-runs `cargo fmt`, clippy with and without the parity features, the committed-vector tests and
-`cargo xtask bundle`, and uploads each bundle. While the repository is private only the
+runs `cargo fmt`, clippy with and without the parity features, the committed-vector tests,
+`cargo xtask docs` and `cargo xtask bundle`, and uploads each bundle without the documentation. While the repository is private only the
 ubuntu-latest job runs. CI sets `ASRS_CI=1`, under which these tests skip with a printed
 `note: skipping` line:
 
@@ -56,6 +60,7 @@ ubuntu-latest job runs. CI sets `ASRS_CI=1`, under which these tests skip with a
 - `asrs-ui`: `headless_capture`, `icon_capture`, `pixel_snap`, `canvas_view`, `text_box` and
   `text_scroll` (GPU) and `platform_mac` (display)
 - `asrs-field3d`: `render_gpu` (GPU)
+- `asrs-app`: `documentation_window` (display)
 
 Tests that need the Electron oracle (the `*_sweep` tests) are `#[ignore]`d everywhere, and no
 default test reads the generated corpora under `target/parity`. On x86_64 the per-platform

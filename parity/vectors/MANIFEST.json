@@ -528,6 +528,7 @@
     "tabs/console-export": {"cases":300,"content":"264169031d72d46e","generator":"c7df0bd2968cd5e7","spec":"parity/specs/tabs/console-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-filter": {"cases":3022,"content":"d9772c459e0a5ef6","generator":"d6305764a6cbc3ad","spec":"parity/specs/tabs/console-filter.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/console-format": {"cases":3041,"content":"76e5265a66c5b13f","generator":"8338483b25230a1f","spec":"parity/specs/tabs/console-format.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "tabs/documentation": {"cases":29,"content":"e0740549b1d7036f","generator":"25e5e25997b7ff78","spec":"parity/specs/tabs/documentation.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/heatmap": {"cases":36,"content":"a0c28ccb88ad4846","generator":"f2636b2bbca5a41f","spec":"parity/specs/tabs/heatmap.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/simple-statistics-random": {"cases":42302,"content":"91ad7a56062d94af","generator":"43e24bcaa67482a1","spec":"parity/specs/tabs/simple-statistics-random.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/simple-statistics/linux-aarch64": {"cases":742,"content":"9bd6b2a1e9b15ecc","generator":"cc9b97d244206b69","spec":"parity/specs/tabs/simple-statistics.fn.json","zone":"UTC","generatedOn":"linux-aarch64"},

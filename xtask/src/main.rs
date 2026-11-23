@@ -7,6 +7,7 @@ mod canvas;
 mod check;
 mod corpus;
 mod coverage;
+mod docs;
 mod dom;
 mod field3d;
 mod glb;
@@ -42,6 +43,7 @@ commands:
   layout    crate dependency and lint opt-out rules only
   harness   strictness lint over replay harnesses only (see `cargo xtask harness help`)
   assets    copy upstream assets into assets/
+  docs      build upstream's embedded documentation into target/docs/build (see `cargo xtask docs help`)
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
   bundle    release directory: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
   libm      build or plant-test the LGPL sin/cos library asrs loads at runtime (see `cargo xtask libm help`)
@@ -67,6 +69,7 @@ fn main() -> ExitCode {
         Some("layout") => layout::run(),
         Some("harness") => harness::run(&args[1..]),
         Some("assets") => assets::run(),
+        Some("docs") => docs::run(&args[1..]),
         Some("licenses") => licenses::run(),
         Some("bundle") => bundle::run(&args[1..]),
         Some("libm") => libm::run(&args[1..]),
