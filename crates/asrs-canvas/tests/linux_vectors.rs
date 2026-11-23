@@ -208,3 +208,29 @@ fn a_scaled_display_turns_hinting_off() {
     assert!(backend.set_device_scale(1.0));
     assert_eq!(*backend.raw_mask(glyph, 1.0, 1.0, 0).unwrap(), *mask);
 }
+
+/// `measureText("Robot 0").width` of the joysticks and swerve painters' sizes in Electron 39.2.7,
+/// each font's first use in its page: Blink's font cache keys sizes to 1/100 px.
+#[test]
+fn fractional_sizes_are_floored_as_blink_floors_them() {
+    if !fonts_are_pinned(&["10px sans-serif"]) {
+        return;
+    }
+    let mut backend = platform_backend().unwrap();
+    for (size, width) in [
+        ("39.10909090909091", 136.92356872558594),
+        ("24.443181818181817", 85.59091186523438),
+        ("19.554545454545455", 68.46183776855469),
+        ("26.072727272727278", 91.28237915039062),
+        ("46.1337890625", 161.55010986328125),
+        ("22.21276595744681", 77.76519775390625),
+        ("13.882978723404253", 48.59637451171875),
+        ("14.829545454545453", 51.879913330078125),
+        ("10.1953125", 35.681121826171875),
+        ("23.727272727272727", 83.07353210449219),
+    ] {
+        let font = FontSpec::parse(&format!("{size}px sans-serif")).unwrap();
+        let m = measure_text(backend.as_mut(), &font, "left", "alphabetic", "Robot 0");
+        assert_eq!(m.width, width, "{size}");
+    }
+}

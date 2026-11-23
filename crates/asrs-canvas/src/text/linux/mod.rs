@@ -69,6 +69,19 @@ fn upright(scale: f64, x_scale: f64) -> M2 {
     }
 }
 
+/// `FontDescription::EffectiveFontSize`: Blink floors a font's zoomed size to 1/100 px.
+fn effective(spec: &FontSpec, zoom: f32) -> FontSpec {
+    let zoomed = spec.size * zoom;
+    let floored = (zoomed * 100.0).floor() / 100.0;
+    if floored == zoomed {
+        return *spec;
+    }
+    FontSpec {
+        size: floored / zoom,
+        ..*spec
+    }
+}
+
 /// Skia's Fontations scaler over fontconfig, configured as Chromium configures it on Linux.
 pub struct Fontations {
     typefaces: Vec<Typeface>,
@@ -529,6 +542,7 @@ impl Fontations {
 
 impl TextBackend for Fontations {
     fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let spec = &effective(spec, zoom);
         let mut glyphs = Vec::new();
         let primary = (spec.size > 0.0).then(|| self.primary(spec)).flatten();
         let Some(primary) = primary else {
@@ -544,6 +558,7 @@ impl TextBackend for Fontations {
     }
 
     fn shape_run(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let spec = &effective(spec, zoom);
         let mut glyphs = Vec::new();
         let primary = (spec.size > 0.0 && !text.is_empty())
             .then(|| self.primary(spec))
@@ -556,6 +571,7 @@ impl TextBackend for Fontations {
     }
 
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {
+        let spec = &effective(spec, 1.0);
         let primary = (spec.size > 0.0).then(|| self.primary(spec)).flatten();
         match primary {
             Some(face) => self.vertical_metrics(face, spec.size),
