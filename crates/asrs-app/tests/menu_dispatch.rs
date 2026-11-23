@@ -512,7 +512,9 @@ fn satellites_open_close_and_round_trip(app: &mut AppUnderTest) {
 fn keys_reach_the_page_unless_a_text_field_has_focus(app: &mut AppUnderTest, hub: WindowId) {
     use SelectionMode::{Idle, Playback, Static};
     let width = app.bounds(hub).width;
-    let (play, popup) = ((width - 130.0, 22.0), (width - 59.0, 22.0));
+    // `body.fancy-title-bar-win` puts the buttons below the title bar.
+    let y = if cfg!(windows) { 63.0 } else { 22.0 };
+    let (play, popup) = ((width - 130.0, y), (width - 59.0, y));
     let (search, below) = ((100.0, 87.0), (100.0, 400.0));
     assert_eq!(app.mode(hub), Idle);
     app.key(hub, "space");
