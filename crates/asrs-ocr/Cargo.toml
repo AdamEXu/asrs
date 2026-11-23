@@ -1,0 +1,18 @@
+[package]
+name = "asrs-ocr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+asrs-js = { path = "../asrs-js" }
+miniz_oxide = "=0.9.1"
+wasmtime = { version = "=51.0.0", default-features = false, features = ["cranelift", "parallel-compilation", "runtime", "std"] }
+
+[dev-dependencies]
+asrs-parity = { path = "../asrs-parity" }
+
+[lints]
+workspace = true
