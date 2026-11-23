@@ -149,4 +149,14 @@ for (const start of [0, 10, 100, 190, 191, 200, 301, 655, 2000]) {
     }
   }
 }
+for (const [first, second] of [[200, 300], [300, 650], [1000, 191], [250, 251]]) {
+  const scroll = (to) => [
+    { eval: `/*console-layout:scroll ${to}*/ window.__oracleQuiet(() => { ${CONTAINER}.scrollTop = ${to}; })` },
+    { frames: 2 },
+    top
+  ];
+  const filtered = (value) => [{ event: { target: "input.filter", type: "input", props: { value } } }, { frames: 2 }, top];
+  anchorSteps.push(...scroll(first), ...filtered("!tall"), ...scroll(second), ...filtered(""), ...scroll(0), ...filtered("!pair"));
+  anchorSteps.push(...filtered(""));
+}
 write("anchor", { entry: "dom", inputs: ["../logs/console-anchor.json"], fixture: { geometry: "real", seed: 1305, steps: anchorSteps } });
