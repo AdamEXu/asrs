@@ -587,6 +587,30 @@ rule = "default-slot"
 reason = 'a missing kind is counted under "" and the counts per kind then differ'
 
 [[allow]]
+file = "crates/asrs-services/tests/download_live.rs"
+function = "run_main"
+rule = "default-slot"
+reason = "without the ssh tools the run uses the fixture server only, which needs no user name"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_support/mod.rs"
+function = "array"
+rule = "default-slot"
+reason = "a scenario without the list has none of it; the run it describes is compared with the recording"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_support/mod.rs"
+function = "raw"
+rule = "skipped-kind"
+reason = "a scripted server that does nothing more; an unknown word fails"
+
+[[allow]]
+file = "crates/asrs-services/tests/download_vectors.rs"
+function = "step"
+rule = "catch-all"
+reason = "effects that change no harness state; all of them are compared below as one list"
+
+[[allow]]
 file = "crates/asrs-services/tests/files_vectors.rs"
 function = "*"
 rule = "no-tally"
@@ -683,7 +707,7 @@ file = "crates/asrs-tabs/tests/field_2d_dom.rs"
 function = "handle_f2dr"
 rule = "default-slot"
 count = 2
-reason = "an empty or unknown mouse event type is rejected by the match below"
+reason = "an unknown kind moves no camera in the port, and the fixtures' camera records compare what it should have moved"
 
 [[allow]]
 file = "crates/asrs-tabs/tests/field_2d_dom.rs"
@@ -771,3 +795,22 @@ file = "crates/asrs-ui/tests/tints.rs"
 function = "hover_and_active_backgrounds"
 rule = "silent-return"
 reason = "the button backgrounds are the rows with a button; the rest are compared by the probe test"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "*"
+rule = "no-tally"
+reason = "every record of form/number-keys is asserted in order inside the loop"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "arrow_keys_step_number_inputs_as_in_blink"
+rule = "default-slot"
+count = 2
+reason = "an input without the attribute has the empty string, as in Blink"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/form_vectors.rs"
+function = "arrow_keys_step_number_inputs_as_in_blink"
+rule = "skipped-kind"
+reason = "focusing a number input changes neither its value nor its events, which are asserted below"
