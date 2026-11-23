@@ -247,6 +247,10 @@ fn visit(
                 path.pop();
                 return;
             }
+            if is_undefined(json) {
+                out.push((shape.clone(), path.clone()));
+                return;
+            }
             if let Some((k, Json::Array(entries))) = single
                 && k.eq_str("o")
                 && entries
@@ -291,6 +295,11 @@ fn visit(
     }
 }
 
+/// CVE-1's undefined, which decodes whatever its tag holds.
+fn is_undefined(json: &Json) -> bool {
+    matches!(json, Json::Object(pairs) if matches!(pairs.as_slice(), [(k, _)] if k.eq_str("u")))
+}
+
 fn change(json: &mut Json, path: &[Step]) {
     if let [step, rest @ ..] = path {
         let inner = match (step, json) {
@@ -309,6 +318,7 @@ fn change(json: &mut Json, path: &[Step]) {
         Json::Number(n) => Json::Number(n + 1.0),
         Json::String(s) => Json::string(&other_text(&s.to_string_lossy())),
         Json::Array(_) => Json::Array(vec![Json::Null]),
+        undefined if is_undefined(undefined) => Json::Null,
         Json::Object(_) => Json::object([("asrsMutated", Json::Bool(true))]),
     };
 }
@@ -534,14 +544,16 @@ mod tests {
             leaves(
                 r#"{"command":{"o":[["x",{"n":"3ff0000000000000"}],["list",[1,{"u":null}]]]},"s":"a","e":[]}"#
             ),
-            ["command.x", "command.list[]", "command.list[].u", "s", "e"]
+            ["command.x", "command.list[]", "command.list[]", "s", "e"]
         );
     }
 
     #[test]
     fn a_change_touches_one_value() {
-        let mut json =
-            json::parse(r#"{"a":{"o":[["x",{"n":"3ff0000000000000"}]]},"b":[true,"t"]}"#).unwrap();
+        let mut json = json::parse(
+            r#"{"a":{"o":[["x",{"n":"3ff0000000000000"}],["y",{"u":null}]]},"b":[true,"t"]}"#,
+        )
+        .unwrap();
         let mut out = Vec::new();
         visit(&json, &mut Vec::new(), &mut String::new(), &mut out);
         for (_, path) in &out {
@@ -549,7 +561,7 @@ mod tests {
         }
         assert_eq!(
             json.to_compact(),
-            r#"{"a":{"o":[["x",{"n":"3ff0000010000000"}]]},"b":[false,"t~"]}"#
+            r#"{"a":{"o":[["x",{"n":"3ff0000010000000"}],["y",null]]},"b":[false,"t~"]}"#
         );
     }
 
