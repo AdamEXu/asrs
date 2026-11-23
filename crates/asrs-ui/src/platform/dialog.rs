@@ -184,6 +184,8 @@ mod script {
     pub struct Script {
         pub replies: VecDeque<Reply>,
         pub shown: Vec<(Option<AnyWindowHandle>, Shown)>,
+        /// What [`add_recent_document`](super::super::add_recent_document) got.
+        pub recent_documents: Vec<PathBuf>,
     }
 
     impl Global for Script {}

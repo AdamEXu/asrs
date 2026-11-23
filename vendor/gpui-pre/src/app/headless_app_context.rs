@@ -178,6 +178,35 @@ impl HeadlessAppContext {
         self.run_until_parked();
     }
 
+    /// Simulates the user pressing the window's close button. Returns whether the window closed.
+    pub fn simulate_close(&mut self, window: AnyWindowHandle) -> bool {
+        let test_window = {
+            let mut app = self.app.borrow_mut();
+            app.windows
+                .get_mut(window.window_id())
+                .and_then(|window| window.as_mut())
+                .and_then(|window| window.platform_window.as_test())
+                .cloned()
+        };
+        let Some(test_window) = test_window else {
+            return false;
+        };
+        let handler = test_window.0.lock().should_close_handler.take();
+        let should_close = match handler {
+            Some(mut handler) => {
+                let should_close = handler();
+                test_window.0.lock().should_close_handler = Some(handler);
+                should_close
+            }
+            None => true,
+        };
+        if should_close {
+            test_window.simulate_close();
+        }
+        self.run_until_parked();
+        should_close
+    }
+
     /// Captures a screenshot from a window.
     ///
     /// Requires that the context was created with a renderer factory that

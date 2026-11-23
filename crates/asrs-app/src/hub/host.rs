@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
@@ -50,6 +51,26 @@ struct WorkerSlot {
 enum ExportMessage {
     Reply(ExportReply),
     Unmodeled(&'static str),
+    /// The worker posted progress since the last of these; the cell holds its latest value.
+    Progressed,
+}
+
+/// The worker's side of its progress messages. Upstream posts one per field and timestamp, and
+/// only the newest of those waiting can be seen, so at most one waits here.
+#[derive(Clone, Default)]
+struct ExportProgress(Arc<Mutex<Option<f64>>>);
+
+impl ExportProgress {
+    /// Whether no earlier value was waiting.
+    fn post(&self, value: f64) -> bool {
+        let mut latest = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        latest.replace(value).is_none()
+    }
+
+    fn take(&self) -> Option<f64> {
+        let mut latest = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        latest.take()
+    }
 }
 
 pub(super) struct HostState {
@@ -205,14 +226,24 @@ impl Hub {
         });
     }
 
-    fn export_message(&mut self, id: u64, message: ExportMessage, cx: &mut Context<'_, Self>) {
+    fn export_message(
+        &mut self,
+        id: u64,
+        message: ExportMessage,
+        progress: &ExportProgress,
+        cx: &mut Context<'_, Self>,
+    ) {
         match message {
-            ExportMessage::Reply(reply) => {
-                let done = !matches!(reply, ExportReply::Progress(_));
-                self.task(cx, |model, host| model.export_reply(id, reply, host));
-                if done {
-                    self.host.exports.retain(|(i, _)| *i != id);
+            ExportMessage::Progressed => {
+                if let Some(value) = progress.take() {
+                    self.task(cx, |model, host| {
+                        model.export_reply(id, ExportReply::Progress(value), host)
+                    });
                 }
+            }
+            ExportMessage::Reply(reply) => {
+                self.task(cx, |model, host| model.export_reply(id, reply, host));
+                self.host.exports.retain(|(i, _)| *i != id);
             }
             ExportMessage::Unmodeled(what) => cx.emit(HubEvent::Exception {
                 task: "worker",
@@ -250,28 +281,26 @@ fn export_options(options: &JsValue) -> Option<ExportOptions> {
     })
 }
 
-fn run_export(log: SerializedLog, options: &JsValue) -> Vec<ExportMessage> {
+fn run_export(
+    log: SerializedLog,
+    options: &JsValue,
+    progress: &mut dyn FnMut(f64),
+) -> ExportMessage {
     let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
     let output = match (
         Log::from_serialized(log, &mut realm),
         export_options(options),
     ) {
-        (Ok(log), Some(options)) => export(&log, &options),
+        (Ok(log), Some(options)) => export(&log, &options, progress),
         (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
         (_, None) => Err(ExportError::Unported("export options of another shape")),
     };
-    let payload = |value| {
-        vec![
-            ExportMessage::Reply(ExportReply::Progress(1.0)),
-            ExportMessage::Reply(ExportReply::Payload(value)),
-        ]
-    };
-    match output {
-        Ok(Output::Text(text)) => payload(JsValue::String(text)),
-        Ok(Output::Bytes(bytes)) => payload(JsValue::Bytes(bytes)),
-        Err(ExportError::Rejected) => vec![ExportMessage::Reply(ExportReply::Failed)],
-        Err(ExportError::Unported(what)) => vec![ExportMessage::Unmodeled(what)],
-    }
+    ExportMessage::Reply(ExportReply::Payload(match output {
+        Ok(Output::Text(text)) => JsValue::String(text),
+        Ok(Output::Bytes(bytes)) => JsValue::Bytes(bytes),
+        Err(ExportError::Rejected) => return ExportMessage::Reply(ExportReply::Failed),
+        Err(ExportError::Unported(what)) => return ExportMessage::Unmodeled(what),
+    }))
 }
 
 impl HubHost for GpuiHost<'_, '_> {
@@ -401,12 +430,17 @@ impl HubHost for GpuiHost<'_, '_> {
 
     fn request_export(&mut self, id: u64, log: SerializedLog, options: JsValue) {
         let (send, receive) = async_channel::unbounded();
+        let progress = ExportProgress::default();
+        let worker = progress.clone();
         let spawned = std::thread::Builder::new()
             .name(format!("export-{id}"))
             .spawn(move || {
-                for message in run_export(log, &options) {
-                    let _ = send.send_blocking(message);
-                }
+                let end = run_export(log, &options, &mut |value| {
+                    if worker.post(value) {
+                        let _ = send.send_blocking(ExportMessage::Progressed);
+                    }
+                });
+                let _ = send.send_blocking(end);
             });
         if let Err(e) = spawned {
             self.emit(HubEvent::Exception {
@@ -418,7 +452,7 @@ impl HubHost for GpuiHost<'_, '_> {
         let pump = self.cx.spawn(async move |this, cx| {
             while let Ok(message) = receive.recv().await {
                 if this
-                    .update(cx, |hub, cx| hub.export_message(id, message, cx))
+                    .update(cx, |hub, cx| hub.export_message(id, message, &progress, cx))
                     .is_err()
                 {
                     break;
