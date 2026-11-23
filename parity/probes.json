@@ -1,6 +1,13 @@
 {
   "about": "Upstream CSS selectors that scenarios probe or mask, mapped to the parity ids of the port elements they match (asrs_ui::parity). A port capture reports, for each selector, the painted boxes of those ids in paint order; a selector missing here fails the port run.",
   ".title-bar": ["div.title-bar"],
+  "div.file-list": ["div.file-list"],
+  "div.file-item": ["div.file-item"],
+  "div.file-item img": ["div.file-item img"],
+  "div.alert-text": ["div.alert-text"],
+  "progress": ["progress"],
+  "div.progress-details": ["div.progress-details"],
+  "#download": ["button#download"],
   ".title-bar-text": ["div.title-bar-text"],
   ".side-bar": ["div.side-bar"],
   ".side-bar-handle": ["div.side-bar-handle"],

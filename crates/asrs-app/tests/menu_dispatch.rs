@@ -5,6 +5,9 @@
 //! dialogs answered by a script. What the handlers do is `menu_click_vectors`' business; this
 //! checks that their effects reach the hubs, the windows, the files and the dialogs.
 
+#[path = "support/child.rs"]
+mod child;
+
 #[path = "support/settle.rs"]
 mod settle;
 
@@ -13,6 +16,7 @@ use std::process::Command as Process;
 use std::sync::Arc;
 use std::time::Duration;
 
+use asrs_app::download_flow::{self, RobotPort};
 use asrs_app::main_process::{self, MainProcess};
 use asrs_app::menus::app_menu;
 use asrs_app::menus::bridge::{self, MenuAction};
@@ -25,6 +29,10 @@ use asrs_model::json_file;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Theme, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::tab_type::TabType;
+use asrs_services::dialog::OpenDialog;
+use asrs_services::download::DownloadEvent;
+use asrs_services::download::downloader::{ListItem, OpenLogBox, SaveLogDialog, WindowMessage};
+use asrs_services::download::page::PageEvent;
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::lifecycle;
 use asrs_services::window_manager::Platform;
@@ -64,9 +72,9 @@ fn run_in_a_fresh_home(test: &str) {
     ] {
         child.env(variable, &home);
     }
-    let status = child.status().expect("the test binary");
+    let status = child::run(&mut child, test);
     let _ = std::fs::remove_dir_all(&home);
-    assert!(status.success(), "{status}");
+    assert!(status.success(), "{test}: {status}");
 }
 
 struct AppUnderTest {
@@ -375,6 +383,7 @@ fn in_a_fresh_home() {
     preferences_reach_the_file_the_hubs_and_the_menu(&mut app, hub);
     dialogs_show_and_resume(&mut app, hub);
     the_preferences_window_writes_the_file(&mut app, hub);
+    the_download_window_shows_what_the_service_sends(&mut app, hub);
     accelerators_reach_the_window_they_were_pressed_in(&mut app, hub);
     let hub = windows_open_and_close(&mut app, hub);
     layouts_round_trip(&mut app, hub);
@@ -740,11 +749,7 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     let shown = app.click(Command::OwletDownloadStatus, &[Reply::Button(0)]);
     assert_eq!(message(&shown).3, HOOT_UNSUPPORTED);
 
-    for command in [
-        Command::OpenLicenses,
-        Command::DownloadLogs,
-        Command::CheckForUpdates,
-    ] {
+    for command in [Command::OpenLicenses, Command::CheckForUpdates] {
         let shown = app.click(command, &[Reply::Button(0)]);
         let (window, kind, text, _) = message(&shown);
         assert_eq!(
@@ -767,6 +772,194 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     }
     let help = Command::Help(HelpLink::GitHubRepository);
     assert!(app.click(help, &[]).is_empty());
+}
+
+/// Main's side of the download window, against a port of 127.0.0.1 nothing listens on.
+fn the_download_window_shows_what_the_service_sends(app: &mut AppUnderTest, hub: WindowId) {
+    let path = app.prefs_path();
+    let before = std::fs::read(&path).expect("prefs.json");
+    let mut prefs = json_file::parse(&before).expect("prefs.json");
+    let object = prefs.as_object_mut().expect("prefs.json is an object");
+    object.insert("robotAddress", JsValue::string("127.000.0.1"));
+    object.insert("systemcoreStaticAddress", JsValue::string(""));
+    std::fs::write(&path, json_file::stringify(&prefs).expect("JSON")).expect("prefs.json");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+    let port = listener.local_addr().expect("its address").port();
+    drop(listener);
+    app.cx.update(|cx| cx.set_global(RobotPort(port)));
+
+    let download = |app: &mut AppUnderTest| {
+        app.cx.update(|cx| {
+            let window = Windows::of_kind(cx, WindowKind::Download, 0)?;
+            Windows::id_of(cx, window)
+        })
+    };
+    assert!(app.click(Command::DownloadLogs, &[]).is_empty());
+    let window = download(app).expect("the download window");
+    let view = app
+        .cx
+        .update(|cx| download_flow::view(cx))
+        .expect("its view");
+    let (bounds, parent) = (app.bounds(window), app.bounds(hub));
+    assert_eq!((bounds.width, bounds.height), (500.0, 500.0));
+    assert_eq!(
+        (bounds.x, bounds.y),
+        (
+            (parent.x + parent.width / 2.0 - 250.0).floor(),
+            (parent.y + parent.height / 2.0 - 250.0).floor()
+        )
+    );
+    app.focus(hub);
+    assert!(app.click(Command::DownloadLogs, &[]).is_empty());
+    assert_eq!(download(app), Some(window), "it is not opened twice");
+
+    let alert = |app: &mut AppUnderTest| {
+        let html = app.cx.update(|cx| {
+            let page = view.read(cx).page();
+            page.alert().map(|html| html.to_string_lossy())
+        });
+        html.filter(|html| html.contains("ECONNREFUSED"))
+    };
+    let started = std::time::Instant::now();
+    let refused = loop {
+        app.settle();
+        if let Some(html) = alert(app) {
+            break html;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "the service reported no refused connection"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    assert_eq!(
+        refused,
+        format!("Unknown error: connect ECONNREFUSED 127.0.0.1:{port}")
+    );
+
+    let starts = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = starts.clone();
+    app.cx.update(|cx| {
+        cx.subscribe(&view, move |_, event: &PageEvent, _| {
+            if let PageEvent::Start { address, path } = event {
+                let event = (address.to_string_lossy(), path.to_string_lossy());
+                seen.borrow_mut().push(event);
+            }
+        })
+        .detach();
+        MainProcess::send_all_preferences(cx);
+    });
+    app.settle();
+    let remote = app.pref("remotePath");
+    let remote = remote.as_str().expect("remotePath").to_string_lossy();
+    assert_eq!(*starts.borrow(), [("127.0.0.1".to_owned(), remote)]);
+
+    let deliver = |app: &mut AppUnderTest, event| {
+        app.cx.update(|cx| download_flow::deliver(event, cx));
+        app.settle();
+    };
+    let names = |app: &mut AppUnderTest| {
+        app.cx.update(|cx| {
+            let rows = view.read(cx).page().rows();
+            let items = rows.iter().filter_map(|row| row.item.as_ref());
+            items.map(|item| item.name.clone()).collect::<Vec<_>>()
+        })
+    };
+    let list = |names: &[&str]| {
+        let item = |name: &&str| ListItem {
+            name: (*name).to_owned(),
+            size: Some(1e6),
+            is_folder: false,
+        };
+        let message = WindowMessage::SetList(names.iter().map(item).collect());
+        DownloadEvent::Window(message)
+    };
+    app.cx.update(|cx| {
+        download_flow::deliver(list(&["a.wpilog", "b.wpilog"]), cx);
+    });
+    assert_eq!(names(app), ["b.wpilog", "a.wpilog"]);
+
+    let folder = app.home.join("chosen");
+    let shown = app.run(&[open(&[&folder])], |app| {
+        let dialog = OpenDialog {
+            title: "Select save location for robot logs".to_owned(),
+            message: None,
+            button_label: Some("Save"),
+            properties: &["openDirectory", "createDirectory", "dontAddToRecent"],
+            filters: None,
+        };
+        deliver(app, DownloadEvent::ChooseFolder { token: 0, dialog });
+    });
+    let [(Some(parent), Shown::Open(options))] = &shown[..] else {
+        panic!("{shown:?}");
+    };
+    assert_eq!((*parent, options.button_label.as_str()), (window, "Save"));
+    assert!(options.open_directory && options.create_directory && !options.open_file);
+
+    let shown = app.run(&[Reply::Save(None)], |app| {
+        let dialog = SaveLogDialog {
+            title: "Select save location for robot log",
+            default_path: "a.wpilog".to_owned(),
+            properties: &["createDirectory"],
+            filter_name: "WPILib robot log",
+            extension: "wpilog".to_owned(),
+        };
+        deliver(app, DownloadEvent::ChooseFile { token: 0, dialog });
+    });
+    let [(Some(parent), Shown::Save(options))] = &shown[..] else {
+        panic!("{shown:?}");
+    };
+    assert_eq!(*parent, window);
+    assert_eq!(options.default_path, Some(PathBuf::from("a.wpilog")));
+    assert_eq!(options.filters[0].extensions, ["wpilog"]);
+    assert!(options.create_directory);
+
+    let shown = app.run(&[Reply::Button(1)], |app| {
+        let options = OpenLogBox {
+            kind: "question",
+            message: "Open log?",
+            detail: "Would you like to open the log file \"a.wpilog\"?".to_owned(),
+            buttons: ["Open", "Skip"],
+            default_id: 0,
+        };
+        deliver(app, DownloadEvent::AskOpenLog { token: 0, options });
+    });
+    let (parent, kind, text, _) = message(&shown);
+    assert_eq!(
+        (parent, kind, text),
+        (Some(window), MessageBoxType::Question, "Open log?")
+    );
+
+    let log = app.home.join("downloaded.csv");
+    std::fs::write(&log, "Timestamp,/Value\n0,1\n").expect("a log");
+    let log = log.to_string_lossy().into_owned();
+    deliver(app, DownloadEvent::FocusHub);
+    let focused = app.cx.update(|cx| Windows::manager(cx).focused());
+    assert_eq!(focused, Some(hub));
+    deliver(app, DownloadEvent::OpenFiles(vec![log.clone()]));
+    assert_eq!(app.historical_paths(hub), [log]);
+
+    deliver(app, DownloadEvent::DestroyWindow);
+    assert_eq!(download(app), None);
+    deliver(app, list(&["c.wpilog"]));
+
+    app.cx.update(|cx| {
+        let command = MenuAction::Command {
+            command: Command::DownloadLogs,
+            checked: false,
+        };
+        dispatch(command, cx);
+        let view = download_flow::view(cx).expect("the download window");
+        download_flow::deliver(list(&["stale.wpilog"]), cx);
+        assert!(view.read(cx).page().rows().is_empty());
+    });
+    let window = download(app).expect("the download window");
+    app.close(window);
+    assert!(app.cx.update(|cx| download_flow::view(cx)).is_none());
+
+    std::fs::write(&path, before).expect("prefs.json");
+    app.cx.update(MainProcess::send_all_preferences);
+    app.focus(hub);
 }
 
 fn accelerators_reach_the_window_they_were_pressed_in(app: &mut AppUnderTest, hub: WindowId) {

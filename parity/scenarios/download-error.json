@@ -1,0 +1,20 @@
+{
+  "about": "Interaction (U21): the download window when the robot has no such log folder: the alert's underlined path is cut by an ellipsis. The empty list is masked for its loading animation; its phases are vectors",
+  "prefs": {
+    "robotAddress": "127.0.0.1",
+    "remotePath": "/media/sda1/a/folder/that/is/not/there/on/this/robot/and/does/not/fit",
+    "hasScrolledLineGraph": true,
+    "hasScrolledTimeline": true
+  },
+  "robot": {
+    "account": "systemcore",
+    "files": { "/media/sda1/logs/a.wpilog": 1 }
+  },
+  "actions": [
+    { "idle": true },
+    { "appMenu": ["Download Logs..."] },
+    { "prompt": "download", "width": 500, "height": 472 },
+    { "download": "Failed to open log folder at /media" },
+    { "capture": "no-folder", "probes": ["div.file-list", "div.alert-text", "#exit", "#download"], "masks": ["div.file-list"] }
+  ]
+}
