@@ -134,5 +134,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: asrs-${{ matrix.target }}
-          path: target/bundle/host
+          # Artifacts of a public repository are public, and parts of the documentation may not
+          # be published until https://github.com/AdamEXu/asrs/issues/310 is decided.
+          path: |
+            target/bundle/host
+            !target/bundle/host/docs
           if-no-files-found: error
