@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 // Ground truth for the Documentation tab: upstream's DocumentationRenderer, unmodified, on the
 // #renderer0 template of the real www/hub.html in an Electron window, its iframe loading the
 // documentation `cargo xtask docs` built. Each case is a fresh page and one record of what
-// saveState() returned: right after each operation (`immediate`) and once the page inside the
-// frame has stopped changing its hash (`settled`).
+// saveState() returned right after each operation. `settle` waits until the page inside the frame
+// has stopped changing its hash.
 //
 //   genDocumentation hash
 //
@@ -118,7 +118,6 @@ async function electronMain() {
   const request = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], "utf8"));
   const real = fs.realpathSync(request.upstream);
   const hubHtml = path.join(request.upstream, "www", "hub.html");
-  const served = path.join(request.upstream, "docs", "build");
   const never = () => new Response(new ReadableStream({ start() {} }));
   app.setPath("userData", request.userData);
   app.on("window-all-closed", () => {});
@@ -139,7 +138,6 @@ async function electronMain() {
   });
   protocol.handle("http", never);
   protocol.handle("https", never);
-  if (fs.existsSync(served)) throw new Error(`${served} exists; the generator serves its own`);
 
   const results: unknown[] = [];
   for (const item of CASES) {

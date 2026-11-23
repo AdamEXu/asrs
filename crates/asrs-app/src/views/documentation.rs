@@ -206,6 +206,6 @@ impl<H: FrameHost> HubFrame<H> {
             .size_full()
             .overflow_hidden()
             .child(content);
-        Some(probed("documentation-container", container).into_any_element())
+        Some(probed("div.documentation-container", container).into_any_element())
     }
 }

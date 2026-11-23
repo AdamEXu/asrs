@@ -1,0 +1,237 @@
+{
+  "about": "Interaction (U18): a layout with a Documentation tab that is not shown yet (its saved hash is lost, as upstream loses it), the tab opened with a click once, a layout restored over it, the tab hidden and shown again, and a hash the URL parser rewrites. Saved HubState is compared at each capture. The documentation itself is masked (gate 5): a native webview has no pixels in a headless capture, and the port's scenario mode loads no page",
+  "actions": [
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "#/tab-reference/line-graph",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": null,
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "unopened",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 329,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 329,
+      "y": 64
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 12
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "opened",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".documentation-container"
+      ],
+      "masks": [
+        ".documentation-container"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 0,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "#/overview/navigation/keyboard",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": null,
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "restored",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".documentation-container"
+      ],
+      "masks": [
+        ".documentation-container"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 64
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 12
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hidden",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 329,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 329,
+      "y": 64
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 12
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "shown",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".documentation-container"
+      ],
+      "masks": [
+        ".documentation-container"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 0,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "#/a b\u00e9",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": null,
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "encoded",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".documentation-container"
+      ],
+      "masks": [
+        ".documentation-container"
+      ]
+    }
+  ]
+}

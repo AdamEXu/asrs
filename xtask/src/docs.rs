@@ -8,7 +8,7 @@ const USAGE: &str = "usage: cargo xtask docs
 
 Builds upstream's embedded documentation (`npm run docs:build-embed`) in a copy under
 target/docs/src and writes it to target/docs/build, which `cargo xtask bundle` ships as
-docs/build and development builds of asrs show. Two images upstream's license does not cover
+docs/build and development builds of asrs show. An oracle install gets a copy too. Two images upstream's license does not cover
 are replaced (see THIRD_PARTY_NOTICES.md), and THIRD_PARTY_LICENSES.txt lists every npm package
 compiled in. Needs Node and reference/AdvantageScope.";
 
@@ -75,6 +75,9 @@ pub fn run(args: &[String]) -> Result {
     docusaurus(&work, EMBED, &build)?;
     docusaurus(&work, LICENSES, &licenses)?;
     copy(&licenses.join(LISTING), &build.join(LISTING))?;
+    if paths.upstream.is_dir() {
+        copy_sources(&build, &paths.upstream.join("docs/build"))?;
+    }
     eprintln!("wrote {}", build.display());
     Ok(())
 }

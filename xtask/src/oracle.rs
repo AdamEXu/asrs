@@ -831,6 +831,7 @@ const SYNC_GENERATED: &[&str] = &[
     "node_modules",
     "bundles",
     "lite/static/bundles",
+    "docs/build",
     "src/licenses.json",
     "ThirdPartyLicenses.txt",
 ];
