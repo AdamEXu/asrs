@@ -34,6 +34,7 @@ use asrs_ui::gpui::{
     Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NoopTextSystem,
     PlatformInput, WindowBounds, WindowOptions, point, px, size,
 };
+use asrs_ui::input::{ScriptedSelectKeys, SelectKeys};
 use asrs_ui::platform::ScriptedNumpadEnter;
 
 fn kind(page: &str) -> (WindowKind, f32, f32) {
@@ -571,6 +572,7 @@ fn main() {
     assert_eq!(asrs_app::IDENTITY, AppIdentity::UPSTREAM);
     let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
     cx.update(asrs_ui::init);
+    cx.update(|cx| cx.set_global(ScriptedSelectKeys(SelectKeys::Mac)));
     cx.run_until_parked();
     run(&mut cx, "prompts/flows");
     run(&mut cx, "prompts/preferences");

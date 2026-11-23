@@ -325,3 +325,28 @@ pub fn can_post_events() -> bool {
 pub fn can_capture_screen() -> bool {
     imp::probe::can_capture_screen()
 }
+
+/// An X11 window's `WM_NORMAL_HINTS`, in device px, and whether it is kept above others.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SizeHints {
+    pub min: Option<(i32, i32)>,
+    pub max: Option<(i32, i32)>,
+    /// The minimum's and the maximum's numerator and denominator.
+    pub aspect: Option<[i32; 4]>,
+    pub above: bool,
+}
+
+/// The hints of the X11 window `number` (see [`window_number`]) on `window`'s display.
+pub fn size_hints(window: &Window, number: u32) -> Option<SizeHints> {
+    imp::probe::size_hints(window, number)
+}
+
+/// Presses the keys of X11 keysyms in turn, then releases them.
+pub fn post_keys(keysyms: &[u32]) -> bool {
+    imp::probe::post_keys(keysyms)
+}
+
+/// Divides an X11 screen into two RandR monitors at `x`, in device px, or undoes that.
+pub fn split_monitors(x: Option<u16>) -> bool {
+    imp::probe::split_monitors(x)
+}

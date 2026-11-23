@@ -1,6 +1,7 @@
 #![allow(clippy::disallowed_methods)]
 
-//! The wheel-calibration scenario on the port, headless, against upstream's timeline ranges.
+//! The wheel-calibration scenario on the port, headless, against upstream's timeline ranges: on
+//! Linux `wheel-calibration-linux`, with the fractions of a tick a high-resolution wheel sends.
 //! `parity/scenarios/inputs/drive.wpilog` is the log the Electron driver generates for
 //! `app:drive` with upstream's `WPILOGEncoder` (oracle/src/app/logs.ts), copied from its
 //! `inputs/`.
@@ -11,28 +12,62 @@ use asrs_app::scenario;
 use asrs_parity::json::{self, Json};
 use asrs_parity::vectors;
 
-/// `selection.getTimelineRange()` in the captures of `cargo xtask app run wheel-calibration` on
-/// macOS with no stray pointer input, light theme: `before`, `notched` and `trackpad`.
-const UPSTREAM: [(u32, [[f64; 2]; 3]); 2] = [
-    (
-        1,
-        [
-            [0.0, 10.0],
-            [0.15738966007338107, 9.842610339926617],
-            [0.04477582253141499, 9.955224177468585],
-        ],
-    ),
-    (
-        2,
-        [
-            [0.0, 10.0],
-            [0.1573896600733855, 9.842610339926612],
-            [0.04477582253141499, 9.955224177468585],
-        ],
-    ),
-];
+struct Calibration {
+    scenario: &'static str,
+    captures: &'static [&'static str],
+    /// `selection.getTimelineRange()` in each capture, per scale, in the light theme.
+    upstream: [(u32, &'static [[f64; 2]]); 2],
+}
 
-const CAPTURES: [&str; 3] = ["before", "notched", "trackpad"];
+/// From `cargo xtask app run wheel-calibration` on macOS with no stray pointer input.
+const MAC: Calibration = Calibration {
+    scenario: "wheel-calibration",
+    captures: &["before", "notched", "trackpad"],
+    upstream: [
+        (
+            1,
+            &[
+                [0.0, 10.0],
+                [0.15738966007338107, 9.842610339926617],
+                [0.04477582253141499, 9.955224177468585],
+            ],
+        ),
+        (
+            2,
+            &[
+                [0.0, 10.0],
+                [0.1573896600733855, 9.842610339926612],
+                [0.04477582253141499, 9.955224177468585],
+            ],
+        ),
+    ],
+};
+
+/// From `cargo xtask app run wheel-calibration-linux` on Linux x86_64 under Xvfb and xfwm4.
+const LINUX: Calibration = Calibration {
+    scenario: "wheel-calibration-linux",
+    captures: &["before", "notched", "trackpad", "hires"],
+    upstream: [
+        (
+            1,
+            &[
+                [0.0, 10.0],
+                [0.15738966007338284, 9.842610339926615],
+                [0.04477582253141499, 9.955224177468585],
+                [0.03486041895230052, 9.965139581047698],
+            ],
+        ),
+        (
+            2,
+            &[
+                [0.0, 10.0],
+                [0.1573896600733793, 9.842610339926619],
+                [0.04477582253141499, 9.955224177468585],
+                [0.03734112836573367, 9.962658871634265],
+            ],
+        ),
+    ],
+};
 
 fn timeline_range(path: &Path) -> [f64; 2] {
     let record = json::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -44,17 +79,19 @@ fn timeline_range(path: &Path) -> [f64; 2] {
 }
 
 fn main() {
-    if !cfg!(target_os = "macos") {
-        println!(
-            "wheel scenario: skipped, the recorded wheel deltas are macOS input (Linux mapping is X05)"
-        );
+    let calibration = if cfg!(target_os = "macos") {
+        MAC
+    } else if cfg!(target_os = "linux") {
+        LINUX
+    } else {
+        println!("wheel scenario: skipped, no recorded ranges for this platform");
         return;
-    }
+    };
     let root = vectors::workspace_root();
     let out = std::env::temp_dir().join(format!("asrs-wheel-scenario-{}", std::process::id()));
     let args: Vec<String> = [
         "--parity-scenario",
-        root.join("parity/scenarios/wheel-calibration.json")
+        root.join(format!("parity/scenarios/{}.json", calibration.scenario))
             .to_str()
             .unwrap(),
         "--out",
@@ -74,10 +111,10 @@ fn main() {
     ]
     .map(str::to_owned)
     .to_vec();
-    scenario::run(&args).unwrap_or_else(|e| panic!("wheel-calibration: {e}"));
+    scenario::run(&args).unwrap_or_else(|e| panic!("{}: {e}", calibration.scenario));
 
-    for (scale, ranges) in UPSTREAM {
-        for (capture, upstream) in CAPTURES.into_iter().zip(ranges) {
+    for (scale, ranges) in calibration.upstream {
+        for (capture, upstream) in calibration.captures.iter().zip(ranges) {
             let port = timeline_range(&out.join(format!("{scale}x-light/captures/{capture}.json")));
             let tolerance = 1e-9 * (upstream[1] - upstream[0]);
             assert!(

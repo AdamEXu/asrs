@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, ClickEvent, ElementId, FocusHandle, InteractiveElement, IntoElement,
+    AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, px, rgb,
 };
 
@@ -11,6 +11,55 @@ use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, FOCUS_RING_WIDT
 struct FocusState {
     handle: FocusHandle,
     from_keyboard: bool,
+}
+
+/// A button's focus and whether it takes `global.css`'s `:focus-visible` style: focused from the
+/// keyboard, in an active window.
+pub struct FocusRing {
+    pub handle: FocusHandle,
+    pub visible: bool,
+}
+
+impl FocusRing {
+    /// The state of the button `id`, which is a tab stop, focused through `given` or a handle of
+    /// its own.
+    pub fn of(
+        id: impl Into<ElementId>,
+        given: Option<FocusHandle>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> FocusRing {
+        let state = window.use_keyed_state(id, cx, |_, cx| FocusState {
+            handle: given.unwrap_or_else(|| cx.focus_handle()).tab_stop(true),
+            from_keyboard: false,
+        });
+        let focused = state.read(cx).handle.is_focused(window);
+        let keyboard = window.last_input_was_keyboard();
+        let from_keyboard = state.update(cx, |s, _| {
+            s.from_keyboard = focused && (s.from_keyboard || keyboard);
+            s.from_keyboard
+        });
+        FocusRing {
+            handle: state.read(cx).handle.clone(),
+            visible: from_keyboard && window.is_window_active(),
+        }
+    }
+
+    /// The 2 px outline outside the button's box.
+    pub fn outline(&self, appearance: Appearance) -> Option<Div> {
+        let outset = px(-FOCUS_RING_WIDTH);
+        self.visible.then(|| {
+            div()
+                .absolute()
+                .top(outset)
+                .left(outset)
+                .right(outset)
+                .bottom(outset)
+                .border(px(FOCUS_RING_WIDTH))
+                .border_color(rgb(appearance.theme().focus_ring))
+                .rounded(px(FOCUS_RING_RADIUS + FOCUS_RING_WIDTH))
+        })
+    }
 }
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
@@ -151,22 +200,9 @@ impl RenderOnce for IconButton {
             .unwrap_or_else(|| Appearance::of(window, cx));
         let theme = appearance.theme();
         let chain = self.tint.chain(appearance, self.blurred, self.disabled);
-        let given = self.focus;
-        let focus = (!self.disabled).then(|| {
-            window.use_keyed_state(self.id.clone(), cx, |_, cx| FocusState {
-                handle: given.unwrap_or_else(|| cx.focus_handle()).tab_stop(true),
-                from_keyboard: false,
-            })
-        });
-        let focus_visible = focus.as_ref().is_some_and(|state| {
-            let focused = state.read(cx).handle.is_focused(window);
-            let keyboard = window.last_input_was_keyboard();
-            let from_keyboard = state.update(cx, |s, _| {
-                s.from_keyboard = focused && (s.from_keyboard || keyboard);
-                s.from_keyboard
-            });
-            from_keyboard && window.is_window_active()
-        });
+        let focus = (!self.disabled)
+            .then(|| FocusRing::of(self.id.clone(), self.focus.clone(), window, cx));
+        let focus_visible = focus.as_ref().is_some_and(|focus| focus.visible);
         let radius = if focus_visible {
             FOCUS_RING_RADIUS
         } else {
@@ -195,21 +231,9 @@ impl RenderOnce for IconButton {
             button = button.bg(rgb(rest));
         }
         if let Some(focus) = &focus {
-            button = button.track_focus(&focus.read(cx).handle);
-        }
-        if focus_visible {
-            let outset = px(-FOCUS_RING_WIDTH);
-            button = button.child(
-                div()
-                    .absolute()
-                    .top(outset)
-                    .left(outset)
-                    .right(outset)
-                    .bottom(outset)
-                    .border(px(FOCUS_RING_WIDTH))
-                    .border_color(rgb(theme.focus_ring))
-                    .rounded(px(FOCUS_RING_RADIUS + FOCUS_RING_WIDTH)),
-            );
+            button = button
+                .track_focus(&focus.handle)
+                .children(focus.outline(appearance));
         }
         if !self.disabled {
             button = button

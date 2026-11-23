@@ -138,3 +138,7 @@ required-features = ["parity"]
 name = "download_window"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "linux_windows"
+harness = false

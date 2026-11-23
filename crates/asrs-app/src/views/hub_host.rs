@@ -483,6 +483,10 @@ impl FrameHost for HubEntityHost {
         });
     }
 
+    fn set_menu_buttons(&mut self, rects: Vec<[f64; 4]>) {
+        sidebar::set_menu_buttons(&self.sidebar_geometry, rects);
+    }
+
     fn slot(&mut self, slot: FrameSlot, _window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
         match slot {
             FrameSlot::SideBar => {

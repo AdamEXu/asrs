@@ -96,18 +96,30 @@ fn main() {
                 Some(f64::from(scale))
             );
             assert_eq!(r.get("colourSpace"), Some(&Json::string("srgb")));
-            let title = r.get("probes").and_then(|p| p.get(".title-bar")).unwrap();
-            assert_eq!(title.to_compact(), "[[0,0,1100,38]]");
+            let probed = |selector: &str| {
+                let boxes = r.get("probes").and_then(|p| p.get(selector)).unwrap();
+                boxes.to_compact()
+            };
             let alpha = |x: u32, y: u32| {
                 image.data[((y * scale * image.width + x * scale) * 4 + 3) as usize]
             };
-            assert_eq!(
-                alpha(150, 300),
-                0,
-                "the vibrancy area is transparent, as upstream's"
-            );
-            assert_eq!(alpha(10, 10), 0, "the title bar over the sidebar too");
-            assert_eq!(alpha(700, 300), 255);
+            if cfg!(target_os = "linux") {
+                assert_eq!(probed(".title-bar"), "[]");
+                assert_eq!(probed(".title-bar-menu"), "[[25,1,250,36]]");
+                assert_eq!(probed(".side-bar"), "[[0,38,300,612]]");
+                for (x, y) in [(150, 300), (10, 10), (700, 300)] {
+                    assert_eq!(alpha(x, y), 255, "({x}, {y}): nothing is translucent");
+                }
+            } else {
+                assert_eq!(probed(".title-bar"), "[[0,0,1100,38]]");
+                assert_eq!(
+                    alpha(150, 300),
+                    0,
+                    "the vibrancy area is transparent, as upstream's"
+                );
+                assert_eq!(alpha(10, 10), 0, "the title bar over the sidebar too");
+                assert_eq!(alpha(700, 300), 255);
+            }
 
             let state =
                 std::fs::read_to_string(variant.join("captures/launch.hub-state.json")).unwrap();

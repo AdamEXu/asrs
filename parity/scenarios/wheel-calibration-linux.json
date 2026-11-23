@@ -1,0 +1,260 @@
+{
+  "about": "wheel-calibration for Linux, whose page has no title bar: the timeline is 38 px higher than on macOS and Windows, so the wheel events are over y 66. After the notched ticks and the trackpad deltas come fractions of a tick, as a high-resolution wheel sends them. Chromium reads 120 px from an X11 wheel notch, three of the 40 px ticks (X03). Elsewhere the events miss the timeline and the captures show nothing but that",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Resized",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "main": "new-tab",
+      "data": 10
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "before",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 66,
+        "deltaY": -40,
+        "wheelTicksY": -1
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 66,
+        "deltaY": 120,
+        "wheelTicksY": 3
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 500,
+        "y": 66,
+        "deltaY": -40,
+        "wheelTicksY": -1
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 820,
+        "y": 66,
+        "deltaY": 80,
+        "wheelTicksY": 2
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "notched",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 66,
+        "deltaY": -3,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 66,
+        "deltaY": -11,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 66,
+        "deltaY": -24,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 66,
+        "deltaX": 17,
+        "deltaY": -2,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 820,
+        "y": 66,
+        "deltaY": 9,
+        "precise": true
+      }
+    },
+    {
+      "capture": "trackpad",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 66,
+        "deltaY": -30,
+        "wheelTicksY": -0.75
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 66,
+        "deltaY": -30,
+        "wheelTicksY": -0.75
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 66,
+        "deltaY": 15,
+        "wheelTicksY": 0.375
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 66,
+        "deltaX": 30,
+        "wheelTicksX": 0.75,
+        "deltaY": -60,
+        "wheelTicksY": -1.5
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 66,
+        "deltaY": -15,
+        "wheelTicksY": -0.375
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "wheel": {
+        "x": 620,
+        "y": 66,
+        "deltaY": 7.5,
+        "wheelTicksY": 0.1875
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "hires",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    }
+  ]
+}

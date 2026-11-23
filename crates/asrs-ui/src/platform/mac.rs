@@ -4,7 +4,7 @@ use std::path::Path;
 use std::ptr::{self, NonNull};
 
 use block2::RcBlock;
-use gpui_kit::{App, ScrollEvent, Window};
+use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, NSObject, Sel};
 use objc2::{
@@ -891,6 +891,8 @@ fn min_y(rect: CGRect) -> f64 {
     rect.origin.y.min(rect.origin.y + rect.size.height)
 }
 
+pub(super) fn popup_window_opened(_: &Window, _: Bounds<Pixels>, _: bool, _: &mut App) {}
+
 pub(super) fn close_popup_menu(window: &Window) {
     let Some(window) = ns_window(window) else {
         return;
@@ -1120,6 +1122,7 @@ pub(super) mod probe {
                 visible: !item.isHidden(),
                 checked: item.state() == NSControlStateValueOn,
                 swatch,
+                shortcut: None,
                 works_when_hidden: key.is_empty() || works_when_hidden.as_bool(),
                 key_equivalent: (!key.is_empty())
                     .then(|| (key, item.keyEquivalentModifierMask().bits() as u32)),
@@ -1644,5 +1647,17 @@ pub(super) mod probe {
 
     pub fn can_capture_screen() -> bool {
         CGPreflightScreenCaptureAccess()
+    }
+
+    pub fn size_hints(_window: &Window, _number: u32) -> Option<super::super::probe::SizeHints> {
+        None
+    }
+
+    pub fn post_keys(_keysyms: &[u32]) -> bool {
+        false
+    }
+
+    pub fn split_monitors(_x: Option<u16>) -> bool {
+        false
     }
 }

@@ -458,6 +458,50 @@ impl Select {
         true
     }
 
+    /// An enabled option that `shown` does not leave out (`display: none`).
+    fn selectable(&self, item: usize, shown: &impl Fn(usize) -> bool) -> bool {
+        matches!(self.items.get(item), Some(SelectItem::Option { .. }))
+            && shown(item)
+            && !self.item_disabled(item)
+    }
+
+    /// `NextValidOption()` from the selected option: the last selectable option among the next
+    /// `skip` list items, and past them only to reach one.
+    pub fn valid_option(
+        &self,
+        forward: bool,
+        skip: usize,
+        shown: impl Fn(usize) -> bool,
+    ) -> Option<usize> {
+        let mut index = self.selected.map_or(-1, |i| i as i64);
+        let mut skip = skip as i64;
+        let mut found = None;
+        loop {
+            index += if forward { 1 } else { -1 };
+            if index < 0 || index >= self.items.len() as i64 {
+                return found;
+            }
+            skip -= 1;
+            if !self.selectable(index as usize, &shown) {
+                continue;
+            }
+            found = Some(index as usize);
+            if skip <= 0 {
+                return found;
+            }
+        }
+    }
+
+    /// `FirstSelectableOption()` or `LastSelectableOption()`.
+    pub fn end_option(&self, last: bool, shown: impl Fn(usize) -> bool) -> Option<usize> {
+        let mut items = 0..self.items.len();
+        if last {
+            items.rev().find(|&i| self.selectable(i, &shown))
+        } else {
+            items.find(|&i| self.selectable(i, &shown))
+        }
+    }
+
     /// `OptionAtIndex()` for type-ahead: an enabled option's label, else nothing to match.
     fn type_ahead_text(&self, item: usize) -> Option<JsString> {
         match &self.items[item] {

@@ -23,7 +23,7 @@ use asrs_services::routing::{Action, Hubs, Route};
 use asrs_services::update::ReleaseProfile;
 use asrs_services::window_manager::Platform;
 use asrs_services::windows::WindowSystem;
-use asrs_ui::gpui::{App, Entity, Global, WeakEntity};
+use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, WeakEntity};
 use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, ThemeSource};
 
@@ -618,6 +618,7 @@ impl MainProcess {
                 video::hub_message(id, message, cx);
                 if let Some(window) = Windows::handle(cx, id) {
                     hub_dialogs::show(message, window, cx);
+                    title_bar_menu_message(message, window, cx);
                 }
             }
         }
@@ -834,6 +835,10 @@ impl MainProcess {
             _ => {}
         })
         .detach();
+        if Platform::current() != Platform::Mac {
+            let title = hub.read(cx).model().title().to_string_lossy();
+            Self::set_title(cx, id, &title);
+        }
         if let Some(handle) = Windows::handle(cx, id) {
             let _ = handle.update(cx, |_, window, cx| {
                 window.on_window_should_close(cx, move |_, cx| {
@@ -978,6 +983,42 @@ impl MainProcess {
         };
         Self::focus(cx, id);
         Self::open_files(cx, vec![path], Some(id));
+    }
+}
+
+/// `open-app-menu` and `close-app-menu`: the `title-bar-menu`'s buttons, which leave out the edit
+/// menu.
+fn title_bar_menu_message(
+    message: &NamedMessage<HubToMain>,
+    window: AnyWindowHandle,
+    cx: &mut App,
+) {
+    let number = |value: Option<&JsValue>| value.and_then(JsValue::as_f64).unwrap_or(f64::NAN);
+    match message.name {
+        HubToMain::OpenAppMenu => {
+            let mut index = number(message.data.get("index"));
+            if index >= 2.0 {
+                index += 1.0;
+            }
+            let rect = message.data.get("rect").cloned().unwrap_or_default();
+            let x = math::round(number(rect.get("x")));
+            let y = (number(rect.get("y")) + number(rect.get("height"))).ceil();
+            cx.defer(move |cx| {
+                let _ = window.update(cx, |_, window, cx| {
+                    bridge::popup_application_submenu(
+                        window,
+                        cx,
+                        index as usize,
+                        x as i32,
+                        y as i32,
+                    );
+                });
+            });
+        }
+        HubToMain::CloseAppMenu => cx.defer(move |cx| {
+            let _ = window.update(cx, |_, window, _| platform::close_popup_menu(window));
+        }),
+        _ => {}
     }
 }
 

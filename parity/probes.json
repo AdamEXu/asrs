@@ -9,6 +9,8 @@
   "div.progress-details": ["div.progress-details"],
   "#download": ["button#download"],
   ".title-bar-text": ["div.title-bar-text"],
+  ".title-bar-menu": ["div.title-bar-menu"],
+  ".title-bar-menu button": ["div.title-bar-menu button"],
   ".side-bar": ["div.side-bar"],
   ".side-bar-handle": ["div.side-bar-handle"],
   ".viewer": ["div.viewer"],

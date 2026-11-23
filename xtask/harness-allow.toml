@@ -28,7 +28,7 @@ reason = "picks the title lists out of the vector; the caller asserts how many w
 
 [[allow]]
 file = "crates/asrs-app/tests/menu_vectors.rs"
-function = "electron_builds_the_darwin_menu"
+function = "replay_electron"
 rule = "skipped-kind"
 reason = "the config record is the run's input description; every other op fails"
 
