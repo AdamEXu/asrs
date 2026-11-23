@@ -508,10 +508,10 @@ impl Painter<'_> {
                     );
                 }
                 ConfigJoystickComponent::Joystick(stick) => {
-                    let [x, y, pressed] = stick_sources(stick, is_sdl);
+                    let ([x, y], button) = stick_sources(stick, is_sdl);
                     let x_value = axis_value(state, x)?;
                     let y_value = axis_value(state, y)?;
-                    let pressed = match pressed.0 {
+                    let pressed = match button {
                         Some(id) => button_state(state, id)?,
                         None => false,
                     };
@@ -690,38 +690,30 @@ fn button_active(
 }
 
 /// A source index and whether it is inverted.
-type Source = (Option<f64>, bool);
+type AxisSource = (Option<f64>, Option<bool>);
 
-/// The x axis, y axis and button of a stick.
-fn stick_sources(stick: &ConfigJoystickStick, is_sdl: bool) -> [Source; 3] {
+/// The x and y axes and the button of a stick.
+fn stick_sources(stick: &ConfigJoystickStick, is_sdl: bool) -> ([AxisSource; 2], Option<f64>) {
     if is_sdl {
-        [
-            (
-                stick.sdl_x_source_index,
-                stick.sdl_x_source_inverted == Some(true),
-            ),
-            (
-                stick.sdl_y_source_index,
-                stick.sdl_y_source_inverted == Some(true),
-            ),
-            (stick.sdl_button_source_index, false),
-        ]
+        (
+            [
+                (stick.sdl_x_source_index, stick.sdl_x_source_inverted),
+                (stick.sdl_y_source_index, stick.sdl_y_source_inverted),
+            ],
+            stick.sdl_button_source_index,
+        )
     } else {
-        [
-            (
-                stick.ni_x_source_index,
-                stick.ni_x_source_inverted == Some(true),
-            ),
-            (
-                stick.ni_y_source_index,
-                stick.ni_y_source_inverted == Some(true),
-            ),
-            (stick.ni_button_source_index, false),
-        ]
+        (
+            [
+                (stick.ni_x_source_index, stick.ni_x_source_inverted),
+                (stick.ni_y_source_index, stick.ni_y_source_inverted),
+            ],
+            stick.ni_button_source_index,
+        )
     }
 }
 
-fn axis_value(state: &JsValue, (id, inverted): Source) -> Result<f64, JsError> {
+fn axis_value(state: &JsValue, (id, inverted): AxisSource) -> Result<f64, JsError> {
     let Some(id) = id else {
         return Ok(0.0);
     };
@@ -729,7 +721,11 @@ fn axis_value(state: &JsValue, (id, inverted): Source) -> Result<f64, JsError> {
         return Ok(0.0);
     };
     let value = operand(member(axis, "value")?)?;
-    Ok(if inverted { -value } else { value })
+    Ok(if inverted == Some(true) {
+        -value
+    } else {
+        value
+    })
 }
 
 fn axis_scaled_value(

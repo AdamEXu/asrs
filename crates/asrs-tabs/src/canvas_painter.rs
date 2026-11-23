@@ -74,7 +74,16 @@ pub(crate) fn canvas_color(value: &JsValue) -> Result<Style, JsError> {
     Ok(Style::Color(css))
 }
 
-const CSS_WIDE_KEYWORDS: [&str; 5] = ["inherit", "initial", "unset", "revert", "revert-layer"];
+/// What Blink's style parser accepts for a colour property and its canvas ignores.
+const STYLE_ONLY_KEYWORDS: [&str; 7] = [
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "-webkit-link",
+    "-webkit-activelink",
+];
 
 fn is_modeled_color(css: &str) -> Result<bool, JsError> {
     if css.is_empty() || color::parse_color(css).is_some() {
@@ -83,7 +92,7 @@ fn is_modeled_color(css: &str) -> Result<bool, JsError> {
     Ok(
         match css_value::serialize("background-color", css, false)? {
             None => true,
-            Some(accepted) => CSS_WIDE_KEYWORDS.contains(&accepted.as_str()),
+            Some(accepted) => STYLE_ONLY_KEYWORDS.contains(&accepted.as_str()),
         },
     )
 }
@@ -129,30 +138,58 @@ fn blink_number(x: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    use asrs_parity::vectors::load;
+    use asrs_parity::{Utf16String, Value};
+
     use super::*;
 
+    fn text(value: &Value) -> String {
+        value
+            .as_str()
+            .and_then(Utf16String::as_string)
+            .expect("a string")
+    }
+
+    /// `fillStyle` reads back the previous `#010203` where Blink ignored the assignment.
     #[test]
-    fn unmodeled_colors_fail_loudly() {
-        let color = |css: &str| canvas_color(&JsValue::from(css));
-        for css in [
-            "hwb(120 10% 10%)",
-            "oklch(0.5 0.1 120)",
-            "currentcolor",
-            "CanvasText",
-        ] {
-            assert_eq!(color(css).unwrap_err().name, "Unmodeled", "{css}");
+    fn canvas_colors_follow_blink_or_fail_loudly() {
+        let records = load("dom/css-style/color-syntax").unwrap();
+        let value = records
+            .iter()
+            .find(|r| r.field("eval").is_some())
+            .expect("an eval record")
+            .value("value")
+            .unwrap();
+        let (mut accepted, mut ignored, mut unmodeled) = (0, 0, 0);
+        for row in value.as_array().expect("rows") {
+            let Some([kind, css, _, _, _, fill_style, _]) = row.as_array() else {
+                panic!("row is not [kind, value, stroke, fill, background, fillStyle, pixel]");
+            };
+            let (kind, css) = (text(kind), text(css));
+            let blink_accepts = text(fill_style) != "#010203";
+            match canvas_color(&JsValue::from(css.as_str())) {
+                Ok(style) => {
+                    assert_eq!(style, Style::Color(css.clone()));
+                    let known = color::parse_color(&css).is_some();
+                    assert_eq!(known, blink_accepts, "{css:?}");
+                    *if known { &mut accepted } else { &mut ignored } += 1;
+                }
+                Err(e) => {
+                    assert_eq!(e.name, "Unmodeled");
+                    assert!(kind == "open" || kind == "keyword", "{css:?}");
+                    assert!(kind == "open" || blink_accepts, "{css:?}");
+                    unmodeled += 1;
+                }
+            }
         }
-        for css in [
-            "",
-            "garbage",
-            "inherit",
-            "#12345",
-            "#ff0000",
-            "rgb(1 2 3 / 50%)",
-        ] {
-            assert_eq!(color(css).unwrap(), Style::from(css), "{css}");
-        }
+        assert!(accepted > 4000 && ignored > 100 && unmodeled > 20);
+    }
+
+    #[test]
+    fn values_that_are_not_strings() {
         assert_eq!(canvas_color(&JsValue::Undefined).unwrap(), Style::Undefined);
-        assert_eq!(canvas_color(&JsValue::Null).unwrap_err().name, "Unmodeled");
+        for value in [JsValue::Null, JsValue::Number(0.0)] {
+            assert_eq!(canvas_color(&value).unwrap_err().name, "Unmodeled");
+        }
     }
 }

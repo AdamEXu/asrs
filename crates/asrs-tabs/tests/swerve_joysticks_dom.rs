@@ -24,7 +24,7 @@ use asrs_tabs::swerve_renderer::{SwerveDom, SwerveRenderer};
 const OTHER_KINDS: &[&str] = &["read", "write", "main", "exception"];
 
 /// `IMAGES` of `oracle/tools/r07Specs.mjs`: the fixtures' `images`.
-const IMAGES: [(&str, [f64; 2]); 3] = [
+const IMAGES: [(&str, [f64; 2]); 5] = [
     (
         "/Users/pilot/Assets/Joystick_Wide/image.png",
         [1250.0, 800.0],
@@ -34,6 +34,8 @@ const IMAGES: [(&str, [f64; 2]); 3] = [
         "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png",
         [101.0, 67.0],
     ),
+    ("bundledAssets/Joystick_ZeroWidth/image.png", [0.0, 50.0]),
+    ("bundledAssets/Joystick_ZeroHeight/image.png", [50.0, 0.0]),
 ];
 
 type Compared = BTreeMap<&'static str, usize>;

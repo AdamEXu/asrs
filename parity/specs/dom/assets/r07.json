@@ -401,6 +401,16 @@
    ]
   },
   {
+   "name": "Zero Width",
+   "path": "bundledAssets/Joystick_ZeroWidth/image.png",
+   "components": []
+  },
+  {
+   "name": "Zero Height",
+   "path": "bundledAssets/Joystick_ZeroHeight/image.png",
+   "components": []
+  },
+  {
    "name": "Empty",
    "path": "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png",
    "components": []

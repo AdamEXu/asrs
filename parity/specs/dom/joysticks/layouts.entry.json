@@ -18,6 +18,14 @@
    "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png": [
     101,
     67
+   ],
+   "bundledAssets/Joystick_ZeroWidth/image.png": [
+    0,
+    50
+   ],
+   "bundledAssets/Joystick_ZeroHeight/image.png": [
+    50,
+    0
    ]
   },
   "steps": [
@@ -201,6 +209,9 @@
    },
    {
     "eval": "window.__r07Render(8, 0, [{\"layout\":\"Broken\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}},{\"layout\":\"Tall\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}},{\"layout\":\"Generic Joystick\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}}])"
+   },
+   {
+    "eval": "window.__r07Render(8, 0, [{\"layout\":\"Zero Width\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}},{\"layout\":\"Tall\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}},{\"layout\":\"Zero Height\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}}])"
    },
    {
     "eval": "window.__r07Render(8, 0, [{\"layout\":\"wide\",\"state\":{\"mapping\":\"sdl\",\"buttons\":[{\"id\":0,\"state\":true},{\"id\":1,\"state\":false},{\"id\":2,\"state\":true},{\"id\":3,\"state\":false}],\"axes\":[{\"id\":0,\"value\":0.25},{\"id\":1,\"value\":-0.75},{\"id\":2,\"value\":1},{\"id\":3,\"value\":-0.1}],\"povs\":[{\"id\":0,\"angle\":45},{\"id\":1,\"angle\":270}],\"touchpads\":[[{\"x\":0.25,\"y\":0.75,\"down\":true},{\"x\":0.5,\"y\":0.5,\"down\":false},{\"x\":1,\"y\":0,\"down\":true},{\"x\":1.01,\"y\":0.5,\"down\":true},{\"x\":0.5,\"y\":-0.01,\"down\":true}],[{\"x\":0,\"y\":1,\"down\":true}]]}}])"

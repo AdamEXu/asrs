@@ -470,9 +470,11 @@ const PATHS = {
   wide: "/Users/pilot/Assets/Joystick_Wide/image.png",
   tall: "bundledAssets/Joystick_Tall/image.png",
   small: "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png",
-  broken: "bundledAssets/Joystick_Broken/image.png"
+  broken: "bundledAssets/Joystick_Broken/image.png",
+  zeroWidth: "bundledAssets/Joystick_ZeroWidth/image.png",
+  zeroHeight: "bundledAssets/Joystick_ZeroHeight/image.png"
 };
-const IMAGES = { [PATHS.wide]: [1250, 800], [PATHS.tall]: [333, 1000], [PATHS.small]: [101, 67] };
+const IMAGES = { [PATHS.wide]: [1250, 800], [PATHS.tall]: [333, 1000], [PATHS.small]: [101, 67], [PATHS.zeroWidth]: [0, 50], [PATHS.zeroHeight]: [50, 0] };
 const cButton = (centerPx, sizePx, sources, isEllipse = false, isYellow = false) => ({ type: "button", isYellow, isEllipse, centerPx, sizePx, ...sources });
 const cStick = (centerPx, radiusPx, sources, isYellow = false) => ({ type: "joystick", isYellow, centerPx, radiusPx, ...sources });
 const cAxis = (centerPx, sizePx, sources, isYellow = false) => ({ type: "axis", isYellow, centerPx, sizePx, ...sources });
@@ -513,9 +515,13 @@ const TALL = {
 };
 const SMALL = { name: "Small \u00e9", path: PATHS.small, components: [cPad([50, 30], [40, 20], 0), cButton([10.5, 10.25], [3, 4], { sdlSourceIndex: 3 }, true)] };
 const BROKEN = { name: "Broken", path: PATHS.broken, components: [cButton([100, 100], [80, 80], { sdlSourceIndex: 0 })] };
+const ZEROS = [
+  { name: "Zero Width", path: PATHS.zeroWidth, components: [] },
+  { name: "Zero Height", path: PATHS.zeroHeight, components: [] }
+];
 const EMPTY = { name: "Empty", path: PATHS.small, components: [] };
 const DUPLICATE = { name: "Tall", path: PATHS.wide, components: [] };
-const ASSETS = { field2ds: [], field3ds: [], robots: [], joysticks: [WIDE, TALL, SMALL, BROKEN, EMPTY, DUPLICATE], loadFailures: [] };
+const ASSETS = { field2ds: [], field3ds: [], robots: [], joysticks: [WIDE, TALL, SMALL, BROKEN, ...ZEROS, EMPTY, DUPLICATE], loadFailures: [] };
 write(path.join(SPECS, "assets"), "r07.json", ASSETS);
 const ASSET_FIXTURE = { assets: "../assets/r07.json", images: IMAGES };
 const ASSET_INPUTS = ["../assets/r07.json"];
@@ -603,6 +609,7 @@ joystickFixtures.push({
       render(JOY, [stick("Empty", FULL)]),
       render(JOY, [stick("Broken", FULL)]),
       render(JOY, [stick("Broken", FULL), stick("Tall", FULL), generic(FULL)]),
+      render(JOY, [stick("Zero Width", FULL), stick("Tall", FULL), stick("Zero Height", FULL)]),
       render(JOY, [stick("wide", FULL)])
     ]
   },
@@ -685,8 +692,10 @@ joystickFixtures.push({
   });
 }
 
+// In a 505x335 canvas the Small image has exactly the target aspect ratio, and the two branches of
+// the fit comparison give sizes one ulp apart.
 const PAIR = [stick("Wide", FULL), generic(FULL)];
-joystickFixtures.push({ id: "resize", fixture: { ...ASSET_FIXTURE, steps: [...START(JOY), ...resizeSteps(JOY, PAIR), size("1250px", "790px"), render(JOY, [stick("Wide", FULL)])] }, inputs: ASSET_INPUTS });
+joystickFixtures.push({ id: "resize", fixture: { ...ASSET_FIXTURE, steps: [...START(JOY), ...resizeSteps(JOY, PAIR), size("1250px", "790px"), render(JOY, [stick("Wide", FULL)]), size("505px", "335px"), render(JOY, [stick("Small \u00e9", FULL)])] }, inputs: ASSET_INPUTS });
 joystickFixtures.push({
   id: "dpr15",
   fixture: { ...ASSET_FIXTURE, window: { width: 1017, height: 689, devicePixelRatio: 1.5 }, steps: [...START(JOY), render(JOY, PAIR), ...resizeSteps(JOY, PAIR)] },

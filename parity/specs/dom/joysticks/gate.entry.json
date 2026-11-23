@@ -18,6 +18,14 @@
    "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png": [
     101,
     67
+   ],
+   "bundledAssets/Joystick_ZeroWidth/image.png": [
+    0,
+    50
+   ],
+   "bundledAssets/Joystick_ZeroHeight/image.png": [
+    50,
+    0
    ]
   },
   "steps": [
