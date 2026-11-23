@@ -948,6 +948,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.active_satellites = uuids;
     }
 
+    /// The last `set-active-satellites`.
+    pub fn active_satellites(&self) -> &[JsValue] {
+        &self.active_satellites
+    }
+
     pub fn is_valid_uuid(&self, uuid: &JsValue) -> bool {
         self.tabs.iter().any(|t| js::strict_eq(uuid, &t.uuid))
     }

@@ -32,10 +32,19 @@ const HOME: &str = "ASRS_MENU_DISPATCH_HOME";
 
 #[test]
 fn the_menu_in_the_app() {
-    let home = std::env::temp_dir().join(format!("asrs-menu-dispatch-{}", std::process::id()));
+    run_in_a_fresh_home("in_a_fresh_home");
+}
+
+#[test]
+fn saved_windows_open_at_launch() {
+    run_in_a_fresh_home("with_saved_windows");
+}
+
+fn run_in_a_fresh_home(test: &str) {
+    let home = std::env::temp_dir().join(format!("asrs-{test}-{}", std::process::id()));
     std::fs::create_dir_all(&home).expect("home");
     let mut child = Process::new(std::env::current_exe().expect("the test binary"));
-    child.args(["--exact", "in_a_fresh_home", "--ignored", "--nocapture"]);
+    child.args(["--exact", test, "--ignored", "--nocapture"]);
     for variable in [
         "HOME",
         "APPDATA",
@@ -114,6 +123,39 @@ impl AppUnderTest {
             let window = Windows::of_kind(cx, WindowKind::Preferences, 0)?;
             Windows::id_of(cx, window)
         })
+    }
+
+    fn satellites(&mut self) -> Vec<WindowId> {
+        let pages = self.cx.update(|cx| MainProcess::satellite_windows(cx));
+        pages.into_iter().map(|(id, _)| id).collect()
+    }
+
+    fn active_satellites(&mut self, hub: WindowId) -> Vec<String> {
+        self.hub(hub, |hub| {
+            let active = hub.tabs().active_satellites().iter();
+            active
+                .map(|uuid| uuid.as_str().expect("a UUID").to_string_lossy())
+                .collect()
+        })
+    }
+
+    fn title(&mut self, satellite: WindowId) -> String {
+        let pages = self.cx.update(|cx| MainProcess::satellite_windows(cx));
+        let page = pages.into_iter().find(|(id, _)| *id == satellite);
+        let (_, page) = page.expect("a satellite");
+        self.cx
+            .update(|cx| page.read(cx).model().title().to_string_lossy())
+    }
+
+    fn frames(&mut self, window: WindowId, count: usize) {
+        let handle = self.cx.update(|cx| Windows::handle(cx, window));
+        let handle = handle.expect("open");
+        for _ in 0..count {
+            self.cx
+                .update_window(handle, |_, window, cx| window.simulate_next_frame(cx))
+                .expect("open");
+            self.settle();
+        }
     }
 
     fn close(&mut self, window: WindowId) {
@@ -276,6 +318,135 @@ fn in_a_fresh_home() {
     accelerators_reach_the_window_they_were_pressed_in(&mut app, hub);
     let hub = windows_open_and_close(&mut app, hub);
     layouts_round_trip(&mut app, hub);
+    satellites_open_close_and_round_trip(&mut app);
+}
+
+const SAVED: &str = r##"{"hubs":[{"x":100,"y":80,"width":1000,"height":600,"state":{"sidebar":{"width":300,"expanded":[]},"tabs":{"selected":1,"tabs":[{"type":0,"title":"","controller":null,"controllerUUID":"documentation","renderer":"","controlsHeight":0},{"type":2,"title":"Field","controller":{"sources":[],"field":"FRC:Evergreen","orientation":0,"size":"large"},"controllerUUID":"fieldtab","renderer":null,"controlsHeight":200}]}}}],"satellites":[{"x":300,"y":200,"width":640,"height":480,"state":{"type":2,"visualizer":{"zoom":1.5,"pan":[0.25,-0.5],"trackingMode":0,"isFTC":false}},"uuid":"fieldtab"},{"x":320,"y":220,"width":500,"height":300,"state":{"type":4,"visualizer":null},"uuid":"gone"}]}"##;
+
+#[test]
+#[ignore = "run by saved_windows_open_at_launch with its own home directory"]
+fn with_saved_windows() {
+    let Some(home) = std::env::var_os(HOME) else {
+        return;
+    };
+    let user_data = lifecycle::user_data_dir(Platform::current(), |name| std::env::var(name).ok())
+        .expect("a user-data directory");
+    std::fs::create_dir_all(&user_data).expect("user data");
+    let file = Path::new(&user_data).join("state-dev.json");
+    std::fs::write(&file, SAVED).expect("state");
+    let mut app = AppUnderTest::start(PathBuf::from(home));
+    let [hub] = app.hubs()[..] else {
+        panic!("{:?}", app.hubs());
+    };
+    let satellites = app.satellites();
+    let [field, table] = satellites[..] else {
+        panic!("{satellites:?}");
+    };
+    let rect = |x, y, width, height| Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    assert_eq!(app.bounds(hub), rect(100.0, 80.0, 1000.0, 600.0));
+    assert_eq!(app.bounds(field), rect(300.0, 200.0, 640.0, 480.0));
+    assert_eq!(app.bounds(table), rect(320.0, 220.0, 500.0, 300.0));
+    assert_eq!(app.active_satellites(hub), ["fieldtab", "gone"]);
+
+    // A change elsewhere has the tracker write the windows again, and the satellites' part of the
+    // file comes back byte for byte.
+    app.click(Command::NewTab(TabType::Metadata), &[]);
+    app.cx.advance_clock(Duration::from_secs(2));
+    app.settle();
+    let written = std::fs::read_to_string(&file).expect("state");
+    assert_ne!(written, SAVED);
+    let satellites =
+        |text: &str| text[text.find("\"satellites\"").expect("satellites")..].to_owned();
+    assert_eq!(satellites(written.trim_end()), satellites(SAVED));
+}
+
+fn satellites_open_close_and_round_trip(app: &mut AppUnderTest) {
+    let [other, hub] = app.hubs()[..] else {
+        panic!("{:?}", app.hubs());
+    };
+    app.close(other);
+    app.focus(hub);
+    app.click(Command::NewTab(TabType::Table), &[]);
+    let uuid = app.hub(hub, |hub| {
+        let tabs = hub.tabs();
+        let selected = tabs.selected_index().expect("a selected tab");
+        tabs.tab(selected).expect("it").uuid().clone()
+    });
+    let uuid = uuid.as_str().expect("a UUID").to_string_lossy();
+    assert!(app.satellites().is_empty());
+    for _ in 0..2 {
+        assert!(app.click(Command::NewPopOut, &[]).is_empty());
+    }
+    let satellites = app.satellites();
+    let [first, second] = satellites[..] else {
+        panic!("{satellites:?}");
+    };
+    let (from, to) = (app.bounds(hub), app.bounds(first));
+    assert_eq!((to.width, to.height), (900.0, 500.0));
+    assert_eq!(to.x, (from.x + from.width / 2.0 - 450.0).floor());
+    assert_eq!(app.active_satellites(hub), [uuid.as_str()]);
+
+    app.frames(hub, 3);
+    assert_eq!(app.title(first), "\u{1f522} Table \u{2014} AdvantageScope");
+    assert_eq!(app.title(second), app.title(first));
+
+    let file = app.home.join("satellites.json");
+    app.cx.advance_clock(Duration::from_secs(2));
+    app.settle();
+    let mut export = |app: &mut AppUnderTest| {
+        let _ = std::fs::remove_file(&file);
+        app.click(Command::ExportLayout, &[Reply::Save(Some(file.clone()))]);
+        std::fs::read(&file).expect("the exported layout")
+    };
+    let exported = export(app);
+    let layout = json_file::parse(&exported).expect("JSON");
+    let saved = layout.get("satellites").and_then(JsValue::as_array);
+    let saved = saved.expect("satellites");
+    assert_eq!(saved.len(), 2);
+    for satellite in saved {
+        assert_eq!(satellite.get("uuid"), Some(&JsValue::string(&uuid)));
+        let state = satellite.get("state").expect("state");
+        assert_eq!(state.get("type"), Some(&JsValue::Number(4.0)));
+    }
+
+    // "Close Tab" on a satellite destroys its window; the other still shows the tab.
+    app.focus(second);
+    app.click(Command::CloseTab, &[]);
+    assert_eq!(app.satellites(), [first]);
+    assert_eq!(app.active_satellites(hub), [uuid.as_str()]);
+    app.focus(first);
+    app.click(Command::CloseWindow, &[]);
+    assert!(app.satellites().is_empty());
+    assert!(app.active_satellites(hub).is_empty());
+
+    let import = std::env::temp_dir().join(format!("asrs-layout-{}.json", std::process::id()));
+    std::fs::write(&import, &exported).expect("a layout");
+    app.focus(hub);
+    let shown = app.click(Command::ImportLayout, &[open(&[&import])]);
+    let _ = std::fs::remove_file(&import);
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    let hubs = app.hubs();
+    let [restored] = hubs[..] else {
+        panic!("{hubs:?}");
+    };
+    assert_ne!(restored, hub);
+    assert_eq!(app.satellites().len(), 2);
+    assert_eq!(app.active_satellites(restored), [uuid.as_str()]);
+    app.cx.advance_clock(Duration::from_secs(2));
+    app.settle();
+    app.focus(restored);
+    assert_eq!(export(app), exported);
+
+    app.close(restored);
+    app.cx.advance_clock(Duration::from_secs(2));
+    app.settle();
+    assert!(app.hubs().is_empty());
+    assert_eq!(app.satellites().len(), 2, "satellites outlive their hub");
 }
 
 fn messages_reach_the_focused_hub(app: &mut AppUnderTest, hub: WindowId) {

@@ -1,0 +1,511 @@
+{
+  "about": "Interaction (U23): swerve, points and joysticks tabs popped out one after another and shown together with the hub's own tab, which is the only one it renders itself; every satellite follows the selected time. Swerve and points lock their windows' aspect ratios, and a 960x100 points tab's ratio is cut to 5; state.json at the end holds the four windows' sizes",
+  "userData": {
+    "userAssets/Joystick_ParityPad/config.json": {
+      "name": "Parity Pad",
+      "components": [
+        {
+          "type": "joystick",
+          "isYellow": false,
+          "centerPx": [
+            200,
+            180
+          ],
+          "radiusPx": 55,
+          "niXSourceIndex": 0,
+          "niXSourceInverted": false,
+          "niYSourceIndex": 1,
+          "niYSourceInverted": true,
+          "niButtonSourceIndex": 9,
+          "sdlXSourceIndex": 0,
+          "sdlYSourceIndex": 1,
+          "sdlButtonSourceIndex": 8
+        },
+        {
+          "type": "joystick",
+          "isYellow": true,
+          "centerPx": [
+            470,
+            250
+          ],
+          "radiusPx": 45,
+          "niXSourceIndex": 4,
+          "niYSourceIndex": 5,
+          "sdlXSourceIndex": 4,
+          "sdlYSourceIndex": 5
+        },
+        {
+          "type": "button",
+          "isYellow": true,
+          "isEllipse": true,
+          "centerPx": [
+            600,
+            130
+          ],
+          "sizePx": [
+            40,
+            40
+          ],
+          "niSourceIndex": 1,
+          "sdlSourceIndex": 0
+        },
+        {
+          "type": "button",
+          "isYellow": false,
+          "isEllipse": true,
+          "centerPx": [
+            645,
+            175
+          ],
+          "sizePx": [
+            40,
+            40
+          ],
+          "niSourceIndex": 2,
+          "sdlSourceIndex": 1
+        },
+        {
+          "type": "button",
+          "isYellow": false,
+          "isEllipse": false,
+          "centerPx": [
+            600,
+            220
+          ],
+          "sizePx": [
+            44,
+            30
+          ],
+          "niSourceIndex": 3,
+          "sdlSourceIndex": 2
+        },
+        {
+          "type": "button",
+          "isYellow": true,
+          "isEllipse": false,
+          "centerPx": [
+            290,
+            250
+          ],
+          "sizePx": [
+            26,
+            26
+          ],
+          "niSourceIndex": 0,
+          "niSourcePov": "up",
+          "sdlSourceIndex": 0,
+          "sdlSourcePov": "up"
+        },
+        {
+          "type": "axis",
+          "isYellow": true,
+          "centerPx": [
+            130,
+            90
+          ],
+          "sizePx": [
+            110,
+            22
+          ],
+          "niSourceIndex": 2,
+          "niSourceRange": [
+            0,
+            1
+          ],
+          "sdlSourceIndex": 2,
+          "sdlSourceRange": [
+            -1,
+            1
+          ]
+        },
+        {
+          "type": "axis",
+          "isYellow": false,
+          "centerPx": [
+            380,
+            130
+          ],
+          "sizePx": [
+            24,
+            80
+          ],
+          "niSourceIndex": 3,
+          "niSourceRange": [
+            1,
+            0
+          ],
+          "sdlSourceIndex": 3,
+          "sdlSourceRange": [
+            -1,
+            1
+          ]
+        },
+        {
+          "type": "touchpad",
+          "isYellow": false,
+          "centerPx": [
+            380,
+            230
+          ],
+          "sizePx": [
+            90,
+            60
+          ],
+          "sdlSourceIndex": 0
+        }
+      ]
+    },
+    "userAssets/Joystick_ParityPad/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 9,
+              "title": "Swerve",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "moduleVelocities",
+                    "logKey": "/Swerve/Modules",
+                    "logType": "SwerveModuleState[]",
+                    "visible": true,
+                    "options": {
+                      "color": "#ff0000",
+                      "arrangement": "0,1,2,3"
+                    }
+                  }
+                ],
+                "maxSpeed": 4.5,
+                "sizeX": 0.7,
+                "sizeY": 0.5,
+                "orientation": 0
+              },
+              "controllerUUID": "swerve00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 11,
+              "title": "Points",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "plus",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "medium",
+                      "groupSize": "2"
+                    }
+                  },
+                  {
+                    "type": "cross",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "small",
+                      "groupSize": "0"
+                    }
+                  },
+                  {
+                    "type": "crossSplit",
+                    "logKey": "/Vision/ListX",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "x",
+                      "size": "large",
+                      "groupSize": "1"
+                    }
+                  },
+                  {
+                    "type": "component",
+                    "logKey": "/Vision/ListY",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "y"
+                    }
+                  }
+                ],
+                "width": 960,
+                "height": 720,
+                "orientation": "xr,yu",
+                "origin": "ll"
+              },
+              "controllerUUID": "points00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 11,
+              "title": "Wide",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "plus",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "medium",
+                      "groupSize": "2"
+                    }
+                  },
+                  {
+                    "type": "cross",
+                    "logKey": "/Vision/Corners",
+                    "logType": "Translation2d[]",
+                    "visible": true,
+                    "options": {
+                      "size": "small",
+                      "groupSize": "0"
+                    }
+                  },
+                  {
+                    "type": "crossSplit",
+                    "logKey": "/Vision/ListX",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "x",
+                      "size": "large",
+                      "groupSize": "1"
+                    }
+                  },
+                  {
+                    "type": "component",
+                    "logKey": "/Vision/ListY",
+                    "logType": "NumberArray",
+                    "visible": true,
+                    "options": {
+                      "component": "y"
+                    }
+                  }
+                ],
+                "width": 960,
+                "height": 100,
+                "orientation": "xr,yu",
+                "origin": "ll"
+              },
+              "controllerUUID": "pointswide0000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "Parity Pad",
+                "None",
+                "None",
+                "None",
+                "None",
+                "None"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "swerve",
+      "probes": [
+        ".swerve-canvas-container",
+        ".swerve-canvas"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "move-tab",
+      "data": 1
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "points",
+      "probes": [
+        ".points-background-container",
+        ".points-background"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "move-tab",
+      "data": 1
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 2
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "points-wide",
+      "probes": [
+        ".points-background-container",
+        ".points-background"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "move-tab",
+      "data": 1
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 3
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "joysticks",
+      "probes": [
+        ".joysticks-canvas"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        1.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "swerve-later",
+      "probes": [
+        ".swerve-canvas"
+      ]
+    },
+    {
+      "prompt": "satellite",
+      "index": 3
+    },
+    {
+      "capture": "joysticks-later",
+      "probes": []
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "hub",
+      "probes": []
+    }
+  ]
+}
