@@ -70,8 +70,6 @@ pub struct BarOptions {
     pub background: String,
     pub border: String,
     shared: bool,
-    background_animation: Option<AnimationRef>,
-    border_animation: Option<AnimationRef>,
 }
 
 type OptionsRef = Rc<RefCell<BarOptions>>;
@@ -81,8 +79,6 @@ fn bar_options(background: String, border: String, shared: bool) -> OptionsRef {
         background,
         border,
         shared,
-        background_animation: None,
-        border_animation: None,
     }))
 }
 
@@ -93,6 +89,10 @@ pub struct Bar {
     pub width: f64,
     pub height: f64,
     options: OptionsRef,
+    /// The `$animations` of the bar's own options. Kept on the bar because an animation holds
+    /// the options it changes, so options holding their animations would never be freed.
+    background_animation: Option<AnimationRef>,
+    border_animation: Option<AnimationRef>,
 }
 
 pub type BarRef = Rc<RefCell<Bar>>;
@@ -306,28 +306,23 @@ impl Meta {
             let t = target.borrow();
             (t.background.clone(), t.border.clone())
         };
-        let mut running = own.borrow().border_animation.clone();
         let on = own.clone();
         animation::animate(
-            &mut running,
+            &mut bar.border_animation,
             HOVER,
             || Target::Border(on),
             Value::Color(border),
             now,
             &mut created,
         );
-        own.borrow_mut().border_animation = running;
-        let mut running = own.borrow().background_animation.clone();
-        let on = own.clone();
         animation::animate(
-            &mut running,
+            &mut bar.background_animation,
             HOVER,
-            || Target::Background(on),
+            || Target::Background(own),
             Value::Color(background),
             now,
             &mut created,
         );
-        own.borrow_mut().background_animation = running;
         created
     }
 }
@@ -802,6 +797,8 @@ impl Chart {
                 width: f64::NAN,
                 height: f64::NAN,
                 options: meta.default_options(),
+                background_animation: None,
+                border_animation: None,
             })));
         }
         *meta.parsed.borrow_mut() = parsed;
@@ -1330,4 +1327,151 @@ fn set_box(scale: &mut Scale, left: f64, top: f64, width: Option<f64>, height: O
     scale.bottom = top + height;
     scale.width = width;
     scale.height = height;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Weak;
+
+    use asrs_canvas::text::FixedAdvance;
+
+    use super::*;
+    use crate::histogram::{Histogram, HistogramCommand, HistogramField};
+
+    const FRAME: f64 = 16.0;
+
+    struct Page {
+        histogram: Histogram,
+        now: f64,
+    }
+
+    impl Page {
+        fn new() -> Page {
+            let mut page = Page {
+                histogram: Histogram::new(1.0),
+                now: 0.0,
+            };
+            page.run(|h, env| h.attach((400.0, 300.0), env)).unwrap();
+            page.update_data(0.0);
+            page
+        }
+
+        fn run<T>(&mut self, body: impl FnOnce(&mut Histogram, &mut Env<'_>) -> T) -> T {
+            let mut env = Env {
+                text: &mut FixedAdvance,
+                now: self.now,
+            };
+            body(&mut self.histogram, &mut env)
+        }
+
+        fn update_data(&mut self, change_counter: f64) {
+            let command = HistogramCommand {
+                change_counter,
+                bins: vec![0.0, 1.0],
+                step_size: 1.0,
+                fields: vec![HistogramField {
+                    title: JsString::from("a"),
+                    color: "#2b66a2".to_owned(),
+                    counts: vec![2.0, 3.0],
+                }],
+            };
+            self.run(|h, env| h.render(&command, false, env)).unwrap();
+        }
+
+        fn frame(&mut self) {
+            self.now += FRAME;
+            self.run(|h, env| h.frame(env)).unwrap();
+        }
+
+        /// Runs frames until none is requested and returns how many ran.
+        fn settle(&mut self) -> usize {
+            let mut frames = 0;
+            while self.histogram.callbacks() > 0 {
+                self.frame();
+                frames += 1;
+                assert!(frames < 1000, "the animations never finish");
+            }
+            assert!(!self.histogram.chart.animator.has_items());
+            frames
+        }
+
+        /// Moves the pointer onto the first bar and returns the bar's own options.
+        fn hover(&mut self) -> Weak<RefCell<BarOptions>> {
+            let [x, y, base, ..] = self.histogram.bars()[0][0];
+            self.histogram
+                .pointer(EventKind::MouseMove, x, (y + base) / 2.0);
+            self.frame();
+            let chart = &self.histogram.chart;
+            assert!(chart.animator.has_items());
+            let options = chart.active[0].element.borrow().options.clone();
+            assert!(!options.borrow().shared);
+            Rc::downgrade(&options)
+        }
+    }
+
+    fn animations_outlast(frames: usize) -> bool {
+        frames as f64 * FRAME >= HOVER.duration
+    }
+
+    fn background(options: &Weak<RefCell<BarOptions>>) -> String {
+        let options = options.upgrade().expect("live options");
+        options.borrow().background.clone()
+    }
+
+    #[test]
+    fn a_replaced_bar_with_finished_animations_is_freed() {
+        let mut page = Page::new();
+        let options = page.hover();
+        assert!(animations_outlast(page.settle()));
+        assert!(options.upgrade().is_some());
+        page.update_data(1.0);
+        assert!(options.upgrade().is_none());
+    }
+
+    #[test]
+    fn a_replaced_bar_keeps_animating_and_is_freed_when_it_finishes() {
+        let mut page = Page::new();
+        let options = page.hover();
+        page.frame();
+        let before = background(&options);
+        page.update_data(1.0);
+        page.frame();
+        assert_ne!(background(&options), before);
+        let chart = &page.histogram.chart;
+        let current = Rc::downgrade(&chart.active[0].element.borrow().options);
+        assert!(!current.ptr_eq(&options));
+        assert!(animations_outlast(page.settle() + 1));
+        assert!(options.upgrade().is_none());
+        assert!(current.upgrade().is_some());
+    }
+
+    #[test]
+    fn repeated_updates_under_the_pointer_free_every_replaced_bar() {
+        let mut page = Page::new();
+        let mut replaced = vec![page.hover()];
+        for change_counter in 1..20 {
+            page.update_data(f64::from(change_counter));
+            let bar = page.histogram.chart.active[0].element.clone();
+            replaced.push(Rc::downgrade(&bar.borrow().options));
+            page.frame();
+        }
+        page.settle();
+        let current = replaced.pop().unwrap();
+        assert!(current.upgrade().is_some());
+        assert!(replaced.iter().all(|o| o.upgrade().is_none()));
+    }
+
+    #[test]
+    fn a_dropped_chart_frees_its_bars() {
+        for finished in [true, false] {
+            let mut page = Page::new();
+            let options = page.hover();
+            if finished {
+                page.settle();
+            }
+            assert!(options.upgrade().is_some());
+            drop(page);
+            assert!(options.upgrade().is_none(), "finished: {finished}");
+        }
+    }
 }
