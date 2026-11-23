@@ -208,7 +208,7 @@ impl DownloadWindow {
     ) {
         self.measure(window);
         if let Err(e) = self.page.message(message, now_ms) {
-            eprintln!("asrs: download window: {}: {}", e.name, e.message);
+            cx.emit(PageEvent::Error(e));
         }
         self.changed(window, cx);
     }
@@ -333,7 +333,7 @@ impl DownloadWindow {
 
     fn click_row(&mut self, index: usize, shift: bool, cx: &mut Context<'_, Self>) {
         if let Err(e) = self.page.click(index, shift) {
-            eprintln!("asrs: download window: {}: {}", e.name, e.message);
+            cx.emit(PageEvent::Error(e));
         }
         cx.notify();
     }

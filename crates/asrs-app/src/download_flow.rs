@@ -52,6 +52,12 @@ pub fn view(cx: &App) -> Option<Entity<DownloadWindow>> {
     downloads.window.as_ref().map(|(_, view)| view.clone())
 }
 
+/// What an event of the service does, for tests.
+#[cfg(feature = "parity")]
+pub fn deliver(event: DownloadEvent, cx: &mut App) {
+    handle(event, cx);
+}
+
 fn config(cx: &App) -> DownloadConfig {
     #[cfg(feature = "parity")]
     if let Some(&RobotPort(port)) = cx.try_global::<RobotPort>() {
@@ -97,7 +103,7 @@ fn with_service(cx: &App, f: impl FnOnce(&DownloadService)) {
 }
 
 /// `openDownload(parent)`.
-pub fn open(parent: WindowId, cx: &mut App) {
+pub(crate) fn open(parent: WindowId, cx: &mut App) {
     if let Err(e) = start(cx) {
         eprintln!("asrs: starting the download service: {e}");
         return;
@@ -142,7 +148,7 @@ fn on_closed(id: WindowId, cx: &mut App) {
 }
 
 /// The download window's `set-preferences` in `sendAllPreferences`.
-pub fn send_preferences(preferences: &Preferences, cx: &mut App) {
+pub(crate) fn send_preferences(preferences: &Preferences, cx: &mut App) {
     let Some((_, view)) = cx
         .try_global::<Downloads>()
         .and_then(|downloads| downloads.window.clone())
@@ -152,7 +158,7 @@ pub fn send_preferences(preferences: &Preferences, cx: &mut App) {
     view.update(cx, |view, cx| view.set_preferences(preferences, cx));
 }
 
-pub fn stop(cx: &App) {
+pub(crate) fn stop(cx: &App) {
     with_service(cx, DownloadService::stop);
 }
 
@@ -168,6 +174,7 @@ fn page_event(event: &PageEvent, id: WindowId, cx: &mut App) {
             with_service(cx, |service| service.save(files));
         }
         PageEvent::Alert(message) => prompts::alert((*message).to_owned(), id, cx),
+        PageEvent::Error(error) => eprintln!("asrs: the download window: {error:?}"),
     }
 }
 

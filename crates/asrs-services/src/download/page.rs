@@ -28,6 +28,8 @@ pub enum PageEvent {
     Save(Vec<Option<String>>),
     /// `alert(message)`.
     Alert(&'static str),
+    /// An exception thrown out of an event handler.
+    Error(JsError),
 }
 
 /// The `img` of a file's row.

@@ -254,7 +254,7 @@ const STATE_SCRIPT = `(() => {
     loading: !list.children[1].hidden,
     overflow: list.style.overflow || "hidden",
     scrollTop: list.scrollTop,
-    alert: alert.hidden ? null : { text: alert.innerText, underlined: Array.from(alert.querySelectorAll("u"), (u) => u.innerText) },
+    alert: alert.hidden ? null : { text: alert.innerText, underlined: Array.from(alert.querySelectorAll("u"), (u) => u.innerText).filter((text) => text !== "") },
     progress: progress.hidden ? null : { value: progress.value, details: details.hidden ? null : details.innerText },
     active: active === null || active === document.body ? null : active.id !== "" ? active.id : active.className,
     blurred: Array.from(document.getElementsByTagName("button"), (b) => b.classList.contains("blurred")),

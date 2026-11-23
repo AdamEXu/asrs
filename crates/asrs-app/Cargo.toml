@@ -109,3 +109,8 @@ required-features = ["parity"]
 [[test]]
 name = "export_flow"
 required-features = ["parity"]
+
+[[test]]
+name = "download_window"
+harness = false
+required-features = ["parity"]
