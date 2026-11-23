@@ -245,6 +245,10 @@ impl RangeModel for Range {
     fn value_at(&self, proportion: f64) -> String {
         asrs_js::number::to_string(self.min + proportion * (self.max - self.min))
     }
+
+    fn value_for_key(&self, _: &str) -> Option<String> {
+        None
+    }
 }
 
 /// The select scenes are parsed markup: the option with `selected`, else the first enabled
@@ -394,8 +398,8 @@ fn part(
             };
             let container_height = rect[3];
             return Part::View(
-                cx.new(|_| {
-                    let mut slider = Slider::new(model, SliderStyle::VIDEO_TIMELINE);
+                cx.new(|cx| {
+                    let mut slider = Slider::new(model, SliderStyle::VIDEO_TIMELINE, cx);
                     slider.set_clip(VIDEO_TIMELINE_RADIUS, container_height);
                     slider
                 })

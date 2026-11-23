@@ -457,6 +457,15 @@
     "src/genProto.ts",
     "src/shims.ts"
   ],
+  "genRangePointer": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genRangePointer.ts",
+    "src/shims.ts"
+  ],
+  "genRangePointerMain": [
+    "src/genRangePointerMain.ts"
+  ],
   "genRegex": [
     "src/consoleExport.ts",
     "src/cve1.ts",

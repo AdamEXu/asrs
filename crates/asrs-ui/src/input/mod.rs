@@ -19,5 +19,7 @@ pub use select::{
     Select, SelectEvent, SelectGeometry, SelectItem, SelectKey, SelectModel, SelectState,
     geometry as select_geometry, paint_select, popup_menu, select_key,
 };
-pub use slider::{Slider, SliderEvent, pointer_proportion, thumb_offset};
+pub use slider::{
+    RangeControl, Slider, SliderEvent, SliderTrack, pointer_proportion, thumb_offset,
+};
 pub use style::{FieldStyle, Frame, SliderStyle, SplitStyle};
