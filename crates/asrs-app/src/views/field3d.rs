@@ -355,7 +355,7 @@ fn ease_in_out(t: f64) -> f64 {
 }
 
 /// `KeyboardEvent.code` for the key GPUI reports.
-fn key_code(key: &str) -> String {
+pub(super) fn key_code(key: &str) -> String {
     let mut chars = key.chars();
     match (chars.next(), chars.next()) {
         (Some(c), None) if c.is_ascii_alphabetic() => format!("Key{}", c.to_ascii_uppercase()),
@@ -832,7 +832,9 @@ impl<H: FrameHost> HubFrame<H> {
         let dark = appearance == Appearance::Dark;
         let now = self.host().frame_time(cx);
 
-        let extra = if dom.container_fixed {
+        let extra = if hub.page().is_satellite() {
+            0.0
+        } else if dom.container_fixed {
             CONTAINER_EXTRA_FIXED
         } else {
             CONTAINER_EXTRA
@@ -1137,11 +1139,11 @@ impl<H: FrameHost> HubFrame<H> {
         key: &str,
         down: bool,
         command_modifier: bool,
+        editable: bool,
         cx: &mut Context<'_, Self>,
     ) {
         let code = key_code(key);
         let shown = self.field3d.shown;
-        let editable = self.console.editing() || self.host().editable_focused(cx);
         let tabs = field3d_tabs(self.host().hub(cx));
         self.host_mut().input(cx, |hub| {
             for (index, _) in tabs {
@@ -1161,18 +1163,28 @@ impl<H: FrameHost> HubFrame<H> {
         });
     }
 
-    pub(super) fn field3d_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<'_, Self>) {
+    pub(super) fn field3d_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        editable: bool,
+        cx: &mut Context<'_, Self>,
+    ) {
         let m = event.keystroke.modifiers;
         let command = if cfg!(target_os = "macos") {
             m.platform
         } else {
             m.control
         };
-        self.field3d_key(&event.keystroke.key, true, command, cx);
+        self.field3d_key(&event.keystroke.key, true, command, editable, cx);
     }
 
-    pub(super) fn field3d_key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<'_, Self>) {
-        self.field3d_key(&event.keystroke.key, false, false, cx);
+    pub(super) fn field3d_key_up(
+        &mut self,
+        event: &KeyUpEvent,
+        editable: bool,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.field3d_key(&event.keystroke.key, false, false, editable, cx);
     }
 
     /// `div.field-3d-settings` over the right of `controls` (`div.controls-content`).

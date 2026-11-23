@@ -254,14 +254,23 @@ function hostModifiers(names: string[] = []): string[] {
   return names.map((name) => (name !== "commandOrControl" ? name : process.platform === "darwin" ? "meta" : "control"));
 }
 
-async function switchPrompt(name: string | null, width?: number, height?: number) {
+function isSatellite(win: BrowserWindow): boolean {
+  return new URL(win.webContents.getURL() || "about:blank").pathname.endsWith("/www/satellite.html");
+}
+
+async function switchPrompt(name: string | null, index: number, width?: number, height?: number) {
+  if (name === "hub") {
+    if (prompt !== null && !prompt.isDestroyed() && !isSatellite(prompt)) throw new Error("the prompt is still open");
+    prompt = null;
+    return;
+  }
   if (name === null) {
     await until("the prompt to close", READY_TIMEOUT_MS, async () => prompt === null || prompt.isDestroyed());
     prompt = null;
     return;
   }
   prompt = await until(`the ${name} prompt`, READY_TIMEOUT_MS, async () => {
-    const win = windows.find((w) => !w.isDestroyed() && new URL(w.webContents.getURL() || "about:blank").pathname.endsWith(`/www/${name}.html`));
+    const win = windows.filter((w) => !w.isDestroyed() && new URL(w.webContents.getURL() || "about:blank").pathname.endsWith(`/www/${name}.html`))[index];
     if (win === undefined || win.webContents.isLoading() || !win.isVisible()) return false;
     return win;
   });
@@ -305,6 +314,8 @@ app.on("browser-window-created", (_event, win) => {
       target = win;
       placeWindow(win);
     }
+    // Windows of other apps can cover a satellite, which hides its page and stops its frames.
+    if (event.isMainFrame && /\/www\/satellite\.html$/.test(new URL(event.url).pathname)) win.webContents.setBackgroundThrottling(false);
   });
 });
 
@@ -330,6 +341,8 @@ async function waitIdle() {
   let last: string[] = [];
   await until("the page to go idle", IDLE_TIMEOUT_MS, async () => {
     last = await exec<string[]>(call(busyReasons));
+    const win = active();
+    if (win !== target && isSatellite(win)) last = last.concat(await exec<string[]>(call(busyReasons), win));
     return last.length === 0;
   }).catch((e) => {
     throw new Error(`${e.message} (busy: ${last.join(", ")})`);
@@ -430,10 +443,12 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
   let hubState: string | undefined;
   let timelineRange: number[] | undefined;
   if (scenario.page === "app") {
-    const saves = await exec<number>("window.__asrsParity.saves()");
-    await until(`capture ${name}: a save-state after the capture`, STATE_SAVE_TIMEOUT_MS, async () => (await exec<number>("window.__asrsParity.saves()")) > saves);
+    // A satellite's capture has the state the satellite saved.
+    const page = win !== target && isSatellite(win) ? win : target!;
+    const saves = await exec<number>("window.__asrsParity.saves()", page);
+    await until(`capture ${name}: a save-state after the capture`, STATE_SAVE_TIMEOUT_MS, async () => (await exec<number>("window.__asrsParity.saves()", page)) > saves);
     hubState = `${name}.hub-state.json`;
-    fs.writeFileSync(path.join(capturesDir, hubState), await exec<string>("window.__asrsParity.savedState()"));
+    fs.writeFileSync(path.join(capturesDir, hubState), await exec<string>("window.__asrsParity.savedState()", page));
     timelineRange = await exec<number[]>("window.selection.getTimelineRange()");
   }
 
@@ -579,7 +594,7 @@ async function perform(action: Action) {
   } else if ("appMenu" in action) {
     clickAppMenu(action.appMenu);
   } else if ("prompt" in action) {
-    await switchPrompt(action.prompt, action.width, action.height);
+    await switchPrompt(action.prompt, action.index ?? 0, action.width, action.height);
   } else if ("download" in action) {
     await until(`the download window to show ${JSON.stringify(action.download)}`, READY_TIMEOUT_MS, () => exec<boolean>(call(downloadShows, action.download), active()));
   } else if ("capture" in action) {
@@ -630,6 +645,8 @@ async function openColourPatch() {
   await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(patchPageHtml()));
 }
 
+let performing = "startup";
+
 async function run() {
   const started = Date.now();
   if (scenario.page === "colour-patch") {
@@ -639,6 +656,7 @@ async function run() {
     await until("the hub window", READY_TIMEOUT_MS, async () => target !== null && !target.webContents.isLoading() && target.isVisible() && (await exec<boolean>(call(hubReady))));
   }
   for (const [i, action] of scenario.actions.entries()) {
+    performing = `action ${i} (${actionKind(action)})`;
     try {
       await perform(action);
     } catch (e) {
@@ -710,7 +728,7 @@ app.whenReady().then(() => {
   const preload = path.join(out, "tap-preload.js");
   fs.writeFileSync(preload, `require("electron").contextBridge.executeInMainWorld({ func: ${installTap.toString()}, args: [${scenario.gl}] });\n`);
   session.defaultSession.registerPreloadScript({ type: "frame", id: "asrs-parity-tap", filePath: preload });
-  const timer = setTimeout(() => finish(null, new Error(`run did not finish within ${RUN_TIMEOUT_MS / 1000} s`)), RUN_TIMEOUT_MS);
+  const timer = setTimeout(() => finish(null, new Error(`run did not finish within ${RUN_TIMEOUT_MS / 1000} s (in ${performing})`)), RUN_TIMEOUT_MS);
   run().then(
     (elapsed) => {
       clearTimeout(timer);

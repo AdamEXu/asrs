@@ -110,13 +110,16 @@ pub enum Action {
     AppMenu {
         labels: Vec<String>,
     },
-    /// Sends input and captures to the prompt window of this page, or back to the hub once the
-    /// prompt has closed.
+    /// Sends input and captures to the `index`th open window of this page, or back to the hub
+    /// once the prompt has closed.
     Prompt {
         page: Option<WindowKind>,
+        index: usize,
         /// The content size the prompt is given.
         size: Option<(f64, f64)>,
     },
+    /// Sends input and captures back to the hub, with satellites left open.
+    Hub,
     /// Waits until the download window shows this.
     Download(DownloadShows),
     Capture {
@@ -338,7 +341,9 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
         "appMenu" => Action::AppMenu {
             labels: strings(Some(value), "appMenu")?,
         },
+        "prompt" if text().as_deref() == Some("hub") => Action::Hub,
         "prompt" => Action::Prompt {
+            index: number(action, "index", Some(0.0))? as usize,
             page: match text().as_deref() {
                 Some("editRange") => Some(WindowKind::EditRange),
                 Some("editFov") => Some(WindowKind::EditFov),
@@ -347,6 +352,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("export") => Some(WindowKind::Export),
                 Some("preferences") => Some(WindowKind::Preferences),
                 Some("download") => Some(WindowKind::Download),
+                Some("satellite") => Some(WindowKind::Satellite),
                 None if value.is_null() => None,
                 other => return Err(format!("unknown prompt page {other:?}")),
             },
@@ -582,6 +588,7 @@ mod tests {
                 Action::Download(DownloadShows::Progress(0.5)),
                 Action::Prompt {
                     page: Some(WindowKind::Download),
+                    index: 0,
                     size: Some((500.0, 472.0))
                 },
                 Action::Mouse {
@@ -624,6 +631,7 @@ mod tests {
             s.actions[9],
             Action::Prompt {
                 page: Some(WindowKind::UnitConversion),
+                index: 0,
                 size: None
             }
         );
@@ -631,6 +639,7 @@ mod tests {
             s.actions[10],
             Action::Prompt {
                 page: None,
+                index: 0,
                 size: None
             }
         );

@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
+use asrs_js::math;
 use asrs_js::ops;
 use asrs_js::string::JsError;
 use asrs_js::time::{Clock, NamedZone, SystemClock};
-use asrs_js::value::{JsValue, ToJs};
-use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_model::messages::{HubToMain, MainToHub, MainToSatellite, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::{Preferences, Theme};
 use asrs_services::asset_downloader;
 use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
@@ -35,9 +36,11 @@ use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
 use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
-use crate::views::hub_host::{HubEntityHost, boot_messages};
+use crate::satellite::{Satellite, SatelliteEvent};
+use crate::views::hub_host::{HubEntityHost, boot_messages, show_satellite_menu};
 use crate::views::prompts;
-use crate::windows::{self, Rect, WindowId, Windows};
+use crate::views::satellite_host::SatelliteHost;
+use crate::windows::{self, Rect, SatellitePlacement, WindowId, Windows};
 
 /// `app.isPackaged`: set by `cargo xtask bundle`.
 pub const PACKAGED: bool = option_env!("ASRS_PACKAGED").is_some();
@@ -60,6 +63,22 @@ pub struct MainProcess {
     /// `menuTemplate`.
     menu: Vec<MenuItem>,
     hubs: Vec<(WindowId, WeakEntity<Hub>)>,
+    satellites: Vec<(WindowId, Entity<Satellite>)>,
+    /// `--random-seed` of the pages a parity scenario opens.
+    scenario_seed: Option<u64>,
+}
+
+/// `createSatellite`'s `config`.
+#[derive(Clone, Debug)]
+pub enum SatelliteConfig {
+    /// `create-satellite` from a hub window.
+    New {
+        parent: WindowId,
+        uuid: JsValue,
+        type_value: JsValue,
+    },
+    /// A saved `SatelliteWindowState`.
+    State(JsValue),
 }
 
 impl Global for MainProcess {}
@@ -139,9 +158,11 @@ struct Screens {
 impl Screens {
     fn now(cx: &App) -> Screens {
         let manager = Windows::manager(cx);
+        let satellites = manager.satellites().into_iter().flat_map(|(_, list)| list);
         let windows = manager
             .hubs()
             .iter()
+            .chain(satellites)
             .filter_map(|id| Some((*id, manager.bounds(*id)?)))
             .collect();
         let displays: Vec<Rect> = cx.displays().iter().map(|d| rect(d.bounds())).collect();
@@ -203,6 +224,25 @@ fn saved_bounds(state: &JsValue) -> Option<Rect> {
     })
 }
 
+/// `set-aspect-ratio` from a satellite: the content keeps its area at the new ratio.
+pub fn set_aspect_ratio(cx: &mut App, id: WindowId, aspect_ratio: Option<f64>, lock: bool) {
+    let Some(aspect_ratio) = aspect_ratio else {
+        windows::set_aspect_ratio(cx, id, 0.0, |_| None);
+        return;
+    };
+    let ratio = if lock { aspect_ratio } else { 0.0 };
+    windows::set_aspect_ratio(cx, id, ratio, move |size| content_size(size, aspect_ratio));
+}
+
+/// `None` where Electron refuses the size (`NaN`).
+pub fn content_size(original: (f64, f64), aspect_ratio: f64) -> Option<(f64, f64)> {
+    let area = original.0 * original.1;
+    let height = math::sqrt(area / aspect_ratio);
+    let width = aspect_ratio * height;
+    let size = (math::round(width), math::round(height));
+    (size.0.is_finite() && size.1.is_finite()).then_some(size)
+}
+
 /// `file:` URLs from the platform's open event, as paths.
 fn file_paths(urls: Vec<String>) -> Vec<String> {
     urls.into_iter()
@@ -234,11 +274,13 @@ fn file_paths(urls: Vec<String>) -> Vec<String> {
 impl MainProcess {
     /// Main in a parity scenario, which opens its hub window itself.
     #[cfg(feature = "parity")]
-    pub(crate) fn headless(state: MainState) -> MainProcess {
+    pub(crate) fn headless(state: MainState, scenario_seed: u64) -> MainProcess {
         MainProcess {
             state,
             menu: Vec::new(),
             hubs: Vec::new(),
+            satellites: Vec::new(),
+            scenario_seed: Some(scenario_seed),
         }
     }
 
@@ -290,6 +332,241 @@ impl MainProcess {
             && let Err(e) = main.state.update_recent_units(&RealFs, preset)
         {
             eprintln!("asrs: recent-units.json: {e:?}");
+        }
+    }
+
+    /// The hub's messages about satellites: `create-satellite` and `update-satellite`.
+    pub(crate) fn satellite_request(cx: &mut App, id: WindowId, event: &HubEvent) {
+        match event {
+            HubEvent::Main(message) if message.name == HubToMain::CreateSatellite => {
+                let field = |key| message.data.get(key).cloned().unwrap_or_default();
+                let config = SatelliteConfig::New {
+                    parent: id,
+                    uuid: field("uuid"),
+                    type_value: field("type"),
+                };
+                Self::open_satellite(cx, config);
+            }
+            HubEvent::SatelliteUpdate(update) => {
+                let uuid = ops::to_string(&update.uuid).to_string_lossy();
+                let satellites = Self::satellites(cx, &uuid);
+                for (window, satellite) in satellites {
+                    if Windows::is_visible(cx, window) {
+                        satellite.update(cx, |page, cx| page.render_command(update, cx));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `satelliteWindows[uuid]`.
+    fn satellites(cx: &App, uuid: &str) -> Vec<(WindowId, Entity<Satellite>)> {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return Vec::new();
+        };
+        let windows = Windows::manager(cx).satellites();
+        let windows = windows.into_iter().find(|(key, _)| key == uuid);
+        let pages = &main.satellites;
+        windows
+            .into_iter()
+            .flat_map(|(_, list)| list)
+            .filter_map(|id| pages.iter().find(|(window, _)| window == id).cloned())
+            .collect()
+    }
+
+    /// Every satellite window's page.
+    pub fn satellite_windows(cx: &App) -> Vec<(WindowId, Entity<Satellite>)> {
+        cx.try_global::<MainProcess>()
+            .map(|main| main.satellites.clone())
+            .unwrap_or_default()
+    }
+
+    fn send_satellites(cx: &mut App, name: MainToSatellite, data: &JsValue) {
+        let message = NamedMessage::new(name, data.clone());
+        for (_, satellite) in Self::satellite_windows(cx) {
+            satellite.update(cx, |page, cx| page.handle_main_message(&message, cx));
+        }
+    }
+
+    /// `stateTracker.saveSatelliteIds(satelliteWindows); sendActiveSatellites();`
+    fn satellites_changed(cx: &mut App) {
+        let mut ids = JsObject::new();
+        for (uuid, windows) in Windows::manager(cx).satellites() {
+            let windows = windows
+                .iter()
+                .map(|id| ops::object([("id", JsValue::Number(*id as f64))]))
+                .collect();
+            ids.insert(uuid.as_str(), JsValue::Array(windows));
+        }
+        if !cx.has_global::<MainProcess>() {
+            return;
+        }
+        let tracker = &mut cx.global_mut::<MainProcess>().state.tracker;
+        if let Err(e) = tracker.save_satellite_ids(&JsValue::Object(ids)) {
+            eprintln!("asrs: saveSatelliteIds: {e:?}");
+        }
+        let active = Self::active_satellites(cx);
+        for (_, hub) in Self::hub_windows(cx) {
+            Self::send(cx, &hub, MainToHub::SetActiveSatellites, active.clone());
+        }
+    }
+
+    fn active_satellites(cx: &App) -> JsValue {
+        let active = Windows::manager(cx).active_satellites();
+        JsValue::Array(active.iter().map(|uuid| JsValue::string(uuid)).collect())
+    }
+
+    /// `createSatellite(config)` with its `dom-ready` sends.
+    pub fn open_satellite(cx: &mut App, config: SatelliteConfig) -> Option<WindowId> {
+        let main = cx.try_global::<MainProcess>()?;
+        let seed = main.scenario_seed;
+        let (uuid, placement, restore) = match &config {
+            SatelliteConfig::New {
+                parent,
+                uuid,
+                type_value,
+            } => (
+                uuid.clone(),
+                SatellitePlacement::Parent(*parent),
+                NamedMessage::new(MainToSatellite::SetType, type_value.clone()),
+            ),
+            SatelliteConfig::State(saved) => {
+                let field = |key| saved.get(key).cloned().unwrap_or_default();
+                (
+                    field("uuid"),
+                    saved_bounds(saved)
+                        .map_or(SatellitePlacement::Unplaced, SatellitePlacement::Saved),
+                    NamedMessage::new(MainToSatellite::RestoreState, field("state")),
+                )
+            }
+        };
+        let boot = [
+            NamedMessage::new(
+                MainToSatellite::SetAssets,
+                main.state.assets.set_assets_data(),
+            ),
+            NamedMessage::new(MainToSatellite::SetBattery, JsValue::Bool(false)),
+            restore,
+        ];
+        let key = ops::to_string(&uuid).to_string_lossy();
+        let opened = windows::open_satellite(cx, &key, placement, |window, cx| {
+            let dark = Appearance::of(window, cx) == Appearance::Dark;
+            SatelliteHost::open(dark, &boot, seed, cx)
+        });
+        let (id, frame) = match opened {
+            Ok(opened) => opened,
+            Err(e) => {
+                eprintln!("asrs: opening a satellite window: {e}");
+                return None;
+            }
+        };
+        let satellite = frame.read(cx).host().satellite().clone();
+        cx.subscribe(&satellite, move |satellite, event, cx| match event {
+            SatelliteEvent::Main(message) => {
+                Self::satellite_message(cx, id, &uuid, satellite.downgrade(), message);
+            }
+            SatelliteEvent::Title(title) => Self::set_title(cx, id, title),
+        })
+        .detach();
+        let title = satellite.read(cx).model().title().to_string_lossy();
+        Self::set_title(cx, id, &title);
+        if let Some(handle) = Windows::handle(cx, id) {
+            let _ = handle.update(cx, |_, window, cx| {
+                window.on_window_should_close(cx, move |_, cx| {
+                    Self::before_unload(cx, id);
+                    true
+                });
+            });
+        }
+        Windows::on_closed(cx, id, move |cx| {
+            let main = cx.global_mut::<MainProcess>();
+            main.satellites.retain(|(window, _)| *window != id);
+            Self::satellites_changed(cx);
+        });
+        let main = cx.global_mut::<MainProcess>();
+        main.satellites.push((id, satellite));
+        Self::satellites_changed(cx);
+        Self::send_all_preferences(cx);
+        Some(id)
+    }
+
+    fn set_title(cx: &mut App, id: WindowId, title: &str) {
+        let title = crate::IDENTITY.window_title(title);
+        if let Some(handle) = Windows::handle(cx, id) {
+            let _ = handle.update(cx, |_, window, _| window.set_window_title(&title));
+        }
+    }
+
+    /// The page's `beforeunload` event, which `destroy()` does not fire.
+    pub fn before_unload(cx: &mut App, window: WindowId) {
+        let mut satellites = Self::satellite_windows(cx).into_iter();
+        if let Some((_, satellite)) = satellites.find(|(id, _)| *id == window) {
+            satellite.update(cx, |page, cx| page.before_unload(cx));
+        }
+    }
+
+    fn satellite_message(
+        cx: &mut App,
+        id: WindowId,
+        uuid: &JsValue,
+        satellite: WeakEntity<Satellite>,
+        message: &NamedMessage<SatelliteToMain>,
+    ) {
+        if !cx.has_global::<MainProcess>() {
+            return;
+        }
+        let data = &message.data;
+        let field = |key| data.get(key).cloned().unwrap_or_default();
+        match message.name {
+            SatelliteToMain::SetAspectRatio => set_aspect_ratio(
+                cx,
+                id,
+                field("aspectRatio").as_f64(),
+                field("lock").as_bool().unwrap_or(false),
+            ),
+            SatelliteToMain::Ask3dCamera | SatelliteToMain::Ask2dCamera => {
+                if let Some(handle) = Windows::handle(cx, id) {
+                    show_satellite_menu(handle, satellite, message, cx);
+                }
+            }
+            SatelliteToMain::AddTableRange => {
+                let range = ops::object([
+                    ("controllerUUID", uuid.clone()),
+                    ("rendererUUID", field("uuid")),
+                    ("range", field("range")),
+                ]);
+                for (_, hub) in Self::hub_windows(cx) {
+                    Self::send(cx, &hub, MainToHub::AddTableRange, range.clone());
+                }
+            }
+            SatelliteToMain::SaveState => cx
+                .global_mut::<MainProcess>()
+                .state
+                .tracker
+                .save_renderer_state(id as f64, data.clone()),
+            SatelliteToMain::UpdatePreferences => {
+                let message = NamedMessage::new(HubToMain::UpdatePreferences, data.clone());
+                let state = &mut cx.global_mut::<MainProcess>().state;
+                match state.hub_message(&RealFs, id as f64, &message) {
+                    Ok(()) => Self::send_all_preferences(cx),
+                    Err(e) => eprintln!("asrs: update-preferences: {e:?}"),
+                }
+            }
+            SatelliteToMain::CallSelectionSetter => {
+                let mut call = data.clone();
+                if let Some(call) = call.as_object_mut() {
+                    call.insert("uuid", uuid.clone());
+                }
+                for (_, hub) in Self::hub_windows(cx) {
+                    Self::send(cx, &hub, MainToHub::CallSelectionSetter, call.clone());
+                }
+            }
+            SatelliteToMain::OpenLink => {
+                if let Some(url) = data.as_str() {
+                    cx.open_url(&url.to_string_lossy());
+                }
+            }
         }
     }
 
@@ -363,6 +640,7 @@ impl MainProcess {
         for (_, hub) in Self::hub_windows(cx) {
             Self::send(cx, &hub, MainToHub::SetPreferences, data.clone());
         }
+        Self::send_satellites(cx, MainToSatellite::SetPreferences, &data);
         download_flow::send_preferences(&prefs, cx);
         let menu = &mut cx.global_mut::<MainProcess>().menu;
         if !menu.is_empty() {
@@ -479,6 +757,13 @@ impl MainProcess {
             preferences,
             Vec::new(),
         );
+        let active = Self::active_satellites(cx);
+        for message in &mut boot {
+            if message.name == MainToHub::SetActiveSatellites {
+                message.data = active.clone();
+            }
+        }
+        let main = cx.try_global::<MainProcess>()?;
         let restore = HubRestore {
             first_load: true,
             layout_override,
@@ -510,13 +795,15 @@ impl MainProcess {
         };
         let hub: Entity<Hub> = frame.read(cx).host().hub().clone();
         cx.subscribe(&hub, move |hub, event, cx| match event {
-            HubEvent::Main(message) => Self::hub_message(cx, id, message),
+            HubEvent::Main(message) if message.name != HubToMain::CreateSatellite => {
+                Self::hub_message(cx, id, message);
+            }
+            HubEvent::Main(_) | HubEvent::SatelliteUpdate(_) => {
+                Self::satellite_request(cx, id, event);
+            }
             HubEvent::Title => {
-                let title =
-                    crate::IDENTITY.window_title(&hub.read(cx).model().title().to_string_lossy());
-                if let Some(handle) = Windows::handle(cx, id) {
-                    let _ = handle.update(cx, |_, window, _| window.set_window_title(&title));
-                }
+                let title = hub.read(cx).model().title().to_string_lossy();
+                Self::set_title(cx, id, &title);
             }
             HubEvent::RecentDocument(path) => Self::opened_document(cx, &path.to_string_lossy()),
             _ => {}
@@ -634,6 +921,7 @@ impl MainProcess {
             return;
         };
         let data = main.state.assets.set_assets_data();
+        Self::send_satellites(cx, MainToSatellite::SetAssets, &data);
         for (_, hub) in Self::hub_windows(cx) {
             Self::send(cx, &hub, MainToHub::SetAssets, data.clone());
         }
@@ -734,6 +1022,8 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         state,
         menu: app_menu::template(Platform::current(), &prefs, crate::IDENTITY),
         hubs: Vec::new(),
+        satellites: Vec::new(),
+        scenario_seed: None,
     });
     MainProcess::install_menu(cx);
     let opened = std::iter::from_fn(|| open_events.try_recv().ok());
@@ -746,8 +1036,8 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         let (saved, is_target) = match &window {
             StartupWindow::DefaultHub => (None, true),
             StartupWindow::Hub(state) => (Some(state), target.is_none()),
-            StartupWindow::Satellite(_) => {
-                eprintln!("asrs: saved satellite windows are not restored yet");
+            StartupWindow::Satellite(state) => {
+                MainProcess::open_satellite(cx, SatelliteConfig::State(state.clone()));
                 continue;
             }
         };

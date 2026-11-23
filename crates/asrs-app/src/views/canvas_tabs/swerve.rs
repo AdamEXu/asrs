@@ -71,7 +71,7 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let (index, key) = displayed(self.host().hub(cx), TabType::Swerve)?;
-        let container = overhung(rect);
+        let container = overhung(self.host().hub(cx), rect);
         let dpr = f64::from(scale);
         let dark = appearance == Appearance::Dark;
         let client = [container[2], container[3]].map(|v| f64::from(client_size(v as f32, scale)));

@@ -1,8 +1,7 @@
 //! Runs the application menu's clicks in the app: [`click`]'s effects against the main process,
 //! the windows and the platform's dialogs, and the roles Electron executes itself.
 //!
-//! [`open_window`], [`check_for_update`], [`open_satellite`] and
-//! [`MainProcess::open_files`] are where the windows and services of other units plug in. A
+//! [`open_window`], [`check_for_update`] and [`MainProcess::open_files`] are where the windows and services of other units plug in. A
 //! command without one yet says so in a message box.
 
 use std::path::{Path, PathBuf};
@@ -20,7 +19,7 @@ use super::context;
 use super::model::Command;
 use crate::download_flow;
 use crate::export_flow;
-use crate::main_process::MainProcess;
+use crate::main_process::{MainProcess, SatelliteConfig};
 use crate::windows::{
     self, FileFilter, MessageBoxOptions, MessageBoxType, OpenDialogOptions, SaveDialogOptions,
     Windows,
@@ -133,11 +132,14 @@ fn perform(effect: Effect, what: &str, cx: &mut App) -> Result<(), Unavailable> 
         Effect::OpenHub(state) => {
             MainProcess::open_hub(cx, state.as_ref(), Vec::new());
         }
-        Effect::OpenSatellite(_) => return open_satellite(),
+        Effect::OpenSatellite(state) => {
+            MainProcess::open_satellite(cx, SatelliteConfig::State(state));
+        }
         Effect::OpenWindow { kind, parent } => return open_window(kind, parent, cx),
         Effect::NewTabPopup { window, rect } => new_tab_popup(window, &rect, cx),
         Effect::Close(window) => {
             if export_flow::may_close(window, cx) {
+                MainProcess::before_unload(cx, window);
                 windows::close(cx, window);
             }
         }
@@ -182,11 +184,6 @@ fn open_window(kind: WindowKind, parent: WindowId, cx: &mut App) -> Result<(), U
 /// `checkForUpdate(true)`.
 fn check_for_update() -> Result<(), Unavailable> {
     Err(Unavailable("Checking for updates"))
-}
-
-/// `createSatellite({ state })`.
-fn open_satellite() -> Result<(), Unavailable> {
-    Err(Unavailable("Opening pop-out windows"))
 }
 
 /// `newTabPopup(window, rect)`.
