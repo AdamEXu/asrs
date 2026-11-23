@@ -7,6 +7,7 @@
 
 use std::rc::Rc;
 
+use asrs_js::math;
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::Clock;
@@ -418,15 +419,8 @@ impl SatelliteModel {
             return;
         }
         self.last_aspect_ratio = aspect_ratio;
-        let clamped = aspect_ratio.map(|a| {
-            if a > MAX_ASPECT_RATIO {
-                MAX_ASPECT_RATIO
-            } else if a < 1.0 / MAX_ASPECT_RATIO {
-                1.0 / MAX_ASPECT_RATIO
-            } else {
-                a
-            }
-        });
+        let clamped = aspect_ratio
+            .map(|a| math::max2(math::min2(a, MAX_ASPECT_RATIO), 1.0 / MAX_ASPECT_RATIO));
         let lock = !self.is(TabType::Field2d);
         self.send(
             SatelliteToMain::SetAspectRatio,

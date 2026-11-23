@@ -756,9 +756,7 @@ impl MainProcess {
                 message.data = active.clone();
             }
         }
-        let Some(main) = cx.try_global::<MainProcess>() else {
-            return None;
-        };
+        let main = cx.try_global::<MainProcess>()?;
         let restore = HubRestore {
             first_load: true,
             layout_override,
