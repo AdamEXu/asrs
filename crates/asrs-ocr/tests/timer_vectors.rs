@@ -581,7 +581,8 @@ fn queued_reads_interleave_and_a_failed_one_costs_only_itself() {
         expected.insert(1000 + id, None);
         expected.insert(2000 + id, None);
     }
-    let results: BTreeMap<u64, Option<String>> = receiver.iter().take(expected.len()).collect();
+    drop(sender);
+    let results: BTreeMap<u64, Option<String>> = receiver.iter().collect();
     assert_eq!(results, expected);
 }
 
