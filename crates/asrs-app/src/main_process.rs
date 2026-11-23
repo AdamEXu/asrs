@@ -6,21 +6,26 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
+use asrs_js::string::JsError;
 use asrs_js::time::{Clock, NamedZone, SystemClock};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::{Preferences, Theme};
 use asrs_services::asset_downloader;
 use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
+use asrs_services::ds_layout::default_ds_layout;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{self, AppPaths, HubRestore, MainState, StartupWindow};
 use asrs_services::path::PathStyle;
+use asrs_services::routing::{Action, Hubs, Route};
 use asrs_services::update::ReleaseProfile;
 use asrs_services::window_manager::Platform;
 use asrs_services::windows::WindowSystem;
 use asrs_ui::gpui::{App, Entity, Global, WeakEntity};
+use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, ThemeSource};
 
+use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
 use crate::menus::app_menu;
@@ -234,6 +239,12 @@ impl MainProcess {
         }
     }
 
+    /// Registers the hub window a parity scenario opened.
+    #[cfg(feature = "parity")]
+    pub(crate) fn adopt_hub(&mut self, id: WindowId, hub: WeakEntity<Hub>) {
+        self.hubs.push((id, hub));
+    }
+
     #[cfg(feature = "parity")]
     pub(crate) fn state_mut(&mut self) -> &mut MainState {
         &mut self.state
@@ -292,12 +303,34 @@ impl MainProcess {
             Ok(()) if message.name == HubToMain::UpdatePreferences => {
                 Self::send_all_preferences(cx);
             }
+            Ok(()) if message.name == HubToMain::OpenFilesRequest => {
+                let files = message.data.get("files").and_then(JsValue::as_array);
+                let files = files.into_iter().flatten().filter_map(JsValue::as_str);
+                let files = files.map(|f| f.to_string_lossy()).collect();
+                Self::open_files(cx, files, Some(id));
+            }
             Ok(()) => {
+                export_flow::hub_message(id, message, cx);
                 if let Some(window) = Windows::handle(cx, id) {
                     hub_dialogs::show(message, window, cx);
                 }
             }
         }
+    }
+
+    /// `hubExportingIds.has(window.id)`.
+    pub fn is_exporting(cx: &App, window: WindowId) -> bool {
+        cx.try_global::<MainProcess>()
+            .is_some_and(|main| main.state.is_exporting(window as f64))
+    }
+
+    /// `historical-start`'s `app.addRecentDocument(path)`, after the hub wrote the path to
+    /// `akit-log-path.txt`.
+    fn opened_document(cx: &mut App, path: &str) {
+        if cx.has_global::<MainProcess>() {
+            cx.global_mut::<MainProcess>().state.akit_path_written = Some(path.to_owned());
+        }
+        platform::add_recent_document(cx, Path::new(path));
     }
 
     /// `sendMessage(window, name, data)` to a hub window.
@@ -381,6 +414,15 @@ impl MainProcess {
 
     /// `createHubWindow(state)` with its `dom-ready` sends; `files` are opened after them.
     pub fn open_hub(cx: &mut App, saved: Option<&JsValue>, files: Vec<String>) -> Option<WindowId> {
+        Self::open_hub_with(cx, saved, None, files)
+    }
+
+    fn open_hub_with(
+        cx: &mut App,
+        saved: Option<&JsValue>,
+        layout_override: Option<&JsValue>,
+        files: Vec<String>,
+    ) -> Option<WindowId> {
         Self::send_all_preferences(cx);
         let main = cx.try_global::<MainProcess>()?;
         let preferences = main.state.preferences(&RealFs).unwrap_or_else(|e| {
@@ -395,7 +437,7 @@ impl MainProcess {
         );
         let restore = HubRestore {
             first_load: true,
-            layout_override: None,
+            layout_override,
             saved,
             cached: JsValue::Undefined,
         };
@@ -432,9 +474,23 @@ impl MainProcess {
                     let _ = handle.update(cx, |_, window, _| window.set_window_title(&title));
                 }
             }
+            HubEvent::RecentDocument(path) => Self::opened_document(cx, &path.to_string_lossy()),
             _ => {}
         })
         .detach();
+        if let Some(handle) = Windows::handle(cx, id) {
+            let _ = handle.update(cx, |_, window, cx| {
+                window.on_window_should_close(cx, move |_, cx| {
+                    let exporting = MainProcess::is_exporting(cx, id);
+                    if exporting {
+                        cx.defer(move |cx| {
+                            export_flow::may_close(id, cx);
+                        });
+                    }
+                    !exporting
+                });
+            });
+        }
         let weak = hub.downgrade();
         let main = cx.global_mut::<MainProcess>();
         main.hubs.retain(|(_, h)| h.upgrade().is_some());
@@ -442,23 +498,77 @@ impl MainProcess {
         Some(id)
     }
 
-    /// `openFilesSmart(files, sourceWindow)` for anything but a single Driver Station log, which
-    /// takes the same route here.
+    /// `openFilesSmart(files, sourceWindow)`.
     pub fn open_files(cx: &mut App, files: Vec<String>, source: Option<WindowId>) {
-        let target = source.and_then(|id| {
-            Self::hub_windows(cx)
-                .into_iter()
-                .find(|(w, _)| *w == id)
-                .map(|(_, hub)| hub)
+        Self::route(cx, files, |hubs, files| {
+            hubs.open_files_smart(files, source)
         });
-        match target {
-            Some(hub) => {
-                let message = open_files_message(files);
-                Self::send(cx, &hub, message.name, message.data);
+    }
+
+    /// The `open-file` event once the app is ready.
+    fn open_file(cx: &mut App, path: String) {
+        Self::route(cx, vec![path], |hubs, files| hubs.open_file(&files[0]));
+    }
+
+    fn route(
+        cx: &mut App,
+        files: Vec<String>,
+        decide: impl FnOnce(&Hubs<'_>, &[String]) -> Result<Route, JsError>,
+    ) {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return;
+        };
+        let route = decide(
+            &Hubs {
+                fs: &RealFs,
+                windows: Windows::manager(cx).hubs(),
+                state: &|window| main.state.tracker.get_renderer_state(window as f64),
+            },
+            &files,
+        );
+        match route {
+            Ok(Route::Open(action)) => Self::act(cx, action, files),
+            Ok(Route::Ask {
+                window,
+                options,
+                actions,
+            }) => {
+                let options = dispatch::message_box_options(&options);
+                dispatch::show_message_box(window, options, cx, move |response, cx| {
+                    if let Some(action) = actions.get(response) {
+                        Self::act(cx, *action, files);
+                    }
+                });
             }
-            None => {
+            Err(e) => eprintln!("asrs: opening {files:?}: {e:?}"),
+        }
+    }
+
+    fn act(cx: &mut App, action: Action, files: Vec<String>) {
+        match action {
+            Action::Send(window) => Self::send_files(cx, window, files),
+            Action::FocusAndSend(window) => {
+                Self::focus(cx, window);
+                Self::send_files(cx, window, files);
+            }
+            Action::NewHub => {
                 Self::open_hub(cx, None, files);
             }
+            Action::NewDsHub => {
+                let layout = default_ds_layout(true).to_js();
+                Self::open_hub_with(cx, None, Some(&layout), files);
+            }
+        }
+    }
+
+    fn send_files(cx: &mut App, window: WindowId, files: Vec<String>) {
+        let message = open_files_message(files);
+        Self::send_to_hub(cx, window, message.name, message.data);
+    }
+
+    fn focus(cx: &mut App, window: WindowId) {
+        if let Some(handle) = Windows::handle(cx, window) {
+            let _ = handle.update(cx, |_, window, _| window.activate_window());
         }
     }
 
@@ -509,9 +619,7 @@ impl MainProcess {
         let Some((id, _)) = Self::hub_windows(cx).into_iter().next() else {
             return;
         };
-        if let Some(handle) = Windows::handle(cx, id) {
-            let _ = handle.update(cx, |_, window, _| window.activate_window());
-        }
+        Self::focus(cx, id);
         Self::open_files(cx, vec![path], Some(id));
     }
 }
@@ -538,7 +646,7 @@ fn every(cx: &mut App, period: Duration, mut tick: impl FnMut(&mut App) + 'stati
 }
 
 /// Registers the platform's open event before the app runs: paths that arrive before
-/// [`start`] are its `firstOpenPath`, later ones each open a new hub window.
+/// [`start`] are its `firstOpenPath`, later ones each go where [`Hubs::open_file`] sends them.
 pub fn open_file_events() -> (
     impl FnMut(Vec<String>) + 'static,
     async_channel::Receiver<String>,
@@ -584,18 +692,12 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         hubs: Vec::new(),
     });
     MainProcess::install_menu(cx);
-    let mut first_open_path = None;
-    while let Ok(path) = open_events.try_recv() {
-        first_open_path = Some(path);
-    }
-    if let Some(path) = lifecycle::first_file_arg(argv) {
-        first_open_path = Some(path);
-    }
+    let opened = std::iter::from_fn(|| open_events.try_recv().ok());
+    let first_open_path = lifecycle::first_open_path(opened, argv);
 
     let mut plan = Vec::new();
     let planned = saved.and_then(|saved| lifecycle::startup_windows(&saved, |w| plan.push(w)));
     let mut target = None;
-    let mut files = first_open_path.into_iter().collect::<Vec<_>>();
     for window in plan {
         let (saved, is_target) = match &window {
             StartupWindow::DefaultHub => (None, true),
@@ -605,21 +707,18 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
                 continue;
             }
         };
-        let opened = MainProcess::open_hub(
-            cx,
-            saved,
-            if is_target {
-                std::mem::take(&mut files)
-            } else {
-                Vec::new()
-            },
-        );
+        let opened = MainProcess::open_hub(cx, saved, Vec::new());
         if is_target {
             target = opened;
         }
     }
-    if let Err(e) = planned {
-        eprintln!("asrs: restoring windows: {e:?}");
+    match planned {
+        Ok(()) => {
+            if let (Some(path), Some(target)) = (first_open_path, target) {
+                MainProcess::open_files(cx, vec![path], Some(target));
+            }
+        }
+        Err(e) => eprintln!("asrs: restoring windows: {e:?}"),
     }
 
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
@@ -635,7 +734,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     );
     cx.spawn(async move |cx| {
         while let Ok(path) = open_events.recv().await {
-            cx.update(|cx| MainProcess::open_hub(cx, None, vec![path]));
+            cx.update(|cx| MainProcess::open_file(cx, path));
         }
     })
     .detach();

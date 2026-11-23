@@ -105,3 +105,7 @@ required-features = ["parity"]
 name = "prompt_windows"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "export_flow"
+required-features = ["parity"]

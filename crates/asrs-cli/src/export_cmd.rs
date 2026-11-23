@@ -138,7 +138,7 @@ fn run_case(log: &Log, case: &Case, fixed_limit: f64, dir: &Path) -> Json {
     if skip_reason(log, &case.options, fixed_limit).is_some() {
         record.push(("outcome", Json::string("skipped")));
     } else {
-        match export::export(log, &case.options) {
+        match export::export(log, &case.options, &mut |_| {}) {
             Ok(output) => {
                 let file = format!("export/{}.{}", case.name, case.extension);
                 match fs::write(dir.join(&file), output.into_bytes()) {
@@ -203,7 +203,7 @@ fn export_single(args: &[String]) -> ExitCode {
         eprintln!("export skipped: {reason}");
         return ExitCode::from(UNMODELED);
     }
-    match export::export(session.log(), &options) {
+    match export::export(session.log(), &options, &mut |_| {}) {
         Ok(output) => {
             let bytes = output.into_bytes();
             let result = match option_value(args, "--out") {

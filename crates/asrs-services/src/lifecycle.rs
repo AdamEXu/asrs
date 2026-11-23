@@ -3,6 +3,8 @@
 //! `dom-ready` restores, the argv scan, the AdvantageKit path handoff through the temp directory,
 //! and the quit cleanup.
 
+use std::collections::HashSet;
+
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsValue, ToJs};
@@ -238,6 +240,16 @@ pub fn first_file_arg(argv: &[String]) -> Option<String> {
         .cloned()
 }
 
+/// `firstOpenPath` when `whenReady` opens it: the last `open-file` event before that, unless an
+/// argument names a log.
+pub fn first_open_path(
+    opened: impl IntoIterator<Item = String>,
+    argv: &[String],
+) -> Option<String> {
+    let opened = opened.into_iter().last();
+    first_file_arg(argv).or(opened)
+}
+
 /// At launch, a stale `ascope-log-path.txt` from an earlier request is deleted unread.
 pub fn clear_akit_input(fs: &dyn Fs, akit_path_input: &str) {
     if fs.exists(akit_path_input) {
@@ -282,6 +294,8 @@ pub struct MainState {
     pub assets: AssetService,
     /// The log path this process last wrote to `akit-log-path.txt`.
     pub akit_path_written: Option<String>,
+    /// `hubExportingIds`.
+    exporting: HashSet<u64>,
 }
 
 impl MainState {
@@ -303,6 +317,7 @@ impl MainState {
             tracker,
             assets,
             akit_path_written: None,
+            exporting: HashSet::new(),
         };
         Ok((main, prefs))
     }
@@ -333,8 +348,21 @@ impl MainState {
                 merge_preferences(&mut prefs, &message.data)?;
                 fs.write(&self.paths.prefs(), &json_file::stringify(&prefs)?)
             }
+            HubToMain::SetExporting => {
+                if ops::to_boolean(&message.data) {
+                    self.exporting.insert(window.to_bits());
+                } else {
+                    self.exporting.remove(&window.to_bits());
+                }
+                Ok(())
+            }
             _ => Ok(()),
         }
+    }
+
+    /// `hubExportingIds.has(window.id)`.
+    pub fn is_exporting(&self, window: f64) -> bool {
+        self.exporting.contains(&window.to_bits())
     }
 
     /// `ask-edit-axis`'s read of `recent-units.json`.
