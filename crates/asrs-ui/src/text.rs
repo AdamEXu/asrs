@@ -23,7 +23,7 @@ use image::{Frame, RgbaImage};
 
 pub use asrs_canvas::text::FontSpec;
 pub use asrs_canvas::text::dom::{
-    Align, Direction, LineHeight, Overflow, Style as TextStyle, WhiteSpace,
+    Align, Direction, ELLIPSIS, LineHeight, Overflow, Style as TextStyle, WhiteSpace,
 };
 
 /// The default budget of one window's glyph-run cache.
@@ -342,6 +342,7 @@ pub struct Text {
     subpixel: (f32, f32),
     probe: Option<SharedString>,
     form_control: bool,
+    content_width: Option<f64>,
     underline: bool,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
@@ -358,6 +359,7 @@ impl Text {
             subpixel: (0.0, 0.0),
             probe: None,
             form_control: false,
+            content_width: None,
             underline: false,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
@@ -374,6 +376,13 @@ impl Text {
     pub fn subpixel(mut self, dx: f32, dy: f32) -> Self {
         self.subpixel = (dx, dy);
         self
+    }
+
+    /// The content box's exact CSS width, for a box sized by its container: without it a width
+    /// that snaps to the text's own counts as the text's, and an ellipsis is missed.
+    pub fn content_width(mut self, width: f64) -> Self {
+        self.content_width = Some(width);
+        self.w(px(width as f32))
     }
 
     /// Text a form control draws (a value or placeholder): Chromium keeps it in the control's
@@ -474,7 +483,10 @@ impl Element for Text {
         cx: &mut App,
     ) -> Prepaint {
         let scale = window.scale_factor();
-        let available = exact_width(&self.measured, bounds.size.width, scale);
+        let available = match self.content_width {
+            Some(width) => dom::lu_round((width * f64::from(scale)) as f32),
+            None => exact_width(&self.measured, bounds.size.width, scale),
+        };
         let layout = layout_lu(cx, &self.style, &self.text, scale, Some(available));
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
@@ -713,19 +725,38 @@ pub mod probe {
         fragments
     }
 
-    /// The text and one box per line, the union of the line's fragments.
+    /// The text and the boxes `Range.getClientRects()` gives for it: one per line, the union of
+    /// the line's fragments, and for a line an ellipsis cut, the whole text's and then that of
+    /// what the ellipsis left.
     pub(super) fn text_run(layout: &Layout, origin: (Lu, Lu)) -> crate::parity::TextRun {
+        let px = |lu: Lu| f64::from(lu) / 64.0 / f64::from(layout.scale);
         let mut text = String::new();
-        let mut rects: Vec<[f64; 4]> = Vec::new();
-        for (fragment, r) in fragments(layout, origin) {
-            text.push_str(&fragment);
-            match rects.last_mut() {
-                Some(last) if last[1] == r[1] => {
-                    let right = (last[0] + last[2]).max(r[0] + r[2]);
-                    last[0] = last[0].min(r[0]);
-                    last[2] = right - last[0];
-                }
-                _ => rects.push(r),
+        let mut rects = Vec::new();
+        for line in &layout.lines {
+            let top = origin.1 + line.baseline - layout.ascent;
+            let rect = |from: Lu, to: Lu| {
+                [
+                    px(origin.0 + from),
+                    px(top),
+                    px(to - from),
+                    px(layout.ascent + layout.descent),
+                ]
+            };
+            if let Some(at) = line.cut_at {
+                rects.push(rect(at, at + line.width));
+            }
+            let kept = line
+                .fragments
+                .iter()
+                .filter(|f| line.cut_at.is_none() || f.text != ELLIPSIS);
+            let mut extent: Option<(Lu, Lu)> = None;
+            for f in kept {
+                text.push_str(&f.text);
+                let (from, to) = extent.unwrap_or((f.x, f.x + f.width));
+                extent = Some((from.min(f.x), to.max(f.x + f.width)));
+            }
+            if let Some((from, to)) = extent {
+                rects.push(rect(from, to));
             }
         }
         crate::parity::TextRun { text, rects }

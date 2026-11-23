@@ -18,3 +18,4 @@ pub mod source_list;
 pub mod statistics;
 pub mod statistics_layout;
 pub mod tab_bar;
+pub mod table;

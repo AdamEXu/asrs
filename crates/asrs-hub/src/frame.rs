@@ -865,6 +865,8 @@ pub enum DragData {
     Fields(DragPayload),
     Tab(TabDragData),
     ListItem(ItemDragPayload),
+    /// A Table tab's column, as `tableIndex`.
+    Column(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -876,9 +878,15 @@ pub enum DragContent {
         item: ItemView,
         width: f64,
     },
+    /// A copy of a Table column's key container in a box `width` wide.
+    Column {
+        text: JsString,
+        available: bool,
+        width: f64,
+    },
 }
 
-/// A `drag-update` event's `detail`, as the controllers that take field drags read it.
+/// A `drag-update` event's `detail`, as the controllers that take field and column drags read it.
 fn drag_detail(update: &DragUpdate<DragData>) -> JsValue {
     let strings =
         |keys: &[JsString]| JsValue::Array(keys.iter().cloned().map(JsValue::String).collect());
@@ -887,6 +895,7 @@ fn drag_detail(update: &DragUpdate<DragData>) -> JsValue {
             ("fields", strings(&fields.fields)),
             ("children", strings(&fields.children)),
         ]),
+        DragData::Column(index) => object([("tableIndex", JsValue::Number(*index as f64))]),
         DragData::Tab(_) | DragData::ListItem(_) => object([]),
     };
     object([
@@ -1042,7 +1051,7 @@ impl HubShell {
                     end,
                 },
                 DragData::ListItem(payload) => ListInput::ItemDrag { payload, x, y, end },
-                DragData::Tab(_) => continue,
+                DragData::Tab(_) | DragData::Column(_) => continue,
             };
             let (_, errors) = hub.source_list_input(input);
             if let (Ok(()), Some(e)) = (&result, errors.into_iter().next()) {
@@ -1071,7 +1080,7 @@ impl HubShell {
     fn dispatch_tab_drag(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
         let updates = self.drag.take_updates_with(|data| match data {
             DragData::Tab(tab) => Some(*tab),
-            DragData::Fields(_) | DragData::ListItem(_) => None,
+            DragData::Fields(_) | DragData::ListItem(_) | DragData::Column(_) => None,
         });
         let mut result = Ok(());
         for update in updates {

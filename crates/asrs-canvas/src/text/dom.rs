@@ -209,6 +209,8 @@ pub struct Line {
     pub height: Lu,
     /// Alphabetic baseline from the content box's top edge.
     pub baseline: Lu,
+    /// Where the text an ellipsis cut starts, whose full size `width` keeps.
+    pub cut_at: Option<Lu>,
     /// Inline size of the whole line before any ellipsis, as alignment sees it.
     pub width: Lu,
     pub fragments: Vec<Fragment>,
@@ -361,7 +363,7 @@ fn byte_offset(text: &str, utf16: usize) -> usize {
     text.len()
 }
 
-const ELLIPSIS: &str = "\u{2026}";
+pub const ELLIPSIS: &str = "\u{2026}";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Class {
@@ -765,7 +767,8 @@ pub fn layout(
         for (f, _) in &mut runs {
             f.x += offset;
         }
-        let fragments = if style.overflow == Overflow::Ellipsis && width > room {
+        let cut = style.overflow == Overflow::Ellipsis && width > room;
+        let fragments = if cut {
             truncate(backend, style, runs, room, scale)
         } else {
             runs.into_iter().map(|(f, _)| f).collect()
@@ -779,6 +782,7 @@ pub fn layout(
             top,
             height: above + below,
             baseline: top + above,
+            cut_at: cut.then_some(offset),
             width,
             fragments,
         });
