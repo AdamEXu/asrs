@@ -6,4 +6,4 @@ mod engine;
 mod timer;
 
 pub use engine::{OcrError, Worker};
-pub use timer::{TIMER_RECTS, TimerReader, TimerRect};
+pub use timer::{TIMER_RECTS, TimerError, TimerReader, TimerRect};

@@ -297,6 +297,7 @@ pub struct Icon {
     fit: IconFit,
     translate: [f64; 2],
     subpixel: [f64; 2],
+    box_size: Option<[f64; 2]>,
 }
 
 impl Icon {
@@ -307,6 +308,7 @@ impl Icon {
             fit: IconFit::BUTTON,
             translate: [0.0, 0.0],
             subpixel: [0.0, 0.0],
+            box_size: None,
         }
     }
 
@@ -327,6 +329,12 @@ impl Icon {
         self.subpixel = [dx, dy];
         self
     }
+
+    /// The CSS size of the box the icon is laid out in, where GPUI's pixel snapping changed it.
+    pub fn box_size(mut self, size: Option<[f64; 2]>) -> Self {
+        self.box_size = size;
+        self
+    }
 }
 
 impl RenderOnce for Icon {
@@ -337,6 +345,7 @@ impl RenderOnce for Icon {
             fit,
             translate,
             subpixel,
+            box_size,
         } = self;
         div().absolute().inset_0().child(
             canvas(
@@ -345,15 +354,12 @@ impl RenderOnce for Icon {
                     let Some(intrinsic) = symbols::intrinsic(source.bytes()) else {
                         return;
                     };
+                    let [width, height] = box_size
+                        .unwrap_or([f64::from(bounds.size.width), f64::from(bounds.size.height)]);
+                    let zoom = f64::from(window.scale_factor());
                     let placement = Placement {
                         translate,
-                        ..layout(
-                            intrinsic,
-                            fit,
-                            f64::from(bounds.size.width),
-                            f64::from(bounds.size.height),
-                            f64::from(window.scale_factor()),
-                        )
+                        ..layout(intrinsic, fit, width, height, zoom)
                     };
                     let origin = [
                         f64::from(bounds.origin.x) + subpixel[0] - translate[0],

@@ -1,0 +1,288 @@
+{
+  "about": "Interaction (U17 and U23): a locked Video tab popped out, with video-data messages as main sends them for generated clips. The satellite shows the frame alone: the Video tab's own keys do nothing in it, the arrow keys step the hub's selection and the locked video with it, and Space starts and pauses playback; after the hub unlocks the video, its frame keys reach the satellite, and a portrait clip changes the aspect ratio. The satellite's saved state is compared. Nothing is masked",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 7,
+              "title": "Match",
+              "controller": null,
+              "controllerUUID": "video000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 85
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.0
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 12,
+        "completedFrames": 12,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "mouse": "click",
+      "x": 1041,
+      "y": 19
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "first",
+      "probes": [
+        ".video-container",
+        ".video-container > img"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "/"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "no-video-keys",
+      "probes": [
+        ".video-container",
+        ".video-container > img"
+      ]
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 150
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "stepped",
+      "probes": [
+        ".video-container",
+        ".video-container > img"
+      ]
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.2
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "later",
+      "probes": [
+        ".video-container",
+        ".video-container > img"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hub",
+      "probes": [
+        ".video-container",
+        ".video-container > img",
+        ".video-timeline-section > button",
+        "input.video-timeline-slider"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "key": "Left"
+    },
+    {
+      "key": "Left"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hub-frame-keys",
+      "probes": [
+        ".video-container",
+        ".video-container > img",
+        ".video-timeline-section > button",
+        "input.video-timeline-slider"
+      ]
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "frame-keys",
+      "probes": [
+        ".video-container",
+        ".video-container > img"
+      ]
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000"
+      }
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "portrait"
+        },
+        "fps": 30,
+        "totalFrames": 1,
+        "completedFrames": 1,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "portrait",
+      "probes": [
+        ".video-container",
+        ".video-container > img"
+      ]
+    }
+  ]
+}

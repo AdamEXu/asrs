@@ -1,0 +1,757 @@
+{
+  "about": "Interaction (U17): the generated drive log and a restored Video tab, with video-data messages as main sends them for generated clips (frames in the driver's inputs/): the empty tab, a first frame while ffmpeg still runs, the timeline slider dragged with the pointer and moved with an arrow key while it has the focus, the next and previous frame buttons, the keyboard's frame and 5 s keys, the lock button and locked selections inside, after and stepped within the clip, play to the end of the clip with the keyboard, a hovered and a pressed source button, portrait and upscaled clips, a frame not converted yet, a frame file that does not exist, and the Blue Alliance button without an API key (main's error box). Saved HubState, dialogs and written files are compared. Nothing is masked",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 7,
+              "title": "Match",
+              "controller": null,
+              "controllerUUID": "video000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 85
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.0
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000"
+      }
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 16,
+        "completedFrames": 5,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "first",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 16,
+        "completedFrames": 12,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 582
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 582
+    },
+    {
+      "mouse": "move",
+      "x": 760,
+      "y": 582
+    },
+    {
+      "mouse": "move",
+      "x": 837,
+      "y": 582
+    },
+    {
+      "mouse": "up",
+      "x": 837,
+      "y": 582
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "dragged",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "slider-key",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 851,
+      "y": 628
+    },
+    {
+      "mouse": "down",
+      "x": 851,
+      "y": 628
+    },
+    {
+      "mouse": "up",
+      "x": 851,
+      "y": 628
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "next-frame",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 785,
+      "y": 628
+    },
+    {
+      "mouse": "down",
+      "x": 785,
+      "y": 628
+    },
+    {
+      "mouse": "up",
+      "x": 785,
+      "y": 628
+    },
+    {
+      "mouse": "move",
+      "x": 785,
+      "y": 628
+    },
+    {
+      "mouse": "down",
+      "x": 785,
+      "y": 628
+    },
+    {
+      "mouse": "up",
+      "x": 785,
+      "y": 628
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "key": "Left"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": ","
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "buttons-and-keys",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 586
+    },
+    {
+      "mouse": "down",
+      "x": 560,
+      "y": 586
+    },
+    {
+      "mouse": "up",
+      "x": 560,
+      "y": 586
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "locked",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.2
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "locked-later",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        8.0
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "locked-past-end",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.1
+      ]
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "selection-stepped",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "key": "/"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "played-to-the-end",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "/"
+    },
+    {
+      "mouse": "move",
+      "x": 344,
+      "y": 607
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hover-local",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "down",
+      "x": 420,
+      "y": 607
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000"
+      }
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "portrait"
+        },
+        "fps": 30,
+        "totalFrames": 1,
+        "completedFrames": 1,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "portrait",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "small"
+        },
+        "fps": 30,
+        "totalFrames": 1,
+        "completedFrames": 1,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "small",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "small"
+        },
+        "fps": 30,
+        "totalFrames": 4,
+        "completedFrames": 2,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 1085,
+      "y": 582
+    },
+    {
+      "mouse": "down",
+      "x": 1085,
+      "y": 582
+    },
+    {
+      "mouse": "up",
+      "x": 1085,
+      "y": 582
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "past-completed",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "mouse": "down",
+      "x": 760,
+      "y": 582
+    },
+    {
+      "mouse": "up",
+      "x": 760,
+      "y": 582
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "wait": 600
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "missing-frame",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "dialog": 0
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 12,
+        "completedFrames": 12,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 496,
+      "y": 607
+    },
+    {
+      "mouse": "down",
+      "x": 496,
+      "y": 607
+    },
+    {
+      "mouse": "up",
+      "x": 496,
+      "y": 607
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "no-api-key",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    }
+  ]
+}

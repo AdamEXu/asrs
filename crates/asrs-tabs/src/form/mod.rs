@@ -7,6 +7,8 @@ pub mod decimal;
 mod select;
 mod step;
 
+use std::cmp::Ordering;
+
 use asrs_js::number;
 use asrs_js::string::JsString;
 
@@ -304,6 +306,26 @@ impl StepRange {
         }
     }
 
+    fn proportion_from_value(&self, value: &Decimal) -> f64 {
+        if self.minimum.compare(&self.maximum) == Some(Ordering::Equal) {
+            return 0.0;
+        }
+        let proportion = value
+            .minus(&self.minimum)
+            .divided_by(&self.maximum.minus(&self.minimum));
+        number::to_number(
+            &proportion
+                .to_js_string()
+                .encode_utf16()
+                .collect::<Vec<u16>>(),
+        )
+    }
+
+    fn value_from_proportion(&self, proportion: &Decimal) -> Decimal {
+        self.minimum
+            .plus(&proportion.times(&self.maximum.minus(&self.minimum)))
+    }
+
     fn default_value(&self) -> Decimal {
         self.clamp_value(
             &self
@@ -400,6 +422,53 @@ impl RangeInput {
 
     pub fn value_as_number(&self) -> f64 {
         value_as_number(&self.value)
+    }
+
+    /// `StepRange::ProportionFromValue` of the clamped value, which is where the thumb sits: 0 at
+    /// `min`, 1 at `max`.
+    pub fn proportion(&self) -> f64 {
+        let range = self.step_range();
+        let value = parse_to_decimal_for_number_type(self.value.units(), range.default_value());
+        range.proportion_from_value(&range.clamp_value(&value))
+    }
+
+    /// The value `SliderThumbElement::SetPositionFromPoint` assigns for a pointer at `proportion`
+    /// along the track.
+    pub fn value_at(&self, proportion: f64) -> JsString {
+        let range = self.step_range();
+        let value = range.value_from_proportion(&Decimal::from_double(proportion));
+        serialize_for_number_type(&range.clamp_value(&value))
+    }
+
+    /// The value `RangeInputType::HandleKeydownEvent` moves to for `key` (a left-to-right
+    /// horizontal slider), `None` where it leaves the value alone.
+    pub fn value_for_key(&self, key: &str) -> Option<JsString> {
+        let range = self.step_range();
+        let current = parse_to_decimal_for_number_type(self.value.units(), Decimal::nan());
+        let span = range.maximum.minus(&range.minimum);
+        let step = if self.step.to_string_lossy().eq_ignore_ascii_case("any") {
+            span.divided_by(&Decimal::from(100))
+        } else {
+            range.step
+        };
+        let tenth = span.divided_by(&Decimal::from(10));
+        let big_step = if step.greater_than(&tenth) {
+            step
+        } else {
+            tenth
+        };
+        let moved = match key {
+            "ArrowUp" | "ArrowRight" => current.plus(&step),
+            "ArrowDown" | "ArrowLeft" => current.minus(&step),
+            "PageUp" => current.plus(&big_step),
+            "PageDown" => current.minus(&big_step),
+            "Home" => range.minimum,
+            "End" => range.maximum,
+            _ => return None,
+        };
+        let moved = range.clamp_value(&moved);
+        (moved.compare(&current) != Some(Ordering::Equal))
+            .then(|| serialize_for_number_type(&moved))
     }
 
     fn resanitize(&mut self) {

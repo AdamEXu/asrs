@@ -14,15 +14,14 @@ use asrs_js::value::{JsValue, ToJs};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::Preferences;
-use asrs_model::selection_impl::KeyTarget;
 use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_services::window_manager::Platform;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use asrs_ui::gpui::{
-    AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, KeyDownEvent,
-    WeakEntity, Window,
+    AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
+    Window,
 };
 
 use super::canvas_tabs::JoysticksTab;
@@ -482,15 +481,6 @@ impl FrameHost for HubEntityHost {
         self.hub.update(cx, |hub, cx| {
             hub.update(cx, |_, host| host.send_main_message(message))
         });
-    }
-
-    fn key_down(&mut self, event: &KeyDownEvent, code: &str, cx: &mut App) -> bool {
-        let m = event.keystroke.modifiers;
-        self.input(cx, |hub| {
-            hub.page_mut()
-                .selection_mut()
-                .key_down(code, m.platform, m.control, KeyTarget::Other)
-        })
     }
 
     fn set_menu_buttons(&mut self, rects: Vec<[f64; 4]>) {

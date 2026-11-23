@@ -370,6 +370,9 @@ pub(super) fn key_code(key: &str) -> String {
             "down" => "ArrowDown".into(),
             "left" => "ArrowLeft".into(),
             "right" => "ArrowRight".into(),
+            "/" | "?" => "Slash".into(),
+            "," | "<" => "Comma".into(),
+            "." | ">" => "Period".into(),
             other => other.to_owned(),
         },
     }

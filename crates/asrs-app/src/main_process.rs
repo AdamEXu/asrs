@@ -37,6 +37,7 @@ use crate::menus::click::ClickEnv;
 use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
 use crate::satellite::{Satellite, SatelliteEvent};
+use crate::video;
 use crate::views::documentation::DocumentationRoot;
 use crate::views::hub_host::{HubEntityHost, boot_messages, show_satellite_menu};
 use crate::views::prompts;
@@ -614,6 +615,7 @@ impl MainProcess {
             }
             Ok(()) => {
                 export_flow::hub_message(id, message, cx);
+                video::hub_message(id, message, cx);
                 if let Some(window) = Windows::handle(cx, id) {
                     hub_dialogs::show(message, window, cx);
                     title_bar_menu_message(message, window, cx);
@@ -1084,6 +1086,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         }
     };
     cx.set_global(theme_source(prefs.theme));
+    video::init(&state.paths, cx);
     let saved = state
         .tracker
         .get_saved_application_state(&RealFs, &screens, true);
@@ -1148,6 +1151,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     })
     .detach();
     cx.on_app_quit(|cx| {
+        video::cleanup(cx);
         if let Some(main) = cx.try_global::<MainProcess>() {
             lifecycle::quit_cleanup(
                 &RealFs,

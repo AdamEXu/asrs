@@ -775,6 +775,37 @@ impl Variant<'_> {
             .map_err(|e| format!("{}: {e}", file.display()))
     }
 
+    /// `{"$clip": name}` is the folder of a clip the Electron driver generated, as `imgFolder`.
+    fn resolve_clips(&self, value: &JsValue) -> Result<JsValue, String> {
+        match value {
+            JsValue::Array(items) => {
+                let items = items.iter().map(|v| self.resolve_clips(v));
+                items.collect::<Result<_, _>>().map(JsValue::Array)
+            }
+            JsValue::Object(object) => {
+                if let Some(clip) = value.get("$clip").and_then(JsValue::as_str) {
+                    let clip = clip.to_string_lossy();
+                    let inputs = self.inputs.ok_or_else(|| {
+                        format!("{clip} is a generated clip; pass --inputs with the driver's inputs directory")
+                    })?;
+                    let folder = std::path::absolute(inputs.join(&clip))
+                        .map_err(|e| format!("{clip}: {e}"))?;
+                    if !folder.is_dir() {
+                        return Err(format!("no clip {}", folder.display()));
+                    }
+                    let folder = format!("{}{}", folder.display(), std::path::MAIN_SEPARATOR);
+                    return Ok(JsValue::string(&folder));
+                }
+                let mut resolved = asrs_js::value::JsObject::new();
+                for (key, v) in object.iter() {
+                    resolved.insert(key.clone(), self.resolve_clips(v)?);
+                }
+                Ok(JsValue::Object(resolved))
+            }
+            other => Ok(other.clone()),
+        }
+    }
+
     fn dispatch(&mut self, input: PlatformInput) -> Result<(), String> {
         let window = self.active();
         self.headless
@@ -867,7 +898,10 @@ impl Variant<'_> {
 
     fn perform(&mut self, action: &Action) -> Result<(), String> {
         match action {
-            Action::Main { name, data } => self.main_message(*name, data.clone())?,
+            Action::Main { name, data } => {
+                let data = self.resolve_clips(data)?;
+                self.main_message(*name, data)?
+            }
             Action::Open { files, merge } => {
                 let files = files
                     .iter()
