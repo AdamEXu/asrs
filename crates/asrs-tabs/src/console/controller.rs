@@ -31,7 +31,7 @@ const CONSOLE_TYPES: [&str; 4] = [
 ];
 
 /// The DOM facts of the shared renderer element.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ConsoleDom {
     /// `ROOT.hidden`.
     pub hidden: bool,
@@ -47,6 +47,20 @@ pub struct ConsoleDom {
     pub jump_input: NumberInput,
     /// `clientHeight` of every row after the header.
     pub row_heights: Vec<f64>,
+}
+
+impl Default for ConsoleDom {
+    fn default() -> Self {
+        ConsoleDom {
+            hidden: false,
+            container: Rect::default(),
+            scroll_top: 0.0,
+            scroll_height: 0.0,
+            drag_highlight_hidden: true,
+            jump_input: NumberInput::default(),
+            row_heights: Vec::new(),
+        }
+    }
 }
 
 /// One entry of the command's `lines` array.
@@ -140,6 +154,10 @@ impl ConsoleController {
     /// Answers the controller's layout read from `geometry` instead of the shared `ConsoleDom`.
     pub fn set_geometry(&mut self, geometry: Box<dyn ConsoleGeometry>) {
         self.geometry = Some(geometry);
+    }
+
+    pub fn dom(&self) -> &Rc<RefCell<ConsoleDom>> {
+        &self.dom
     }
 
     /// The `close-field` event on `ROOT`.

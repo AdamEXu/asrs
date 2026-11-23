@@ -1141,7 +1141,7 @@ impl<H: FrameHost> HubFrame<H> {
     ) {
         let code = key_code(key);
         let shown = self.field3d.shown;
-        let editable = self.host().editable_focused(cx);
+        let editable = self.console.editing() || self.host().editable_focused(cx);
         let tabs = field3d_tabs(self.host().hub(cx));
         self.host_mut().input(cx, |hub| {
             for (index, _) in tabs {

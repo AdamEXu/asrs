@@ -14,19 +14,22 @@ use asrs_services::path::PathStyle;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
-    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
-    point, px, rgb, size,
+    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke, Modifiers,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, PlatformInput,
+    Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div, point, px,
+    rgb, size,
 };
 use asrs_ui::parity::Recorder;
+use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Theme, Wheel, patch_colours,
+    Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Theme, Wheel,
+    patch_colours,
 };
 use crate::hub::{Hub, HubEvent};
+use crate::hub_dialogs;
 use crate::main_process::process_platform;
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
@@ -568,11 +571,15 @@ impl Variant<'_> {
             key: gpui_key(key),
             key_char,
         };
-        self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
-            keystroke: keystroke.clone(),
-            is_held: false,
-            prefer_character_input: false,
-        }))?;
+        let window = self.window();
+        let down = keystroke.clone();
+        self.headless
+            .context()
+            .update_window(window, |_, window, cx| {
+                window.dispatch_keystroke(down, cx);
+            })
+            .map_err(|e| e.to_string())?;
+        self.settle();
         self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }))
     }
 
@@ -626,6 +633,23 @@ impl Variant<'_> {
                 }))?;
             }
             Action::Key { key, modifiers } => self.key(key, modifiers)?,
+            Action::Dialog(reply) => {
+                let reply = match reply {
+                    DialogReply::Button(index) => Reply::Button(*index),
+                    DialogReply::Cancel => Reply::Save(None),
+                    DialogReply::File(name) => {
+                        let file = std::path::absolute(self.dir.join("files/dialog").join(name))
+                            .map_err(|e| e.to_string())?;
+                        if let Some(parent) = file.parent() {
+                            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                        }
+                        Reply::Save(Some(file))
+                    }
+                };
+                self.headless.context().update(|cx| {
+                    cx.default_global::<Script>().replies.push_back(reply);
+                });
+            }
             Action::Capture {
                 name,
                 probes,
@@ -738,9 +762,12 @@ impl Variant<'_> {
                     .map_err(|e| e.to_string())?;
                 let (saves, exceptions) = (self.saves.clone(), self.exceptions.clone());
                 let main = self.main.clone();
+                let handle = window.into();
                 self.headless.context().update(|cx| {
-                    cx.subscribe(&hub, move |_, event, _| match event {
+                    cx.set_global(Script::default());
+                    cx.subscribe(&hub, move |_, event, cx| match event {
                         HubEvent::Main(m) => {
+                            hub_dialogs::show(m, handle, cx);
                             if let Some((main, screen)) = main.borrow_mut().as_mut() {
                                 let saved =
                                     main.hub_message(&RealFs, HUB_WINDOW_ID, m).and_then(|()| {
@@ -804,6 +831,14 @@ impl Variant<'_> {
             .map_err(|e| e.to_string())?;
         self.settle();
         let exceptions = self.exceptions.borrow().clone();
+        let dialogs: Vec<JsValue> = self.headless.context().update(|cx| {
+            let script = cx.try_global::<Script>();
+            let shown = script.map_or(&[][..], |s| &s.shown);
+            shown
+                .iter()
+                .map(|(_, s)| capture::dialog_record(s))
+                .collect()
+        });
         capture::write(
             &self.dir.join("run.json"),
             &capture::run_record(
@@ -815,6 +850,7 @@ impl Variant<'_> {
                     self.dir,
                     &[("prefs.json", self.prefs_seed()?.into_bytes())],
                 )?,
+                &dialogs,
             ),
         )
     }

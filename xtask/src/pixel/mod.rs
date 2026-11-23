@@ -507,16 +507,103 @@ pub(crate) fn compare_variant(
     Ok(results)
 }
 
-/// `run.json`'s `files`: (path under files/, changed from its seed).
+/// `run.json`'s `files` and the files dialogs were answered with: (path under files/, changed
+/// from its seed).
 fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
     let run = read_json(&variant.join("run.json"))?;
-    Ok(list(&run, "files")
+    let mut files: Vec<(String, bool)> = list(&run, "files")
         .iter()
         .filter_map(|f| {
             let changed = f.get("changed") != Some(&Json::Bool(false));
             Some((string(f, "file")?, changed))
         })
-        .collect())
+        .collect();
+    let chosen = variant.join("files/dialog");
+    if chosen.is_dir() {
+        for path in sorted_entries(&chosen)? {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            files.push((format!("dialog/{name}"), true));
+        }
+    }
+    Ok(files)
+}
+
+/// `text` with every `YYYY-MM-DD` replaced, since the two sides may run on different days.
+fn undated(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        let date = rest.get(..10).is_some_and(|d| {
+            d.bytes().enumerate().all(|(i, b)| match i {
+                4 | 7 => b == b'-',
+                _ => b.is_ascii_digit(),
+            })
+        });
+        if date {
+            out.push_str("<date>");
+            rest = &rest[10..];
+        } else {
+            out.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    out
+}
+
+fn same_option(upstream: &Json, port: &Json) -> bool {
+    match (upstream.as_str(), port.as_str()) {
+        (Some(u), Some(p)) => undated(&u.to_string_lossy()) == undated(&p.to_string_lossy()),
+        _ => upstream == port,
+    }
+}
+
+/// The dialogs main showed, in order: the same kinds, and the options the port passes equal.
+fn compare_dialogs(reference: &Path, port: &Path, outcome: &mut Outcome) -> Result {
+    let theirs = read_json(&reference.join("run.json"))?;
+    let ours = read_json(&port.join("run.json"))?;
+    let (theirs, ours) = (list(&theirs, "dialogs"), list(&ours, "dialogs"));
+    if theirs.is_empty() && ours.is_empty() {
+        return Ok(());
+    }
+    let mut problems = Vec::new();
+    if theirs.len() != ours.len() {
+        problems.push(format!(
+            "{} upstream, {} on the port",
+            theirs.len(),
+            ours.len()
+        ));
+    }
+    for (i, (t, o)) in theirs.iter().zip(ours).enumerate() {
+        if string(t, "kind") != string(o, "kind") {
+            problems.push(format!("dialog {i}: {t:?} vs {o:?}"));
+            continue;
+        }
+        let Some(Json::Object(options)) = o.get("options") else {
+            problems.push(format!("dialog {i}: the port recorded no options"));
+            continue;
+        };
+        for (key, value) in options {
+            let expected = t
+                .get("options")
+                .and_then(|o| o.get(&key.to_string_lossy()))
+                .cloned()
+                .unwrap_or(Json::Null);
+            if !same_option(&expected, value) {
+                problems.push(format!("dialog {i} {key:?}: {expected:?} vs {value:?}"));
+            }
+        }
+    }
+    outcome.push(
+        "files",
+        "dialogs",
+        problems.is_empty(),
+        if problems.is_empty() {
+            format!("{} dialogs equal", ours.len())
+        } else {
+            problems.join("; ")
+        },
+    );
+    Ok(())
 }
 
 /// Every file the port wrote equals the file upstream wrote at the same path, and every file
@@ -557,6 +644,7 @@ fn compare_files(label: &str, reference: &Path, port: &Path) -> Result<CaptureRe
             "written by upstream, not by the port".into(),
         );
     }
+    compare_dialogs(reference, port, &mut outcome)?;
     if outcome.checks.is_empty() {
         outcome.push(
             "files",
@@ -934,6 +1022,55 @@ mod tests {
         let outcome = compare_files("v", &upstream, &port).unwrap().outcome;
         let failed: Vec<&str> = outcome.failures().map(|c| c.what.as_str()).collect();
         assert_eq!(failed, ["prefs.json", "state-dev.json"]);
+
+        fs::create_dir_all(upstream.join("files/dialog")).unwrap();
+        fs::write(upstream.join("files/dialog/console.txt"), "a\nb").unwrap();
+        let port = variant(
+            &root,
+            "exported",
+            &[readme, ("prefs.json", "{}"), ("state-dev.json", "{}")],
+        );
+        let failed = |port: &Path| -> Vec<String> {
+            let outcome = compare_files("v", &upstream, port).unwrap().outcome;
+            outcome.failures().map(|c| c.what.clone()).collect()
+        };
+        assert_eq!(failed(&port), ["dialog/console.txt"]);
+        fs::create_dir_all(port.join("files/dialog")).unwrap();
+        fs::write(port.join("files/dialog/console.txt"), "a\nb\n").unwrap();
+        assert_eq!(failed(&port), ["dialog/console.txt"]);
+        fs::write(port.join("files/dialog/console.txt"), "a\nb").unwrap();
+        assert!(failed(&port).is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn dialogs_compare_the_ports_options_without_dates() {
+        let root = std::env::temp_dir().join(format!("asrs-dialogs-{}", std::process::id()));
+        let side = |name: &str, dialogs: &str| {
+            let dir = root.join(name);
+            fs::create_dir_all(&dir).unwrap();
+            let run = format!(r#"{{"files":[],"dialogs":[{dialogs}]}}"#);
+            fs::write(dir.join("run.json"), run).unwrap();
+            dir
+        };
+        let upstream = side(
+            "upstream",
+            r#"{"kind":"showSaveDialog","options":{"title":"T","defaultPath":"Console 2026-01-02.txt","properties":[]}}"#,
+        );
+        let check = |dialogs: &str| {
+            let mut outcome = Outcome::default();
+            compare_dialogs(&upstream, &side("port", dialogs), &mut outcome).unwrap();
+            outcome.pass()
+        };
+        let port = |title: &str, path: &str| {
+            format!(
+                r#"{{"kind":"showSaveDialog","options":{{"title":"{title}","defaultPath":"{path}"}}}}"#
+            )
+        };
+        assert!(check(&port("T", "Console 2025-12-31.txt")));
+        assert!(!check(&port("T", "Console 2025-12-31.json")));
+        assert!(!check(&port("U", "Console 2026-01-02.txt")));
+        assert!(!check(""));
         let _ = fs::remove_dir_all(&root);
     }
 }

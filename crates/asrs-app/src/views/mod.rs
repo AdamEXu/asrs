@@ -1,9 +1,11 @@
+pub mod console;
 pub mod console_layout;
 pub mod field3d;
 pub mod field_2d;
 mod field_image;
 pub mod frame;
 pub mod hub_host;
+mod large_table;
 pub mod line_graph;
 pub mod select;
 pub mod sidebar;

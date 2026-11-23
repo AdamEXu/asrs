@@ -3,6 +3,7 @@
 use asrs_model::app_identity::AppIdentity;
 
 pub mod hub;
+mod hub_dialogs;
 pub mod main_process;
 pub mod menus;
 pub mod scenario;

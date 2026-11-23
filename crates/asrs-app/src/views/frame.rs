@@ -35,6 +35,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::console::ConsoleViews;
 use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
@@ -141,6 +142,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) line_graph: LineGraphViews,
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
+    pub(super) console: ConsoleViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -225,6 +227,7 @@ impl<H: FrameHost> HubFrame<H> {
             line_graph: LineGraphViews::default(),
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
+            console: ConsoleViews::default(),
         }
     }
 
@@ -309,6 +312,7 @@ impl<H: FrameHost> HubFrame<H> {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
         self.source_list_mouse_move(x, y, cx);
+        self.console_mouse_move(x, y, cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -352,6 +356,7 @@ impl<H: FrameHost> HubFrame<H> {
     fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
+        self.console_mouse_up(event, x, y, cx);
         let shell = &mut self.shell;
         if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
             eprintln!("asrs: {e}");
@@ -736,9 +741,12 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     }
                 });
                 let frame = entity.clone();
-                window.on_key_event(move |event: &KeyDownEvent, phase, _, cx| {
+                window.on_key_event(move |event: &KeyDownEvent, phase, window, cx| {
                     if phase == DispatchPhase::Bubble {
-                        let _ = frame.update(cx, |frame, cx| frame.field3d_key_down(event, cx));
+                        let _ = frame.update(cx, |frame, cx| {
+                            frame.field3d_key_down(event, cx);
+                            frame.console_key_down(event, window, cx);
+                        });
                     }
                 });
                 window.on_key_event(move |event: &KeyUpEvent, phase, _, cx| {
@@ -868,6 +876,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(field) = self.field3d_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(field);
+                }
+                if let Some(table) = self.console_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(table);
                 }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }

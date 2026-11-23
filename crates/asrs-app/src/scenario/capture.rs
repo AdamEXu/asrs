@@ -6,6 +6,7 @@ use std::path::Path;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_ui::capture::Capture;
 use asrs_ui::parity::{Recorder, Rect};
+use asrs_ui::platform::dialog::{MessageBoxType, Shown};
 
 use super::{Action, COLUMNS, PATCH, Page, Scenario, Theme, patch_colours};
 
@@ -92,6 +93,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Mouse { .. } => "mouse",
         Action::Wheel(_) => "wheel",
         Action::Key { .. } => "key",
+        Action::Dialog(_) => "dialog",
         Action::Capture { .. } => "capture",
     }
 }
@@ -215,12 +217,64 @@ pub fn collect_files(dir: &Path, seeds: &[(&str, Vec<u8>)]) -> Result<Vec<Writte
     Ok(written)
 }
 
+/// A dialog the port showed, as the Electron driver records one, with the options the port's
+/// platform dialogs take.
+pub fn dialog_record(shown: &Shown) -> JsValue {
+    let text = |s: &str| JsValue::string(s);
+    let (kind, options) = match shown {
+        Shown::Message(options) => {
+            let kind = match options.kind {
+                MessageBoxType::None => "none",
+                MessageBoxType::Info => "info",
+                MessageBoxType::Warning => "warning",
+                MessageBoxType::Error => "error",
+                MessageBoxType::Question => "question",
+            };
+            (
+                "showMessageBox",
+                asrs_js::ops::object([
+                    ("type", text(kind)),
+                    ("title", text(&options.title)),
+                    ("message", text(&options.message)),
+                    ("detail", text(&options.detail)),
+                ]),
+            )
+        }
+        Shown::Open(options) => (
+            "showOpenDialog",
+            asrs_js::ops::object([("title", text(&options.title))]),
+        ),
+        Shown::Save(options) => {
+            let filters = options.filters.iter().map(|f| {
+                asrs_js::ops::object([
+                    ("name", text(&f.name)),
+                    (
+                        "extensions",
+                        JsValue::Array(f.extensions.iter().map(|e| text(e)).collect()),
+                    ),
+                ])
+            });
+            let path = options.default_path.clone().unwrap_or_default();
+            (
+                "showSaveDialog",
+                asrs_js::ops::object([
+                    ("title", text(&options.title)),
+                    ("defaultPath", text(&path.to_string_lossy())),
+                    ("filters", JsValue::Array(filters.collect())),
+                ]),
+            )
+        }
+    };
+    asrs_js::ops::object([("kind", text(kind)), ("options", options)])
+}
+
 pub fn run_record(
     scenario: &Scenario,
     scale: u32,
     theme: Theme,
     exceptions: &[String],
     files: &[WrittenFile],
+    dialogs: &[JsValue],
 ) -> String {
     let record = asrs_js::ops::object([
         ("scenario", JsValue::string(&scenario.name)),
@@ -252,6 +306,7 @@ pub fn run_record(
                     .collect(),
             ),
         ),
+        ("dialogs", JsValue::Array(dialogs.to_vec())),
         (
             "exceptions",
             JsValue::Array(exceptions.iter().map(|e| JsValue::string(e)).collect()),

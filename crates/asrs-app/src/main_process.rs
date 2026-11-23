@@ -22,6 +22,7 @@ use asrs_ui::gpui::{App, Entity, Global, WeakEntity};
 use asrs_ui::theme::{Appearance, ThemeSource};
 
 use crate::hub::{Hub, HubEvent};
+use crate::hub_dialogs;
 use crate::menus::app_menu;
 use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
@@ -276,7 +277,11 @@ impl MainProcess {
             Ok(()) if message.name == HubToMain::UpdatePreferences => {
                 Self::send_all_preferences(cx);
             }
-            Ok(()) => {}
+            Ok(()) => {
+                if let Some(window) = Windows::handle(cx, id) {
+                    hub_dialogs::show(message, window, cx);
+                }
+            }
         }
     }
 

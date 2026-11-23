@@ -9,6 +9,7 @@ use asrs_canvas::text::dom::{self, LineHeight, Lu};
 use asrs_canvas::text::inline::{Breaker, Item, Line};
 use asrs_canvas::text::{FixedAdvance, FontSpec, TextBackend, platform_backend};
 use asrs_js::string::JsString;
+use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
 use asrs_model::source_list::Rect;
 use asrs_tabs::ansi::AnsiStyle;
 use asrs_tabs::console::ConsoleNode;
@@ -125,7 +126,9 @@ struct State {
     /// Each row's top below the header, and the last one's bottom, in lines.
     tops: Vec<usize>,
     cells: HashMap<usize, Cells>,
-    scroll_top: f64,
+    /// The scroll offset before it is snapped to the device pixel grid.
+    offset: f64,
+    wheel: WheelScroll,
 }
 
 /// One console tab's layout, shared by the view, the renderer and the controller.
@@ -143,7 +146,8 @@ impl Default for ConsoleLayout {
             rows: Vec::new(),
             tops: vec![0],
             cells: HashMap::new(),
-            scroll_top: 0.0,
+            offset: 0.0,
+            wheel: WheelScroll::default(),
         })))
     }
 }
@@ -181,7 +185,12 @@ impl State {
         }
     }
 
+    /// Lays out the rows that changed. Scroll anchoring keeps the first row in view where it was.
     fn sync(&mut self, rows: &[ConsoleRow]) {
+        let anchor = (self.scroll_top() > 0.0)
+            .then(|| self.first_row_below(self.scroll_top()))
+            .flatten()
+            .map(|index| (index, self.tops[index]));
         let block = Block {
             width: self.container[2],
             scale: self.scale,
@@ -192,9 +201,7 @@ impl State {
             self.cells.clear();
         }
         let mut changed = rows.len().min(self.rows.len());
-        if rows.len() < self.rows.len() {
-            self.rows.truncate(rows.len());
-        }
+        self.rows.truncate(rows.len());
         for (i, row) in rows.iter().enumerate() {
             if let Some(known) = self.rows.get(i)
                 && Rc::ptr_eq(&known.html, row.html())
@@ -220,7 +227,23 @@ impl State {
             let top = self.tops.last().copied().unwrap_or(0);
             self.tops.push(top + row.lines);
         }
-        self.scroll_top = self.clamp(self.scroll_top);
+        if let Some((index, old_top)) = anchor
+            && index < self.rows.len()
+            && self.tops[index] != old_top
+        {
+            let moved = self.tops[index] as f64 - old_top as f64;
+            self.offset += moved * LINE_HEIGHT;
+        }
+        self.offset = self.clamp(self.offset);
+    }
+
+    /// The first row whose bottom is past `y` px from the scrolled content's top.
+    fn first_row_below(&self, y: f64) -> Option<usize> {
+        let index = self
+            .tops
+            .partition_point(|&top| HEADER_HEIGHT + top as f64 * LINE_HEIGHT <= y);
+        let index = index.saturating_sub(1);
+        (index < self.rows.len()).then_some(index)
     }
 
     fn scroll_height(&self) -> f64 {
@@ -228,13 +251,25 @@ impl State {
         (HEADER_HEIGHT + lines * LINE_HEIGHT + TABLE_MARGIN).max(self.container[3])
     }
 
-    /// The range of `scrollTop`, which Chromium keeps on whole px.
-    fn clamp(&self, top: f64) -> f64 {
-        let max = (self.scroll_height() - self.container[3]).max(0.0);
-        if top.is_nan() {
+    fn max_offset(&self) -> f64 {
+        (self.scroll_height() - self.container[3]).max(0.0)
+    }
+
+    fn clamp(&self, offset: f64) -> f64 {
+        if offset.is_nan() {
             return 0.0;
         }
-        top.clamp(0.0, max).round()
+        offset.clamp(0.0, self.max_offset())
+    }
+
+    fn scroll_top(&self) -> f64 {
+        assign_scroll_offset(self.offset, self.max_offset(), f64::from(self.scale))
+    }
+
+    fn set_scroll_top(&mut self, top: f64) {
+        self.wheel.stop();
+        self.offset = self.clamp(top);
+        self.offset = self.scroll_top();
     }
 }
 
@@ -242,24 +277,41 @@ impl ConsoleLayout {
     /// Places the container and lays out the rows that changed.
     pub fn sync(&self, container: [f64; 4], scale: f32, rows: &[ConsoleRow]) {
         let mut state = self.0.borrow_mut();
-        state.container = container;
         state.scale = scale;
+        state.container = container;
         state.sync(rows);
     }
 
     pub fn scroll_top(&self) -> f64 {
-        self.0.borrow().scroll_top
+        self.0.borrow().scroll_top()
     }
 
-    pub fn scroll_height(&self) -> f64 {
-        self.0.borrow().scroll_height()
+    /// `scrollTop = top`.
+    pub fn set_scroll_top(&self, top: f64) {
+        self.0.borrow_mut().set_scroll_top(top);
     }
 
-    /// A user scroll to `top`; returns whether the position changed.
-    pub fn scroll_to(&self, top: f64) -> bool {
+    /// A wheel event at `now` (ms).
+    pub fn wheel(&self, wheel: Wheel, now: f64) {
         let mut state = self.0.borrow_mut();
-        let top = state.clamp(top);
-        std::mem::replace(&mut state.scroll_top, top) != top
+        let offset = [0.0, state.offset];
+        let client = [state.container[2], state.container[3]];
+        if let Some([_, to]) = state.wheel.wheel(wheel, now, offset, client) {
+            state.offset = state.clamp(to);
+        }
+    }
+
+    /// Advances a notched wheel animation to the frame at `now` (ms); whether it goes on.
+    pub fn animate(&self, now: f64) -> bool {
+        let mut state = self.0.borrow_mut();
+        if let Some([_, to]) = state.wheel.animate(now) {
+            state.offset = state.clamp(to);
+        }
+        state.wheel.animating()
+    }
+
+    pub fn stop_wheel(&self) {
+        self.0.borrow_mut().wheel.stop();
     }
 
     /// Row `index`'s top and height below the header, in px.
@@ -339,13 +391,13 @@ impl ConsoleGeometry for ConsoleLayout {
     fn scroll_top(&mut self, rows: &[ConsoleRow]) -> f64 {
         let mut state = self.0.borrow_mut();
         state.sync(rows);
-        state.scroll_top
+        state.scroll_top()
     }
 
     fn set_scroll_top(&mut self, rows: &[ConsoleRow], value: f64) {
         let mut state = self.0.borrow_mut();
         state.sync(rows);
-        state.scroll_top = state.clamp(value);
+        state.set_scroll_top(value);
     }
 
     fn scroll_height(&mut self, rows: &[ConsoleRow]) -> f64 {
