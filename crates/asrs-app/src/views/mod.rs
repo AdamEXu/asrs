@@ -1,3 +1,4 @@
+pub mod canvas_tabs;
 pub mod cell_text;
 pub mod console;
 pub mod console_layout;

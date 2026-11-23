@@ -283,7 +283,10 @@ const numberKeys = [
   input('<input type="number" value="x" step="0.5">', [["set", "value", "0.7"], ...keys("ArrowDown", "ArrowUp")]),
   input(RANGE_MIN, [["char", "1"], ["char", "2"], ...keys("ArrowUp"), ["char", "5"], ["blur"], ["focus"], ...keys("ArrowDown"), ["blur"]]),
   input(RANGE_MIN, [["char", "1"], ["char", "e"], ...keys("ArrowUp")]),
-  input(RANGE_MIN, ["shift", "alt", "ctrl"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]])))
+  input(RANGE_MIN, ["shift", "alt", "ctrl"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]]))),
+  ...['value="5"', 'value="0.65" step="0.01"', 'value="960" step="1"', 'value="720" step="1"', 'value="20"'].map((attributes) =>
+    input(`<input type="number" ${attributes} />`, [...keys("ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowDown"), ["set", "value", "0.9"], ...keys("ArrowUp", "ArrowDown", "ArrowDown"), ["set", "value", "12.345"], ...keys("ArrowDown", "ArrowUp", "ArrowUp")])
+  )
 ];
 fs.writeFileSync(
   path.join(ROOT, "parity/specs/form/number-keys.entry.json"),

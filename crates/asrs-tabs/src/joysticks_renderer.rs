@@ -74,6 +74,23 @@ impl JoysticksRenderer {
         Some(index)
     }
 
+    /// The `path` of every layout `command` draws, which `JoysticksDom::images` must hold before
+    /// it is rendered.
+    pub fn image_paths(
+        assets: Option<&AdvantageScopeAssets>,
+        command: &JsValue,
+    ) -> Result<Vec<JsString>, JsError> {
+        let mut paths = Vec::new();
+        if let Some(assets) = assets {
+            for joystick in for_each_items(command, "command")? {
+                if let Some(config) = find_config(assets, joystick)? {
+                    paths.push(config.path.clone());
+                }
+            }
+        }
+        Ok(paths)
+    }
+
     /// `render(command)` in the colour scheme `dark`: when the render state changed, paints a
     /// new frame into `dom.painted`. A throw leaves the frame as far as it was painted.
     pub fn render_command(

@@ -2,15 +2,19 @@ pub mod geometry;
 pub mod presenter;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use asrs_canvas::pixels::transform_bilinear;
 use asrs_canvas::raster::CanvasError;
 use asrs_canvas::text::lut::MaskGammaLut;
 use asrs_canvas::text::{TextBackend, platform_backend};
-use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, TextRaster};
+use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, ShadeCache, TextRaster};
 use gpui_kit::{App, Bounds, Context, Entity, Global, Pixels, Point, Window, canvas};
 
 use geometry::{bitmap_side, client_rect_coord, client_size, mouse_client, valid_bitmap};
 pub use presenter::FramePresenter;
+
+use crate::input::style::device_border;
 
 /// What an upstream renderer reads from the DOM before drawing: the canvas box's `clientWidth`
 /// and `clientHeight`, `window.devicePixelRatio` and `getBoundingClientRect()` as `[x, y, w, h]`.
@@ -103,11 +107,13 @@ pub fn with_text_backend<R>(
 
 /// The pixmap a display list draws through the app's canvas text stack, or `None` for a canvas
 /// Chromium would leave blank (an invalid size or a failed allocation). `state` is what the
-/// canvas's earlier frames left and receives what this one leaves.
+/// canvas's earlier frames left and receives what this one leaves, and so do `shades` with the
+/// images they resampled.
 pub fn rasterize(
     frame: &Canvas2d,
-    images: &HashMap<String, Pixmap>,
+    images: &HashMap<String, Arc<Pixmap>>,
     state: &mut RasterState,
+    shades: &mut ShadeCache,
     cx: &mut App,
 ) -> Option<(Pixmap, Vec<(usize, CanvasError)>)> {
     let raster = valid_bitmap(frame.width, frame.height)
@@ -115,11 +121,14 @@ pub fn rasterize(
         .flatten();
     let Some(raster) = raster else {
         *state = RasterState::default();
+        *shades = ShadeCache::default();
         return None;
     };
-    let mut raster = raster.with_state(*state);
+    let mut raster = raster
+        .with_state(*state)
+        .with_shades(std::mem::take(shades));
     for (id, pixmap) in images {
-        raster.add_image(id, pixmap.clone());
+        raster.add_image_element(id, pixmap.clone());
     }
     let text = cx.default_global::<CanvasText>();
     if let (Some(backend), Some(lut)) = (text.backend.as_deref_mut(), text.lut.as_ref()) {
@@ -127,21 +136,58 @@ pub fn rasterize(
     }
     raster.run(&frame.calls);
     *state = raster.state();
+    *shades = raster.take_shades();
     let errors = raster.errors().to_vec();
     Some((raster.into_pixmap(), errors))
 }
 
-/// One `<canvas>`: the display list it last drew, the images `drawImage` may name, and the frame
+/// A `<canvas>`'s own `border` and `border-radius` in CSS px with `box-sizing: border-box`: its
+/// bitmap is stretched over the content box and clipped to that box's rounded corners.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CanvasBorder {
+    pub width: f32,
+    pub radius: f32,
+}
+
+impl CanvasBorder {
+    fn device_width(&self, dpr: f32) -> f32 {
+        device_border(self.width, dpr)
+    }
+
+    /// The bitmap over the content box of a border box `metrics` lays out.
+    fn stretch(&self, bitmap: &Pixmap, metrics: &CanvasMetrics) -> Option<Pixmap> {
+        let dpr = metrics.device_pixel_ratio;
+        let border = 2.0 * f64::from(self.device_width(dpr as f32));
+        let side = |box_side: f64| (box_side * dpr).round() - border;
+        let [_, _, width, height] = metrics.client_rect;
+        let (width, height) = (side(width), side(height));
+        if !(width >= 1.0 && height >= 1.0) {
+            return None;
+        }
+        let scale = [
+            f64::from(bitmap.width()) / width,
+            f64::from(bitmap.height()) / height,
+        ];
+        let inverse = [scale[0], 0.0, 0.0, scale[1], 0.0, 0.0];
+        transform_bilinear(bitmap, width as u32, height as u32, inverse)
+    }
+}
+
+/// One `<canvas>`: the display list it last drew, the `<img>` elements `drawImage` may name, and the frame
 /// it shows. A display list equal to the last one is not drawn again, which is the dirty check
 /// upstream renderers do by comparing `JSON.stringify` of their render state.
 pub struct CanvasState {
     presenter: FramePresenter,
     raster: RasterState,
+    shades: ShadeCache,
     frame: Option<Canvas2d>,
-    images: HashMap<String, Pixmap>,
+    images: HashMap<String, Arc<Pixmap>>,
     images_changed: bool,
     errors: Vec<(usize, CanvasError)>,
     metrics: Option<CanvasMetrics>,
+    border: Option<CanvasBorder>,
+    /// The bitmap a border stretched and the border box it was stretched for.
+    stretched: Option<(Pixmap, [f64; 4])>,
     draws: u64,
 }
 
@@ -152,12 +198,23 @@ impl CanvasState {
         CanvasState {
             presenter: FramePresenter::default(),
             raster: RasterState::default(),
+            shades: ShadeCache::default(),
             frame: None,
             images: HashMap::new(),
             images_changed: false,
             errors: Vec::new(),
             metrics: None,
+            border: None,
+            stretched: None,
             draws: 0,
+        }
+    }
+
+    /// A canvas with a border, which the caller draws around it.
+    pub fn bordered(border: CanvasBorder, cx: &mut Context<'_, Self>) -> CanvasState {
+        CanvasState {
+            border: Some(border),
+            ..CanvasState::new(cx)
         }
     }
 
@@ -184,8 +241,8 @@ impl CanvasState {
         self.draws
     }
 
-    pub fn set_image(&mut self, id: impl Into<String>, pixmap: Pixmap) {
-        self.images.insert(id.into(), pixmap);
+    pub fn set_image(&mut self, id: impl Into<String>, pixmap: impl Into<Arc<Pixmap>>) {
+        self.images.insert(id.into(), pixmap.into());
         self.images_changed = true;
     }
 
@@ -200,18 +257,62 @@ impl CanvasState {
         }
         self.images_changed = false;
         self.draws += 1;
-        match rasterize(&frame, &self.images, &mut self.raster, cx) {
+        let shades = &mut self.shades;
+        match rasterize(&frame, &self.images, &mut self.raster, shades, cx) {
             None => {
                 self.errors.clear();
+                self.stretched = None;
                 self.presenter.clear(window, cx);
             }
             Some((pixmap, errors)) => {
                 self.errors = errors;
-                self.presenter.present(pixmap, window, cx);
+                match self.border {
+                    None => self.presenter.present(pixmap, window, cx),
+                    Some(border) => self.present_stretched(border, pixmap, window, cx),
+                }
             }
         }
         self.frame = Some(frame);
         true
+    }
+
+    fn present_stretched(
+        &mut self,
+        border: CanvasBorder,
+        bitmap: Pixmap,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let metrics = self.metrics;
+        match metrics.and_then(|metrics| border.stretch(&bitmap, &metrics)) {
+            Some(shown) => self.presenter.present(shown, window, cx),
+            None => self.presenter.clear(window, cx),
+        }
+        self.stretched = metrics.map(|metrics| (bitmap, metrics.client_rect));
+    }
+
+    /// Stretches the bitmap again when the border box changed size under an equal frame.
+    fn fit(&mut self, window: &mut Window, cx: &mut App) {
+        let (Some(border), Some(metrics)) = (self.border, self.metrics) else {
+            return;
+        };
+        let current = |(_, rect): &(Pixmap, [f64; 4])| rect[2..] == metrics.client_rect[2..];
+        if let Some((bitmap, _)) = self.stretched.take_if(|s| !current(s)) {
+            self.present_stretched(border, bitmap, window, cx);
+        }
+    }
+
+    fn paint(&self, origin: [f32; 2], window: &mut Window) {
+        match self.border {
+            None => self.presenter.paint(origin, window),
+            Some(border) => {
+                let dpr = window.scale_factor();
+                let width = border.device_width(dpr);
+                let inset = origin.map(|v| v + width / dpr);
+                let radius = border.radius - width / dpr;
+                self.presenter.paint_rounded(inset, radius, window);
+            }
+        }
     }
 
     /// Shows a frame drawn elsewhere (a 3D readback, a video frame), bypassing the display list.
@@ -239,15 +340,26 @@ pub fn canvas_view(
             if let Some(frame) = painter(&metrics, cx) {
                 state.update(cx, |this, cx| this.draw(frame, window, cx));
             }
+            state.update(cx, |this, cx| this.fit(window, cx));
             [f32::from(bounds.origin.x), f32::from(bounds.origin.y)]
         },
         move |_, origin, window, cx| {
             let state = paint_state.read(cx);
-            state.presenter.paint(origin, window);
+            state.paint(origin, window);
             #[cfg(feature = "parity")]
-            if let (Some(metrics), Some(image)) = (state.metrics, state.presenter.image().cloned())
-            {
-                crate::parity::record_canvas(cx, || canvas_dump(metrics.client_rect, &image));
+            if let Some(metrics) = state.metrics {
+                let stretched = state.stretched.as_ref().map(|(bitmap, _)| bitmap.clone());
+                let image = state.presenter.image().cloned();
+                if let Some(bitmap) = stretched {
+                    crate::parity::record_canvas(cx, || crate::parity::CanvasDump {
+                        rect: metrics.client_rect,
+                        width: bitmap.width(),
+                        height: bitmap.height(),
+                        rgba: asrs_canvas::pixels::to_straight_rgba(&bitmap),
+                    });
+                } else if let Some(image) = image {
+                    crate::parity::record_canvas(cx, || canvas_dump(metrics.client_rect, &image));
+                }
             }
         },
     )
@@ -266,5 +378,45 @@ fn canvas_dump(rect: [f64; 4], image: &gpui_kit::RenderImage) -> crate::parity::
         width: size.width.0 as u32,
         height: size.height.0 as u32,
         rgba,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_border_insets_the_bitmap_by_whole_device_pixels() {
+        let border = CanvasBorder {
+            width: 1.0,
+            radius: 10.0,
+        };
+        for (dpr, size, inner) in [
+            (1.0, (780, 32), (778, 30)),
+            (2.0, (1560, 64), (1556, 60)),
+            (1.5, (1170, 48), (1168, 46)),
+        ] {
+            let mut bitmap = Pixmap::new(size.0, size.1).expect("bitmap");
+            for p in bitmap.data_mut().as_chunks_mut::<4>().0 {
+                *p = [200, 40, 10, 255];
+            }
+            let metrics = CanvasMetrics {
+                client_width: 780,
+                client_height: 32,
+                device_pixel_ratio: dpr,
+                client_rect: [310.0, 88.0, 780.0, 32.0],
+            };
+            let shown = border.stretch(&bitmap, &metrics).expect("shown");
+            assert_eq!((shown.width(), shown.height()), inner, "{dpr}");
+            assert!(shown.pixels().iter().all(|p| *p == bitmap.pixels()[0]));
+        }
+        let flat = CanvasMetrics {
+            client_width: 780,
+            client_height: 0,
+            device_pixel_ratio: 1.0,
+            client_rect: [310.0, 88.0, 780.0, 0.0],
+        };
+        let bitmap = Pixmap::new(780, 32).expect("bitmap");
+        assert!(border.stretch(&bitmap, &flat).is_none());
     }
 }

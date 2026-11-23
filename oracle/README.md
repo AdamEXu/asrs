@@ -1272,7 +1272,7 @@ Scenario file:
 | `window` | `{"width":1100,"height":650}` | content size in CSS px |
 | `scales`, `themes` | `[1,2]`, `["light","dark"]` | variants; one launch each |
 | `gl` | `false` | 3D scenario: GL switches and drawing-buffer dumps |
-| `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra JSON files seeded into userData |
+| `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra files seeded into userData: JSON values, or `{"$file": path}` for a file under `parity/scenarios` |
 | `actions` | | in order, below |
 
 Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-files` message;
@@ -1315,8 +1315,9 @@ the hub's model APIs (`main` and `open` as main messages, `selection` on the mod
 becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); a `dialog`
 action answers the next dialog the port shows, and `run.json` lists those it showed, which `xtask
 pixel compare` checks against the driver's together with the files under `files/dialog/`. `eval`
-and a non-empty `userData` are refused because the port has no page script and main's userData
-reads are not seeded. Before the window opens it seeds `prefs.json` as the driver does and runs main's own
+and any `userData` outside `userAssets/` are refused because the port has no page script and main's
+other userData reads are not seeded. Before the window opens it seeds `prefs.json` and the
+scenario's user assets as the driver does and runs main's own
 startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
 rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's
