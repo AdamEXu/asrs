@@ -1,0 +1,106 @@
+{
+  "about": "Interaction (U22): the same help window, opened from the Help item of an item's type menu",
+  "scales": [
+    1
+  ],
+  "themes": [
+    "light"
+  ],
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 317,
+      "y": 495
+    },
+    {
+      "mouse": "click",
+      "x": 317,
+      "y": 495
+    },
+    {
+      "menu": [
+        "Help"
+      ]
+    },
+    {
+      "prompt": "sourceListHelp"
+    },
+    {
+      "capture": "opened",
+      "probes": [
+        "div.type-header",
+        "div.type-title",
+        "div.parent-warning",
+        "table.options",
+        "div.source-types"
+      ]
+    },
+    {
+      "wait": 1500
+    }
+  ]
+}

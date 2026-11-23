@@ -13,6 +13,7 @@ pub use patches::{COLUMNS, PATCH, patch_colours};
 #[cfg(feature = "parity")]
 pub use run::{run, run_from_args};
 
+use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
 use asrs_services::window_manager::{WindowKind, WindowManager};
@@ -159,12 +160,16 @@ pub struct Scenario {
     pub gl: bool,
     /// Merged over the default preferences, as main merges `prefs.json`.
     pub prefs: JsValue,
+    /// `beta-2027.json` before the run.
+    pub beta: JsValue,
     /// Files under `userAssets/` seeded into userData before main starts.
     pub user_assets: Vec<(String, Seed)>,
     /// Whether connections go to the scenario's robot.
     pub robot: bool,
     pub actions: Vec<Action>,
 }
+
+pub const BETA_FILE: &str = "beta-2027.json";
 
 /// A seeded file: JSON, or the bytes of a file beside the scenarios (`{"$file": path}`).
 #[derive(Clone, Debug, PartialEq)]
@@ -173,13 +178,14 @@ pub enum Seed {
     File(String),
 }
 
-/// `userData`, whose only files a port run seeds are user assets.
+/// `userData` less `beta-2027.json`, whose only other files a port run seeds are user assets.
 fn user_assets(name: &str, root: &JsValue) -> Result<Vec<(String, Seed)>, String> {
     let Some(seeds) = root.get("userData") else {
         return Ok(Vec::new());
     };
     keys(seeds)
         .into_iter()
+        .filter(|file| file != BETA_FILE)
         .map(|file| {
             if !file.starts_with("userAssets/") || file.split('/').any(|c| c == "..") {
                 return Err(format!(
@@ -351,6 +357,9 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("unitConversion") => Some(WindowKind::UnitConversion),
                 Some("export") => Some(WindowKind::Export),
                 Some("preferences") => Some(WindowKind::Preferences),
+                Some("licenses") => Some(WindowKind::Licenses),
+                Some("sourceListHelp") => Some(WindowKind::SourceListHelp),
+                Some("betaWelcome") => Some(WindowKind::BetaWelcome),
                 Some("download") => Some(WindowKind::Download),
                 Some("satellite") => Some(WindowKind::Satellite),
                 None if value.is_null() => None,
@@ -405,6 +414,8 @@ impl Scenario {
             return Err(format!("{name}: unknown key {key:?}"));
         }
         let user_assets = user_assets(name, &root)?;
+        let beta = root.get("userData").and_then(|u| u.get(BETA_FILE));
+        let beta = beta.cloned();
         let page = match root.get("page").and_then(JsValue::as_str) {
             None => Page::App,
             Some(p) if p.to_string_lossy() == "app" => Page::App,
@@ -466,6 +477,12 @@ impl Scenario {
             scales,
             themes,
             gl: root.get("gl") == Some(&JsValue::Bool(true)),
+            beta: beta.unwrap_or_else(|| {
+                ops::object([
+                    ("welcomeComplete", JsValue::Bool(true)),
+                    ("surveyStatus", JsValue::Bool(true)),
+                ])
+            }),
             prefs: root
                 .get("prefs")
                 .cloned()
@@ -662,7 +679,7 @@ mod tests {
         assert!(e.contains("dialog"), "{e}");
         let e = Scenario::parse(
             "u",
-            r#"{"userData": {"state.json": {}}, "actions": [{"capture": "c"}]}"#,
+            r#"{"userData": {"beta-2027.json": {}, "state.json": {}}, "actions": [{"capture": "c"}]}"#,
         )
         .unwrap_err();
         assert!(e.contains("userData"), "{e}");

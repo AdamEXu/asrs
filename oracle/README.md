@@ -1253,6 +1253,15 @@ insertions are `execCommand("insertText")`, which takes typing's and pasting's r
 `BeforeTextInsertedEvent`. Fixed starting texts with every caret position come first, then seeded
 random ones.
 
+### Licenses, Help and beta welcome vectors
+
+`info/*` (`src/genInfoWindows.ts`) records upstream's `licenses.html`, `sourceListHelp.html` and
+`betaWelcome.html` in an offscreen Electron window, one process per device scale. A `dump` record is
+the whole body after the page settled, `[tag, class, box, colour, extra, children]` per element and
+`[text, line boxes]` per text node; a `step` record is the beta page's state after one trusted click
+or key. `src/licenses.ts` is bundled with its `licenses.json` read from the page, so cases can give
+it a list; the other two pages run their rolldown bundles. Cases with `layout: false` carry no boxes.
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
@@ -1347,7 +1356,8 @@ answer for the next dialog; a name ending in `/` is a folder that exists), `{"me
 context menu that popped up; neither side shows menus natively), `{"appMenu": [label, ...]}`
 (clicks, for the hub window, the one application menu item that has one of these labels, which
 differ per platform), `{"prompt": page | "hub" | null, "index": n}`
-(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export`, `preferences`, `satellite` or `download`:
+(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export`, `preferences`, `licenses`,
+`sourceListHelp`, `betaWelcome`, `satellite` or `download`:
 later input and captures go to that window, the `index`th open one of its page (default 0), whose
 content size is its own unless the action has a `width` and `height`, and a satellite's captures hold
 the state the satellite saved; `null` waits until it has closed; `hub` goes back to the hub and leaves
@@ -1381,9 +1391,10 @@ the hub's model APIs (`main` and `open` as main messages, `selection` on the mod
 becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); a `dialog`
 action answers the next dialog the port shows, and `run.json` lists those it showed, which `xtask
 pixel compare` checks against the driver's together with the files under `files/dialog/`. `eval`
-and any `userData` outside `userAssets/` are refused because the port has no page script and main's
-other userData reads are not seeded. Before the window opens it seeds `prefs.json` and the
-scenario's user assets as the driver does and runs main's own
+is refused because the port has no page script, and so is any `userData` but `beta-2027.json` and
+files under `userAssets/`, because main's other userData reads are not seeded. Before the window
+opens it seeds `prefs.json`, `beta-2027.json` and the scenario's user assets as the driver does and
+runs main's own
 startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
 rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's

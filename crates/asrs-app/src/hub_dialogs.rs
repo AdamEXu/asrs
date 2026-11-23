@@ -1,16 +1,20 @@
-//! Shows the dialogs main answers hub messages with, on the window that sent the message.
+//! Shows the dialogs and opens the windows main answers hub messages with, for the window that
+//! sent the message.
 
 use asrs_js::time::{Clock, NamedZone, SystemClock};
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
 use asrs_services::hub_dialogs;
+use asrs_services::update::feedback_url;
 use asrs_ui::gpui::{AnyWindowHandle, App, Window};
 
+use crate::main_process::{MainProcess, RELEASE_PROFILE};
 use crate::menus::dispatch::{message_box_options, save_dialog_options};
-use crate::windows;
+use crate::windows::{self, Windows};
 
-/// `handleHubMessage`'s `error` and `export-console`; other messages show no dialog here.
+/// `handleHubMessage`'s `error`, `export-console`, `source-list-help`, `prompt-update` and
+/// `open-feedback`; other messages show nothing here.
 pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut App) {
     match message.name {
         HubToMain::Error => {
@@ -44,6 +48,16 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
                 );
             });
         }
+        HubToMain::SourceListHelp => {
+            let config = message.data.clone();
+            cx.defer(move |cx| {
+                if let Some(parent) = Windows::id_of(cx, window) {
+                    MainProcess::open_source_list_help(cx, parent, &config);
+                }
+            });
+        }
+        HubToMain::PromptUpdate => cx.defer(MainProcess::prompt_update),
+        HubToMain::OpenFeedback => cx.open_url(&feedback_url(RELEASE_PROFILE.repository)),
         _ => {}
     }
 }

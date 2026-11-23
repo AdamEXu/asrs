@@ -59,6 +59,11 @@ impl AppPaths {
         constants::state_filename(self.style, &self.user_data, self.app_version())
     }
 
+    /// `BETA_STATE_FILENAME` of the beta `year`.
+    pub fn beta_state(&self, year: &str) -> String {
+        constants::beta_filename(self.style, &self.user_data, year)
+    }
+
     pub fn type_memory(&self) -> String {
         constants::type_memory_filename(self.style, &self.user_data)
     }

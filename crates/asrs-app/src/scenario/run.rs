@@ -29,14 +29,15 @@ use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, DialogReply, DownloadShows, MouseKind, PATCH, Page, Scenario, Seed,
-    Theme, Wheel, patch_colours,
+    Action, BETA_FILE, Button, COLUMNS, DialogReply, DownloadShows, MouseKind, PATCH, Page,
+    Scenario, Seed, Theme, Wheel, patch_colours,
 };
 use crate::download_flow::{self, RobotPort};
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
-use crate::main_process::{MainProcess, process_platform};
+use crate::licenses::LicensesFile;
+use crate::main_process::{BetaTime, MainProcess, process_platform};
 use crate::menus::app_menu;
 use crate::menus::bridge::{MenuAction, ScriptedMenu};
 use crate::menus::dispatch::dispatch;
@@ -50,14 +51,14 @@ use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>]
+[--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
-automatic folders of each variant's userData/; --work-area is the primary display's work area
-origin on the Electron driver's host, which places its window 16 px inside it (default 0,0), at
-one scale or at every scale;
+automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
+lists; --work-area is the primary display's work area origin on the Electron driver's host, which
+places its window 16 px inside it (default 0,0), at one scale or at every scale;
 --robot is where the scenario's robot listens on 127.0.0.1.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
@@ -73,6 +74,8 @@ const STABLE_ATTEMPTS: usize = 120;
 const RANDOM_SEED: u64 = 1;
 /// The Electron driver's `WINDOW_ORIGIN`: its window's offset into the primary work area.
 const WINDOW_ORIGIN: f64 = 16.0;
+/// 2026-11-01T00:00:00Z, before upstream's beta expires.
+const BETA_TIME: f64 = 1_793_491_200_000.0;
 /// The id `StateTracker` keys the one hub window's renderer state by.
 const HUB_WINDOW_ID: f64 = 1.0;
 
@@ -145,13 +148,14 @@ struct Options {
     inputs: Option<PathBuf>,
     probes: Option<PathBuf>,
     bundled_assets: Option<PathBuf>,
+    licenses: Option<PathBuf>,
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
-    let mut bundled_assets = None;
+    let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
     let mut robot = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
@@ -166,6 +170,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--inputs" => inputs = Some(PathBuf::from(value()?)),
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
+            "--licenses" => licenses = Some(PathBuf::from(value()?)),
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--work-area" => {
                 let text = value()?;
@@ -193,6 +198,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         inputs,
         probes,
         bundled_assets,
+        licenses,
         work_areas,
         robot,
     })
@@ -240,6 +246,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let probes = Probes::load(&probes_file)?;
     let mut headless = HeadlessCapture::new(Arc::new(())).map_err(|e| e.to_string())?;
     headless.context().update(windows::init);
+    if let Some(file) = options.licenses.clone() {
+        headless
+            .context()
+            .update(|cx| cx.set_global(LicensesFile(file)));
+    }
     match options.robot {
         Some(port) => headless
             .context()
@@ -574,6 +585,9 @@ impl Variant<'_> {
                     .context()
                     .update(|cx| Windows::of_kind(cx, kind, index))
                     .ok_or_else(|| format!("no {kind:?} prompt is open"))?;
+                if matches!(kind, WindowKind::Licenses | WindowKind::SourceListHelp) {
+                    self.leave_title_bar(window)?;
+                }
                 if let Some((width, height)) = content {
                     self.headless
                         .context()
@@ -600,6 +614,21 @@ impl Variant<'_> {
             }
         };
         self.tick()
+    }
+
+    /// Electron sizes windows without `useContentSize` by their frame, and a headless window has
+    /// none to take the title bar from.
+    fn leave_title_bar(&mut self, window: AnyWindowHandle) -> Result<(), String> {
+        self.headless
+            .context()
+            .update_window(window, |_, window, _| {
+                let frame = window.viewport_size();
+                let side = |v| f64::from(f32::from(v));
+                let (width, height) =
+                    platform::titled_content_size(side(frame.width), side(frame.height));
+                window.resize(size(px(width as f32), px(height as f32)));
+            })
+            .map_err(|e| e.to_string())
     }
 
     fn settle(&mut self) {
@@ -1003,8 +1032,7 @@ impl Variant<'_> {
         Ok(())
     }
 
-    /// Main's startup in the variant's `userData/`: the Electron driver's seeded `prefs.json`,
-    /// then module load and `whenReady` up to the windows. Returns the `set-assets` and
+    /// Main's startup in the variant's `userData/`: the Electron driver's seeded files, then module load and `whenReady` up to the windows. Returns the `set-assets` and
     /// `set-preferences` data.
     fn start_main(&mut self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
@@ -1065,7 +1093,10 @@ impl Variant<'_> {
                 .map(|text| text.unwrap_or_default().into_bytes())
         };
         let prefs = seeded_prefs(self.scenario, self.theme)?;
-        let mut seeds = vec![("prefs.json".to_owned(), json("prefs", &prefs)?)];
+        let mut seeds = vec![
+            ("prefs.json".to_owned(), json("prefs", &prefs)?),
+            (BETA_FILE.to_owned(), json(BETA_FILE, &self.scenario.beta)?),
+        ];
         for (file, seed) in &self.scenario.user_assets {
             let bytes = match seed {
                 Seed::Json(value) => json(file, value)?,
@@ -1170,6 +1201,8 @@ impl Variant<'_> {
                         _ => {}
                     })
                     .detach();
+                    cx.set_global(BetaTime(BETA_TIME));
+                    MainProcess::beta_init(cx, id);
                 });
                 self.window = Some(window.into());
                 self.hub = Some((hub, geometry));

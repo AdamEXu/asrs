@@ -11,16 +11,20 @@ use asrs_js::ops;
 use asrs_js::string::JsError;
 use asrs_js::time::{Clock, NamedZone, SystemClock};
 use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_model::build_constants;
 use asrs_model::messages::{HubToMain, MainToHub, MainToSatellite, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::{Preferences, Theme};
+use asrs_model::source_list_config::SourceListConfig;
 use asrs_services::asset_downloader;
+use asrs_services::beta::{self, BetaConfig, BetaStartup};
 use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
+use asrs_services::dialog::MessageBox;
 use asrs_services::ds_layout::default_ds_layout;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{self, AppPaths, HubRestore, MainState, StartupWindow};
 use asrs_services::path::PathStyle;
 use asrs_services::routing::{Action, Hubs, Route};
-use asrs_services::update::ReleaseProfile;
+use asrs_services::update::{FetchReply, ReleaseProfile, UpdateChecker, UpdateEnv};
 use asrs_services::window_manager::Platform;
 use asrs_services::windows::WindowSystem;
 use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, WeakEntity};
@@ -31,6 +35,7 @@ use crate::download_flow;
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
+use crate::licenses;
 use crate::menus::app_menu;
 use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
@@ -40,6 +45,7 @@ use crate::satellite::{Satellite, SatelliteEvent};
 use crate::video;
 use crate::views::documentation::DocumentationRoot;
 use crate::views::hub_host::{HubEntityHost, boot_messages, show_satellite_menu};
+use crate::views::info::{self, SourceListHelpPage};
 use crate::views::prompts;
 use crate::views::satellite_host::SatelliteHost;
 use crate::windows::{self, Rect, SatellitePlacement, WindowId, Windows};
@@ -62,6 +68,7 @@ pub const RELEASE_PROFILE: ReleaseProfile = if cfg!(feature = "parity") {
 
 pub struct MainProcess {
     state: MainState,
+    updater: UpdateChecker,
     /// `menuTemplate`.
     menu: Vec<MenuItem>,
     hubs: Vec<(WindowId, WeakEntity<Hub>)>,
@@ -301,6 +308,7 @@ impl MainProcess {
     pub(crate) fn headless(state: MainState, scenario_seed: u64) -> MainProcess {
         MainProcess {
             state,
+            updater: UpdateChecker::new(),
             menu: Vec::new(),
             hubs: Vec::new(),
             satellites: Vec::new(),
@@ -715,6 +723,166 @@ impl MainProcess {
         }
     }
 
+    /// `openLicenses(parent)`.
+    pub fn open_licenses(cx: &mut App, parent: WindowId) {
+        let licenses = match licenses::load(cx) {
+            Ok(licenses) => licenses,
+            Err(e) => {
+                eprintln!("asrs: licenses: {e}");
+                return dispatch::show_error("The licenses could not be read", &e, cx);
+            }
+        };
+        if let Err(e) = info::open_licenses(cx, parent, licenses) {
+            eprintln!("asrs: opening the licenses window: {e}");
+        }
+    }
+
+    /// `openSourceListHelp(parent, config)`.
+    pub fn open_source_list_help(
+        cx: &mut App,
+        parent: WindowId,
+        config: &JsValue,
+    ) -> Option<(WindowId, Entity<SourceListHelpPage>)> {
+        let Some(config) = SourceListConfig::from_js(config) else {
+            eprintln!("asrs: source list help: not a config: {config:?}");
+            return None;
+        };
+        let opened = info::open_source_list_help(cx, parent, &config)
+            .inspect_err(|e| eprintln!("asrs: opening a source list help window: {e}"))
+            .ok()?;
+        Self::send_all_preferences(cx);
+        Some(opened)
+    }
+
+    /// The beta block of a hub window's `dom-ready`.
+    pub(crate) fn beta_init(cx: &mut App, window: WindowId) {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return;
+        };
+        let beta = Beta::of(main, cx);
+        let startup = beta::beta_startup(
+            &RealFs,
+            beta.file.as_deref(),
+            beta.config.as_ref(),
+            &beta,
+            build_constants::DISTRIBUTION,
+            crate::IDENTITY.name,
+        );
+        match startup {
+            Ok(BetaStartup::Nothing) => {}
+            Ok(BetaStartup::Expired(options)) => {
+                let options = dispatch::message_box_options(&options);
+                dispatch::show_message_box(Some(window), options, cx, |response, cx| {
+                    if beta::beta_expired_response(response) {
+                        cx.quit();
+                    }
+                });
+            }
+            Ok(BetaStartup::Welcome) => Self::open_beta_welcome(cx, window, beta),
+            Ok(BetaStartup::Survey(options)) => {
+                let options = dispatch::message_box_options(&options);
+                dispatch::show_message_box(Some(window), options, cx, move |response, cx| {
+                    let answered = beta::beta_survey_response(
+                        &RealFs,
+                        beta.file.as_deref(),
+                        beta.config.as_ref(),
+                        &beta,
+                        response,
+                        |url| cx.open_url(url),
+                    );
+                    beta.log(answered);
+                });
+            }
+            Err(e) => beta.log(Err(e)),
+        }
+    }
+
+    /// `openBetaWelcome(parent)`: closing it quits the app, its button closes it without.
+    fn open_beta_welcome(cx: &mut App, parent: WindowId, beta: Beta) {
+        let is_alpha = beta::beta_welcome_ready(beta.config.as_ref());
+        let (id, page) = match info::open_beta_welcome(cx, parent, is_alpha) {
+            Ok(opened) => opened,
+            Err(e) => return eprintln!("asrs: opening the beta welcome window: {e}"),
+        };
+        if let Some(handle) = Windows::handle(cx, id) {
+            let _ = handle.update(cx, |_, window, cx| {
+                window.on_window_should_close(cx, |_, cx| {
+                    if beta::beta_welcome_closed() {
+                        cx.quit();
+                    }
+                    true
+                });
+            });
+        }
+        cx.subscribe(&page, move |_, _: &info::Acknowledged, cx| {
+            windows::close(cx, id);
+            beta.log(beta::beta_welcome_done(
+                &RealFs,
+                beta.file.as_deref(),
+                beta.config.as_ref(),
+                &beta,
+            ));
+        })
+        .detach();
+    }
+
+    fn update_env() -> UpdateEnv<'static> {
+        UpdateEnv {
+            platform: process_platform(),
+            arch: process_arch(),
+            running_under_arm64_translation: false,
+            packaged: PACKAGED,
+            version: build_constants::VERSION,
+            is_beta: IS_BETA,
+            repository: RELEASE_PROFILE.repository,
+            app_name: crate::IDENTITY.name,
+        }
+    }
+
+    /// `checkForUpdate(alwaysPrompt)`; false in a build that does not check. A packaged build's
+    /// check has no HTTP client yet.
+    pub fn check_for_update(cx: &mut App, always_prompt: bool) -> bool {
+        if !RELEASE_PROFILE.update_check || PACKAGED || !cx.has_global::<MainProcess>() {
+            return false;
+        }
+        let checked = cx.global_mut::<MainProcess>().updater.check_for_update(
+            &Self::update_env(),
+            &NamedZone::system(),
+            always_prompt,
+            |_| FetchReply::Rejected,
+        );
+        if let Some(show) = checked.button {
+            for (_, hub) in Self::hub_windows(cx) {
+                Self::send(cx, &hub, MainToHub::ShowUpdateButton, JsValue::Bool(show));
+            }
+        }
+        if let Some(options) = checked.prompt {
+            Self::show_update_prompt(cx, &options);
+        }
+        true
+    }
+
+    /// `prompt-update`: `updateChecker.showPrompt()`.
+    pub fn prompt_update(cx: &mut App) {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return;
+        };
+        let options = main.updater.prompt_box();
+        Self::show_update_prompt(cx, &options);
+    }
+
+    fn show_update_prompt(cx: &mut App, options: &MessageBox) {
+        let options = dispatch::message_box_options(options);
+        dispatch::show_message_box(None, options, cx, |response, cx| {
+            let updater = &mut cx.global_mut::<MainProcess>().updater;
+            match &updater.prompt_response(&Self::update_env(), response) {
+                Some(JsValue::String(url)) => cx.open_url(&url.to_string_lossy()),
+                Some(other) => eprintln!("asrs: shell.openExternal: not a string: {other:?}"),
+                None => {}
+            }
+        });
+    }
+
     /// `menuTemplate`, as the last `sendAllPreferences` left it.
     pub fn menu(cx: &App) -> &[MenuItem] {
         &cx.global::<MainProcess>().menu
@@ -856,6 +1024,7 @@ impl MainProcess {
         let main = cx.global_mut::<MainProcess>();
         main.hubs.retain(|(_, h)| h.upgrade().is_some());
         main.hubs.push((id, weak));
+        Self::beta_init(cx, id);
         Some(id)
     }
 
@@ -986,6 +1155,42 @@ impl MainProcess {
     }
 }
 
+/// The time the beta flow reads in place of the system's, for runs that outlive the beta.
+pub struct BetaTime(pub f64);
+
+impl Global for BetaTime {}
+
+/// `BETA_CONFIG` and its state file; neither in a build that skips the beta flow.
+struct Beta {
+    config: Option<BetaConfig>,
+    file: Option<String>,
+    time: Option<f64>,
+}
+
+impl Clock for Beta {
+    fn now(&self) -> f64 {
+        self.time.unwrap_or_else(|| SystemClock.now())
+    }
+}
+
+impl Beta {
+    fn of(main: &MainProcess, cx: &App) -> Beta {
+        let config = beta::beta_config(RELEASE_PROFILE.beta_survey, &NamedZone::system());
+        Beta {
+            file: config.as_ref().map(|c| main.state.paths.beta_state(c.year)),
+            config,
+            time: cx.try_global::<BetaTime>().map(|time| time.0),
+        }
+    }
+
+    fn log(&self, result: Result<(), JsError>) {
+        if let Err(e) = result {
+            let file = self.file.as_deref().unwrap_or_default();
+            eprintln!("asrs: {file}: {}: {}", e.name, e.message);
+        }
+    }
+}
+
 /// `open-app-menu` and `close-app-menu`: the `title-bar-menu`'s buttons, which leave out the edit
 /// menu.
 fn title_bar_menu_message(
@@ -1090,9 +1295,14 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     let saved = state
         .tracker
         .get_saved_application_state(&RealFs, &screens, true);
+    let mut menu = app_menu::template(Platform::current(), &prefs, crate::IDENTITY);
+    if !RELEASE_PROFILE.update_check {
+        app_menu::remove_update_check(&mut menu);
+    }
     cx.set_global(MainProcess {
         state,
-        menu: app_menu::template(Platform::current(), &prefs, crate::IDENTITY),
+        updater: UpdateChecker::new(),
+        menu,
         hubs: Vec::new(),
         satellites: Vec::new(),
         scenario_seed: None,
@@ -1127,6 +1337,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         Err(e) => eprintln!("asrs: restoring windows: {e:?}"),
     }
 
+    MainProcess::check_for_update(cx, false);
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
         if MainProcess::load_assets(cx) {
             MainProcess::send_assets(cx);

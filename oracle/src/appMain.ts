@@ -30,7 +30,7 @@ inputs/ and, with --colour=display, display.icc.`;
 
 const WINDOW_ORIGIN = 16;
 const RANDOM_SEED = 1;
-const RUN_TIMEOUT_MS = 240_000;
+const RUN_TIMEOUT_MS = 480_000;
 const READY_TIMEOUT_MS = 90_000;
 const IDLE_TIMEOUT_MS = 60_000;
 const STABLE_TIMEOUT_MS = 30_000;

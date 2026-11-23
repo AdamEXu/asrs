@@ -1,7 +1,8 @@
 // Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2006-2023 Google Inc.). See THIRD_PARTY_NOTICES.md.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use skrifa::instance::{Location, LocationRef, Size};
 use skrifa::metrics::{GlyphMetrics, Metrics};
@@ -18,6 +19,19 @@ use crate::blit::Spans;
 use crate::hairline::P;
 use crate::skpath::SkPath;
 use crate::text::{LcdMask, Mask};
+
+/// A font file's bytes, read once per process: faces borrow them forever.
+fn font_bytes(path: &Path) -> Option<&'static [u8]> {
+    static FILES: Mutex<Option<HashMap<PathBuf, &'static [u8]>>> = Mutex::new(None);
+    let mut files = FILES.lock().unwrap_or_else(PoisonError::into_inner);
+    let files = files.get_or_insert_default();
+    if let Some(data) = files.get(path) {
+        return Some(data);
+    }
+    let data: &'static [u8] = Vec::leak(std::fs::read(path).ok()?);
+    files.insert(path.to_owned(), data);
+    Some(data)
+}
 
 /// One face of a font file, as `SkTypeface_Fontations` holds it.
 pub struct Typeface {
@@ -100,8 +114,7 @@ impl OutlinePen for Pen {
 
 impl Typeface {
     pub fn load(found: &Match) -> Option<Typeface> {
-        let data: &'static [u8] = Vec::leak(std::fs::read(&found.path).ok()?);
-        Typeface::new(data, found)
+        Typeface::new(font_bytes(&found.path)?, found)
     }
 
     fn new(data: &'static [u8], found: &Match) -> Option<Typeface> {
@@ -338,5 +351,12 @@ mod tests {
         let sum = |f: &[u32]| f.iter().sum::<u32>() * 255 / 256;
         assert_eq!(u32::from(lcd.data[0]), sum(&LCD_FILTER[0][8..]));
         assert_eq!(u32::from(lcd.data[2]), sum(&LCD_FILTER[2][8..]));
+    }
+
+    #[test]
+    fn a_font_file_is_read_once() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let [a, b] = [(); 2].map(|()| font_bytes(&path).expect("a file"));
+        assert!(std::ptr::eq(a, b));
     }
 }

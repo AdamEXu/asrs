@@ -953,6 +953,8 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             )
             .arg("--bundled-assets")
             .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
+            .arg("--licenses")
+            .arg(workspace_root().join("target/oracle/upstream/src/licenses.json"))
             .args(
                 work_areas
                     .into_iter()

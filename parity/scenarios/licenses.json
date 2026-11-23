@@ -1,0 +1,49 @@
+{
+  "about": "Interaction (U22): the licenses window, opened through the application menu's item on both sides, listing upstream's own licenses.json. Every line box of the whole document is compared in every capture, including those scrolled out of view",
+  "actions": [
+    {
+      "idle": true
+    },
+    {
+      "appMenu": [
+        "Show Licenses..."
+      ]
+    },
+    {
+      "prompt": "licenses"
+    },
+    {
+      "wheel": {
+        "x": 300,
+        "y": 300,
+        "deltaX": 0,
+        "deltaY": -120000,
+        "precise": true
+      }
+    },
+    {
+      "key": "PageDown"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "middle"
+    },
+    {
+      "key": "End"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "end"
+    }
+  ]
+}

@@ -25,6 +25,13 @@ pub struct RobotPort(pub u16);
 #[cfg(feature = "parity")]
 impl Global for RobotPort {}
 
+/// `readyTimeout` of the connections to [`RobotPort`], in place of upstream's.
+#[cfg(feature = "parity")]
+pub struct RobotTimeout(pub f64);
+
+#[cfg(feature = "parity")]
+impl Global for RobotTimeout {}
+
 /// The service, which outlives each window it is for.
 struct Downloads {
     service: DownloadService,
@@ -63,12 +70,14 @@ pub fn deliver(event: DownloadEvent, cx: &mut App) {
 fn config(cx: &App) -> DownloadConfig {
     #[cfg(feature = "parity")]
     if let Some(&RobotPort(port)) = cx.try_global::<RobotPort>() {
+        let timeout = cx.try_global::<RobotTimeout>().map(|timeout| timeout.0);
         let mut config = DownloadConfig::new(PathStyle::host());
         let target = config.target;
         config.target = Box::new(move |options| {
             let mut target = target(options);
             if target.host == "127.0.0.1" {
                 target.port = port;
+                target.ready_timeout_ms = timeout.unwrap_or(target.ready_timeout_ms);
             }
             target
         });

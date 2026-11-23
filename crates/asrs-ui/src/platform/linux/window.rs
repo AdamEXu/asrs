@@ -6,6 +6,11 @@ use super::x11::X11Window;
 
 pub struct NativeWindow(X11Window);
 
+#[cfg(feature = "parity")]
+pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+    (width, height)
+}
+
 pub fn native(window: &Window) -> Option<NativeWindow> {
     X11Window::of(window).map(NativeWindow)
 }

@@ -253,6 +253,11 @@ pub fn line_metrics(backend: &mut dyn TextBackend, style: &Style, scale: f32) ->
     (ascent, descent, height)
 }
 
+/// The leading above a line's text: half of it, floored to whole device px.
+pub(super) fn line_leading(line_height: Lu, ascent: Lu, descent: Lu) -> Lu {
+    lu_floor_px((line_height - (ascent + descent)) / 2)
+}
+
 /// `text` shaped in `style`'s font, with `letter-spacing` added after every character as
 /// Blink's `ShapeResultSpacing` does, the last one included.
 fn shape(backend: &mut dyn TextBackend, style: &Style, text: &str, scale: f32) -> Shaped {
@@ -312,7 +317,7 @@ pub(super) fn utf16_len(s: &str) -> usize {
 }
 
 /// `LineOffsetForTextAlign`.
-fn align_offset(align: Align, direction: Direction, space: Lu) -> Lu {
+pub(super) fn align_offset(align: Align, direction: Direction, space: Lu) -> Lu {
     let ltr = direction == Direction::Ltr;
     let align = match align {
         Align::Start if ltr => Align::Left,
@@ -755,7 +760,7 @@ pub fn layout(
     scale: f32,
 ) -> Layout {
     let (ascent, descent, line_height) = line_metrics(backend, style, scale);
-    let leading = lu_floor_px((line_height - (ascent + descent)) / 2);
+    let leading = line_leading(line_height, ascent, descent);
     let strut = (leading + ascent, line_height - leading - ascent);
     let mut texts = Vec::new();
     for paragraph in collapse(text, style.white_space) {
@@ -807,7 +812,12 @@ pub fn layout(
             runs.into_iter().map(|(f, _)| f).collect()
         };
         let (above, below) = if style.line_height == LineHeight::Normal {
-            used_fonts(backend, &fragments, scale, strut)
+            extend_with_fallbacks(
+                backend,
+                fragments.iter().flat_map(|f| &f.glyphs),
+                scale,
+                strut,
+            )
         } else {
             strut
         };
@@ -833,13 +843,13 @@ pub fn layout(
 
 /// `InlineBoxState::AccumulateUsedFonts`: under `line-height: normal` a line box also holds the
 /// ascent and descent, with about half the line gap each side, of every fallback font its glyphs use.
-fn used_fonts(
+pub(super) fn extend_with_fallbacks<'a>(
     backend: &mut dyn TextBackend,
-    fragments: &[Fragment],
+    glyphs: impl IntoIterator<Item = &'a ShapedGlyph>,
     scale: f32,
     (mut above, mut below): (Lu, Lu),
 ) -> (Lu, Lu) {
-    for glyph in fragments.iter().flat_map(|f| &f.glyphs) {
+    for glyph in glyphs {
         if let Some(m) = backend.fallback_metrics(glyph.glyph, scale) {
             let (a, d) = (m.ascent as Lu * LU_PER_PX, m.descent as Lu * LU_PER_PX);
             let gap = m.line_gap as Lu * LU_PER_PX;

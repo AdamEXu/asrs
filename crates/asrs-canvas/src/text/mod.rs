@@ -1,6 +1,7 @@
 pub mod cache;
 pub mod coverage;
 pub mod dom;
+pub mod flow;
 pub mod font;
 pub mod inline;
 pub mod layout;

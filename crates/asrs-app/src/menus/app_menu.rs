@@ -33,6 +33,15 @@ pub fn template(platform: Platform, prefs: &Preferences, identity: AppIdentity) 
     ]
 }
 
+/// Takes out "Check for Updates...", for a build that never checks.
+pub fn remove_update_check(menu: &mut [MenuItem]) {
+    for item in menu {
+        if let Some(submenu) = &mut item.submenu {
+            submenu.retain(|item| item.command != Some(Command::CheckForUpdates));
+        }
+    }
+}
+
 fn app(mac: bool, identity: AppIdentity) -> MenuItem {
     let mut items = vec![MenuItem::new(format!("About {}", identity.name)).command(Command::About)];
     if mac {

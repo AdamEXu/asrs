@@ -65,6 +65,20 @@ pub fn paint_text_field(bounds: Bounds<Pixels>, disabled: bool, window: &mut Win
     skia::paint(("text-field", w, h, disabled), bounds, draw, window, cx);
 }
 
+/// What the pointer does to a control, which the theme's colours follow.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PointerState {
+    #[default]
+    Normal,
+    Hovered,
+    Pressed,
+}
+
+const HOVERED_BORDER: u32 = 0x4f4f4fff;
+const PRESSED_BORDER: u32 = 0x8d8d8dff;
+const HOVERED_ACCENT: u32 = 0x005cc8ff;
+const PRESSED_ACCENT: u32 = 0x3793ffff;
+
 type Toggle = Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
 
 /// `PaintCheckboxRadioCommon` and `PaintCheckbox`: the largest centred square, a white
@@ -75,6 +89,7 @@ pub struct Checkbox {
     id: ElementId,
     checked: bool,
     disabled: bool,
+    pointer: PointerState,
     on_toggle: Option<Toggle>,
 }
 
@@ -84,8 +99,14 @@ impl Checkbox {
             id: id.into(),
             checked,
             disabled: false,
+            pointer: PointerState::Normal,
             on_toggle: None,
         }
+    }
+
+    pub fn pointer(mut self, pointer: PointerState) -> Self {
+        self.pointer = pointer;
+        self
     }
 
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -100,7 +121,18 @@ impl Checkbox {
     }
 }
 
-pub fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, window: &mut Window, cx: &mut App) {
+pub fn paint_checkbox(
+    bounds: Bounds<Pixels>,
+    checked: bool,
+    pointer: PointerState,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let (accent, border) = match pointer {
+        PointerState::Normal => (ACCENT, NATIVE_BORDER),
+        PointerState::Hovered => (HOVERED_ACCENT, HOVERED_BORDER),
+        PointerState::Pressed => (PRESSED_ACCENT, PRESSED_BORDER),
+    };
     let scale = window.scale_factor();
     let (w, h) = skia::device_size(bounds, scale);
     let (cw, ch) = (
@@ -115,7 +147,7 @@ pub fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, window: &mut Window
         let white = skia::paint_attrs("fill", 0xffffffff);
         let mut body = skia::rect(x + bg, y + bg, side - 2.0 * bg, side - 2.0 * bg, r, &white);
         if checked {
-            body += &skia::rect(x, y, side, side, r, &skia::paint_attrs("fill", ACCENT));
+            body += &skia::rect(x, y, side, side, r, &skia::paint_attrs("fill", accent));
             body += &format!(
                 "<path d=\"M{} {} L{} {} L{} {}\" fill=\"none\" {} stroke-width=\"{}\"/>",
                 x + side * 0.2,
@@ -130,22 +162,28 @@ pub fn paint_checkbox(bounds: Bounds<Pixels>, checked: bool, window: &mut Window
         } else {
             let paint = format!(
                 "fill=\"none\" {} stroke-width=\"1\"",
-                skia::paint_attrs("stroke", NATIVE_BORDER)
+                skia::paint_attrs("stroke", border)
             );
             body += &skia::rect(x + 0.5, y + 0.5, side - 1.0, side - 1.0, r, &paint);
         }
         skia::svg(w, h, f64::from(scale), &body)
     };
-    skia::paint(("checkbox", w, h, checked), bounds, draw, window, cx);
+    skia::paint(
+        ("checkbox", w, h, checked, pointer),
+        bounds,
+        draw,
+        window,
+        cx,
+    );
 }
 
 impl RenderOnce for Checkbox {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let checked = self.checked;
+        let (checked, pointer) = (self.checked, self.pointer);
         let mut root = div().id(self.id).size_full().child(
             canvas(
                 |_, _, _| {},
-                move |bounds, _, window, cx| paint_checkbox(bounds, checked, window, cx),
+                move |bounds, _, window, cx| paint_checkbox(bounds, checked, pointer, window, cx),
             )
             .size_full(),
         );

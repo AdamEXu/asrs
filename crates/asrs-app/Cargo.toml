@@ -127,6 +127,10 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "info_windows"
+required-features = ["parity"]
+
+[[test]]
 name = "video_flow"
 required-features = ["parity"]
 

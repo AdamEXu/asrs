@@ -76,6 +76,11 @@ pub(super) fn wheel_delta(_event: &ScrollEvent) -> Option<WheelDelta> {
 pub(super) mod window {
     use gpui_kit::Window;
 
+    #[cfg(feature = "parity")]
+    pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+        (width, height)
+    }
+
     pub enum NativeWindow {}
 
     pub fn native(_window: &Window) -> Option<NativeWindow> {

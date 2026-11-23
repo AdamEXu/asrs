@@ -11,23 +11,27 @@ mod child;
 #[path = "support/settle.rs"]
 mod settle;
 
+use std::io::{ErrorKind, Read};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
 use std::sync::Arc;
 use std::time::Duration;
 
-use asrs_app::download_flow::{self, RobotPort};
-use asrs_app::main_process::{self, MainProcess};
+use asrs_app::download_flow::{self, RobotPort, RobotTimeout};
+use asrs_app::licenses::{self, LicensesFile};
+use asrs_app::main_process::{self, BetaTime, MainProcess};
 use asrs_app::menus::app_menu;
 use asrs_app::menus::bridge::{self, MenuAction};
 use asrs_app::menus::dispatch::dispatch;
 use asrs_app::menus::model::{Command, HelpLink, MenuItem};
 use asrs_app::windows::{self, MessageBoxType, Rect, WindowId, WindowKind, Windows};
 use asrs_hub::hub::HubModel;
-use asrs_js::value::JsValue;
+use asrs_js::value::{JsValue, ToJs};
 use asrs_model::json_file;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Theme, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode};
+use asrs_model::source_list::configs;
 use asrs_model::tab_type::TabType;
 use asrs_services::dialog::OpenDialog;
 use asrs_services::download::DownloadEvent;
@@ -90,6 +94,7 @@ impl AppUnderTest {
             asrs_ui::init(cx);
             windows::init(cx);
             cx.set_global(Script::default());
+            cx.set_global(BetaTime(0.0));
             main_process::start(cx, &[], events);
         });
         let mut app = AppUnderTest { cx, home };
@@ -101,10 +106,14 @@ impl AppUnderTest {
         settle::settle(&mut self.cx);
     }
 
-    fn prefs_path(&self) -> PathBuf {
+    fn user_data(&self, file: &str) -> PathBuf {
         let user_data =
             lifecycle::user_data_dir(Platform::current(), |name| std::env::var(name).ok());
-        Path::new(&user_data.expect("a user-data directory")).join("prefs.json")
+        Path::new(&user_data.expect("a user-data directory")).join(file)
+    }
+
+    fn prefs_path(&self) -> PathBuf {
+        self.user_data("prefs.json")
     }
 
     fn pref(&self, key: &str) -> JsValue {
@@ -134,11 +143,15 @@ impl AppUnderTest {
         assert_eq!(focused, Some(window));
     }
 
-    fn preferences(&mut self) -> Option<WindowId> {
+    fn window(&mut self, kind: WindowKind) -> Option<WindowId> {
         self.cx.update(|cx| {
-            let window = Windows::of_kind(cx, WindowKind::Preferences, 0)?;
+            let window = Windows::of_kind(cx, kind, 0)?;
             Windows::id_of(cx, window)
         })
+    }
+
+    fn preferences(&mut self) -> Option<WindowId> {
+        self.window(WindowKind::Preferences)
     }
 
     fn satellites(&mut self) -> Vec<WindowId> {
@@ -254,7 +267,9 @@ impl AppUnderTest {
             let handle = app.cx.update(|cx| Windows::handle(cx, window));
             app.cx
                 .update_window(handle.expect("open"), |_, window, cx| {
-                    window.dispatch_keystroke(Keystroke::parse(key).expect("a keystroke"), cx)
+                    let keystroke = Keystroke::parse(key).expect("a keystroke");
+                    window.dispatch_keystroke(keystroke.clone(), cx);
+                    window.dispatch_event(PlatformInput::KeyUp(KeyUpEvent { keystroke }), cx);
                 })
                 .expect("open");
         })
@@ -308,11 +323,8 @@ impl AppUnderTest {
         );
     }
 
-    /// A key pressed and released.
     fn key(&mut self, window: WindowId, key: &'static str) {
         assert!(self.press(window, key, &[]).is_empty());
-        let keystroke = Keystroke::parse(key).expect("a keystroke");
-        self.send(window, vec![PlatformInput::KeyUp(KeyUpEvent { keystroke })]);
     }
 
     fn mode(&mut self, hub: WindowId) -> SelectionMode {
@@ -376,6 +388,7 @@ fn in_a_fresh_home() {
     let [hub] = hubs[..] else {
         panic!("{hubs:?}");
     };
+    the_beta_welcome_is_acknowledged(&mut app, hub);
     app.focus(hub);
 
     keys_reach_the_page_unless_a_text_field_has_focus(&mut app, hub);
@@ -383,7 +396,17 @@ fn in_a_fresh_home() {
     preferences_reach_the_file_the_hubs_and_the_menu(&mut app, hub);
     dialogs_show_and_resume(&mut app, hub);
     the_preferences_window_writes_the_file(&mut app, hub);
-    the_download_window_shows_what_the_service_sends(&mut app, hub);
+    the_licenses_window_opens_once(&mut app, hub);
+    help_windows_open_beside_the_hub(&mut app, hub);
+    let robot = TcpListener::bind("127.0.0.1:0").expect("a port");
+    let port = robot.local_addr().expect("its address").port();
+    app.cx.update(|cx| {
+        cx.set_global(RobotPort(port));
+        cx.set_global(RobotTimeout(600_000.0));
+    });
+    closing_licenses_or_help_stops_the_download(&mut app, hub, &robot);
+    drop(robot);
+    the_download_window_shows_what_the_service_sends(&mut app, hub, port);
     accelerators_reach_the_window_they_were_pressed_in(&mut app, hub);
     let hub = windows_open_and_close(&mut app, hub);
     layouts_round_trip(&mut app, hub);
@@ -558,6 +581,201 @@ fn keys_reach_the_page_unless_a_text_field_has_focus(app: &mut AppUnderTest, hub
     assert_eq!(app.mode(hub), Playback, "from a satellite");
     app.key(satellite, "space");
     app.close(satellite);
+    app.focus(hub);
+}
+
+fn the_beta_welcome_is_acknowledged(app: &mut AppUnderTest, hub: WindowId) {
+    let file = app.user_data("beta-2027.json");
+    assert!(!file.exists());
+    let window = app.window(WindowKind::BetaWelcome).expect("the welcome");
+    let bounds = app.bounds(window);
+    let height = if cfg!(windows) { 530.0 } else { 490.0 };
+    assert_eq!((bounds.width, bounds.height), (450.0, height));
+    for _ in 0..3 {
+        app.tab(window, 1, false);
+        app.press(window, "enter", &[]);
+        assert!(!file.exists());
+        app.press(window, "space", &[]);
+    }
+    assert_eq!(app.window(WindowKind::BetaWelcome), Some(window));
+    app.tab(window, 1, false);
+    app.press(window, "enter", &[]);
+    assert_eq!(app.window(WindowKind::BetaWelcome), None);
+    let written = std::fs::read_to_string(&file).expect("beta-2027.json");
+    assert_eq!(
+        written,
+        "{\"welcomeComplete\":true,\"surveyStatus\":false}\n"
+    );
+    assert_eq!(app.hubs(), [hub]);
+}
+
+fn the_licenses_window_opens_once(app: &mut AppUnderTest, hub: WindowId) {
+    let file = app.home.join("licenses.json");
+    app.cx
+        .update(|cx| cx.set_global(LicensesFile(file.clone())));
+    let shown = app.click(Command::OpenLicenses, &[Reply::Button(0)]);
+    let (_, kind, text, _) = message(&shown);
+    assert_eq!(
+        (kind, text),
+        (MessageBoxType::Error, "The licenses could not be read")
+    );
+    assert_eq!(app.window(WindowKind::Licenses), None);
+
+    let list = r#"[{"module":"AdvantageScope","text":"a\n\nb"},{"module":"z","text":"- c"}]"#;
+    std::fs::write(&file, list).expect("licenses.json");
+    assert!(app.click(Command::OpenLicenses, &[]).is_empty());
+    let window = app.window(WindowKind::Licenses).expect("the licenses");
+    let (bounds, parent) = (app.bounds(window), app.bounds(hub));
+    assert_eq!((bounds.width, bounds.height), (600.0, 625.0));
+    let center = |start: f64, outer: f64, inner: f64| (start + outer / 2.0 - inner / 2.0).floor();
+    assert_eq!(bounds.x, center(parent.x, parent.width, 600.0));
+    assert_eq!(bounds.y, center(parent.y, parent.height, 625.0));
+    app.focus(hub);
+    assert!(app.click(Command::OpenLicenses, &[]).is_empty());
+    assert_eq!(app.window(WindowKind::Licenses), Some(window));
+    let modules = app.cx.update(|cx| {
+        let licenses = licenses::load(cx).expect("the list");
+        licenses
+            .iter()
+            .map(|l| (l.module.len(), l.parts.len()))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(modules, [(1, 3), (1, 1)]);
+    app.close(window);
+    assert_eq!(app.window(WindowKind::Licenses), None);
+    app.focus(hub);
+}
+
+fn help_windows_open_beside_the_hub(app: &mut AppUnderTest, hub: WindowId) {
+    let parent = app.bounds(hub);
+    let mut opened = Vec::new();
+    let path = app.prefs_path();
+    let saved = std::fs::read_to_string(&path).expect("prefs.json");
+    let edited = saved.replace("\"liveDiscard\":1200", "\"liveDiscard\":1100");
+    assert_ne!(edited, saved);
+    for (config, prefs, discard) in [
+        (configs::line_graph_numeric(), edited, 1100.0),
+        (configs::mechanism(), saved, 1200.0),
+    ] {
+        std::fs::write(&path, prefs).expect("prefs.json");
+        let data = config.to_js();
+        let opened_help = app
+            .cx
+            .update(|cx| MainProcess::open_source_list_help(cx, hub, &data));
+        let (window, page) = opened_help.expect("a help window");
+        app.settle();
+        let held = app.hub(hub, |hub| hub.page().preferences().map(|p| p.live_discard));
+        assert_eq!(held, Some(discard));
+        let bounds = app.bounds(window);
+        assert_eq!((bounds.width, bounds.height), (350.0, 500.0));
+        assert_eq!(bounds.x, parent.x + 30.0);
+        assert_eq!(bounds.y, (parent.y + parent.height / 2.0 - 250.0).floor());
+        let help = app.cx.update(|cx| page.read(cx).help().clone());
+        assert_eq!(help.title(), format!("{} Help", config.title));
+        let documented = config.types.iter().filter(|t| t.show_docs).count();
+        assert_eq!(help.items().len(), documented);
+        opened.push(window);
+    }
+    assert_ne!(opened[0], opened[1]);
+    for window in opened {
+        app.close(window);
+    }
+    app.focus(hub);
+}
+
+/// Points the preferences at 127.0.0.1 and returns the file as it was.
+fn write_robot_address(app: &AppUnderTest) -> Vec<u8> {
+    let path = app.prefs_path();
+    let before = std::fs::read(&path).expect("prefs.json");
+    let mut prefs = json_file::parse(&before).expect("prefs.json");
+    let object = prefs.as_object_mut().expect("prefs.json is an object");
+    object.insert("robotAddress", JsValue::string("127.000.0.1"));
+    object.insert("systemcoreStaticAddress", JsValue::string(""));
+    std::fs::write(&path, json_file::stringify(&prefs).expect("JSON")).expect("prefs.json");
+    before
+}
+
+fn assert_connected(connection: &mut TcpStream) {
+    let timeout = Some(Duration::from_millis(300));
+    connection.set_read_timeout(timeout).expect("a timeout");
+    let open = connection.read_to_end(&mut Vec::new());
+    let open = open.expect_err("no end yet");
+    assert!(
+        matches!(open.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
+        "{open}"
+    );
+}
+
+fn assert_ends(connection: &mut TcpStream, what: &str) {
+    let timeout = Some(Duration::from_secs(60));
+    connection.set_read_timeout(timeout).expect("a timeout");
+    connection
+        .read_to_end(&mut Vec::new())
+        .unwrap_or_else(|e| panic!("{what}: {e}"));
+}
+
+fn closing_licenses_or_help_stops_the_download(
+    app: &mut AppUnderTest,
+    hub: WindowId,
+    robot: &TcpListener,
+) {
+    let before = write_robot_address(app);
+    assert!(app.click(Command::NewPopOut, &[]).is_empty());
+    let [satellite] = app.satellites()[..] else {
+        panic!("{:?}", app.satellites());
+    };
+    app.focus(hub);
+    assert!(app.click(Command::DownloadLogs, &[]).is_empty());
+    let download = app.window(WindowKind::Download);
+    let download = download.expect("the download window");
+    let (mut connection, _) = robot.accept().expect("a connection");
+
+    app.focus(hub);
+    assert!(app.click(Command::OpenLicenses, &[]).is_empty());
+    let licenses = app.window(WindowKind::Licenses).expect("the licenses");
+    assert_connected(&mut connection);
+    app.close(licenses);
+    assert_ends(&mut connection, "closing the licenses");
+
+    app.cx.update(MainProcess::send_all_preferences);
+    let (mut connection, _) = robot.accept().expect("a connection");
+    assert_connected(&mut connection);
+    let told = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let seen = [told.clone(), told.clone(), told.clone()];
+    let (opened, held) = app.cx.update(|cx| {
+        let pages = MainProcess::hub_windows(cx);
+        let page = pages[0].1.upgrade().expect("a live hub");
+        let (_, pop_out) = MainProcess::satellite_windows(cx).remove(0);
+        let view = download_flow::view(cx).expect("the download window's view");
+        let [hubs, satellites, downloads] = seen;
+        let held = [
+            cx.observe(&page, move |_, _| hubs.borrow_mut().push("hub")),
+            cx.observe(&pop_out, move |_, _| {
+                satellites.borrow_mut().push("satellite")
+            }),
+            cx.subscribe(&view, move |_, event: &PageEvent, _| {
+                if matches!(event, PageEvent::Start { .. }) {
+                    downloads.borrow_mut().push("download");
+                }
+            }),
+        ];
+        let data = configs::mechanism().to_js();
+        (MainProcess::open_source_list_help(cx, hub, &data), held)
+    });
+    drop(held);
+    let (help, _) = opened.expect("a help window");
+    app.settle();
+    assert_eq!(*told.borrow(), ["hub", "satellite", "download"]);
+    assert_ends(&mut connection, "starting again");
+    let (mut connection, _) = robot.accept().expect("a connection");
+    assert_connected(&mut connection);
+    app.close(help);
+    assert_ends(&mut connection, "closing the help");
+
+    app.close(download);
+    app.close(satellite);
+    std::fs::write(app.prefs_path(), before).expect("prefs.json");
+    app.cx.update(MainProcess::send_all_preferences);
     app.focus(hub);
 }
 
@@ -749,15 +967,11 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     let shown = app.click(Command::OwletDownloadStatus, &[Reply::Button(0)]);
     assert_eq!(message(&shown).3, HOOT_UNSUPPORTED);
 
-    for command in [Command::OpenLicenses, Command::CheckForUpdates] {
-        let shown = app.click(command, &[Reply::Button(0)]);
-        let (window, kind, text, _) = message(&shown);
-        assert_eq!(
-            (window, kind, text),
-            (Some(hub), MessageBoxType::Error, "Not available yet"),
-            "{command:?}"
-        );
-    }
+    let shown = app.click(Command::CheckForUpdates, &[Reply::Button(0)]);
+    let (window, kind, text, detail) = message(&shown);
+    assert_eq!((window, kind), (unparented(hub), MessageBoxType::Info));
+    assert_eq!(text, "Cannot check for updates");
+    assert!(detail.contains("development environment"));
 
     let before = app.tabs(hub);
     for (button, resets) in [(1, false), (0, true)] {
@@ -775,25 +989,14 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
 }
 
 /// Main's side of the download window, against a port of 127.0.0.1 nothing listens on.
-fn the_download_window_shows_what_the_service_sends(app: &mut AppUnderTest, hub: WindowId) {
-    let path = app.prefs_path();
-    let before = std::fs::read(&path).expect("prefs.json");
-    let mut prefs = json_file::parse(&before).expect("prefs.json");
-    let object = prefs.as_object_mut().expect("prefs.json is an object");
-    object.insert("robotAddress", JsValue::string("127.000.0.1"));
-    object.insert("systemcoreStaticAddress", JsValue::string(""));
-    std::fs::write(&path, json_file::stringify(&prefs).expect("JSON")).expect("prefs.json");
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
-    let port = listener.local_addr().expect("its address").port();
-    drop(listener);
-    app.cx.update(|cx| cx.set_global(RobotPort(port)));
+fn the_download_window_shows_what_the_service_sends(
+    app: &mut AppUnderTest,
+    hub: WindowId,
+    port: u16,
+) {
+    let before = write_robot_address(app);
 
-    let download = |app: &mut AppUnderTest| {
-        app.cx.update(|cx| {
-            let window = Windows::of_kind(cx, WindowKind::Download, 0)?;
-            Windows::id_of(cx, window)
-        })
-    };
+    let download = |app: &mut AppUnderTest| app.window(WindowKind::Download);
     assert!(app.click(Command::DownloadLogs, &[]).is_empty());
     let window = download(app).expect("the download window");
     let view = app
@@ -957,7 +1160,7 @@ fn the_download_window_shows_what_the_service_sends(app: &mut AppUnderTest, hub:
     app.close(window);
     assert!(app.cx.update(|cx| download_flow::view(cx)).is_none());
 
-    std::fs::write(&path, before).expect("prefs.json");
+    std::fs::write(app.prefs_path(), before).expect("prefs.json");
     app.cx.update(MainProcess::send_all_preferences);
     app.focus(hub);
 }

@@ -14,6 +14,22 @@ pub fn native(window: &Window) -> Option<NativeWindow> {
     ns_window(window).map(NativeWindow)
 }
 
+#[cfg(feature = "parity")]
+pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+    use objc2_app_kit::NSWindowStyleMask;
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return (width, height);
+    };
+    let style = NSWindowStyleMask::Titled
+        | NSWindowStyleMask::Closable
+        | NSWindowStyleMask::Miniaturizable
+        | NSWindowStyleMask::Resizable;
+    let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height));
+    let content = NSWindow::contentRectForFrameRect_styleMask(frame, style, mtm);
+    (content.size.width, content.size.height)
+}
+
 impl NativeWindow {
     pub fn hidden_inset_titlebar(&self) {
         let Some(mtm) = MainThreadMarker::new() else {

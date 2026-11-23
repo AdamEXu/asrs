@@ -9,6 +9,7 @@ pub mod field_2d;
 mod field_image;
 pub mod frame;
 pub mod hub_host;
+pub mod info;
 mod large_table;
 pub mod line_graph;
 pub mod metadata;
