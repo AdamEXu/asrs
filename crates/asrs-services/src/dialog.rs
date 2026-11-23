@@ -1,4 +1,4 @@
-//! `dialog.showMessageBox` options as main passes them.
+//! `dialog.showMessageBox`, `showOpenDialog` and `showSaveDialog` options as main passes them.
 
 use asrs_js::string::JsString;
 
@@ -16,4 +16,29 @@ pub struct MessageBox {
     pub cancel_id: Option<f64>,
     pub icon: bool,
     pub modal: bool,
+}
+
+/// One `showOpenDialog` call. `None` fields are keys main leaves out.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpenDialog {
+    pub title: String,
+    pub message: Option<&'static str>,
+    pub button_label: Option<&'static str>,
+    pub properties: &'static [&'static str],
+    pub filters: Option<FileFilter>,
+}
+
+/// One `showSaveDialog` call.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SaveDialog {
+    pub title: &'static str,
+    pub default_path: String,
+    pub properties: &'static [&'static str],
+    pub filters: FileFilter,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileFilter {
+    pub name: &'static str,
+    pub extensions: &'static [&'static str],
 }
