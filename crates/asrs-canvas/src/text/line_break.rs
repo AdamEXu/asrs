@@ -32,28 +32,34 @@ fn needs_icu(c: char) -> bool {
 /// The byte offsets at which the next line may start when one starts at `text`'s own start: Blink
 /// breaks each line with no regard for the text before it. Spaces are collapsed.
 pub fn opportunities(text: &str) -> Vec<usize> {
-    let icu: Vec<usize> = if text.chars().any(needs_icu) {
-        let segmenter = LineSegmenter::new_for_non_complex_scripts(LineBreakOptions::default());
-        segmenter.segment_str(text).collect()
-    } else {
-        Vec::new()
-    };
-    let mut out = Vec::new();
-    let (mut before_last, mut last) = ('\0', None);
-    for (byte, c) in text.char_indices() {
-        if let Some(previous) = last
-            && c != ' '
-            && (previous == ' ' || may_break(before_last, previous, c, &icu, byte))
-        {
-            out.push(byte);
-        }
-        before_last = last.unwrap_or('\0');
-        last = Some(c);
-    }
-    out
+    breaks(text).collect()
 }
 
-fn may_break(before_last: char, last: char, c: char, icu: &[usize], byte: usize) -> bool {
+/// [`opportunities`], found as they are asked for.
+pub fn breaks(text: &str) -> impl Iterator<Item = usize> {
+    let mut icu = None;
+    let (mut before_last, mut last) = ('\0', None);
+    text.char_indices().filter_map(move |(byte, c)| {
+        let mut icu_breaks = || {
+            let found = icu.get_or_insert_with(|| {
+                let options = LineBreakOptions::default();
+                LineSegmenter::new_for_non_complex_scripts(options)
+                    .segment_str(text)
+                    .peekable()
+            });
+            while found.next_if(|&at| at < byte).is_some() {}
+            found.peek() == Some(&byte)
+        };
+        let here = last.is_some_and(|previous| {
+            c != ' ' && (previous == ' ' || may_break(before_last, previous, c, &mut icu_breaks))
+        });
+        before_last = last.unwrap_or('\0');
+        last = Some(c);
+        here.then_some(byte)
+    })
+}
+
+fn may_break(before_last: char, last: char, c: char, icu: &mut dyn FnMut() -> bool) -> bool {
     if last == '-' && c.is_ascii_digit() {
         return before_last.is_ascii_alphanumeric();
     }
@@ -63,7 +69,7 @@ fn may_break(before_last: char, last: char, c: char, icu: &[usize], byte: usize)
         return false;
     }
     if needs_icu(last) || needs_icu(c) {
-        return icu.binary_search(&byte).is_ok();
+        return icu();
     }
     last.is_ascii() && c.is_ascii() && ascii_pair(last, c)
 }

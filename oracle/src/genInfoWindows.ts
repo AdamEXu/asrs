@@ -171,7 +171,7 @@ function helpCases(): Case[] {
   empty.types = [];
   add("no types", [config(empty)], at);
   const entities = syntheticConfig();
-  entities.types = [{ ...entities.types[10], options: [{ key: "x", display: "A &amp; B", values: [{ key: "a", display: "R&D" }, { key: "b", display: "&lt;b&gt; &#x1F44B; &#65;&quot;&nbsp;&copy;" }, { key: "c", display: "1 < 2 & 3 > 2 &unknown; &" }] }] }];
+  entities.types = [{ ...entities.types[10], options: [{ key: "x", display: "A &amp; B", showInTypeName: false, values: [{ key: "a", display: "R&D" }, { key: "b", display: "&lt;b&gt; &#x1F44B; &#65;&quot;&nbsp;&copy;" }, { key: "c", display: "1 < 2 & 3 > 2 &unknown; &" }] }] }];
   add("entities", [config(entities)], at);
   return cases;
 }
