@@ -5,6 +5,9 @@
 //! dialogs answered by a script. What the handlers do is `menu_click_vectors`' business; this
 //! checks that their effects reach the hubs, the windows, the files and the dialogs.
 
+#[path = "support/child.rs"]
+mod child;
+
 #[path = "support/settle.rs"]
 mod settle;
 
@@ -69,9 +72,9 @@ fn run_in_a_fresh_home(test: &str) {
     ] {
         child.env(variable, &home);
     }
-    let status = child.status().expect("the test binary");
+    let status = child::run(&mut child, test);
     let _ = std::fs::remove_dir_all(&home);
-    assert!(status.success(), "{status}");
+    assert!(status.success(), "{test}: {status}");
 }
 
 struct AppUnderTest {
