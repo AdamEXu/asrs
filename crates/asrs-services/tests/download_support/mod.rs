@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -118,8 +118,6 @@ pub struct Fixture {
     pub on_auth: OnAuth,
     partial: bool,
     renames: AtomicU32,
-    /// Bound and never listening, so that nothing else can take the port.
-    bound: Option<Socket>,
     sshd: Option<Child>,
     drops: watch::Sender<Option<&'static str>>,
     runtime: Option<Runtime>,
@@ -159,7 +157,6 @@ impl Fixture {
             on_auth: OnAuth::default(),
             partial: matches!(scenario.get("partial"), Some(Json::Bool(true))),
             renames: AtomicU32::new(0),
-            bound: None,
             sshd: None,
             drops: watch::channel(None).0,
             runtime: None,
@@ -168,17 +165,12 @@ impl Fixture {
         match text(server, "kind").as_str() {
             "closed" => {
                 let ipv6 = optional_text(scenario, "host").is_some_and(|host| host == "::1");
-                let address = if ipv6 {
-                    SocketAddr::from((Ipv6Addr::LOCALHOST, 0))
+                let ip = if ipv6 {
+                    IpAddr::V6(Ipv6Addr::LOCALHOST)
                 } else {
-                    SocketAddr::from((Ipv4Addr::LOCALHOST, 0))
+                    IpAddr::V4(Ipv4Addr::LOCALHOST)
                 };
-                let socket = Socket::new(Domain::for_address(address), Type::STREAM, None)
-                    .and_then(|socket| socket.bind(&address.into()).map(|()| socket))
-                    .map_err(|e| format!("no loopback: {e}"))?;
-                let bound = socket.local_addr().expect("address").as_socket();
-                fixture.port = bound.expect("an IP address").port();
-                fixture.bound = Some(socket);
+                fixture.port = closed_port(ip).map_err(|e| format!("no loopback: {e}"))?;
             }
             "unroutable" if !cfg!(target_os = "macos") => {
                 return Err("recorded with macOS's error code".to_owned());
@@ -595,6 +587,21 @@ fn unlock(dir: &Path) {
     for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
         if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
             unlock(&entry.path());
+        }
+    }
+}
+
+/// A port nothing listens on, below the ephemeral ports so that no other fixture is handed it.
+fn closed_port(ip: IpAddr) -> io::Result<u16> {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    std::net::TcpListener::bind((ip, 0))?;
+    let ports = 20000u16..30000;
+    loop {
+        let n = NEXT.fetch_add(1, Ordering::SeqCst);
+        let n = std::process::id().wrapping_mul(64).wrapping_add(n);
+        let port = ports.start + (n % ports.len() as u32) as u16;
+        if std::net::TcpListener::bind((ip, port)).is_ok() {
+            return Ok(port);
         }
     }
 }
