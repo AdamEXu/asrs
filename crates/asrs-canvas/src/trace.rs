@@ -144,6 +144,7 @@ pub fn call_to_value(call: &Call) -> JsValue {
             v
         }
         Call::Fill => named("fill", &[]),
+        Call::FillEvenOdd => array([string("fill"), string("evenodd")]),
         Call::Stroke => named("stroke", &[]),
         Call::Clip => named("clip", &[]),
         Call::FillRect(x, y, w, h) => named("fillRect", &[*x, *y, *w, *h]),
@@ -529,7 +530,11 @@ pub fn call_from_value(v: &JsValue) -> Result<Call, String> {
                     anticlockwise: optional_bool(args, 7)?,
                 }
             }
-            "fill" => Call::Fill,
+            "fill" => match args {
+                [] => Call::Fill,
+                _ if arg_str(args, 0)? == "evenodd" => Call::FillEvenOdd,
+                _ => return Err("unsupported fill rule".to_owned()),
+            },
             "stroke" => Call::Stroke,
             "clip" if args.is_empty() => Call::Clip,
             "fillRect" | "strokeRect" | "clearRect" => {

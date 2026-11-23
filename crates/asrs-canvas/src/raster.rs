@@ -559,7 +559,8 @@ impl<'a> Raster<'a> {
                     );
                 }
             }
-            Call::Fill => self.fill_current_path(),
+            Call::Fill => self.fill_current_path(false),
+            Call::FillEvenOdd => self.fill_current_path(true),
             Call::Stroke => self.stroke_current_path(),
             &Call::FillRect(x, y, w, h) => self.fill_rect(x, y, w, h),
             &Call::StrokeRect(x, y, w, h) => self.stroke_rect(x, y, w, h),
@@ -1038,6 +1039,10 @@ impl<'a> Raster<'a> {
 
     /// Fills a device path with Skia's analytic AA.
     fn fill_sk(&mut self, path: &SkPath, fill: &Fill) {
+        self.fill_sk_rule(path, fill, false);
+    }
+
+    fn fill_sk_rule(&mut self, path: &SkPath, fill: &Fill, even_odd: bool) {
         if !dev_path_drawable(path) {
             return;
         }
@@ -1049,7 +1054,7 @@ impl<'a> Raster<'a> {
             None => (self.canvas_rect(), false),
             Some(clip) => (clip.bounds(), clip.force_rle()),
         };
-        aaa::fill_path_clipped(path, bounds, force_rle, false, &mut spans);
+        aaa::fill_path_clipped(path, bounds, force_rle, even_odd, &mut spans);
         self.paint_spans(&spans, &source);
     }
 
@@ -1083,7 +1088,7 @@ impl<'a> Raster<'a> {
         });
     }
 
-    fn fill_current_path(&mut self) {
+    fn fill_current_path(&mut self, even_odd: bool) {
         if !self.invertible() {
             return;
         }
@@ -1101,7 +1106,7 @@ impl<'a> Raster<'a> {
         let ctm = self.state.transform;
         let device = self.path.to_sk(Some(&ctm));
         let fill = self.state.fill.clone();
-        self.fill_sk(&device, &fill);
+        self.fill_sk_rule(&device, &fill, even_odd);
     }
 
     /// `SkDrawTreatAsHairline`: a stroke whose width maps to at most one device pixel on both
@@ -1835,13 +1840,9 @@ impl<'a> Raster<'a> {
             self.blit_decal_image(&image, src, m.e, m.f);
             if let (Some(before), Some(clip)) = (before, &self.state.clip) {
                 let stride = before.width() as usize;
-                for (i, (new, old)) in self
-                    .pixmap
-                    .data_mut()
-                    .chunks_exact_mut(4)
-                    .zip(before.data().chunks_exact(4))
-                    .enumerate()
-                {
+                let (new, _) = self.pixmap.data_mut().as_chunks_mut::<4>();
+                let (old, _) = before.data().as_chunks::<4>();
+                for (i, (new, old)) in new.iter_mut().zip(old).enumerate() {
                     let c = u32::from(clip.at((i % stride) as i32, (i / stride) as i32));
                     for (n, &o) in new.iter_mut().zip(old) {
                         *n = scan::div255(u32::from(*n) * c + u32::from(o) * (255 - c)) as u8;

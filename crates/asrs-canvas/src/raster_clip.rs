@@ -205,12 +205,7 @@ fn trimmed(bounds: IRect, alpha: &[u8]) -> RasterClip {
         for (i, _) in cells.iter().enumerate().filter(|(_, a)| **a != 0) {
             let x = bounds[0] + i as i32;
             let r = used.get_or_insert([x, y, x + 1, y + 1]);
-            *r = [
-                r[0].min(x),
-                r[1].min(y),
-                r[2].max(x + 1),
-                r[3].max(y + 1),
-            ];
+            *r = [r[0].min(x), r[1].min(y), r[2].max(x + 1), r[3].max(y + 1)];
         }
     }
     let Some(used) = used else {

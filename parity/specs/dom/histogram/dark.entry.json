@@ -1,0 +1,65 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "seed": 909,
+  "ignoreMain": [
+   "save-state",
+   "save-type-memory",
+   "update-touch-bar-slider",
+   "show"
+  ],
+  "layout": [
+   {
+    "selector": "div.stats-histogram-container",
+    "rect": [
+     530,
+     92,
+     560,
+     348
+    ]
+   }
+  ],
+  "window": {
+   "theme": "dark"
+  },
+  "steps": [
+   {
+    "eval": "(() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const charts = [];\n  const observers = new Map();\n  w.ResizeObserver = class {\n    constructor(callback) {\n      this.callback = callback;\n    }\n    observe(el) {\n      observers.set(el, this.callback);\n    }\n    unobserve(el) {\n      observers.delete(el);\n    }\n    disconnect() {\n      for (const [el, callback] of observers) if (callback === this.callback) observers.delete(el);\n    }\n  };\n  const containerOf = (chart) => chart.canvas.parentNode;\n  let depth = 0;\n  const state = (chart) => ({\n    size: [chart.width, chart.height, chart.currentDevicePixelRatio],\n    area: chart.chartArea === undefined ? undefined : [\"left\", \"top\", \"right\", \"bottom\", \"width\", \"height\"].map((k) => chart.chartArea[k]),\n    scales: Object.fromEntries(\n      Object.entries(chart.scales).map(([id, s]) => [\n        id,\n        {\n          box: [s.left, s.top, s.right, s.bottom, s.width, s.height],\n          range: [s.min, s.max],\n          rotation: s.labelRotation,\n          ticks: s.ticks.map((t) => [t.value, t.label])\n        }\n      ])\n    ),\n    legend: [chart.legend.left, chart.legend.top, chart.legend.right, chart.legend.bottom],\n    bars: chart.data.datasets.map((_, i) => chart.getDatasetMeta(i).data.map((b) => [b.x, b.y, b.base, b.width, b.height]))\n  });\n  const observe = (chart, record, body) => {\n    if (depth > 0) return body();\n    const ctx = chart.canvas.__oracleContext;\n    const [frames, length] = [ctx.frames, ctx.calls.length];\n    depth++;\n    try {\n      return body();\n    } catch (e) {\n      record.threw = tree(e instanceof Error ? e.name + \": \" + e.message : String(e));\n      throw e;\n    } finally {\n      depth--;\n      record.reset = ctx.frames !== frames;\n      record.calls = tree(record.reset ? ctx.calls : ctx.calls.slice(length));\n      record.canvas = tree([chart.canvas.width, chart.canvas.height]);\n      if (record.layout) record.state = tree(state(chart));\n      delete record.layout;\n      write(record);\n    }\n  };\n  const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n  const hook = (r) => {\n    const chart = r.histogram;\n    const id = charts.length;\n    charts.push(chart);\n    const ctx = chart.canvas.__oracleContext;\n    write({ hist: \"create\", id: tree(id), dpr: tree(w.devicePixelRatio), calls: tree(ctx.calls), canvas: tree([chart.canvas.width, chart.canvas.height]) });\n    let last;\n    const render = r.render;\n    r.render = function (command) {\n      const record = { hist: \"render\", id: tree(id), t: tree(Date.now()), dark: dark() };\n      const theme = r.lastIsLight !== !record.dark;\n      record.layout = theme || r.changeCounter !== command.changeCounter || r.firstRender;\n      if (command !== last) record.command = tree({ changeCounter: command.changeCounter, bins: command.bins, stepSize: command.stepSize, fields: command.fields.map((f) => ({ title: f.title, color: f.color, histogramCounts: f.histogramCounts })) });\n      last = command;\n      return observe(chart, record, () => render.apply(this, arguments));\n    };\n    const resize = chart.resize;\n    chart.resize = function (width, height) {\n      const rect = containerOf(chart).getBoundingClientRect();\n      const record = { hist: \"resize\", id: tree(id), t: tree(Date.now()), args: tree([width, height]), container: tree([rect.width, rect.height]), layout: true };\n      return observe(chart, record, () => resize.apply(this, arguments));\n    };\n    const handler = chart._eventHandler;\n    chart._eventHandler = function (e) {\n      const record = { hist: \"event\", id: tree(id), t: tree(Date.now()), type: e.type, at: tree([e.x, e.y]) };\n      return observe(chart, record, () => handler.apply(this, arguments));\n    };\n    const draw = chart.draw;\n    chart.draw = function () {\n      return observe(chart, { hist: \"draw\", id: tree(id), t: tree(Date.now()) }, () => draw.apply(this, arguments));\n    };\n    for (const type of [\"mousemove\", \"mouseout\", \"click\"]) {\n      chart.canvas.addEventListener(type, (e) => write({ hist: \"dom\", id: tree(id), type, at: tree([e.offsetX, e.offsetY]) }));\n    }\n  };\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const before = this.tabList.slice();\n    const result = addTab.apply(this, args);\n    this.tabList.forEach((t) => {\n      if (t.type === 6 && !before.includes(t)) hook(t.renderer);\n    });\n    return result;\n  };\n  const frame = () => {\n    write({ hist: \"frame\", t: tree(Date.now()) });\n    w.requestAnimationFrame(frame);\n  };\n  w.requestAnimationFrame(frame);\n  const last = () => charts[charts.length - 1];\n  w.__histCommand = (command) => {\n    const tab = w.tabs.tabList.filter((t) => t.type === 6).pop();\n    let counter = w.__histCounter ?? 0;\n    w.__histCounter = ++counter;\n    const value = { changeCounter: counter, ...command, fields: command.fields.map((f) => ({ ...f, stats: new Proxy({}, { get: () => 0 }) })) };\n    tab.controller.getCommand = () => value;\n  };\n  w.__histSize = (width, height) => {\n    const chart = last();\n    const container = containerOf(chart);\n    container.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height });\n    write({ hist: \"observe\", id: tree(charts.length - 1), size: tree([width, height]) });\n    const callback = observers.get(container);\n    if (callback === undefined) throw new Error(\"no ResizeObserver on the chart's container\");\n    callback([{ contentRect: { width, height } }]);\n  };\n  w.__histDpr = (dpr) => {\n    Object.defineProperty(w, \"devicePixelRatio\", { configurable: true, get: () => dpr });\n    write({ hist: \"dpr\", id: tree(charts.length - 1), dpr: tree(dpr) });\n    w.dispatchEvent(new Event(\"resize\"));\n  };\n  w.__histMouse = (type, x, y) => {\n    const e = new MouseEvent(type, { bubbles: true, cancelable: true });\n    Object.defineProperty(e, \"offsetX\", { value: x });\n    Object.defineProperty(e, \"offsetY\", { value: y });\n    last().canvas.dispatchEvent(e);\n  };\n  w.__histHover = (type, dataset, index, fx, fy) => {\n    const b = last().getDatasetMeta(dataset).data[index];\n    w.__histMouse(type, Math.round(b.x + (fx - 0.5) * b.width), Math.round(b.y + (b.base - b.y) * fy));\n  };\n})()"
+   },
+   {
+    "main": "new-tab",
+    "data": 6
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[10,14,18,1,10,16,11,4,1,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[2,13,14,24,7,0,28,1,10,12]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[4,27,0,2,10,5,2,1,11,16]}]})"
+   },
+   {
+    "advance": 32
+   },
+   {
+    "eval": "window.__histHover(\"mousemove\", 1, 3, 0.5, 0.5)"
+   },
+   {
+    "advance": 32
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 32
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[10,14,18,1,10,16,11,4,1,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[2,13,14,24,7,0,28,1,10,12]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[4,27,0,2,10,5,2,1,11,16]}]})"
+   },
+   {
+    "advance": 32
+   },
+   {
+    "eval": "window.__histHover(\"mousemove\", 0, 4, 0.5, 0.5)"
+   },
+   {
+    "advance": 500
+   }
+  ]
+ }
+}

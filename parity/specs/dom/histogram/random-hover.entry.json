@@ -1,0 +1,878 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "seed": 909,
+  "ignoreMain": [
+   "save-state",
+   "save-type-memory",
+   "update-touch-bar-slider",
+   "show"
+  ],
+  "layout": [
+   {
+    "selector": "div.stats-histogram-container",
+    "rect": [
+     530,
+     92,
+     560,
+     348
+    ]
+   }
+  ],
+  "steps": [
+   {
+    "eval": "(() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const charts = [];\n  const observers = new Map();\n  w.ResizeObserver = class {\n    constructor(callback) {\n      this.callback = callback;\n    }\n    observe(el) {\n      observers.set(el, this.callback);\n    }\n    unobserve(el) {\n      observers.delete(el);\n    }\n    disconnect() {\n      for (const [el, callback] of observers) if (callback === this.callback) observers.delete(el);\n    }\n  };\n  const containerOf = (chart) => chart.canvas.parentNode;\n  let depth = 0;\n  const state = (chart) => ({\n    size: [chart.width, chart.height, chart.currentDevicePixelRatio],\n    area: chart.chartArea === undefined ? undefined : [\"left\", \"top\", \"right\", \"bottom\", \"width\", \"height\"].map((k) => chart.chartArea[k]),\n    scales: Object.fromEntries(\n      Object.entries(chart.scales).map(([id, s]) => [\n        id,\n        {\n          box: [s.left, s.top, s.right, s.bottom, s.width, s.height],\n          range: [s.min, s.max],\n          rotation: s.labelRotation,\n          ticks: s.ticks.map((t) => [t.value, t.label])\n        }\n      ])\n    ),\n    legend: [chart.legend.left, chart.legend.top, chart.legend.right, chart.legend.bottom],\n    bars: chart.data.datasets.map((_, i) => chart.getDatasetMeta(i).data.map((b) => [b.x, b.y, b.base, b.width, b.height]))\n  });\n  const observe = (chart, record, body) => {\n    if (depth > 0) return body();\n    const ctx = chart.canvas.__oracleContext;\n    const [frames, length] = [ctx.frames, ctx.calls.length];\n    depth++;\n    try {\n      return body();\n    } catch (e) {\n      record.threw = tree(e instanceof Error ? e.name + \": \" + e.message : String(e));\n      throw e;\n    } finally {\n      depth--;\n      record.reset = ctx.frames !== frames;\n      record.calls = tree(record.reset ? ctx.calls : ctx.calls.slice(length));\n      record.canvas = tree([chart.canvas.width, chart.canvas.height]);\n      if (record.layout) record.state = tree(state(chart));\n      delete record.layout;\n      write(record);\n    }\n  };\n  const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n  const hook = (r) => {\n    const chart = r.histogram;\n    const id = charts.length;\n    charts.push(chart);\n    const ctx = chart.canvas.__oracleContext;\n    write({ hist: \"create\", id: tree(id), dpr: tree(w.devicePixelRatio), calls: tree(ctx.calls), canvas: tree([chart.canvas.width, chart.canvas.height]) });\n    let last;\n    const render = r.render;\n    r.render = function (command) {\n      const record = { hist: \"render\", id: tree(id), t: tree(Date.now()), dark: dark() };\n      const theme = r.lastIsLight !== !record.dark;\n      record.layout = theme || r.changeCounter !== command.changeCounter || r.firstRender;\n      if (command !== last) record.command = tree({ changeCounter: command.changeCounter, bins: command.bins, stepSize: command.stepSize, fields: command.fields.map((f) => ({ title: f.title, color: f.color, histogramCounts: f.histogramCounts })) });\n      last = command;\n      return observe(chart, record, () => render.apply(this, arguments));\n    };\n    const resize = chart.resize;\n    chart.resize = function (width, height) {\n      const rect = containerOf(chart).getBoundingClientRect();\n      const record = { hist: \"resize\", id: tree(id), t: tree(Date.now()), args: tree([width, height]), container: tree([rect.width, rect.height]), layout: true };\n      return observe(chart, record, () => resize.apply(this, arguments));\n    };\n    const handler = chart._eventHandler;\n    chart._eventHandler = function (e) {\n      const record = { hist: \"event\", id: tree(id), t: tree(Date.now()), type: e.type, at: tree([e.x, e.y]) };\n      return observe(chart, record, () => handler.apply(this, arguments));\n    };\n    const draw = chart.draw;\n    chart.draw = function () {\n      return observe(chart, { hist: \"draw\", id: tree(id), t: tree(Date.now()) }, () => draw.apply(this, arguments));\n    };\n    for (const type of [\"mousemove\", \"mouseout\", \"click\"]) {\n      chart.canvas.addEventListener(type, (e) => write({ hist: \"dom\", id: tree(id), type, at: tree([e.offsetX, e.offsetY]) }));\n    }\n  };\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const before = this.tabList.slice();\n    const result = addTab.apply(this, args);\n    this.tabList.forEach((t) => {\n      if (t.type === 6 && !before.includes(t)) hook(t.renderer);\n    });\n    return result;\n  };\n  const frame = () => {\n    write({ hist: \"frame\", t: tree(Date.now()) });\n    w.requestAnimationFrame(frame);\n  };\n  w.requestAnimationFrame(frame);\n  const last = () => charts[charts.length - 1];\n  w.__histCommand = (command) => {\n    const tab = w.tabs.tabList.filter((t) => t.type === 6).pop();\n    let counter = w.__histCounter ?? 0;\n    w.__histCounter = ++counter;\n    const value = { changeCounter: counter, ...command, fields: command.fields.map((f) => ({ ...f, stats: new Proxy({}, { get: () => 0 }) })) };\n    tab.controller.getCommand = () => value;\n  };\n  w.__histSize = (width, height) => {\n    const chart = last();\n    const container = containerOf(chart);\n    container.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height });\n    write({ hist: \"observe\", id: tree(charts.length - 1), size: tree([width, height]) });\n    const callback = observers.get(container);\n    if (callback === undefined) throw new Error(\"no ResizeObserver on the chart's container\");\n    callback([{ contentRect: { width, height } }]);\n  };\n  w.__histDpr = (dpr) => {\n    Object.defineProperty(w, \"devicePixelRatio\", { configurable: true, get: () => dpr });\n    write({ hist: \"dpr\", id: tree(charts.length - 1), dpr: tree(dpr) });\n    w.dispatchEvent(new Event(\"resize\"));\n  };\n  w.__histMouse = (type, x, y) => {\n    const e = new MouseEvent(type, { bubbles: true, cancelable: true });\n    Object.defineProperty(e, \"offsetX\", { value: x });\n    Object.defineProperty(e, \"offsetY\", { value: y });\n    last().canvas.dispatchEvent(e);\n  };\n  w.__histHover = (type, dataset, index, fx, fy) => {\n    const b = last().getDatasetMeta(dataset).data[index];\n    w.__histMouse(type, Math.round(b.x + (fx - 0.5) * b.width), Math.round(b.y + (b.base - b.y) * fy));\n  };\n})()"
+   },
+   {
+    "main": "new-tab",
+    "data": 6
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[10,14,18,1,10,16,11,4,1,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[2,13,14,24,7,0,28,1,10,12]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[4,27,0,2,10,5,2,1,11,16]}]})"
+   },
+   {
+    "advance": 32
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[26,9,22,1,4,6,10,16,3,4]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[0,10,20,6,13,17,9,15,4,2]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 304, 55)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 120, 48)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 83, 178)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 214, 203)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 170, 152)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 515, 223)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[0,0,8,12,13,1,0,5,14,2]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,9,12,4,0,15,10,8,23,2]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[4,18,3,0,8,0,21,9,17,15]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 69, 134)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 458, 263)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 3, 228)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 76, 133)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(523, 173)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 308, 6)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 355, 120)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[4,31,0,13,16,17,2,3,11,7,9,0,2,1,0,1,18,1,30,19]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[5,10,21,0,13,17,11,2,30,12,0,18,0,25,19,9,10,3,0,3]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 517, 80)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histSize(240, 329)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 59, 295)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 144, 58)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[11,12,15,2,16,16,10,28,0,17,1,29,2,0,0,1,3,25,2,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[9,0,2,0,1,24,0,0,23,26,10,5,8,0,10,6,25,6,2,19]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 195, 90)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histSize(378, 142)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[15,15,10]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 181, 90)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 371, 79)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[22,0,2]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[0,6,8]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[14,14,10]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[4,14,18]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[4,36,17]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 207, 110)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[25,3,1,1,27,1,1,31,13,1,12,10,2,1,0,1,19,19,4,16]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[35,23,1,12,20,24,7,2,7,24,4,6,16,0,30,0,0,12,10,27]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[8,16,3,5,4,4,18,23,12,2,16,2,5,17,32,1,9,19,13,9]}]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 67, 94)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 294, 45)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[16,22,6]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[25,26,9]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[0,1,0]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 341, 45)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 309, 94)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histSize(552, 358)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 415, 100)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 499, 270)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 543, 115)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 235, 44)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 386, 152)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 5, 94)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 317, 300)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 45, 79)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[0,19,22,17,2,0,17,26,0,3,0,1,9,1,24,12,9,17,4,1]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,5,2,23,2,14,8,21,0,1,3,1,3,29,7,3,11,10,5,0]}]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 267, 282)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 113, 132)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 159, 291)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[33,2,23,10,32,0,12,0,7,32,12,1,7,14,0,16,0,2,12,1]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[10,10,1,0,3,2,10,1,9,5,12,16,10,4,23,0,0,36,13,20]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 25, 276)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[20,20,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[8,3,1]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[7,2,10]}]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 442, 222)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 8, 211)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 490, 285)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 547, 193)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 4, 189)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 320, 258)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 437, 76)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 390, 221)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 396, 260)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 48, 191)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 473, 74)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 460, 263)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 173, 100)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 303, 49)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 445, 80)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histSize(555, 173)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(451, 172)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[12,9,12,3,0,3,23,2,31,9,0,2,24,27,11,0,13,13,2,0]}]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 143, 158)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 15, 42)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 258, 78)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[18,22,17,0,0,8,7,8,17,20,19,0,21,2,0,4,1,32,15,10]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[7,5,3,20,33,6,3,0,18,3,4,7,1,3,17,2,0,8,10,22]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 335, 81)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 65, 115)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 313, 93)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[18,15,4,1,8,3,2,0,9,4,17,10,3,18,3,7,6,13,1,3]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 94, 23)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 86, 75)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 45, 99)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histSize(550, 160)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 113, 117)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 432, 87)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 517, 94)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 217, 73)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 192, 108)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 299, 66)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 336, 118)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 423, 60)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 418, 57)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 29, 147)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histSize(424, 424)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 117, 122)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 287, 370)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[13,29,12,14,2,2,26,26,2,22]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[17,13,9,1,30,14,19,2,13,7]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[5,1,8,10,35,0,4,25,0,0]}]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 281, 123)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[7,4,24,17,10,9,0,10,14,17,11,0,10,18,6,2,32,8,11,5]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 202, 308)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 144, 299)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 218, 150)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 46, 169)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 399, 156)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[8,4,1,0,27,19,34,23,0,8]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[7,30,3,0,18,0,3,23,3,2]}]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 413, 70)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 379, 352)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 259, 345)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 7, 316)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[2,2,15,3,11,4,5,18,7,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[3,30,18,7,7,7,1,0,16,9]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[2,6,11,32,9,30,1,0,6,3]}]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 170, 19)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[25,9,21,33,20,19,4,3,4,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[3,2,0,4,10,4,5,4,13,3]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[5,1,12,17,7,7,2,4,21,3]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[15,1,7,4,2,10,3,0,4,9]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[11,0,6,5,0,13,14,0,9,4]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[7,34,8,5,1,3,0,1,3,20]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 225, 163)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 19, 85)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[17,11,2]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,4,0]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[0,1,20]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(474, 313)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 379, 162)"
+   },
+   {
+    "advance": 450
+   }
+  ]
+ }
+}

@@ -139,6 +139,7 @@ pub enum Call {
         anticlockwise: Option<bool>,
     },
     Fill,
+    FillEvenOdd,
     Stroke,
     Clip,
     FillRect(f64, f64, f64, f64),
