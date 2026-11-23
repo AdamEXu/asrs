@@ -11,6 +11,7 @@ mod dom;
 mod field3d;
 mod glb;
 mod gpui;
+mod harness;
 mod historical;
 mod host;
 mod layout;
@@ -36,8 +37,9 @@ const USAGE: &str = "usage: cargo xtask <command>
 
 commands:
   app       Electron scenario driver: run upstream on parity/scenarios, compare, normalize (see `cargo xtask app`)
-  check     layout rules, gpui vendor and features, rustfmt, clippy, tests
+  check     layout rules, harness strictness, gpui vendor and features, rustfmt, clippy, tests
   layout    crate dependency and lint opt-out rules only
+  harness   strictness lint over replay harnesses only (see `cargo xtask harness help`)
   assets    copy upstream assets into assets/
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
   bundle    release directory: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
@@ -61,6 +63,7 @@ fn main() -> ExitCode {
         Some("app") => app::run(&args[1..]),
         Some("check") => check::run(),
         Some("layout") => layout::run(),
+        Some("harness") => harness::run(&args[1..]),
         Some("assets") => assets::run(),
         Some("licenses") => licenses::run(),
         Some("bundle") => bundle::run(&args[1..]),

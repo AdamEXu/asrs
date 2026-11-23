@@ -360,7 +360,7 @@ pub fn check_local_records(id: &str, f: impl FnMut(&Record) -> Result<(), String
     }
 }
 
-fn check_record_list(
+pub(crate) fn check_record_list(
     id: &str,
     records: &[Record],
     mut f: impl FnMut(&Record) -> Result<(), String>,

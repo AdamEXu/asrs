@@ -296,7 +296,7 @@ fn dependencies(manifest: &str) -> Vec<(String, bool)> {
     deps
 }
 
-fn collect_rs(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result {
+pub(crate) fn collect_rs(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result {
     for entry in fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
         let path = entry.map_err(|e| e.to_string())?.path();
         if path.is_dir() {
