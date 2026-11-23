@@ -1,6 +1,6 @@
 //! `main.ts`'s prompt windows: `createEditRangeWindow`, `createUnitConversionWindow`,
-//! `createRenameTabWindow`, `createEditFovWindow` the window of `createExportWindow`,
-//! and `openPreferences`, whose page is laid out as theirs are.
+//! `createRenameTabWindow`, `createEditFovWindow`, the window of `createExportWindow` and
+//! `openPreferences`.
 
 mod layout;
 pub mod window;
@@ -48,7 +48,6 @@ pub fn open(
     Ok((id, view))
 }
 
-/// `loadFile` of the window's page.
 fn load(kind: WindowKind, window: &mut Window, cx: &mut App) -> Entity<PromptWindow> {
     let page = page(kind);
     window.set_window_title(&format!(
