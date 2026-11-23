@@ -18,6 +18,8 @@ use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, Render, Window};
 pub struct Windows {
     manager: WindowManager,
     handles: Vec<(WindowId, AnyWindowHandle)>,
+    /// Open modal prompts with their parents.
+    modals: Vec<(WindowId, WindowId)>,
 }
 
 impl Default for Windows {
@@ -25,6 +27,7 @@ impl Default for Windows {
         Self {
             manager: WindowManager::new(),
             handles: Vec::new(),
+            modals: Vec::new(),
         }
     }
 }
@@ -42,6 +45,8 @@ pub fn init(cx: &mut App) {
         {
             let (id, _) = windows.handles.remove(i);
             windows.manager.closed(id);
+            windows.modals.retain(|(modal, _)| *modal != id);
+            close_modals(cx, id);
         }
     })
     .detach();
@@ -109,8 +114,17 @@ impl Windows {
     }
 }
 
-/// `window.destroy()`. A modal prompt is detached from its parent first.
+fn close_modals(cx: &mut App, parent: WindowId) {
+    let modals = cx.global::<Windows>().modals.clone();
+    for (modal, _) in modals.into_iter().filter(|(_, p)| *p == parent) {
+        close(cx, modal);
+    }
+}
+
+/// `window.destroy()`. A modal prompt is detached from its parent first, and a parent's prompts
+/// close with it.
 pub fn close(cx: &mut App, id: WindowId) {
+    close_modals(cx, id);
     let Some(handle) = Windows::handle(cx, id) else {
         return;
     };
@@ -185,7 +199,9 @@ pub fn open_modal<V: Render>(
         .global_mut::<Windows>()
         .manager
         .create_modal(kind, parent);
-    open_new(cx, id, options, build)
+    let opened = open_new(cx, id, options, build)?;
+    cx.global_mut::<Windows>().modals.push((id, parent));
+    Ok(opened)
 }
 
 /// `openSourceListHelp`.

@@ -6,7 +6,7 @@ diff --git a/src/app/headless_app_context.rs b/src/app/headless_app_context.rs
  //! Cross-platform headless app context for tests that need real text shaping.
  //!
  //! This replaces the macOS-only `HeadlessMetalAppContext` with a platform-neutral
-@@ -161,6 +162,22 @@
+@@ -161,6 +162,51 @@
          app.update_window(window, f)
      }
  
@@ -24,6 +24,35 @@ diff --git a/src/app/headless_app_context.rs b/src/app/headless_app_context.rs
 +            test_window.simulate_scale_factor_change(scale_factor);
 +        }
 +        self.run_until_parked();
++    }
++
++    /// Simulates the user pressing the window's close button. Returns whether the window closed.
++    pub fn simulate_close(&mut self, window: AnyWindowHandle) -> bool {
++        let test_window = {
++            let mut app = self.app.borrow_mut();
++            app.windows
++                .get_mut(window.window_id())
++                .and_then(|window| window.as_mut())
++                .and_then(|window| window.platform_window.as_test())
++                .cloned()
++        };
++        let Some(test_window) = test_window else {
++            return false;
++        };
++        let handler = test_window.0.lock().should_close_handler.take();
++        let should_close = match handler {
++            Some(mut handler) => {
++                let should_close = handler();
++                test_window.0.lock().should_close_handler = Some(handler);
++                should_close
++            }
++            None => true,
++        };
++        if should_close {
++            test_window.simulate_close();
++        }
++        self.run_until_parked();
++        should_close
 +    }
 +
      /// Captures a screenshot from a window.

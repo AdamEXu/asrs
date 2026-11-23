@@ -9,7 +9,7 @@
 #[allow(dead_code)]
 mod js_json;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
 use std::rc::Rc;
@@ -24,6 +24,7 @@ use asrs_app::menus::model::Command;
 use asrs_app::windows::{self, WindowId, WindowKind, Windows};
 use asrs_hub::hub::HubModel;
 use asrs_js::ops;
+use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::tab_type::TabType;
@@ -187,6 +188,25 @@ impl AppUnderTest {
         self.hub(window, |hub| {
             hub.tabs().tabs().map(|t| t.tab_type()).collect()
         })
+    }
+
+    /// The progress values the loading glow shows from now on.
+    fn watch_glow(&mut self, window: WindowId) -> Rc<RefCell<Vec<JsString>>> {
+        let seen: Rc<RefCell<Vec<JsString>>> = Rc::default();
+        let shown = seen.clone();
+        self.cx.update(|cx| {
+            let hubs = MainProcess::hub_windows(cx);
+            let hub = hubs.iter().find(|(id, _)| *id == window).expect("a hub");
+            let hub = hub.1.upgrade().expect("a live hub");
+            cx.observe(&hub, move |hub, cx| {
+                let loading = hub.read(cx).model().loading();
+                if loading.show == Some(true) {
+                    shown.borrow_mut().extend(loading.progress.clone());
+                }
+            })
+            .detach();
+        });
+        seen
     }
 
     fn glow(&mut self, window: WindowId) -> Option<bool> {
@@ -385,6 +405,10 @@ fn routing_in_a_fresh_home() {
     assert_eq!(buttons(&shown).len(), 3);
     assert_eq!(app.logs(hub), [text(&ds)]);
     assert_eq!(app.hubs().len(), 3);
+
+    assert_eq!(std::fs::read_to_string(&written).ok(), Some(text(&ds)));
+    app.cx.update(|cx| cx.shutdown());
+    assert!(!written.exists(), "quitting withdraws the path");
 }
 
 #[test]
@@ -422,7 +446,9 @@ fn exports_in_a_fresh_home() {
     app.focus(hub);
     the_prompt_exports(&mut app, hub);
     every_run_writes_upstreams_bytes(&mut app, hub);
+    a_write_that_fails_is_reported(&mut app, hub);
     a_hub_asks_before_closing_on_an_export(&mut app, hub);
+    a_close_button_asks_and_takes_the_prompt_along(&mut app);
 }
 
 struct Run {
@@ -492,13 +518,20 @@ fn the_prompt_exports(app: &mut AppUnderTest, hub: WindowId) {
     assert_eq!(suggested, Some(text(&log)), "a .csv log's own path");
     assert_eq!(app.prompt(), Some(prompt), "cancelling keeps it open");
 
+    let glow = app.watch_glow(hub);
     let out = app.home.join("prompt.csv");
     app.run(&[Reply::Save(Some(out.clone()))], |app| {
         app.click_at(prompt, confirm.0, confirm.1)
     });
     assert!(app.prompt().is_none());
-    app.until("the export", |app| app.glow(hub) == Some(false));
-    assert!(!app.hub(hub, HubModel::is_exporting));
+    app.until("the export", |app| {
+        !app.hub(hub, HubModel::is_exporting) && app.glow(hub) == Some(false)
+    });
+    let glow = glow.borrow();
+    assert!(
+        glow.contains(&JsString::from("1")),
+        "the worker's last progress never showed: {glow:?}"
+    );
     let defaults = ops::object([
         ("format", JsValue::string("csv-table")),
         ("samplingMode", JsValue::string("changes")),
@@ -552,6 +585,75 @@ fn every_run_writes_upstreams_bytes(app: &mut AppUnderTest, hub: WindowId) {
     }
     assert_eq!(errors.get(), rejected);
     assert!(written > 60 && rejected > 10, "{written} {rejected}");
+}
+
+fn a_write_that_fails_is_reported(app: &mut AppUnderTest, hub: WindowId) {
+    let run = runs().remove(0);
+    open_log(app, hub, &run.file);
+    let out = app.home.join("missing").join("run.csv");
+    let data = ops::object([
+        ("path", JsValue::string(&text(&out))),
+        ("options", run.options),
+    ]);
+    let shown = app.run(&[Reply::Button(0)], |app| {
+        app.cx
+            .update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::PrepareExport, data));
+        app.until("the error", |app| {
+            app.cx.update(|cx| !cx.global::<Script>().shown.is_empty())
+        });
+    });
+    let [(_, Shown::Message(options))] = &shown[..] else {
+        panic!("{shown:?}");
+    };
+    assert_eq!(options.message, "The export failed");
+    assert!(options.detail.contains("ENOENT"), "{}", options.detail);
+    assert!(!out.exists());
+    assert!(!app.hub(hub, HubModel::is_exporting));
+    assert_eq!(app.glow(hub), Some(true), "upstream's never finishes");
+    app.cx.update(|cx| {
+        MainProcess::send_to_hub(cx, hub, MainToHub::FinishExport, JsValue::Undefined)
+    });
+    app.settle();
+}
+
+fn a_close_button_asks_and_takes_the_prompt_along(app: &mut AppUnderTest) {
+    let [hub] = app.hubs()[..] else {
+        panic!("{:?}", app.hubs());
+    };
+    app.click(Command::NewWindow, &[]);
+    app.focus(hub);
+    let log = vectors::workspace_root().join("parity/specs/hub/logs/match.csv");
+    open_log(app, hub, &log);
+    app.click(Command::ExportData, &[]);
+    let prompt = app.prompt().expect("the export prompt");
+    let handle = app.handle(hub);
+    let shown = app.run(&[Reply::Button(0)], |app| {
+        assert!(!app.cx.simulate_close(handle));
+    });
+    let [(Some(parent), Shown::Message(options))] = &shown[..] else {
+        panic!("{shown:?}");
+    };
+    assert_eq!(*parent, handle);
+    assert_eq!(options.message, "Export in progress");
+    assert!(app.hubs().contains(&hub));
+    assert_eq!(app.prompt(), Some(prompt));
+
+    app.run(&[Reply::Button(1)], |app| {
+        assert!(!app.cx.simulate_close(handle));
+    });
+    assert!(!app.hubs().contains(&hub));
+    assert!(
+        app.prompt().is_none(),
+        "a closed hub takes its prompt along"
+    );
+
+    let [other] = app.hubs()[..] else {
+        panic!("{:?}", app.hubs());
+    };
+    app.click(Command::NewWindow, &[]);
+    let handle = app.handle(other);
+    let shown = app.run(&[], |app| assert!(app.cx.simulate_close(handle)));
+    assert!(shown.is_empty() && !app.hubs().contains(&other));
 }
 
 fn a_hub_asks_before_closing_on_an_export(app: &mut AppUnderTest, hub: WindowId) {
