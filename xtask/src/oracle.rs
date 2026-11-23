@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use asrs_parity::json::{self, Json};
 
-use crate::{Result, canvas, dom, historical, pack, vectors, workspace_root};
+use crate::{Result, canvas, coverage, dom, historical, pack, vectors, workspace_root};
 
 pub(crate) const ELECTRON_VERSION: &str = "39.2.7";
 pub(crate) const EMSDK_VERSION: &str = "4.0.12";
@@ -71,6 +71,9 @@ commands:
   dom-ab [<id prefix>...] [--jobs N] [--out <file>]
                       run every dom/* and form/* spec on jsdom and on Blink with scripted
                       geometry and report the differing records per family
+  coverage <spec>... [--file <upstream file>]... [--require <file>:<function or lines>]...
+                      the upstream lines and functions the specs execute (V8 precise coverage;
+                      `cargo xtask oracle coverage --help`)
   canvas [<scene>...] Chromium canvas references (same as `cargo xtask canvas ref`)
   canvas-lut [--check]
                       mask-gamma LUT for this platform (same as `cargo xtask canvas lut`)
@@ -145,6 +148,7 @@ pub(crate) fn pin_environment(command: &mut Command, zone: &str) {
         .env(ZONE_VARIABLE, zone);
 }
 
+#[derive(Clone)]
 pub(crate) struct Paths {
     pub(crate) root: PathBuf,
     pub(crate) reference: PathBuf,
@@ -217,6 +221,7 @@ pub fn run(args: &[String]) -> Result {
             }
         }
         Some("dom") => dom::run(&paths, rest),
+        Some("coverage") => coverage::run(&paths, rest),
         Some("dom-ab") => dom::ab(&paths, rest),
         Some("canvas") => canvas::reference(&paths, &canvas::reference_dir(&paths), rest),
         Some("canvas-lut") => canvas::lut(&paths, rest.iter().any(|a| a == "--check")),
@@ -532,7 +537,7 @@ pub(crate) fn step(name: &str) {
     eprintln!("==> {name}");
 }
 
-fn stamped(
+pub(crate) fn stamped(
     paths: &Paths,
     name: &str,
     inputs: &str,
@@ -599,18 +604,23 @@ pub(crate) fn npm_ci(paths: &Paths, dir: &Path) -> Result {
 }
 
 pub(crate) fn build_harness(paths: &Paths) -> Result {
+    build_harness_with(paths, |_| {})
+}
+
+pub(crate) fn build_harness_with(paths: &Paths, configure: impl FnOnce(&mut Command)) -> Result {
     step("build harness");
-    exec(
-        node()
-            .arg(paths.oracle_src.join("build.mjs"))
-            .arg("--upstream")
-            .arg(&paths.upstream)
-            .arg("--harness")
-            .arg(&paths.harness)
-            .arg("--out")
-            .arg(&paths.dist)
-            .stdout(std::io::stderr()),
-    )
+    let mut command = node();
+    command
+        .arg(paths.oracle_src.join("build.mjs"))
+        .arg("--upstream")
+        .arg(&paths.upstream)
+        .arg("--harness")
+        .arg(&paths.harness)
+        .arg("--out")
+        .arg(&paths.dist)
+        .stdout(std::io::stderr());
+    configure(&mut command);
+    exec(&mut command)
 }
 
 pub(crate) fn oracle_command(paths: &Paths, entry: &str) -> Result<Command> {
@@ -734,11 +744,11 @@ fn print_env(paths: &Paths) -> Result {
     Ok(())
 }
 
-fn node() -> Command {
+pub(crate) fn node() -> Command {
     Command::new("node")
 }
 
-fn exec(command: &mut Command) -> Result {
+pub(crate) fn exec(command: &mut Command) -> Result {
     let status = command
         .status()
         .map_err(|e| format!("failed to run {:?}: {e}", command.get_program()))?;

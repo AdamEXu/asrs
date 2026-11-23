@@ -6,6 +6,7 @@ mod bundle;
 mod canvas;
 mod check;
 mod corpus;
+mod coverage;
 mod dom;
 mod field3d;
 mod glb;
