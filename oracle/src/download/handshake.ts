@@ -18,10 +18,10 @@ function packet(payload: string): string {
   if (padding < 4) padding += 8;
   return u32(1 + payload.length + padding) + String.fromCharCode(padding) + payload + "\0".repeat(padding);
 }
+const kexinitLists = (lists: string[], follows = "\0") =>
+  packet("\x14" + "\0".repeat(16) + [...lists, "none", "none", "", ""].map(str).join("") + follows + "\0\0\0\0");
 const kexinit = (kex: string, hostKey = "ssh-ed25519", follows = "\0") =>
-  packet(
-    "\x14" + "\0".repeat(16) + [kex, hostKey, "aes128-ctr", "aes128-ctr", "hmac-sha2-256", "hmac-sha2-256", "none", "none", "", ""].map(str).join("") + follows + "\0\0\0\0"
-  );
+  kexinitLists([kex, hostKey, "aes128-ctr", "aes128-ctr", "hmac-sha2-256", "hmac-sha2-256"], follows);
 const reply = (key: string) => packet("\x1f" + str(str(key)) + str("d".repeat(32)) + str("s"));
 
 const INPUTS = [
@@ -33,6 +33,11 @@ const INPUTS = [
   "\r\r\n",
   "SSH-2.0-OpenSSH_9.9\r",
   IDENT + u32(12) + "\xff" + "\0".repeat(11),
+  IDENT + u32(8) + "\x04" + "\0".repeat(7),
+  IDENT + u32(16) + "\x04" + "\0".repeat(15),
+  IDENT + kexinitLists(["curve25519-sha256", "ssh-ed25519", "aes128-gcm@openssh.com", "aes128-ctr", "x", "y"]),
+  IDENT + kexinitLists(["curve25519-sha256", "ssh-ed25519", "aes128-ctr", "aes256-gcm@openssh.com", "hmac-sha1", "y"]),
+  IDENT + kexinitLists(["curve25519-sha256", "ssh-ed25519", "aes128-ctr", "aes256-gcm@openssh.com", "x", "y"]),
   IDENT + packet(""),
   IDENT + packet("") + packet("\x1e"),
   IDENT + packet("\x1e"),

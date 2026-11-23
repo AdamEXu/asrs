@@ -162,8 +162,8 @@ export async function runSftp(count: number, seed: number): Promise<void> {
   const names = (id: number, ...entries: string[]) => packet("68" + u32(id) + u32(entries.length) + entries.join(""));
   const data = (id: number, len: number): Part[] => [u32(len + 9) + "67" + u32(id) + u32(len), { fill: id & 0xff, len }];
 
-  function ready(read?: number) {
-    begin("SSH-2.0-OpenSSH_9.9");
+  function ready(read?: number, ident = "SSH-2.0-OpenSSH_9.9") {
+    begin(ident);
     init();
     if (read === undefined) push(VERSION);
     else {
@@ -236,8 +236,8 @@ export async function runSftp(count: number, seed: number): Promise<void> {
   }
 
   // fastGet.
-  const transfer = (size: number, read?: number) => {
-    ready(read);
+  const transfer = (size: number, read?: number, ident?: string) => {
+    ready(read, ident);
     fastGet("/r/file.wpilog", "/l/file.wpilog");
     push(handle(take().id, "file"));
     push(fileAttrs(take().id, size));
@@ -266,6 +266,10 @@ export async function runSftp(count: number, seed: number): Promise<void> {
   }
   transfer(32768 * 70 + 5);
   finishTransfer("fifo");
+  for (const ident of ["SSH-2.0-mod_sftp", "SSH-2.0-dropbear_2020.81", "SSH-1.99-OpenSSH_3.0"]) {
+    transfer(70000, undefined, ident);
+    finishTransfer("fifo");
+  }
   transfer(40000, 1000);
   finishTransfer("fifo");
   transfer(70000, 20000);
