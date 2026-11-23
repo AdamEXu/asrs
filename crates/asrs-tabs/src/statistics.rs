@@ -25,6 +25,7 @@ use crate::form::{NumberInput, Select, SelectOption};
 use crate::list_cx::{self, SourceListCx, js_error, with_env};
 use crate::simple_statistics as stats;
 
+pub mod renderer;
 pub mod values;
 
 const UPDATE_PERIOD_MS: f64 = 100.0;
@@ -40,6 +41,9 @@ const TIME_RANGE_OPTIONS: [(&str, &str); 7] = [
     ("live-30", "Live: 30 Seconds"),
     ("live-10", "Live: 10 Seconds"),
 ];
+
+/// `option.live-only` in [`TIME_RANGE_OPTIONS`].
+const LIVE_OPTIONS: std::ops::Range<usize> = 5..7;
 
 /// What the controller reads besides [`SourceListCx`].
 pub trait StatisticsCx: SourceListCx {
@@ -65,15 +69,11 @@ pub struct StatisticsController {
     range_min: NumberInput,
     range_max: NumberInput,
     step_size: NumberInput,
-    range_min_step: JsString,
-    range_max_step: JsString,
-    step_size_step: JsString,
     command: StatisticsCommand,
     should_update: bool,
     last_source_str: String,
     last_timeline_range: [f64; 2],
     last_update_time: f64,
-    live_options_disabled: bool,
 }
 
 impl StatisticsController {
@@ -89,12 +89,9 @@ impl StatisticsController {
                     .map(|(value, text)| SelectOption::new(Some(value), text))
                     .collect(),
             ),
-            range_min: NumberInput::new("0"),
-            range_max: NumberInput::new("10"),
-            step_size: NumberInput::new("1"),
-            range_min_step: JsString::new(),
-            range_max_step: JsString::new(),
-            step_size_step: JsString::new(),
+            range_min: NumberInput::with_value("0"),
+            range_max: NumberInput::with_value("10"),
+            step_size: NumberInput::with_value("1"),
             command: StatisticsCommand {
                 step_size: 1.0,
                 ..StatisticsCommand::default()
@@ -103,7 +100,6 @@ impl StatisticsController {
             last_source_str: String::new(),
             last_timeline_range: [0.0, 0.0],
             last_update_time: 0.0,
-            live_options_disabled: false,
         };
         controller.update_histogram_inputs();
         controller
@@ -127,9 +123,9 @@ impl StatisticsController {
             range_min: self.range_min.value().clone(),
             range_max: self.range_max.value().clone(),
             step_size: self.step_size.value().clone(),
-            range_min_step: self.range_min_step.clone(),
-            range_max_step: self.range_max_step.clone(),
-            step_size_step: self.step_size_step.clone(),
+            range_min_step: self.range_min.step().clone(),
+            range_max_step: self.range_max.step().clone(),
+            step_size_step: self.step_size.step().clone(),
             time_range: (self.time_range.selected_index() >= 0).then(|| self.time_range.value()),
         }
     }
@@ -140,7 +136,29 @@ impl StatisticsController {
 
     /// `option.disabled` of the `live-only` time range options, which `getCommand` sets.
     pub fn live_options_disabled(&self) -> bool {
-        self.live_options_disabled
+        self.time_range
+            .option(LIVE_OPTIONS.start)
+            .is_some_and(SelectOption::is_disabled)
+    }
+
+    /// `.time-range`.
+    pub fn time_range(&self) -> &Select {
+        &self.time_range
+    }
+
+    /// `.range-min`.
+    pub fn range_min(&self) -> &NumberInput {
+        &self.range_min
+    }
+
+    /// `.range-max`.
+    pub fn range_max(&self) -> &NumberInput {
+        &self.range_max
+    }
+
+    /// `.step-size`.
+    pub fn step_size(&self) -> &NumberInput {
+        &self.step_size
     }
 
     /// One run of the source list's own `requestAnimationFrame` loop, which the hub schedules
@@ -220,7 +238,7 @@ impl StatisticsController {
         if self.step_size.number() <= 0.0 {
             self.step_size
                 .set_value(JsString::from(number::to_string(clean_float(
-                    value_to_number(&self.step_size_step) * 0.9,
+                    value_to_number(self.step_size.step()) * 0.9,
                 ))));
         }
         let range = math::abs(self.range_max.number() - self.range_min.number());
@@ -231,10 +249,12 @@ impl StatisticsController {
                 ))));
         }
         let step = math::pow(10.0, math::floor(math::log10(self.step_size.number())));
-        self.step_size_step = JsString::from(number::to_string(step));
+        self.step_size
+            .set_step(JsString::from(number::to_string(step)));
         let min_max_step = math::pow(10.0, math::ceil(math::log10(self.step_size.number())));
-        self.range_min_step = JsString::from(number::to_string(min_max_step));
-        self.range_max_step = JsString::from(number::to_string(min_max_step));
+        let min_max_step = JsString::from(number::to_string(min_max_step));
+        self.range_min.set_step(min_max_step.clone());
+        self.range_max.set_step(min_max_step);
     }
 
     fn is_valid(
@@ -815,7 +835,10 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
-        self.live_options_disabled = cx.tab_selection().get_current_live_time().is_none();
+        let not_live = cx.tab_selection().get_current_live_time().is_none();
+        for option in LIVE_OPTIONS {
+            self.time_range.set_option_disabled(option, not_live);
+        }
         let sources_js = JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect());
         let sources_str = json::stringify(&sources_js)
             .map_err(|e| JsError {

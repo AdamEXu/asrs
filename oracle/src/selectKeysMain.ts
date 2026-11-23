@@ -2,11 +2,11 @@ import { app, BrowserWindow } from "electron";
 import fs from "node:fs";
 
 // Electron main process for `selectKeys` (not run under ELECTRON_RUN_AS_NODE). Each step loads
-// its markup into an offscreen page, focuses the first <select>, and applies the ops: keys and
+// its markup into an offscreen page, focuses the first <select> or <input>, and applies the ops: keys and
 // mouse presses go through the DevTools protocol's Input domain, which makes them trusted input
 // with the timestamps the fixture gives. After the markup and after every op it writes
 // {"step", "op", "value", "selectedIndex", "focused", "events"}, where events lists the DOM
-// events the select received since the previous record. Ops that would open the native popup
+// events the element received since the previous record. Ops that would open the native popup
 // (ArrowUp, ArrowDown, F4, Space outside a type-ahead session, a press on an enabled select)
 // block in AppKit's menu loop, so fixtures avoid them.
 
@@ -21,6 +21,8 @@ const KEYS: { [name: string]: { code: string; keyCode: number; text?: string } }
   End: { code: "End", keyCode: 35 },
   PageUp: { code: "PageUp", keyCode: 33 },
   PageDown: { code: "PageDown", keyCode: 34 },
+  ArrowUp: { code: "ArrowUp", keyCode: 38 },
+  ArrowDown: { code: "ArrowDown", keyCode: 40 },
   ArrowLeft: { code: "ArrowLeft", keyCode: 37 },
   ArrowRight: { code: "ArrowRight", keyCode: 39 },
   Backspace: { code: "Backspace", keyCode: 8 }
@@ -35,7 +37,7 @@ function fail(message: string): never {
 }
 
 const PAGE_SCRIPT = `(() => {
-  const select = document.querySelector("select");
+  const select = document.querySelector("select, input");
   window.__events = [];
   for (const type of ["keydown", "keypress", "keyup", "input", "change", "focus", "blur", "mousedown", "mouseup", "click"]) {
     select.addEventListener(type, () => window.__events.push(type));
