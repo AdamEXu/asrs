@@ -258,6 +258,7 @@ fn release_profile() {
             repository: "AdamEXu/asrs",
             update_check: false,
             beta_survey: false,
+            contact_email: None,
         }
     );
     assert_eq!(

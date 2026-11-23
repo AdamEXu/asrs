@@ -389,7 +389,7 @@ impl World {
                     platform: self.platform,
                     arch: &self.arch,
                     identity: AppIdentity::UPSTREAM,
-                    repository: ReleaseProfile::PARITY.repository,
+                    profile: ReleaseProfile::PARITY,
                     fs: &self.fs,
                     paths: &self.main.paths,
                     windows: manager,

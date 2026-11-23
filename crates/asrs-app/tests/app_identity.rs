@@ -9,6 +9,7 @@ use asrs_model::preferences::Preferences;
 use asrs_services::fs::MemFs;
 use asrs_services::lifecycle::AppPaths;
 use asrs_services::path::PathStyle;
+use asrs_services::update::ReleaseProfile;
 use asrs_services::window_manager::{Platform, WindowManager};
 use asrs_services::windows::Rect;
 
@@ -72,7 +73,7 @@ fn commands(items: &[MenuItem], out: &mut Vec<Command>) {
 }
 
 /// Every effect of every click on a hub window, and of the layout imports that fail or warn.
-fn clicks(platform: Platform, identity: AppIdentity) -> Vec<Effect> {
+fn clicks(platform: Platform, identity: AppIdentity, profile: ReleaseProfile) -> Vec<Effect> {
     let fs = MemFs::new();
     let paths = AppPaths {
         style: PathStyle::Posix,
@@ -108,7 +109,7 @@ fn clicks(platform: Platform, identity: AppIdentity) -> Vec<Effect> {
         platform,
         arch: "arm64",
         identity,
-        repository: "owner/repository",
+        profile,
         fs: &fs,
         paths: &paths,
         windows: &windows,
@@ -139,12 +140,35 @@ fn clicks(platform: Platform, identity: AppIdentity) -> Vec<Effect> {
 }
 
 #[test]
-fn release_clicks_differ_from_parity_by_the_name_only() {
+fn release_clicks_differ_from_parity_by_the_name_and_help_links_only() {
+    const HELP_LINKS: [(&str, &str); 3] = [
+        (
+            "https://github.com/Mechanical-Advantage/AdvantageScope/issues",
+            "https://github.com/AdamEXu/asrs/issues",
+        ),
+        (
+            "mailto:software@team6328.org",
+            "https://github.com/AdamEXu/asrs/issues",
+        ),
+        (
+            "https://github.com/Mechanical-Advantage/AdvantageScope",
+            "https://github.com/AdamEXu/asrs",
+        ),
+    ];
     for platform in [Platform::Mac, Platform::Windows, Platform::Linux] {
-        let upstream = clicks(platform, AppIdentity::UPSTREAM);
-        let release = clicks(platform, AppIdentity::RELEASE);
+        let upstream = clicks(platform, AppIdentity::UPSTREAM, ReleaseProfile::PARITY);
+        let release = clicks(platform, AppIdentity::RELEASE, ReleaseProfile::RELEASE);
         let mut differing = 0;
+        let mut links = Vec::new();
         for (upstream, release) in upstream.iter().zip(&release) {
+            if let (Effect::OpenExternal(upstream), Effect::OpenExternal(release)) =
+                (upstream, release)
+            {
+                if upstream != release {
+                    links.push((upstream.as_str(), release.as_str()));
+                }
+                continue;
+            }
             let text = format!("{upstream:?}");
             assert_eq!(
                 text.replace(AppIdentity::UPSTREAM.name, AppIdentity::RELEASE.name),
@@ -154,6 +178,7 @@ fn release_clicks_differ_from_parity_by_the_name_only() {
             differing += usize::from(upstream != release);
         }
         assert_eq!(upstream.len(), release.len());
+        assert_eq!(links, HELP_LINKS, "{platform:?}");
         assert_eq!(
             differing, 6,
             "About, custom assets, asset status, export, two imports"

@@ -1,0 +1,201 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "geometry": "real",
+  "steps": [
+   {
+    "main": "new-tab",
+    "data": 9
+   },
+   {
+    "eval": "(() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const view = new DataView(new ArrayBuffer(8));\n  const bits = (x) => {\n    view.setFloat64(0, Number.isNaN(x) ? NaN : x);\n    return view.getUint32(0).toString(16).padStart(8, \"0\") + view.getUint32(4).toString(16).padStart(8, \"0\");\n  };\n  const tree = (v) => {\n    if (v === undefined) return { u: null };\n    if (v === null || typeof v === \"boolean\" || typeof v === \"string\") return v;\n    if (typeof v === \"number\") return { n: bits(v) };\n    if (Array.isArray(v)) {\n      const out = [];\n      for (let i = 0; i < v.length; i++) out.push(tree(v[i]));\n      return out;\n    }\n    return { o: Object.keys(v).map((k) => [k, tree(v[k])]) };\n  };\n  const errorText = (e) => (e instanceof Error || e instanceof frame.contentWindow.DOMException ? e.name + \": \" + e.message : String(e));\n  const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n  const frame = document.body.appendChild(document.createElement(\"iframe\"));\n  frame.style.display = \"none\";\n  const real = frame.contentDocument.createElement(\"canvas\").getContext(\"2d\");\n  if (!(real instanceof frame.contentWindow.CanvasRenderingContext2D)) throw new Error(\"no real 2D context\");\n  const mirror = (canvas) => {\n    canvas.getContext(\"2d\");\n    const ctx = canvas.__oracleContext;\n    const method = ctx.method;\n    ctx.method = function (name, args) {\n      if (name === \"arc\" || name === \"ellipse\") real[name](...args);\n      return method.call(this, name, args);\n    };\n  };\n\n  let lastAssets;\n  const assets = () => {\n    if (w.assets === lastAssets) return;\n    lastAssets = w.assets;\n    write({ r07: \"assets\", assets: tree(w.assets) });\n  };\n\n  const renderers = [];\n  const hook = (kind, r) => {\n    if (renderers.includes(r)) return;\n    const id = renderers.length;\n    renderers.push(r);\n    const canvas = r.CANVAS;\n    mirror(canvas);\n    const ctx = canvas.__oracleContext;\n    let active = null;\n    const sized = kind === \"swerve\" ? r.CONTAINER : canvas;\n    for (const name of [\"clientWidth\", \"clientHeight\"]) {\n      const getter = Object.getOwnPropertyDescriptor(Element.prototype, name).get;\n      Object.defineProperty(sized, name, {\n        configurable: true,\n        get() {\n          const value = getter.call(this);\n          if (active !== null) active.reads.push([name, tree(value)]);\n          return value;\n        }\n      });\n    }\n    for (const name of [\"width\", \"height\"]) {\n      Object.defineProperty(canvas.style, name, {\n        configurable: true,\n        get() {\n          return this.getPropertyValue(name);\n        },\n        set(value) {\n          if (active !== null) active.style.push([name, tree(value)]);\n          this.setProperty(name, value);\n        }\n      });\n    }\n    if (kind === \"joysticks\") {\n      r.IMAGES.forEach((image, index) => {\n        image.addEventListener(\"load\", () => write({ r07: \"load\", id: tree(id), index: tree(index) }));\n      });\n    }\n    write({ r07: \"create\", kind, id: tree(id), aspect: tree(r.getAspectRatio()), state: tree(r.saveState()) });\n\n    const render = r.render;\n    r.render = function (command) {\n      if (kind === \"joysticks\") assets();\n      const record = { r07: \"render\", kind, id: tree(id), command: tree(command), dark: tree(dark()), dpr: tree(w.devicePixelRatio), reads: [], style: [] };\n      const before = ctx.frames;\n      const loads = r.imageLoadCount;\n      active = record;\n      try {\n        return render.apply(this, arguments);\n      } catch (e) {\n        record.threw = tree(errorText(e));\n        throw e;\n      } finally {\n        active = null;\n        if (kind === \"joysticks\") record.loads = tree(loads);\n        record.aspect = tree(r.getAspectRatio());\n        if (ctx.frames !== before) {\n          record.size = tree([canvas.width, canvas.height]);\n          record.calls = tree(ctx.calls);\n        } else if (record.style.length > 0) throw new Error(\"style without a frame\");\n        write(record);\n      }\n    };\n  };\n  const hookAll = () => {\n    w.tabs.tabList.forEach((t) => {\n      if (t.type === 8) hook(\"joysticks\", t.renderer);\n      if (t.type === 9) hook(\"swerve\", t.renderer);\n    });\n  };\n  hookAll();\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const result = addTab.apply(this, args);\n    hookAll();\n    return result;\n  };\n\n  w.__r07Render = (type, index, command) => {\n    const tab = w.tabs.tabList.filter((t) => t.type === type)[index];\n    try {\n      tab.renderer.render(command);\n    } catch (e) {}\n  };\n  w.__r07Size = (width, height) =>\n    w.__oracleQuiet(() => {\n      const content = document.querySelector(\"div.renderer-content\");\n      content.style.width = width;\n      content.style.height = height;\n      content.style.bottom = \"auto\";\n    });\n})()"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1.1095282901078463,\"frameAspectRatio\":0.9169330427423119,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.522747088689357,\"vy\":-0.5730504812672734,\"omega\":-5.53560730163008},\"color\":\"#e51d10\"},{\"value\":{\"vx\":-0.12980455020442605,\"vy\":0.24666864378377795,\"omega\":-1.8535933708772063},\"color\":\"#fb259a\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1.9977971259504557,\"frameAspectRatio\":2.44711355753243,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.7177213151007891,\"angle\":4.060918092727661},{\"velocity\":-0.9747407818213105,\"angle\":4.008889686316252},{\"velocity\":0.33616419043391943,\"angle\":1.0146274492144585},{\"velocity\":-0.8443512544035912,\"angle\":-2.5699040479958057},{\"velocity\":-0.5287964604794979,\"angle\":7.004151035100222}],\"color\":\"#e819f5\"},{\"values\":[{\"velocity\":-0.22470373753458261,\"angle\":5.777642831206322}],\"color\":\"#8f1e16\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.19422464026138186,\"vy\":-0.6990021923556924,\"omega\":1.469410945661366},\"color\":\"#bfb14c\"},{\"value\":{\"vx\":0.851569127291441,\"vy\":0.29396184952929616,\"omega\":-0.8158205542713404},\"color\":\"#d99990\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-7.274818457663059,\"frameAspectRatio\":2.616327461367473,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.4442310077138245,\"angle\":-0.09858054667711258},{\"velocity\":-0.6064549200236797,\"angle\":-0.6319486498832703}],\"color\":\"#82cada\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.2585113476961851,\"vy\":0.44297618977725506,\"omega\":5.328529693186283},\"color\":\"#e8dad8\"},{\"value\":{\"vx\":-0.09830062417313457,\"vy\":0.4179033488035202,\"omega\":1.3496642969548702},\"color\":\"#2f1aa3\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":3.0152771435678005,\"frameAspectRatio\":2.062000881461427,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.09630999015644193,\"angle\":5.86718088388443}],\"color\":\"#727e90\"},{\"values\":[],\"color\":\"#1a0982\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.6529512079432607,\"vy\":-0.24304201966151595,\"omega\":4.260068155825138},\"color\":\"#6cb742\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-3.8797328574582934,\"frameAspectRatio\":1.0057238799519836,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.013774194288998842,\"angle\":-4.316193237900734}],\"color\":\"#637755\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":7.561030476354063,\"frameAspectRatio\":2.508620624477044,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.8970476156100631,\"angle\":4.671216510236263},{\"velocity\":0.4335548938252032,\"angle\":7.775581266731024},{\"velocity\":0.09949882887303829,\"angle\":-7.940949346870184}],\"color\":\"#f41684\"},{\"values\":[],\"color\":\"#2e9081\"},{\"values\":[],\"color\":\"#3af947\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.9724782109260559,\"vy\":-0.2996402345597744,\"omega\":1.456699339672923},\"color\":\"#fc93af\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-5.802924041636288,\"frameAspectRatio\":2.3946093048900368,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.5029558576643467,\"frameAspectRatio\":0.6066490661352872,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.9791608704254031,\"vy\":0.6888030003756285,\"omega\":2.3291799277067184},\"color\":\"#e04725\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-7.612876370549202,\"frameAspectRatio\":1.4725793966092169,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.962830577045679,\"frameAspectRatio\":0.3689158747904003,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.4832436889410019,\"vy\":0.19341305177658796,\"omega\":5.752745697274804},\"color\":\"#335b14\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.4336568992584944,\"frameAspectRatio\":1.9792031476274132,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-2.9103597346693277,\"frameAspectRatio\":1.8770929675549268,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.031514376401901245,\"vy\":0.7971177576109767,\"omega\":1.7740640491247177},\"color\":\"#3d8e39\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.2926237881183624,\"frameAspectRatio\":0.5390896343626081,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.9593223896808922,\"angle\":-3.095513477921486},{\"velocity\":-0.5187662853859365,\"angle\":5.5758318193256855},{\"velocity\":0.054206342436373234,\"angle\":-5.815333683043718}],\"color\":\"#e1ced6\"},{\"values\":[{\"velocity\":-0.042056790087372065,\"angle\":-2.5610630474984646},{\"velocity\":-0.18401268171146512,\"angle\":0.14574166387319565},{\"velocity\":0.5335078141652048,\"angle\":-4.416673216968775}],\"color\":\"#0100bc\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.29710517590865493,\"vy\":0.7043207897804677,\"omega\":5.1032774448394775},\"color\":\"#587a9c\"},{\"value\":{\"vx\":-0.043641782365739346,\"vy\":0.609187422785908,\"omega\":3.1908875349909067},\"color\":\"#b6c989\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.7470393925905228,\"frameAspectRatio\":0.5666990778874605,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5827368819154799,\"angle\":1.926480945199728},{\"velocity\":-0.9043481186963618,\"angle\":-4.22816900536418}],\"color\":\"#684fc2\"},{\"values\":[{\"velocity\":-0.9267338616773486,\"angle\":1.6834559589624405},{\"velocity\":0.6851516142487526,\"angle\":4.07921252399683},{\"velocity\":0.27644424932077527,\"angle\":1.639320369809866}],\"color\":\"#1fd17b\"},{\"values\":[{\"velocity\":-0.774913543369621,\"angle\":7.731051195412874},{\"velocity\":-0.10509379860013723,\"angle\":-0.19843267649412155}],\"color\":\"#63edb3\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.9448649575933814,\"vy\":0.32174024172127247,\"omega\":0.1502219494432211},\"color\":\"#24352a\"},{\"value\":{\"vx\":-0.10832720343023539,\"vy\":-0.947361393366009,\"omega\":2.3059673197567463},\"color\":\"#a1bec2\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.7405911199748516,\"frameAspectRatio\":0.2315274705644697,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.9058356746099889,\"angle\":-6.871813550591469}],\"color\":\"#0a94e2\"},{\"values\":[],\"color\":\"#954931\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-7.910708021372557,\"frameAspectRatio\":2.436933568492532,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.23330130195245147,\"angle\":2.68035089597106},{\"velocity\":-0.06153024174273014,\"angle\":-5.73027179017663}],\"color\":\"#c953b3\"},{\"values\":[],\"color\":\"#b19313\"},{\"values\":[{\"velocity\":0.8965303818695247,\"angle\":-1.2519627958536148},{\"velocity\":-0.11149548552930355,\"angle\":7.1687923185527325},{\"velocity\":0.13026915583759546,\"angle\":-1.0903436206281185}],\"color\":\"#dbe517\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.42369258450344205,\"vy\":-0.6072815502993762,\"omega\":2.461146212182939},\"color\":\"#c04b4d\"},{\"value\":{\"vx\":-0.5495938900858164,\"vy\":-0.14130813255906105,\"omega\":2.098969747312367},\"color\":\"#bd5236\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.327249797992408,\"frameAspectRatio\":1.7791181719396263,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.772657920606434,\"frameAspectRatio\":0.8353844569530338,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.6742295632138848,\"angle\":-2.697215586900711}],\"color\":\"#0a1ac5\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.0719826566055417,\"vy\":0.8273433796130121,\"omega\":-0.17171089723706245},\"color\":\"#163548\"},{\"value\":{\"vx\":0.32594792265444994,\"vy\":0.46759564615786076,\"omega\":3.3040432278066874},\"color\":\"#611b33\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.2441393444314599,\"frameAspectRatio\":1.6138626931235194,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.9578538723289967,\"angle\":5.8444322273135185},{\"velocity\":0.40555263636633754,\"angle\":2.823009565472603}],\"color\":\"#0af896\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.3675605347380042,\"vy\":-0.6391758075915277,\"omega\":-5.5314260283485055},\"color\":\"#1aaf7b\"},{\"value\":{\"vx\":0.9673103480599821,\"vy\":0.8501332425512373,\"omega\":-0.08974168170243502},\"color\":\"#70dd11\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":9.352704584598541,\"frameAspectRatio\":3.0872992161195727,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.5714677283540368,\"vy\":-0.6541232345625758,\"omega\":1.7984467092901468},\"color\":\"#6e9ca9\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-3.157916059717536,\"frameAspectRatio\":1.6904237377922982,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.2110755043104291,\"vy\":0.4236988266929984,\"omega\":-5.824046443216503},\"color\":\"#ca21e0\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":6.009023697115481,\"frameAspectRatio\":1.9089876276440918,\"moduleVelocities\":[{\"values\":[],\"color\":\"#bbab3c\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":6.808680817484856,\"frameAspectRatio\":2.4221061899326743,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.9652827526442707,\"angle\":-0.8913067728281021},{\"velocity\":0.24144968716427684,\"angle\":0.4845307245850563},{\"velocity\":0.802680991590023,\"angle\":5.39238890260458},{\"velocity\":-0.39552408596500754,\"angle\":1.3432165421545506}],\"color\":\"#69152c\"},{\"values\":[{\"velocity\":-0.6897365911863744,\"angle\":-0.4972621314227581},{\"velocity\":-0.10820636106655002,\"angle\":-6.124971196055412}],\"color\":\"#d5e779\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.16417079232633114,\"vy\":0.3404369349591434,\"omega\":-2.244488555006683},\"color\":\"#059ef4\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":3.351291590370238,\"frameAspectRatio\":1.1033133713528513,\"moduleVelocities\":[{\"values\":[],\"color\":\"#e39f59\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.6004325780086219,\"vy\":0.824962729588151,\"omega\":0.6704469323158264},\"color\":\"#2efb70\"},{\"value\":{\"vx\":0.9433109774254262,\"vy\":-0.003653659950941801,\"omega\":-0.6308972658589482},\"color\":\"#1dfc34\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-4.3132483353838325,\"frameAspectRatio\":0.904668041318655,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.6488102711737156,\"angle\":-3.6108152866363525},{\"velocity\":0.5919070662930608,\"angle\":-6.775848377496004},{\"velocity\":0.08957584481686354,\"angle\":-5.02408204600215},{\"velocity\":0.828313420061022,\"angle\":2.64783002063632},{\"velocity\":-0.14706899179145694,\"angle\":-2.844872023910284}],\"color\":\"#9ea824\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":7.711866390891373,\"frameAspectRatio\":1.1974587094038724,\"moduleVelocities\":[{\"values\":[],\"color\":\"#92577c\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.5457919002510607,\"vy\":-0.0029232422821223736,\"omega\":5.0621311124414206},\"color\":\"#7f7001\"},{\"value\":{\"vx\":0.37163964938372374,\"vy\":-0.3449920555576682,\"omega\":2.391194036230445},\"color\":\"#4a7962\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-4.797637783922255,\"frameAspectRatio\":3.189236065419391,\"moduleVelocities\":[{\"values\":[],\"color\":\"#aedaf0\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.07806827547028661,\"vy\":0.10256861243396997,\"omega\":-0.055342577397823334},\"color\":\"#4b5557\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.645567174069583,\"frameAspectRatio\":1.901547694625333,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.024814566131681204,\"angle\":1.6439146548509598},{\"velocity\":-0.8216591430827975,\"angle\":2.7557634487748146},{\"velocity\":-0.6999435080215335,\"angle\":-4.249408852308989},{\"velocity\":-0.7530472371727228,\"angle\":-2.4906670041382313},{\"velocity\":-0.7454528156667948,\"angle\":4.100618094205856}],\"color\":\"#e5606e\"},{\"values\":[],\"color\":\"#64a11a\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.2936984193511307,\"vy\":-0.3996919929049909,\"omega\":0.29867731779813766},\"color\":\"#9bb241\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-8.03788032848388,\"frameAspectRatio\":1.4160257243085652,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.3008902417495847,\"vy\":-0.37481003999710083,\"omega\":5.935957504436374},\"color\":\"#123e39\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":6.72794736456126,\"frameAspectRatio\":2.1152727774344386,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.6573759466409683,\"angle\":-0.7993794307112694},{\"velocity\":-0.11510092532262206,\"angle\":-6.303161915391684},{\"velocity\":0.4042238746769726,\"angle\":-2.7429263666272163},{\"velocity\":-0.048093106132000685,\"angle\":-7.40756731107831}],\"color\":\"#468933\"},{\"values\":[{\"velocity\":0.18337425077334046,\"angle\":-2.303029466420412},{\"velocity\":0.03164172265678644,\"angle\":7.040221106261015},{\"velocity\":-0.8180179996415973,\"angle\":4.872927505522966},{\"velocity\":0.11668240930885077,\"angle\":-5.665909182280302},{\"velocity\":-0.1659304485656321,\"angle\":2.885403733700514}],\"color\":\"#5a7120\"},{\"values\":[{\"velocity\":0.9175992337986827,\"angle\":0.5814595073461533},{\"velocity\":0.3655233313329518,\"angle\":3.3309769444167614},{\"velocity\":0.23361867992207408,\"angle\":-0.5370518378913403},{\"velocity\":-0.0453633195720613,\"angle\":-2.3339098803699017},{\"velocity\":-0.4777999590151012,\"angle\":-7.005580589175224}],\"color\":\"#286ba4\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.2961776885204017,\"vy\":-0.603787072468549,\"omega\":-2.8138152798637748},\"color\":\"#bff099\"},{\"value\":{\"vx\":0.11061156122013927,\"vy\":0.8983431677334011,\"omega\":-3.0012262277305126},\"color\":\"#a44813\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.9963020188733935,\"frameAspectRatio\":2.8056941063143315,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.7106938781216741,\"angle\":0.5212028734385967},{\"velocity\":-0.5292617226950824,\"angle\":6.205314930528402},{\"velocity\":0.9968731314875185,\"angle\":-3.3470250628888607}],\"color\":\"#7cf388\"},{\"values\":[{\"velocity\":0.30922678811475635,\"angle\":-5.507741022855043}],\"color\":\"#5c21c9\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.07245165621861815,\"vy\":0.07481732591986656,\"omega\":2.4360139444470406},\"color\":\"#5fc80f\"},{\"value\":{\"vx\":0.4061017013154924,\"vy\":-0.13565514609217644,\"omega\":-2.141277590766549},\"color\":\"#aca13d\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-9.208238902501762,\"frameAspectRatio\":1.8709713814780116,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.8798984885215759,\"vy\":-0.7152408608235419,\"omega\":5.407182893715799},\"color\":\"#da8e1f\"},{\"value\":{\"vx\":0.26262744329869747,\"vy\":-0.8088287091813982,\"omega\":-1.7342979703098536},\"color\":\"#12f84c\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-4.358874354511499,\"frameAspectRatio\":1.9140107492450624,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1.8790920870378613,\"frameAspectRatio\":1.8065497996751219,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.6261900286190212,\"angle\":0.5617290809750557},{\"velocity\":0.18828381830826402,\"angle\":-7.169726110994816}],\"color\":\"#7d8bb7\"},{\"values\":[],\"color\":\"#72aa5b\"},{\"values\":[],\"color\":\"#645091\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.46962650027126074,\"vy\":-0.1041765408590436,\"omega\":-5.413966275751591},\"color\":\"#52b6a3\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-4.401975115761161,\"frameAspectRatio\":1.3687805976253002,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.7313917744904757,\"vy\":0.8019091826863587,\"omega\":1.769313815049827},\"color\":\"#96145c\"},{\"value\":{\"vx\":-0.8785056401975453,\"vy\":-0.29070649202913046,\"omega\":-3.379059623926878},\"color\":\"#264159\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-6.977009973488748,\"frameAspectRatio\":2.2283155457582327,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.7050308207981288,\"vy\":-0.7725771944969893,\"omega\":0.3519341256469488},\"color\":\"#e77480\"},{\"value\":{\"vx\":0.02765919268131256,\"vy\":-0.7929800702258945,\"omega\":-4.426299199461937},\"color\":\"#728b46\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-9.888029680587351,\"frameAspectRatio\":1.7574203610885888,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.45965513680130243,\"vy\":-0.9493044996634126,\"omega\":1.5488380277529359},\"color\":\"#a6213e\"},{\"value\":{\"vx\":-0.7276709866710007,\"vy\":-0.9406282599084079,\"omega\":-3.92851884663105},\"color\":\"#cb49f7\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.691245896741748,\"frameAspectRatio\":2.5431812955532225,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.9753470756113529,\"angle\":1.6310823112726212},{\"velocity\":-0.057449596002697945,\"angle\":2.488306410610676},{\"velocity\":0.23951322445645928,\"angle\":2.592126317322254}],\"color\":\"#960430\"},{\"values\":[],\"color\":\"#056223\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.17434687819331884,\"vy\":0.7204653415828943,\"omega\":-2.7769296979531646},\"color\":\"#c30101\"},{\"value\":{\"vx\":-0.05611876770853996,\"vy\":0.5117476209998131,\"omega\":-1.7199536059051752},\"color\":\"#a5cd93\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-9.129585064947605,\"frameAspectRatio\":2.6062727021519096,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.3438840126618743,\"vy\":-0.9172936724498868,\"omega\":4.41752222366631},\"color\":\"#f9090c\"},{\"value\":{\"vx\":-0.6349471719004214,\"vy\":-0.8183910981751978,\"omega\":0.7657107571139932},\"color\":\"#58037a\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-7.146175089292228,\"frameAspectRatio\":1.9565710605122149,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.5948640741407871,\"vy\":-0.28207835042849183,\"omega\":0.2992565045133233},\"color\":\"#00401e\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.822358196601272,\"frameAspectRatio\":2.8636517599690707,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.8922164472751319,\"angle\":5.188296120613813},{\"velocity\":-0.8363880114629865,\"angle\":-6.131037328392267},{\"velocity\":0.8514014384709299,\"angle\":-5.169350098818541}],\"color\":\"#bc3818\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.9772196402773261,\"vy\":-0.46250286465510726,\"omega\":1.489635500125587},\"color\":\"#88b3b8\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":8.970593055710196,\"frameAspectRatio\":2.552926006773487,\"moduleVelocities\":[{\"values\":[],\"color\":\"#65ed2c\"},{\"values\":[{\"velocity\":0.22883489821106195,\"angle\":7.334080707281828},{\"velocity\":-0.5451811398379505,\"angle\":7.656632665544748}],\"color\":\"#8c9e58\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-6.60080008674413,\"frameAspectRatio\":0.5836369225755333,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.41047336207702756,\"angle\":7.663697578012943},{\"velocity\":0.2838885406963527,\"angle\":-0.32668453454971313}],\"color\":\"#d68e07\"},{\"values\":[],\"color\":\"#58ff69\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.7217987542971969,\"vy\":-0.8647571341134608,\"omega\":-2.7351185493171215},\"color\":\"#8cd799\"},{\"value\":{\"vx\":-0.40444424329325557,\"vy\":0.6509226993657649,\"omega\":-2.807589568197727},\"color\":\"#7c5edb\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.7750628162175417,\"frameAspectRatio\":1.307729819137603,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.7734802393242717,\"vy\":-0.7778636887669563,\"omega\":5.314248902723193},\"color\":\"#c29696\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-3.2513813488185406,\"frameAspectRatio\":2.181801925227046,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.9757066862657666,\"vy\":-0.31636505853384733,\"omega\":4.004282022826374},\"color\":\"#eaa702\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-6.477513066492975,\"frameAspectRatio\":2.6481551479548218,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.27024638466537,\"angle\":2.534894324839115},{\"velocity\":0.13454880844801664,\"angle\":-3.78942171856761}],\"color\":\"#12ab4b\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8003599834628403,\"vy\":0.6644192058593035,\"omega\":-5.369289242662489},\"color\":\"#1670f5\"},{\"value\":{\"vx\":0.6528218681924045,\"vy\":0.23098732205107808,\"omega\":-3.2318641114979982},\"color\":\"#40cd64\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":6.621366408653557,\"frameAspectRatio\":1.8107298932038247,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.57142202463001,\"frameAspectRatio\":0.4726874486543238,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.6907124775461853,\"angle\":3.594907533377409},{\"velocity\":-0.2457024739123881,\"angle\":4.46679574996233}],\"color\":\"#7db0b5\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.35618303809314966,\"frameAspectRatio\":2.052744462899864,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":3.233205061405897,\"frameAspectRatio\":0.8035253487061709,\"moduleVelocities\":[],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-4.094500378705561,\"frameAspectRatio\":2.7234762011095883,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.0010550497099757195,\"vy\":0.19445303734391928,\"omega\":5.644659326411784},\"color\":\"#698da0\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-1.4906344516202807,\"frameAspectRatio\":1.263621594570577,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.5535275400616229,\"angle\":-0.14257721230387688}],\"color\":\"#79d83d\"},{\"values\":[{\"velocity\":-0.41597668267786503,\"angle\":1.984155997633934}],\"color\":\"#de543b\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.4275020402856171,\"vy\":0.9328058836981654,\"omega\":0.19259707164019346},\"color\":\"#bf39a5\"},{\"value\":{\"vx\":0.3784760651178658,\"vy\":-0.8862208579666913,\"omega\":0.5313048139214516},\"color\":\"#42c527\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.4647162901237607,\"frameAspectRatio\":0.41597083285450936,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.6280658422037959,\"angle\":6.408612530678511},{\"velocity\":-0.11345948185771704,\"angle\":1.402407944202423},{\"velocity\":-0.1343619958497584,\"angle\":-4.839691437780857},{\"velocity\":-0.011850910726934671,\"angle\":3.2245856933295727},{\"velocity\":-0.9245293796993792,\"angle\":6.845554795116186}],\"color\":\"#2f62e9\"},{\"values\":[{\"velocity\":-0.07052972633391619,\"angle\":-1.452969167381525},{\"velocity\":-0.8685096683911979,\"angle\":4.650015220046043},{\"velocity\":0.5233653355389833,\"angle\":4.030196003615856}],\"color\":\"#f3292a\"},{\"values\":[{\"velocity\":-0.5408251276239753,\"angle\":-6.818863160908222},{\"velocity\":0.4696695739403367,\"angle\":-3.9963640309870243},{\"velocity\":0.6044621858745813,\"angle\":-6.348031986504793},{\"velocity\":-0.39089545561000705,\"angle\":-3.4027228988707066},{\"velocity\":-0.8835628661327064,\"angle\":-6.3885404244065285}],\"color\":\"#423430\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.47310999408364296,\"vy\":0.18026996403932571,\"omega\":4.270429431460798},\"color\":\"#1a1609\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":4.7243600664660335,\"frameAspectRatio\":0.8855477879289537,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.31207846384495497,\"vy\":-0.26627791207283735,\"omega\":-4.7110413601621985},\"color\":\"#1ad061\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-4.222640064544976,\"frameAspectRatio\":2.484276491031051,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.853397773578763,\"angle\":-1.248326487839222},{\"velocity\":0.7146551860496402,\"angle\":3.409491002559662},{\"velocity\":0.3161972798407078,\"angle\":4.739577438682318}],\"color\":\"#420db6\"},{\"values\":[{\"velocity\":0.26518684765323997,\"angle\":-7.520539294928312}],\"color\":\"#3e9fdf\"},{\"values\":[{\"velocity\":0.7398795373737812,\"angle\":-3.396697599440813}],\"color\":\"#a9311a\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.8647729502990842,\"vy\":-0.26951109571382403,\"omega\":0.9973076479509473},\"color\":\"#131c4b\"},{\"value\":{\"vx\":-0.5905986772850156,\"vy\":0.056056189350783825,\"omega\":-1.725972292944789},\"color\":\"#795a95\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":7.633525389246643,\"frameAspectRatio\":1.6376183254644274,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.9632752914912999,\"angle\":-0.4773571789264679}],\"color\":\"#908752\"},{\"values\":[],\"color\":\"#fbce7b\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.022709162440150976,\"vy\":-0.8707212405279279,\"omega\":-2.4816093211993575},\"color\":\"#ae029c\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-2.7856320701539516,\"frameAspectRatio\":2.482630990725011,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":-0.8141371482051909,\"vy\":-0.8632412971928716,\"omega\":3.641385890543461},\"color\":\"#29d77e\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.31536866910755634,\"frameAspectRatio\":3.0206258688587697,\"moduleVelocities\":[{\"values\":[],\"color\":\"#ce263b\"},{\"values\":[{\"velocity\":0.5253197737038136,\"angle\":-7.233041424304247},{\"velocity\":-0.08509322768077254,\"angle\":-3.085185658186674},{\"velocity\":0.8104947698302567,\"angle\":-4.156132992357016},{\"velocity\":-0.08457300020381808,\"angle\":6.796586528420448}],\"color\":\"#b34cb2\"},{\"values\":[{\"velocity\":-0.1690821247175336,\"angle\":-5.40976619720459},{\"velocity\":-0.16248423140496016,\"angle\":-2.92774885520339},{\"velocity\":0.45777735067531466,\"angle\":2.6808587722480297}],\"color\":\"#97447e\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":9.447199567221105,\"frameAspectRatio\":0.47615884598344566,\"moduleVelocities\":[{\"values\":[],\"color\":\"#cc7fab\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.3438627291470766,\"vy\":-0.41202120389789343,\"omega\":-3.210003233514726},\"color\":\"#622c07\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.8799528861418366,\"frameAspectRatio\":0.811792754381895,\"moduleVelocities\":[],\"robotVelocities\":[{\"value\":{\"vx\":0.11405277950689197,\"vy\":0.39825437357649207,\"omega\":4.621567170135677},\"color\":\"#8d5032\"},{\"value\":{\"vx\":-0.3472976549528539,\"vy\":-0.7426122822798789,\"omega\":-0.7962849112227559},\"color\":\"#393c44\"}]})"
+   },
+   {
+    "advance": 1
+   }
+  ]
+ }
+}
