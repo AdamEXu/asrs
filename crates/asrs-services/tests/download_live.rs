@@ -170,6 +170,7 @@ impl Session {
     fn drain(&mut self) {
         while let Some(event) = self.events.as_mut().and_then(DownloadEvents::try_next) {
             match event {
+                DownloadEvent::WindowOpened => {}
                 DownloadEvent::Window(message) => self.effects.window(message),
                 DownloadEvent::ChooseFolder { token, .. } => {
                     self.dialogs.push_back(token);

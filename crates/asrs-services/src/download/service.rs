@@ -22,6 +22,9 @@ use crate::path::PathStyle;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DownloadEvent {
+    /// The answer to [`DownloadService::window_opened`]: what came before it was for an earlier
+    /// window.
+    WindowOpened,
     /// A message to the download window.
     Window(WindowMessage),
     /// Answered by [`DownloadService::save_location`].
@@ -350,7 +353,10 @@ async fn run(
 
 fn handle(command: Command, downloader: &mut Downloader, host: &mut Host) {
     match command {
-        Command::WindowOpened => downloader.window_opened(),
+        Command::WindowOpened => {
+            host.event(DownloadEvent::WindowOpened);
+            downloader.window_opened();
+        }
         Command::WindowClosed => downloader.window_closed(host),
         Command::Start { address, path } => downloader.start_message(&address, &path, host),
         Command::Close => downloader.close_message(host),

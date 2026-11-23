@@ -6,6 +6,9 @@
 //! Upstream registers its callbacks on a client without checking, when they run, that the client is
 //! still the current one, and its licenses and help windows also call `downloadStop` when they
 //! close. Both are kept.
+//!
+//! One deviation: upstream saves under whatever name the server sent, and here a save with a name
+//! that is not a plain file name ([`is_plain_name`]) fails like any other before it writes anything.
 
 use std::collections::HashMap;
 
@@ -299,6 +302,10 @@ impl Downloader {
         let Some(first) = files.first() else {
             return;
         };
+        if let Some(name) = files.iter().find(|name| !is_plain_name(name)) {
+            self.error(&unsafe_name(name), host);
+            return;
+        }
         let extension = self.extension(first);
         let token = if files.len() > 1 || extension.is_empty() {
             host.show_open_dialog(&OpenDialog {
@@ -516,6 +523,15 @@ impl Downloader {
             Some(Pending::SaveFolder(mut save)) => {
                 let folder = save.folder.take().expect("a folder was being read");
                 if let Ok(files) = result {
+                    let saved = |file: &&DirEntry| is_saved(file);
+                    let unsafe_file = files
+                        .iter()
+                        .filter(saved)
+                        .find(|file| !is_plain_name(&file.filename));
+                    if let Some(file) = unsafe_file {
+                        self.error(&unsafe_name(&file.filename), host);
+                        return;
+                    }
                     self.add_folder(&mut save, &folder, files, host);
                 }
                 self.collect(save, host);
@@ -611,7 +627,7 @@ impl Downloader {
             return;
         }
         for file in files {
-            if !file.is_directory() && !file.filename.starts_with('.') {
+            if is_saved(&file) {
                 save.tasks.push(Task {
                     remote: format!("{}{folder}/{}", self.path, file.filename),
                     local: self.join(&local, &file.filename),
@@ -779,6 +795,34 @@ impl Downloader {
             host.open_files(&[save_path]);
         }
     }
+}
+
+/// Whether a folder's entry is downloaded with it.
+fn is_saved(file: &DirEntry) -> bool {
+    !file.is_directory() && !file.filename.starts_with('.')
+}
+
+/// Whether `name` names a file in whichever folder it is joined to, on every platform: no path
+/// separator, drive prefix or NUL, and not empty, `.` or `..`.
+pub fn is_plain_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    !matches!(name, "" | "." | "..") && !drive && !name.contains(['/', '\\', '\0'])
+}
+
+/// The `show-error` message for a refused name; the window reads it as HTML.
+fn unsafe_name(name: &str) -> String {
+    let mut shown = String::new();
+    for c in name.chars() {
+        match c {
+            '&' => shown.push_str("&amp;"),
+            '<' => shown.push_str("&lt;"),
+            '>' => shown.push_str("&gt;"),
+            c if c.is_control() => shown.push('\u{fffd}'),
+            c => shown.push(c),
+        }
+    }
+    format!("The robot sent an unsafe file name: {shown}")
 }
 
 fn folder_item(name: String, size: f64) -> ListItem {
