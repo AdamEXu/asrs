@@ -491,7 +491,10 @@ impl World {
             } => {
                 let described = ops::object([
                     ("title", JsValue::string(options.title)),
-                    ("defaultPath", JsValue::string(&options.default_path)),
+                    (
+                        "defaultPath",
+                        JsValue::string(options.default_path.as_deref().expect("a path")),
+                    ),
                     ("properties", strings(options.properties)),
                     ("filters", filters(&options.filters)),
                 ]);

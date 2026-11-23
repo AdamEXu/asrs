@@ -9,7 +9,9 @@ use asrs_formats::{revlog, wpilogxz};
 use asrs_js::string::JsString;
 use asrs_js::time::{Rng, create_uuid};
 
+use crate::constants::akit_path_output;
 use crate::fs::{Fs, ReadError};
+use crate::path::PathStyle;
 
 pub const XZ_UNSUPPORTED: &str =
     "Compressed WPILOG files (.wpilogxz) are not supported on this platform.";
@@ -45,11 +47,6 @@ pub struct Outcome {
 
 fn join(dir: &str, name: &str) -> String {
     format!("{dir}{}{name}", std::path::MAIN_SEPARATOR)
-}
-
-/// `path.join(app.getPath("temp"), "akit-log-path.txt")`.
-pub fn akit_path_output(temp_dir: &str) -> String {
-    join(temp_dir, "akit-log-path.txt")
 }
 
 /// `p.slice(0, p.length - 5) + "dsevents"` for a path ending in `.dslog`.
@@ -182,9 +179,10 @@ impl FileOpen<'_> {
         let mut outcome = Outcome::default();
         if !delete_after_read {
             outcome.recent_document = Some(path.clone());
-            let _ = self
-                .fs
-                .write(&akit_path_output(self.temp_dir), fs_path.as_bytes());
+            let _ = self.fs.write(
+                &akit_path_output(PathStyle::host(), self.temp_dir),
+                fs_path.as_bytes(),
+            );
         }
 
         let read = |p: &str| self.fs.read_file(p).ok();

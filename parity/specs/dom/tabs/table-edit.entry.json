@@ -5,6 +5,7 @@
     "../logs/robot.json"
   ],
   "fixture": {
+    "geometry": "real",
     "assets": "../assets/minimal.json",
     "images": {
       "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
@@ -13,80 +14,6 @@
       ]
     },
     "seed": 1101,
-    "layout": [
-      {
-        "selector": "div.data-table-container",
-        "rect": [
-          300,
-          92,
-          800,
-          358
-        ]
-      },
-      {
-        "selector": "table.data-table th[data-i=\"0\"]",
-        "rect": [
-          300,
-          92,
-          120,
-          25
-        ]
-      },
-      {
-        "selector": "table.data-table th[data-i=\"1\"]",
-        "rect": [
-          420,
-          92,
-          200,
-          25
-        ]
-      },
-      {
-        "selector": "table.data-table th[data-i=\"2\"]",
-        "rect": [
-          620,
-          92,
-          200,
-          25
-        ]
-      },
-      {
-        "selector": "table.data-table th[data-i=\"3\"]",
-        "rect": [
-          820,
-          92,
-          200,
-          25
-        ]
-      },
-      {
-        "selector": "table.data-table th[data-i=\"4\"]",
-        "rect": [
-          1020,
-          92,
-          200,
-          25
-        ]
-      },
-      {
-        "selector": "table.data-table tr:nth-of-type(1)",
-        "rect": [
-          300,
-          92,
-          800,
-          25
-        ]
-      },
-      {
-        "selector": "table.data-table tr",
-        "rect": [
-          300,
-          117,
-          800,
-          20
-        ]
-      }
-    ],
     "steps": [
       {
         "log": "../logs/robot.json"
@@ -97,9 +24,6 @@
       },
       {
         "advance": 50
-      },
-      {
-        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
       },
       {
         "event": {
@@ -124,14 +48,11 @@
         "capture": [
           "commands",
           {
-            "kind": "dom",
-            "selector": "div.data-table-drag-highlight"
+            "kind": "eval",
+            "expr": "/*table:highlight*/ (() => { const e = document.querySelector(\"div.renderer-content > :not([hidden]) div.data-table-drag-highlight\"); return [e.hidden, e.style.left]; })()"
           }
         ],
         "label": "drag-over"
-      },
-      {
-        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
       },
       {
         "event": {
@@ -163,9 +84,6 @@
         "label": "first-field"
       },
       {
-        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
-      },
-      {
         "event": {
           "target": "window",
           "type": "drag-update",
@@ -194,9 +112,6 @@
           "state"
         ],
         "label": "inserted-before"
-      },
-      {
-        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
       },
       {
         "event": {
@@ -267,9 +182,6 @@
         "label": "empty-filtered"
       },
       {
-        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
-      },
-      {
         "event": {
           "target": "div.renderer-content > :not([hidden])",
           "type": "mousedown",
@@ -333,9 +245,6 @@
           "state"
         ],
         "label": "column-moved"
-      },
-      {
-        "eval": "/*table:tag*/ document.querySelectorAll(\"div.renderer-content > :not([hidden]) table.data-table th\").forEach((e, i) => e.setAttribute(\"data-i\", String(i)))"
       },
       {
         "event": {

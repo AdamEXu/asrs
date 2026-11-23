@@ -1,0 +1,709 @@
+[
+  {
+    "file": "../hub/logs/match.csv",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      }
+    ]
+  },
+  {
+    "file": "../hub/logs/akit.csv",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      }
+    ]
+  },
+  {
+    "file": "../hub/logs/enabled.csv",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "fixed",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "akit",
+        "samplingPeriod": 250,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/None",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "/",
+        "includeGenerated": false
+      }
+    ]
+  },
+  {
+    "file": "../hub/logs/partial.wpilog",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "fixed",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "akit",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "fixed",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "akit",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "fixed",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "akit",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "fixed",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "akit",
+        "samplingPeriod": 100,
+        "prefixes": "",
+        "includeGenerated": true
+      }
+    ]
+  },
+  {
+    "file": "../hub/logs/corpus-a-struct-wpilib.wpilog",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": false
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": false
+      }
+    ]
+  },
+  {
+    "file": "../hub/logs/corpus-b-random-r2-3.rlog",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "akit",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "akit",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "akit",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "akit",
+        "samplingPeriod": 20,
+        "prefixes": "",
+        "includeGenerated": true
+      }
+    ]
+  },
+  {
+    "file": "undefined.csv",
+    "exports": [
+      {
+        "format": "csv-table",
+        "samplingMode": "changes",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-table",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "changes",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "csv-list",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "changes",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "wpilog",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "changes",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      },
+      {
+        "format": "mcap",
+        "samplingMode": "fixed",
+        "samplingPeriod": 500,
+        "prefixes": "",
+        "includeGenerated": true
+      }
+    ]
+  }
+]

@@ -55,6 +55,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hub_table"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "hub_wheel"
 harness = false
 required-features = ["parity"]
@@ -94,4 +99,8 @@ required-features = ["parity"]
 [[test]]
 name = "prompt_windows"
 harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "export_flow"
 required-features = ["parity"]

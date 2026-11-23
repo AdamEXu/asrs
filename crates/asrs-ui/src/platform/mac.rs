@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
+use std::path::Path;
 use std::ptr::{self, NonNull};
 
 use block2::RcBlock;
@@ -12,9 +13,9 @@ use objc2::{
 };
 use objc2_app_kit::{
     NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSControlStateValueOff,
-    NSControlStateValueOn, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont,
-    NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle,
-    NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
+    NSControlStateValueOn, NSDocumentController, NSEvent, NSEventMask, NSEventModifierFlags,
+    NSEventType, NSFont, NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem,
+    NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
     NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
     NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection,
 };
@@ -25,7 +26,7 @@ use objc2_core_graphics::{
 };
 use objc2_foundation::{
     NSArray, NSAttributedString, NSCharacterSet, NSDictionary, NSNumber, NSPoint, NSRect,
-    NSRunLoopCommonModes, NSSize, NSString,
+    NSRunLoopCommonModes, NSSize, NSString, NSURL,
 };
 use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -38,6 +39,14 @@ use super::{
 
 pub(super) mod dialog;
 pub(super) mod window;
+
+pub(super) fn add_recent_document(path: &Path) {
+    if let Some(mtm) = MainThreadMarker::new()
+        && let Some(url) = NSURL::from_file_path(path)
+    {
+        NSDocumentController::sharedDocumentController(mtm).noteNewRecentDocumentURL(&url);
+    }
+}
 
 pub(super) fn init() {
     if MainThreadMarker::new().is_some() {

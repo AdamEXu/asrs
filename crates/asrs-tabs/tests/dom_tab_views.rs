@@ -77,6 +77,18 @@ impl TableGeometry for Scripted {
     fn data_row_rect(&mut self, index: usize, _hidden: bool) -> Rect {
         self.rect(&format!("{TABLE_BODY}>tr:{}", index + 2))
     }
+    fn container_rect(&mut self) -> Rect {
+        unreachable!("a controller read")
+    }
+    fn header_cell_rect(&mut self, _index: usize) -> Rect {
+        unreachable!("a controller read")
+    }
+    fn header_key_client_width(&mut self, _index: usize) -> f64 {
+        unreachable!("a controller read")
+    }
+    fn header_key_text_width(&mut self, _index: usize) -> f64 {
+        unreachable!("a controller read")
+    }
 }
 
 impl ConsoleGeometry for Scripted {
