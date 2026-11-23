@@ -404,11 +404,6 @@ impl FrameHost for HubEntityHost {
         self.hub.read(cx).model()
     }
 
-    fn editable_focused(&self, cx: &App) -> bool {
-        self.sidebar_geometry.search_focused()
-            || FrameHost::hub(self, cx).sidebar().number_input_focused()
-    }
-
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {
         self.hub
             .update(cx, |hub, cx| hub.update(cx, |model, _| f(model)))

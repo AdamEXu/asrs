@@ -87,6 +87,14 @@ fn selectable(entry: &PopupEntry) -> bool {
     entry.visible && entry.enabled
 }
 
+/// The key context of an open menu.
+const CONTEXT: &str = "AsrsMenu";
+
+/// Whether a menu drawn in `window` has its focus.
+pub fn focused(window: &Window) -> bool {
+    window.context_stack().iter().any(|c| c.contains(CONTEXT))
+}
+
 pub struct MenuView {
     menu: PopupMenu,
     prefix: MenuPath,
@@ -430,6 +438,7 @@ impl Render for MenuView {
         let mut body = div()
             .id("menu")
             .track_focus(&self.focus)
+            .key_context(CONTEXT)
             .on_key_down(cx.listener(Self::key_down))
             .on_mouse_down_out(cx.listener(|view, _: &MouseDownEvent, window, cx| {
                 if view.host == Host::InWindow && view.submenu.is_none() {

@@ -495,6 +495,7 @@ impl<M: FieldModel> Render for TextField<M> {
 
         let mut root = div()
             .id("text-field")
+            .key_context(super::CONTEXT)
             .capture_action(cx.listener(Self::paste))
             .relative()
             .w(px(width))

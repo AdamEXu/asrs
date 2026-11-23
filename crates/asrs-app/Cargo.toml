@@ -65,6 +65,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hub_keys"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "hub_table"
 harness = false
 required-features = ["parity"]

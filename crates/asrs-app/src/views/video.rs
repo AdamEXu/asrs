@@ -18,9 +18,8 @@ use asrs_tabs::video_renderer::{Shown, VideoImage, VideoRenderer};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::FramePresenter;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Bounds, Context, Corners, Entity, Focusable, IntoElement,
-    KeyDownEvent, ParentElement, Pixels, Styled, Subscription, Task, Window, canvas, div, point,
-    px, rgb, size,
+    AnyElement, AppContext, Bounds, Context, Corners, Entity, IntoElement, KeyDownEvent,
+    ParentElement, Pixels, Styled, Subscription, Task, Window, canvas, div, point, px, rgb, size,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::input::{Slider, SliderEvent, SliderStyle, paint_in_rounded};
@@ -28,7 +27,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::text::{self, TextStyle, WhiteSpace};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, FONT_SIZE, IconTint, chains};
 
-use super::frame::{FrameHost, HubFrame};
+use super::frame::{FrameHost, HubFrame, key_target};
 use super::large_table::symbol;
 use super::range::FormRange;
 use super::video_frame;
@@ -491,25 +490,6 @@ fn device_bounds([x, y, w, h]: [i32; 4], scale: f32) -> Bounds<Pixels> {
 }
 
 impl<H: FrameHost> HubFrame<H> {
-    /// Whether the timeline slider of the displayed Video tab has the focus.
-    pub(super) fn video_slider_focused(&self, window: &Window, cx: &App) -> bool {
-        self.video.tabs.values().any(|tab| {
-            let slider = tab.slider.as_ref();
-            slider.is_some_and(|s| s.slider.focus_handle(cx).is_focused(window))
-        })
-    }
-
-    fn key_target(&self, window: &Window, cx: &App) -> KeyTarget {
-        if self.console.editing()
-            || self.host().editable_focused(cx)
-            || self.video_slider_focused(window, cx)
-        {
-            KeyTarget::Input
-        } else {
-            KeyTarget::Other
-        }
-    }
-
     /// The window `keydown` listeners of the selection and of the displayed Video tab.
     pub(super) fn playback_key_down(
         &mut self,
@@ -520,7 +500,9 @@ impl<H: FrameHost> HubFrame<H> {
         let Some(code) = key_code(&event.keystroke.key) else {
             return;
         };
-        let target = self.key_target(window, cx);
+        let Some(target) = key_target(window) else {
+            return;
+        };
         let m = event.keystroke.modifiers;
         let shown = displayed(self.host().hub(cx));
         let prevented = self.host_mut().input(cx, |hub| {

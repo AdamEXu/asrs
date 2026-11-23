@@ -24,3 +24,11 @@ pub use slider::{
     thumb_offset,
 };
 pub use style::{FieldStyle, Frame, SliderStyle, SplitStyle};
+
+/// The key context of the components that are an `<input>` in upstream's pages.
+const CONTEXT: &str = "HtmlInput";
+
+/// Whether an `<input>` has the window's focus.
+pub fn focused(window: &gpui_kit::Window) -> bool {
+    window.context_stack().iter().any(|c| c.contains(CONTEXT))
+}

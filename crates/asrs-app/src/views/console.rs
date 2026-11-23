@@ -10,13 +10,14 @@ use std::rc::Rc;
 use asrs_canvas::text::FontSpec;
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::string::{JsError, JsString};
+use asrs_model::selection_impl::KeyTarget;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::console::view::{ConsoleRow, ConsoleView};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement,
+    AnyElement, App, AppContext, Context, Div, Entity, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled,
     Subscription, Window, div, px, rgb, rgba,
 };
@@ -29,7 +30,7 @@ use super::console_layout::{
     CELL_PADDING, Cell, CellNode, ConsoleLayout, HEADER_HEIGHT, LINE_HEIGHT, TIME_WIDTH, cell_font,
     cell_style,
 };
-use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::frame::{FrameHost, HubFrame, key_target, wheel_of};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -169,14 +170,6 @@ pub struct ConsoleViews {
     shown: Option<Shown>,
     hovered: Option<usize>,
     pressed_row: Option<usize>,
-    editing: bool,
-}
-
-impl ConsoleViews {
-    /// Whether one of the displayed table's inputs has focus.
-    pub fn editing(&self) -> bool {
-        self.editing
-    }
 }
 
 fn renderer_key(renderer: &ConsoleRenderer) -> usize {
@@ -425,7 +418,6 @@ impl<H: FrameHost> HubFrame<H> {
         self.console.shown = shown.as_ref().map(|(s, ..)| *s);
         let (shown, dom, layout) = shown?;
         let layout = layout?;
-        self.console.editing = self.console_field_focused(shown, window, cx);
 
         let now = self.host().frame_time(cx);
         self.console
@@ -821,19 +813,7 @@ impl<H: FrameHost> HubFrame<H> {
         Some((jump, filter))
     }
 
-    fn console_field_focused(&self, shown: Shown, window: &Window, cx: &App) -> bool {
-        self.console
-            .tabs
-            .get(&shown.key)
-            .and_then(|tab| tab.fields.as_ref())
-            .is_some_and(|f| {
-                f.jump.focus_handle(cx).is_focused(window)
-                    || f.filter.focus_handle(cx).is_focused(window)
-            })
-    }
-
     fn console_blur(&mut self, key: usize, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.console.editing = false;
         let Some(fields) = self.console.tabs.get(&key).and_then(|t| t.fields.as_ref()) else {
             return;
         };
@@ -1039,7 +1019,7 @@ impl<H: FrameHost> HubFrame<H> {
         if !command || event.keystroke.key != "f" || m.shift {
             return;
         }
-        if self.console.editing || self.host().editable_focused(cx) {
+        if key_target(window) != Some(KeyTarget::Other) {
             return;
         }
         let Some(shown) = self.console.shown else {

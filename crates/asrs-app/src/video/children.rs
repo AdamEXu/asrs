@@ -7,12 +7,13 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use asrs_js::string::JsString;
 use asrs_services::video::{Handle, VideoEvent};
 
 const EXIT_POLL: Duration = Duration::from_millis(10);
+const KILL_WAIT: Duration = Duration::from_millis(200);
 const CHUNK: usize = 64 * 1024;
 
 type Shared = Arc<Mutex<Child>>;
@@ -83,16 +84,22 @@ impl Children {
         }
     }
 
-    /// `child.kill()`.
+    /// `child.kill()`, but with SIGKILL where Node sends SIGTERM: ffmpeg takes seconds to act on
+    /// that, writes frames all the while and reports progress once more. Quitting deletes those
+    /// frames, so the child gets a moment to be gone.
     pub fn kill(&mut self, process: Handle) -> bool {
         let Some(child) = self.0.get(&process) else {
             return false;
         };
         let mut child = lock(child);
-        match child.try_wait() {
-            Ok(None) => child.kill().is_ok(),
-            _ => false,
+        if !matches!(child.try_wait(), Ok(None)) || child.kill().is_err() {
+            return false;
         }
+        let killed = Instant::now();
+        while matches!(child.try_wait(), Ok(None)) && killed.elapsed() < KILL_WAIT {
+            thread::sleep(Duration::from_millis(1));
+        }
+        true
     }
 
     /// Forgets a child that has closed.

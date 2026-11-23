@@ -296,7 +296,11 @@ impl<M: RangeModel> Render for Slider<M> {
             },
         )
         .size_full();
-        let mut root = div().id("slider").size_full().child(painted);
+        let mut root = div()
+            .id("slider")
+            .key_context(super::CONTEXT)
+            .size_full()
+            .child(painted);
         if !self.control.disabled() {
             root = root
                 .track_focus(&self.focus)

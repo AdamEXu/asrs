@@ -62,6 +62,12 @@ fn a_failed_conversion_shows_its_error() {
     in_fresh_home("failure_in_a_fresh_home");
 }
 
+#[cfg(unix)]
+#[test]
+fn an_installed_ffmpeg_converts_a_clip() {
+    in_fresh_home("ffmpeg_in_a_fresh_home");
+}
+
 #[test]
 fn youtube_without_a_url_says_so() {
     in_fresh_home("youtube_in_a_fresh_home");
@@ -128,16 +134,20 @@ impl AppUnderTest {
         let start = Instant::now();
         while !done(self) {
             assert!(start.elapsed() < TIMEOUT, "waiting for {what}");
-            self.cx.advance_clock(Duration::from_millis(10));
-            let window = self.cx.update(|cx| Windows::handle(cx, self.hub));
-            self.cx
-                .update_window(window.expect("open"), |_, window, cx| {
-                    window.simulate_next_frame(cx);
-                })
-                .expect("open");
-            self.cx.run_until_parked();
+            self.frame();
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+
+    fn frame(&mut self) {
+        self.cx.advance_clock(Duration::from_millis(10));
+        let window = self.cx.update(|cx| Windows::handle(cx, self.hub));
+        self.cx
+            .update_window(window.expect("open"), |_, window, cx| {
+                window.simulate_next_frame(cx);
+            })
+            .expect("open");
+        self.cx.run_until_parked();
     }
 
     fn model<R>(&mut self, f: impl FnOnce(&mut HubModel) -> R) -> R {
@@ -272,6 +282,92 @@ printf 'frame=    4 fps=0.0 q=2.0 size=N/A\r' >&2
     let cache = app.cache();
     assert!(cache.is_dir());
     drop(app);
+    assert!(!cache.exists(), "quitting deletes the frames");
+}
+
+#[cfg(unix)]
+fn running(folder: &str) -> bool {
+    let ps = Process::new("ps").args(["-axww", "-o", "args="]).output();
+    let ps = ps.expect("ps").stdout;
+    String::from_utf8_lossy(&ps).contains(folder)
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "run by an_installed_ffmpeg_converts_a_clip"]
+fn ffmpeg_in_a_fresh_home() {
+    let Some(home) = std::env::var_os(HOME).map(PathBuf::from) else {
+        return;
+    };
+    let clip = |name: &str, seconds: u32| {
+        let file = home.join(name);
+        let source = format!("testsrc2=size=320x180:rate=25:duration={seconds}");
+        let status = Process::new("ffmpeg")
+            .args(["-nostdin", "-v", "error", "-f", "lavfi", "-i", &source])
+            .args(["-c:v", "mpeg4", "-q:v", "5", "-f", "mp4"])
+            .arg(format!("file:{}", file.display()))
+            .status();
+        status.ok().map(|status| {
+            assert!(status.success(), "{name}: {status}");
+            file
+        })
+    };
+    let Some(short) = clip("-y 100% 'two' \u{fc}.mp4", 2) else {
+        println!("skipped: no ffmpeg on the PATH");
+        return;
+    };
+    let long = clip("long.mp4", 120).expect("ffmpeg");
+    let replies = [long.clone(), short, long].map(|file| Reply::Open(vec![file]));
+    let Some(mut app) = AppUnderTest::start(&replies) else {
+        return;
+    };
+    let folder = |app: &mut AppUnderTest| {
+        let folder = app.video(|video, _, _| video.data()[0].clone());
+        folder.as_str().map(|folder| folder.to_string_lossy())
+    };
+    let start = |app: &mut AppUnderTest| {
+        let before = folder(app);
+        app.video(|video, page, uuid| video.select_local(page, uuid));
+        app.until("progress", |app| {
+            let now = folder(app);
+            now.is_some() && now != before
+        });
+        folder(app).expect("imgFolder")
+    };
+    let first = start(&mut app);
+    assert!(running(&first));
+
+    app.video(|video, page, uuid| video.select_local(page, uuid));
+    app.until("the short clip", |app| {
+        app.video(|video, _, _| {
+            video.data()[3] == &JsValue::Number(50.0) && video.data()[4] == &JsValue::Number(50.0)
+        })
+    });
+    assert!(!running(&first), "the replaced conversion still runs");
+    assert_eq!(
+        app.video(|video, _, _| video.data()[2].clone()),
+        JsValue::Number(25.0)
+    );
+    for frame in 1..=50 {
+        app.until("the frame", |app| app.natural_size() == [1920.0, 1080.0]);
+        assert_eq!(
+            app.video(|video, _, _| video.slider().number()),
+            f64::from(frame)
+        );
+        app.video(|video, _, _| video.change_frame(1.0));
+        app.frame();
+    }
+
+    let last = start(&mut app);
+    assert!(running(&last));
+    let cache = app.cache();
+    drop(app);
+    let start = Instant::now();
+    while running(&last) {
+        assert!(start.elapsed() < TIMEOUT, "ffmpeg outlives the app");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!PathBuf::from(&last).exists(), "{last}");
     assert!(!cache.exists(), "quitting deletes the frames");
 }
 

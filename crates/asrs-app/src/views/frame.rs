@@ -18,7 +18,7 @@ use asrs_hub::timeline::{ScrollTarget, Timeline, TimelineFrame};
 use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
-use asrs_model::selection_impl::ControlButton;
+use asrs_model::selection_impl::{ControlButton, KeyTarget};
 use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
@@ -33,6 +33,8 @@ use asrs_ui::gpui::{
     canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
+use asrs_ui::input;
+use asrs_ui::menu;
 use asrs_ui::parity::{Probed, probed};
 use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
@@ -80,10 +82,6 @@ pub trait FrameHost: 'static {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
     /// The layout the hub model's `HubView` answers source list reads from.
     fn source_list_geometry(&self) -> ListsGeometry;
-    /// Whether the focused element is a text input, which keyboard navigation leaves alone.
-    fn editable_focused(&self, _cx: &App) -> bool {
-        false
-    }
     /// The contents of `slot`, laid out in a box of the slot's size.
     fn slot(
         &mut self,
@@ -140,6 +138,17 @@ impl FrameGeometry {
     /// `div.side-bar`'s box as last laid out.
     pub fn side_bar(&self) -> [f64; 4] {
         self.0.borrow().side_bar
+    }
+}
+
+/// What a key event the page gets is dispatched to; `None` while an open menu takes the keys.
+pub(super) fn key_target(window: &Window) -> Option<KeyTarget> {
+    if menu::focused(window) {
+        None
+    } else if input::focused(window) {
+        Some(KeyTarget::Input)
+    } else {
+        Some(KeyTarget::Other)
     }
 }
 
@@ -868,11 +877,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 frame.playback_key_down(event, window, cx)
             }))
             .on_key_down(cx.listener(|frame, event: &KeyDownEvent, window, cx| {
-                frame.field3d_key_down(event, cx);
+                frame.field3d_key_down(event, window, cx);
                 frame.console_key_down(event, window, cx);
             }))
-            .on_key_up(cx.listener(|frame, event: &KeyUpEvent, _, cx| {
-                frame.field3d_key_up(event, cx);
+            .on_key_up(cx.listener(|frame, event: &KeyUpEvent, window, cx| {
+                frame.field3d_key_up(event, window, cx);
             }))
             .on_drop(
                 cx.listener(|frame, paths: &ExternalPaths, _, cx| frame.drop_files(paths, cx)),

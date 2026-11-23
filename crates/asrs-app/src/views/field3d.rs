@@ -23,6 +23,7 @@ use asrs_js::value::JsValue;
 use asrs_model::assets::built_in_3d_fields;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Field3dMode, Preferences};
+use asrs_model::selection_impl::KeyTarget;
 use asrs_model::tab_controller::{TabCommand, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::field3d::Field3dController;
@@ -44,7 +45,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
 
-use super::frame::{FrameHost, HubFrame};
+use super::frame::{FrameHost, HubFrame, key_target};
 use super::select::FormSelect;
 
 /// `div.field-3d-canvas-container`'s `height: calc(100% + 26px)`, or `+ 10px` when `.fixed`.
@@ -1137,11 +1138,15 @@ impl<H: FrameHost> HubFrame<H> {
         key: &str,
         down: bool,
         command_modifier: bool,
+        window: &Window,
         cx: &mut Context<'_, Self>,
     ) {
+        let Some(target) = key_target(window) else {
+            return;
+        };
+        let editable = target != KeyTarget::Other;
         let code = key_code(key);
         let shown = self.field3d.shown;
-        let editable = self.console.editing() || self.host().editable_focused(cx);
         let tabs = field3d_tabs(self.host().hub(cx));
         self.host_mut().input(cx, |hub| {
             for (index, _) in tabs {
@@ -1161,18 +1166,28 @@ impl<H: FrameHost> HubFrame<H> {
         });
     }
 
-    pub(super) fn field3d_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<'_, Self>) {
+    pub(super) fn field3d_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         let m = event.keystroke.modifiers;
         let command = if cfg!(target_os = "macos") {
             m.platform
         } else {
             m.control
         };
-        self.field3d_key(&event.keystroke.key, true, command, cx);
+        self.field3d_key(&event.keystroke.key, true, command, window, cx);
     }
 
-    pub(super) fn field3d_key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<'_, Self>) {
-        self.field3d_key(&event.keystroke.key, false, false, cx);
+    pub(super) fn field3d_key_up(
+        &mut self,
+        event: &KeyUpEvent,
+        window: &Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.field3d_key(&event.keystroke.key, false, false, window, cx);
     }
 
     /// `div.field-3d-settings` over the right of `controls` (`div.controls-content`).
