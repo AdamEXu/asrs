@@ -416,6 +416,13 @@ impl Variant<'_> {
         self.prompt.unwrap_or(self.window())
     }
 
+    /// The hub, then the prompt while it is open.
+    fn open_windows(&mut self) -> Vec<AnyWindowHandle> {
+        let mut windows = vec![self.window(), self.active()];
+        windows.dedup();
+        windows
+    }
+
     fn switch_prompt(&mut self, page: Option<WindowKind>) -> Result<(), String> {
         self.settle();
         self.prompt = match page {
@@ -444,12 +451,8 @@ impl Variant<'_> {
 
     /// One animation frame, `FRAME` of executor time, and everything that then runs.
     fn tick(&mut self) -> Result<(), String> {
-        let (hub, active) = (self.window(), self.active());
         self.headless.context().advance_clock(FRAME);
-        for window in [Some(hub), (active != hub).then_some(active)]
-            .into_iter()
-            .flatten()
-        {
+        for window in self.open_windows() {
             self.headless
                 .context()
                 .update_window(window, |_, window, cx| window.simulate_next_frame(cx))
@@ -883,11 +886,12 @@ impl Variant<'_> {
             self.perform(action)
                 .map_err(|e| format!("action {i} ({}): {e}", capture::kind(action)))?;
         }
-        let window = self.window();
-        self.headless
-            .context()
-            .update_window(window, |_, window, _| window.remove_window())
-            .map_err(|e| e.to_string())?;
+        for window in self.open_windows() {
+            self.headless
+                .context()
+                .update_window(window, |_, window, _| window.remove_window())
+                .map_err(|e| e.to_string())?;
+        }
         self.settle();
         let exceptions = self.exceptions.borrow().clone();
         capture::write(
