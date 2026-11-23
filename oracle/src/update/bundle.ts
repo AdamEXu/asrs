@@ -148,11 +148,13 @@ const PACKAGE_STUBS: { [name: string]: string } = {
   "@rev-robotics/revlog-converter": "export function parseREVLOG() { return null; }"
 };
 
-// The real main.ts against the `files` fakes, which genUpdate imports statically and hands over
+// The real main.ts against the `files` fakes, which the generator imports statically and hands over
 // through `globalThis.__asrsMain` so this bundle and the generator share one instance of each.
 // Every path is resolved through realpath so main.ts and the entry's own imports
 // (ElectronConstants, betaConfig) are one module instance even when target/ is a symlink.
-export async function buildMainBundle(): Promise<string> {
+// `neighbours` replaces a stub's source, or with `null` bundles that neighbour for real.
+export async function buildMainBundle(neighbours: { [rel: string]: string | null } = {}): Promise<string> {
+  const stubs: { [rel: string]: string | null } = { ...MAIN_STUBS, ...neighbours };
   const upstream = fs.realpathSync(__UPSTREAM_DIR__);
   const srcDir = path.join(upstream, "src");
   const upstreamPackage = JSON.parse(fs.readFileSync(path.join(upstream, "package.json"), "utf8"));
@@ -196,13 +198,13 @@ export async function buildMainBundle(): Promise<string> {
           build.onResolve({ filter: /^\./ }, (args: any) => {
             if (!args.importer.startsWith(path.join(srcDir, "main/electron") + path.sep)) return undefined;
             const rel = path.relative(srcDir, path.resolve(path.dirname(args.importer), args.path)).split(path.sep).join("/");
-            return MAIN_STUBS[rel] === undefined ? undefined : { path: "stub:" + rel, namespace: "asrs-main-glue" };
+            return stubs[rel] === undefined || stubs[rel] === null ? undefined : { path: "stub:" + rel, namespace: "asrs-main-glue" };
           });
           build.onLoad({ filter: /.*/, namespace: "asrs-main-glue" }, (args: any) => {
             if (args.path === "electron") return { contents: "module.exports = globalThis.__asrsMain.electron;", loader: "js" };
             if (args.path === "fs") return { contents: "module.exports = globalThis.__asrsMain.fs;", loader: "js" };
             if (args.path.startsWith("pkg:")) return { contents: PACKAGE_STUBS[args.path.slice(4)], loader: "js" };
-            return { contents: MAIN_STUBS[args.path.slice(5)], loader: "ts" };
+            return { contents: stubs[args.path.slice(5)]!, loader: "ts" };
           });
           build.onLoad({ filter: /buildConstants\.ts$/ }, (args: any) => {
             const source = fs.readFileSync(args.path, "utf8");

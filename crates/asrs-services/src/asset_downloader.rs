@@ -34,7 +34,8 @@ const DISK_FAIL_STATUS: &str = "Not enough disk space. Trying again soon.";
 const GITHUB_FAIL_STATUS: &str = "Cannot connect to GitHub. Trying again soon.";
 const SUCCESS_STATUS: &str =
     "All assets downloaded. AdvantageScope will check for updates periodically.";
-const INITIAL_STATUS: &str = "No status available.";
+/// `getAssetDownloadStatus()` before the first check.
+pub const INITIAL_STATUS: &str = "No status available.";
 
 /// `buildConstants.DISTRIBUTION`: WPILib builds treat the FRC 6328 release as optional.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
