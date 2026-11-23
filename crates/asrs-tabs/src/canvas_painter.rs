@@ -162,11 +162,11 @@ mod tests {
             .unwrap();
         let (mut accepted, mut ignored, mut unmodeled) = (0, 0, 0);
         for row in value.as_array().expect("rows") {
-            let Some([kind, css, _, _, _, fill_style, _]) = row.as_array() else {
+            let Some([kind, css, stroke, _, _, fill_style, _]) = row.as_array() else {
                 panic!("row is not [kind, value, stroke, fill, background, fillStyle, pixel]");
             };
             let (kind, css) = (text(kind), text(css));
-            let blink_accepts = text(fill_style) != "#010203";
+            let blink_accepts = text(fill_style) != "#010203" || text(stroke) == "rgb(1, 2, 3)";
             match canvas_color(&JsValue::from(css.as_str())) {
                 Ok(style) => {
                     assert_eq!(style, Style::Color(css.clone()));
