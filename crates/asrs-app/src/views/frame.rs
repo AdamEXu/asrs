@@ -19,6 +19,7 @@ use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::selection_impl::ControlButton;
+use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
@@ -42,6 +43,7 @@ use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
+use super::table::{self, TableViews};
 
 /// `element` under its parity id, which is its selector in `www/hub.html` (`div.title-bar`).
 fn probe(element: FrameElement, child: impl IntoElement) -> Probed {
@@ -99,6 +101,7 @@ struct GeometryState {
     classes: BodyClasses,
     inner_height: f64,
     side_bar: [f64; 4],
+    table: Option<(Rect, f64)>,
 }
 
 impl FrameGeometry {
@@ -124,6 +127,11 @@ impl FrameGeometry {
         renderer_top(self.0.borrow().classes, show_timeline)
     }
 
+    /// `div.renderer-content`'s box while a Table tab is displayed, and the window's scale.
+    pub fn table_box(&self) -> Option<(Rect, f64)> {
+        self.0.borrow().table
+    }
+
     /// `div.side-bar`'s box as last laid out.
     pub fn side_bar(&self) -> [f64; 4] {
         self.0.borrow().side_bar
@@ -143,6 +151,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) line_graph: LineGraphViews,
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
+    pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
 }
 
@@ -228,6 +237,7 @@ impl<H: FrameHost> HubFrame<H> {
             line_graph: LineGraphViews::default(),
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
+            table: TableViews::default(),
             console: ConsoleViews::default(),
         }
     }
@@ -313,6 +323,7 @@ impl<H: FrameHost> HubFrame<H> {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
         self.source_list_mouse_move(x, y, cx);
+        self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
         self.console_mouse_move(x, y, cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
@@ -357,6 +368,7 @@ impl<H: FrameHost> HubFrame<H> {
     fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
+        self.table_mouse_up(event, x, y, cx);
         self.console_mouse_up(event, x, y, cx);
         let shell = &mut self.shell;
         if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
@@ -701,6 +713,22 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let inputs = self.inputs(cx, width, height, f64::from(scale), fps_size);
         let layout = FrameLayout::compute(&inputs);
         self.geometry.set_inner_height(height);
+        self.geometry.0.borrow_mut().table = FrameLayout::compute(&FrameInputs {
+            show_timeline: Some(false),
+            show_tab_controls: Some(false),
+            tab_controls_height: Some(0.0),
+            ..inputs.clone()
+        })
+        .rect(FrameElement::RendererContent)
+        .map(|[x, y, width, height]| {
+            let rect = Rect {
+                x,
+                y,
+                width,
+                height,
+            };
+            (rect, f64::from(scale))
+        });
         self.geometry.sync(self.host.hub(cx));
         let titles: Vec<TitleElement> = self.host.hub(cx).tabs().bar().map(|e| e.clone()).collect();
         if let Some(bar) = layout.rect(FrameElement::TabBar) {
@@ -744,7 +772,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 let frame = entity.clone();
                 window.on_mouse_event(move |event: &MouseExitEvent, phase, _, cx| {
                     if phase == DispatchPhase::Bubble && event.pressed_button.is_none() {
-                        let _ = frame.update(cx, |frame, cx| frame.console_mouse_exit(cx));
+                        let _ = frame.update(cx, |frame, cx| {
+                            frame.table_mouse_exit(cx);
+                            frame.console_mouse_exit(cx);
+                        });
                     }
                 });
                 let frame = entity.clone();
@@ -895,8 +926,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(field) = self.field3d_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(field);
                 }
-                if let Some(table) = self.console_element(rect, appearance, scale, window, cx) {
+                if let Some(table) = self.table_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(table);
+                }
+                if let Some(console) = self.console_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(console);
                 }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
@@ -1061,6 +1095,15 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     };
                     item.opacity(0.5).child(tab).into_any_element()
                 }
+                DragContent::Column {
+                    text,
+                    available,
+                    width,
+                } => item
+                    .child(table::drag_column(
+                        &text, available, width, appearance, scale, cx,
+                    ))
+                    .into_any_element(),
                 DragContent::ListItem {
                     item: list_item,
                     width,

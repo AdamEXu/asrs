@@ -1110,7 +1110,9 @@ Geometry, fixture key `"geometry"`:
   that are inputs rather than upstream behaviour. `asrs_parity::geometry::ScriptedReads`
   answers a port's reads from these records in order and checks its writes, failing on any read
   or write upstream did not make; `dom/tabs/table-real` replays the Table renderer this way
-  (`crates/asrs-tabs/tests/table_real_dom.rs`).
+  (`crates/asrs-tabs/tests/table_real_dom.rs`), as do the other `dom/tabs/table*` fixtures the
+  whole tab (`crates/asrs-hub/tests/dom_tabs.rs`). Both also check every vertical read against
+  `asrs_tabs::table::layout::TableLayout`, the model of Blink's layout the app answers from.
 
 `window.__oracleTree(value)` gives fixture evals the CVE-1 tree of a value.
 

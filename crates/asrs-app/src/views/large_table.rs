@@ -3,11 +3,11 @@
 
 use asrs_js::math;
 use asrs_ui::button::IconButton;
-use asrs_ui::gpui::{Div, IntoElement, ParentElement, Styled, div, px, rgb};
+use asrs_ui::gpui::{App, Div, IntoElement, ParentElement, Styled, div, px, rgb, rgba};
 use asrs_ui::icon::{Icon, IconFit};
 use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Text, TextStyle, snap_remainder};
+use asrs_ui::text::{self, ELLIPSIS, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, chains};
 
 use super::source_list::ratio_symbol;
@@ -100,11 +100,16 @@ pub(super) fn mean(a: u32, b: u32) -> u32 {
     channel(16) | channel(8) | channel(0)
 }
 
-/// A `th`: its background, and its 1 px borders meeting in a mitre at the bottom right corner,
+/// A `th`: its background, and its `border` px borders meeting in a mitre at the bottom right corner,
 /// where the pixels on the diagonal take half of each.
-pub(super) fn header_cell(grid: Grid, cell: [f64; 4], right: bool, palette: &HeaderPalette) -> Div {
+pub(super) fn header_cell(
+    grid: Grid,
+    cell: [f64; 4],
+    right: bool,
+    border: f64,
+    palette: &HeaderPalette,
+) -> Div {
     let [x, y, w, h] = cell;
-    let border = 1.0;
     let (right_edge, bottom_edge) = (grid.snap(x + w), grid.snap(y + h));
     let mut out = div()
         .absolute()
@@ -188,7 +193,7 @@ impl HandFade {
             self.since = None;
             return (HAND_OPACITY, false);
         }
-        (HAND_OPACITY * ease_in(math::max2(t, 0.0)), true)
+        (HAND_OPACITY * ease_in(t), true)
     }
 }
 
@@ -205,16 +210,50 @@ pub(super) fn hand_icon(root: [f64; 4], opacity: f64, dark: bool, grid: Grid) ->
     )
 }
 
-/// `text-decoration: line-through` of 14 px text in a 30 px line, `width` wide from the box's
-/// left edge.
-pub(super) fn line_through(left: f64, width: f64, color: u32) -> Div {
-    div()
-        .absolute()
-        .left(px(left as f32))
-        .top(px(15.0))
-        .w(px(width as f32))
-        .h(px(1.0))
-        .bg(rgb(color))
+/// `text-decoration: line-through` on a key whose line box starts at client (`x`, `y`), cut to
+/// `width` if any: Blink decorates the text and not its ellipsis, rounds the line to whole device rows
+/// and leaves its ends antialiased.
+pub(super) fn line_through(
+    key: &str,
+    style: &TextStyle,
+    [x, y]: [f64; 2],
+    width: Option<f64>,
+    color: u32,
+    grid: Grid,
+    cx: &mut App,
+) -> Vec<Div> {
+    let scale = grid.scale;
+    let layout = text::layout(cx, style, key, scale as f32, width.map(|w| w as f32));
+    let Some(line) = layout.lines.first() else {
+        return Vec::new();
+    };
+    let device = |lu: i32| f64::from(lu) / 64.0;
+    let ascent = device(layout.ascent);
+    let top = y * scale + device(line.baseline) - ascent;
+    let row = math::floor(top + 2.0 * ascent / 3.0 + 0.5);
+    let thickness = math::max2(math::floor(14.0 * scale / 10.0), 1.0);
+    let mut out = Vec::new();
+    let mut span = |from: f64, to: f64, alpha: f64| {
+        if to > from {
+            let alpha = (alpha * 255.0).round() as u32;
+            out.push(
+                grid.place([from, row, to - from, thickness].map(|v| v / scale))
+                    .bg(rgba(color << 8 | alpha)),
+            );
+        }
+    };
+    for f in &line.fragments {
+        if line.cut_at.is_some() && f.text == ELLIPSIS {
+            continue;
+        }
+        let from = x * scale + device(f.x);
+        let to = from + device(f.width);
+        let (inner_from, inner_to) = (math::ceil(from), math::floor(to));
+        span(math::floor(from), inner_from, inner_from - from);
+        span(inner_from, inner_to, 1.0);
+        span(inner_to, math::ceil(to), to - inner_to);
+    }
+    out
 }
 
 pub(super) fn plain(text: impl Into<String>, style: TextStyle, color: u32) -> Text {

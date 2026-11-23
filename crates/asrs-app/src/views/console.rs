@@ -38,6 +38,7 @@ use super::number::FormNumber;
 const JUMP_INPUT: [f64; 4] = [4.0, 4.5, 64.0, 21.0];
 const JUMP_BUTTON_LEFT: f64 = 70.0;
 const BUTTON_TOP: f64 = 2.5;
+const BORDER: f64 = 1.0;
 /// `div` around the key: `right: 246px`, `height: 30px`, `padding-left: 5px`.
 const KEY_RIGHT: f64 = 246.0;
 const KEY_HEIGHT: f64 = 30.0;
@@ -566,6 +567,10 @@ impl<H: FrameHost> HubFrame<H> {
                 KEY_HEIGHT,
             ])
             .overflow_hidden();
+        let inner = Grid {
+            origin: [grid.snap(field_cell[0]), grid.snap(y)],
+            ..grid
+        };
         let mut key_end = 0.0;
         for (i, line) in key.split('\n').enumerate() {
             let (w, _) = text::measure(cx, &key_style(), line, scale);
@@ -582,24 +587,22 @@ impl<H: FrameHost> HubFrame<H> {
                     ),
             );
             if view.field_line_through {
-                key_box = key_box.child(
-                    line_through(
-                        grid.snap(key_left) - grid.snap(field_cell[0]),
-                        w,
-                        text_color,
-                    )
-                    .mt(px(top as f32)),
-                );
+                let at = [key_left, y + top];
+                key_box = key_box.children(line_through(
+                    line,
+                    &key_style(),
+                    at,
+                    None,
+                    text_color,
+                    inner,
+                    cx,
+                ));
             }
         }
         let key_box = if view.field_delete_hidden {
             key_box
         } else {
             let at = [key_left + key_end + DELETE_MARGIN, y + BUTTON_TOP];
-            let inner = Grid {
-                origin: [grid.snap(field_cell[0]), grid.snap(y)],
-                ..grid
-            };
             let button = IconButton::new("console-delete", symbol("close.svg"))
                 .blurred(blurred)
                 .on_click(cx.listener(|frame, _, _, cx| frame.console_close(cx)));
@@ -642,11 +645,12 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([x, y, TIME_WIDTH, HEADER_HEIGHT]),
             ))
             .child(probed("table.console-table th", grid.place(field_cell)))
-            .child(header_cell(grid, field_cell, false, &palette))
+            .child(header_cell(grid, field_cell, false, BORDER, &palette))
             .child(header_cell(
                 grid,
                 [x, y, TIME_WIDTH, HEADER_HEIGHT],
                 true,
+                BORDER,
                 &palette,
             ))
             .child(probed(

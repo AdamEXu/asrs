@@ -3,8 +3,10 @@
 //! `render(command)` with `{"tr": "render"}` and `{"tr": "rendered"}`; the port renders the
 //! same command with its layout reads answered, in order, by the `read` records inside the
 //! bracket and its scroll writes checked against the `write` records, through
-//! `asrs_parity::geometry::ScriptedReads`. Geometry records outside a bracket belong to the
-//! tab bar, sidebar and timeline, which other models replay.
+//! `asrs_parity::geometry::ScriptedReads`, and every read is also checked against
+//! `asrs_tabs::table::layout::TableLayout`, the layout the app's view answers from. Geometry
+//! records outside a bracket belong to the tab bar, sidebar and timeline, which other models
+//! replay.
 
 mod support;
 
@@ -19,51 +21,14 @@ use asrs_model::tab_controller::TabRenderer;
 use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::vectors::{Record, load};
 use asrs_parity::{Json, Value};
+use asrs_tabs::table::layout::TableLayout;
 use asrs_tabs::table::{TableCommand, TableCommandField, TableDom, TableGeometry, TableRenderer};
+use support::table_geometry::{CONTAINER, SharedTable};
 use support::{Host, field, number, opt};
 
 const VECTOR: &str = "dom/tabs/table-real";
-const CONTAINER: &str = "div.data-table-container:2";
-const HEADER: &str = "div.data-table-container:2>table.data-table:0>tbody:0>tr:0";
-
-fn data_row(index: usize) -> String {
-    format!(
-        "div.data-table-container:2>table.data-table:0>tbody:0>tr:{}",
-        index + 2
-    )
-}
-
-struct ScriptedTable(Rc<RefCell<ScriptedReads>>);
-
-fn rect([x, y, width, height]: [f64; 4]) -> Rect {
-    Rect {
-        x,
-        y,
-        width,
-        height,
-    }
-}
-
-impl TableGeometry for ScriptedTable {
-    fn scroll_top(&mut self) -> f64 {
-        self.0.borrow_mut().read_f64("scrollTop", CONTAINER)
-    }
-    fn set_scroll_top(&mut self, value: f64) {
-        self.0.borrow_mut().write_f64("scrollTop", CONTAINER, value);
-    }
-    fn container_client_height(&mut self) -> f64 {
-        self.0.borrow_mut().read_f64("clientHeight", CONTAINER)
-    }
-    fn header_client_height(&mut self) -> f64 {
-        self.0.borrow_mut().read_f64("clientHeight", HEADER)
-    }
-    fn header_rect(&mut self) -> Rect {
-        rect(self.0.borrow_mut().read_rect(HEADER))
-    }
-    fn data_row_rect(&mut self, index: usize, _hidden: bool) -> Rect {
-        rect(self.0.borrow_mut().read_rect(&data_row(index)))
-    }
-}
+/// Two steps scroll the container behind the recorder's back, as a user does.
+const USER_SCROLLS: usize = 2;
 
 /// The recorded `TableRendererCommand`. The renderer reads each field's key and availability;
 /// cell text is the view's.
@@ -110,8 +75,15 @@ fn table_real_geometry_replays_through_scripted_reads() {
     let records = load(VECTOR).unwrap_or_else(|e| panic!("{e}"));
     let dom = Rc::new(RefCell::new(TableDom::default()));
     let mut renderer = TableRenderer::new("uuid".into(), dom, true);
-    let reads = Rc::new(RefCell::new(ScriptedReads::default()));
-    renderer.set_geometry(Box::new(ScriptedTable(reads.clone())));
+    let table = SharedTable::default();
+    table.0.borrow_mut().layout.container = Rect {
+        x: 300.0,
+        y: 88.0,
+        width: 800.0,
+        height: 562.0,
+    };
+    renderer.set_geometry(Box::new(table.clone()));
+    let mut user_scrolls = 0;
     let mut host = Host::default();
 
     let (mut renders, mut recorded_renders) = (0, 0);
@@ -140,7 +112,17 @@ fn table_real_geometry_replays_through_scripted_reads() {
                         }
                     }
                 }
-                *reads.borrow_mut() = ScriptedReads::from_records(span).unwrap();
+                {
+                    let mut t = table.0.borrow_mut();
+                    t.reads = ScriptedReads::from_records(span).unwrap();
+                    let first = t.reads.peek().filter(|g| g.name == "scrollTop").unwrap();
+                    assert!(first.is_on(CONTAINER));
+                    let scroll_top = first.value.as_f64().unwrap();
+                    if scroll_top != t.layout.scroll_top() {
+                        t.layout.set_scroll_top(scroll_top);
+                        user_scrolls += 1;
+                    }
+                }
                 host.selection.calls.clear();
                 let cmd = command(&begin.value("command").unwrap());
                 let result = TabRenderer::<Host>::render(&mut renderer, &mut host, &cmd);
@@ -161,7 +143,7 @@ fn table_real_geometry_replays_through_scripted_reads() {
                     host.selection.calls, selection_calls,
                     "{at}: selection calls"
                 );
-                let taken = std::mem::take(&mut *reads.borrow_mut());
+                let taken = std::mem::take(&mut table.0.borrow_mut().reads);
                 geometry_compared += taken.finish().unwrap_or_else(|e| panic!("{at}: {e}"));
                 renders += 1;
             }
@@ -190,8 +172,56 @@ fn table_real_geometry_replays_through_scripted_reads() {
         geometry_compared, geometry_recorded,
         "geometry records compared"
     );
+    let t = table.0.borrow();
+    assert!(t.mismatches.is_empty(), "{}", t.mismatches.join("\n"));
+    assert!(t.checked > 1000, "{} reads checked", t.checked);
+    assert_eq!(user_scrolls, USER_SCROLLS);
     assert!(
         renders > 100 && geometry_compared > 1000,
         "{renders} renders, {geometry_compared} reads"
     );
+}
+
+/// The fixtures scroll the header row 250 px right before any read of it.
+#[test]
+fn header_cells_scroll_under_the_first_column() {
+    for (vector, scale) in [
+        ("dom/tabs/table-wide", 1.0),
+        ("dom/tabs/table-wide-hidpi", 1.5),
+        ("dom/tabs/table-wide-2x", 2.0),
+    ] {
+        let mut cells = [None; 5];
+        for record in load(vector).unwrap() {
+            let Some(g) = GeometryRecord::parse(&record).unwrap() else {
+                continue;
+            };
+            for (i, cell) in cells.iter_mut().enumerate() {
+                if cell.is_none() && g.is_on(&format!("tbody:0>tr:0>th:{i}")) {
+                    let Value::Array(rect) = &g.value else {
+                        panic!("{vector}: {} of a header cell", g.name)
+                    };
+                    *cell = Some([0, 1, 2, 3].map(|k| number(&rect[k])));
+                }
+            }
+        }
+        let cells = cells.map(|cell| cell.unwrap_or_else(|| panic!("{vector}: a cell is unread")));
+        let mut layout = TableLayout::default();
+        layout.container = Rect {
+            x: 300.0,
+            y: 88.0,
+            width: 800.0,
+            height: 562.0,
+        };
+        layout.device_pixel_ratio = scale;
+        layout.columns = cells.map(|[_, _, width, _]| width).to_vec();
+        layout.scroll_to([250.0, 0.0]);
+        for (i, recorded) in cells.into_iter().enumerate() {
+            let cell = layout.header_cell_rect(i);
+            assert_eq!(
+                [cell.x, cell.y, cell.width, cell.height],
+                recorded,
+                "{vector}: header cell {i}"
+            );
+        }
+    }
 }

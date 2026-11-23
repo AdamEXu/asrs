@@ -75,12 +75,8 @@ fn title_style() -> TextStyle {
 
 fn source_style() -> TextStyle {
     let font = format!("14px {}", FONT_FAMILY.join(", "));
-    TextStyle::from_css([
-        ("font", font.as_str()),
-        ("white-space", "nowrap"),
-        ("text-decoration", "underline"),
-    ])
-    .expect("field 2d source style")
+    TextStyle::from_css([("font", font.as_str()), ("white-space", "nowrap")])
+        .expect("field 2d source style")
 }
 
 /// Where `div.field-2d-settings` puts its parts inside `div.controls-content`, in client
@@ -747,6 +743,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .child(
                         Text::new("Source", source_style())
                             .color(theme.link)
+                            .underline()
                             .subpixel(
                                 snap_remainder(r[0] as f32, scale),
                                 snap_remainder(r[1] as f32, scale),
@@ -928,6 +925,11 @@ mod tests {
         assert_eq!(layout.select, [925.5, 483.0, 99.0, 24.0]);
         assert_eq!(layout.orientation, [862.5, 543.0, 100.0, 65.0]);
         assert_eq!(layout.size, [987.5, 543.0, 100.0, 65.0]);
+    }
+
+    #[test]
+    fn source_link_has_a_style() {
+        source_style();
     }
 
     #[test]

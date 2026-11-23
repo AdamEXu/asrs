@@ -7,13 +7,15 @@
 //! `dom/tabs/<case>` vector, line for line. `dom`, `canvas`, `measure` and `sourceLists` capture
 //! kinds belong to other layers and are skipped while comparing.
 //!
-//! jsdom's `:nth-child` and `:nth-of-type` go stale once the table header is rebuilt, so
-//! table fixtures lay header cells out by `data-i`, set by a `/*table:tag*/` eval step right
-//! before each event that reads header rects. Events the harness does not model fail the run.
+//! The table fixtures (`TABLE_FIXTURES`) ran on Blink with real geometry: the tab's layout reads
+//! and scroll writes are answered from and checked against the recorded ones, which the port's
+//! `TableLayout` must also predict. Events the harness does not model fail the run.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
+#[path = "../../asrs-tabs/tests/support/table_geometry.rs"]
+mod table_geometry;
 
 use std::cell::{Cell, Ref, RefCell};
 use std::collections::HashMap;
@@ -63,6 +65,7 @@ use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_tabs::swerve_renderer::SwerveRenderer;
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
+use table_geometry::SharedTable;
 
 fn err(message: impl Into<String>) -> String {
     message.into()
@@ -116,8 +119,6 @@ struct ElDesc {
     pos: usize,
     /// Position among all siblings, for `:nth-child`, where the tree knows it.
     child_pos: Option<usize>,
-    /// The `data-i` attribute a `/*table:tag*/` eval step set.
-    data_i: Option<usize>,
     parent: Option<Box<ElDesc>>,
 }
 
@@ -134,22 +135,11 @@ fn el(
         hidden,
         pos,
         child_pos: None,
-        data_i: None,
         parent: Some(Box::new(parent)),
     }
 }
 
 fn matches_compound(el: &ElDesc, compound: &str) -> bool {
-    let compound = match compound.split_once("[data-i=\"") {
-        Some((head, rest)) => {
-            let value = rest.trim_end_matches("\"]").parse::<usize>().ok();
-            if value.is_none() || el.data_i != value {
-                return false;
-            }
-            head
-        }
-        None => compound,
-    };
     let (compound, nth, pos) = if let Some((head, arg)) = compound.split_once(":nth-of-type(") {
         (head, Some(arg.trim_end_matches(')')), Some(el.pos))
     } else if let Some((head, arg)) = compound.split_once(":nth-child(") {
@@ -279,44 +269,9 @@ fn root_el(hidden: bool, pos: usize) -> ElDesc {
         hidden: false,
         pos: 1,
         child_pos: None,
-        data_i: None,
         parent: None,
     };
     el("div", &[], hidden, pos, renderer_content)
-}
-
-fn table_container_el(hidden: bool, pos: usize) -> ElDesc {
-    el(
-        "div",
-        &["data-table-container"],
-        false,
-        2,
-        root_el(hidden, pos),
-    )
-}
-
-fn table_body(hidden: bool, pos: usize) -> ElDesc {
-    let table = el(
-        "table",
-        &["data-table"],
-        false,
-        1,
-        table_container_el(hidden, pos),
-    );
-    el("tbody", &[], false, 1, table)
-}
-
-fn table_th(hidden: bool, tab_pos: usize, th_pos: usize, tagged: bool) -> ElDesc {
-    let header = el("tr", &[], false, 1, table_body(hidden, tab_pos));
-    ElDesc {
-        child_pos: Some(th_pos),
-        data_i: tagged.then(|| th_pos - 1),
-        ..el("th", &[], false, th_pos, header)
-    }
-}
-
-fn table_tr(hidden: bool, tab_pos: usize, tr_pos: usize) -> ElDesc {
-    el("tr", &[], false, tr_pos, table_body(hidden, tab_pos))
 }
 
 fn console_container_el(hidden: bool, pos: usize) -> ElDesc {
@@ -384,7 +339,6 @@ fn video_source_button_el(button_pos: usize) -> ElDesc {
         hidden: false,
         pos: 1,
         child_pos: None,
-        data_i: None,
         parent: None,
     };
     let controller_root = el("div", &[], false, 1, controls);
@@ -768,10 +722,8 @@ struct Runner {
     /// after the selected one but appends its controls, and `shiftSelected` moves only the
     /// tab, so a selector's match index follows creation order, not `tabList`.
     controls_order: Vec<usize>,
-    /// Table tabs whose header cells carry `data-i` tags. Upstream drops the tags when
-    /// `updateFields` rebuilds the header; the harness drops them every frame, so a fixture
-    /// re-tags right before each event that reads header rects.
-    tagged_tables: Vec<String>,
+    /// The Table tab of a real-geometry fixture.
+    table: Option<SharedTable>,
     sidebar_width: f64,
     sidebar_expanded: Vec<JsString>,
     ignored: Vec<String>,
@@ -813,21 +765,17 @@ impl Runner {
                 continue;
             };
             let hidden = tab.content_hidden();
-            let uuid = tab.uuid().as_str().map(|s| s.to_string_lossy());
-            let Some(uuid) = uuid else { continue };
+            if tab.uuid().as_str().is_none() {
+                continue;
+            }
             let pos = i + 1;
             match self.tab_dom(i) {
                 DomKind::Table(dom) => {
-                    let tagged = self.tagged_tables.contains(&uuid);
                     let mut dom = dom.borrow_mut();
                     dom.hidden = hidden;
-                    dom.container = self.layout.rect_of(&table_container_el(hidden, pos));
-                    let cells = dom.header_count.max(1);
-                    dom.header_cells = (1..=cells)
-                        .map(|n| self.layout.rect_of(&table_th(hidden, pos, n, tagged)))
-                        .collect();
-                    dom.header_row = self.layout.rect_of(&table_tr(hidden, pos, 1));
-                    dom.data_row = self.layout.rect_of(&table_tr(hidden, pos, 2));
+                    if let (None, Some(table)) = (&dom.geometry, &self.table) {
+                        dom.geometry = Some(Box::new(table.clone()));
+                    }
                 }
                 DomKind::Console(dom) => {
                     let mut dom = dom.borrow_mut();
@@ -924,7 +872,6 @@ impl Runner {
             hidden: false,
             pos: 1,
             child_pos: None,
-            data_i: None,
             parent: None,
         };
         self.layout.rect_of(&tab_list).top()
@@ -942,7 +889,6 @@ impl Runner {
             return;
         }
         self.host.renderer_top = self.renderer_top();
-        self.tagged_tables.clear();
         self.sync_dom();
         for i in 0..self.tabs.len() {
             let index = JsValue::Number(i as f64);
@@ -1302,17 +1248,68 @@ fn video_view(r: &Runner) -> JsValue {
     JsValue::Array(tabs)
 }
 
+/// Blink's serialization of an inline length assigned as `n.toString() + "px"`.
+fn css_px(n: f64) -> String {
+    let text = asrs_js::number::to_precision(n, Some(6.0)).unwrap();
+    let text = match text.contains('.') {
+        true => text.trim_end_matches('0').trim_end_matches('.').to_owned(),
+        false => text,
+    };
+    format!("{text}px")
+}
+
+/// Reads and assignments of `TABLE_CONTAINER`'s scroll position and of the `bottom` inset that
+/// sets its height, which are fixture input and leave no geometry records.
+fn eval_table_container(r: &mut Runner, body: &str) -> Option<JsValue> {
+    const CONTAINER: &str =
+        "window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.";
+    let mut table = r.table.as_ref()?.0.borrow_mut();
+    let axis = |name: &str| match name {
+        "scrollLeft" => Some(0),
+        "scrollTop" => Some(1),
+        _ => None,
+    };
+    if let Some(statements) = body.strip_prefix("{ ").and_then(|b| b.strip_suffix(" }")) {
+        for statement in statements.split_terminator(';') {
+            let (name, value) = statement
+                .trim()
+                .strip_prefix(CONTAINER)?
+                .split_once(" = ")?;
+            if name == "style.bottom" {
+                let bottom: f64 = value.trim_matches('"').strip_suffix("px")?.parse().ok()?;
+                table.layout.container.height = TABLE_CONTAINER.height - bottom;
+                continue;
+            }
+            let axis = axis(name)?;
+            let mut to = table.layout.scroll();
+            to[axis] = value.parse().ok()?;
+            table.layout.scroll_to(to);
+        }
+        return Some(JsValue::Undefined);
+    }
+    let name = body.strip_prefix(CONTAINER)?;
+    let scroll = table.layout.scroll();
+    Some(JsValue::Number(scroll[axis(name)?]))
+}
+
 fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
-    if expr.starts_with("/*table:tag*/") {
-        let uuid = r
-            .tabs
-            .selected_index()
-            .and_then(|i| r.tabs.tab(i))
-            .and_then(|t| t.uuid().as_str().map(|s| s.to_string_lossy()))
-            .ok_or_else(|| err("table:tag needs a selected tab"))?;
-        r.tagged_tables.push(uuid);
-        r.sync_dom();
-        return Ok(JsValue::Undefined);
+    if let Some(body) = expr
+        .strip_prefix("window.__oracleQuiet(() => ")
+        .and_then(|e| e.strip_suffix(')'))
+    {
+        return eval_table_container(r, body)
+            .ok_or_else(|| err(format!("unsupported eval {expr}")));
+    }
+    if expr.starts_with("/*table:highlight*/") {
+        let dom = r
+            .selected_table_dom()
+            .ok_or_else(|| err("table:highlight needs a selected Table tab"))?;
+        let dom = dom.borrow();
+        let left = dom.drag_highlight_left.map_or(String::new(), css_px);
+        return Ok(JsValue::Array(vec![
+            JsValue::Bool(dom.drag_highlight_hidden),
+            JsValue::string(&left),
+        ]));
     }
     // The scroll is an input; the position it leaves comes back from the recorded reads.
     if expr.starts_with("/*console:scroll*/") {
@@ -1343,7 +1340,6 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
             .selected_index()
             .map_or(DomKind::Other, |i| r.tab_dom(i));
         let scroll_top = match (container, dom) {
-            ("data-table-container", DomKind::Table(dom)) => dom.borrow().scroll_top,
             ("console-table-container", DomKind::Console(dom)) => match &mut r.console_reads {
                 Some(reads) => reads.scroll_top(&[]),
                 None => dom.borrow().scroll_top,
@@ -1701,6 +1697,8 @@ fn json_to_layout(fixture: &Json) -> Result<Layout, String> {
 
 fn skippable(record: &Record) -> bool {
     record.field("dom").is_some()
+        || record.field("read").is_some()
+        || record.field("write").is_some()
         || record.field("canvas").is_some()
         || record.field("sourceLists").is_some()
         || record.field("measure").is_some()
@@ -1793,7 +1791,11 @@ fn selection_step(
     Ok(())
 }
 
-fn replay(spec_path: &Path, console_reads: Option<RecordedConsole>) -> Result<Vec<Emit>, String> {
+fn replay(
+    spec_path: &Path,
+    table: Option<SharedTable>,
+    console_reads: Option<RecordedConsole>,
+) -> Result<Vec<Emit>, String> {
     let spec = load_json(spec_path)?;
     let fixture = spec.get("fixture").ok_or_else(|| err("no fixture"))?;
     let start = fixture
@@ -1821,6 +1823,11 @@ fn replay(spec_path: &Path, console_reads: Option<RecordedConsole>) -> Result<Ve
         .and_then(Json::as_str)
         .is_some_and(|t| t.to_string_lossy() == "dark");
     let device_pixel_ratio = wnum("devicePixelRatio", 1.0);
+    if let Some(table) = &table {
+        let layout = &mut table.0.borrow_mut().layout;
+        layout.container = TABLE_CONTAINER;
+        layout.device_pixel_ratio = device_pixel_ratio;
+    }
     let mut images = HashMap::new();
     if let Some(Json::Object(map)) = fixture.get("images") {
         for (src, size) in map {
@@ -1951,7 +1958,7 @@ fn replay(spec_path: &Path, console_reads: Option<RecordedConsole>) -> Result<Ve
         frame_loop_dead: false,
         active_drag: None,
         controls_order: Vec::new(),
-        tagged_tables: Vec::new(),
+        table,
         sidebar_width: 300.0,
         sidebar_expanded: Vec::new(),
         ignored,
@@ -2491,9 +2498,6 @@ impl Runner {
             .unwrap_or(f64::NAN);
         if let Some(i) = self.tabs.selected_index() {
             match self.tab_dom(i) {
-                DomKind::Table(dom) if target.contains("data-table") => {
-                    dom.borrow_mut().scroll_top = scroll_top;
-                }
                 DomKind::Console(dom) if target.contains("console-table") => {
                     dom.borrow_mut().scroll_top = scroll_top;
                 }
@@ -2950,12 +2954,59 @@ impl Runner {
     }
 }
 
+/// Fixtures that ran on Blink with real geometry and hold one Table tab; their other geometry
+/// records are the sidebar's, tab bar's and timeline's, which other models replay.
+const TABLE_FIXTURES: [&str; 7] = [
+    "dom/tabs/table",
+    "dom/tabs/table-edit",
+    "dom/tabs/table-ranges",
+    "dom/tabs/table-resize",
+    "dom/tabs/table-wide",
+    "dom/tabs/table-wide-2x",
+    "dom/tabs/table-wide-hidpi",
+];
+
+/// `div.data-table-container` in the fixtures' 1100 x 650 window.
+const TABLE_CONTAINER: Rect = Rect {
+    x: 300.0,
+    y: 88.0,
+    width: 800.0,
+    height: 562.0,
+};
+
+fn table_reads(records: &[Record]) -> Result<SharedTable, String> {
+    let mut on_table = Vec::new();
+    for record in records {
+        let geometry = GeometryRecord::parse(record)?;
+        if geometry.is_some_and(|g| g.el.contains("div.data-table-container:")) {
+            on_table.push(record.clone());
+        }
+    }
+    let table = SharedTable::default();
+    table.0.borrow_mut().reads = ScriptedReads::from_records(&on_table)?;
+    Ok(table)
+}
+
 fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
     let records = vectors::load(vector_id)?;
-    let reads = real_geometry(spec)
+    let table = TABLE_FIXTURES
+        .contains(&vector_id)
+        .then(|| table_reads(&records))
+        .transpose()?;
+    let reads = (table.is_none() && real_geometry(spec))
         .then(|| console_reads(&records))
         .transpose()?;
-    let emitted = replay(spec, reads.clone())?;
+    let emitted = replay(spec, table.clone(), reads.clone())?;
+    if let Some(table) = table {
+        let mut t = table.0.borrow_mut();
+        if let Some(mismatch) = t.mismatches.first() {
+            return Err(format!("{} mismatches, {mismatch}", t.mismatches.len()));
+        }
+        let compared = std::mem::take(&mut t.reads).finish()?;
+        if compared < 20 || t.checked < 20 {
+            return Err(format!("only {compared} geometry records compared"));
+        }
+    }
     if let Some(RecordedConsole(reads)) = reads {
         reads.take().finish()?;
     }
