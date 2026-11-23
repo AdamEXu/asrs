@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use asrs_canvas::text::dom::{self, LineHeight, Lu};
-use asrs_canvas::text::inline::{Breaker, Item, Line};
+use asrs_canvas::text::inline::{self, Breaker, Item, Line};
 use asrs_canvas::text::{FixedAdvance, FontSpec, TextBackend, platform_backend};
 use asrs_js::string::JsString;
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
@@ -26,6 +26,8 @@ pub const LINE_HEIGHT: f64 = 16.0;
 /// `margin-bottom` of the table.
 const TABLE_MARGIN: f64 = 6.0;
 const TAB_SIZE: u8 = 4;
+/// Coverage below this is a glyph's edge grazing a pixel, not ink in it.
+const INK: u8 = 24;
 
 /// The font of a `td`, or of a rendition inside one.
 pub fn cell_font(bold: bool, italic: bool) -> FontSpec {
@@ -362,6 +364,49 @@ impl ConsoleLayout {
     /// Forgets the cells outside `rows`.
     pub fn keep_cells(&self, rows: &std::ops::Range<usize>) {
         self.0.borrow_mut().cells.retain(|i, _| rows.contains(i));
+    }
+
+    /// Where each glyph of `text`, drawn from client `x`, has ink in the 1 px stripe that starts
+    /// `stripe` px below the text box's top: `[left, right]` in client px, in glyph order.
+    pub fn ink(&self, font: FontSpec, text: &str, x: f64, stripe: f64) -> Vec<[f64; 2]> {
+        let mut state = self.0.borrow_mut();
+        let state = &mut *state;
+        let scale = state.scale;
+        let backend = state.backend.as_mut();
+        let (ascent, ..) = dom::line_metrics(backend, &cell_style(font), scale);
+        let top = (stripe as f32 * scale).round() as i32 - ascent / dom::LU_PER_PX;
+        let rows = top..top + scale.round().max(1.0) as i32;
+        let mut out = Vec::new();
+        for glyph in inline::glyphs(backend, &font, text, scale) {
+            let Some(mask) = backend.raw_mask(glyph.glyph, f64::from(scale), 1.0, 0) else {
+                continue;
+            };
+            if mask.color || mask.width == 0 {
+                continue;
+            }
+            let columns = rows
+                .clone()
+                .filter_map(|row| usize::try_from(row - mask.top).ok())
+                .filter(|row| *row < mask.height as usize)
+                .flat_map(|row| {
+                    let width = mask.width as usize;
+                    let line = &mask.data[row * width..(row + 1) * width];
+                    (0..width).filter(move |&c| line[c] > INK)
+                });
+            let (mut first, mut last) = (None, 0);
+            for column in columns {
+                first = Some(first.map_or(column, |f: usize| f.min(column)));
+                last = last.max(column);
+            }
+            if let Some(first) = first {
+                let at = |column: usize| {
+                    let device = f64::from(glyph.x * scale) + f64::from(mask.left) + column as f64;
+                    x + device / f64::from(scale)
+                };
+                out.push([at(first), at(last + 1)]);
+            }
+        }
+        out
     }
 
     /// The ascent and descent of the cells' text boxes and their top in a line, in px.

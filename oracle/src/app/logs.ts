@@ -71,14 +71,14 @@ function robotConsole(): Uint8Array {
   encoder.add(WPILOGEncoderRecord.makeControlStart(0, { entry: 2, name: "/Battery", type: "double", metadata: "" }));
   const lines = [
     "Robot program starting on 10.63.28.2 (roboRIO 2, image 2026_v1.2)",
-    "\u001b[32mConnected\u001b[0m to \u001b[1mPower Distribution\u001b[0m on \u001b[4mCAN 1\u001b[0m",
+    "\u001b[32mConnected\u001b[0m to \u001b[1mPower Distribution\u001b[0m on \u001b[4mCAN 1\u001b[0m, \u001b[4mqueue y/g\u001b[0m, \u001b]8;;https://docs.advantagescope.org/\u0007docs\u001b]8;;\u0007",
     "Warning: Loop time of 0.02s overrun by 0.0131s in Drive.periodic(), SuperstructureStateMachine.periodic(), Vision.processFrames(): 0.018402s, Telemetry.flush(): 0.004211s, total 0.0331s",
     "\u001b[31;1mERROR\u001b[0m 1 DriveMotor[FL] (id=3): StatusCode::kStale -- no frame for 250ms",
     "{\"pose\":{\"x\":3.25,\"y\":-1.5,\"theta\":0.78539},\"targets\":[1,2,3],\"latency_ms\":12.5,\"path\":\"/home/lvuser/deploy/pathplanner/autos/Four-Piece_Amp+Center(v2).auto\"}",
     "col1\tcol2\tcolumn three\tlast",
     "first line\nsecond line\n    indented third line",
     "\\x1b[33mescaped yellow\\x1b[0m and \\ntext after an escaped newline",
-    "\u001b[2mfaint\u001b[0m \u001b[3mitalic\u001b[0m \u001b[41;97mwhite on red\u001b[0m \u001b[38;5;208m208\u001b[0m \u001b[48;2;0;64;128;38;2;255;255;0mtrue colour\u001b[0m",
+    "\u001b[2mfaint\u001b[0m \u001b[2;44mfaint on blue\u001b[0m \u001b[3mitalic\u001b[0m \u001b[41;97mwhite on red\u001b[0m \u001b[38;5;208m208\u001b[0m \u001b[48;2;0;64;128;38;2;255;255;0mtrue colour\u001b[0m",
     "r\u00e9sum\u00e9 \u00b5s \u00b0C \u2192 \u2713 na\u00efve",
     "    at frc.robot.subsystems.drive.Drive.runVelocity(Drive.java:214)",
     "https://docs.advantagescope.org/tab-reference/console?field=/RobotConsole&filter=!warn#usage"

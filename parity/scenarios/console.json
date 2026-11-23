@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U13)",
+  "about": "Interaction (U13): the generated console log on a restored empty Console tab with a selected time; /RobotConsole dragged from the sidebar into the table with the pointer (captured while the drag highlights the table and after the drop, over a hovered row), a row clicked to select its time, trackpad scrolling, the highlight button and a hovered warning row, a filter typed into the filter field, the filter cleared with its cancel button, a time typed into the jump field with Enter, the export button answered with a file name (files/dialog/console.txt and the dialog are compared), a right click that goes idle, the field removed with its delete button and an export with nothing to export (main's error box), then a restored field the log does not have. Saved HubState is compared at each capture. Nothing is masked but the focused filter and jump fields (gate 5)",
   "actions": [
     {
       "open": [
@@ -226,8 +226,8 @@
     },
     {
       "mouse": "move",
-      "x": 150,
-      "y": 600
+      "x": 640,
+      "y": 392
     },
     {
       "idle": true
@@ -255,13 +255,13 @@
       "y": 103
     },
     {
-      "key": "E"
+      "key": "P"
+    },
+    {
+      "key": "e"
     },
     {
       "key": "r"
-    },
-    {
-      "key": "O"
     },
     {
       "mouse": "move",
@@ -438,6 +438,61 @@
         "button.highlight-button",
         "input.filter",
         "img.large-table-hand-icon"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": "/Missing/Console",
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "missing",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
       ]
     }
   ]

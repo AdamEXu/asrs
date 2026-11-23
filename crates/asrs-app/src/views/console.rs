@@ -2,15 +2,16 @@
 //! `www/renderers.css`), drawn from R11's `ConsoleView` over the boxes of [`ConsoleLayout`],
 //! which answers the renderer's and the controller's layout reads.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
+use asrs_canvas::text::FontSpec;
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::string::{JsError, JsString};
 use asrs_model::tab_type::TabType;
-use asrs_tabs::ansi::AnsiStyle;
-use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
+use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRenderer};
 use asrs_tabs::console::view::{ConsoleRow, ConsoleView};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
@@ -48,6 +49,9 @@ const FILTER: [f64; 3] = [5.0, 180.0, 22.0];
 /// `td span.highlight`.
 const HIGHLIGHT: u32 = 0xffff00;
 const FAINT: f64 = 0.7;
+/// The thickness of an underline of 12 px text, and its top above the text box's bottom.
+const UNDERLINE: f64 = 1.0;
+const UNDERLINE_FROM_BOTTOM: f64 = 2.0;
 
 /// `table.console-table button.highlight-button.active img`, which outranks `button.blurred`.
 const HIGHLIGHT_ACTIVE: IconTint = IconTint {
@@ -102,8 +106,9 @@ struct Fields {
     _subscriptions: [Subscription; 2],
 }
 
-#[derive(Default)]
 struct TabView {
+    /// Keeps the tab's key, which is this allocation's address, from being reused.
+    _dom: Rc<RefCell<ConsoleDom>>,
     layout: ConsoleLayout,
     fields: Option<Fields>,
     hand: HandFade,
@@ -111,6 +116,17 @@ struct TabView {
 
 fn inside([left, top, w, h]: [f64; 4], x: f64, y: f64) -> bool {
     x >= left && x < left + w && y >= top && y < top + h
+}
+
+impl TabView {
+    fn new(dom: Rc<RefCell<ConsoleDom>>) -> Self {
+        TabView {
+            _dom: dom,
+            layout: ConsoleLayout::default(),
+            fields: None,
+            hand: HandFade::default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -308,7 +324,7 @@ impl Rows<'_> {
                 _ if *link => theme.link,
                 _ => style.fg.map_or(theme.text, of),
             };
-            let [x, y, w, _] = rect;
+            let [x, y, ..] = rect;
             if !tabs {
                 let font = cell_font(first || style.bold, style.italic);
                 let line_top = y - self.text_box.0;
@@ -327,16 +343,33 @@ impl Rows<'_> {
                 layer = layer.child(piece);
             }
             if style.underline || *link {
-                layer = layer.child(self.underline(style, x, y, w).bg(rgb(blend(color))));
+                let font = cell_font(first || style.bold, style.italic);
+                let text = if tabs { "" } else { text };
+                layer = layer.child(self.underline(font, text, rect, blend(color)));
             }
         }
         layer
     }
 
-    fn underline(&self, _style: &AnsiStyle, x: f64, y: f64, width: f64) -> Div {
-        let thickness = 1.0;
-        let top = y + self.text_box.1 - 2.0;
-        self.grid.place([x, top, width, thickness])
+    /// `text-decoration: underline` with `text-decoration-skip-ink: auto`: the stripe less
+    /// what the glyphs that cross it cover, a thickness wider each side.
+    fn underline(&self, font: FontSpec, text: &str, [x, y, w, h]: [f64; 4], color: u32) -> Div {
+        let top = y + h - UNDERLINE_FROM_BOTTOM;
+        let mut layer = div().absolute().inset_0();
+        let mut from = x;
+        for [left, right] in self.layout.ink(font, text, x, top - y) {
+            let (left, right) = (left - UNDERLINE, right + UNDERLINE);
+            if left > from {
+                let part = self.grid.place([from, top, left - from, UNDERLINE]);
+                layer = layer.child(part.bg(rgb(color)));
+            }
+            from = from.max(right);
+        }
+        if x + w > from {
+            let part = self.grid.place([from, top, x + w - from, UNDERLINE]);
+            layer = layer.child(part.bg(rgb(color)));
+        }
+        layer
     }
 }
 
@@ -370,21 +403,23 @@ impl<H: FrameHost> HubFrame<H> {
                     container: rect,
                 },
                 renderer.view().clone(),
+                renderer.dom().clone(),
             )
         });
         let blurred = !hub.is_focused();
-        let key = shown.as_ref().map(|(s, _)| s.key);
+        let key = shown.as_ref().map(|(s, ..)| s.key);
         let left = self.console.shown.filter(|s| Some(s.key) != key);
         self.console.tabs.retain(|key, _| live.contains(key));
         if let Some(left) = left {
             self.console_hidden(left, window, cx);
         }
-        self.console.shown = shown.as_ref().map(|(s, _)| *s);
-        let (shown, view) = shown?;
+        self.console.shown = shown.as_ref().map(|(s, ..)| *s);
+        let (shown, view, dom) = shown?;
         self.console.editing = self.console_field_focused(shown, window, cx);
 
         let now = self.host().frame_time(cx);
-        let tab = self.console.tabs.entry(shown.key).or_default();
+        let tabs = &mut self.console.tabs;
+        let tab = tabs.entry(shown.key).or_insert_with(|| TabView::new(dom));
         let (hand, fading) = tab.hand.opacity(view.show_hand, now);
         let layout = tab.layout.clone();
         layout.sync(rect, scale, &view.rows);
@@ -488,7 +523,9 @@ impl<H: FrameHost> HubFrame<H> {
         let [x, y, width, _] = shown.container;
         let palette = HeaderPalette::of(appearance);
         let text_color = appearance.theme().text;
-        let (jump, filter) = self.console_fields(shown, view, window, cx);
+        let Some((jump, filter)) = self.console_fields(shown, view, window, cx) else {
+            return div().into_any_element();
+        };
         let field_cell = [x + TIME_WIDTH, y, width - TIME_WIDTH, HEADER_HEIGHT];
         let right = x + width;
         let scale = grid.scale as f32;
@@ -687,8 +724,8 @@ impl<H: FrameHost> HubFrame<H> {
         view: &ConsoleView,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
-    ) -> (Entity<TextField<NumberValue>>, Entity<TextField<PlainText>>) {
-        let tab = self.console.tabs.entry(shown.key).or_default();
+    ) -> Option<(Entity<TextField<NumberValue>>, Entity<TextField<PlainText>>)> {
+        let tab = self.console.tabs.get_mut(&shown.key)?;
         let fields = tab.fields.get_or_insert_with(|| {
             let jump = cx.new(|cx| {
                 TextField::new(
@@ -755,7 +792,7 @@ impl<H: FrameHost> HubFrame<H> {
         filter.update(cx, |field, _| {
             field.set_size(FILTER[1] as f32, FILTER[2] as f32)
         });
-        (jump, filter)
+        Some((jump, filter))
     }
 
     fn console_field_focused(&self, shown: Shown, window: &Window, cx: &App) -> bool {
@@ -849,6 +886,12 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     pub(super) fn console_mouse_move(&mut self, x: f64, y: f64, cx: &mut Context<'_, Self>) {
+        self.console_point(x, y, cx);
+        cx.notify();
+    }
+
+    /// The pointer is at a client position: every mouse event moves the hover there.
+    fn console_point(&mut self, x: f64, y: f64, cx: &mut App) {
         let Some(shown) = self.console.shown else {
             return;
         };
@@ -858,7 +901,6 @@ impl<H: FrameHost> HubFrame<H> {
             self.console_row_at(shown, x, y)
         };
         self.console_hover(row, cx);
-        cx.notify();
     }
 
     fn console_mouse_down(
@@ -872,6 +914,7 @@ impl<H: FrameHost> HubFrame<H> {
         };
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
+        self.console_point(x, y, cx);
         if !inside(shown.jump_rect(), x, y) && !inside(shown.filter_rect(), x, y) {
             self.console_blur(shown.key, window, cx);
         }
@@ -894,6 +937,7 @@ impl<H: FrameHost> HubFrame<H> {
         y: f64,
         cx: &mut Context<'_, Self>,
     ) {
+        self.console_point(x, y, cx);
         if event.button != MouseButton::Left {
             return;
         }
