@@ -19,8 +19,12 @@ import { World, electronFake, fakeFs } from "./world";
 //   raw     a TCP server that sends `send` (latin1), then holds, closes or resets the connection, or
 //           lingers: holds it and never closes its own side
 //           (`when`: at once, after the client's ident, or after its KEXINIT)
+//   password  ssh2's own Server in this process: it accepts the passwords in `accounts`, and `none`
+//           where `none` is set, pushes every attempt as {k: "auth"}, and answers every OPENDIR with
+//           "No such file"
 //   closed  a port nothing listens on
 //   blackhole  no server: `host` is a TEST-NET address that never answers
+//   unroutable  no server: `connect` to `host` fails at once (with this code on macOS)
 // A scenario with `level: "client"` runs one ssh2 Client with no main.ts: its effects are the
 // events error (with the message), ready and close, and `onError` says whether the error listener
 // calls Client.end(), as main.ts's downloadStart does.
@@ -97,6 +101,7 @@ class Fixture {
   root: string;
   port = 0;
   key = "";
+  onAuth: (attempt: object) => void = () => undefined;
   /** The proxy forwards nothing more from the server. */
   stalled = false;
   private sshd: ChildProcess | null = null;
@@ -140,7 +145,32 @@ class Fixture {
         this.port = await listen(listener);
         break;
       }
+      case "password": {
+        const key = path.join(this.root, "host");
+        if (spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "asrs-fixture", "-f", key]).status !== 0) throw new Error("ssh-keygen");
+        const { Server } = upstreamRequire()("ssh2");
+        const listener = new Server({ hostKeys: [fs.readFileSync(key)] }, (client: any) => {
+          client.on("error", () => undefined);
+          client.on("authentication", (ctx: any) => {
+            const { method, username, password } = ctx;
+            this.onAuth({ k: "auth", method, username, ...(method === "password" ? { password } : {}) });
+            const accepted = method === "password" ? server.accounts[username] === password : method === "none" && server.none;
+            if (accepted) ctx.accept();
+            else ctx.reject(["password"]);
+          });
+          client.on("session", (accept: any) => {
+            accept().on("sftp", (accept: any) => {
+              const sftp = accept();
+              sftp.on("OPENDIR", (id: number) => sftp.status(id, 2, "No such file"));
+            });
+          });
+        });
+        this.servers.push(listener);
+        this.port = await listen(listener);
+        break;
+      }
       case "blackhole":
+      case "unroutable":
         this.port = 22;
         break;
       case "sshd":
@@ -315,6 +345,7 @@ export async function runLiveOne(name: string): Promise<void> {
   };
   process.on("uncaughtException", (error) => push({ k: "uncaught", message: error.message }));
 
+  fixture.onAuth = push;
   try {
     await fixture.start();
     Object.defineProperty(process, "platform", { value: "darwin" });

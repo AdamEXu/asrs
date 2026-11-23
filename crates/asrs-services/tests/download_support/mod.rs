@@ -1,16 +1,20 @@
 //! The fixture of `files/download-live`: the same scenario file, remote tree, sshd configuration,
-//! byte-counting proxy and raw servers as `oracle/src/download/live.ts`.
+//! byte-counting proxy, raw servers and password server as `oracle/src/download/live.ts`.
 
 use std::fs;
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr, TcpStream as StdStream};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream as StdStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use asrs_parity::Json;
 use asrs_parity::vectors::workspace_root;
+use russh::keys::{Algorithm, PrivateKey, key::safe_rng};
+use russh::server::{self, Auth, ChannelOpenHandle, Msg, Session};
+use russh::{Channel, ChannelId, MethodKind, MethodSet};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -104,10 +108,13 @@ pub fn tools() -> Result<Tools, String> {
     })
 }
 
+type OnAuth = Arc<Mutex<Option<Box<dyn Fn(Json) + Send>>>>;
+
 pub struct Fixture {
     pub root: PathBuf,
     pub port: u16,
     pub key: String,
+    pub on_auth: OnAuth,
     partial: bool,
     sshd: Option<Child>,
     drops: watch::Sender<Option<&'static str>>,
@@ -130,7 +137,7 @@ fn how(name: &str) -> &'static str {
 }
 
 impl Fixture {
-    /// `Err` when this machine's sshd does not accept the scenario's configuration.
+    /// `Err` when this machine cannot run the scenario.
     pub fn start(spec: &Json, scenario: &Json, tools: Option<&Tools>) -> Result<Fixture, String> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let name = format!(
@@ -145,6 +152,7 @@ impl Fixture {
             root,
             port: 0,
             key: String::new(),
+            on_auth: OnAuth::default(),
             partial: matches!(scenario.get("partial"), Some(Json::Bool(true))),
             sshd: None,
             drops: watch::channel(None).0,
@@ -153,15 +161,55 @@ impl Fixture {
         let server = scenario.get("server").expect("server");
         match text(server, "kind").as_str() {
             "closed" => {
-                let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+                let ipv6 = optional_text(scenario, "host").is_some_and(|host| host == "::1");
+                let listener = if ipv6 {
+                    std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0))
+                        .map_err(|e| format!("no IPv6 loopback: {e}"))?
+                } else {
+                    std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind")
+                };
                 fixture.port = listener.local_addr().expect("address").port();
             }
-            "blackhole" => fixture.port = 22,
+            "unroutable" if !cfg!(target_os = "macos") => {
+                return Err("recorded with macOS's error code".to_owned());
+            }
+            "blackhole" | "unroutable" => fixture.port = 22,
             "raw" => {
                 let send = text(server, "send").chars().map(|c| c as u8).collect();
                 let (then, when) = (text(server, "then"), text(server, "when"));
                 fixture.listen(move |socket, _| {
                     raw(socket, Vec::clone(&send), then.clone(), when.clone())
+                });
+            }
+            "password" => {
+                let key = PrivateKey::random(&mut safe_rng(), Algorithm::Ed25519).expect("key");
+                let config = Arc::new(server::Config {
+                    keys: vec![key],
+                    auth_rejection_time: Duration::ZERO,
+                    ..server::Config::default()
+                });
+                let handler = PasswordServer {
+                    accounts: match server.get("accounts") {
+                        Some(Json::Object(accounts)) => accounts
+                            .iter()
+                            .map(|(name, password)| {
+                                let password = password.as_str().expect("a password");
+                                (name.to_string_lossy(), password.to_string_lossy())
+                            })
+                            .collect(),
+                        other => panic!("accounts are {other:?}"),
+                    },
+                    none: matches!(server.get("none"), Some(Json::Bool(true))),
+                    on_auth: fixture.on_auth.clone(),
+                    received: Vec::new(),
+                };
+                fixture.listen(move |socket, _| {
+                    let (config, handler) = (config.clone(), handler.clone());
+                    async move {
+                        if let Ok(session) = server::run_stream(config, socket, handler).await {
+                            let _ = session.await;
+                        }
+                    }
                 });
             }
             "sshd" => {
@@ -334,8 +382,6 @@ impl Fixture {
     /// Drops every proxied connection.
     pub fn drop_all(&self, name: &str) {
         let _ = self.drops.send(Some(how(name)));
-        std::thread::sleep(Duration::from_millis(1));
-        let _ = self.drops.send(None);
     }
 
     pub fn saved(&self) -> Json {
@@ -387,6 +433,101 @@ impl Drop for Fixture {
         }
         unlock(&self.root);
         let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+#[derive(Clone)]
+struct PasswordServer {
+    accounts: Vec<(String, String)>,
+    none: bool,
+    on_auth: OnAuth,
+    received: Vec<u8>,
+}
+
+impl PasswordServer {
+    fn attempt(&self, method: &str, user: &str, password: Option<&str>, accepted: bool) -> Auth {
+        let mut attempt = vec![
+            ("k", Json::string("auth")),
+            ("method", Json::string(method)),
+            ("username", Json::string(user)),
+        ];
+        attempt.extend(password.map(|password| ("password", Json::string(password))));
+        let on_auth = self.on_auth.lock().expect("on_auth");
+        on_auth.as_ref().expect("a listener")(Json::object(attempt));
+        if accepted {
+            Auth::Accept
+        } else {
+            Auth::Reject {
+                proceed_with_methods: Some(MethodSet::from(&[MethodKind::Password][..])),
+                partial_success: false,
+            }
+        }
+    }
+}
+
+impl server::Handler for PasswordServer {
+    type Error = russh::Error;
+
+    async fn auth_none(&mut self, user: &str) -> Result<Auth, russh::Error> {
+        Ok(self.attempt("none", user, None, self.none))
+    }
+
+    async fn auth_password(&mut self, user: &str, password: &str) -> Result<Auth, russh::Error> {
+        let account = (user.to_owned(), password.to_owned());
+        let accepted = self.accounts.contains(&account);
+        Ok(self.attempt("password", user, Some(password), accepted))
+    }
+
+    async fn channel_open_session(
+        &mut self,
+        _: Channel<Msg>,
+        reply: ChannelOpenHandle,
+        _: &mut Session,
+    ) -> Result<(), russh::Error> {
+        reply.accept().await;
+        Ok(())
+    }
+
+    async fn subsystem_request(
+        &mut self,
+        channel: ChannelId,
+        name: &str,
+        session: &mut Session,
+    ) -> Result<(), russh::Error> {
+        assert_eq!(name, "sftp");
+        session.channel_success(channel)
+    }
+
+    async fn data(
+        &mut self,
+        channel: ChannelId,
+        data: &[u8],
+        session: &mut Session,
+    ) -> Result<(), russh::Error> {
+        const INIT: u8 = 1;
+        const OPENDIR: u8 = 11;
+        self.received.extend_from_slice(data);
+        while let Some(length) = self.received.first_chunk::<4>() {
+            let end = 4 + u32::from_be_bytes(*length) as usize;
+            if self.received.len() < end {
+                break;
+            }
+            let packet: Vec<u8> = self.received.drain(..end).collect();
+            let reply = match packet[4] {
+                INIT => vec![0, 0, 0, 5, 2, 0, 0, 0, 3],
+                OPENDIR => {
+                    let mut body = vec![101];
+                    body.extend_from_slice(&packet[5..9]);
+                    body.extend_from_slice(b"\0\0\0\x02\0\0\0\x0cNo such file\0\0\0\0");
+                    let mut reply = (body.len() as u32).to_be_bytes().to_vec();
+                    reply.extend(body);
+                    reply
+                }
+                other => panic!("unexpected request {other}"),
+            };
+            session.data(channel, reply)?;
+        }
+        Ok(())
     }
 }
 

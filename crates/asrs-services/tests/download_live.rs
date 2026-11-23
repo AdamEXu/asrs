@@ -215,6 +215,14 @@ fn run_main(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<Js
         effects: Effects::new(scenario, fixture),
         dialogs: VecDeque::new(),
     }));
+    *fixture.on_auth.lock().expect("on_auth") = Some(Box::new({
+        let session = session.clone();
+        move |attempt| {
+            let mut session = session.lock().expect("session");
+            session.drain();
+            session.effects.push(attempt);
+        }
+    }));
     let target = {
         let session = session.clone();
         let account = optional_text(scenario.get("server").expect("server"), "account");
@@ -561,7 +569,11 @@ fn run_all(wanted: impl Fn(&Json) -> bool, tools: Option<Tools>, skippable: &[&s
 
 #[test]
 fn scripted_servers() {
-    run_all(|s| kind(s) != "sshd", None, &["blackhole"]);
+    run_all(
+        |s| kind(s) != "sshd",
+        None,
+        &["blackhole", "unroutable", "ipv6"],
+    );
 }
 
 #[test]

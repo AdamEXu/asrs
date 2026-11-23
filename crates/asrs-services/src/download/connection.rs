@@ -10,12 +10,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use russh::client::{self, AuthResult, DisconnectReason, Handle};
+use russh::client::{self, AuthResult, DisconnectReason, GexParams, Handle};
 use russh::keys::{Algorithm, PrivateKey, PrivateKeyWithHashAlg};
 use russh::{
     Channel, ChannelMsg, ChannelOpenFailure, Disconnect, Limits, Preferred, Sig, SshId, cipher,
     compression, kex, mac,
 };
+use socket2::{Domain, SockAddr, Socket, Type};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -122,7 +123,24 @@ impl Events {
     }
 }
 
+const EPERM: i32 = 1;
+const EHOSTDOWN: i32 = if cfg!(target_os = "macos") { 64 } else { 112 };
+const EINPROGRESS: i32 = if cfg!(target_os = "macos") { 36 } else { 115 };
+const EAFNOSUPPORT: i32 = if cfg!(target_os = "macos") {
+    47
+} else if cfg!(windows) {
+    10047
+} else {
+    97
+};
+
 fn error_code(error: &io::Error) -> &'static str {
+    match error.raw_os_error() {
+        Some(EPERM) if cfg!(unix) => return "EPERM",
+        Some(EHOSTDOWN) if cfg!(unix) => return "EHOSTDOWN",
+        Some(EAFNOSUPPORT) => return "EAFNOSUPPORT",
+        _ => {}
+    }
     match error.kind() {
         io::ErrorKind::ConnectionRefused => "ECONNREFUSED",
         io::ErrorKind::ConnectionReset => "ECONNRESET",
@@ -138,6 +156,40 @@ fn error_code(error: &io::Error) -> &'static str {
     }
 }
 
+/// `net.Socket.connect`. A `connect` call that fails on the spot makes node add the socket's own
+/// address to the message; libuv reports a refusal as if it came later.
+async fn connect(address: SocketAddr) -> Result<TcpStream, String> {
+    let failed = |e: &io::Error, local: &str| {
+        let (code, ip, port) = (error_code(e), address.ip(), address.port());
+        format!("connect {code} {ip}:{port}{local}")
+    };
+    let later = |e: io::Error| failed(&e, "");
+    let socket = Socket::new(Domain::for_address(address), Type::STREAM, None).map_err(later)?;
+    socket.set_nonblocking(true).map_err(later)?;
+    if let Err(e) = socket.connect(&SockAddr::from(address))
+        && !connecting(&e)
+    {
+        if e.kind() == io::ErrorKind::ConnectionRefused {
+            return Err(later(e));
+        }
+        let local = match socket.local_addr().ok().and_then(|local| local.as_socket()) {
+            Some(local) => format!("{}:{}", local.ip(), local.port()),
+            None => "undefined:undefined".to_owned(),
+        };
+        return Err(failed(&e, &format!(" - Local ({local})")));
+    }
+    let stream = TcpStream::from_std(socket.into()).map_err(later)?;
+    stream.writable().await.map_err(later)?;
+    match stream.take_error().map_err(later)? {
+        Some(e) => Err(later(e)),
+        None => Ok(stream),
+    }
+}
+
+fn connecting(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::WouldBlock || error.raw_os_error() == Some(EINPROGRESS)
+}
+
 async fn run(
     address: SocketAddr,
     login: Login,
@@ -145,7 +197,7 @@ async fn run(
     events: Events,
 ) {
     let mut ended = false;
-    let connecting = TcpStream::connect(address);
+    let connecting = connect(address);
     tokio::pin!(connecting);
     let socket = loop {
         tokio::select! {
@@ -157,11 +209,8 @@ async fn run(
     };
     let socket = match socket {
         Ok(socket) => socket,
-        Err(e) => {
-            events.send(ConnectionEvent::ConnectFailed(format!(
-                "connect {} {address}",
-                error_code(&e)
-            )));
+        Err(message) => {
+            events.send(ConnectionEvent::ConnectFailed(message));
             return;
         }
     };
@@ -410,6 +459,12 @@ fn preferred() -> Preferred {
     }
 }
 
+/// ssh2's group exchange request. It asks for 8192 bits instead where a 192 or 256 bit cipher was
+/// negotiated, which is not known yet here.
+fn group_sizes() -> GexParams {
+    GexParams::new(2048, 3072, 8192).expect("sizes in order")
+}
+
 fn config() -> client::Config {
     client::Config {
         client_id: SshId::Standard(Cow::Borrowed(IDENT)),
@@ -417,6 +472,7 @@ fn config() -> client::Config {
         window_size: WINDOW_SIZE,
         maximum_packet_size: PACKET_SIZE,
         preferred: preferred(),
+        gex: group_sizes(),
         ..client::Config::default()
     }
 }
