@@ -5,6 +5,7 @@
 //! progress as ffmpeg does. What the processor decides is `video_vectors`' business; this checks
 //! that its children, dialogs and files are real and that what it sends reaches the tab.
 
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::process::Command as Process;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
 use asrs_tabs::video::VideoController;
+#[cfg(unix)]
 use asrs_tabs::video_renderer::VideoRenderer;
 use asrs_ui::gpui::{HeadlessAppContext, NoopTextSystem};
 use asrs_ui::platform::dialog::{Reply, Script, Shown};
@@ -75,14 +77,13 @@ fn youtube_without_a_url_says_so() {
 
 struct AppUnderTest {
     cx: HeadlessAppContext,
-    home: PathBuf,
     hub: WindowId,
 }
 
 impl AppUnderTest {
     /// The app with one hub on a Video tab; `None` unless run by [`in_fresh_home`].
     fn start(replies: &[Reply]) -> Option<AppUnderTest> {
-        let home = PathBuf::from(std::env::var_os(HOME)?);
+        std::env::var_os(HOME)?;
         let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
         let (_, received) = async_channel::unbounded();
         cx.update(|cx| {
@@ -127,7 +128,7 @@ impl AppUnderTest {
         ]);
         cx.update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::RestoreState, state));
         cx.run_until_parked();
-        Some(AppUnderTest { cx, home, hub })
+        Some(AppUnderTest { cx, hub })
     }
 
     fn until(&mut self, what: &str, mut done: impl FnMut(&mut AppUnderTest) -> bool) {
@@ -169,6 +170,7 @@ impl AppUnderTest {
         })
     }
 
+    #[cfg(unix)]
     fn natural_size(&mut self) -> [f64; 2] {
         self.model(|hub| {
             let tab = hub.tabs().tab(TAB).expect("the Video tab");
@@ -188,8 +190,10 @@ impl AppUnderTest {
         })
     }
 
+    #[cfg(unix)]
     fn cache(&self) -> PathBuf {
-        self.home.join("advantagescope-video-cache")
+        let home = PathBuf::from(std::env::var_os(HOME).expect("home"));
+        home.join("advantagescope-video-cache")
     }
 }
 

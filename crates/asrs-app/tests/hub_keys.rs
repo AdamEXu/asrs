@@ -69,8 +69,7 @@ impl Page<'_> {
             let mut tabs = model.tabs().tabs();
             let table = tabs.find_map(|tab| tab.renderer().downcast_ref::<TableRenderer>());
             let dom = table.expect("a table").dom().clone();
-            let top = dom.borrow_mut().layout.scroll()[1];
-            top
+            dom.borrow_mut().layout.scroll()[1]
         })
     }
 }
