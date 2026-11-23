@@ -4,94 +4,26 @@
 //! unlocking it, a first frame that does not, wheel input past an edge, and the hover a table
 //! leaves when its tab is hidden. `dom/tabs/table-*` check the rules themselves against Blink.
 
+#[path = "support/hub_page.rs"]
+mod hub_page;
+
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
-use asrs_app::hub::Hub;
-use asrs_app::views::frame::HubFrame;
-use asrs_app::views::hub_host::HubEntityHost;
-use asrs_hub::hub::HubModel;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
-use asrs_model::messages::{MainToHub, NamedMessage};
-use asrs_model::selection::{Selection, SelectionMode};
+use asrs_model::selection::SelectionMode;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::table::TableRenderer;
 use asrs_ui::capture::HeadlessCapture;
-use asrs_ui::gpui::{
-    Entity, MouseExitEvent, MouseMoveEvent, PlatformInput, ScrollDelta, ScrollEvent, WindowHandle,
-    point, px, size,
-};
+use asrs_ui::gpui::{MouseExitEvent, MouseMoveEvent, PlatformInput, ScrollDelta, point, px};
+use hub_page::Page;
 
-const WIDTH: f32 = 1100.0;
-const HEIGHT: f32 = 650.0;
-const FRAME: Duration = Duration::from_millis(16);
 const SETTLE_FRAMES: usize = 40;
 const ROWS: usize = 200;
 const KEY: &str = "/Value";
 
-type Window = WindowHandle<HubFrame<HubEntityHost>>;
-
-struct Page<'a> {
-    headless: &'a mut HeadlessCapture,
-    window: Window,
-    hub: Entity<Hub>,
-}
-
 impl Page<'_> {
-    fn open(headless: &mut HeadlessCapture, scale: f32) -> Page<'_> {
-        let window = headless
-            .open_window(size(px(WIDTH), px(HEIGHT)), scale, |window, cx| {
-                HubEntityHost::open(window, false, false, Vec::new(), cx)
-            })
-            .expect("hub window");
-        let hub = headless
-            .context()
-            .update_window(window.into(), |root, _, cx| {
-                let frame = root.downcast::<HubFrame<HubEntityHost>>().expect("frame");
-                frame.read(cx).host().hub().clone()
-            })
-            .expect("window");
-        let mut page = Page {
-            headless,
-            window,
-            hub,
-        };
-        page.frames(2);
-        page
-    }
-
-    fn main(&mut self, name: MainToHub, data: JsValue) {
-        let hub = self.hub.clone();
-        self.headless.context().update(|cx| {
-            hub.update(cx, |hub, cx| {
-                hub.handle_main_message(NamedMessage::new(name, data), cx)
-            })
-        });
-        self.headless.context().run_until_parked();
-    }
-
-    fn frames(&mut self, count: usize) {
-        for _ in 0..count {
-            let cx = self.headless.context();
-            cx.advance_clock(FRAME);
-            cx.update_window(self.window.into(), |_, window, cx| {
-                window.simulate_next_frame(cx);
-            })
-            .expect("window");
-            cx.run_until_parked();
-        }
-        self.headless.capture(self.window.into()).expect("render");
-    }
-
-    fn model<R>(&mut self, f: impl FnOnce(&mut HubModel) -> R) -> R {
-        let hub = self.hub.clone();
-        self.headless
-            .context()
-            .update(|cx| hub.update(cx, |hub, cx| hub.update(cx, |model, _| f(model))))
-    }
-
     fn log(&mut self) {
         self.model(|model| {
             let mut log = model.page().shared_log().borrow_mut();
@@ -103,14 +35,8 @@ impl Page<'_> {
 
     /// Opens a table with one column, which the next frame renders for the first time.
     fn open_table(&mut self) {
-        self.main(MainToHub::NewTab, JsValue::Number(TabType::Table.number()));
-        self.model(|model| {
-            let (tabs, page) = model.tabs_mut();
-            let index = tabs.selected_index().expect("a selected tab");
-            let tab = tabs.tab_mut(index).expect("the table");
-            let fields = JsValue::Array(vec![JsValue::string(KEY)]);
-            tab.controller.restore_state(page, &fields).expect("fields");
-        });
+        let fields = JsValue::Array(vec![JsValue::string(KEY)]);
+        self.open_tab(TabType::Table, &fields);
     }
 
     fn table<R>(&mut self, f: impl FnOnce(&TableRenderer) -> R) -> R {
@@ -130,40 +56,6 @@ impl Page<'_> {
 
     fn max_scroll_top(&mut self) -> f64 {
         self.table(|table| table.dom().borrow().layout.scroll_range()[1])
-    }
-
-    fn selection<R>(&mut self, f: impl FnOnce(&mut dyn Selection) -> R) -> R {
-        self.model(|model| f(model.page_mut().selection_mut()))
-    }
-
-    fn mode(&mut self) -> SelectionMode {
-        self.selection(|selection| selection.get_mode())
-    }
-
-    fn dispatch(&mut self, event: PlatformInput) {
-        self.headless
-            .context()
-            .update_window(self.window.into(), |_, window, cx| {
-                window.dispatch_event(event, cx);
-            })
-            .expect("window");
-        self.headless.context().run_until_parked();
-    }
-
-    fn wheel(&mut self, delta: ScrollDelta) {
-        self.dispatch(PlatformInput::Scroll(ScrollEvent {
-            position: point(px(700.0), px(400.0)),
-            delta,
-            ..ScrollEvent::default()
-        }));
-    }
-
-    fn close(self) {
-        self.headless
-            .context()
-            .update_window(self.window.into(), |_, window, _| window.remove_window())
-            .expect("window");
-        self.headless.context().run_until_parked();
     }
 }
 
@@ -280,11 +172,7 @@ fn leaving_the_window_and_hiding_leave_the_body(headless: &mut HeadlessCapture, 
         ..MouseMoveEvent::default()
     }));
     page.frames(2);
-    page.model(|model| {
-        let (tabs, page) = model.tabs_mut();
-        tabs.set_selected(page, &JsValue::Number(0.0))
-            .expect("the documentation");
-    });
+    page.select_documentation();
     page.frames(3);
     let cursor = page.table(|table| table.dom().borrow().hover_cursor_y);
     assert_eq!(cursor, None, "{scale}x: a hidden table stays hovered");

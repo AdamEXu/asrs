@@ -16,10 +16,13 @@ use asrs_app::views::console_layout::{CELL_PADDING, Cell, CellNode, ConsoleLayou
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::selection::SelectionMode;
+use asrs_model::source_list::Rect as ClientRect;
 use asrs_model::tab_controller::TabRenderer;
 use asrs_parity::json::{self, Json};
 use asrs_parity::{Value, vectors};
-use asrs_tabs::console::controller::{ConsoleCommand, ConsoleDom, ConsoleLine, ConsoleRenderer};
+use asrs_tabs::console::controller::{
+    ConsoleCommand, ConsoleDom, ConsoleGeometry, ConsoleLine, ConsoleRenderer,
+};
 use asrs_tabs::cx::TabCx;
 use support::Host;
 
@@ -279,4 +282,36 @@ fn scroll_anchoring_follows_blink() {
     assert!(expected.next().is_none());
     println!("{compared} scroll positions equal");
     assert!(compared > 20);
+}
+
+#[test]
+fn placing_lays_out_as_the_view_does() {
+    let mut host = Host::default();
+    let host: &mut dyn TabCx = &mut host;
+    let renderer = renderer(host, lines(&load("logs/console-wrap.json")));
+    let rows = renderer.view().rows.as_slice();
+    let mut tops = Vec::new();
+    for scale in [1.0, 2.0] {
+        let viewed = ConsoleLayout::default();
+        viewed.sync([300.0, 88.0, 800.0, 562.0], scale, rows);
+        viewed.set_scroll_top(10.5);
+
+        let mut placed = ConsoleLayout::default();
+        let container = ClientRect {
+            x: 300.0,
+            y: 88.0,
+            width: 800.0,
+            height: 562.0,
+        };
+        placed.place(container, f64::from(scale));
+        ConsoleGeometry::set_scroll_top(&mut placed, rows, 10.5);
+
+        assert_eq!(placed.container_rect(), container);
+        for (i, _) in rows.iter().enumerate() {
+            assert_eq!(placed.row(i), viewed.row(i), "{scale}x: row {i}");
+        }
+        assert_eq!(placed.scroll_top(), viewed.scroll_top(), "{scale}x");
+        tops.push(placed.scroll_top());
+    }
+    assert_ne!(tops[0], tops[1], "the scroll position snaps to the scale");
 }
