@@ -92,7 +92,7 @@ fn enosys(syscall: &str, path: &str) -> JsError {
 }
 
 /// libuv's code and description for the errors file opens and writes commonly hit.
-fn uv_error(e: &std::io::Error) -> Option<(&'static str, &'static str)> {
+pub(crate) fn uv_error(e: &std::io::Error) -> Option<(&'static str, &'static str)> {
     Some(match e.kind() {
         ErrorKind::NotFound => ("ENOENT", "no such file or directory"),
         ErrorKind::PermissionDenied if cfg!(windows) => ("EPERM", "operation not permitted"),
