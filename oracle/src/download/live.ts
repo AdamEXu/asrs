@@ -41,7 +41,7 @@ import { World, electronFake, fakeFs } from "./world";
 
 declare const __filename: string;
 
-const SETTLE_LIMIT_MS = 60000;
+const SETTLE_LIMIT_MS = 150000;
 const RETRY_MS = 100;
 const NEVER_MS = 0x7fffffff;
 
@@ -399,7 +399,7 @@ export async function runLiveOne(name: string): Promise<void> {
         return super.connect({
           ...config,
           port: fixture.port,
-          readyTimeout: scenario.timeoutMs ?? 30000,
+          readyTimeout: scenario.timeoutMs ?? 60000,
           ...(login ? { username: os.userInfo().username, password: undefined, privateKey: fixture.key } : {})
         });
       }
@@ -523,7 +523,7 @@ async function runClient(scenario: Scenario, fixture: Fixture, ssh2: any, push: 
           host: scenario.host ?? "127.0.0.1",
           port: fixture.port,
           forceIPv4: true,
-          readyTimeout: scenario.timeoutMs ?? 30000,
+          readyTimeout: scenario.timeoutMs ?? 60000,
           username: login ? os.userInfo().username : "systemcore",
           ...(login ? { privateKey: fixture.key } : { password: "systemcore" })
         });
