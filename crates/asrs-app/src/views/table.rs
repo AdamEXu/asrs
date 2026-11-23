@@ -33,7 +33,7 @@ use asrs_ui::text::{self, ELLIPSIS, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
 
 use super::frame::{FrameHost, HubFrame, wheel_of};
-use super::sidebar::NumberValue;
+use super::number::FormNumber;
 use super::source_list::ratio_symbol;
 
 const FIRST_COLUMN_MIN: f64 = 97.0;
@@ -255,7 +255,7 @@ fn column_widths(
 
 #[derive(Default)]
 struct TabView {
-    jump: Option<(Entity<TextField<NumberValue>>, Subscription)>,
+    jump: Option<(Entity<TextField<FormNumber>>, Subscription)>,
     wheel: WheelScroll,
     hand: HandFade,
     cells: Cells,
@@ -531,7 +531,7 @@ impl<H: FrameHost> HubFrame<H> {
         &self,
         view: &TableView,
         dom: &Rc<RefCell<TableDom>>,
-        jump: Entity<TextField<NumberValue>>,
+        jump: Entity<TextField<FormNumber>>,
         rect: [f64; 4],
         appearance: Appearance,
         grid: Grid,
@@ -753,12 +753,12 @@ impl<H: FrameHost> HubFrame<H> {
         view: &TableView,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
-    ) -> Entity<TextField<NumberValue>> {
+    ) -> Entity<TextField<FormNumber>> {
         let tab = self.table.tabs.entry(shown.key.clone()).or_default();
         if tab.jump.is_none() {
             let field = cx.new(|cx| {
                 TextField::new(
-                    NumberValue::default(),
+                    FormNumber::default(),
                     FieldKind::Number,
                     FieldStyle::native(),
                     window,

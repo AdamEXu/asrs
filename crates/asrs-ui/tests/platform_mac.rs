@@ -1,5 +1,6 @@
 use asrs_ui::platform::probe::{
-    native_menu_roundtrip, read_wheel_sample, select_menu_roundtrip, wheel_gesture_samples,
+    native_menu_roundtrip, numpad_enter_for, read_wheel_sample, select_menu_roundtrip,
+    wheel_gesture_samples,
 };
 use asrs_ui::platform::{
     PopupEntry, PopupItem, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind, WheelDelta,
@@ -15,7 +16,11 @@ fn main() {
         menu_tree();
         select_menu();
         wheel_gesture();
-        println!("platform mac: labels, menu tree, select menu and wheel gesture ok");
+        assert_eq!(
+            [0x24, 0x4C].map(numpad_enter_for),
+            [Some(false), Some(true)]
+        );
+        println!("platform mac: labels, menu tree, select menu, wheel gesture and numpad Enter ok");
     } else {
         println!("platform mac: skipped on this platform");
     }

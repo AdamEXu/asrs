@@ -62,13 +62,36 @@ impl Windows {
     }
 
     pub fn id(cx: &App, window: &Window) -> Option<WindowId> {
-        let target = window.window_handle().window_id();
+        Self::id_of(cx, window.window_handle())
+    }
+
+    pub fn id_of(cx: &App, handle: AnyWindowHandle) -> Option<WindowId> {
+        let windows = cx.try_global::<Windows>()?;
+        windows
+            .handles
+            .iter()
+            .find(|(_, h)| h.window_id() == handle.window_id())
+            .map(|(id, _)| *id)
+    }
+
+    /// Registers a hub window a parity scenario opened headless, so it can parent prompts.
+    #[cfg(feature = "parity")]
+    pub fn adopt_hub(cx: &mut App, handle: AnyWindowHandle) -> WindowId {
+        let windows = cx.global_mut::<Windows>();
+        let (id, _) = windows.manager.create_hub(None);
+        windows.handles.push((id, handle));
+        id
+    }
+
+    /// The open window of this kind a parity scenario drives.
+    #[cfg(feature = "parity")]
+    pub fn of_kind(cx: &App, kind: WindowKind) -> Option<AnyWindowHandle> {
         let windows = cx.global::<Windows>();
         windows
             .handles
             .iter()
-            .find(|(_, h)| h.window_id() == target)
-            .map(|(id, _)| *id)
+            .find(|(id, _)| windows.manager.kind(*id) == Some(kind))
+            .map(|(_, h)| *h)
     }
 
     /// `BrowserWindow.getFocusedWindow()`.

@@ -16,8 +16,8 @@ use asrs_canvas::text::lut::MaskGammaLut;
 use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 use gpui_kit::{
     App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, SharedString,
-    Style, StyleRefinement, Styled, Window, WindowId, point, px, size,
+    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, Rgba, SharedString,
+    Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
 };
 use image::{Frame, RgbaImage};
 
@@ -343,6 +343,7 @@ pub struct Text {
     probe: Option<SharedString>,
     form_control: bool,
     content_width: Option<f64>,
+    underline: bool,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -359,6 +360,7 @@ impl Text {
             probe: None,
             form_control: false,
             content_width: None,
+            underline: false,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -387,6 +389,12 @@ impl Text {
     /// shadow tree, so the DOM dump has no text node for it and parity captures leave it out.
     pub fn form_control(mut self) -> Self {
         self.form_control = true;
+        self
+    }
+
+    /// `text-decoration: underline`, as on links.
+    pub fn underline(mut self) -> Self {
+        self.underline = true;
         self
     }
 
@@ -507,8 +515,10 @@ impl Element for Text {
         }
         let Prepaint { layout, origin } = prepaint;
         let mut images = Vec::new();
+        let mut underlines = Vec::new();
         for line in &layout.lines {
             let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
+            let first = images.len();
             for fragment in &line.fragments {
                 let x = origin.0 + fragment.x;
                 if let Some((left, top, image)) = system.run(
@@ -522,10 +532,33 @@ impl Element for Text {
                     images.push((x.div_euclid(64) + left, baseline + top, image));
                 }
             }
+            if self.underline
+                && let (Some(start), Some(end)) = (line.fragments.first(), line.fragments.last())
+            {
+                let left = (origin.0 + start.x) as f32 / 64.0;
+                let right = (origin.0 + end.x + end.width) as f32 / 64.0;
+                let size = self.style.font.size * scale;
+                let inked = &images[first..];
+                underlines.extend(underline::segments(left, right, baseline, size, inked));
+            }
         }
         let clip = (self.style.overflow != Overflow::Visible).then_some(ContentMask { bounds });
         window.with_content_mask(clip, |window| {
             let to_px = |v: i32| px(v as f32 / scale);
+            let [r, g, b] = self.color.map(|c| f32::from(c) / 255.0);
+            for s in underlines {
+                let rect = Bounds {
+                    origin: point(to_px(s.x), to_px(s.y)),
+                    size: size(to_px(s.width), to_px(s.height)),
+                };
+                let color = Rgba {
+                    r,
+                    g,
+                    b,
+                    a: s.coverage,
+                };
+                window.paint_quad(fill(rect, color));
+            }
             for (x, y, image) in images {
                 let s = image.size(0);
                 let rect = Bounds {
@@ -543,6 +576,115 @@ impl Element for Text {
             if !self.form_control {
                 crate::parity::record_text(cx, probe::text_run(layout, *origin));
             }
+        }
+    }
+}
+
+/// Blink's underline (`TextDecorationInfo`, `TextPainter::ClipDecorationsStripe`) with the auto
+/// offset, thickness and `text-decoration-skip-ink`, in device px.
+mod underline {
+    use std::sync::Arc;
+
+    use gpui_kit::RenderImage;
+
+    #[derive(Debug, PartialEq)]
+    pub struct Segment {
+        pub x: i32,
+        pub y: i32,
+        pub width: i32,
+        pub height: i32,
+        pub coverage: f32,
+    }
+
+    /// The horizontal extents of the ink in rows `top..bottom` of the glyph runs.
+    fn intercepts(top: i32, bottom: i32, runs: &[(i32, i32, Arc<RenderImage>)]) -> Vec<(f32, f32)> {
+        let mut out = Vec::new();
+        for (x, y, image) in runs {
+            let size = image.size(0);
+            let (w, h) = (size.width.0, size.height.0);
+            let Some(bytes) = image.as_bytes(0) else {
+                continue;
+            };
+            let rows = (top - y).max(0)..(bottom - y).min(h);
+            let column = |col: i32| {
+                rows.clone()
+                    .map(|row| bytes[((row * w + col) * 4 + 3) as usize])
+                    .max()
+                    .unwrap_or(0)
+            };
+            let inked: Vec<u8> = (0..w).map(column).collect();
+            let mut col = 0;
+            while col < inked.len() {
+                if inked[col] == 0 {
+                    col += 1;
+                    continue;
+                }
+                let start = col;
+                while col < inked.len() && inked[col] != 0 {
+                    col += 1;
+                }
+                let part = |c: usize| f32::from(inked[c]) / 255.0;
+                out.push((
+                    (x + start as i32 + 1) as f32 - part(start),
+                    (x + col as i32 - 1) as f32 + part(col - 1),
+                ));
+            }
+        }
+        out
+    }
+
+    /// The underline of a line from `left` to `right` whose font is `size` device px, with gaps
+    /// as wide as the stroke is thick around the ink it would touch.
+    pub fn segments(
+        left: f32,
+        right: f32,
+        baseline: i32,
+        size: f32,
+        runs: &[(i32, i32, Arc<RenderImage>)],
+    ) -> Vec<Segment> {
+        let auto = (size / 10.0).max(1.0);
+        let height = auto.floor() as i32;
+        let y = baseline + (height as f32 / 2.0).ceil() as i32;
+        let gaps = intercepts(y, y + height, runs);
+        let skipped = |x: i32| {
+            let centre = x as f32 + 0.5;
+            gaps.iter()
+                .any(|(a, b)| centre >= a - auto && centre < b + auto)
+        };
+        let mut out: Vec<Segment> = Vec::new();
+        for x in left.floor() as i32..right.ceil() as i32 {
+            if skipped(x) {
+                continue;
+            }
+            let coverage = (right.min((x + 1) as f32) - left.max(x as f32)).min(1.0);
+            match out.last_mut() {
+                Some(last) if last.x + last.width == x && last.coverage == coverage => {
+                    last.width += 1;
+                }
+                _ => out.push(Segment {
+                    x,
+                    y,
+                    width: 1,
+                    height,
+                    coverage,
+                }),
+            }
+        }
+        out
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn fractional_ends_are_partly_covered() {
+            let line = segments(180.25, 213.75, 172, 16.0, &[]);
+            let spans: Vec<_> = line.iter().map(|s| (s.x, s.width, s.coverage)).collect();
+            assert_eq!(spans, [(180, 1, 0.75), (181, 32, 1.0), (213, 1, 0.75)]);
+            assert!(line.iter().all(|s| (s.y, s.height) == (173, 1)));
+            let line = segments(360.0, 427.0, 344, 32.0, &[]);
+            assert_eq!((line[0].y, line[0].height), (346, 3));
         }
     }
 }

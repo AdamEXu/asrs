@@ -4,6 +4,10 @@ use super::{MenuPath, PopupMenu, WheelDelta};
 
 pub(super) fn init() {}
 
+pub(super) fn numpad_enter() -> bool {
+    false
+}
+
 pub(super) fn install_sidebar_vibrancy(_window: &Window) -> bool {
     false
 }
@@ -235,6 +239,10 @@ pub(super) mod probe {
 
     pub fn perform_key_equivalent(_key: &str, _modifiers: u32) -> bool {
         false
+    }
+
+    pub fn numpad_enter_for(_key_code: u16) -> Option<bool> {
+        None
     }
 
     pub fn read_wheel_sample(_sample: &WheelSample) -> Option<WheelReading> {

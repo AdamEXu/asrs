@@ -11,7 +11,6 @@ use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{
     Checkbox, FieldKind, FieldModel, FieldStyle, PlainText, Progress, RangeModel, Segment,
     SegmentedControl, Select, SelectItem, SelectModel, Slider, SliderStyle, TextField,
-    number_accepts,
 };
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::snap_remainder;
@@ -219,10 +218,6 @@ impl FieldModel for Number {
 
     fn set_value(&mut self, value: &str) {
         self.0 = value.to_owned();
-    }
-
-    fn accepts(&self, c: char) -> bool {
-        number_accepts(c)
     }
 }
 
