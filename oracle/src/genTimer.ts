@@ -27,6 +27,18 @@ const upstreamDir = __UPSTREAM_DIR__;
 const requireUpstream = createRequire(path.join(upstreamDir, "package.json"));
 const Tesseract = requireUpstream("tesseract.js");
 
+function checkVendoredData() {
+  const pairs = [
+    [requireUpstream.resolve("tesseract.js-core/tesseract-core-simd-lstm.wasm"), "tesseract-core-simd-lstm.wasm"],
+    [path.join(upstreamDir, "eng.traineddata.gz"), "eng.traineddata.gz"]
+  ];
+  for (const [upstream, vendored] of pairs) {
+    if (!fs.readFileSync(upstream).equals(fs.readFileSync(path.join("crates/asrs-ocr/data", vendored)))) {
+      throw new Error(`crates/asrs-ocr/data/${vendored} is not upstream's`);
+    }
+  }
+}
+
 interface Clip {
   name: string;
   stderr: string[];
@@ -170,6 +182,8 @@ interface Edit {
   insert?: string;
 }
 const NO_EDIT: Edit = {};
+// Each aborted job leaks some of the core's 64 KiB stack; this many overflow it.
+const ABORTS = 80;
 
 function applyEdit(image: Buffer, edit: Edit): Buffer {
   if (edit.zeros !== undefined) return Buffer.alloc(edit.zeros);
@@ -264,9 +278,13 @@ async function runRects(clips: Clip[]) {
     await run(clip, frame, edit, timer);
     await run(clip, frame, NO_EDIT, timer);
   }
+  await nextWorker();
+  for (let i = 0; i < ABORTS; i++) await run(clip, frame, { keep: 300 }, timer);
+  await run(clip, frame, NO_EDIT, timer);
   await worker.terminate();
 }
 
+checkVendoredData();
 if (mode === "clip" && args.length === 1) {
   await runClip(readClip(args[0]));
 } else if (mode === "rects" && args.length > 0) {

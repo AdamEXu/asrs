@@ -136,6 +136,39 @@ above is the one REV attached to the utilities shipped alongside them.
   `revlogParser` and `revDBC`), and `crates/asrs-formats/src/revlog/*.public.dbc`, the
   package's DBC files copied unmodified
 
+## tesseract.js
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt))
+- Copyright (c) the tesseract.js contributors (Kevin Kwok, Guillermo Webster, Jerome Wu, Balearica)
+- Version: 6.0.1
+- Used in: `crates/asrs-ocr/src/engine.rs` (the recognition path of `src/worker-script` and the
+  Emscripten glue of the core, translated to Rust) and `timer.rs` (the scheduler's queue)
+
+## tesseract.js-core
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt)); the libraries compiled
+  into it are listed with their licenses in
+  [`licenses/tesseract.js-core.txt`](licenses/tesseract.js-core.txt)
+- Version: 6.0.0 (npm), source https://github.com/naptha/tesseract.js-core
+- Used in: `crates/asrs-ocr/data/tesseract-core-simd-lstm.wasm`, copied unmodified
+  (sha256 `187d76742dfc0d8929f0b49a619f145bb6370730776c7bd0d3e20c6b2098808d`)
+
+It contains Tesseract OCR 5.1.0-284-g9c08 (Apache-2.0, Copyright Google Inc. and the Tesseract
+contributors; built from https://github.com/Balearica/tesseract/tree/5a21eeb), Leptonica, libjpeg,
+libpng, libtiff, libwebp, giflib, zlib, OpenLibm and the Emscripten 3.1.38 runtime. This software is
+based in part on the work of the Independent JPEG Group.
+
+## Tesseract English model
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt))
+- Copyright Google Inc. (tessdata_best `eng`, converted to integers by tesseract.js)
+- Version: npm `@tesseract.js-data/eng` 1.0.0, `4.0.0_best_int/eng.traineddata.gz`
+- Used in: `crates/asrs-ocr/data/eng.traineddata.gz`, copied unmodified
+  (sha256 `45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91`)
+
+The npm package's own metadata says MIT; its source repository (https://github.com/naptha/tessdata)
+and the model it converts are Apache-2.0.
+
 ## V8
 
 - License: BSD-3-Clause ([`licenses/V8.txt`](licenses/V8.txt))
