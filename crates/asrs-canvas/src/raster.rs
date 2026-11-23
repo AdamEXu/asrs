@@ -458,8 +458,8 @@ impl<'a> Raster<'a> {
             }
             Call::ResetTransform => self.set_transform(Affine::IDENTITY),
             Call::SetTransform(m) => {
-                self.set_transform(Affine::IDENTITY);
                 if finite(m) {
+                    self.set_transform(Affine::IDENTITY);
                     let [a, b, c, d, e, f] = m.map(|v| f64::from(clamp32(v)));
                     self.set_transform(Affine { a, b, c, d, e, f });
                 }
@@ -2034,6 +2034,19 @@ mod tests {
             gradient_luminance(&[(0.0, white), (0.5, dark), (1.0, dark)]),
             [0x6c; 3]
         );
+    }
+
+    #[test]
+    fn set_transform_with_a_number_that_is_not_finite_does_nothing() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut c = Canvas2d::new(20, 10);
+            c.translate(10.0, 0.0);
+            c.set_transform([1.0, 0.0, 0.0, 1.0, bad, 0.0]);
+            c.fill_rect(0.0, 0.0, 10.0, 10.0);
+            let pixmap = render(&c);
+            assert_eq!(pixmap.pixel(5, 5).unwrap().alpha(), 0);
+            assert_eq!(pixmap.pixel(15, 5).unwrap().alpha(), 255);
+        }
     }
 
     fn render(canvas: &Canvas2d) -> Pixmap {

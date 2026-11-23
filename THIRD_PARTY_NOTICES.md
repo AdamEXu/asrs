@@ -179,9 +179,10 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
-  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and the raster pipeline in
-  `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in `text/layout.rs`; skcms,
-  `SkColorSpace` and the colour-conversion pipeline stages in `color_profile.rs`)
+  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and
+  the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
+  `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
+  `color_profile.rs`)
 
 ## Chromium and Blink
 
@@ -295,8 +296,3 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Used in: `crates/asrs-services/src/{asset_downloader,download_deps,file_type,zip}.rs`,
   translated to Rust; `crates/asrs-services/src/ext_list.rs` is generated from ext-list over
   mime-db, and `zip.rs` carries yauzl's CP437 table
-
-## Not yet ported
-
-Upstream also depends on Chart.js (MIT). No code from it has been ported yet; add an entry
-here and a file header when one is.
