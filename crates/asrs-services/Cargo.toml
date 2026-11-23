@@ -13,11 +13,15 @@ asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 idna = "=1.1.0"
 miniz_oxide = "=0.9.1"
+russh = { version = "=0.65.4", default-features = false, features = ["flate2", "ring", "rsa"] }
+socket2 = "=0.6.5"
+tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 url = "=2.5.8"
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
 sha2 = "=0.10.9"
+tokio = { version = "=1.54.1", default-features = false, features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true
