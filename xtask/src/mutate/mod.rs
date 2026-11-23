@@ -35,7 +35,8 @@ expression ever had another value there, so \"equivalent\" is not decided by rea
 With --vector: the recorded vector itself is mutated instead of the port (one recorded value at a
 time, a dropped record of each kind, a record of an unknown kind), and the tests must fail. A
 missed one names a recorded field, or a kind, the replay does not compare. No rebuild, so a run
-costs one run of the test per mutant.
+costs one run of the test per mutant. A dropped record goes unnoticed, and is listed without
+counting as missed, where each record carries its own input; in a session vector it is a hole.
 
   --test <pkg>:<test>  an integration test that replays the unit's vectors (repeatable)
   --only <name>        pass this name filter to the test binaries

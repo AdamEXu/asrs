@@ -122,26 +122,34 @@ pub(super) fn run(options: &Options, work: &Path) -> Result<(String, usize)> {
             return Err(e.clone());
         }
         let results = results.into_inner().expect("no panics under the lock");
-        let of = |wanted: bool| -> Vec<&Case> {
+        let of = |wanted: bool, dropped: bool| -> Vec<&Case> {
             cases
                 .iter()
                 .zip(&results)
-                .filter(|(_, r)| **r == Some(wanted))
+                .filter(|(c, r)| {
+                    **r == Some(wanted)
+                        && dropped == (!wanted && matches!(c.change, Change::Drop(_)))
+                })
                 .map(|(c, _)| c)
                 .collect()
         };
-        let (caught, missed) = (of(true), of(false));
+        let (caught, missed, dropped) = (of(true, false), of(false, false), of(false, true));
         missed_total += missed.len();
         report.push_str(&format!(
-            "# Mutants of vector {id}\n\n{} records with {fields} recorded fields; {} mutants (seed {}), against {}: {} caught, {} missed.\n",
+            "# Mutants of vector {id}\n\n{} records with {fields} recorded fields; {} mutants (seed {}), against {}: {} caught, {} missed, {} drops unnoticed.\n",
             records.len(),
             cases.len(),
             options.seed,
             test_names(options),
             caught.len(),
-            missed.len()
+            missed.len(),
+            dropped.len()
         ));
-        for (title, list) in [("Missed", missed), ("Caught", caught)] {
+        for (title, list) in [
+            ("Missed", missed),
+            ("Dropped records unnoticed", dropped),
+            ("Caught", caught),
+        ] {
             if !list.is_empty() {
                 report.push_str(&format!("\n## {title}\n\n"));
                 for c in list {
