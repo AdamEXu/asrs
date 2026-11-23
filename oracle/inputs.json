@@ -13,6 +13,7 @@
   "canvasMain": [
     "src/canvas/dom.ts",
     "src/canvas/field2dTraces.json",
+    "src/canvas/histogramTraces.json",
     "src/canvas/lineGraphTraces.json",
     "src/canvas/page.ts",
     "src/canvas/png.ts",

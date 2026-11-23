@@ -257,6 +257,28 @@ pub fn intl_format(value: f64, options: IntlOptions) -> String {
     out
 }
 
+/// `Intl.NumberFormat` for "en-US" with `notation: "scientific"` and exactly `fraction` digits.
+pub fn intl_format_scientific(value: f64, fraction: u32) -> String {
+    if value.is_nan() {
+        return "NaN".to_owned();
+    }
+    let sign = if value.is_sign_negative() { "-" } else { "" };
+    let abs = value.abs();
+    if abs.is_infinite() {
+        return format!("{sign}∞");
+    }
+    let (digits, point) = shortest_digits(abs);
+    let (digits, point) = round_at(&digits, point, fraction as i32 + 1);
+    let mut out = format!("{sign}{}", digit_or_zero(&digits, 0));
+    if fraction > 0 {
+        out.push('.');
+        out.extend((1..=fraction as i32).map(|i| digit_or_zero(&digits, i)));
+    }
+    let exponent = if abs == 0.0 { 0 } else { point - 1 };
+    out.push_str(&format!("E{exponent}"));
+    out
+}
+
 /// `String.prototype` whitespace and line terminators accepted by
 /// `AdvanceToNonspace`.
 fn is_space(u: u16) -> bool {
