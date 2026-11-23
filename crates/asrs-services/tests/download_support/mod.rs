@@ -116,6 +116,7 @@ pub struct Fixture {
     pub key: String,
     pub on_auth: OnAuth,
     partial: bool,
+    renames: AtomicU32,
     sshd: Option<Child>,
     drops: watch::Sender<Option<&'static str>>,
     runtime: Option<Runtime>,
@@ -154,6 +155,7 @@ impl Fixture {
             key: String::new(),
             on_auth: OnAuth::default(),
             partial: matches!(scenario.get("partial"), Some(Json::Bool(true))),
+            renames: AtomicU32::new(0),
             sshd: None,
             drops: watch::channel(None).0,
             runtime: None,
@@ -365,14 +367,32 @@ impl Fixture {
         }
     }
 
-    pub fn remove_remote(&self, path: &str) {
+    pub fn put_at_once(&self, entry: &Json) {
+        let full = self.root.join("remote").join(text(entry, "path"));
+        let top = full
+            .ancestors()
+            .take_while(|path| !path.exists())
+            .last()
+            .expect("a new path");
+        let staged = self.unused("staged");
+        let file = match full.strip_prefix(top).expect("an ancestor") {
+            rest if rest.as_os_str().is_empty() => staged.clone(),
+            rest => staged.join(rest),
+        };
+        let size = number(entry, "size").expect("size") as usize;
+        fs::create_dir_all(file.parent().expect("parent")).expect("staged folder");
+        fs::write(&file, file_bytes(size)).expect("staged file");
+        fs::rename(&staged, top).expect("remote path");
+    }
+
+    pub fn remove_at_once(&self, path: &str) {
         let full = self.root.join("remote").join(path);
-        if full.is_dir() {
-            unlock(&full);
-            fs::remove_dir_all(&full).expect("remove remote folder");
-        } else {
-            fs::remove_file(&full).expect("remove remote file");
-        }
+        fs::rename(full, self.unused("removed")).expect("remove remote path");
+    }
+
+    fn unused(&self, kind: &str) -> PathBuf {
+        let n = self.renames.fetch_add(1, Ordering::SeqCst);
+        self.root.join(format!("{kind}-{n}"))
     }
 
     pub fn put_local(&self, path: &str, size: usize) {
@@ -651,12 +671,15 @@ async fn proxy(
                 Ok(n) => if server.write_all(&from_client[..n]).await.is_err() { return },
                 Err(_) => return,
             },
-            result = server.read(&mut from_server), if server_open && !stalled => match result {
+            result = server.read(&mut from_server), if server_open => match result {
                 Ok(0) | Err(_) => {
                     server_open = false;
                     let _ = client.shutdown().await;
                 }
                 Ok(n) => {
+                    if stalled {
+                        continue;
+                    }
                     let left = rule.as_ref().map_or(usize::MAX, |rule| rule.bytes - sent);
                     if client.write_all(&from_server[..n.min(left)]).await.is_err() {
                         return;
@@ -664,7 +687,10 @@ async fn proxy(
                     if let Some(rule) = &rule {
                         sent += n.min(left);
                         if sent >= rule.bytes {
-                            break rule.how;
+                            if rule.how != "stall" {
+                                break rule.how;
+                            }
+                            stalled = true;
                         }
                     }
                 }

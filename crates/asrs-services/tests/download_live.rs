@@ -16,7 +16,8 @@ use asrs_parity::Json;
 use asrs_parity::vectors::load;
 use asrs_services::download::client::{ClientEvent, Clients, Login, Target, lookup};
 use asrs_services::download::downloader::{
-    CONNECT_TIMEOUT_MS, ConnectOptions, ListItem, Progress, SSH_PORT, Token, WindowMessage,
+    CONNECT_TIMEOUT_MS, ConnectOptions, ListItem, Progress, REFRESH_INTERVAL_MS, RETRY_DELAY_MS,
+    SSH_PORT, Token, WindowMessage,
 };
 use asrs_services::download::{DownloadConfig, DownloadEvent, DownloadEvents, DownloadService};
 use asrs_services::path::PathStyle;
@@ -26,7 +27,8 @@ use download_support::{
 
 const VECTOR: &str = "files/download-live/macos-aarch64";
 const LIMIT: Duration = Duration::from_secs(60);
-const TIME_SCALE: f64 = 10.0;
+const RETRY_MS: f64 = 100.0;
+const NEVER_MS: f64 = 2147483647.0;
 const DEFAULT_TIMEOUT_MS: f64 = 30000.0;
 const WORKERS: usize = 4;
 
@@ -261,10 +263,16 @@ fn run_main(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<Js
             }
         }
     };
+    let retry_ms = number(scenario, "retryMs").unwrap_or(RETRY_MS);
+    let refresh_ms = number(scenario, "refreshMs").unwrap_or(NEVER_MS);
     let (service, events) = DownloadService::spawn(DownloadConfig {
         style: PathStyle::host(),
         target: Box::new(target),
-        delay: Box::new(|ms| ms / TIME_SCALE),
+        delay: Box::new(move |ms| match ms {
+            RETRY_DELAY_MS => retry_ms,
+            REFRESH_INTERVAL_MS => refresh_ms,
+            other => panic!("unknown delay {other}"),
+        }),
     })
     .expect("service");
     session.lock().expect("session").events = Some(events);
@@ -322,8 +330,8 @@ fn run_main(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<Js
                 }
             }
             "drop" => fixture.drop_all(&text(step, "how")),
-            "remote" => fixture.put(step),
-            "removeRemote" => fixture.remove_remote(&text(step, "path")),
+            "remote" => fixture.put_at_once(step),
+            "removeRemote" => fixture.remove_at_once(&text(step, "path")),
             "local" => fixture.put_local(
                 &text(step, "path"),
                 number(step, "size").expect("size") as usize,
