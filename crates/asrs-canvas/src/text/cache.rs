@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::font::FontKey;
-use super::{Bounds, FontMetrics, FontSpec, Glyph, Mask, Shaped, TextBackend};
+use super::{Bounds, FontMetrics, FontSpec, Glyph, LcdMask, Mask, Shaped, TextBackend};
 
 const MAX_SHAPES: usize = 4096;
 const MAX_MASKS: usize = 16384;
@@ -19,6 +19,8 @@ pub struct Cached<B> {
     fallback_metrics: HashMap<(Glyph, u32), Option<FontMetrics>>,
     bounds: HashMap<Glyph, Option<Bounds>>,
     masks: HashMap<MaskKey, Option<Arc<Mask>>>,
+    lcd_masks: HashMap<MaskKey, Option<Arc<LcdMask>>>,
+    device_scale: f32,
 }
 
 impl<B: TextBackend> Cached<B> {
@@ -31,6 +33,8 @@ impl<B: TextBackend> Cached<B> {
             fallback_metrics: HashMap::new(),
             bounds: HashMap::new(),
             masks: HashMap::new(),
+            lcd_masks: HashMap::new(),
+            device_scale: 1.0,
         }
     }
 
@@ -120,5 +124,43 @@ impl<B: TextBackend> TextBackend for Cached<B> {
             (phase.0 | 0x80, phase.1),
         );
         self.mask(key, |b| b.raw_mask_transformed(glyph, matrix, phase))
+    }
+
+    fn raw_lcd_mask(
+        &mut self,
+        glyph: Glyph,
+        scale: f64,
+        x_scale: f64,
+        phase: u8,
+    ) -> Option<Arc<LcdMask>> {
+        let key = (
+            glyph,
+            [scale.to_bits(), x_scale.to_bits(), 0, 0],
+            (phase, 0),
+        );
+        if let Some(mask) = self.lcd_masks.get(&key) {
+            return mask.clone();
+        }
+        if self.lcd_masks.len() >= MAX_MASKS {
+            self.lcd_masks.clear();
+        }
+        let mask = self.backend.raw_lcd_mask(glyph, scale, x_scale, phase);
+        self.lcd_masks.insert(key, mask.clone());
+        mask
+    }
+
+    fn set_device_scale(&mut self, scale: f32) {
+        if scale == self.device_scale {
+            return;
+        }
+        self.device_scale = scale;
+        self.backend.set_device_scale(scale);
+        self.shapes.clear();
+        self.runs.clear();
+        self.metrics.clear();
+        self.fallback_metrics.clear();
+        self.bounds.clear();
+        self.masks.clear();
+        self.lcd_masks.clear();
     }
 }
