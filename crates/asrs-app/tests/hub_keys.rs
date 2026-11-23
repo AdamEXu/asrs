@@ -9,11 +9,14 @@ mod hub_page;
 
 use std::sync::Arc;
 
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
+use asrs_model::messages::MainToHub;
 use asrs_model::selection::SelectionMode;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::table::TableRenderer;
+use asrs_tabs::video::VideoController;
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     KeyDownEvent, KeyUpEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput,
@@ -26,6 +29,8 @@ const KEY: &str = "/Value";
 const JUMP_INPUT: (f32, f32) = (30.0, 15.0);
 const JUMP_BUTTON: (f32, f32) = (82.0, 15.0);
 const BODY: (f32, f32) = (400.0, 412.0);
+/// In the window.
+const SLIDER: (f32, f32) = (800.0, 582.0);
 
 impl Page<'_> {
     fn press(&mut self, key: &'static str) {
@@ -41,7 +46,11 @@ impl Page<'_> {
 
     fn click(&mut self, (x, y): (f32, f32)) {
         let container = self.table(|table| table.dom().borrow().layout.container);
-        let position = point(px(container.x as f32 + x), px(container.y as f32 + y));
+        self.click_at((container.x as f32 + x, container.y as f32 + y));
+    }
+
+    fn click_at(&mut self, (x, y): (f32, f32)) {
+        let position = point(px(x), px(y));
         self.dispatch(PlatformInput::MouseDown(MouseDownEvent {
             button: MouseButton::Left,
             position,
@@ -109,6 +118,33 @@ fn space_toggles_once(page: &mut Page<'_>) {
     }
 }
 
+fn open_video(page: &mut Page<'_>) {
+    page.open_tab(TabType::Video, &JsValue::Null);
+    let uuid = page.model(|model| {
+        let tabs = model.tabs();
+        let index = tabs.selected_index().expect("a selected tab");
+        tabs.tab(index).expect("the tab").uuid().clone()
+    });
+    let data = ops::object([
+        ("uuid", uuid),
+        ("imgFolder", JsValue::string("/none/")),
+        ("fps", JsValue::Number(30.0)),
+        ("totalFrames", JsValue::Number(100.0)),
+        ("completedFrames", JsValue::Number(100.0)),
+        ("autoEndFrame", JsValue::Number(-1.0)),
+    ]);
+    page.main(MainToHub::VideoData, data);
+    page.frames(2);
+}
+
+fn slider_value(page: &mut Page<'_>) -> f64 {
+    page.model(|model| {
+        let mut tabs = model.tabs().tabs();
+        let video = tabs.find_map(|tab| tab.controller().downcast_ref::<VideoController>());
+        video.expect("a video").slider().number()
+    })
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub keys: skipped, no headless renderer on this platform");
@@ -137,11 +173,13 @@ fn main() {
     assert_eq!(page.scroll_top(), top, "Space also clicked the button");
     space_toggles_once(&mut page);
 
-    page.click(JUMP_INPUT);
-    space_toggles_playback(&mut page, "the jump input again", false);
+    open_video(&mut page);
+    page.click_at(SLIDER);
+    assert!(slider_value(&mut page) > 1.0, "the slider is clicked");
+    space_toggles_playback(&mut page, "the video's slider", false);
     page.select_documentation();
     page.frames(2);
-    space_toggles_playback(&mut page, "an input its tab hid", true);
+    space_toggles_playback(&mut page, "a slider its tab hid", true);
     page.close();
     println!("hub_keys: ok");
 }
