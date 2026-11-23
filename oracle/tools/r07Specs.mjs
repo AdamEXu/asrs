@@ -528,7 +528,7 @@ const ASSET_INPUTS = ["../assets/r07.json"];
 
 const FULL = {
   buttons: [button(0, true), button(1, false), button(2, true), button(3, false)],
-  axes: [axis(0, 0.25), axis(1, -0.75), axis(2, 1), axis(3, -0.1)],
+  axes: [axis(0, 0.25), axis(1, -0.75), axis(2, 0.9), axis(3, -0.1)],
   povs: [pov(0, 45), pov(1, 270)],
   touchpads: [[finger(0.25, 0.75), finger(0.5, 0.5, false), finger(1, 0), finger(1.01, 0.5), finger(0.5, -0.01)], [finger(0, 1)]]
 };
