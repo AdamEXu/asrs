@@ -28,8 +28,9 @@ expression ever had another value there, so \"equivalent\" is not decided by rea
   differs      it gave another value on a fixture's input and no comparison noticed. Compare the
                value's effect, or add a fixture where it has one. Not equivalent as code.
   agrees       reached, with the same value every time. Add a separating input, or show in the PR
-               why none exists.
-  reached      reached; this kind of mutant has no value to compare.
+               why none exists. It is not proof of equivalence.
+  reached      reached, and its value is not known every time: this kind of mutant has none, a
+               short-circuited operand was not evaluated, or it was NaN, which hides its bits.
   unprobed     the probe does not compile there.
 
 With --vector: the recorded vector itself is mutated instead of the port (one recorded value at a
@@ -220,7 +221,7 @@ fn sources(options: &Options, work: &Path) -> Result<(String, usize)> {
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let listed = json::parse(&text).map_err(|e| format!("cargo mutants --list: {e}"))?;
-    let all: Vec<Mutant> = listed
+    let mut all: Vec<Mutant> = listed
         .as_array()
         .unwrap_or_default()
         .iter()
@@ -231,18 +232,14 @@ fn sources(options: &Options, work: &Path) -> Result<(String, usize)> {
     if all.is_empty() {
         return Err("mutate: cargo-mutants has no mutant of these files".to_owned());
     }
+    all.sort_by(|a, b| (&a.file, a.start, &a.name).cmp(&(&b.file, b.start, &b.name)));
     let total = all.len();
     let sample = Draw(options.seed).sample(all, options.sample);
 
     // cargo-mutants runs its own baseline on the mutated packages only, which need not be the
     // ones the tests are in.
-    let binaries = records::build(options)?;
-    let baseline = Instant::now();
-    let vectors = asrs_parity::vectors::vectors_dir();
-    if !records::passes(&binaries, &vectors, options, Duration::from_secs(3600))? {
-        return Err(format!("mutate: {} fail unmutated", test_names(options)));
-    }
-    let timeout = baseline.elapsed() * 5 + Duration::from_secs(60);
+    let baseline = probe::baseline(options, work)?;
+    let timeout = baseline * 5 + Duration::from_secs(60);
 
     let out = work.join("mutants.out");
     if out.exists() {

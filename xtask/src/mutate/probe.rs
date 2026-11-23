@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
+use quote::ToTokens;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 
@@ -48,6 +50,39 @@ impl Depth {
             Depth::Reach | Depth::Nothing => Depth::Nothing,
         }
     }
+}
+
+/// How long the tests take unmutated, in a copy of the checkout like the ones cargo-mutants tests
+/// in. A test that needs a file git ignores fails there with and without a mutant, which would
+/// count every mutant as caught.
+pub(super) fn baseline(options: &Options, work: &Path) -> Result<Duration> {
+    let copy = work.join("probe-src");
+    sync(&workspace_root(), &copy)?;
+    eprintln!("==> unmutated build");
+    let build = test_command(options, &copy, work)
+        .args(["--no-run", "--message-format=short"])
+        .output()
+        .map_err(|e| format!("cargo test: {e}"))?;
+    if !build.status.success() {
+        return Err(format!(
+            "mutate: {} do not build:\n{}",
+            super::test_names(options),
+            tail(&build.stderr)
+        ));
+    }
+    eprintln!("==> unmutated run");
+    let started = Instant::now();
+    let test = test_command(options, &copy, work)
+        .output()
+        .map_err(|e| format!("cargo test: {e}"))?;
+    if !test.status.success() {
+        return Err(format!(
+            "mutate: {} fail unmutated in a copy of the files git does not ignore:\n{}",
+            super::test_names(options),
+            tail(&test.stdout)
+        ));
+    }
+    Ok(started.elapsed())
 }
 
 /// Runs the tests once on a copy of the checkout whose mutated places report being reached, and
@@ -122,12 +157,18 @@ pub(super) fn run(options: &Options, work: &Path, mutants: &[&Mutant]) -> Result
 
 fn verdict(id: usize, depth: Depth, log: &str) -> Verdict {
     let has = |what: &str| log.lines().any(|l| l == format!("{id} {what}"));
-    match (depth, has("differs"), has("agrees"), has("reached")) {
-        (Depth::Nothing, ..) => Verdict::Unprobed,
-        (_, true, ..) => Verdict::Differs,
-        (_, _, true, _) => Verdict::Agrees,
-        (_, _, _, true) => Verdict::Reached,
-        _ => Verdict::NotReached,
+    if depth == Depth::Nothing {
+        Verdict::Unprobed
+    } else if has("differs") {
+        Verdict::Differs
+    } else if has("unknown") {
+        Verdict::Reached
+    } else if has("agrees") {
+        Verdict::Agrees
+    } else if has("reached") {
+        Verdict::Reached
+    } else {
+        Verdict::NotReached
     }
 }
 
@@ -174,16 +215,22 @@ fn error_lines(stderr: &str) -> Vec<(String, usize)> {
         .collect()
 }
 
-/// Copies every tracked file that changed since the last copy, keeping the times of the rest so
+/// Copies every file git does not ignore that changed since the last copy, keeping the times of the rest so
 /// the probe build is incremental.
 fn sync(root: &Path, copy: &Path) -> Result {
     let output = Command::new("git")
-        .args(["ls-files", "-z"])
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ])
         .current_dir(root)
         .output()
         .map_err(|e| format!("git ls-files: {e}"))?;
     if !output.status.success() {
-        return Err("mutate: git ls-files failed; the probe copies the tracked files".to_owned());
+        return Err("mutate: git ls-files failed; the copy needs its list of files".to_owned());
     }
     for name in String::from_utf8_lossy(&output.stdout).split('\0') {
         let from = root.join(name);
@@ -268,7 +315,7 @@ mod {MODULE} {{
     use std::fmt::Debug;
     use std::io::Write;
     use std::sync::atomic::{{AtomicBool, Ordering}};
-    static SEEN: [[AtomicBool; 3]; {count}] = [const {{ [const {{ AtomicBool::new(false) }}; 3] }}; {count}];
+    static SEEN: [[AtomicBool; 4]; {count}] = [const {{ [const {{ AtomicBool::new(false) }}; 4] }}; {count}];
     fn note(id: usize, kind: usize, what: &str) {{
         if SEEN[id][kind].swap(true, Ordering::SeqCst) {{ return; }}
         if let Some(path) = std::env::var_os("{LOG_VARIABLE}") {{
@@ -280,18 +327,27 @@ mod {MODULE} {{
     fn same(id: usize, same: bool) {{
         if same {{ note(id, 1, "agrees"); }} else {{ note(id, 2, "differs"); }}
     }}
+    fn unknown(id: usize) {{ note(id, 3, "unknown"); }}
     pub fn value<T: Debug>(id: usize, own: T, mutant: impl FnOnce() -> T) -> T {{
         let mutant = std::panic::catch_unwind(std::panic::AssertUnwindSafe(mutant));
-        same(id, mutant.is_ok_and(|m| format!("{{m:?}}") == format!("{{own:?}}")));
+        let own_text = format!("{{own:?}}");
+        let equal = mutant.is_ok_and(|m| format!("{{m:?}}") == own_text);
+        if equal && own_text.contains("NaN") {{ unknown(id); }} else {{ same(id, equal); }}
         own
     }}
     pub fn and(id: usize, l: bool, r: impl FnOnce() -> bool) -> bool {{
         reach(id);
-        if l {{ let r = r(); same(id, r); r }} else {{ false }}
+        if l {{ let r = r(); same(id, r); r }} else {{ unknown(id); false }}
     }}
     pub fn or(id: usize, l: bool, r: impl FnOnce() -> bool) -> bool {{
         reach(id);
-        if l {{ true }} else {{ let r = r(); same(id, !r); r }}
+        if l {{ unknown(id); true }} else {{ let r = r(); same(id, !r); r }}
+    }}
+    pub fn and_pure(id: usize, l: bool, r: impl Fn() -> bool) -> bool {{
+        value(id, l && r(), || l || r())
+    }}
+    pub fn or_pure(id: usize, l: bool, r: impl Fn() -> bool) -> bool {{
+        value(id, l || r(), || l && r())
     }}
 }}
 "#
@@ -302,6 +358,52 @@ fn line_starts(text: &str) -> Vec<usize> {
     std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
         .collect()
+}
+
+/// Whether evaluating an expression where the code would not has no effect but its value (or a
+/// panic, which the probe takes for a difference).
+fn is_pure(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::Path(_) | syn::Expr::Lit(_) => true,
+        syn::Expr::Field(f) => is_pure(&f.base),
+        syn::Expr::Paren(p) => is_pure(&p.expr),
+        syn::Expr::Reference(r) => r.mutability.is_none() && is_pure(&r.expr),
+        syn::Expr::Cast(c) => is_pure(&c.expr),
+        syn::Expr::Index(i) => is_pure(&i.expr) && is_pure(&i.index),
+        syn::Expr::Unary(u) => is_pure(&u.expr),
+        syn::Expr::Binary(b) => {
+            let op = b.op.to_token_stream().to_string();
+            let assigns = op.ends_with('=') && !["==", "!=", "<=", ">="].contains(&op.as_str());
+            !assigns && is_pure(&b.left) && is_pure(&b.right)
+        }
+        syn::Expr::MethodCall(m) => {
+            [
+                "abs",
+                "as_bool",
+                "as_f64",
+                "as_str",
+                "contains",
+                "contains_key",
+                "ends_with",
+                "floor",
+                "is_empty",
+                "is_err",
+                "is_finite",
+                "is_infinite",
+                "is_nan",
+                "is_none",
+                "is_ok",
+                "is_some",
+                "len",
+                "starts_with",
+            ]
+            .iter()
+            .any(|name| m.method == name)
+                && is_pure(&m.receiver)
+                && m.args.iter().all(is_pure)
+        }
+        _ => false,
+    }
 }
 
 struct Finder<'a> {
@@ -331,6 +433,16 @@ impl Finder<'_> {
             })
             .map(|(id, m, depth)| (*id, m.replacement.clone(), *depth))
             .collect()
+    }
+
+    /// Whether a probe may evaluate `node` where the code does not: a probe inside it would
+    /// report places the tests do not reach.
+    fn repeatable(&self, node: &syn::Expr) -> bool {
+        let (from, to) = (node.span().start(), node.span().end());
+        is_pure(node)
+            && !self.probes.iter().any(|(_, m, _)| {
+                ((from.line, from.column + 1)..(to.line, to.column + 1)).contains(&m.start)
+            })
     }
 
     fn place(&mut self, id: usize, node: proc_macro2::Span) {
@@ -405,16 +517,19 @@ impl<'ast> Visit<'ast> for Finder<'_> {
             let op_len = self.offset(node.op.span().end()) - op_at;
             let own = self.text[op_at..op_at + op_len].to_owned();
             let (before, between, after) = match own.as_str() {
-                "&&" => (
-                    format!("{MODULE}::and({id}, "),
-                    ", || ".to_owned(),
-                    ")".to_owned(),
-                ),
-                "||" => (
-                    format!("{MODULE}::or({id}, "),
-                    ", || ".to_owned(),
-                    ")".to_owned(),
-                ),
+                "&&" | "||" => {
+                    let function = match (own.as_str(), self.repeatable(&node.right)) {
+                        ("&&", true) => "and_pure",
+                        ("&&", false) => "and",
+                        (_, true) => "or_pure",
+                        (_, false) => "or",
+                    };
+                    (
+                        format!("{MODULE}::{function}({id}, "),
+                        ", || ".to_owned(),
+                        ")".to_owned(),
+                    )
+                }
                 _ => {
                     let mut own = format!("l {own} r");
                     for (id, mutant, _) in &values {
@@ -535,6 +650,23 @@ mod tests {
     }
 
     #[test]
+    fn an_operand_the_code_skips_is_evaluated_only_if_nothing_can_tell() {
+        let probe = |right: &str, operator: &str| {
+            let out = body(
+                &format!("fn f() -> bool {{ a {operator} {right} }}"),
+                &[mutant("BinaryOperator", "", 1, 20)],
+                Depth::Value,
+            );
+            let call = out.split_once("probe::").unwrap().1;
+            call.split_once('(').unwrap().0.to_owned()
+        };
+        assert_eq!(probe("b.x < 1.0", "&&"), "and_pure");
+        assert_eq!(probe("!self.list[i].is_empty()", "||"), "or_pure");
+        assert_eq!(probe("next()", "&&"), "and");
+        assert_eq!(probe("self.rng.next() < 1.0", "||"), "or");
+    }
+
+    #[test]
     fn several_mutants_of_one_operator_share_a_probe() {
         let out = body(
             "fn f() -> f64 { a + b }",
@@ -614,12 +746,13 @@ mod tests {
 
     #[test]
     fn verdicts_rank_differing_first() {
-        let log = "0 reached\n1 reached\n1 agrees\n2 agrees\n2 differs\n";
+        let log = "0 reached\n1 reached\n1 agrees\n2 agrees\n2 differs\n4 agrees\n4 unknown\n";
         let of = |id| verdict(id, Depth::Value, log);
         assert_eq!(of(0), Verdict::Reached);
         assert_eq!(of(1), Verdict::Agrees);
         assert_eq!(of(2), Verdict::Differs);
         assert_eq!(of(3), Verdict::NotReached);
+        assert_eq!(of(4), Verdict::Reached);
         assert_eq!(verdict(0, Depth::Nothing, log), Verdict::Unprobed);
     }
 
