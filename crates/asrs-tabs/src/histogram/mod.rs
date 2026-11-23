@@ -36,7 +36,6 @@ pub struct HistogramField {
     pub counts: Vec<f64>,
 }
 
-/// One axis after a layout.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScaleLayout {
     /// Left, top, right, bottom, width and height.
@@ -88,7 +87,6 @@ impl Histogram {
         self.chart.pointer(kind, x, y);
     }
 
-    /// Animation frame callbacks waiting for the next frame.
     pub fn callbacks(&self) -> usize {
         self.chart.callbacks()
     }
@@ -109,7 +107,6 @@ impl Histogram {
         result
     }
 
-    /// The histogram's part of `render`.
     pub fn render(
         &mut self,
         command: &HistogramCommand,
@@ -157,7 +154,6 @@ impl Histogram {
         self.chart.surface.canvas()
     }
 
-    /// The canvas's CSS size.
     pub fn size(&self) -> (f64, f64) {
         (self.chart.width, self.chart.height)
     }
@@ -170,7 +166,6 @@ impl Histogram {
         self.chart.area
     }
 
-    /// The `x` and `y` scales.
     pub fn scales(&self) -> [ScaleLayout; 2] {
         [&self.chart.x, &self.chart.y].map(|s| ScaleLayout {
             bounds: [s.left, s.top, s.right, s.bottom, s.width, s.height],
@@ -200,7 +195,6 @@ impl Histogram {
         self.chart.metas().iter().map(|m| bars(m)).collect()
     }
 
-    /// Starts keeping every canvas call for [`Histogram::take_calls`].
     pub fn record_calls(&mut self) {
         self.chart.surface.record_calls();
     }

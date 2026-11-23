@@ -107,7 +107,6 @@ fn delta(value: f64, ticks: &[f64]) -> f64 {
     }
 }
 
-/// `Ticks.formatters.numeric`.
 pub fn format(value: f64, ticks: &[f64]) -> String {
     if value == 0.0 {
         return "0".to_owned();

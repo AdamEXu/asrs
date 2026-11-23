@@ -128,7 +128,6 @@ impl Color {
         self.set_hsl(hsl);
     }
 
-    /// `this.mix(other, weight)`.
     fn mix(self, other: Color, weight: f64) -> Color {
         let (a1, a2) = (b2n(self.a), b2n(other.a));
         let w = 2.0 * weight - 1.0;
@@ -157,7 +156,6 @@ pub fn hover(css: &str) -> Option<String> {
     Some(color.hex_string())
 }
 
-/// The `color` interpolator.
 pub fn interpolate(from: &str, to: &str, factor: f64) -> String {
     match (Color::parse(from), Color::parse(to)) {
         (Some(c0), Some(c1)) => c1.mix(c0, factor).hex_string(),

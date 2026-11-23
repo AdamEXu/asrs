@@ -34,7 +34,6 @@ pub struct Margins {
     pub bottom: f64,
 }
 
-/// What a scale reads from its chart.
 pub struct ChartView<'a> {
     pub width: f64,
     pub height: f64,
@@ -361,7 +360,6 @@ impl Scale {
         self.label_rotation * (math::PI / 180.0)
     }
 
-    /// `determineMaxTicks`.
     fn max_ticks(&mut self, ctx: &mut Surface, text: &mut dyn TextBackend) -> f64 {
         let rotation = self.radians();
         let cos = math::abs(math::cos(rotation));
@@ -466,7 +464,6 @@ impl Scale {
         })
     }
 
-    /// `getLineWidthForValue`.
     pub fn line_width_for_value(&self, value: f64) -> f64 {
         if self.ticks.iter().any(|t| t.value == value) {
             1.0
@@ -615,7 +612,6 @@ impl Scale {
     }
 }
 
-/// `_alignPixel`.
 fn align_pixel(dpr: f64, pixel: f64, width: f64) -> f64 {
     let half = max2(width / 2.0, 0.5);
     math::round((pixel - half) * dpr) / dpr + half

@@ -192,7 +192,6 @@ struct Parsed {
     stack: StackRef,
 }
 
-/// A dataset's meta and its controller.
 pub struct Meta {
     dataset: Option<Rc<Dataset>>,
     index: Cell<usize>,
@@ -384,7 +383,6 @@ enum Callback {
     Animate,
 }
 
-/// What an animation frame callback did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Work {
     Resize,
@@ -590,7 +588,6 @@ impl Chart {
         self.resize(None, env)
     }
 
-    /// The container's `ResizeObserver` entry.
     pub fn container_resized(&mut self, container: (f64, f64)) {
         self.container = container;
         if container == (0.0, 0.0) {
@@ -599,7 +596,6 @@ impl Chart {
         self.request_resize(Some(container));
     }
 
-    /// The window's `resize` event.
     pub fn window_resized(&mut self, device_pixel_ratio: f64) {
         self.window_ratio = device_pixel_ratio;
         if device_pixel_ratio == self.last_window_ratio {
@@ -628,12 +624,10 @@ impl Chart {
         self.request(Callback::Event(kind));
     }
 
-    /// How many animation frame callbacks are queued for the next frame.
     pub fn callbacks(&self) -> usize {
         self.callbacks.len()
     }
 
-    /// Runs the first queued animation frame callback.
     pub fn run_callback(&mut self, env: &mut Env<'_>) -> Option<(Work, Result<(), JsError>)> {
         Some(match self.callbacks.pop_front()? {
             Callback::Resize => {
@@ -665,7 +659,6 @@ impl Chart {
         }
     }
 
-    /// `getRelativePosition`.
     fn relative(&self, kind: EventKind, x: f64, y: f64) -> Event {
         let canvas = self.surface.canvas();
         let ratio = self.device_pixel_ratio.unwrap_or(f64::NAN);
@@ -699,7 +692,6 @@ impl Chart {
         Ok(())
     }
 
-    /// `retinaScale`: whether the canvas changed.
     fn retina_scale(&mut self, (width, height): (f64, f64)) -> bool {
         let ratio = self.window_ratio;
         let device_height = math::floor(height * ratio);
@@ -721,7 +713,6 @@ impl Chart {
         true
     }
 
-    /// `getDatasetMeta`.
     fn dataset_meta(&mut self, index: usize) -> Rc<Meta> {
         let dataset = self.datasets.get(index).cloned();
         let matches = |meta: &&Rc<Meta>| match (&meta.dataset, &dataset) {
@@ -756,7 +747,6 @@ impl Chart {
         }
     }
 
-    /// `buildOrUpdateControllers`.
     fn build_controllers(&mut self) {
         self.remove_unreferenced_metasets();
         for i in 0..self.datasets.len() {
@@ -829,7 +819,6 @@ impl Chart {
         self.render(env)
     }
 
-    /// `layouts.update`.
     fn layout(&mut self, env: &mut Env<'_>) {
         let (width, height) = (self.width, self.height);
         let (available_width, available_height) = (max2(width, 0.0), max2(height, 0.0));
@@ -1012,7 +1001,6 @@ impl Chart {
         ctx.restore();
     }
 
-    /// `computeMinSampleSize`.
     fn min_sample_size(&self) -> f64 {
         let mut values: Vec<f64> = self
             .sorted_metasets
@@ -1043,7 +1031,6 @@ impl Chart {
         min
     }
 
-    /// `updateElements` of every controller.
     fn update_elements(&mut self) {
         if self.sorted_metasets.is_empty() {
             return;
@@ -1252,7 +1239,6 @@ impl Chart {
         }
     }
 
-    /// `Tooltip.handleEvent`.
     fn tooltip_event(
         &mut self,
         event: Event,

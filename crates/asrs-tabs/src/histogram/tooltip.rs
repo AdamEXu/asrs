@@ -166,7 +166,6 @@ impl Tooltip {
         created
     }
 
-    /// `update` with no active element.
     pub fn hide(&mut self, now: f64) -> Vec<AnimationRef> {
         if self.get(Prop::Opacity) == 0.0 {
             return Vec::new();
@@ -174,7 +173,6 @@ impl Tooltip {
         self.animate(&[(Prop::Opacity, 0.0)], now)
     }
 
-    /// `update` with the items of the active elements.
     pub fn show(
         &mut self,
         position: (f64, f64),
@@ -203,7 +201,6 @@ impl Tooltip {
         )
     }
 
-    /// `getTooltipSize`.
     fn size(&self, ctx: &mut Surface, text: &mut dyn TextBackend) -> (f64, f64) {
         let lines = self.body.len() as f64;
         let mut height = PADDING + PADDING;

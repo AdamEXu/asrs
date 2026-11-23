@@ -85,7 +85,6 @@ impl Surface {
         self.canvas.push(call);
     }
 
-    /// `clearCanvas`.
     pub fn clear(&mut self) {
         let mut kept: Vec<Call> = Vec::new();
         let mut depth = 0u32;
@@ -228,7 +227,6 @@ impl Surface {
         });
     }
 
-    /// `clipArea`.
     pub fn clip_area(&mut self, left: f64, top: f64, right: f64, bottom: f64) {
         self.save();
         self.begin_path();
