@@ -1385,7 +1385,7 @@ fn replay(
                         runner.outcome(outcome);
                     }
                 }
-                _ => {}
+                other => return Err(format!("{}: main message {other} is not modeled", where_())),
             }
         } else if let Some(ms) = step.get("advance") {
             now_cell.set({
