@@ -31,7 +31,7 @@ const CONSOLE_TYPES: [&str; 4] = [
 ];
 
 /// The DOM facts of the shared renderer element.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ConsoleDom {
     /// `ROOT.hidden`.
     pub hidden: bool,
@@ -47,6 +47,20 @@ pub struct ConsoleDom {
     pub jump_input: NumberInput,
     /// `clientHeight` of every row after the header.
     pub row_heights: Vec<f64>,
+}
+
+impl Default for ConsoleDom {
+    fn default() -> Self {
+        ConsoleDom {
+            hidden: false,
+            container: Rect::default(),
+            scroll_top: 0.0,
+            scroll_height: 0.0,
+            drag_highlight_hidden: true,
+            jump_input: NumberInput::default(),
+            row_heights: Vec::new(),
+        }
+    }
 }
 
 /// One entry of the command's `lines` array.
@@ -122,6 +136,7 @@ fn console_children(field: &JsString) -> Vec<JsString> {
 
 pub struct ConsoleController {
     dom: Rc<RefCell<ConsoleDom>>,
+    geometry: Option<Box<dyn ConsoleGeometry>>,
     field: JsValue,
 }
 
@@ -131,8 +146,18 @@ impl ConsoleController {
     pub fn new(dom: Rc<RefCell<ConsoleDom>>) -> Self {
         Self {
             dom,
+            geometry: None,
             field: JsValue::Null,
         }
+    }
+
+    /// Answers the controller's layout read from `geometry` instead of the shared `ConsoleDom`.
+    pub fn set_geometry(&mut self, geometry: Box<dyn ConsoleGeometry>) {
+        self.geometry = Some(geometry);
+    }
+
+    pub fn dom(&self) -> &Rc<RefCell<ConsoleDom>> {
+        &self.dom
     }
 
     /// The `close-field` event on `ROOT`.
@@ -155,7 +180,10 @@ impl ConsoleController {
         }
         let x = ops::value_to_number(&ops::get(detail, "x")?).unwrap_or(f64::NAN);
         let y = ops::value_to_number(&ops::get(detail, "y")?).unwrap_or(f64::NAN);
-        let rect = self.dom.borrow().container;
+        let rect = match self.geometry.as_deref_mut() {
+            Some(geometry) => geometry.container_rect(),
+            None => self.dom.borrow_mut().container_rect(),
+        };
         let active = x > rect.left() && x < rect.right() && y > rect.top() && y < rect.bottom();
         let first = ops::index(&ops::get(&data, "fields")?, 0)?;
         let valid_type = match &first {
@@ -363,36 +391,47 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for ConsoleController {
     }
 }
 
-/// The layout reads `ConsoleRenderer` makes and the scroll position it writes, one call per
-/// upstream access and in upstream's order.
+/// The layout reads `ConsoleController` and `ConsoleRenderer` make and the scroll position the
+/// renderer writes, one call per upstream access and in upstream's order. `rows` are the table's
+/// rows as the access finds them, which a layout read lays out first.
 pub trait ConsoleGeometry {
+    /// `TABLE_CONTAINER.getBoundingClientRect()`.
+    fn container_rect(&mut self) -> Rect;
     /// `TABLE_CONTAINER.scrollTop`.
-    fn scroll_top(&mut self) -> f64;
-    fn set_scroll_top(&mut self, value: f64);
+    fn scroll_top(&mut self, rows: &[ConsoleRow]) -> f64;
+    fn set_scroll_top(&mut self, rows: &[ConsoleRow], value: f64);
     /// `TABLE_CONTAINER.scrollHeight`.
-    fn scroll_height(&mut self) -> f64;
+    fn scroll_height(&mut self, rows: &[ConsoleRow]) -> f64;
     /// `TABLE_CONTAINER.clientHeight`.
     fn container_client_height(&mut self) -> f64;
+    /// Lays `rows` out, before a batch of `row_client_height` reads.
+    fn lay_out(&mut self, rows: &[ConsoleRow]);
     /// `TABLE_BODY.children[index + 1].clientHeight`.
     fn row_client_height(&mut self, index: usize) -> f64;
 }
 
 impl ConsoleGeometry for ConsoleDom {
-    fn scroll_top(&mut self) -> f64 {
+    fn container_rect(&mut self) -> Rect {
+        self.container
+    }
+
+    fn scroll_top(&mut self, _rows: &[ConsoleRow]) -> f64 {
         self.scroll_top
     }
 
-    fn set_scroll_top(&mut self, value: f64) {
+    fn set_scroll_top(&mut self, _rows: &[ConsoleRow], value: f64) {
         self.scroll_top = value;
     }
 
-    fn scroll_height(&mut self) -> f64 {
+    fn scroll_height(&mut self, _rows: &[ConsoleRow]) -> f64 {
         self.scroll_height
     }
 
     fn container_client_height(&mut self) -> f64 {
         asrs_js::math::round(self.container.height)
     }
+
+    fn lay_out(&mut self, _rows: &[ConsoleRow]) {}
 
     fn row_client_height(&mut self, index: usize) -> f64 {
         self.row_heights.get(index).copied().unwrap_or(0.0)
@@ -466,10 +505,10 @@ impl ConsoleRenderer {
         self.geometry = Some(geometry);
     }
 
-    fn geometry<R>(&mut self, f: impl FnOnce(&mut dyn ConsoleGeometry) -> R) -> R {
+    fn geometry<R>(&mut self, f: impl FnOnce(&mut dyn ConsoleGeometry, &[ConsoleRow]) -> R) -> R {
         match self.geometry.as_deref_mut() {
-            Some(geometry) => f(geometry),
-            None => f(&mut *self.dom.borrow_mut()),
+            Some(geometry) => f(geometry, &self.view.rows),
+            None => f(&mut *self.dom.borrow_mut(), &self.view.rows),
         }
     }
 
@@ -531,9 +570,10 @@ impl ConsoleRenderer {
             .position(|line| line.timestamp > target)
             .unwrap_or(self.lines.len());
         let above = row.saturating_sub(1).min(self.view.rows.len());
-        self.geometry(|g| {
-            let height = (0..above).fold(0.0, |sum, index| sum + g.row_client_height(index));
-            g.set_scroll_top(height);
+        self.geometry(|g, rows| {
+            g.lay_out(rows);
+            let height = (0..above).fold(0.0, |sum, i| sum + g.row_client_height(i));
+            g.set_scroll_top(rows, height);
         });
     }
 
@@ -691,16 +731,16 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for ConsoleRenderer {
 
         if command.selection_mode == SelectionMode::Locked {
             let last = self.last_scroll_position;
-            if last.is_some_and(|last| self.geometry(|g| g.scroll_top()) < last) {
+            if last.is_some_and(|last| self.geometry(|g, rows| g.scroll_top(rows)) < last) {
                 cx.tab_selection().unlock();
             } else {
-                self.geometry(|g| {
-                    let bottom = g.scroll_height() - g.container_client_height();
-                    g.set_scroll_top(bottom);
+                self.geometry(|g, rows| {
+                    let bottom = g.scroll_height(rows) - g.container_client_height();
+                    g.set_scroll_top(rows, bottom);
                 });
             }
         }
-        self.last_scroll_position = Some(self.geometry(|g| g.scroll_top()));
+        self.last_scroll_position = Some(self.geometry(|g, rows| g.scroll_top(rows)));
         Ok(())
     }
 }

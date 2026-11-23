@@ -23,18 +23,18 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement,
     MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled, Subscription,
-    Window, div, px, rgb, rgba,
+    Window, div, px, rgb,
 };
-use asrs_ui::icon::{Icon, IconFit};
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
-use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{self, ELLIPSIS, Text, TextStyle, snap_remainder};
-use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
+use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
+use asrs_ui::theme::{Appearance, FONT_FAMILY};
 
 use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::large_table::{
+    BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
+};
 use super::number::FormNumber;
-use super::source_list::ratio_symbol;
 
 const FIRST_COLUMN_MIN: f64 = 97.0;
 const COLUMN_MIN: f64 = 175.0;
@@ -43,17 +43,11 @@ const KEY_LEFT: f64 = 6.0;
 const KEY_RIGHT: f64 = 6.0;
 const KEY_RIGHT_WITH_CLOSE: f64 = 30.0;
 const KEY_HEIGHT: f64 = 30.0;
-const KEY_FONT_SIZE: f64 = 14.0;
-const BUTTON: f64 = 25.0;
 const BUTTON_TOP: f64 = 2.5;
 const JUMP_INPUT: [f64; 4] = [4.0, 4.5, 64.0, 21.0];
 const JUMP_BUTTON_LEFT: f64 = 70.0;
 const CLOSE_RIGHT: f64 = 2.0;
 const HIGHLIGHT_WIDTH: f64 = 25.0;
-const HAND_SIZE: f64 = 100.0;
-const HAND_OPACITY: f64 = 0.15;
-const HAND_DELAY_MS: f64 = 1000.0;
-const HAND_FADE_MS: f64 = 1000.0;
 const CACHED_CELLS: usize = 8192;
 const CACHED_BYTES: usize = 1 << 24;
 const PIECE_CHARS: usize = 200;
@@ -88,9 +82,7 @@ fn key_style(align: &str) -> TextStyle {
 }
 
 struct Palette {
-    header_line: u32,
     line: u32,
-    background: u32,
     hovered: u32,
     selected: u32,
 }
@@ -99,74 +91,16 @@ impl Palette {
     fn of(appearance: Appearance) -> Palette {
         appearance.pick(
             Palette {
-                header_line: 0x222222,
                 line: 0xeeeeee,
-                background: 0xffffff,
                 hovered: 0xdddddd,
                 selected: 0xaaaaaa,
             },
             Palette {
-                header_line: 0xeeeeee,
                 line: 0x333333,
-                background: 0x222222,
                 hovered: 0x444444,
                 selected: 0x777777,
             },
         )
-    }
-}
-
-/// `cubic-bezier(0.42, 0, 1, 1)` (`ease-in`) at `t`.
-fn ease_in(t: f64) -> f64 {
-    if t <= 0.0 {
-        return 0.0;
-    }
-    let (x1, x2) = (0.42, 1.0);
-    let (y1, y2) = (0.0, 1.0);
-    let bezier = |a: f64, b: f64, s: f64| {
-        let r = 1.0 - s;
-        3.0 * r * r * s * a + 3.0 * r * s * s * b + s * s * s
-    };
-    let (mut lo, mut hi) = (0.0, 1.0);
-    for _ in 0..64 {
-        let mid = (lo + hi) / 2.0;
-        if bezier(x1, x2, mid) < t {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    bezier(y1, y2, (lo + hi) / 2.0)
-}
-
-/// `img.large-table-hand-icon`'s opacity. `transition: opacity 1s ease-in 1s` runs only when the
-/// icon was on display with opacity 0 before.
-#[derive(Default)]
-struct HandFade {
-    shown: Option<bool>,
-    since: Option<f64>,
-}
-
-impl HandFade {
-    fn opacity(&mut self, show: bool, now: f64) -> (f64, bool) {
-        let was = self.shown.replace(show);
-        match (was, show) {
-            (Some(false), true) => self.since = Some(now),
-            (_, false) => self.since = None,
-            _ => {}
-        }
-        if !show {
-            return (0.0, false);
-        }
-        let Some(since) = self.since else {
-            return (HAND_OPACITY, false);
-        };
-        let t = (now - since - HAND_DELAY_MS) / HAND_FADE_MS;
-        if t >= 1.0 {
-            self.since = None;
-            return (HAND_OPACITY, false);
-        }
-        (HAND_OPACITY * ease_in(t), true)
     }
 }
 
@@ -382,104 +316,6 @@ fn with_controller<R>(
     tab.controller.downcast_mut::<TableController>().map(f)
 }
 
-/// Positions in the renderer element for client coordinates, on the device pixel grid.
-#[derive(Clone, Copy)]
-struct Grid {
-    origin: [f64; 2],
-    scale: f64,
-}
-
-impl Grid {
-    fn snap(&self, v: f64) -> f64 {
-        math::floor(v * self.scale + 0.5) / self.scale
-    }
-
-    /// Blink's pixel-snapped rect of a box.
-    fn place(&self, [x, y, w, h]: [f64; 4]) -> Div {
-        let (left, top) = (self.snap(x), self.snap(y));
-        div()
-            .absolute()
-            .left(px((left - self.origin[0]) as f32))
-            .top(px((top - self.origin[1]) as f32))
-            .w(px((self.snap(x + w) - left) as f32))
-            .h(px((self.snap(y + h) - top) as f32))
-    }
-
-    fn remainder(&self, v: f64) -> f32 {
-        snap_remainder(v as f32, self.scale as f32)
-    }
-
-    /// Text whose box starts at client (`x`, `y`).
-    fn text(&self, text: &str, style: TextStyle, color: u32, [x, y]: [f64; 2]) -> Div {
-        div()
-            .absolute()
-            .left(px((self.snap(x) - self.origin[0]) as f32))
-            .top(px((self.snap(y) - self.origin[1]) as f32))
-            .child(
-                Text::new(text.to_owned(), style)
-                    .color(color)
-                    .subpixel(self.remainder(x), self.remainder(y)),
-            )
-    }
-
-    /// One of the header's buttons at client (`x`, `y`).
-    fn button(&self, button: IconButton, [x, y]: [f64; 2]) -> Div {
-        div()
-            .absolute()
-            .left(px((self.snap(x) - self.origin[0]) as f32))
-            .top(px((self.snap(y) - self.origin[1]) as f32))
-            .child(
-                button
-                    .size(BUTTON as f32, BUTTON as f32)
-                    .subpixel(x - self.snap(x), y - self.snap(y)),
-            )
-    }
-}
-
-fn symbol(name: &str) -> Symbol {
-    Symbol::named(name).unwrap_or_else(|| panic!("bundled symbol {name}"))
-}
-
-fn mean(a: u32, b: u32) -> u32 {
-    let channel = |shift: u32| (((a >> shift & 0xff) + (b >> shift & 0xff)).div_ceil(2)) << shift;
-    channel(16) | channel(8) | channel(0)
-}
-
-/// A `th`: its background, and its borders meeting in a mitre at the bottom right corner, where
-/// the pixels on the diagonal take half of each.
-fn header_cell(grid: Grid, cell: [f64; 4], right: bool, border: f64, palette: &Palette) -> Div {
-    let [x, y, w, h] = cell;
-    let (right_edge, bottom_edge) = (grid.snap(x + w), grid.snap(y + h));
-    let mut out = div().absolute().inset_0();
-    out = out
-        .child(grid.place(cell).bg(rgb(palette.background)))
-        .child(
-            grid.place([x, bottom_edge - border, right_edge - x, border])
-                .bg(rgb(palette.header_line)),
-        );
-    if !right {
-        return out;
-    }
-    let left = right_edge - border;
-    out = out.child(
-        grid.place([left, y, border, bottom_edge - border - y])
-            .bg(rgb(palette.line)),
-    );
-    let pixel = 1.0 / grid.scale;
-    let half = mean(palette.header_line, palette.line);
-    for step in 0..(border * grid.scale).round() as usize {
-        let at = step as f64 * pixel;
-        let top = bottom_edge - border + at;
-        out = out
-            .child(grid.place([left + at, top, pixel, pixel]).bg(rgb(half)))
-            .child(
-                grid.place([left + at + pixel, top, border - at - pixel, pixel])
-                    .bg(rgb(palette.line)),
-            );
-    }
-    out
-}
-
 impl<H: FrameHost> HubFrame<H> {
     /// The displayed table's renderer element over `rect` (`div.renderer-content`), if the
     /// displayed tab is a table.
@@ -597,6 +433,7 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let palette = Palette::of(appearance);
+        let header_palette = HeaderPalette::of(appearance);
         let text_color = appearance.theme().text;
         let [x, y, width, height] = rect;
         let mut dom = dom.borrow_mut();
@@ -619,7 +456,7 @@ impl<H: FrameHost> HubFrame<H> {
         let mut cells = div().absolute().inset_0();
         let mut first_cells = div().absolute().inset_0().child(
             grid.place([first[0], rows_top, first[1], rows_height])
-                .bg(rgb(palette.background)),
+                .bg(rgb(header_palette.background)),
         );
         for (i, row) in rows.iter().enumerate() {
             let top = rows_top + i as f64 * row_height;
@@ -674,7 +511,7 @@ impl<H: FrameHost> HubFrame<H> {
                         continue;
                     }
                     let at = [from, top + CELL_PADDING];
-                    let element = grid.text(piece, cell_style(bold), text_color, at);
+                    let element = grid.text(plain(piece, cell_style(bold), text_color), at);
                     if bold {
                         first_cells = first_cells.child(element);
                     } else {
@@ -741,14 +578,20 @@ impl<H: FrameHost> HubFrame<H> {
             let mut th = div()
                 .absolute()
                 .inset_0()
-                .child(header_cell(grid, cell, !last, border, &palette))
+                .child(header_cell(grid, cell, !last, border, &header_palette))
                 .child(key_box);
             if !field.available {
                 let key = field.text.to_string_lossy();
                 let style = key_style("left");
                 let at = [key_left, y];
                 th = th.children(line_through(
-                    &key, &style, at, key_width, text_color, grid, cx,
+                    &key,
+                    &style,
+                    at,
+                    Some(key_width),
+                    text_color,
+                    grid,
+                    cx,
                 ));
             }
             if view.has_controller {
@@ -773,7 +616,13 @@ impl<H: FrameHost> HubFrame<H> {
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
         header = header
-            .child(header_cell(grid, first_cell, count > 1, border, &palette))
+            .child(header_cell(
+                grid,
+                first_cell,
+                count > 1,
+                border,
+                &header_palette,
+            ))
             .child(
                 grid.place(jump_at)
                     .on_mouse_down_out({
@@ -1117,65 +966,6 @@ impl<H: FrameHost> HubFrame<H> {
     }
 }
 
-/// `text-decoration: line-through` on a key whose line box starts at client (`x`, `y`), cut to
-/// `width`: Blink decorates the text and not its ellipsis, rounds the line to whole device rows
-/// and leaves its ends antialiased.
-fn line_through(
-    key: &str,
-    style: &TextStyle,
-    [x, y]: [f64; 2],
-    width: f64,
-    color: u32,
-    grid: Grid,
-    cx: &mut App,
-) -> Vec<Div> {
-    let scale = grid.scale;
-    let layout = text::layout(cx, style, key, scale as f32, Some(width as f32));
-    let Some(line) = layout.lines.first() else {
-        return Vec::new();
-    };
-    let device = |lu: i32| f64::from(lu) / 64.0;
-    let ascent = device(layout.ascent);
-    let top = y * scale + device(line.baseline) - ascent;
-    let row = math::floor(top + 2.0 * ascent / 3.0 + 0.5);
-    let thickness = math::max2(math::floor(KEY_FONT_SIZE * scale / 10.0), 1.0);
-    let mut out = Vec::new();
-    let mut span = |from: f64, to: f64, alpha: f64| {
-        if to > from {
-            let alpha = (alpha * 255.0).round() as u32;
-            out.push(
-                grid.place([from, row, to - from, thickness].map(|v| v / scale))
-                    .bg(rgba(color << 8 | alpha)),
-            );
-        }
-    };
-    for f in &line.fragments {
-        if line.cut_at.is_some() && f.text == ELLIPSIS {
-            continue;
-        }
-        let from = x * scale + device(f.x);
-        let to = from + device(f.width);
-        let (inner_from, inner_to) = (math::ceil(from), math::floor(to));
-        span(math::floor(from), inner_from, inner_from - from);
-        span(inner_from, inner_to, 1.0);
-        span(inner_to, math::ceil(to), to - inner_to);
-    }
-    out
-}
-
-fn hand_icon(root: [f64; 4], opacity: f64, dark: bool, grid: Grid) -> impl IntoElement {
-    let [x, y, w, h] = root;
-    let half = HAND_SIZE / 2.0;
-    let chain = if dark { chains::INVERT } else { "" };
-    let at = [x + w / 2.0 - half, y + h / 2.0 - half];
-    probed(
-        "img.large-table-hand-icon",
-        grid.place([at[0], at[1], HAND_SIZE, HAND_SIZE])
-            .opacity(opacity as f32)
-            .child(Icon::new(ratio_symbol("trackpadinput.svg"), chain).fit(IconFit::Natural)),
-    )
-}
-
 /// `#dragItem`'s copy of a column's key container.
 pub fn drag_column(
     text: &JsString,
@@ -1198,7 +988,7 @@ pub fn drag_column(
             &key,
             &style,
             [KEY_LEFT, 0.0],
-            width,
+            Some(width),
             color,
             grid,
             cx,
@@ -1224,18 +1014,6 @@ pub fn drag_column(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn hand_fades_in_only_after_it_was_gone() {
-        let mut hand = HandFade::default();
-        assert_eq!(hand.opacity(true, 0.0), (HAND_OPACITY, false));
-        assert_eq!(hand.opacity(false, 10.0), (0.0, false));
-        assert_eq!(hand.opacity(true, 20.0), (0.0, true));
-        assert_eq!(hand.opacity(true, 1020.0), (0.0, true));
-        let (mid, _) = hand.opacity(true, 1520.0);
-        assert!((0.3..0.33).contains(&(mid / HAND_OPACITY)));
-        assert_eq!(hand.opacity(true, 2020.0), (HAND_OPACITY, false));
-    }
 
     #[test]
     fn long_text_is_cut_between_visible_ascii() {
@@ -1337,11 +1115,5 @@ mod tests {
             let widths: Vec<_> = widths.into_iter().map(Some).collect();
             assert_eq!(widths, recorded, "{vector}");
         }
-    }
-
-    #[test]
-    fn corner_pixels_take_half_of_each_border() {
-        assert_eq!(mean(0x222222, 0xeeeeee), 0x888888);
-        assert_eq!(mean(0xeeeeee, 0x333333), 0x919191);
     }
 }

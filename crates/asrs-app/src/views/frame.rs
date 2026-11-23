@@ -37,6 +37,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::console::ConsoleViews;
 use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
@@ -151,6 +152,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
     pub(super) table: TableViews,
+    pub(super) console: ConsoleViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -236,6 +238,7 @@ impl<H: FrameHost> HubFrame<H> {
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
             table: TableViews::default(),
+            console: ConsoleViews::default(),
         }
     }
 
@@ -321,6 +324,7 @@ impl<H: FrameHost> HubFrame<H> {
         let y = mouse_client(f32::from(event.position.y));
         self.source_list_mouse_move(x, y, cx);
         self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
+        self.console_mouse_move(x, y, cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -365,6 +369,7 @@ impl<H: FrameHost> HubFrame<H> {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
         self.table_mouse_up(event, x, y, cx);
+        self.console_mouse_up(event, x, y, cx);
         let shell = &mut self.shell;
         if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
             eprintln!("asrs: {e}");
@@ -767,13 +772,30 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 let frame = entity.clone();
                 window.on_mouse_event(move |event: &MouseExitEvent, phase, _, cx| {
                     if phase == DispatchPhase::Bubble && event.pressed_button.is_none() {
-                        let _ = frame.update(cx, |frame, cx| frame.table_mouse_exit(cx));
+                        let _ = frame.update(cx, |frame, cx| {
+                            frame.table_mouse_exit(cx);
+                            frame.console_mouse_exit(cx);
+                        });
                     }
                 });
                 let frame = entity.clone();
-                window.on_key_event(move |event: &KeyDownEvent, phase, _, cx| {
+                // Before the press focuses what it is on.
+                window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture {
+                        let x = mouse_client(f32::from(event.position.x));
+                        let y = mouse_client(f32::from(event.position.y));
+                        let _ = frame.update(cx, |frame, cx| {
+                            frame.console_window_mouse_down(x, y, window, cx)
+                        });
+                    }
+                });
+                let frame = entity.clone();
+                window.on_key_event(move |event: &KeyDownEvent, phase, window, cx| {
                     if phase == DispatchPhase::Bubble {
-                        let _ = frame.update(cx, |frame, cx| frame.field3d_key_down(event, cx));
+                        let _ = frame.update(cx, |frame, cx| {
+                            frame.field3d_key_down(event, cx);
+                            frame.console_key_down(event, window, cx);
+                        });
                     }
                 });
                 window.on_key_event(move |event: &KeyUpEvent, phase, _, cx| {
@@ -906,6 +928,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(table) = self.table_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(table);
+                }
+                if let Some(console) = self.console_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(console);
                 }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }

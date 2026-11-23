@@ -42,6 +42,7 @@ use asrs_model::source_list_config::{
 };
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::console::controller::ConsoleController;
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::Field2dRenderer;
 use asrs_tabs::line_graph::LineGraphController;
@@ -753,6 +754,10 @@ impl HubModel {
             if let Some(table) = tab.controller.downcast_mut::<TableController>() {
                 table.dom().borrow_mut().hidden = hidden;
                 result = result.and(table.handle_drag(&mut self.page, detail));
+            }
+            if let Some(console) = tab.controller.downcast_mut::<ConsoleController>() {
+                console.dom().borrow_mut().hidden = hidden;
+                result = result.and(console.handle_drag(&mut self.page, detail));
             }
         }
         result
