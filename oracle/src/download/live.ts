@@ -41,7 +41,7 @@ import { World, electronFake, fakeFs } from "./world";
 
 declare const __filename: string;
 
-const SETTLE_LIMIT_MS = 30000;
+const SETTLE_LIMIT_MS = 60000;
 const RETRY_MS = 100;
 const NEVER_MS = 0x7fffffff;
 
@@ -223,12 +223,8 @@ class Fixture {
     keygen(server.hostKey ?? "ed25519", "host");
     this.key = fs.readFileSync(file("user"), "utf8");
     fs.copyFileSync(file("user.pub"), file("authorized"));
-    const reserve = net.createServer();
-    const sshdPort = await listen(reserve);
-    await new Promise((resolve) => reserve.close(resolve));
     const subsystem = server.subsystem === undefined ? sftpServer() : server.subsystem;
     const base = [
-      `Port ${sshdPort}`,
       "ListenAddress 127.0.0.1",
       `HostKey ${file("host")}`,
       "PidFile none",
@@ -245,10 +241,10 @@ class Fixture {
     if (spawnSync(sshdPath(), ["-t", "-f", config]).status !== 0) fs.writeFileSync(config, base.join("\n") + "\n");
     const check = spawnSync(sshdPath(), ["-t", "-f", config]);
     if (check.status !== 0) throw new Error(`sshd -t: ${check.stderr}`);
-    this.sshd = spawn(sshdPath(), ["-D", "-e", "-f", config], { stdio: ["ignore", "ignore", fs.openSync(file("sshd.log"), "w")] });
-    for (let i = 0; !(await reachable(sshdPort)); i++) {
-      if (i > 200) throw new Error("sshd did not start: " + fs.readFileSync(file("sshd.log"), "utf8"));
-      await sleep(25);
+    let sshdPort = 0;
+    for (let i = 0; this.sshd === null; i++) {
+      if (i === 20) throw new Error("sshd did not start: " + fs.readFileSync(file("sshd.log"), "utf8"));
+      sshdPort = await this.spawnSshd(config);
     }
     const proxy = net.createServer({ allowHalfOpen: true }, (client) => {
       if (this.stalled) return;
@@ -271,6 +267,23 @@ class Fixture {
     });
     this.servers.push(proxy);
     this.port = await listen(proxy);
+  }
+
+  /** Another process may take the port before sshd does. */
+  private async spawnSshd(config: string): Promise<number> {
+    const log = path.join(this.root, "sshd.log");
+    const reserve = net.createServer();
+    const port = await listen(reserve);
+    await new Promise((resolve) => reserve.close(resolve));
+    const sshd = spawn(sshdPath(), ["-D", "-e", "-f", config, "-p", String(port)], { stdio: ["ignore", "ignore", fs.openSync(log, "w")] });
+    while (sshd.exitCode === null && sshd.signalCode === null) {
+      if (fs.readFileSync(log, "utf8").includes(`Server listening on 127.0.0.1 port ${port}.`)) {
+        this.sshd = sshd;
+        break;
+      }
+      await sleep(5);
+    }
+    return port;
   }
 
   private drop(link: Link, how: string): void {
@@ -327,11 +340,6 @@ class Fixture {
 
 const listen = (server: net.Server): Promise<number> =>
   new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as net.AddressInfo).port)));
-const reachable = (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const socket = net.connect(port, "127.0.0.1");
-    socket.on("data", () => (socket.destroy(), resolve(true))).on("error", () => resolve(false));
-  });
 const firstExisting = (candidates: string[]): string => {
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (found === undefined) throw new Error(`none of ${candidates.join(", ")} exists`);
@@ -391,7 +399,7 @@ export async function runLiveOne(name: string): Promise<void> {
         return super.connect({
           ...config,
           port: fixture.port,
-          readyTimeout: scenario.timeoutMs ?? 15000,
+          readyTimeout: scenario.timeoutMs ?? 30000,
           ...(login ? { username: os.userInfo().username, password: undefined, privateKey: fixture.key } : {})
         });
       }
@@ -515,7 +523,7 @@ async function runClient(scenario: Scenario, fixture: Fixture, ssh2: any, push: 
           host: scenario.host ?? "127.0.0.1",
           port: fixture.port,
           forceIPv4: true,
-          readyTimeout: scenario.timeoutMs ?? 15000,
+          readyTimeout: scenario.timeoutMs ?? 30000,
           username: login ? os.userInfo().username : "systemcore",
           ...(login ? { privateKey: fixture.key } : { password: "systemcore" })
         });

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use asrs_parity::Json;
 use asrs_parity::vectors::workspace_root;
@@ -16,6 +16,7 @@ use russh::keys::{Algorithm, PrivateKey, key::safe_rng};
 use russh::server::{self, Auth, ChannelOpenHandle, Msg, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet};
 use sha2::{Digest, Sha256};
+use socket2::{Domain, Socket, Type};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
@@ -117,6 +118,8 @@ pub struct Fixture {
     pub on_auth: OnAuth,
     partial: bool,
     renames: AtomicU32,
+    /// Bound and never listening, so that nothing else can take the port.
+    bound: Option<Socket>,
     sshd: Option<Child>,
     drops: watch::Sender<Option<&'static str>>,
     runtime: Option<Runtime>,
@@ -156,6 +159,7 @@ impl Fixture {
             on_auth: OnAuth::default(),
             partial: matches!(scenario.get("partial"), Some(Json::Bool(true))),
             renames: AtomicU32::new(0),
+            bound: None,
             sshd: None,
             drops: watch::channel(None).0,
             runtime: None,
@@ -164,13 +168,17 @@ impl Fixture {
         match text(server, "kind").as_str() {
             "closed" => {
                 let ipv6 = optional_text(scenario, "host").is_some_and(|host| host == "::1");
-                let listener = if ipv6 {
-                    std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0))
-                        .map_err(|e| format!("no IPv6 loopback: {e}"))?
+                let address = if ipv6 {
+                    SocketAddr::from((Ipv6Addr::LOCALHOST, 0))
                 } else {
-                    std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind")
+                    SocketAddr::from((Ipv4Addr::LOCALHOST, 0))
                 };
-                fixture.port = listener.local_addr().expect("address").port();
+                let socket = Socket::new(Domain::for_address(address), Type::STREAM, None)
+                    .and_then(|socket| socket.bind(&address.into()).map(|()| socket))
+                    .map_err(|e| format!("no loopback: {e}"))?;
+                let bound = socket.local_addr().expect("address").as_socket();
+                fixture.port = bound.expect("an IP address").port();
+                fixture.bound = Some(socket);
             }
             "unroutable" if !cfg!(target_os = "macos") => {
                 return Err("recorded with macOS's error code".to_owned());
@@ -274,10 +282,6 @@ impl Fixture {
         );
         self.key = fs::read_to_string(file("user")).expect("user key");
         fs::copy(file("user.pub"), file("authorized")).expect("authorized key");
-        let port = {
-            let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
-            listener.local_addr().expect("address").port()
-        };
         let sftp_server = tools.sftp_server.display().to_string();
         let subsystem = match server.get("subsystem") {
             None => Some(sftp_server.clone()),
@@ -285,7 +289,6 @@ impl Fixture {
             Some(_) => Some(text(server, "subsystem").replace("SFTP_SERVER", &sftp_server)),
         };
         let mut lines = vec![
-            format!("Port {port}"),
             "ListenAddress 127.0.0.1".to_owned(),
             format!("HostKey {}", file("host").display()),
             "PidFile none".to_owned(),
@@ -318,26 +321,38 @@ impl Fixture {
         let mut penalties = lines.clone();
         penalties.push("PerSourcePenalties no".to_owned());
         check(&penalties).or_else(|_| check(&lines))?;
-        let log = fs::File::create(file("sshd.log")).expect("sshd.log");
-        let child = Command::new(&tools.sshd)
+        let port = (0..20).find_map(|_| self.spawn_sshd(&config, tools));
+        Ok(port.unwrap_or_else(|| {
+            let log = fs::read_to_string(file("sshd.log")).unwrap_or_default();
+            panic!("sshd did not start: {log}")
+        }))
+    }
+
+    /// `None` if sshd exited: another process may take the port before sshd does.
+    fn spawn_sshd(&mut self, config: &Path, tools: &Tools) -> Option<u16> {
+        let port = {
+            let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+            listener.local_addr().expect("address").port()
+        };
+        let log = self.root.join("sshd.log");
+        let mut sshd = Command::new(&tools.sshd)
             .args(["-D", "-e", "-f"])
-            .arg(&config)
+            .arg(config)
+            .args(["-p", &port.to_string()])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(log)
+            .stderr(fs::File::create(&log).expect("sshd.log"))
             .spawn()
             .expect("sshd");
-        self.sshd = Some(child);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while !answers(port) {
-            assert!(
-                Instant::now() < deadline,
-                "sshd did not start: {}",
-                fs::read_to_string(file("sshd.log")).unwrap_or_default()
-            );
-            std::thread::sleep(Duration::from_millis(25));
+        let listening = format!("Server listening on 127.0.0.1 port {port}.");
+        while sshd.try_wait().expect("sshd").is_none() {
+            if fs::read_to_string(&log).is_ok_and(|log| log.contains(&listening)) {
+                self.sshd = Some(sshd);
+                return Some(port);
+            }
+            std::thread::sleep(Duration::from_millis(5));
         }
-        Ok(port)
+        None
     }
 
     pub fn remote(&self, path: &str) -> String {
@@ -580,11 +595,6 @@ fn unlock(dir: &Path) {
             unlock(&entry.path());
         }
     }
-}
-
-fn answers(port: u16) -> bool {
-    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    StdStream::connect_timeout(&address, Duration::from_secs(1)).is_ok()
 }
 
 /// Whether the TEST-NET address of a blackhole scenario really never answers here.
