@@ -141,7 +141,7 @@ pub struct WheelDelta {
     pub y: f32,
 }
 
-/// Electron's `app.addRecentDocument(path)`. Only macOS has it so far (#60).
+/// Electron's `app.addRecentDocument(path)`. Only macOS has it so far (#279).
 pub fn add_recent_document(cx: &mut App, path: &Path) {
     #[cfg(feature = "parity")]
     if cx.has_global::<dialog::Script>() {
