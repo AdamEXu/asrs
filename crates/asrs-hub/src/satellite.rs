@@ -181,7 +181,7 @@ impl Selection for SatelliteSelection {
 }
 
 /// What the page reads `document.title` back as: the `title` element's text with ASCII whitespace
-/// stripped and collapsed. The HTML parser replaced NUL characters.
+/// stripped and collapsed. The HTML parser drops NUL characters.
 fn document_title(text: &JsString) -> JsString {
     let mut out: Vec<u16> = Vec::new();
     for &unit in text.units().iter() {
@@ -189,7 +189,8 @@ fn document_title(text: &JsString) -> JsString {
         match (space, out.last()) {
             (true, None | Some(0x20)) => {}
             (true, _) => out.push(0x20),
-            (false, _) => out.push(if unit == 0 { 0xfffd } else { unit }),
+            (false, _) if unit == 0 => {}
+            (false, _) => out.push(unit),
         }
     }
     if out.last() == Some(&0x20) {
@@ -205,6 +206,7 @@ pub struct SatelliteModel {
     /// Whether `renderer` is set.
     has_renderer: bool,
     title: Option<JsString>,
+    document_title: JsString,
     last_aspect_ratio: Option<f64>,
     last_command: Option<Command>,
     outbox: Vec<NamedMessage<SatelliteToMain>>,
@@ -218,6 +220,7 @@ impl SatelliteModel {
             type_value: JsValue::Null,
             has_renderer: false,
             title: None,
+            document_title: JsString::from(APP_NAME),
             last_aspect_ratio: None,
             last_command: None,
             outbox: Vec::new(),
@@ -235,11 +238,12 @@ impl SatelliteModel {
     }
 
     /// `document.title`.
-    pub fn title(&self) -> JsString {
+    pub fn title(&self) -> &JsString {
+        &self.document_title
+    }
+
+    fn set_title(&mut self, title: &JsString) {
         let mut text = JsString::new();
-        let Some(title) = &self.title else {
-            return JsString::from(APP_NAME);
-        };
         if !self.type_value.is_null() {
             let icon = self.kind().map_or("", TabType::icon);
             text.push_str(&JsString::from(icon));
@@ -248,7 +252,8 @@ impl SatelliteModel {
         text.push_str(title);
         text.push_str(&JsString::from(" \u{2014} "));
         text.push_str(&JsString::from(APP_NAME));
-        document_title(&text)
+        self.document_title = document_title(&text);
+        self.title = Some(title.clone());
     }
 
     fn kind(&self) -> Option<TabType> {
@@ -265,6 +270,10 @@ impl SatelliteModel {
     /// `updateVisualizer()`. A type the switch does not know keeps the renderer there was, which
     /// for main's one `set-type` or `restore-state` is none.
     fn update_visualizer(&mut self) -> Result<(), TabsError> {
+        if self.type_value.is_undefined() {
+            let message = "Cannot read properties of undefined (reading 'toString')";
+            return Err(JsError::type_error(message).into());
+        }
         if let Some(kind) = self.kind() {
             let (tabs, page) = self.hub.tabs_mut();
             tabs.set_satellite_tab(page, &self.type_value, kind)?;
@@ -336,10 +345,11 @@ impl SatelliteModel {
             .as_ref()
             .is_none_or(|old| *title != JsValue::String(old.clone()))
         {
+            ops::get(title, "replace")?;
             let JsValue::String(title) = title else {
                 return Err(JsError::type_error("text.replace is not a function").into());
             };
-            self.title = Some(title.clone());
+            self.set_title(title);
         }
         self.last_command = Some(command);
         if !self.has_renderer {
@@ -505,6 +515,6 @@ mod tests {
     fn titles_read_back_collapsed() {
         let title = |s: &str| document_title(&JsString::from(s)).to_string_lossy();
         assert_eq!(title(" a \t\r\n b  "), "a b");
-        assert_eq!(title("\u{1f4c9} \0"), "\u{1f4c9} \u{fffd}");
+        assert_eq!(title("\u{1f4c9} \0x"), "\u{1f4c9} x");
     }
 }
