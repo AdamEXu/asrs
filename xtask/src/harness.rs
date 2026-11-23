@@ -13,17 +13,21 @@ const USAGE: &str = "usage: cargo xtask harness [--list] [--root <checkout>]
 
 Strictness lint over replay harnesses (files of crates/*/tests that use asrs_parity, and
 crates/asrs-parity/src/live), part of `cargo xtask check`. Rules:
-  default-slot   unwrap_or_default: an absent recorded value or port result becomes one that can
-                 compare equal. Name the absence: ok_or_else, expect, or an Option comparison.
-                 A string only matched on afterwards is fine if the catch-all arm fails.
-  catch-all      a match on recorded strings or Json values whose catch-all arm does nothing, so
-                 an unknown record kind, field or operation passes. Return an error or panic.
+  default-slot   unwrap_or_default, or an empty value given another way (unwrap_or(\"\"),
+                 unwrap_or_else(Vec::new), None => Default::default()): an absent recorded value or
+                 port result becomes one that can compare equal. Name the absence: ok_or_else,
+                 expect, or an Option comparison. A string matched on afterwards is fine if the
+                 catch-all arm fails. Named values (0.0, false, Value::Undefined) do not count.
+  catch-all      a match on recorded strings or Json values whose catch-all arm does nothing (or
+                 only prints or counts), so an unknown record kind, field or operation passes.
+                 Return an error or panic. An arm that gives a value is not seen.
   skipped-kind   a match arm naming a recorded kind and doing nothing, so its records are skipped.
                  Compare it, or assert where another harness does.
   silent-return  an early return, continue or break out of a replay because a recorded field is
-                 absent (let-else, or an if whose whole body leaves).
-  open-chain     an if/else-if chain over recorded fields with no final else, so a record that
-                 matches none passes.
+                 absent (let-else, a None arm, or an if whose whole body leaves). An `if let` on
+                 an optional field, filter_map and `?` are not seen; read through tally::Fields.
+  open-chain     an if/else-if chain over recorded fields, or comparing with strings, that has no
+                 final else, so a record that matches none passes.
   no-tally       a file that loads vectors itself and never checks how many records it compared
                  (an assertion on a length or a compared/recorded count, or two lengths compared).
                  Use asrs_parity::tally::Tally, or check_records and check_fn_vectors.
@@ -123,9 +127,13 @@ pub fn run(args: &[String]) -> Result {
         print!("{}", listing(&findings));
         return Ok(());
     }
-    let (problems, stale) = judge(&findings, &allow);
-    for note in &stale {
-        eprintln!("harness lint: {note}");
+    let (mut problems, stale) = judge(&findings, &allow);
+    for (file, note) in stale {
+        // An entry for a file of a branch that has not landed is only reported.
+        match root.join(&file).exists() {
+            true => problems.push(note),
+            false => eprintln!("harness lint: {note}"),
+        }
     }
     if problems.is_empty() {
         let allowed: usize = findings.values().map(Vec::len).sum();
@@ -219,8 +227,12 @@ fn group(findings: &BTreeMap<String, Vec<Finding>>) -> Groups<'_> {
     groups
 }
 
-/// The findings beyond the allowed counts, and the entries that allow more than there is.
-fn judge(findings: &BTreeMap<String, Vec<Finding>>, allow: &[Allow]) -> (Vec<String>, Vec<String>) {
+/// The findings beyond the allowed counts, and the entries (with their file) that allow more than
+/// there is.
+fn judge(
+    findings: &BTreeMap<String, Vec<Finding>>,
+    allow: &[Allow],
+) -> (Vec<String>, Vec<(String, String)>) {
     let groups = group(findings);
     let mut problems = Vec::new();
     for ((file, function, rule), found) in &groups {
@@ -251,13 +263,14 @@ fn judge(findings: &BTreeMap<String, Vec<Finding>>, allow: &[Allow]) -> (Vec<Str
                 .get(&(a.file.as_str(), a.function.as_str(), a.rule))
                 .map_or(0, Vec::len);
             (n < a.count).then(|| {
-                format!(
+                let note = format!(
                     "{ALLOW} allows {} {} in {} {}, and there are {n}",
                     a.count,
                     a.rule.name(),
                     a.file,
                     a.function
-                )
+                );
+                (a.file.clone(), note)
             })
         })
         .collect();
@@ -306,13 +319,16 @@ struct Lint {
     path: Vec<String>,
     loads: Option<(usize, String)>,
     tallies: bool,
-    /// Lines of `unwrap_or_default` calls whose value a strict match rejects.
-    matched: Vec<usize>,
+    /// The defaulting calls whose value a strict match rejects.
+    matched: Vec<Place>,
 }
 
 impl Lint {
     fn report(&mut self, rule: Rule, at: &impl ToTokens, line: usize) {
-        let mut text = at.to_token_stream().to_string();
+        self.report_text(rule, at.to_token_stream().to_string(), line);
+    }
+
+    fn report_text(&mut self, rule: Rule, mut text: String, line: usize) {
         if text.len() > 110 {
             let mut end = 110;
             while !text.is_char_boundary(end) {
@@ -341,7 +357,13 @@ impl Lint {
             name.ident.to_string().as_str(),
             "assert" | "assert_eq" | "assert_ne"
         ) {
-            self.tallies |= counts_records(&mac.tokens.to_string());
+            let conditions = if name.ident == "assert" { 1 } else { 2 };
+            let args = mac.parse_body_with(
+                syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated,
+            );
+            for arg in args.iter().flatten().take(conditions) {
+                self.tallies |= counts_records(&arg.to_token_stream().to_string());
+            }
         }
         // `fn_vectors!` and `record_vectors!` hold their replay closure in macro tokens.
         if let Ok(args) = mac.parse_body_with(
@@ -376,22 +398,161 @@ fn reads_record(expr: &impl ToTokens) -> bool {
         .any(|read| tokens.contains(read))
 }
 
+/// Whether an expression reads a record or compares with a string literal.
+fn tests_record(expr: &syn::Expr) -> bool {
+    struct Compares(bool);
+    impl<'ast> Visit<'ast> for Compares {
+        fn visit_expr_binary(&mut self, node: &'ast syn::ExprBinary) {
+            self.0 |= matches!(node.op, syn::BinOp::Eq(_))
+                && (is_string_literal(&node.left) || is_string_literal(&node.right));
+            visit::visit_expr_binary(self, node);
+        }
+    }
+    let mut compares = Compares(false);
+    compares.visit_expr(expr);
+    compares.0 || reads_record(expr)
+}
+
+fn is_string_literal(expr: &syn::Expr) -> bool {
+    matches!(expr, syn::Expr::Lit(l) if matches!(l.lit, syn::Lit::Str(_)))
+}
+
+fn is_ident(expr: &syn::Expr, name: &str) -> bool {
+    matches!(expr, syn::Expr::Path(p) if p.path.is_ident(name))
+}
+
+/// A value that stands for nothing: what `Default` gives, by any spelling.
+fn is_empty_value(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::Lit(l) => matches!(&l.lit, syn::Lit::Str(s) if s.value().is_empty()),
+        syn::Expr::Array(a) => a.elems.is_empty(),
+        syn::Expr::Reference(r) => is_empty_value(&r.expr),
+        syn::Expr::Index(i) => is_empty_value(&i.expr),
+        syn::Expr::Paren(p) => is_empty_value(&p.expr),
+        syn::Expr::Block(b) => {
+            matches!(b.block.stmts.as_slice(), [syn::Stmt::Expr(e, None)] if is_empty_value(e))
+        }
+        syn::Expr::Macro(m) => m.mac.path.is_ident("vec") && m.mac.tokens.is_empty(),
+        syn::Expr::MethodCall(m) => {
+            ["to_owned", "to_string", "into"]
+                .iter()
+                .any(|name| m.method == name)
+                && is_empty_value(&m.receiver)
+        }
+        syn::Expr::Call(c) => {
+            is_default_path(&c.func)
+                && c.args
+                    .iter()
+                    .all(|a| is_empty_value(a) || is_ident(a, "None"))
+        }
+        _ => false,
+    }
+}
+
+/// `Default::default`, `Vec::new` and the like.
+fn is_default_path(expr: &syn::Expr) -> bool {
+    matches!(expr, syn::Expr::Path(p) if p.path.segments.len() > 1
+        && p.path.segments.last().is_some_and(|s| s.ident == "default" || s.ident == "new"))
+}
+
+/// A function that gives an empty value.
+fn gives_empty(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::Closure(c) => is_empty_value(&c.body),
+        _ => is_default_path(expr),
+    }
+}
+
+/// Whether a branch for an absent `from` gives an empty value. An empty list or string written
+/// out for an absent port value is how the page shows it; only a `default()` is suspect there.
+fn branch_defaults(from: &impl ToTokens, body: &syn::Expr) -> bool {
+    is_empty_value(body)
+        && (reads_record(from) || body.to_token_stream().to_string().contains("default ()"))
+}
+
+fn defaults(call: &syn::ExprMethodCall) -> bool {
+    let first = call.args.first();
+    match call.method.to_string().as_str() {
+        "unwrap_or_default" => true,
+        "unwrap_or" => first.is_some_and(is_empty_value),
+        "unwrap_or_else" => first.is_some_and(gives_empty),
+        "map_or" => first.is_some_and(is_empty_value) && reads_record(&call.receiver),
+        "map_or_else" => first.is_some_and(gives_empty) && reads_record(&call.receiver),
+        _ => false,
+    }
+}
+
+/// A `None` or `Err(_)` pattern.
+fn is_absence(pat: &syn::Pat) -> bool {
+    match pat {
+        syn::Pat::Ident(i) => i.ident == "None",
+        syn::Pat::Path(p) => p.path.is_ident("None"),
+        syn::Pat::TupleStruct(t) => t.path.is_ident("Err") && t.elems.iter().all(catches_all),
+        _ => false,
+    }
+}
+
+/// The arms a match on an optional takes when it is absent: `None`, `Err(_)`, or a wildcard
+/// beside a `Some`.
+fn absence_arms(node: &syn::ExprMatch) -> impl Iterator<Item = &syn::Arm> {
+    let optional = node.arms.iter().any(|a| {
+        matches!(&a.pat, syn::Pat::TupleStruct(t) if t.path.is_ident("Some") || t.path.is_ident("Ok"))
+    });
+    node.arms
+        .iter()
+        .filter(move |a| is_absence(&a.pat) || optional && matches!(a.pat, syn::Pat::Wild(_)))
+}
+
 /// An expression that leaves a replay as if nothing were wrong.
 fn does_nothing(expr: &syn::Expr) -> bool {
     match expr {
         syn::Expr::Tuple(t) => t.elems.is_empty(),
-        syn::Expr::Block(b) => block_does_nothing(&b.block),
-        syn::Expr::Call(_) => expr.to_token_stream().to_string() == "Ok (())",
-        _ => leaves(expr),
+        syn::Expr::Block(b) => b.block.stmts.iter().all(statement_does_nothing),
+        syn::Expr::Macro(m) => prints(&m.mac),
+        syn::Expr::Call(_) => is_ok_unit(expr),
+        _ => leaves(expr) || counts_up(expr),
     }
 }
 
-fn block_does_nothing(block: &syn::Block) -> bool {
-    match block.stmts.as_slice() {
-        [] => true,
-        [syn::Stmt::Expr(e, _)] => does_nothing(e),
-        _ => false,
+fn statement_does_nothing(stmt: &syn::Stmt) -> bool {
+    match stmt {
+        syn::Stmt::Expr(syn::Expr::Verbatim(v), _) => v.is_empty(),
+        syn::Stmt::Expr(e, _) => does_nothing(e),
+        syn::Stmt::Local(l) => {
+            matches!(l.pat, syn::Pat::Wild(_))
+                && l.init.as_ref().is_some_and(|i| {
+                    matches!(*i.expr, syn::Expr::Path(_) | syn::Expr::Reference(_))
+                })
+        }
+        syn::Stmt::Macro(m) => prints(&m.mac),
+        syn::Stmt::Item(_) => true,
     }
+}
+
+fn prints(mac: &syn::Macro) -> bool {
+    ["print", "println", "eprint", "eprintln"]
+        .iter()
+        .any(|name| mac.path.is_ident(name))
+}
+
+fn counts_up(expr: &syn::Expr) -> bool {
+    matches!(expr, syn::Expr::Binary(b) if matches!(b.op, syn::BinOp::AddAssign(_))
+        && matches!(*b.left, syn::Expr::Path(_))
+        && matches!(*b.right, syn::Expr::Lit(_)))
+}
+
+fn is_ok(expr: &syn::Expr, value: impl Fn(&syn::Expr) -> bool) -> bool {
+    matches!(expr, syn::Expr::Call(c) if matches!(&*c.func, syn::Expr::Path(p)
+            if p.path.segments.last().is_some_and(|s| s.ident == "Ok"))
+        && c.args.len() == 1
+        && value(&c.args[0]))
+}
+
+fn is_ok_unit(expr: &syn::Expr) -> bool {
+    is_ok(
+        expr,
+        |e| matches!(e, syn::Expr::Tuple(t) if t.elems.is_empty()),
+    )
 }
 
 fn leaves(expr: &syn::Expr) -> bool {
@@ -400,17 +561,24 @@ fn leaves(expr: &syn::Expr) -> bool {
         syn::Expr::Break(b) => b.expr.is_none(),
         syn::Expr::Return(r) => match &r.expr {
             None => true,
-            Some(value) => matches!(
-                value.to_token_stream().to_string().as_str(),
-                "Ok (())" | "Ok (None)" | "None" | "()"
-            ),
+            Some(value) => {
+                let nothing = |e: &syn::Expr| {
+                    is_empty_value(e)
+                        || is_ident(e, "None")
+                        || matches!(e, syn::Expr::Tuple(t) if t.elems.is_empty())
+                        || matches!(e, syn::Expr::Lit(l) if matches!(&l.lit, syn::Lit::Bool(b) if b.value))
+                };
+                nothing(value) || is_ok(value, nothing)
+            }
         },
         _ => false,
     }
 }
 
+/// A block that ends by leaving and does nothing before it.
 fn block_leaves(block: &syn::Block) -> bool {
-    matches!(block.stmts.as_slice(), [syn::Stmt::Expr(e, _)] if leaves(e))
+    matches!(block.stmts.split_last(), Some((syn::Stmt::Expr(e, _), before))
+        if leaves(e) && before.iter().all(statement_does_nothing))
 }
 
 fn catches_all(pat: &syn::Pat) -> bool {
@@ -426,6 +594,10 @@ fn catches_all(pat: &syn::Pat) -> bool {
         syn::Pat::Tuple(t) => t.elems.iter().all(catches_all),
         syn::Pat::Or(o) => o.cases.iter().any(catches_all),
         syn::Pat::Paren(p) => catches_all(&p.pat),
+        syn::Pat::Reference(r) => catches_all(&r.pat),
+        syn::Pat::TupleStruct(t) => {
+            (t.path.is_ident("Some") || t.path.is_ident("Ok")) && t.elems.iter().all(catches_all)
+        }
         _ => false,
     }
 }
@@ -440,12 +612,19 @@ fn is_string(pat: &syn::Pat) -> bool {
     }
 }
 
-/// Finds a string literal or a `Json`/`Value` variant in a pattern: what records are made of.
+/// Finds a string literal, a constant or a `Json`/`Value` variant in a pattern: what records are
+/// made of.
 struct RecordPattern(bool);
 
 impl<'ast> Visit<'ast> for RecordPattern {
     fn visit_lit_str(&mut self, _: &'ast syn::LitStr) {
         self.0 = true;
+    }
+
+    fn visit_pat_ident(&mut self, node: &'ast syn::PatIdent) {
+        let name = node.ident.to_string();
+        self.0 |= name.len() > 1 && !name.contains(|c: char| c.is_lowercase());
+        visit::visit_pat_ident(self, node);
     }
 
     fn visit_path(&mut self, path: &'ast syn::Path) {
@@ -462,25 +641,86 @@ impl<'ast> Visit<'ast> for RecordPattern {
 
 /// Whether an unknown string ends in an arm that does something, such as failing.
 fn rejects_unknown(node: &syn::ExprMatch) -> bool {
+    let names_empty = |arm: &syn::Arm| arm.pat.to_token_stream().to_string().contains("\"\"");
     node.arms.iter().any(|arm| is_string(&arm.pat))
+        && !node.arms.iter().any(names_empty)
         && node
             .arms
             .iter()
             .any(|arm| arm.guard.is_none() && catches_all(&arm.pat) && !does_nothing(&arm.body))
 }
 
-/// The lines of the `unwrap_or_default` calls an expression ends in, under `as_str`, a reference
-/// or the arms of a match.
-fn defaulted(expr: &syn::Expr) -> Vec<usize> {
+/// Where the defaulting calls are that an expression ends in, under `as_str`, a reference or the
+/// arms of a match.
+fn defaulted(expr: &syn::Expr) -> Vec<Place> {
     match expr {
-        syn::Expr::MethodCall(call) if call.method == "unwrap_or_default" => {
-            vec![call.method.span().start().line]
-        }
+        syn::Expr::MethodCall(call) if defaults(call) => vec![place(&call.method)],
         syn::Expr::MethodCall(call) if call.method == "as_str" => defaulted(&call.receiver),
         syn::Expr::Reference(r) => defaulted(&r.expr),
         syn::Expr::Paren(p) => defaulted(&p.expr),
         syn::Expr::Match(m) => m.arms.iter().flat_map(|a| defaulted(&a.body)).collect(),
         _ => Vec::new(),
+    }
+}
+
+type Place = (usize, usize);
+
+fn place(node: &impl Spanned) -> Place {
+    let at = node.span().start();
+    (at.line, at.column)
+}
+
+/// Finds an `if`, let-else or match that leaves when the variable `name` is absent.
+struct LeavesOnAbsence<'a> {
+    name: &'a syn::Ident,
+    found: Vec<(usize, String)>,
+}
+
+impl LeavesOnAbsence<'_> {
+    fn is_it(&self, expr: &syn::Expr) -> bool {
+        match expr {
+            syn::Expr::Reference(r) => self.is_it(&r.expr),
+            _ => is_ident(expr, &self.name.to_string()),
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for LeavesOnAbsence<'_> {
+    fn visit_expr_if(&mut self, node: &'ast syn::ExprIf) {
+        let cond = node.cond.to_token_stream().to_string();
+        if node.else_branch.is_none()
+            && block_leaves(&node.then_branch)
+            && (cond == format!("{} . is_none ()", self.name)
+                || cond == format!("! {} . is_some ()", self.name))
+        {
+            self.found
+                .push((node.span().start().line, node.to_token_stream().to_string()));
+        }
+        visit::visit_expr_if(self, node);
+    }
+
+    fn visit_local(&mut self, node: &'ast syn::Local) {
+        if let Some(init) = &node.init
+            && self.is_it(&init.expr)
+            && let Some((_, diverge)) = &init.diverge
+            && matches!(&**diverge, syn::Expr::Block(b) if block_leaves(&b.block))
+        {
+            self.found
+                .push((node.span().start().line, node.to_token_stream().to_string()));
+        }
+        visit::visit_local(self, node);
+    }
+
+    fn visit_expr_match(&mut self, node: &'ast syn::ExprMatch) {
+        if self.is_it(&node.expr) {
+            for arm in absence_arms(node) {
+                if does_nothing(&arm.body) {
+                    self.found
+                        .push((arm.span().start().line, arm.to_token_stream().to_string()));
+                }
+            }
+        }
+        visit::visit_expr_match(self, node);
     }
 }
 
@@ -502,6 +742,30 @@ impl<'ast> Visit<'ast> for StrictMatch<'_> {
             self.found |= rejects_unknown(node);
         }
         visit::visit_expr_match(self, node);
+    }
+}
+
+/// Finds where the variable `name` is used: in the message of a panic or a print, or elsewhere.
+struct Uses<'a> {
+    name: &'a syn::Ident,
+    messages: bool,
+    others: bool,
+}
+
+impl<'ast> Visit<'ast> for Uses<'_> {
+    fn visit_path(&mut self, node: &'ast syn::Path) {
+        self.others |= node.is_ident(self.name);
+        visit::visit_path(self, node);
+    }
+
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if !node.tokens.to_string().contains(&self.name.to_string()) {
+            return;
+        }
+        match prints(node) || node.path.is_ident("panic") || node.path.is_ident("unreachable") {
+            true => self.messages = true,
+            false => self.others = true,
+        }
     }
 }
 
@@ -557,8 +821,20 @@ impl<'ast> Visit<'ast> for Lint {
             if let syn::Pat::Ident(name) = &local.pat
                 && let Some(init) = &local.init
             {
-                let lines = defaulted(&init.expr);
-                if lines.is_empty() {
+                if init.diverge.is_none() && reads_record(&init.expr) {
+                    let mut absence = LeavesOnAbsence {
+                        name: &name.ident,
+                        found: Vec::new(),
+                    };
+                    for rest in &node.stmts[i + 1..] {
+                        absence.visit_stmt(rest);
+                    }
+                    for (line, text) in absence.found {
+                        self.report_text(Rule::SilentReturn, text, line);
+                    }
+                }
+                let places = defaulted(&init.expr);
+                if places.is_empty() {
                     continue;
                 }
                 let mut strict = StrictMatch {
@@ -568,8 +844,16 @@ impl<'ast> Visit<'ast> for Lint {
                 for rest in &node.stmts[i + 1..] {
                     strict.visit_stmt(rest);
                 }
-                if strict.found {
-                    self.matched.extend(lines);
+                let mut uses = Uses {
+                    name: &name.ident,
+                    messages: false,
+                    others: false,
+                };
+                for rest in &node.stmts[i + 1..] {
+                    uses.visit_stmt(rest);
+                }
+                if strict.found || uses.messages && !uses.others {
+                    self.matched.extend(places);
                 }
             }
         }
@@ -577,9 +861,9 @@ impl<'ast> Visit<'ast> for Lint {
     }
 
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
-        let line = node.method.span().start().line;
-        if node.method == "unwrap_or_default" && !self.matched.contains(&line) {
-            self.report(Rule::DefaultSlot, node, line);
+        let at = place(&node.method);
+        if defaults(node) && !self.matched.contains(&at) {
+            self.report(Rule::DefaultSlot, node, at.0);
         }
         visit::visit_expr_method_call(self, node);
     }
@@ -609,6 +893,13 @@ impl<'ast> Visit<'ast> for Lint {
                 self.report(Rule::CatchAll, arm, line);
             } else if is_string(&arm.pat) {
                 self.report(Rule::SkippedKind, arm, line);
+            } else if reads_record(&node.expr) && absence_arms(node).any(|a| std::ptr::eq(a, arm)) {
+                self.report(Rule::SilentReturn, arm, line);
+            }
+        }
+        for arm in node.arms.iter().filter(|a| is_absence(&a.pat)) {
+            if branch_defaults(&node.expr, &arm.body) {
+                self.report(Rule::DefaultSlot, arm, arm.span().start().line);
             }
         }
         visit::visit_expr_match(self, node);
@@ -626,7 +917,36 @@ impl<'ast> Visit<'ast> for Lint {
         visit::visit_local(self, node);
     }
 
+    fn visit_expr_path(&mut self, node: &'ast syn::ExprPath) {
+        if node.path.segments.len() > 1
+            && let Some(last) = node.path.segments.last()
+            && last.ident == "unwrap_or_default"
+        {
+            self.report(Rule::DefaultSlot, node, last.ident.span().start().line);
+        }
+        visit::visit_expr_path(self, node);
+    }
+
+    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
+        // `load` imported by itself is called without the `vectors::` before it.
+        let tokens = node.tree.to_token_stream().to_string();
+        let mut words = tokens.split(|c: char| !c.is_alphanumeric() && c != '_');
+        if tokens.contains("vectors ::")
+            && words.any(|w| ["load", "load_local", "parse_records"].contains(&w))
+        {
+            self.loads
+                .get_or_insert_with(|| (node.span().start().line, tokens));
+        }
+        visit::visit_item_use(self, node);
+    }
+
     fn visit_expr_if(&mut self, node: &'ast syn::ExprIf) {
+        if matches!(&*node.cond, syn::Expr::Let(_))
+            && let Some((_, other)) = &node.else_branch
+            && branch_defaults(&node.cond, other)
+        {
+            self.report(Rule::DefaultSlot, node, node.span().start().line);
+        }
         if node.else_branch.is_none() && reads_record(&node.cond) && block_leaves(&node.then_branch)
         {
             self.report(Rule::SilentReturn, node, node.span().start().line);
@@ -637,7 +957,7 @@ impl<'ast> Visit<'ast> for Lint {
         let mut open = false;
         while let Some(branch) = link {
             branches += 1;
-            record_branches += usize::from(reads_record(&branch.cond));
+            record_branches += usize::from(tests_record(&branch.cond));
             link = match &branch.else_branch {
                 None => {
                     open = true;
@@ -829,6 +1149,101 @@ mod tests {
     }
 
     #[test]
+    fn a_default_by_any_spelling_is_reported() {
+        for default in [
+            "unwrap_or(Default::default())",
+            "unwrap_or(Slot::default())",
+            "unwrap_or_else(Default::default)",
+            "unwrap_or_else(|| Rc::new(RefCell::new(None)))",
+            "unwrap_or(String::new())",
+            "unwrap_or_else(String::new)",
+            "unwrap_or(\"\")",
+            "unwrap_or_else(|| \"\".to_owned())",
+            "unwrap_or(&[])",
+            "unwrap_or(vec![])",
+            "map(Option::unwrap_or_default)",
+        ] {
+            let text = format!("fn f() {{ let slot = self.commands.get(&uuid).{default}; }}");
+            assert_eq!(rules(&text), [Rule::DefaultSlot], "{text}");
+        }
+        for text in [
+            "fn f() { let s = match slots.get(&id) { Some(s) => s, None => Default::default() }; }",
+            "fn f() { let s = match r.string(\"x\") { Some(s) => s, None => String::new() }; }",
+            "fn f() { let s = if let Some(s) = r.string(\"x\") { s } else { String::new() }; }",
+        ] {
+            assert_eq!(rules(text), [Rule::DefaultSlot], "{text}");
+        }
+        for text in [
+            "fn f() { let x = args.get(i).cloned().unwrap_or(Value::Undefined); }",
+            "fn f() { let x = init.get(\"x\").and_then(Json::as_f64).unwrap_or(0.0); }",
+            "fn f() { let x = match self.show { None => \"\", Some(_) => \"1\" }; }",
+            "fn f() { *counts.entry(kind).or_default() += 1; }",
+            "fn f() { let log = read(path).unwrap_or_default(); panic!(\"failed: {log}\"); }",
+        ] {
+            assert_eq!(rules(text), [], "{text}");
+        }
+        assert_eq!(
+            rules(
+                "fn f() { let x = r.string(\"x\").unwrap_or_default(); match x.as_str() { \"\" => y(), _ => panic!() } }"
+            ),
+            [Rule::DefaultSlot]
+        );
+    }
+
+    #[test]
+    fn a_catch_all_is_found_under_other_patterns_and_bodies() {
+        for arms in [
+            "Some(\"a\") => check(), Some(_) => {} None => panic!()",
+            "Some(\"a\") => check(), Some(_) | None => {}",
+            "\"a\" => check(), &_ => {}",
+            "CLICK => check(), SCROLL => check(), _ => {}",
+            "\"a\" => check(), other => { let _ = other; }",
+            "\"a\" => check(), other => eprintln!(\"{other}\")",
+            "\"a\" => check(), _ => { skipped += 1; continue; }",
+            "\"a\" => check(), _ => Ok::<(), String>(())",
+            "\"a\" => check(), _ => return Ok(Vec::new())",
+            "\"a\" => check(), _ => return true",
+        ] {
+            let text = format!("fn f() {{ loop {{ match kind {{ {arms} }} }} }}");
+            assert_eq!(rules(&text), [Rule::CatchAll], "{text}");
+        }
+        for arms in [
+            "Some(\"a\") => check(), Some(other) => panic!(\"{other}\"), None => panic!()",
+            "\"a\" => check(), _ => return Err(unknown())",
+            "\"a\" => check(), _ => return false",
+        ] {
+            let text = format!("fn f() {{ match kind {{ {arms} }} }}");
+            assert_eq!(rules(&text), [], "{text}");
+        }
+        assert_eq!(
+            rules("fn f() { if kind == \"click\" { a() } else if kind == \"scroll\" { b() } }"),
+            [Rule::OpenChain]
+        );
+    }
+
+    #[test]
+    fn silent_exits_are_found_through_matches_and_variables() {
+        for text in [
+            "fn f() -> R { match r.field(\"x\") { None => return Ok(()), Some(x) => check(x) } }",
+            "fn f() -> R { match r.field(\"x\") { None => Ok(()), Some(x) => check(x) } }",
+            "fn f() -> R { match r.field(\"x\") { Some(x) => check(x), _ => Ok(()) } }",
+            "fn f() { let x = r.field(\"x\"); if x.is_none() { return; } check(x); }",
+            "fn f() { let x = r.field(\"x\"); let Some(x) = x else { return; }; }",
+            "fn f() -> R { let Some(x) = r.field(\"x\") else { return Ok(Vec::new()); }; }",
+            "fn f() { let Some(x) = r.field(\"x\") else { skipped += 1; return; }; }",
+        ] {
+            assert_eq!(rules(text), [Rule::SilentReturn], "{text}");
+        }
+        for text in [
+            "fn f() { let id = r.value(\"sl\").unwrap(); match id { 0 => a(), _ => {} } }",
+            "fn f() -> R { match r.field(\"x\") { None => Err(()), Some(x) => check(x) } }",
+            "fn f() { let x = r.field(\"x\"); if x.is_none() { panic!(); } }",
+        ] {
+            assert_eq!(rules(text), [], "{text}");
+        }
+    }
+
+    #[test]
     fn macro_closures_are_linted() {
         assert_eq!(
             rules(
@@ -850,6 +1265,12 @@ mod tests {
         ] {
             assert_eq!(rules(&format!("{load} {counted} }}")), [], "{counted}");
         }
+        let message = "assert!(failures.is_empty(), \"{} differ\", failures.len());";
+        assert_eq!(rules(&format!("{load} {message} }}")), [Rule::NoTally]);
+        assert_eq!(
+            rules("use asrs_parity::vectors::{Record, load}; fn f() { for r in load(ID) {} }"),
+            [Rule::NoTally]
+        );
     }
 
     #[test]

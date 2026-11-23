@@ -381,10 +381,12 @@ impl Env {
             )?;
             return Ok(());
         }
-        if name.to_string_lossy() == "save-state" {
-            self.trackers[0].save_renderer_state(id, data.clone());
-        } else if name.to_string_lossy() == "save-type-memory" {
-            let _ = type_memory::save(&self.fs, &self.tm_file, data);
+        match name.to_string_lossy().as_str() {
+            "save-state" => self.trackers[0].save_renderer_state(id, data.clone()),
+            "save-type-memory" => {
+                let _ = type_memory::save(&self.fs, &self.tm_file, data);
+            }
+            other => panic!("message {other} is not modeled"),
         }
         Ok(())
     }
