@@ -40,26 +40,15 @@ impl Content {
 }
 
 /// The `<img>`: its attributes, and the loads its page performs through
-/// [`VideoImage::take_request`] and [`VideoImage::loaded`].
-#[derive(Debug)]
+/// [`VideoImage::begin_load`] and [`VideoImage::loaded`].
+#[derive(Debug, Default)]
 pub struct VideoImage {
     hidden: bool,
     src: Option<JsString>,
     content: Option<Content>,
     shown: Option<Shown>,
-    requested: bool,
-}
-
-impl Default for VideoImage {
-    fn default() -> Self {
-        VideoImage {
-            hidden: false,
-            src: None,
-            content: None,
-            shown: None,
-            requested: false,
-        }
-    }
+    /// The `src` whose load starts in the next microtask.
+    pending: Option<JsString>,
 }
 
 impl VideoImage {
@@ -83,12 +72,14 @@ impl VideoImage {
         self.shown.as_ref().filter(|_| !self.hidden)
     }
 
-    /// The URL to load, once per load the element starts.
-    pub fn take_request(&mut self) -> Option<JsString> {
-        if !std::mem::take(&mut self.requested) {
-            return None;
-        }
-        self.content.as_ref().map(|content| content.src.clone())
+    /// The microtask that starts the load of a new `src`, which it returns.
+    pub fn begin_load(&mut self) -> Option<JsString> {
+        let src = self.pending.take()?;
+        self.content = Some(Content {
+            src: src.clone(),
+            state: State::Loading,
+        });
+        Some(src)
     }
 
     /// The load of `src` ended with the image's natural size, or failed. Ignored once the element
@@ -109,28 +100,22 @@ impl VideoImage {
     }
 
     /// `img.src = src`. An image that is loading or loaded is found in the memory cache at once;
-    /// a failed one is fetched again. Returns the natural size a read in the same task sees.
-    fn set_src(&mut self, src: &JsString) -> [f64; 2] {
+    /// a failed one is fetched again.
+    fn set_src(&mut self, src: &JsString) {
         self.src = Some(src.clone());
+        self.pending = None;
         if src.is_empty() {
             self.content = None;
             self.shown = None;
-            self.requested = false;
-            return [0.0; 2];
+            return;
         }
-        let size = self.natural_size();
         let cached = self
             .content
             .as_ref()
             .is_some_and(|c| c.src == *src && c.state != State::Failed);
         if !cached {
-            self.content = Some(Content {
-                src: src.clone(),
-                state: State::Loading,
-            });
-            self.requested = true;
+            self.pending = Some(src.clone());
         }
-        size
     }
 }
 
@@ -161,7 +146,8 @@ impl VideoRenderer {
         };
         let mut image = self.image.borrow_mut();
         image.hidden = command.is_empty();
-        let [width, height] = image.set_src(command);
+        image.set_src(command);
+        let [width, height] = image.natural_size();
         self.aspect_ratio = (width > 0.0 && height > 0.0).then(|| width / height);
     }
 }

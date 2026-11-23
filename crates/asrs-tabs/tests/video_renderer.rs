@@ -47,18 +47,20 @@ fn command(json: &Json) -> JsValue {
 }
 
 fn replay(
+    loading: &mut Option<JsString>,
     renderer: &mut VideoRenderer,
     frames: &[(String, [f64; 2])],
     record: &Record,
 ) -> Result<(), String> {
     let step = record.field("step").ok_or("no step")?;
+    if let Some(src) = renderer.image().borrow_mut().begin_load() {
+        *loading = Some(src);
+    }
     match (step.get("render"), step.get("load")) {
         (Some(json), None) => renderer.render_command(&command(json)),
         (None, Some(Json::Bool(true))) => {
-            let src = renderer
-                .image()
-                .borrow_mut()
-                .take_request()
+            let src = loading
+                .take()
                 .ok_or("Blink loaded an image the port did not request")?;
             let name = src.to_string_lossy();
             let size = frames.iter().find(|(n, _)| *n == name).map(|(_, s)| *s);
@@ -103,5 +105,6 @@ fn replay(
 record_vectors!(video_renderer, "video/renderer", {
     let mut renderer = VideoRenderer::new(Rc::default());
     let frames = frames();
-    move |record: &Record| replay(&mut renderer, &frames, record)
+    let mut loading = None;
+    move |record: &Record| replay(&mut loading, &mut renderer, &frames, record)
 });
