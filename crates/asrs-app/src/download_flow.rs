@@ -170,8 +170,7 @@ fn page_event(event: &PageEvent, id: WindowId, cx: &mut App) {
         }),
         PageEvent::Close => with_service(cx, DownloadService::close),
         PageEvent::Save(files) => {
-            let files = files.iter().flatten().cloned().collect();
-            with_service(cx, |service| service.save(files));
+            with_service(cx, |service| service.save(files.clone()));
         }
         PageEvent::Alert(message) => prompts::alert((*message).to_owned(), id, cx),
         PageEvent::Error(error) => eprintln!("asrs: the download window: {error:?}"),

@@ -526,6 +526,9 @@ fn replay(
 const SCALE_TOLERANCE: f64 = 1e-5;
 
 fn loading_record(record: &Record) -> Result<(), String> {
+    if field_names(record) != ["kind", "time", "scales"] {
+        return Err(format!("line {}: unexpected record", record.line));
+    }
     let time = match record.field("time") {
         Some(Json::Number(n)) => n.to_string().parse::<f64>().map_err(|e| e.to_string())?,
         other => return Err(format!("time is {other:?}")),
@@ -542,11 +545,20 @@ fn loading_record(record: &Record) -> Result<(), String> {
 
 /// The bars where Blink on macOS puts them; the space between them is the body font's.
 fn bars_record(record: &Record) -> Result<(), String> {
+    if field_names(record) != ["kind", "container", "bars"] {
+        return Err(format!("line {}: unexpected record", record.line));
+    }
+    let (width, height) = (f64::from(WIDTH), f64::from(HEIGHT) - 46.0);
+    let expected = floats(&cve(record, "container")?)?;
+    let actual = loading::container(width, height);
+    if expected != actual {
+        return Err(format!("container: {expected:?} vs {actual:?}"));
+    }
     let Cve::Array(bars) = cve(record, "bars")? else {
         return Err("bars is not an array".to_owned());
     };
     let expected: Vec<Vec<f64>> = bars.iter().map(floats).collect::<Result<_, _>>()?;
-    let actual = loading::bars(f64::from(WIDTH), f64::from(HEIGHT) - 46.0);
+    let actual = loading::bars(width, height);
     if expected == actual.map(|bar| bar.to_vec()) {
         Ok(())
     } else {
@@ -607,5 +619,5 @@ fn main() {
         eprintln!("{failure}\n");
     }
     assert!(failures.is_empty(), "{} failures", failures.len());
-    assert!(phases > 300 && bars == 1, "{phases} phases, {bars} bars");
+    assert_eq!((phases, bars), (358, 1), "loading records");
 }

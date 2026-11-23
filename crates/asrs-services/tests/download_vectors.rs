@@ -383,9 +383,9 @@ impl Replay {
                     .and_then(Json::as_array)
                     .ok_or("files")?
                     .iter()
-                    .map(|f| f.as_str().expect("a name").to_string_lossy())
+                    .map(|f| Some(f.as_str().expect("a name").to_string_lossy()))
                     .collect();
-                downloader.save_message(files, host);
+                threw = downloader.save_message(files, host).err();
             }
             "ready" => {
                 if self.ready.insert(index(args, "client")) {

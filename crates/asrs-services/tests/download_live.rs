@@ -304,7 +304,7 @@ fn run_main(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<Js
             "save" => service.save(
                 array(step, "files")
                     .iter()
-                    .map(|file| file.as_str().expect("a name").to_string_lossy())
+                    .map(|file| Some(file.as_str().expect("a name").to_string_lossy()))
                     .collect(),
             ),
             "answer" => {

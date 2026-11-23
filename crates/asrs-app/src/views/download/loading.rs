@@ -31,10 +31,16 @@ pub fn scales(elapsed_ms: f64) -> [f64; BARS] {
     })
 }
 
-/// Each bar's unscaled `[x, y, width, height]` in a list of this size.
-pub fn bars(width: f64, height: f64) -> [[f64; 4]; BARS] {
+/// `[x, y, width, height]` of `div.loading` in a list of this size.
+pub fn container(width: f64, height: f64) -> [f64; 4] {
     let total = BARS as f64 * BAR_WIDTH + (BARS - 1) as f64 * SPACE;
     let (left, top) = ((width - total) / 2.0, (height - LINE_HEIGHT) / 2.0);
+    [left, top, total, LINE_HEIGHT]
+}
+
+/// Each bar's unscaled `[x, y, width, height]` in a list of this size.
+pub fn bars(width: f64, height: f64) -> [[f64; 4]; BARS] {
+    let [left, top, ..] = container(width, height);
     std::array::from_fn(|i| {
         let x = left + i as f64 * (BAR_WIDTH + SPACE);
         [x, top, BAR_WIDTH, BAR_HEIGHT]

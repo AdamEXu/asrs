@@ -10,7 +10,6 @@ use asrs_services::download::downloader::{
     SftpId, Thrown, TimerId, Token, WindowMessage, is_plain_name,
 };
 use asrs_services::download::page::alert_runs;
-use asrs_services::download::window::friendly_error;
 use asrs_services::path::PathStyle;
 
 const UNSAFE: [&str; 17] = [
@@ -43,6 +42,48 @@ const SAFE: [&str; 9] = [
     "caf\u{e9} \u{65e5}\u{672c}.hoot",
     "folder",
 ];
+/// What Windows opens as a device or as a stream of another file.
+const WINDOWS_UNSAFE: [&str; 15] = [
+    "NUL",
+    "con.wpilog",
+    "Aux .rlog",
+    "PRN.a.b.hoot",
+    "CONIN$",
+    "conout$.wpilog",
+    "COM1.wpilog",
+    "com9",
+    "LPT0.rlog",
+    "lpt\u{b2}.wpilog",
+    "12:30.wpilog",
+    "ab:c.wpilog",
+    "x.exe::$DATA",
+    ":x.wpilog",
+    "x.wpilog:",
+];
+const WINDOWS_SAFE: [&str; 9] = [
+    "CONSOLE.wpilog",
+    "xNUL.wpilog",
+    "x.con",
+    "COM.wpilog",
+    "COM10.wpilog",
+    "COMx.wpilog",
+    "LPT\u{b4}.wpilog",
+    "nul_.hoot",
+    "FRC_20250101_120000_Q1.wpilog",
+];
+const STYLES: [PathStyle; 2] = [PathStyle::Posix, PathStyle::Win32];
+
+fn refused(style: PathStyle) -> Vec<&'static str> {
+    let windows: &[&str] = match style {
+        PathStyle::Posix => &[],
+        PathStyle::Win32 => &WINDOWS_UNSAFE,
+    };
+    UNSAFE.iter().chain(windows).copied().collect()
+}
+
+fn some(files: &[&str]) -> Vec<Option<String>> {
+    files.iter().map(|file| Some((*file).to_owned())).collect()
+}
 
 #[derive(Default)]
 struct Host {
@@ -52,7 +93,8 @@ struct Host {
     gets: Vec<(String, String)>,
     dirs: Vec<String>,
     errors: Vec<String>,
-    timeouts: Vec<f64>,
+    alerts: Vec<String>,
+    timeouts: usize,
     intervals_cleared: usize,
 }
 
@@ -86,8 +128,8 @@ impl DownloadHost for Host {
         self.gets.push((remote.to_owned(), local.to_owned()));
         Ok(self.token())
     }
-    fn set_timeout(&mut self, ms: f64) -> TimerId {
-        self.timeouts.push(ms);
+    fn set_timeout(&mut self, _: f64) -> TimerId {
+        self.timeouts += 1;
         self.token()
     }
     fn clear_timeout(&mut self, _: TimerId) {}
@@ -98,8 +140,10 @@ impl DownloadHost for Host {
         self.intervals_cleared += 1;
     }
     fn send(&mut self, message: WindowMessage) {
-        if let WindowMessage::ShowError(message) = message {
-            self.errors.push(message);
+        match message {
+            WindowMessage::ShowError(message) => self.errors.push(message),
+            WindowMessage::ShowAlert(html) => self.alerts.push(html),
+            WindowMessage::SetList(_) | WindowMessage::SetProgress(_) => {}
         }
     }
     fn show_open_dialog(&mut self, _: &OpenDialog) -> Token {
@@ -167,30 +211,43 @@ fn choose(downloader: &mut Downloader, host: &mut Host, path: &str) {
         .expect("the SFTP session");
 }
 
+/// The window says so, nothing is written, and the connection goes on.
 fn assert_refused(host: &Host, name: &str) {
-    assert_eq!(host.errors.len(), 1, "{name:?}: {:?}", host.errors);
+    assert_eq!(host.alerts.len(), 1, "{name:?}: {:?}", host.alerts);
+    assert_eq!(host.errors, [""; 0], "{name:?}");
     assert!(host.gets.is_empty(), "{name:?}: {:?}", host.gets);
+    assert!(host.dirs.is_empty(), "{name:?}: {:?}", host.dirs);
     assert!(host.dialogs.is_empty(), "{name:?}");
-    assert_eq!(host.timeouts, [1000.0], "{name:?}: no retry was set");
-    assert_eq!(host.intervals_cleared, 1, "{name:?}: still refreshing");
+    assert_eq!((host.timeouts, host.intervals_cleared), (0, 0), "{name:?}");
+}
+
+fn save(downloader: &mut Downloader, files: &[&str], host: &mut Host) {
+    downloader
+        .save_message(some(files), host)
+        .expect("every name is a string");
 }
 
 #[test]
 fn plain_names() {
-    for name in UNSAFE {
-        assert!(!is_plain_name(name), "{name:?}");
+    for style in STYLES {
+        for name in refused(style) {
+            assert!(!is_plain_name(name, style), "{style:?} {name:?}");
+        }
+        for name in WINDOWS_SAFE {
+            assert!(is_plain_name(name, style), "{style:?} {name:?}");
+        }
     }
-    for name in SAFE {
-        assert!(is_plain_name(name), "{name:?}");
+    for name in SAFE.iter().chain(&WINDOWS_UNSAFE) {
+        assert!(is_plain_name(name, PathStyle::Posix), "{name:?}");
     }
 }
 
 #[test]
 fn a_single_log_is_refused_before_its_dialog() {
-    for style in [PathStyle::Posix, PathStyle::Win32] {
-        for name in UNSAFE {
+    for style in STYLES {
+        for name in refused(style) {
             let (mut downloader, mut host) = listed(style, &[entry(name, false)]);
-            downloader.save_message(vec![name.to_owned()], &mut host);
+            save(&mut downloader, &[name], &mut host);
             assert_refused(&host, name);
         }
     }
@@ -198,43 +255,45 @@ fn a_single_log_is_refused_before_its_dialog() {
 
 #[test]
 fn several_logs_are_refused_together() {
-    for name in UNSAFE {
-        let files = ["good.wpilog", name, "other.rlog"];
-        let entries: Vec<DirEntry> = files.iter().map(|f| entry(f, false)).collect();
-        let (mut downloader, mut host) = listed(PathStyle::Posix, &entries);
-        downloader.save_message(files.map(str::to_owned).to_vec(), &mut host);
-        assert_refused(&host, name);
+    for style in STYLES {
+        for name in refused(style) {
+            let files = ["good.wpilog", name, "other.rlog"];
+            let entries: Vec<DirEntry> = files.iter().map(|f| entry(f, false)).collect();
+            let (mut downloader, mut host) = listed(style, &entries);
+            save(&mut downloader, &files, &mut host);
+            assert_refused(&host, name);
+        }
     }
 }
 
 #[test]
 fn a_folder_is_refused() {
-    for name in UNSAFE {
-        let (mut downloader, mut host) = listed(PathStyle::Posix, &[entry(name, true)]);
-        downloader.save_message(vec![name.to_owned()], &mut host);
-        assert_refused(&host, name);
-        assert!(host.dirs.is_empty(), "{name:?}: {:?}", host.dirs);
+    for style in STYLES {
+        for name in refused(style) {
+            let (mut downloader, mut host) = listed(style, &[entry(name, true)]);
+            save(&mut downloader, &[name], &mut host);
+            assert_refused(&host, name);
+        }
     }
 }
 
 #[test]
 fn a_folder_with_an_unsafe_file_writes_nothing() {
-    for name in UNSAFE.iter().copied().filter(|name| !name.starts_with('.')) {
-        let (mut downloader, mut host) = listed(
-            PathStyle::Posix,
-            &[entry("first.wpilog", false), entry("folder", true)],
-        );
-        downloader.save_message(
-            vec!["first.wpilog".to_owned(), "folder".to_owned()],
-            &mut host,
-        );
-        choose(&mut downloader, &mut host, "/save");
-        let (path, token) = host.readdirs.pop().expect("the folder is read");
-        assert_eq!(path, "/logs/folder");
-        let files = vec![entry("good.wpilog", false), entry(name, false)];
-        downloader.on_readdir(token, Ok(files), &mut host);
-        assert_refused(&host, name);
-        assert!(host.dirs.is_empty(), "{name:?}: {:?}", host.dirs);
+    for style in STYLES {
+        for name in refused(style) {
+            if name.starts_with('.') {
+                continue;
+            }
+            let entries = [entry("first.wpilog", false), entry("folder", true)];
+            let (mut downloader, mut host) = listed(style, &entries);
+            save(&mut downloader, &["first.wpilog", "folder"], &mut host);
+            choose(&mut downloader, &mut host, "/save");
+            let (path, token) = host.readdirs.pop().expect("the folder is read");
+            assert_eq!(path, "/logs/folder");
+            let files = vec![entry("good.wpilog", false), entry(name, false)];
+            downloader.on_readdir(token, Ok(files), &mut host);
+            assert_refused(&host, name);
+        }
     }
 }
 
@@ -242,7 +301,7 @@ fn a_folder_with_an_unsafe_file_writes_nothing() {
 #[test]
 fn hidden_entries_and_subfolders_do_not_refuse_a_folder() {
     let (mut downloader, mut host) = listed(PathStyle::Posix, &[entry("folder", true)]);
-    downloader.save_message(vec!["folder".to_owned()], &mut host);
+    save(&mut downloader, &["folder"], &mut host);
     choose(&mut downloader, &mut host, "/save");
     let (_, token) = host.readdirs.pop().expect("the folder is read");
     let files = vec![
@@ -253,7 +312,7 @@ fn hidden_entries_and_subfolders_do_not_refuse_a_folder() {
         entry("good.wpilog", false),
     ];
     downloader.on_readdir(token, Ok(files), &mut host);
-    assert_eq!(host.errors, [""; 0]);
+    assert_eq!(host.alerts, [""; 0]);
     assert_eq!(
         host.gets,
         [(
@@ -269,9 +328,9 @@ fn plain_names_are_saved() {
         let files = ["first.rlog", name];
         let entries: Vec<DirEntry> = files.iter().map(|f| entry(f, false)).collect();
         let (mut downloader, mut host) = listed(PathStyle::Posix, &entries);
-        downloader.save_message(files.map(str::to_owned).to_vec(), &mut host);
+        save(&mut downloader, &files, &mut host);
         choose(&mut downloader, &mut host, "/save");
-        assert_eq!(host.errors, [""; 0], "{name:?}");
+        assert_eq!(host.alerts, [""; 0], "{name:?}");
         assert_eq!(host.gets.len(), 2, "{name:?}");
         assert_eq!(
             host.gets[1],
@@ -280,15 +339,41 @@ fn plain_names_are_saved() {
     }
 }
 
+/// `path.extname(undefined)` throws: at once for the first name, and for a later one when the save
+/// comes to it, so nothing is downloaded.
 #[test]
-fn the_error_shows_the_name_as_text() {
+fn an_undefined_name_ends_the_save() {
+    let entries = [entry("a.wpilog", false), entry("folder", true)];
+    for files in [vec![None], vec![None, Some("a.wpilog".to_owned())]] {
+        let (mut downloader, mut host) = listed(PathStyle::Posix, &entries);
+        let thrown = downloader.save_message(files, &mut host);
+        assert!(thrown.is_err_and(|e| e.ends_with("Received undefined")));
+        assert!(host.dialogs.is_empty());
+    }
+
+    let (mut downloader, mut host) = listed(PathStyle::Posix, &entries);
+    let mut files = some(&["a.wpilog", "folder"]);
+    files.push(None);
+    downloader
+        .save_message(files, &mut host)
+        .expect("the first name is a string");
+    choose(&mut downloader, &mut host, "/save");
+    let (_, token) = host.readdirs.pop().expect("the folder is read");
+    downloader.on_readdir(token, Ok(vec![entry("b.wpilog", false)]), &mut host);
+    assert_eq!(host.dirs, ["/save/folder"]);
+    assert!(host.gets.is_empty(), "{:?}", host.gets);
+    assert!(host.alerts.is_empty() && host.errors.is_empty());
+}
+
+#[test]
+fn the_alert_shows_the_name_as_text() {
     let name = "<img src=x>&amp;/\u{7}..";
     let (mut downloader, mut host) = listed(PathStyle::Posix, &[entry(name, true)]);
-    downloader.save_message(vec![name.to_owned()], &mut host);
-    let html = friendly_error(&host.errors[0], &JsString::from("a"), &JsString::from("p"));
+    save(&mut downloader, &[name], &mut host);
+    let html = JsString::from(host.alerts[0].as_str());
     let text: String = alert_runs(&html).into_iter().map(|run| run.text).collect();
     assert_eq!(
         text,
-        "Unknown error: The robot sent an unsafe file name: <img src=x>&amp;/\u{fffd}.."
+        "Not saved: the robot sent an unsafe file name (<img src=x>&amp;/\u{fffd}..)"
     );
 }
