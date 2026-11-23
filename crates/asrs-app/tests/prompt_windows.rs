@@ -1,11 +1,13 @@
 #![allow(clippy::disallowed_methods)]
 
 //! Replays `prompts/flows` and `prompts/preferences` (oracle/src/genPrompts.ts: upstream's prompt
-//! pages in Blink, driven with real input) through the prompt windows: each flow opens the page's [`PromptWindow`] in a
-//! headless app, gets main's messages, and then the recorded user input as GPUI input events.
+//! pages in Blink, driven with real input) through the prompt windows: each flow opens the page's
+//! [`PromptWindow`] in a headless app, gets main's messages, and then the recorded user input as
+//! GPUI input events.
 //! After the open and after every step the controls, the focused element, the buttons' class,
 //! and the replies, alerts and errors since the previous record must equal the recording, and so
-//! must the bytes a preferences flow's replies leave in `prefs.json`. Every flow runs in an active and in an inactive window, whose blur events GPUI does not deliver.
+//! must the bytes a preferences flow's replies leave in `prefs.json`. Every flow runs in an active
+//! and in an inactive window, whose blur events GPUI does not deliver.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]

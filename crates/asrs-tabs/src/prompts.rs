@@ -1,7 +1,7 @@
 //! The prompt pages as headless models: `src/editRange.ts`, `src/editFov.ts`, `src/renameTab.ts`,
 //! `src/export.ts`, `src/preferences.ts` and, over `asrs_model::unit_conversion_dialog`,
-//! `src/unitConversion.ts`. A view shows [`PromptPage::controls`], reports what the user does to them and acts on the
-//! [`PromptEvent`]s it gets back; `main.ts`'s side of the port is the caller's.
+//! `src/unitConversion.ts`. A view shows [`PromptPage::controls`], reports what the user does to
+//! them and acts on the [`PromptEvent`]s it gets back; `main.ts`'s side of the port is the caller's.
 
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
