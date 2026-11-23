@@ -4,7 +4,8 @@
 //! with real input) through the prompt windows: each flow opens the page's [`PromptWindow`] in a
 //! headless app, gets main's messages, and then the recorded user input as GPUI input events.
 //! After the open and after every step the controls, the focused element, the buttons' class,
-//! and the replies, alerts and errors since the previous record must equal the recording.
+//! and the replies, alerts and errors since the previous record must equal the recording. Every
+//! flow runs in an active and in an inactive window, whose blur events GPUI does not deliver.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
@@ -129,7 +130,7 @@ struct Prompt<'a> {
 }
 
 impl Prompt<'_> {
-    fn open<'a>(cx: &'a mut HeadlessAppContext, page: &str) -> Prompt<'a> {
+    fn open<'a>(cx: &'a mut HeadlessAppContext, page: &str, active: bool) -> Prompt<'a> {
         let (kind, height) = kind(page);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::new(
@@ -150,7 +151,9 @@ impl Prompt<'_> {
                         seen.borrow_mut().push(event.clone());
                     })
                     .detach();
-                    window.activate_window();
+                    if active {
+                        window.activate_window();
+                    }
                     view
                 })
             })
@@ -236,14 +239,14 @@ impl Prompt<'_> {
                 click_count: 1,
             }),
         ];
-        for input in inputs {
-            self.cx
-                .update_window(self.window, |_, window, cx| {
+        self.cx
+            .update_window(self.window, |_, window, cx| {
+                for input in inputs {
                     window.dispatch_event(input, cx);
-                })
-                .expect("the window is open");
-            self.settle();
-        }
+                }
+            })
+            .expect("the window is open");
+        self.settle();
     }
 
     fn apply(&mut self, step: &Cve) -> Result<(), String> {
@@ -389,6 +392,7 @@ fn compare(what: &str, expected: &Cve, actual: &Cve) -> Result<(), String> {
 fn replay(
     cx: &mut HeadlessAppContext,
     records: &[Record],
+    active: bool,
     compared: &mut BTreeMap<String, usize>,
 ) -> Result<(), String> {
     let (open, rest) = records.split_first().expect("a flow has records");
@@ -401,7 +405,7 @@ fn replay(
     let Cve::Array(posts) = cve(open, "posts")? else {
         return Err("posts is not an array".to_owned());
     };
-    let mut prompt = Prompt::open(cx, &page);
+    let mut prompt = Prompt::open(cx, &page, active);
     for post in &posts {
         let data = js_json::to_js(post)?;
         prompt.update(|view, window, cx| view.message(&data, window, cx));
@@ -473,32 +477,34 @@ fn main() {
     let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
     cx.update(asrs_ui::init);
     cx.run_until_parked();
-    let mut compared = BTreeMap::new();
-    let mut failures = Vec::new();
-    let mut flows = 0;
-    let mut start = 0;
-    while start < records.len() {
-        let end = records[start..]
-            .iter()
-            .position(|r| r.string("kind").as_deref() == Some("end"))
-            .map_or(records.len(), |i| start + i + 1);
-        flows += 1;
-        if let Err(e) = replay(&mut cx, &records[start..end], &mut compared) {
-            let flow = records[start].string("flow").unwrap_or_default();
-            failures.push(format!("flow {flow:?}: {e}"));
+    for active in [true, false] {
+        let mut compared = BTreeMap::new();
+        let mut failures = Vec::new();
+        let mut flows = 0;
+        let mut start = 0;
+        while start < records.len() {
+            let end = records[start..]
+                .iter()
+                .position(|r| r.string("kind").as_deref() == Some("end"))
+                .map_or(records.len(), |i| start + i + 1);
+            flows += 1;
+            if let Err(e) = replay(&mut cx, &records[start..end], active, &mut compared) {
+                let flow = records[start].string("flow").unwrap_or_default();
+                failures.push(format!("flow {flow:?}: {e}"));
+            }
+            start = end;
         }
-        start = end;
+        assert!(
+            failures.is_empty(),
+            "{id}: active {active}: {} of {flows} flows differ\n\n{}",
+            failures.len(),
+            failures.join("\n\n")
+        );
+        assert!(flows > 0, "{id}: no flows");
+        assert_eq!(
+            recorded, compared,
+            "{id}: compared counts differ from recorded counts"
+        );
+        println!("{id}: window active {active}: {flows} flows, {compared:?} records equal");
     }
-    assert!(
-        failures.is_empty(),
-        "{id}: {} of {flows} flows differ\n\n{}",
-        failures.len(),
-        failures.join("\n\n")
-    );
-    assert!(flows > 0, "{id}: no flows");
-    assert_eq!(
-        recorded, compared,
-        "{id}: compared counts differ from recorded counts"
-    );
-    println!("{id}: {flows} flows, {compared:?} records equal");
 }

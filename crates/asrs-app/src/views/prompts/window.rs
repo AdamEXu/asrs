@@ -284,6 +284,9 @@ impl PromptWindow {
 
     /// `element.select()`, or `focus()` on a select.
     pub fn select(&mut self, id: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.active(window, cx) != Some(id) {
+            self.commit(window, cx);
+        }
         match self.fields.iter().find(|f| f.id == id).map(|f| &f.widget) {
             Some(Widget::Text(f)) => f.update(cx, |f, cx| f.select(window, cx)),
             Some(Widget::Number(f)) => f.update(cx, |f, cx| f.select(window, cx)),

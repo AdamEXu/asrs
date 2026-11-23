@@ -405,7 +405,7 @@
     "oracle/zones/Asia/Kolkata": {"cases":20,"content":"9d6f982b1323735f","generator":"69a2d4b690f9c4c0","spec":"parity/specs/oracle/zones.fn.json","zone":"Asia/Kolkata","generatedOn":"macos-aarch64"},
     "oracle/zones/Pacific/Auckland": {"cases":20,"content":"fa0a6f3f5b83a239","generator":"3c890a137544a27d","spec":"parity/specs/oracle/zones.fn.json","zone":"Pacific/Auckland","generatedOn":"macos-aarch64"},
     "oracle/zones/UTC": {"cases":20,"content":"c66de66de1d609b3","generator":"a5f7d1c01ba19602","spec":"parity/specs/oracle/zones.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "prompts/flows": {"cases":1801,"content":"a0a44955ac2e14db","generator":"7a5150d7b5c3b3a3","spec":"parity/specs/prompts/flows.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "prompts/flows": {"cases":1865,"content":"a845466efc047399","generator":"52207f2a5703e49e","spec":"parity/specs/prompts/flows.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "regex/engine": {"cases":30000,"content":"e40a050ba624ab32","generator":"07200da29ab5dd04","spec":"parity/specs/regex/engine.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "regex/sites": {"cases":29428,"content":"094e81eb7469edfa","generator":"b885dc8ec0bf27c9","spec":"parity/specs/regex/sites.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "revlog/convert": {"cases":1591,"content":"ce77f18dab454dac","generator":"2eae332bca469106","spec":"parity/specs/revlog/convert.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
