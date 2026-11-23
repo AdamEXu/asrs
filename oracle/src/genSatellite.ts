@@ -84,6 +84,7 @@ function flows(): Flow[] {
 
   add("titles", setType(10), ...["A", "A", "", "", " ", "  two  spaces ", "a\tb\nc\r\nd", "<b>&amp;</b>", "a & b", "\u0000x", "café 日本", "\u{1f4c8} up", "\ud83d", " nbsp ", " em", "x".repeat(300), "Documentation", "香0馚"].map((title) => render(null, title)));
   for (const title of [null, 5, {}, ["a"], true]) add(`title ${JSON.stringify(title)}`, setType(11), render(points(2, 1), "First"), render(points(3, 1), title), render(points(4, 1), "First"), resize(640, 360));
+  for (const title of [null, undefined]) add(`first title ${title}`, setType(11), post("render", { command: points(2, 1), title }), render(points(3, 1), "Later"));
   add("title without a type", render(null, "Alone"), setType(4), render(table([0]), "Alone"), render(table([0]), "Typed"));
 
   add("restore points", restore({ type: 11, visualizer: null }), render(points(2, 1)));

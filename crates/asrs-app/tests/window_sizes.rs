@@ -587,7 +587,7 @@ async fn visibility(cx: &mut AsyncApp, electron: &Electron, report: &mut Report)
         height,
     };
     let build = |_: &mut Window, cx: &mut App| cx.new(|_| Blank);
-    let mut open = |uuid: &str, rect: Rect, cx: &mut AsyncApp| {
+    let open = |uuid: &str, rect: Rect, cx: &mut AsyncApp| {
         cx.update(|cx| windows::open_satellite(cx, uuid, SatellitePlacement::Saved(rect), build))
             .expect("open window")
             .0

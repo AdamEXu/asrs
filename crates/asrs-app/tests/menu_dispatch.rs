@@ -25,6 +25,7 @@ use asrs_model::tab_type::TabType;
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::lifecycle;
 use asrs_services::window_manager::Platform;
+use asrs_tabs::list_cx::SourceListCx;
 use asrs_ui::gpui::{
     HeadlessAppContext, KeyUpEvent, Keystroke, Modifiers, MouseButton, MouseDownEvent,
     MouseUpEvent, NoopTextSystem, PlatformInput, point, px,
@@ -509,8 +510,7 @@ fn keys_reach_the_page_unless_a_text_field_has_focus(app: &mut AppUnderTest, hub
     use SelectionMode::{Idle, Playback, Static};
     let width = app.bounds(hub).width;
     let (play, popup) = ((width - 130.0, 22.0), (width - 59.0, 22.0));
-    let search_top = if cfg!(target_os = "macos") { 73.0 } else { 35.0 };
-    let (search, below) = ((100.0, search_top + 14.0), (100.0, 400.0));
+    let (search, below) = ((100.0, 87.0), (100.0, 400.0));
     assert_eq!(app.mode(hub), Idle);
     app.key(hub, "space");
     assert_eq!(app.mode(hub), Playback);
@@ -663,6 +663,8 @@ fn the_preferences_window_writes_the_file(app: &mut AppUnderTest, hub: WindowId)
     assert_eq!(held(app), (Theme::Dark, Timestamps::Original));
     let source = app.cx.update(|cx| *cx.global::<ThemeSource>());
     assert_eq!(source, ThemeSource::Dark);
+    app.send(hub, Vec::new());
+    assert!(app.hub(hub, |hub| hub.page().tab_dark()));
 
     app.focus(hub);
     let spaced = after.replace(":", ": ");
