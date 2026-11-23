@@ -2187,7 +2187,11 @@ impl Runner {
                     "pause" => sel.pause(),
                     "goIdle" => sel.go_idle(),
                     "togglePlayback" => sel.toggle_playback(),
-                    _ => {}
+                    other => {
+                        return Err(TabsError::Thrown(JsError::type_error(format!(
+                            "unhandled selection call {other}"
+                        ))));
+                    }
                 }
             }
             "set-assets" => {
@@ -2871,7 +2875,12 @@ impl Runner {
                     .and_then(Json::as_str)
                     .map(|s| s.to_string_lossy())
                     .unwrap_or_default(),
-                _ => continue,
+                other => {
+                    return Err(err(format!(
+                        "capture {} is not modeled",
+                        other.to_compact()
+                    )));
+                }
             };
             match kind_name.as_str() {
                 "commands" => {
