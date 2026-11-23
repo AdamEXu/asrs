@@ -10,6 +10,7 @@ use asrs_services::fs::MemFs;
 use asrs_services::lifecycle::AppPaths;
 use asrs_services::path::PathStyle;
 use asrs_services::window_manager::{Platform, WindowManager};
+use asrs_services::windows::Rect;
 
 fn substituted(items: &[BuiltItem]) -> Vec<BuiltItem> {
     items
@@ -92,7 +93,16 @@ fn clicks(platform: Platform, identity: AppIdentity) -> Vec<Effect> {
         br#"{"version":"0","hubs":[],"satellites":[]}"#,
     );
     let mut windows = WindowManager::for_platform(platform);
-    let (hub, _) = windows.create_hub(None);
+    let (hub, options) = windows.create_hub(None);
+    windows.set_bounds(
+        hub,
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: options.width,
+            height: options.height,
+        },
+    );
     let application_state = || JsValue::Null;
     let env = ClickEnv {
         platform,
@@ -102,7 +112,7 @@ fn clicks(platform: Platform, identity: AppIdentity) -> Vec<Effect> {
         fs: &fs,
         paths: &paths,
         windows: &windows,
-        asset_status: "status",
+        asset_status: "AdvantageScope will check for updates periodically.",
         layout_default_path: "AdvantageScope date.json".to_owned(),
         application_state: &application_state,
     };
@@ -144,6 +154,9 @@ fn release_clicks_differ_from_parity_by_the_name_only() {
             differing += usize::from(upstream != release);
         }
         assert_eq!(upstream.len(), release.len());
-        assert_eq!(differing, 5, "About, custom assets, export, two imports");
+        assert_eq!(
+            differing, 6,
+            "About, custom assets, asset status, export, two imports"
+        );
     }
 }

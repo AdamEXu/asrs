@@ -310,7 +310,10 @@ pub fn click(
         Command::AssetDownloadStatus => out.push(Effect::MessageBox {
             window: None,
             sync: false,
-            options: info_box("Asset Download Status", env.asset_status),
+            options: info_box(
+                "Asset Download Status",
+                &env.identity.text(env.asset_status),
+            ),
             then: Then::Nothing,
         }),
         Command::OwletDownloadStatus => out.push(Effect::MessageBox {
@@ -414,7 +417,8 @@ pub fn click(
         Command::NewTab(tab) => to_hub(out, MainToHub::NewTab, tab.to_js()),
         Command::NewTabPopup => {
             if let Some(window) = hub {
-                let width = env.windows.bounds(window).map_or(0.0, |b| b.width);
+                let bounds = env.windows.bounds(window);
+                let width = bounds.expect("an open window has bounds").width;
                 let y = if env.platform == Platform::Windows {
                     48.0
                 } else {
@@ -608,7 +612,13 @@ fn replace_windows(
             .expect("layout::import checked it is an array")
             .to_vec())
     };
-    out.extend(items("hubs")?.into_iter().map(|s| Effect::OpenHub(Some(s))));
-    out.extend(items("satellites")?.into_iter().map(Effect::OpenSatellite));
+    for hub in items("hubs")? {
+        ops::get(&hub, "x")?;
+        out.push(Effect::OpenHub(Some(hub)));
+    }
+    for satellite in items("satellites")? {
+        ops::get(&satellite, "uuid")?;
+        out.push(Effect::OpenSatellite(satellite));
+    }
     Ok(())
 }

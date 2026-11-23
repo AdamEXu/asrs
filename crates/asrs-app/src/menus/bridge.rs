@@ -188,7 +188,13 @@ fn show_application_menu(
             platform::set_application_menu(cx, &menu, dispatch);
         }
         None => {
-            asrs_ui::menu::install_accelerators(cx, table, move |path, _, cx| dispatch(path, cx))
+            let dispatch = Rc::new(dispatch);
+            // The keystroke's window is borrowed until its event ends, and the handlers reach
+            // windows by handle.
+            asrs_ui::menu::install_accelerators(cx, table, move |path, _, cx| {
+                let dispatch = dispatch.clone();
+                cx.defer(move |cx| dispatch(path, cx));
+            });
         }
     }
 }

@@ -232,7 +232,7 @@ impl MainProcess {
     }
 
     /// `hubWindows`, most recently focused first.
-    fn hub_windows(cx: &App) -> Vec<(WindowId, WeakEntity<Hub>)> {
+    pub fn hub_windows(cx: &App) -> Vec<(WindowId, WeakEntity<Hub>)> {
         let Some(main) = cx.try_global::<MainProcess>() else {
             return Vec::new();
         };
@@ -312,6 +312,11 @@ impl MainProcess {
             app_menu::apply_preferences(menu, &prefs);
             Self::install_menu(cx);
         }
+    }
+
+    /// `menuTemplate`, as the last `sendAllPreferences` left it.
+    pub fn menu(cx: &App) -> &[MenuItem] {
+        &cx.global::<MainProcess>().menu
     }
 
     fn install_menu(cx: &mut App) {

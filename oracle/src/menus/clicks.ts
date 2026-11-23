@@ -455,6 +455,8 @@ export async function runClicks(platform: string, packaged: boolean): Promise<vo
   putFile("/fake/array.json", "[]");
   putFile("/fake/number.json", "5");
   putFile("/fake/corrupt.json", "{");
+  putFile("/fake/nullHub.json", JSON.stringify({ hubs: [null, { ...bounds(90), state: {} }], satellites: [], version }));
+  putFile("/fake/nullSatellite.json", JSON.stringify({ hubs: [{ ...bounds(90), state: {} }], satellites: [null], version }));
   const imports: [string[], Reply[]][] = [
     [["/fake/old.json"], [box(0)]],
     [["/fake/unknown.json"], [box(0)]],
@@ -465,6 +467,8 @@ export async function runClicks(platform: string, packaged: boolean): Promise<vo
     [["/fake/one.json"], []],
     [["/fake/one.json", "/fake/two.json", "/fake/other.json", "/fake/old.json"], []],
     [["/fake/one.json", "/fake/corrupt.json"], []],
+    [["/fake/nullHub.json"], []],
+    [["/fake/nullSatellite.json"], []],
     [["/fake/other.json"], packaged ? [boxSync(1)] : []],
     ...((packaged ? [[["/fake/other.json"], [boxSync(0)]]] : []) as [string[], Reply[]][])
   ];
