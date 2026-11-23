@@ -258,9 +258,10 @@ fn character_reference(text: &str) -> Option<(char, usize)> {
     }
     let end = text.find(';')?;
     let digits = text[..end].strip_prefix("&#")?;
-    let code = match digits.strip_prefix(['x', 'X']) {
-        Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-        None => digits.parse().ok()?,
+    let (digits, radix) = match digits.strip_prefix(['x', 'X']) {
+        Some(hex) => (hex, 16),
+        None => (digits, 10),
     };
+    let code = u32::from_str_radix(digits, radix).ok()?;
     Some((char::from_u32(code)?, end + 1))
 }

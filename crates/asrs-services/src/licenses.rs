@@ -57,7 +57,7 @@ fn thrown(error: json::JsonError) -> JsError {
 }
 
 /// The order the list is saved in: `first`, then by name.
-pub fn sort<T>(licenses: &mut Vec<(JsString, T)>, first: &JsString) {
+pub fn sort<T>(licenses: &mut [(JsString, T)], first: &JsString) {
     array_sort(licenses, |(a, _), (b, _)| {
         if a == first {
             return -1.0;

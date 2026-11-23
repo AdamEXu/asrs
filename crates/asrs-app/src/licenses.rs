@@ -30,7 +30,7 @@ pub fn load(cx: &App) -> Result<Vec<License>, String> {
 
 fn read(path: &Path) -> Result<JsString, String> {
     std::fs::read_to_string(path)
-        .map(|text| JsString::from(text))
+        .map(JsString::from)
         .map_err(|e| format!("{}: {e}", path.display()))
 }
 

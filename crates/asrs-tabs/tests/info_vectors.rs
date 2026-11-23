@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 //! Compares `asrs_tabs::info` with the DOM upstream's pages build: `info/*`, written by
 //! `oracle/src/genInfoWindows.ts`.
 
