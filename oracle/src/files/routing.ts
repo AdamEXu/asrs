@@ -534,6 +534,8 @@ async function exportFlow(hub: number): Promise<void> {
   await openFile(PLAIN);
   const next = byFile("hub.html").pop()!.id;
   await domReady(next);
+  await message(next, "set-exporting", true);
+  await message(next, "set-exporting", false);
   await close(next);
 }
 
@@ -553,11 +555,10 @@ async function startup(scenario: string, dsLayout: any): Promise<void> {
     if (scenario === "startup-ds-saved") fakeFs.putFile("/fake/userData/state-dev.json", utf8(JSON.stringify(state)));
     if (scenario === "startup-argv") process.argv.push("--flag", "/logs/x.txt", DS, PLAIN);
     if (scenario === "startup-plain") process.argv.push(PLAIN);
-    if (scenario === "startup-ds" || scenario === "startup-ds-saved") {
-      out({ op: "openFileEarly", path: toTree(PLAIN) });
-      electronFake.fireAppEvent("open-file", {}, PLAIN);
-      out({ op: "openFileEarly", path: toTree(DS) });
-      electronFake.fireAppEvent("open-file", {}, DS);
+    const early = scenario === "startup-argv" ? [PLAIN] : scenario === "startup-plain" ? [] : [PLAIN, DS];
+    for (const path of early) {
+      out({ op: "openFileEarly", path: toTree(path) });
+      electronFake.fireAppEvent("open-file", {}, path);
     }
   });
   const hubs = byFile("hub.html").map((w) => w.id);

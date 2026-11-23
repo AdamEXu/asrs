@@ -246,7 +246,8 @@ pub fn first_open_path(
     opened: impl IntoIterator<Item = String>,
     argv: &[String],
 ) -> Option<String> {
-    first_file_arg(argv).or_else(|| opened.into_iter().last())
+    let opened = opened.into_iter().last();
+    first_file_arg(argv).or(opened)
 }
 
 /// At launch, a stale `ascope-log-path.txt` from an earlier request is deleted unread.

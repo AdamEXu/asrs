@@ -59,9 +59,6 @@ pub fn is_ds_window(state: &JsValue) -> Result<bool, JsError> {
                 .collect();
             Ok(signature(tabs)? == signature(&layout)?)
         }
-        JsValue::Null => Err(JsError::type_error(
-            "Cannot read properties of null (reading 'map')",
-        )),
         _ => Err(JsError::type_error("tabs.map is not a function")),
     }
 }

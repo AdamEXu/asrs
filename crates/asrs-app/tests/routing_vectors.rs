@@ -803,7 +803,7 @@ fn replay(scenario: &str) -> BTreeMap<String, usize> {
 fn while_running() {
     let tally = replay("running");
     for (what, least) in [
-        ("message", 155),
+        ("message", 157),
         ("openFile", 13),
         ("openLogs", 7),
         ("akit", 6),
