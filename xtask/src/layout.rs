@@ -68,6 +68,7 @@ const RULES: &[Rule] = &[
             "asrs-model",
         ],
     ),
+    rule("asrs-ocr", true, &["asrs-js", "asrs-services"]),
     rule(
         "asrs-field3d",
         false,
@@ -94,6 +95,7 @@ const RULES: &[Rule] = &[
             "asrs-tabs",
             "asrs-hub",
             "asrs-services",
+            "asrs-ocr",
             "asrs-field3d",
             "asrs-ui",
         ],

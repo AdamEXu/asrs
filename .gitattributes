@@ -1,3 +1,5 @@
 vendor/** -text
 patches/** -text
 crates/asrs-formats/src/revlog/*.dbc -text
+parity/specs/video/timer/*.clip -text
+crates/asrs-ocr/data/** -text
