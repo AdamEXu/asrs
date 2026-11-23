@@ -41,7 +41,7 @@ struct Case {
     change: Change,
 }
 
-struct TestBinary {
+pub(super) struct TestBinary {
     executable: PathBuf,
     directory: PathBuf,
 }
@@ -369,7 +369,8 @@ fn caught(
     Ok(false)
 }
 
-fn passes(
+/// Whether the tests pass on the vectors in `tree`.
+pub(super) fn passes(
     binaries: &[TestBinary],
     tree: &Path,
     options: &Options,
@@ -409,7 +410,7 @@ fn passes(
     Ok(true)
 }
 
-fn build(options: &Options) -> Result<Vec<TestBinary>> {
+pub(super) fn build(options: &Options) -> Result<Vec<TestBinary>> {
     let mut command = Command::new(cargo_binary());
     command
         .args([

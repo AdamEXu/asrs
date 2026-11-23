@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use asrs_parity::json::{self, Json};
 
@@ -234,6 +234,16 @@ fn sources(options: &Options, work: &Path) -> Result<(String, usize)> {
     let total = all.len();
     let sample = Draw(options.seed).sample(all, options.sample);
 
+    // cargo-mutants runs its own baseline on the mutated packages only, which need not be the
+    // ones the tests are in.
+    let binaries = records::build(options)?;
+    let baseline = Instant::now();
+    let vectors = asrs_parity::vectors::vectors_dir();
+    if !records::passes(&binaries, &vectors, options, Duration::from_secs(3600))? {
+        return Err(format!("mutate: {} fail unmutated", test_names(options)));
+    }
+    let timeout = baseline.elapsed() * 5 + Duration::from_secs(60);
+
     let out = work.join("mutants.out");
     if out.exists() {
         fs::remove_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
@@ -250,7 +260,9 @@ fn sources(options: &Options, work: &Path) -> Result<(String, usize)> {
             "--caught",
             "--unviable",
         ])
-        .args(["--cap-lints", "true"])
+        .args(["--cap-lints", "true", "--baseline", "skip"])
+        .arg("--timeout")
+        .arg(timeout.as_secs().to_string())
         .arg("--jobs")
         .arg(options.jobs.unwrap_or(2).to_string())
         .arg("--output")
@@ -280,7 +292,7 @@ fn sources(options: &Options, work: &Path) -> Result<(String, usize)> {
     // 2: mutants were missed; 3: some timed out.
     if !matches!(status.code(), Some(0 | 2 | 3)) {
         return Err(format!(
-            "cargo mutants failed ({status}); the unmutated tests must pass (logs in {})",
+            "cargo mutants failed ({status}; logs in {})",
             out.join("log").display()
         ));
     }

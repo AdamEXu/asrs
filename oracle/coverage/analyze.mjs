@@ -120,13 +120,16 @@ function upstreamBundle(file) {
   const twin = path.join(request.bundles, path.relative(bundleDir, file));
   // rolldown's runtime helpers are a chunk of their own, with no source and so no map.
   if (!fs.existsSync(twin + ".map")) return null;
+  const script = loadScript(twin, twin + ".map", path.dirname(twin));
   if (!verified.has(file)) {
     // The build date is the only difference between two builds, and its length is fixed.
-    const [a, b] = [file, twin].map((f) => strip(fs.readFileSync(f, "utf8")).length);
+    const text = fs.readFileSync(file, "utf8");
+    const [a, b] = [strip(text), strip(fs.readFileSync(twin, "utf8"))].map((t) => t.length);
     if (a !== b) throw new Error(`${twin} is not the build the oracle ran (${b} characters, not ${a})`);
+    script.length = text.length;
     verified.add(file);
   }
-  return loadScript(twin, twin + ".map", path.dirname(twin));
+  return script;
 }
 
 /** The script a coverage URL names, or null for one that holds no upstream code. */
@@ -176,16 +179,22 @@ function readRun(dir) {
   const states = new Map();
   if (raw.length === 0) throw new Error(`${dir}: the run wrote no coverage`);
   for (const name of raw) {
-    for (const line of fs.readFileSync(path.join(dir, name), "utf8").split("\n")) {
-      if (line === "") continue;
-      for (const script of JSON.parse(line)) {
-        const source = scriptOf(script.url, runtime);
-        if (source === null) continue;
-        if (!states.has(source)) {
-          states.set(source, { hits: new Uint8Array(source.segments.length), keys: [] });
-        }
-        addScript(files, script, source, states.get(source));
+    const takes = fs.readFileSync(path.join(dir, name), "utf8").split("\n").filter((line) => line !== "");
+    const scripts = takes.flatMap((line) => JSON.parse(line));
+    // Only a take in which a script's top level ran reports that script's whole range.
+    const sizes = new Map();
+    const id = (script) => `${script.scriptId} ${script.url}`;
+    for (const script of scripts) {
+      const end = Math.max(...script.functions.map((f) => f.ranges[0].endOffset));
+      sizes.set(id(script), Math.max(sizes.get(id(script)) ?? 0, end));
+    }
+    for (const script of scripts) {
+      const source = scriptOf(script.url, runtime);
+      if (source === null) continue;
+      if (!states.has(source)) {
+        states.set(source, { hits: new Uint8Array(source.segments.length), keys: [] });
       }
+      addScript(files, script, sizes.get(id(script)), source, states.get(source));
     }
   }
   for (const [source, state] of states) addLines(files, source, state);
@@ -195,10 +204,10 @@ function readRun(dir) {
 const MISSED = 1;
 const HIT = 2;
 
-function addScript(files, script, source, state) {
-  const size = Math.max(...script.functions.map((f) => f.ranges[0].endOffset));
+function addScript(files, script, size, source, state) {
   // A page bundle is the tail of the script the window runs, after the fixture.
-  const shift = Math.max(0, size - source.length);
+  const shift = size - source.length;
+  if (shift < 0) throw new Error(`${script.url}: the coverage spans ${size} of its ${source.length} characters`);
   const segs = source.segments;
   const ranges = [];
   for (const fn of script.functions) {
