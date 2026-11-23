@@ -1,7 +1,8 @@
 #![allow(clippy::disallowed_methods)]
 
 //! Replays `dom/histogram/*`, written by `oracle/tools/histogramSpecs.mjs` and recorded in Blink
-//! from upstream's StatisticsRenderer and Chart.js 4.4.0, through `asrs_tabs::histogram`.
+//! from upstream's StatisticsRenderer and Chart.js 4.4.0, through
+//! `asrs_tabs::statistics::renderer` and `asrs_tabs::histogram`.
 //!
 //! Every outermost entry into the chart is compared call for call with the canvas calls upstream
 //! made, after every layout the chart's geometry is compared bit for bit (tick values and
@@ -9,16 +10,21 @@
 //! directions. Within an animation frame the order and kind of Chart.js's callbacks are compared
 //! too. Records the harness does not know fail.
 
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
-use asrs_canvas::text::{FixedAdvance, TextBackend};
+use asrs_canvas::text::FixedAdvance;
 use asrs_canvas::{Call, Raster, trace};
 use asrs_js::string::{JsError, JsString};
+use asrs_js::time::Clock;
+use asrs_js::value::{JsObject, JsValue};
 use asrs_parity::vectors::{encoded_match, load, values_match, vectors_dir};
 use asrs_parity::{Json, Record, Utf16String, Value};
-use asrs_tabs::histogram::{
-    Env, EventKind, Histogram, HistogramCommand, HistogramField, ScaleLayout, Work,
-};
+use asrs_tabs::histogram::{EventKind, Histogram, ScaleLayout, Work};
+use asrs_tabs::statistics::renderer::{StatisticsGeometry, StatisticsRenderer};
+use asrs_tabs::statistics::values::StatisticsRow;
+use asrs_tabs::statistics::{StatisticsCommand, StatisticsField};
 
 fn case_ids() -> Vec<String> {
     let dir = vectors_dir().join("dom/histogram");
@@ -91,24 +97,72 @@ fn assert_numbers(expected: &[f64], actual: &[f64], what: &str) {
     );
 }
 
-fn command(value: &Value) -> HistogramCommand {
+const STATS: [&str; 22] = [
+    "count",
+    "min",
+    "max",
+    "mean",
+    "median",
+    "mode",
+    "geometricMean",
+    "harmonicMean",
+    "quadraticMean",
+    "standardDeviation",
+    "medianAbsoluteDeviation",
+    "interquartileRange",
+    "skewness",
+    "percentile01",
+    "percentile05",
+    "percentile10",
+    "percentile25",
+    "percentile50",
+    "percentile75",
+    "percentile90",
+    "percentile95",
+    "percentile99",
+];
+
+/// The recorder leaves the values table's part of the commands out, which `dom/statistics-view`
+/// covers; each statistic is 0 here.
+fn command(value: &Value) -> StatisticsCommand {
     assert_eq!(
         keys(value),
         ["changeCounter", "bins", "stepSize", "fields"],
         "command keys"
     );
-    HistogramCommand {
+    let mut stats = JsObject::new();
+    for key in STATS {
+        stats.insert(key, JsValue::Number(0.0));
+    }
+    StatisticsCommand {
         change_counter: number(get(value, "changeCounter")),
         bins: numbers(get(value, "bins")),
         step_size: number(get(value, "stepSize")),
         fields: items(get(value, "fields"))
             .iter()
-            .map(|f| HistogramField {
+            .map(|f| StatisticsField {
                 title: string(get(f, "title")),
-                color: string(get(f, "color")).to_string_lossy(),
-                counts: numbers(get(f, "histogramCounts")),
+                color: JsValue::String(string(get(f, "color"))),
+                histogram_counts: numbers(get(f, "histogramCounts")),
+                stats: stats.clone(),
             })
             .collect(),
+    }
+}
+
+struct PageClock(Rc<Cell<f64>>);
+
+impl Clock for PageClock {
+    fn now(&self) -> f64 {
+        self.0.get()
+    }
+}
+
+struct FixedWidth;
+
+impl StatisticsGeometry for FixedWidth {
+    fn values_offset_width(&mut self, _rows: &[StatisticsRow]) -> f64 {
+        0.0
     }
 }
 
@@ -228,10 +282,9 @@ fn canvas_size(chart: &Histogram) -> (f64, f64) {
 
 struct Replay {
     id: String,
-    text: FixedAdvance,
-    chart: Option<Histogram>,
-    command: Option<HistogramCommand>,
-    now: f64,
+    renderer: Option<StatisticsRenderer>,
+    command: Option<StatisticsCommand>,
+    now: Rc<Cell<f64>>,
     /// The current frame's time, how many of its callbacks run after the hub's own, and how many
     /// of the queued ones the next frame runs before them.
     frame: f64,
@@ -247,18 +300,28 @@ struct Replay {
 }
 
 impl Replay {
-    fn chart(&mut self) -> &mut Histogram {
-        self.chart.as_mut().expect("a chart was created")
+    fn renderer(&mut self) -> &mut StatisticsRenderer {
+        self.renderer.as_mut().expect("a chart was created")
     }
 
-    /// Runs `body` on the chart with the recorded `Date.now()`.
-    fn run<T>(&mut self, body: impl FnOnce(&mut Histogram, &mut Env<'_>) -> T) -> T {
-        let text: &mut dyn TextBackend = &mut self.text;
-        let mut env = Env {
-            text,
-            now: self.now,
-        };
-        body(self.chart.as_mut().expect("a chart was created"), &mut env)
+    fn chart(&mut self) -> &mut Histogram {
+        self.renderer().histogram_mut().expect("a mounted chart")
+    }
+
+    fn attached(&self) -> bool {
+        let histogram = self
+            .renderer
+            .as_ref()
+            .and_then(StatisticsRenderer::histogram);
+        histogram.is_some_and(Histogram::is_attached)
+    }
+
+    fn callbacks(&self) -> usize {
+        let histogram = self
+            .renderer
+            .as_ref()
+            .and_then(StatisticsRenderer::histogram);
+        histogram.map_or(0, Histogram::callbacks)
     }
 
     fn check(
@@ -333,9 +396,7 @@ impl Replay {
 
     fn run_callbacks(&mut self, count: usize, what: &str) {
         for _ in 0..count {
-            let (work, result) = self
-                .run(|chart, env| chart.run_callback(env))
-                .expect("a queued callback");
+            let (work, result) = self.renderer().run_callback().expect("a queued callback");
             let calls = self.chart().take_calls();
             if work == Work::Idle {
                 assert!(calls.1.is_empty(), "{} {what}: idle frame drew", self.id);
@@ -388,18 +449,19 @@ impl Replay {
         if kind != "create" && kind != "frame" {
             assert_eq!(number(&value("id")), 0.0, "{what}: one chart per fixture");
         }
-        let attach = kind == "resize" && !self.chart.as_ref().is_some_and(Histogram::is_attached);
+        let attach = kind == "resize" && !self.attached();
         if let Ok(t) = record.value("t") {
-            self.now = number(&t);
-            if self.now > self.frame && !attach {
+            let now = number(&t);
+            self.now.set(now);
+            if now > self.frame && !attach {
                 self.no_pending_work(&what);
-                self.frame = self.now;
-                let queued = self.chart.as_ref().map_or(0, Histogram::callbacks);
+                self.frame = now;
+                let queued = self.callbacks();
                 self.rest = queued - self.first;
                 let first = std::mem::take(&mut self.first);
                 self.run_callbacks(first, &what);
             }
-            assert!(attach || self.now == self.frame, "{what}: not in its frame");
+            assert!(attach || now == self.frame, "{what}: not in its frame");
         }
         let in_frame = matches!(kind.as_str(), "event" | "draw" | "resize") && !attach;
         if !in_frame {
@@ -407,11 +469,14 @@ impl Replay {
         }
         let key = match kind.as_str() {
             "create" => {
-                assert!(self.chart.is_none(), "{what}: one chart per fixture");
-                let mut chart = Histogram::new(number(&value("dpr")));
-                let calls = chart.canvas().calls.clone();
-                chart.record_calls();
-                self.chart = Some(chart);
+                assert!(self.renderer.is_none(), "{what}: one chart per fixture");
+                let clock = Rc::new(PageClock(self.now.clone()));
+                let text = Rc::new(RefCell::new(FixedAdvance));
+                let mut renderer = StatisticsRenderer::new(clock, text);
+                renderer.mount(number(&value("dpr")), Box::new(FixedWidth));
+                self.renderer = Some(renderer);
+                let calls = self.chart().canvas().calls.clone();
+                self.chart().record_calls();
                 let canvas = canvas_size(self.chart());
                 let what = format!("{} {what}", self.id);
                 self.check_calls(record, &calls, canvas, &what);
@@ -424,7 +489,7 @@ impl Replay {
                     "{what}: the attach resize has no size"
                 );
                 let container = pair(&value("container"));
-                let result = self.run(|chart, env| chart.attach(container, env));
+                let result = self.renderer().attach(container);
                 let calls = self.chart().take_calls();
                 let canvas = canvas_size(self.chart());
                 self.check(record, &result, calls, canvas, &what);
@@ -467,7 +532,7 @@ impl Replay {
                 }
                 let dark = boolean(record, "dark");
                 let command = self.command.clone().expect("a command");
-                let result = self.run(|chart, env| chart.render(&command, dark, env));
+                let result = self.renderer().render_command(&command, dark);
                 let calls = self.chart().take_calls();
                 let canvas = canvas_size(self.chart());
                 self.check(record, &result, calls, canvas, &what);
@@ -493,8 +558,8 @@ impl Replay {
                 "dom"
             }
             "frame" => {
-                if self.chart.is_some() {
-                    self.first = self.chart().callbacks() - self.rest;
+                if self.renderer.is_some() {
+                    self.first = self.callbacks() - self.rest;
                     let rest = std::mem::take(&mut self.rest);
                     self.run_callbacks(rest, &what);
                 }
@@ -510,10 +575,9 @@ fn replay(id: &str) -> Replay {
     let vector = load(id).unwrap_or_else(|e| panic!("{id}: {e}"));
     let mut replay = Replay {
         id: id.to_owned(),
-        text: FixedAdvance,
-        chart: None,
+        renderer: None,
         command: None,
-        now: f64::NAN,
+        now: Rc::new(Cell::new(f64::NAN)),
         frame: f64::NEG_INFINITY,
         rest: 0,
         first: 0,
@@ -586,4 +650,79 @@ fn the_kept_display_list_paints_what_the_whole_history_paints() {
             "{id}: the kept calls paint something else"
         );
     }
+}
+
+#[test]
+fn callbacks_run_around_the_hubs_own() {
+    let clock = Rc::new(Cell::new(1000.0));
+    let text = Rc::new(RefCell::new(FixedAdvance));
+    let mut renderer = StatisticsRenderer::new(Rc::new(PageClock(clock.clone())), text);
+    let mut stats = JsObject::new();
+    for key in STATS {
+        stats.insert(key, JsValue::Number(0.0));
+    }
+    let data = |change_counter, counts: [f64; 2]| StatisticsCommand {
+        change_counter,
+        bins: vec![0.0, 1.0],
+        step_size: 1.0,
+        fields: vec![StatisticsField {
+            title: JsString::from("/Field"),
+            color: JsValue::string("#2b66a2"),
+            histogram_counts: counts.to_vec(),
+            stats: stats.clone(),
+        }],
+    };
+    let queued = |r: &StatisticsRenderer| r.histogram().map_or(0, Histogram::callbacks);
+    renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+    assert!(
+        renderer.table().rows().is_empty(),
+        "nothing before the chart has a canvas"
+    );
+
+    renderer.mount(1.0, Box::new(FixedWidth));
+    renderer.attach((400.0, 300.0)).unwrap();
+    renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+    assert_eq!(renderer.histogram_left(), Some(10.0));
+    let [x, y, base, ..] = renderer.histogram().unwrap().bars()[0][0];
+    let hover = (x, (y + base) / 2.0);
+    renderer.frame_rest();
+    let chart = renderer.histogram_mut().unwrap();
+    chart.pointer(EventKind::MouseMove, hover.0, hover.1);
+    renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+    assert_eq!(
+        queued(&renderer),
+        1,
+        "the event waits behind the hub's frame"
+    );
+    renderer.frame_rest();
+    assert_eq!(queued(&renderer), 1, "the hover animation's first frame");
+
+    for _ in 0..4 {
+        clock.set(clock.get() + 1000.0);
+        renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+        renderer.frame_rest();
+    }
+    assert_eq!(queued(&renderer), 0, "the animation is over");
+    renderer.frame(&data(2.0, [9.0, 1.0]), false).unwrap();
+    assert_eq!(queued(&renderer), 1, "requested by render");
+    renderer.frame_rest();
+    assert_eq!(queued(&renderer), 1);
+    let chart = renderer.histogram_mut().unwrap();
+    chart.pointer(EventKind::MouseMove, hover.0, hover.1 + 1.0);
+    let before = renderer.histogram().unwrap().revision();
+    clock.set(clock.get() + 16.0);
+    renderer.frame(&data(2.0, [9.0, 1.0]), false).unwrap();
+    assert!(
+        renderer.histogram().unwrap().revision() > before,
+        "drawn before the hub's frame"
+    );
+
+    let chart = renderer.histogram_mut().unwrap();
+    chart.pointer(EventKind::MouseOut, 0.0, 0.0);
+    clock.set(clock.get() + 1000.0);
+    for _ in 0..6 {
+        renderer.frame_rest();
+        clock.set(clock.get() + 1000.0);
+    }
+    assert_eq!(queued(&renderer), 0, "a hidden tab's callbacks run too");
 }

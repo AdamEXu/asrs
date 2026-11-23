@@ -20,7 +20,22 @@ pub struct Windows {
     handles: Vec<(WindowId, AnyWindowHandle)>,
     /// Open modal prompts with their parents.
     modals: Vec<(WindowId, WindowId)>,
+    /// Windows that have not been shown yet.
+    hidden: Vec<WindowId>,
+    on_closed: Vec<(WindowId, OnClosed)>,
 }
+
+type OnClosed = Box<dyn FnOnce(&mut App)>;
+
+/// Stands in for the platform's frame where windows have none: the height of the title bar of a
+/// framed window.
+#[cfg(feature = "parity")]
+pub struct ScriptedFrame {
+    pub title_bar: f64,
+}
+
+#[cfg(feature = "parity")]
+impl Global for ScriptedFrame {}
 
 impl Default for Windows {
     fn default() -> Self {
@@ -28,6 +43,8 @@ impl Default for Windows {
             manager: WindowManager::new(),
             handles: Vec::new(),
             modals: Vec::new(),
+            hidden: Vec::new(),
+            on_closed: Vec::new(),
         }
     }
 }
@@ -46,7 +63,15 @@ pub fn init(cx: &mut App) {
             let (id, _) = windows.handles.remove(i);
             windows.manager.closed(id);
             windows.modals.retain(|(modal, _)| *modal != id);
+            windows.hidden.retain(|hidden| *hidden != id);
+            let listeners = std::mem::take(&mut windows.on_closed);
+            let (closed, open): (Vec<_>, Vec<_>) =
+                listeners.into_iter().partition(|(window, _)| *window == id);
+            windows.on_closed = open;
             close_modals(cx, id);
+            for (_, listener) in closed {
+                listener(cx);
+            }
         }
     })
     .detach();
@@ -82,23 +107,46 @@ impl Windows {
     /// Registers a hub window a parity scenario opened headless, so it can parent prompts and
     /// take the application menu's clicks.
     #[cfg(feature = "parity")]
-    pub fn adopt_hub(cx: &mut App, handle: AnyWindowHandle) -> WindowId {
+    pub fn adopt_hub(cx: &mut App, handle: AnyWindowHandle, bounds: Rect) -> WindowId {
         let windows = cx.global_mut::<Windows>();
         let (id, _) = windows.manager.create_hub(None);
         windows.handles.push((id, handle));
+        windows.manager.set_bounds(id, bounds);
         windows.manager.focus(id);
         id
     }
 
-    /// The open window of this kind a parity scenario drives.
+    /// The open window of this kind a parity scenario drives, counted in opening order.
     #[cfg(feature = "parity")]
-    pub fn of_kind(cx: &App, kind: WindowKind) -> Option<AnyWindowHandle> {
+    pub fn of_kind(cx: &App, kind: WindowKind, index: usize) -> Option<AnyWindowHandle> {
         let windows = cx.global::<Windows>();
         windows
             .handles
             .iter()
-            .find(|(id, _)| windows.manager.kind(*id) == Some(kind))
+            .filter(|(id, _)| windows.manager.kind(*id) == Some(kind))
+            .nth(index)
             .map(|(_, h)| *h)
+    }
+
+    /// `window.isVisible()`.
+    pub fn is_visible(cx: &mut App, id: WindowId) -> bool {
+        if cx.global::<Windows>().hidden.contains(&id) {
+            return false;
+        }
+        let Some(handle) = Self::handle(cx, id) else {
+            return false;
+        };
+        handle
+            .update(cx, |_, window, _| {
+                asrs_ui::platform::native_window(window).is_none_or(|native| native.is_visible())
+            })
+            .unwrap_or(false)
+    }
+
+    /// `window.once("closed", listener)`.
+    pub fn on_closed(cx: &mut App, id: WindowId, listener: impl FnOnce(&mut App) + 'static) {
+        let windows = cx.global_mut::<Windows>();
+        windows.on_closed.push((id, Box::new(listener)));
     }
 
     /// `BrowserWindow.getFocusedWindow()`.
@@ -143,6 +191,58 @@ pub fn close(cx: &mut App, id: WindowId) {
             .ok();
     })
     .detach();
+}
+
+/// `window.setAspectRatio(lock)`, then `window.setContentSize(width, height)`, for the size
+/// `resize` computes from `window.getContentSize()`. Not a window's own task on macOS, where
+/// AppKit answers a resize by notifying GPUI.
+pub fn set_aspect_ratio(
+    cx: &mut App,
+    id: WindowId,
+    lock: f64,
+    resize: impl FnOnce((f64, f64)) -> Option<(f64, f64)> + 'static,
+) {
+    let Some(handle) = Windows::handle(cx, id) else {
+        return;
+    };
+    cx.spawn(async move |cx| {
+        let native = handle.update(cx, |_, window, cx| {
+            asrs_ui::platform::set_aspect_ratio(window, lock);
+            let native = asrs_ui::platform::native_window(window);
+            if native.is_none() {
+                let size = window.viewport_size();
+                let (width, height) = (f32::from(size.width), f32::from(size.height));
+                if let Some((width, height)) = resize((f64::from(width), f64::from(height))) {
+                    resize_window(window, width, height, cx);
+                }
+                return None;
+            }
+            native.map(|native| (native, resize))
+        });
+        if let Ok(Some((native, resize))) = native
+            && let Some((width, height)) = resize(native.content_size())
+        {
+            let min = native.content_size_for_frame(SATELLITE_MIN.0, SATELLITE_MIN.1);
+            native.set_content_size(width.max(min.0), height.max(min.1));
+        }
+    })
+    .detach();
+}
+
+/// `createSatellite`'s `minWidth` and `minHeight`, which `setContentSize` keeps to.
+const SATELLITE_MIN: (f64, f64) = (200.0, 100.0);
+
+fn resize_window(window: &mut Window, width: f64, height: f64, cx: &mut App) {
+    window.resize(asrs_ui::gpui::size(
+        asrs_ui::gpui::px(width as f32),
+        asrs_ui::gpui::px(height as f32),
+    ));
+    // The headless platform resizes its windows without the notification real ones send.
+    #[cfg(feature = "parity")]
+    if cx.has_global::<ScriptedFrame>() {
+        window.bounds_changed(cx);
+    }
+    let _ = cx;
 }
 
 pub type Opening<V> = asrs_ui::gpui::Result<(WindowId, Entity<V>)>;

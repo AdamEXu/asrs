@@ -7,11 +7,11 @@ mod model;
 mod native;
 mod segmented;
 mod select;
-mod skia;
+pub(crate) mod skia;
 mod slider;
 pub mod style;
 
-pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry};
+pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry, text_field_focused};
 pub use model::{FieldModel, FieldValue, PlainText, RangeModel};
 pub use native::{Checkbox, Progress, paint_checkbox, paint_progress, paint_text_field};
 pub use segmented::{Segment, SegmentedControl, segment_boxes};

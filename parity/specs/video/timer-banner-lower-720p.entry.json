@@ -1,0 +1,1 @@
+{ "entry": "genTimer", "args": ["clip", "parity/specs/video/timer/banner-lower-720p.clip"], "inputs": ["timer/banner-lower-720p.clip"] }

@@ -1,0 +1,208 @@
+{
+  "about": "Interaction (U23): a 2D field popped out, whose window takes the field's aspect ratio without a lock; the camera menu locked to the robot, then a pan and a trackpad zoom, which the satellite's saved state holds; a second field tab with a rotated field opened after it. state.json at the end holds the windows' sizes after the ratio changed them",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "robot",
+                    "logKey": "/Odometry/Robot",
+                    "logType": "Pose2d",
+                    "visible": true,
+                    "options": {
+                      "bumpers": ""
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "field",
+      "probes": [
+        ".field-2d-canvas",
+        ".field-2d-scroll"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 200,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Locked to Robot"
+      ]
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "field-locked",
+      "probes": [
+        ".field-2d-canvas"
+      ]
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 200,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Unlocked"
+      ]
+    },
+    {
+      "wait": 200
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 210
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 230
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 230
+    },
+    {
+      "wait": 200
+    },
+    {
+      "wheel": {
+        "x": 300,
+        "y": 150,
+        "deltaX": 0,
+        "deltaY": 120,
+        "precise": true
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "capture": "field-moved",
+      "probes": [
+        ".field-2d-canvas"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        6.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "capture": "field-later",
+      "probes": [
+        ".field-2d-canvas"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "capture": "hub",
+      "probes": [
+        ".field-2d-canvas"
+      ]
+    }
+  ]
+}

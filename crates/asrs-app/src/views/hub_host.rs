@@ -8,19 +8,21 @@ use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 
 use asrs_hub::hub::{HubModel, HubPage, HubView};
 use asrs_hub::sidebar::SidebarGeometry;
+use asrs_js::string::JsError;
 use asrs_js::time::{Rng, SystemClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_log::realm::JsRealm;
-use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::messages::{HubToMain, MainToHub, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::Preferences;
+use asrs_model::selection_impl::KeyTarget;
 use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_services::window_manager::Platform;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use asrs_ui::gpui::{
-    AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
-    Window,
+    AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, KeyDownEvent,
+    WeakEntity, Window,
 };
 
 use super::canvas_tabs::JoysticksTab;
@@ -33,14 +35,14 @@ use super::source_list::ListsGeometry;
 use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
 use crate::main_process::MainProcess;
 use crate::menus::bridge::{self, EffectHandler};
-use crate::menus::context::{self, Effect, MenuEnv};
+use crate::menus::context::{self, ContextMenu, Effect, MenuEnv};
+use crate::satellite::Satellite;
 use crate::windows::Windows;
 
 struct FrameView {
     geometry: FrameGeometry,
     canvas_text: Rc<RefCell<dyn TextBackend>>,
     lists: ListsGeometry,
-    dark: bool,
     sidebar: ViewGeometry,
 }
 
@@ -58,7 +60,7 @@ impl HubView for FrameView {
     }
 
     fn dark(&self) -> bool {
-        self.dark
+        self.geometry.dark()
     }
 
     fn sidebar_geometry(&mut self) -> &mut dyn SidebarGeometry {
@@ -104,10 +106,12 @@ impl HubView for FrameView {
         Some(self.canvas_text.clone())
     }
 
-    fn lay_out_console(&self, controller: &mut ConsoleController, renderer: &mut ConsoleRenderer) {
-        let layout = ConsoleLayout::default();
-        controller.set_geometry(Box::new(layout.clone()));
-        renderer.set_geometry(Box::new(layout));
+    fn lay_out_console(
+        &self,
+        controller: Option<&mut ConsoleController>,
+        renderer: &mut ConsoleRenderer,
+    ) {
+        lay_out_console(controller, renderer);
     }
 
     fn tab_renderer(
@@ -116,12 +120,37 @@ impl HubView for FrameView {
         preferences: Option<&Preferences>,
         is_battery: bool,
     ) -> Option<Box<dyn TabRenderer<HubPage>>> {
-        match kind {
-            TabType::Field3d => Some(Box::new(Field3dTab::new(preferences, is_battery))),
-            TabType::Joysticks => Some(Box::new(JoysticksTab::default())),
-            _ => None,
-        }
+        view_renderer(kind, preferences, is_battery)
     }
+}
+
+/// The renderers a hub's or a satellite's view builds itself.
+pub(super) fn view_renderer(
+    kind: TabType,
+    preferences: Option<&Preferences>,
+    is_battery: bool,
+) -> Option<Box<dyn TabRenderer<HubPage>>> {
+    match kind {
+        TabType::Field3d => Some(Box::new(Field3dTab::new(preferences, is_battery))),
+        TabType::Joysticks => Some(Box::new(JoysticksTab::default())),
+        _ => None,
+    }
+}
+
+pub(super) fn lay_out_console(
+    controller: Option<&mut ConsoleController>,
+    renderer: &mut ConsoleRenderer,
+) {
+    let layout = ConsoleLayout::default();
+    if let Some(controller) = controller {
+        controller.set_geometry(Box::new(layout.clone()));
+    }
+    renderer.set_geometry(Box::new(layout));
+}
+
+pub(super) fn canvas_text() -> Rc<RefCell<dyn TextBackend>> {
+    let text: Box<dyn TextBackend> = platform_backend().unwrap_or_else(|| Box::new(FixedAdvance));
+    Rc::new(RefCell::new(text))
 }
 
 /// The `Math.random()` calls upstream's hub bundle makes while its imports evaluate, before
@@ -242,15 +271,13 @@ impl HubEntityHost {
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
+        geometry.set_dark(dark);
         let sidebar_geometry = ViewGeometry::new();
         let lists = ListsGeometry::default();
-        let canvas_text: Box<dyn TextBackend> =
-            platform_backend().unwrap_or_else(|| Box::new(FixedAdvance));
         let view = Box::new(FrameView {
             geometry: geometry.clone(),
-            canvas_text: Rc::new(RefCell::new(canvas_text)),
+            canvas_text: canvas_text(),
             lists: lists.clone(),
-            dark,
             sidebar: sidebar_geometry.clone(),
         });
         let mut config = HubConfig::new(view);
@@ -271,10 +298,13 @@ impl HubEntityHost {
         let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
         let handle = window.window_handle();
         let weak = hub.downgrade();
+        let scheme = geometry.clone();
         cx.subscribe(&hub, move |_, event, cx| match event {
             HubEvent::Console { warn: true, text } => eprintln!("asrs: {text}"),
             HubEvent::Exception { task, error } => eprintln!("asrs: {task}: {error}"),
-            HubEvent::Main(message) => show_context_menu(handle, weak.clone(), dark, message, cx),
+            HubEvent::Main(message) => {
+                show_context_menu(handle, weak.clone(), scheme.dark(), message, cx);
+            }
             _ => {}
         })
         .detach();
@@ -310,25 +340,22 @@ impl HubEntityHost {
     }
 }
 
-/// What a click in a context menu of the hub window `handle` does: messages sent back to the
-/// hub, and prompts whose reply has further effects. The source list help window is not wired
-/// yet.
-fn menu_effects(handle: AnyWindowHandle, hub: WeakEntity<Hub>) -> EffectHandler {
+/// `sendMessage(window, ..)` to the window a menu popped up for.
+type Send = Rc<dyn Fn(&Effect, &mut App)>;
+
+/// What a click in a context menu of the window `handle` does: messages `send` sends back to it,
+/// and prompts whose reply has further effects. The source list help window is not wired yet.
+fn menu_effects(handle: AnyWindowHandle, send: Send) -> EffectHandler {
     Rc::new(move |effects, cx| {
         for effect in effects {
-            run_effect(effect, handle, &hub, cx);
+            run_effect(effect, handle, &send, cx);
         }
     })
 }
 
-fn run_effect(effect: Effect, handle: AnyWindowHandle, hub: &WeakEntity<Hub>, cx: &mut App) {
-    if let Some(message) = effect.to_hub() {
-        if let Some(hub) = hub.upgrade() {
-            hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
-        }
-        return;
-    }
+fn run_effect(effect: Effect, handle: AnyWindowHandle, send: &Send, cx: &mut App) {
     match effect {
+        Effect::Send { .. } => send(&effect, cx),
         Effect::WriteClipboard(JsValue::String(ref text)) => {
             cx.write_to_clipboard(ClipboardItem::new_string(text.to_string_lossy()))
         }
@@ -337,7 +364,7 @@ fn run_effect(effect: Effect, handle: AnyWindowHandle, hub: &WeakEntity<Hub>, cx
             let Some(parent) = Windows::id_of(cx, handle) else {
                 return;
             };
-            let effects = menu_effects(handle, hub.clone());
+            let effects = menu_effects(handle, send.clone());
             let request = prompt.clone();
             let opened = prompts::ask(cx, parent, &request, move |value, cx| {
                 match prompt.reply(value) {
@@ -351,6 +378,59 @@ fn run_effect(effect: Effect, handle: AnyWindowHandle, hub: &WeakEntity<Hub>, cx
         }
         other => eprintln!("asrs: context menu effect not available yet: {other:?}"),
     }
+}
+
+fn send_to_hub(hub: WeakEntity<Hub>) -> Send {
+    Rc::new(move |effect, cx| {
+        if let (Some(message), Some(hub)) = (effect.to_hub(), hub.upgrade()) {
+            hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
+        }
+    })
+}
+
+fn send_to_satellite(satellite: WeakEntity<Satellite>) -> Send {
+    Rc::new(move |effect, cx| {
+        if let (Some(message), Some(satellite)) = (effect.to_satellite(), satellite.upgrade()) {
+            satellite.update(cx, |satellite, cx| {
+                satellite.handle_main_message(&message, cx)
+            });
+        }
+    })
+}
+
+/// Pops up `menu`, the context menu main answers a message of the window's page with, if any.
+fn popup(
+    handle: AnyWindowHandle,
+    what: &str,
+    menu: Result<Option<ContextMenu>, JsError>,
+    send: Send,
+    cx: &mut App,
+) {
+    let menu = match menu {
+        Ok(Some(menu)) => menu,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("asrs: {what}: {error:?}");
+            return;
+        }
+    };
+    let on_effects = menu_effects(handle, send);
+    let platform = Platform::current();
+    let _ = handle.update(cx, |_, window, cx| {
+        bridge::popup_context(window, cx, platform, &menu, on_effects)
+    });
+}
+
+/// The context menu a satellite's message handler pops up for `message`, if any.
+pub(crate) fn show_satellite_menu(
+    handle: AnyWindowHandle,
+    satellite: WeakEntity<Satellite>,
+    message: &NamedMessage<SatelliteToMain>,
+    cx: &mut App,
+) {
+    let menu = context::for_satellite_message(message);
+    let name = message.name.name();
+    popup(handle, name, menu, send_to_satellite(satellite), cx);
 }
 
 /// The context menu `main.ts` pops up for `message`, if any.
@@ -372,19 +452,8 @@ fn show_context_menu(
         _ => None,
     };
     let env = MenuEnv { dark, recent_units };
-    let menu = match context::for_hub_message(message, &env) {
-        Ok(Some(menu)) => menu,
-        Ok(None) => return,
-        Err(error) => {
-            eprintln!("asrs: {}: {error:?}", message.name.name());
-            return;
-        }
-    };
-    let on_effects = menu_effects(handle, hub);
-    let platform = Platform::current();
-    let _ = handle.update(cx, |_, window, cx| {
-        bridge::popup_context(window, cx, platform, &menu, on_effects)
-    });
+    let menu = context::for_hub_message(message, &env);
+    popup(handle, message.name.name(), menu, send_to_hub(hub), cx);
 }
 
 impl FrameHost for HubEntityHost {
@@ -404,11 +473,6 @@ impl FrameHost for HubEntityHost {
         self.hub.read(cx).model()
     }
 
-    fn editable_focused(&self, cx: &App) -> bool {
-        self.sidebar_geometry.search_focused()
-            || FrameHost::hub(self, cx).sidebar().number_input_focused()
-    }
-
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {
         self.hub
             .update(cx, |hub, cx| hub.update(cx, |model, _| f(model)))
@@ -418,6 +482,15 @@ impl FrameHost for HubEntityHost {
         self.hub.update(cx, |hub, cx| {
             hub.update(cx, |_, host| host.send_main_message(message))
         });
+    }
+
+    fn key_down(&mut self, event: &KeyDownEvent, code: &str, cx: &mut App) -> bool {
+        let m = event.keystroke.modifiers;
+        self.input(cx, |hub| {
+            hub.page_mut()
+                .selection_mut()
+                .key_down(code, m.platform, m.control, KeyTarget::Other)
+        })
     }
 
     fn slot(&mut self, slot: FrameSlot, _window: &mut Window, _cx: &mut App) -> Option<AnyElement> {

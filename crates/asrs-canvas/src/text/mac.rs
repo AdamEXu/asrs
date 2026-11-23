@@ -20,10 +20,9 @@ use core_text::font_descriptor::{
 use core_text::line::CTLine;
 use core_text::run::CTRun;
 use core_text::string_attributes::kCTFontAttributeName;
-use icu_properties::CodePointSetData;
-use icu_properties::props::EmojiPresentation;
 
 use super::font::FontKey;
+use super::shaping::{emoji_clusters, hb_scale, round, words};
 use super::{
     Bounds, Family, FontMetrics, FontSpec, Glyph, Mask, Shaped, ShapedGlyph, TextBackend, relax,
 };
@@ -159,7 +158,7 @@ fn create_font(spec: &FontSpec) -> Face {
         family => {
             let name = match family {
                 Family::SansSerif => "Helvetica",
-                Family::Monospace => "Courier",
+                Family::Monospace | Family::Courier => "Courier",
                 Family::Arial => "Arial",
                 Family::HelveticaNeue => "Helvetica Neue",
                 _ => "Times",
@@ -249,37 +248,15 @@ fn vertical_metrics(font: &CTFont) -> FontMetrics {
     }
 }
 
-/// The clusters of `text` in UTF-16 `[from, to)`, each with whether Blink's
-/// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
-/// sequence with VS16, a skin tone modifier, a keycap or a ZWJ; VS15 forces text.
-fn emoji_clusters(text: &str, from: isize, to: isize) -> Vec<(isize, isize, bool)> {
-    let presentation = CodePointSetData::new::<EmojiPresentation>();
-    let mut clusters: Vec<(isize, isize, bool)> = Vec::new();
-    let mut at = 0isize;
-    let mut joined = false;
-    for c in text.chars() {
-        let units = c.len_utf16() as isize;
-        if at >= from && at < to {
-            let extends = matches!(c, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
-                || ('\u{1f3fb}'..='\u{1f3ff}').contains(&c)
-                || ('\u{e0020}'..='\u{e007f}').contains(&c);
-            match clusters.last_mut() {
-                Some(last) if last.1 == at && (extends || joined) => {
-                    last.1 = at + units;
-                    match c {
-                        '\u{fe0e}' => last.2 = false,
-                        '\u{fe0f}' | '\u{200d}' | '\u{20e3}' => last.2 = true,
-                        _ if extends => last.2 = true,
-                        _ => {}
-                    }
-                }
-                _ => clusters.push((at, at + units, presentation.contains(c))),
-            }
-            joined = c == '\u{200d}';
-        }
-        at += units;
+/// The byte offset in `text` of each UTF-16 offset, the one past a surrogate pair's first unit
+/// being the next character's.
+fn byte_offsets(text: &str) -> Vec<usize> {
+    let mut out = Vec::with_capacity(text.len() + 1);
+    out.push(0);
+    for (byte, c) in text.char_indices() {
+        out.resize(out.len() + c.len_utf16(), byte + c.len_utf8());
     }
-    clusters
+    out
 }
 
 fn has_color_glyphs(font: &CTFont) -> bool {
@@ -290,38 +267,6 @@ fn run_font(run: &CTRun) -> Option<CTFont> {
     // SAFETY: a CoreText constant, valid for the life of the process.
     let key = unsafe { CFString::wrap_under_get_rule(kCTFontAttributeName) };
     run.attributes()?.find(&key)?.clone().downcast::<CTFont>()
-}
-
-/// Blink's `CachingWordShapeIterator` for space-normalized text: every space is a word of its
-/// own and shapes apart from its neighbours.
-fn words(text: &str) -> impl Iterator<Item = &str> {
-    let mut rest = text;
-    std::iter::from_fn(move || {
-        if rest.is_empty() {
-            return None;
-        }
-        let end = if rest.starts_with(' ') {
-            1
-        } else {
-            rest.find(' ').unwrap_or(rest.len())
-        };
-        let (word, tail) = rest.split_at(end);
-        rest = tail;
-        Some(word)
-    })
-}
-
-/// HarfBuzz's `em_mult` scaling of whole font units to 16.16 at Blink's font scale, the size
-/// truncated to 16.16.
-fn hb_scale(units: i64, upem: u32, size: f32) -> i32 {
-    let x_scale = (size * 65536.0) as i64;
-    let x_mult = (x_scale << 16) / i64::from(upem);
-    ((units * x_mult + 32768) >> 16) as i32
-}
-
-/// Skia's `SkScalarRoundToScalar`.
-fn round(v: f32) -> f32 {
-    (v + 0.5).floor()
 }
 
 fn bitmap_context(width: usize, height: usize) -> CGContext {
@@ -491,13 +436,18 @@ impl CoreText {
             })
             .collect();
         let mut overrides = Vec::new();
+        if runs.iter().all(|(_, font)| font.is_none()) {
+            return overrides;
+        }
+        let bytes = byte_offsets(word);
         for (k, (start, font)) in runs.iter().enumerate() {
             let Some(font) = font else {
                 continue;
             };
             let end = runs.get(k + 1).map_or(len, |r| r.0);
             let fallback = exact_copy(font, size);
-            for (from, to, emoji) in emoji_clusters(word, *start, end) {
+            let run = word.get(bytes[*start as usize]..bytes[end as usize]);
+            for (from, to, emoji) in emoji_clusters(run.unwrap_or_default(), *start) {
                 let font = if emoji {
                     let named = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
                     exact_copy(&named, size)

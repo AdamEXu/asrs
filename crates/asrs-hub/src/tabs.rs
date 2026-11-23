@@ -186,10 +186,11 @@ pub trait TabsHost {
     fn canvas_env(&self) -> Option<CanvasEnv> {
         None
     }
-    /// Gives a new Console tab the layout its view draws, in place of its `ConsoleDom`.
+    /// Gives a new Console tab, or a satellite's renderer without one, the layout its view draws,
+    /// in place of its `ConsoleDom`.
     fn lay_out_console(
         &self,
-        _controller: &mut ConsoleController,
+        _controller: Option<&mut ConsoleController>,
         _renderer: &mut ConsoleRenderer,
     ) {
     }
@@ -220,7 +221,7 @@ pub trait TabFactory<Cx: ?Sized> {
 }
 
 /// A tab's `div.tab` in the tab bar.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TitleElement {
     pub text: JsString,
     /// The `class` attribute's tokens in order (`tab`, then `tab-hovered` and `tab-selected`
@@ -398,6 +399,23 @@ pub struct SatelliteUpdate {
     pub title: JsValue,
 }
 
+impl fmt::Debug for SatelliteUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SatelliteUpdate")
+            .field("uuid", &self.uuid)
+            .field("title", &self.title)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for SatelliteUpdate {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid == other.uuid
+            && self.title == other.title
+            && Rc::ptr_eq(&self.command, &other.command)
+    }
+}
+
 impl SatelliteUpdate {
     pub fn to_message(&self) -> NamedMessage<HubToMain> {
         let mut o = JsObject::new();
@@ -435,9 +453,9 @@ pub struct Tabs<Cx: ?Sized> {
 }
 
 impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
-    /// The constructor: the default tabs, with Line Graph selected.
-    pub fn new(factory: Box<dyn TabFactory<Cx>>, cx: &mut Cx) -> Self {
-        let mut tabs = Tabs {
+    /// No tabs at all, which only a satellite's page starts with.
+    pub(crate) fn empty(factory: Box<dyn TabFactory<Cx>>) -> Self {
+        Tabs {
             factory,
             tabs: Vec::new(),
             selected: num(0.0),
@@ -456,7 +474,35 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             messages: Vec::new(),
             bar_sensor: ScrollSensor::default(),
             shadows: [None, None],
-        };
+        }
+    }
+
+    /// A satellite's only tab: the renderer for `kind` and no controller.
+    pub(crate) fn set_satellite_tab(
+        &mut self,
+        cx: &mut Cx,
+        type_value: &JsValue,
+        kind: TabType,
+    ) -> Result {
+        let parts = self.factory.create(cx, Some(kind))?;
+        self.tabs = vec![Tab {
+            type_value: type_value.clone(),
+            kind: Some(kind),
+            title: JsValue::string(""),
+            element: Rc::default(),
+            content_hidden: false,
+            controller: parts.controller,
+            renderer: parts.renderer,
+            uuid: JsValue::String(parts.uuid),
+            controls_height: num(0.0),
+        }];
+        self.selected = num(0.0);
+        Ok(())
+    }
+
+    /// The constructor: the default tabs, with Line Graph selected.
+    pub fn new(factory: Box<dyn TabFactory<Cx>>, cx: &mut Cx) -> Self {
+        let mut tabs = Tabs::empty(factory);
         let start = tabs
             .update_controls_height(cx)
             .and_then(|()| {
@@ -536,6 +582,14 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             out.edit = out.edit.or(o.edit);
         }
         (out, errors)
+    }
+
+    /// The frame callbacks every tab's renderer requested itself.
+    pub fn animation_frame(&mut self, cx: &mut Cx) -> Vec<JsError> {
+        self.tabs
+            .iter_mut()
+            .flat_map(|tab| tab.renderer.animation_frame(cx))
+            .collect()
     }
 
     /// `getSelectedTab()`.
@@ -909,6 +963,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     pub fn set_active_satellites(&mut self, uuids: Vec<JsValue>) {
         self.active_satellites = uuids;
+    }
+
+    /// The last `set-active-satellites`.
+    pub fn active_satellites(&self) -> &[JsValue] {
+        &self.active_satellites
     }
 
     pub fn is_valid_uuid(&self, uuid: &JsValue) -> bool {

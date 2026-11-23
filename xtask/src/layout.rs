@@ -68,6 +68,7 @@ const RULES: &[Rule] = &[
             "asrs-model",
         ],
     ),
+    rule("asrs-ocr", true, &["asrs-js", "asrs-services"]),
     rule(
         "asrs-field3d",
         false,
@@ -94,6 +95,7 @@ const RULES: &[Rule] = &[
             "asrs-tabs",
             "asrs-hub",
             "asrs-services",
+            "asrs-ocr",
             "asrs-field3d",
             "asrs-ui",
         ],
@@ -296,7 +298,7 @@ fn dependencies(manifest: &str) -> Vec<(String, bool)> {
     deps
 }
 
-fn collect_rs(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result {
+pub(crate) fn collect_rs(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result {
     for entry in fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
         let path = entry.map_err(|e| e.to_string())?.path();
         if path.is_dir() {

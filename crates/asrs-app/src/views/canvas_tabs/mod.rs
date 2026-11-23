@@ -26,7 +26,7 @@ pub use settings::Control;
 
 /// `div.swerve-canvas-container`, `div.mechanism-svg-container` and
 /// `div.points-background-container` are `height: calc(100% + 10px)` from the bottom of the
-/// renderer element.
+/// renderer element, and `height: 100%` in a satellite.
 const OVERHANG: f64 = 10.0;
 
 #[derive(Default)]
@@ -106,8 +106,13 @@ fn local(rect: [f64; 4], origin: [f64; 4]) -> Div {
         .h(px(rect[3] as f32))
 }
 
-fn overhung(rect: [f64; 4]) -> [f64; 4] {
-    [rect[0], rect[1] - OVERHANG, rect[2], rect[3] + OVERHANG]
+fn overhung(hub: &HubModel, rect: [f64; 4]) -> [f64; 4] {
+    let overhang = if hub.page().is_satellite() {
+        0.0
+    } else {
+        OVERHANG
+    };
+    [rect[0], rect[1] - overhang, rect[2], rect[3] + overhang]
 }
 
 impl<H: FrameHost> HubFrame<H> {

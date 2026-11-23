@@ -11,6 +11,7 @@ pub mod pixel;
 pub mod pixel3d;
 pub mod protocol;
 pub mod random;
+pub mod tally;
 pub mod utf16;
 pub mod vectors;
 

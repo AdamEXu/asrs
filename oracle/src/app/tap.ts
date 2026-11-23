@@ -105,6 +105,26 @@ export function installTap(readGl: boolean) {
     });
   };
 
+  // A satellite draws in its message port's handler, outside any animation frame.
+  const onmessage = Object.getOwnPropertyDescriptor(MessagePort.prototype, "onmessage")!;
+  Object.defineProperty(MessagePort.prototype, "onmessage", {
+    ...onmessage,
+    set(this: MessagePort, handler: ((event: MessageEvent) => void) | null) {
+      const wrapped =
+        handler === null
+          ? null
+          : (event: MessageEvent) => {
+              for (const entry of entries) entry.drew = false;
+              try {
+                handler.call(this, event);
+              } finally {
+                if (readGl) for (const entry of entries) if (entry.drew) readBack(entry);
+              }
+            };
+      onmessage.set!.call(this, wrapped);
+    }
+  });
+
   const describe = (canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
     const path: string[] = [];

@@ -271,7 +271,7 @@ fn text_scene(path: &Path) -> Result<TextScene, String> {
 
 fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
     let mut backend =
-        platform_backend().ok_or("no text backend for this platform yet (units R12, R13)")?;
+        platform_backend().ok_or("no text backend for this platform yet (unit R12)")?;
     let mut rows: [Option<[u8; 256]>; lut::ROWS] = [None; lut::ROWS];
     let mut residuals = Vec::new();
     for k in 0..lut::ROWS {
@@ -317,4 +317,100 @@ fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
         eprintln!("  {line}");
     }
     Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use asrs_canvas::text::FontSpec;
+    use asrs_canvas::text::linux::Fontations;
+    use sha2::{Digest, Sha256};
+
+    use super::*;
+
+    const MAX_CHANNEL: u8 = 24;
+
+    /// A font of the scenes that is not the file the manifest records for the render host.
+    fn unpinned_font(manifest: &Json) -> Option<String> {
+        let fonts = manifest.get("host").and_then(|h| h.get("fonts")).unwrap();
+        let Json::Object(fonts) = fonts else {
+            panic!("linux.json records no host fonts");
+        };
+        let Some(mut backend) = Fontations::new() else {
+            return Some("no fonts".to_owned());
+        };
+        [
+            "12px system-ui",
+            "200 12px system-ui",
+            "bold 12px system-ui",
+            "10px sans-serif",
+            "italic 10px sans-serif",
+        ]
+        .iter()
+        .find_map(|css| {
+            let (path, _) = backend.font_file(&FontSpec::parse(css).unwrap()).unwrap();
+            let hash = format!("{:x}", Sha256::digest(fs::read(&path).unwrap()));
+            let recorded = fonts
+                .iter()
+                .any(|(_, h)| h.as_str().is_some_and(|h| h.to_string_lossy() == hash));
+            (!recorded).then(|| format!("{css} resolves to {}", path.display()))
+        })
+    }
+
+    /// The committed text scenes against Chromium's CPU canvas on the Linux render host, at the
+    /// gate `cargo xtask canvas diff` holds text to, wherever its fonts are installed.
+    #[test]
+    fn text_scenes_match_the_linux_render_host() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/vectors/canvas");
+        let manifest = json::parse(&fs::read_to_string(root.join("linux.json")).unwrap()).unwrap();
+        let scenes = manifest.get("scenes").and_then(Json::as_array).unwrap();
+        assert!(scenes.len() >= 12);
+        if let Some(problem) = unpinned_font(&manifest) {
+            assert!(std::env::var_os("ASRS_CI").is_none(), "{problem}");
+            eprintln!("skipped: {problem}, not a font of the render host (FONTCONFIG_FILE)");
+            return;
+        }
+        let mut glyphs = platform_backend().zip(MaskGammaLut::embedded());
+        for entry in scenes {
+            let name = string(entry.get("scene").unwrap()).unwrap();
+            let file = |ext: &str| root.join(format!("scenes-linux/{name}.{ext}"));
+            let scene =
+                asrs_js::json::parse_str(&fs::read_to_string(file("json")).unwrap()).unwrap();
+            let number = |k: &str| js_number(scene.get(k), k).unwrap();
+            let (dpr, text) = (number("dpr"), js_text(scene.get("gate")).unwrap() == "text");
+            let (width, height) = (
+                (number("width") * dpr) as u32,
+                (number("height") * dpr) as u32,
+            );
+            let cmds = scene.get("cmds").and_then(JsValue::as_array).unwrap();
+            let pixmap =
+                render_list(width, height, cmds, &mut HashMap::new(), &mut glyphs).unwrap();
+            let ours = pixel::Rgba {
+                width,
+                height,
+                data: pixels::to_straight_rgba(&pixmap),
+            };
+            let background = scene.get("background").and_then(JsValue::as_array).unwrap();
+            let channel = |i: usize| js_number(background.get(i), "background").unwrap() as u8;
+            let background = [channel(0), channel(1), channel(2)];
+            let composite = |image: &pixel::Rgba| pixel::composite(image, background);
+            let reference = pixel::read_png(&file("png")).unwrap();
+            let stats = pixel::compare(&composite(&reference), &composite(&ours), background)
+                .unwrap()
+                .stats;
+            eprintln!(
+                "{name}: {} differing, max channel {}",
+                stats.mismatch, stats.max_channel
+            );
+            if text {
+                assert_eq!(stats.mismatch, 0, "{name}");
+                assert!(
+                    stats.max_channel <= MAX_CHANNEL,
+                    "{name}: {}",
+                    stats.max_channel
+                );
+            } else {
+                assert!(stats.mismatch_pct <= 0.2 && stats.max_blob <= 64, "{name}");
+            }
+        }
+    }
 }

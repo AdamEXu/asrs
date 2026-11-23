@@ -705,7 +705,7 @@ pub fn replay(spec_path: &Path, options: &Options) -> Result<Vec<Emit>, String> 
                         .map_err(|e| err(format!("{}: set-preferences: {e:?}", where_())))?;
                     preferences = Some(p);
                 }
-                _ => {}
+                other => return Err(format!("{}: main message {other} is not modeled", where_())),
             }
         } else if let Some(event) = step.get("event") {
             let kind = event

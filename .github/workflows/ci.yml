@@ -96,6 +96,17 @@ jobs:
             pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
             libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev \
             libvulkan-dev mesa-vulkan-drivers
+      - name: Cache the render host's fonts
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/asrs-fonts
+          key: asrs-fonts-${{ hashFiles('xtask/hosts/linux/fonts.sh') }}
+      - name: Install the render host's fonts
+        if: runner.os == 'Linux'
+        run: |
+          xtask/hosts/linux/fonts.sh ~/.cache/asrs-fonts "$RUNNER_TEMP/asrs-fonts"
+          echo "FONTCONFIG_FILE=$RUNNER_TEMP/asrs-fonts/fonts.conf" >> "$GITHUB_ENV"
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
@@ -108,6 +119,7 @@ jobs:
       - name: Layout, vendored gpui-pre and generated tables
         run: |
           cargo xtask layout
+          cargo xtask harness
           cargo xtask gpui verify
           cargo xtask gpui features
           cargo xtask tables units --check
@@ -119,8 +131,10 @@ jobs:
           cargo clippy -p asrs-ui -p asrs-app --all-targets --locked
           --features asrs-ui/parity,asrs-app/parity -- -D warnings
       - name: Test
+        timeout-minutes: 30
         run: cargo test --workspace --locked --no-fail-fast
       - name: Test (parity features)
+        timeout-minutes: 30
         run: >-
           cargo test -p asrs-ui -p asrs-app --locked
           --features asrs-ui/parity,asrs-app/parity --no-fail-fast

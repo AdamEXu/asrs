@@ -259,6 +259,36 @@ mismatch panics with the differ's report. `$ASRS_PARITY_VECTORS` overrides the d
 `cargo xtask parity`). The Rust side of `fn` is `asrs-cli fn`, which speaks the same protocol;
 ported functions are registered in `crates/asrs-cli/src/functions.rs` under their oracle name.
 
+## Coverage
+
+`cargo xtask oracle coverage <spec>... --file <upstream file>...` runs specs under V8 precise
+(block) coverage and reports, per upstream TypeScript file and function, which lines they execute.
+
+```sh
+cargo xtask oracle coverage dom/field-2d \
+  --file shared/renderers/Field2dRenderer.ts --file hub/controllers/Field2dController.ts \
+  --require shared/renderers/Field2dRenderer.ts:273-345
+```
+
+Nothing under `oracle/src` or in `build.mjs` knows about it, so no vector depends on it:
+`coverage/preload.cjs` is loaded through `NODE_OPTIONS` into every process of the run (the entry,
+its worker threads and the Electron windows it opens, over the DevTools protocol),
+`coverage/buildPreload.cjs` rebuilds the bundles with source maps into `target/oracle/coverage`,
+and `coverage/rolldown.config.mjs` does the same for upstream's worker bundles. A run whose output
+differs from its committed vector fails. `coverage/analyze.mjs` maps the ranges back:
+
+- Module evaluation does not count, and a run's own lines leave out what the same harness executes
+  on an empty input (a fixture without steps, no requests), so starting the hub reaches nothing.
+- "Lines only some runs reach" groups lines by the set of runs reaching them. A block only one
+  fixture of many reaches is what most of the unit's fixtures never test.
+- Runs that execute exactly the same lines are listed. They may still differ in values.
+- V8 loses the zero count after a `return` at the next block of the same statement list; the
+  analysis restores it from the parsed script.
+- A function no run's bundle contains is listed as such, not left out of the total.
+
+The command fails when a run reaches none of the `--file`s or misses a `--require` (a function or
+a line range). `jsdom` fixtures and hub sessions are covered too.
+
 ## Shims (`src/shims.ts`)
 
 Imported first by every entry point: `window` and `self` alias `globalThis`;
@@ -987,6 +1017,22 @@ and captures `scrollTop` (`/*console-layout:top*/`), which Chromium's scroll anc
 macOS's Courier, so the test runs there only; the log leaves out CJK, whose fallback advance differs
 from Blink's.
 
+### Statistics and Metadata layout, line breaking
+
+`dom/statistics-layout/*` and `dom/metadata-layout/*`
+(`crates/asrs-app/tests/statistics_metadata_layout.rs`) record what Blink lays the two tabs' tables
+out as, with `"geometry": "real"` at 1x, 1.5x, 2x and in a narrow window. `node
+oracle/tools/u14Specs.mjs` writes the specs; edit the script, not the specs. Before each capture a
+`/*layout:command*/` eval replaces the controller's `getCommand` and returns the command; the
+capture's eval returns the container's boxes and every row as `[height, cells]`, a cell as its rect
+and its text nodes with their line rects. The text is macOS's, so the test runs there only. CJK
+advances in Courier differ (#273): only the vertical positions of those cells are compared, and the
+1.5x fixture leaves CJK out.
+
+`dom/line-break/*` (`crates/asrs-canvas/tests/line_break.rs`) record where Blink starts a line in a
+box of width 0: `pairs` for every pair of printable ASCII characters between two letters, `strings`
+for words, punctuation, other scripts and random mixtures of them.
+
 ### Mechanism and Points renderers
 
 `dom/mechanism/<case>` and `dom/points/<case>` (`crates/asrs-tabs/tests/mechanism_points_dom.rs`)
@@ -1166,6 +1212,10 @@ loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift
 can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
 `selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
+`form/number-keys` is the same entry on the number inputs of the Statistics tab: the element may
+be an `<input>`, for which `ArrowUp` and `ArrowDown` are keys too. Its fixture is written by
+`oracle/tools/u14Specs.mjs` and covers `step` attributes, start values and modifiers.
+
 ### Number insertion vectors
 
 `form/number-insert` (`src/genNumberInsert.ts`) records what Chromium lets the user insert into an
@@ -1253,21 +1303,28 @@ Scenario file:
 | `scales`, `themes` | `[1,2]`, `["light","dark"]` | variants; one launch each |
 | `gl` | `false` | 3D scenario: GL switches and drawing-buffer dumps |
 | `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra files seeded into userData: JSON values, or `{"$file": path}` for a file under `parity/scenarios` |
+| `robot` | | `{account, files, stall}`: the robot `robotServer.ts` plays for the run on 127.0.0.1, where the scenario's `prefs.robotAddress` points |
 | `actions` | | in order, below |
 
 Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-files` message;
 `app:<name>` is a log generated by `src/app/logs.ts` with upstream's `WPILOGEncoder` into
 `inputs/`), `{"main": name, "data": ...}` (any main-to-hub message, dispatched on the hub's
 `messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
-`{"selection": [method, ...args]}`, `{"mouse": "move"|"down"|"up"|"click", "x", "y"}`,
+`{"selection": [method, ...args]}`,
+`{"mouse": "move"|"down"|"up"|"click", "x", "y", "modifiers": [...]}`,
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
-`{"key": keyCode, "modifiers": [...]}`, `{"dialog": button index | file name | null}` (queued
-answer for the next dialog), `{"menu": [label, ...]}` (clicks the item at that label path of the
+`{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
+answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the
 context menu that popped up; neither side shows menus natively), `{"appMenu": [label, ...]}`
 (clicks, for the hub window, the one application menu item that has one of these labels, which
-differ per platform), `{"prompt": page | null}`
-(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export` or `preferences`: later input and captures go to
-that prompt window, whose content size is its own; `null` waits until it has closed),
+differ per platform), `{"prompt": page | "hub" | null, "index": n}`
+(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export`, `preferences`, `satellite` or `download`:
+later input and captures go to that window, the `index`th open one of its page (default 0), whose
+content size is its own unless the action has a `width` and `height`, and a satellite's captures hold
+the state the satellite saved; `null` waits until it has closed; `hub` goes back to the hub and leaves
+satellites open),
+`{"download": "listed" | text | number}` (waits until the download window shows its list and no
+alert, an alert or progress text that starts so, or that much of its progress bar),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

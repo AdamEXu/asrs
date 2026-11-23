@@ -5,6 +5,8 @@ pub enum Family {
     SansSerif,
     Serif,
     Monospace,
+    /// `Courier`, which Chromium takes for `Courier New` where only that is installed.
+    Courier,
     /// The family of Chromium's `-webkit-small-control` font on macOS, which form controls use.
     Arial,
     /// The first family of Chart.js's default font, which only macOS has.
@@ -186,7 +188,7 @@ fn families(list: &str) -> Option<Family> {
             "monospace" if !quoted => Some(Family::Monospace),
             "helvetica" => Some(Family::SansSerif),
             "times" => Some(Family::Serif),
-            "courier" => Some(Family::Monospace),
+            "courier" => Some(Family::Courier),
             "arial" => Some(Family::Arial),
             "helvetica neue" if cfg!(target_os = "macos") => Some(Family::HelveticaNeue),
             _ => None,

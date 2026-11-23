@@ -19,7 +19,7 @@ asrs as a whole is a derived work of AdvantageScope: every crate ports its
 TypeScript, CSS and C sources (including the WPILOG indexer,
 `src/hub/dataSources/wpilog/indexer/wpilogIndexer.c`). Also taken from upstream:
 
-- `www/symbols` icons, embedded into `asrs-ui` at build time, and `www/textures`,
+- `www/symbols` and `icons/download` icons, embedded into `asrs-ui` at build time, and `www/textures`,
   `icons`, `bundledAssets` and `licenses`, copied into `assets/` by `cargo xtask assets`.
 - `crates/asrs-model/src/source_list/configs/*.json`: upstream's tab controller
   source list configs.
@@ -136,6 +136,39 @@ above is the one REV attached to the utilities shipped alongside them.
   `revlogParser` and `revDBC`), and `crates/asrs-formats/src/revlog/*.public.dbc`, the
   package's DBC files copied unmodified
 
+## tesseract.js
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt))
+- Copyright (c) the tesseract.js contributors (Kevin Kwok, Guillermo Webster, Jerome Wu, Balearica)
+- Version: 6.0.1
+- Used in: `crates/asrs-ocr/src/engine.rs` (the recognition path of `src/worker-script` and the
+  Emscripten glue of the core, translated to Rust) and `timer.rs` (the scheduler's queue)
+
+## tesseract.js-core
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt)); the libraries compiled
+  into it are listed with their licenses in
+  [`licenses/tesseract.js-core.txt`](licenses/tesseract.js-core.txt)
+- Version: 6.0.0 (npm), source https://github.com/naptha/tesseract.js-core
+- Used in: `crates/asrs-ocr/data/tesseract-core-simd.wasm`, copied unmodified
+  (sha256 `ca11ee92a02023e4f5083eefd0966fb83b297416da54e997b9f6ce445f719c9b`)
+
+It contains Tesseract OCR 5.1.0-284-g9c08 (Apache-2.0, Copyright Google Inc. and the Tesseract
+contributors; built from https://github.com/Balearica/tesseract/tree/5a21eeb), Leptonica, libjpeg,
+libpng, libtiff, libwebp, giflib, zlib, OpenLibm and the Emscripten 3.1.38 runtime. This software is
+based in part on the work of the Independent JPEG Group.
+
+## Tesseract English model
+
+- License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt))
+- Copyright Google Inc. (tessdata_best `eng`, converted to integers by tesseract.js)
+- Version: npm `@tesseract.js-data/eng` 1.0.0, `4.0.0_best_int/eng.traineddata.gz`
+- Used in: `crates/asrs-ocr/data/eng.traineddata.gz`, copied unmodified
+  (sha256 `45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91`)
+
+The npm package's own metadata says MIT; its source repository (https://github.com/naptha/tessdata)
+and the model it converts are Apache-2.0.
+
 ## V8
 
 - License: BSD-3-Clause ([`licenses/V8.txt`](licenses/V8.txt))
@@ -175,13 +208,14 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 ## Skia
 
 - License: BSD-3-Clause ([`licenses/Skia.txt`](licenses/Skia.txt))
-- Copyright (c) 2011 Google Inc.
+- Copyright (c) 2006-2023 Google Inc.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
   `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
-  `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
+  `text/layout.rs`; the Fontations scaler, fontconfig matching and bitmap glyphs in
+  `text/linux/`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)
 
 ## Chromium and Blink
@@ -193,7 +227,9 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: m142 (as shipped in Electron 39)
 - Used in: `crates/asrs-canvas/src/` (`color.rs` CSS colour parsing, `path.rs` and `raster.rs`
   `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/inline.rs`,
-  `text/layout.rs`, `text/metrics.rs` text layout and `TextMetrics`), and behaviour reproduced in
+  `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`,
+  `text/shaping.rs` and `text/linux/` word shaping and font fallback),
+  `crates/asrs-tabs/src/form/step.rs`, and behaviour reproduced in
   `crates/asrs-ui` (SVG painting, filters, theme) and `crates/asrs-live/src/timers.rs`
   (`DOMTimer` scheduling)
 

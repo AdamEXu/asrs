@@ -17,7 +17,7 @@ formats use (the NetworkTables client name and the WPILOG exporter metadata both
 ```sh
 cargo xtask assets      # copy upstream assets from reference/AdvantageScope
 cargo run -p asrs-app   # the asrs binary
-cargo xtask check       # layout rules, formatting, clippy and tests
+cargo xtask check       # layout rules, replay-harness lint, formatting, clippy and tests
 cargo xtask licenses    # third-party license bundle for release builds
 cargo xtask libm        # build the LGPL sin/cos library asrs loads at runtime
 cargo xtask bundle      # release directory: app, sin/cos library, licenses

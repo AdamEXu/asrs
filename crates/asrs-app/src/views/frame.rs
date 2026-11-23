@@ -27,12 +27,13 @@ use asrs_ui::canvas_view::{
 };
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
-    Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
-    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
-    ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window, canvas,
-    div, point, px, rgb, rgba,
+    Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
+    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Render, ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window,
+    canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
+use asrs_ui::input::text_field_focused;
 use asrs_ui::parity::{Probed, probed};
 use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
@@ -42,9 +43,11 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 use super::canvas_tabs::CanvasTabViews;
 use super::console::ConsoleViews;
 use super::field_2d::Field2dViews;
-use super::field3d::Field3dViews;
+use super::field3d::{Field3dViews, key_code};
 use super::line_graph::LineGraphViews;
+use super::metadata::MetadataView;
 use super::source_list::{self, ListsGeometry};
+use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
 use super::table::{self, TableViews};
 
@@ -72,6 +75,15 @@ pub trait FrameHost: 'static {
     /// The geometry the hub model's `HubView` answers from.
     fn geometry(&self) -> FrameGeometry;
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel;
+    /// The window's `resize` event, once the page has been laid out at its new size.
+    fn resized(&mut self, _cx: &mut App) {}
+    /// An animation frame of a page without a frame loop of its own.
+    fn animation_frame(&mut self, _cx: &mut App) {}
+    /// The window's `keydown` event outside editable elements. Returns whether `preventDefault`
+    /// was called.
+    fn key_down(&mut self, _event: &KeyDownEvent, _code: &str, _cx: &mut App) -> bool {
+        false
+    }
     /// The hub's frame clock (ms), which its scroll sensors animate on.
     fn frame_time(&self, cx: &App) -> f64;
     /// Runs `f`, the frame's handler for an input event, as one page task.
@@ -79,10 +91,6 @@ pub trait FrameHost: 'static {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
     /// The layout the hub model's `HubView` answers source list reads from.
     fn source_list_geometry(&self) -> ListsGeometry;
-    /// Whether the focused element is a text input, which keyboard navigation leaves alone.
-    fn editable_focused(&self, _cx: &App) -> bool {
-        false
-    }
     /// The contents of `slot`, laid out in a box of the slot's size.
     fn slot(
         &mut self,
@@ -105,6 +113,7 @@ struct GeometryState {
     inner_height: f64,
     side_bar: [f64; 4],
     large_table: Option<(Rect, f64)>,
+    dark: bool,
 }
 
 impl FrameGeometry {
@@ -114,6 +123,15 @@ impl FrameGeometry {
 
     pub fn sync(&self, hub: &HubModel) {
         self.0.borrow_mut().classes = BodyClasses::from_names(hub.body_classes().iter().copied());
+    }
+
+    pub fn set_dark(&self, dark: bool) {
+        self.0.borrow_mut().dark = dark;
+    }
+
+    /// `prefers-color-scheme: dark`.
+    pub fn dark(&self) -> bool {
+        self.0.borrow().dark
     }
 
     pub fn set_inner_height(&self, height: f64) {
@@ -146,6 +164,9 @@ pub struct HubFrame<H: FrameHost> {
     host: H,
     shell: HubShell,
     started: Instant,
+    viewport: Option<(f64, f64)>,
+    /// The focus while no element has it, which is `body`'s in a page.
+    body: FocusHandle,
     geometry: FrameGeometry,
     timeline: Timeline,
     timeline_sensor: ScrollSensor,
@@ -158,6 +179,8 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) canvas_tabs: CanvasTabViews,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
+    pub(super) statistics: StatisticsViews,
+    pub(super) metadata: MetadataView,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -169,7 +192,7 @@ struct TimelinePointer {
     target: ScrollTarget,
 }
 
-pub(super) fn wheel_of(event: &ScrollEvent) -> Wheel {
+pub(crate) fn wheel_of(event: &ScrollEvent) -> Wheel {
     let delta = platform::wheel_delta(event);
     Wheel {
         delta: [f64::from(delta.x), f64::from(delta.y)],
@@ -266,6 +289,8 @@ impl<H: FrameHost> HubFrame<H> {
             host,
             shell: HubShell::default(),
             started: Instant::now(),
+            viewport: None,
+            body: cx.focus_handle(),
             geometry,
             timeline: Timeline::new(Rc::new(asrs_js::time::SystemClock)),
             timeline_sensor: ScrollSensor::default(),
@@ -278,6 +303,8 @@ impl<H: FrameHost> HubFrame<H> {
             canvas_tabs: CanvasTabViews::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
+            statistics: StatisticsViews::default(),
+            metadata: MetadataView::default(),
         }
     }
 
@@ -318,6 +345,25 @@ impl<H: FrameHost> HubFrame<H> {
 
     fn now(&self) -> f64 {
         asrs_js::math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock))
+    }
+
+    /// The window's `keydown` listeners, before the focused element's own key handling, which
+    /// `preventDefault` keeps from running.
+    fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let editable = text_field_focused(window);
+        self.field3d_key_down(event, editable, cx);
+        self.console_key_down(event, editable, window, cx);
+        if !editable
+            && self
+                .host
+                .key_down(event, &key_code(&event.keystroke.key), cx)
+        {
+            window.prevent_default();
+        }
+    }
+
+    fn key_up(&mut self, event: &KeyUpEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.field3d_key_up(event, text_field_focused(window), cx);
     }
 
     fn handle_down(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
@@ -364,6 +410,7 @@ impl<H: FrameHost> HubFrame<H> {
         self.source_list_mouse_move(x, y, cx);
         self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
         self.console_mouse_move(x, y, cx);
+        self.statistics_mouse_move(x, y, event.pressed_button.is_some(), cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -637,7 +684,11 @@ impl<H: FrameHost> HubFrame<H> {
                     cx.notify();
                 });
             });
-        Some(probe(element, place(rect, (0.0, 0.0)).child(button)).into_any_element())
+        // `-webkit-app-region: no-drag`, over the title bar.
+        let place = place(rect, (0.0, 0.0))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(button);
+        Some(probe(element, place).into_any_element())
     }
 
     fn tab_control_click(&mut self, element: FrameElement, cx: &mut App) {
@@ -734,6 +785,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();
         let dark = appearance == Appearance::Dark;
+        self.geometry.set_dark(dark);
         let size = window.viewport_size();
         let (width, height) = (
             f64::from(f32::from(size.width)),
@@ -764,9 +816,23 @@ impl<H: FrameHost> Render for HubFrame<H> {
             .as_ref()
             .map_or((0.0, 0.0), |t| text::measure(cx, &fps_style(), t, scale));
         let inputs = self.inputs(cx, width, height, f64::from(scale), fps_size);
-        let layout = FrameLayout::compute(&inputs);
+        let satellite = self.host.hub(cx).page().is_satellite();
+        let compute = |inputs: &FrameInputs| {
+            if satellite {
+                FrameLayout::satellite(width, height)
+            } else {
+                FrameLayout::compute(inputs)
+            }
+        };
+        let layout = compute(&inputs);
+        if self.viewport.replace((width, height)) != Some((width, height)) {
+            let resized = cx.entity().downgrade();
+            window.on_next_frame(move |_, cx| {
+                let _ = resized.update(cx, |frame, cx| frame.host.resized(cx));
+            });
+        }
         self.geometry.set_inner_height(height);
-        self.geometry.0.borrow_mut().large_table = FrameLayout::compute(&FrameInputs {
+        self.geometry.0.borrow_mut().large_table = compute(&FrameInputs {
             show_timeline: Some(false),
             show_tab_controls: Some(false),
             tab_controls_height: Some(0.0),
@@ -807,6 +873,13 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let entity = cx.entity().downgrade();
         // Window listeners, not hover-gated element ones: a press that leaves the window keeps
         // delivering moves and its release, as Chromium's mouse capture does upstream.
+        let body = self.body.clone();
+        // Hiding the focused element leaves `body` with the focus.
+        window.defer(cx, move |window, cx| {
+            if !body.contains_focused(window, cx) {
+                body.focus(window, cx);
+            }
+        });
         let window_listeners = canvas(
             |_, _, _| {},
             move |_, _, window, _| {
@@ -828,6 +901,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let _ = frame.update(cx, |frame, cx| {
                             frame.table_mouse_exit(cx);
                             frame.console_mouse_exit(cx);
+                            frame.statistics_mouse_exit(cx);
                         });
                     }
                 });
@@ -838,22 +912,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let x = mouse_client(f32::from(event.position.x));
                         let y = mouse_client(f32::from(event.position.y));
                         let _ = frame.update(cx, |frame, cx| {
-                            frame.console_window_mouse_down(x, y, window, cx)
+                            frame.console_window_mouse_down(x, y, window, cx);
+                            frame.statistics_window_mouse_down(x, y, window, cx);
                         });
-                    }
-                });
-                let frame = entity.clone();
-                window.on_key_event(move |event: &KeyDownEvent, phase, window, cx| {
-                    if phase == DispatchPhase::Bubble {
-                        let _ = frame.update(cx, |frame, cx| {
-                            frame.field3d_key_down(event, cx);
-                            frame.console_key_down(event, window, cx);
-                        });
-                    }
-                });
-                window.on_key_event(move |event: &KeyUpEvent, phase, _, cx| {
-                    if phase == DispatchPhase::Bubble {
-                        let _ = entity.update(cx, |frame, cx| frame.field3d_key_up(event, cx));
                     }
                 });
             },
@@ -862,12 +923,22 @@ impl<H: FrameHost> Render for HubFrame<H> {
         .size_full();
         let mut root = div()
             .id("hub-frame")
+            .track_focus(&self.body)
+            .capture_key_down(cx.listener(Self::key_down))
+            .capture_key_up(cx.listener(Self::key_up))
+            .on_key_down(|_, window, cx| {
+                if window.default_prevented() {
+                    cx.stop_propagation();
+                }
+            })
             .relative()
             .size_full()
-            .child(window_listeners)
-            .on_drop(
+            .child(window_listeners);
+        if !satellite {
+            root = root.on_drop(
                 cx.listener(|frame, paths: &ExternalPaths, _, cx| frame.drop_files(paths, cx)),
             );
+        }
         root = match self.shell.cursor() {
             BodyCursor::ColResize => root.cursor(CursorStyle::ResizeColumn),
             BodyCursor::RowResize => root.cursor(CursorStyle::ResizeRow),
@@ -985,6 +1056,14 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(console) = self.console_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(console);
                 }
+                if let Some(statistics) =
+                    self.statistics_element(rect, covered, appearance, scale, window, cx)
+                {
+                    renderer = renderer.child(statistics);
+                }
+                if let Some(metadata) = self.metadata_element(rect, appearance, scale, cx) {
+                    renderer = renderer.child(metadata);
+                }
                 if let Some(tab) = self.canvas_tab_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(tab);
                 }
@@ -1007,6 +1086,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     controls = controls.child(settings);
                 }
                 if let Some(settings) = self.field3d_settings(rect, appearance, scale, window, cx) {
+                    controls = controls.child(settings);
+                }
+                if let Some(settings) =
+                    self.statistics_controls(rect, appearance, scale, window, cx)
+                {
                     controls = controls.child(settings);
                 }
                 if let Some(tab) = self.canvas_tab_controls(rect, appearance, scale, window, cx) {
@@ -1146,7 +1230,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                             let label = element.inner_text().to_string_lossy();
                             let width =
                                 text::measure(cx, &tab_bar::tab_style(), &label, scale).0 + 22.0;
-                            tab_bar::tab(&element, width, true, true, dark, theme.text)
+                            tab_bar::tab(&element, width as f32, 0.0, true, true, dark, theme.text)
                                 .into_any_element()
                         }
                     };

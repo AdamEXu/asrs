@@ -10,10 +10,12 @@
 mod host;
 
 use std::rc::Rc;
-use std::time::Instant;
+use std::sync::mpsc::RecvTimeoutError;
+use std::time::{Duration, Instant};
 
 use asrs_formats::historical::Status;
 use asrs_hub::hub::{HubHost, HubModel, HubView, LoadingGlow};
+use asrs_hub::tabs::SatelliteUpdate;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SystemClock, V8MathRandom};
 use asrs_log::realm::JsRealm;
@@ -22,12 +24,14 @@ use asrs_ui::gpui::{App, BackgroundExecutor, Context, EventEmitter, Window};
 
 use host::{GpuiHost, HostState};
 
+pub(crate) use host::interval;
+
 /// `(Math.random, Date)` for a new decode worker's realm.
 pub type WorkerRealm = Box<dyn FnMut() -> (Box<dyn Rng + Send>, Box<dyn Clock + Send>)>;
 
 /// Milliseconds on the frame clock since `origin`: the executor's clock, which is simulated
 /// under a test dispatcher, so animations stepped by it do not depend on how long frames take.
-fn frame_time(origin: Instant, cx: &App) -> f64 {
+pub(crate) fn frame_time(origin: Instant, cx: &App) -> f64 {
     cx.background_executor()
         .now()
         .saturating_duration_since(origin)
@@ -103,6 +107,8 @@ pub enum HubEvent {
     },
     /// A message for main, other than `historical-start`, which the hub answers itself.
     Main(NamedMessage<HubToMain>),
+    /// `update-satellite`.
+    SatelliteUpdate(SatelliteUpdate),
     /// `app.addRecentDocument(path)` after `historical-start`.
     RecentDocument(JsString),
     Console {
@@ -192,6 +198,12 @@ impl Hub {
     /// Decode threads still running, terminated workers included until their thread exits.
     pub fn decode_threads(&self) -> usize {
         self.host.decode_threads()
+    }
+
+    /// Blocks until a decode or export thread posts to the page. False, at once, when none of
+    /// them has anything left to post.
+    pub fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
+        self.host.wait_for_threads(timeout)
     }
 
     fn task<R>(

@@ -1,0 +1,159 @@
+{
+  "about": "Interaction (U23): a console popped out, without its export and close buttons; a row hovered and clicked through the hub's selection, and a filter typed in the satellite, which the hub's own console does not share",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Log",
+              "controller": "/Drive/Mode",
+              "controllerUUID": "console0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 460
+    },
+    {
+      "wait": 400
+    },
+    {
+      "capture": "console",
+      "probes": [
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.highlight-button",
+        "input.filter"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 60
+    },
+    {
+      "wait": 150
+    },
+    {
+      "capture": "console-hover",
+      "probes": []
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 60
+    },
+    {
+      "wait": 200
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 400
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "console-clicked",
+      "probes": []
+    },
+    {
+      "mouse": "click",
+      "x": 800,
+      "y": 17
+    },
+    {
+      "key": "T"
+    },
+    {
+      "key": "e"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 400
+    },
+    {
+      "capture": "console-filtered",
+      "probes": []
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "hub",
+      "probes": [
+        ".console-table-container"
+      ]
+    }
+  ]
+}

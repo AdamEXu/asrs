@@ -146,7 +146,7 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let (index, _) = displayed(self.host().hub(cx), TabType::Points)?;
-        let container = overhung(rect);
+        let container = overhung(self.host().hub(cx), rect);
         let size = [container[2], container[3]].map(|v| client_rect_coord(v as f32, scale));
         let tree = self.host_mut().input(cx, |hub| {
             with_renderer(hub, index, |renderer: &mut PointsRenderer| {

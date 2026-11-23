@@ -5,6 +5,7 @@
 pub mod css;
 pub mod decimal;
 mod select;
+mod step;
 
 use asrs_js::number;
 use asrs_js::string::JsString;
@@ -112,16 +113,50 @@ fn value_as_number(value: &JsString) -> f64 {
 #[derive(Clone, Debug, Default)]
 pub struct NumberInput {
     value: JsString,
+    value_attribute: JsString,
+    step: JsString,
 }
 
 impl NumberInput {
     /// The `value` attribute from markup (`""` when there is none).
     pub fn new(markup: &str) -> NumberInput {
         let mut input = NumberInput {
-            value: JsString::new(),
+            value_attribute: JsString::from(markup),
+            ..NumberInput::default()
         };
         input.set_value(JsString::from(markup));
         input
+    }
+
+    /// Without a `value` attribute, after `input.value = value`.
+    pub fn with_value(value: &str) -> NumberInput {
+        let mut input = NumberInput::default();
+        input.set_value(JsString::from(value));
+        input
+    }
+
+    /// With the `step` attribute `step`.
+    pub fn with_step(mut self, step: &str) -> NumberInput {
+        self.step = JsString::from(step);
+        self
+    }
+
+    /// The `step` attribute (`""` when there is none).
+    pub fn step(&self) -> &JsString {
+        &self.step
+    }
+
+    pub fn set_step(&mut self, attr: JsString) {
+        self.step = attr;
+    }
+
+    /// The up or down arrow key, which dispatches `input` and `change` when the value changes.
+    /// Returns whether it did.
+    pub fn arrow_key(&mut self, up: bool) -> bool {
+        let stepped = step::stepped(&self.value, &self.value_attribute, &self.step, up);
+        let changed = stepped != self.value;
+        self.set_value(stepped);
+        changed
     }
 
     pub fn value(&self) -> &JsString {
