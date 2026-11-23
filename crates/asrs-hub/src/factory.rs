@@ -103,95 +103,98 @@ impl<Cx: ?Sized> HubTabFactory<Cx> {
     }
 }
 
-type Halves<Cx> = (Box<dyn TabController<Cx>>, Box<dyn TabRenderer<Cx>>);
-
 fn pending<Cx: ?Sized>(kind: TabType) -> Box<dyn TabRenderer<Cx>> {
     Box::new(PendingRenderer { kind })
 }
 
-impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
-    fn halves(
-        cx: &mut Cx,
-        uuid: &JsString,
-        tab_type: Option<TabType>,
-    ) -> Result<Halves<Cx>, JsError> {
-        Ok(match tab_type {
-            Some(TabType::Documentation) => (
-                Box::new(NoopController),
-                Box::new(DocumentationRenderer::new()),
-            ),
-            Some(TabType::LineGraph) => {
-                let controller = LineGraphController::new(cx.tab_rng());
-                let renderer: Box<dyn TabRenderer<Cx>> = match cx.canvas_env() {
-                    Some(env) => Box::new(LineGraphRenderer::new(
-                        true,
-                        env.clock,
-                        Rc::new(RefCell::new(LineGraphDom::default())),
-                        env.text,
-                    )),
-                    None => pending(TabType::LineGraph),
-                };
-                (Box::new(controller), renderer)
-            }
-            Some(TabType::Field2d) => (
-                Box::new(Field2dController::new(cx)),
-                Box::new(Field2dRenderer::new(Rc::new(RefCell::new(
-                    Field2dDom::default(),
-                )))),
-            ),
-            Some(TabType::Field3d) => {
-                let controller = Field3dController::new(cx);
-                let renderer = cx
-                    .view_renderer(TabType::Field3d)
-                    .unwrap_or_else(|| pending(TabType::Field3d));
-                (Box::new(controller), renderer)
-            }
-            Some(TabType::Table) => {
-                let dom = Rc::new(RefCell::new(TableDom::default()));
-                let controller = TableController::new(uuid, dom.clone());
-                let renderer_uuid = JsString::from(create_uuid(cx.tab_rng()));
-                (
-                    Box::new(controller),
-                    Box::new(TableRenderer::new(renderer_uuid, dom, true)),
-                )
-            }
-            Some(TabType::Console) => {
-                let dom = Rc::new(RefCell::new(ConsoleDom::default()));
-                (
-                    Box::new(ConsoleController::new(dom.clone())),
-                    Box::new(ConsoleRenderer::new(dom, true)),
-                )
-            }
-            Some(TabType::Statistics) => (
-                Box::new(StatisticsController::new(cx)),
-                pending(TabType::Statistics),
-            ),
-            Some(TabType::Video) => (Box::new(VideoController::new()), pending(TabType::Video)),
-            Some(TabType::Joysticks) => (
-                Box::new(JoysticksController::new(cx)),
-                Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
-                    JoysticksDom::default(),
-                )))),
-            ),
-            Some(TabType::Swerve) => (
-                Box::new(SwerveController::new(cx)),
-                Box::new(SwerveRenderer::new(Rc::new(RefCell::new(
-                    SwerveDom::default(),
-                )))),
-            ),
-            Some(TabType::Mechanism) => (
-                Box::new(MechanismController::new(cx)),
-                Box::new(MechanismRenderer::new()),
-            ),
-            Some(TabType::Points) => (
-                Box::new(PointsController::new(cx)),
-                Box::new(PointsRenderer::new()),
-            ),
-            Some(TabType::Metadata) => (
-                Box::new(MetadataController::new(cx)?),
-                Box::new(MetadataRenderer::new()),
-            ),
-            None => (Box::new(NoopController), Box::new(NoopRenderer)),
+/// The elements a tab's controller and renderer both look up in the tab's root.
+#[derive(Default)]
+struct SharedDom {
+    table: Rc<RefCell<TableDom>>,
+    console: Rc<RefCell<ConsoleDom>>,
+}
+
+fn controller<Cx: HubTabCx + 'static>(
+    cx: &mut Cx,
+    uuid: &JsString,
+    tab_type: Option<TabType>,
+    dom: &SharedDom,
+) -> Result<Box<dyn TabController<Cx>>, JsError> {
+    Ok(match tab_type {
+        Some(TabType::LineGraph) => Box::new(LineGraphController::new(cx.tab_rng())),
+        Some(TabType::Field2d) => Box::new(Field2dController::new(cx)),
+        Some(TabType::Field3d) => Box::new(Field3dController::new(cx)),
+        Some(TabType::Table) => Box::new(TableController::new(uuid, dom.table.clone())),
+        Some(TabType::Console) => Box::new(ConsoleController::new(dom.console.clone())),
+        Some(TabType::Statistics) => Box::new(StatisticsController::new(cx)),
+        Some(TabType::Video) => Box::new(VideoController::new()),
+        Some(TabType::Joysticks) => Box::new(JoysticksController::new(cx)),
+        Some(TabType::Swerve) => Box::new(SwerveController::new(cx)),
+        Some(TabType::Mechanism) => Box::new(MechanismController::new(cx)),
+        Some(TabType::Points) => Box::new(PointsController::new(cx)),
+        Some(TabType::Metadata) => Box::new(MetadataController::new(cx)?),
+        Some(TabType::Documentation) | None => Box::new(NoopController),
+    })
+}
+
+/// The renderer of a hub tab, or of a satellite window's page, which has no controller
+/// (`hasController` is false).
+fn renderer<Cx: HubTabCx + 'static>(
+    cx: &mut Cx,
+    tab_type: Option<TabType>,
+    has_controller: bool,
+    dom: &SharedDom,
+) -> Box<dyn TabRenderer<Cx>> {
+    match tab_type {
+        Some(TabType::Documentation) => Box::new(DocumentationRenderer::new()),
+        Some(TabType::LineGraph) => match cx.canvas_env() {
+            Some(env) => Box::new(LineGraphRenderer::new(
+                has_controller,
+                env.clock,
+                Rc::new(RefCell::new(LineGraphDom::default())),
+                env.text,
+            )),
+            None => pending(TabType::LineGraph),
+        },
+        Some(TabType::Field2d) => Box::new(Field2dRenderer::new(Rc::new(RefCell::new(
+            Field2dDom::default(),
+        )))),
+        Some(TabType::Field3d) => cx
+            .view_renderer(TabType::Field3d)
+            .unwrap_or_else(|| pending(TabType::Field3d)),
+        Some(TabType::Table) => {
+            let uuid = JsString::from(create_uuid(cx.tab_rng()));
+            Box::new(TableRenderer::new(uuid, dom.table.clone(), has_controller))
+        }
+        Some(TabType::Console) => {
+            Box::new(ConsoleRenderer::new(dom.console.clone(), has_controller))
+        }
+        Some(TabType::Statistics) => pending(TabType::Statistics),
+        Some(TabType::Video) => pending(TabType::Video),
+        Some(TabType::Joysticks) => Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
+            JoysticksDom::default(),
+        )))),
+        Some(TabType::Swerve) => Box::new(SwerveRenderer::new(Rc::new(RefCell::new(
+            SwerveDom::default(),
+        )))),
+        Some(TabType::Mechanism) => Box::new(MechanismRenderer::new()),
+        Some(TabType::Points) => Box::new(PointsRenderer::new()),
+        Some(TabType::Metadata) => Box::new(MetadataRenderer::new()),
+        None => Box::new(NoopRenderer),
+    }
+}
+
+/// What a satellite window's page shows: the switch in `updateVisualizer`, which builds renderers
+/// as `Tabs.addTab` does, with no controllers.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SatelliteFactory;
+
+impl<Cx: HubTabCx + 'static> TabFactory<Cx> for SatelliteFactory {
+    fn create(&mut self, cx: &mut Cx, tab_type: Option<TabType>) -> Result<TabParts<Cx>, JsError> {
+        Ok(TabParts {
+            uuid: JsString::new(),
+            controller: Box::new(NoopController),
+            renderer: renderer(cx, tab_type, false, &SharedDom::default()),
         })
     }
 }
@@ -199,7 +202,9 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
 impl<Cx: HubTabCx + 'static> TabFactory<Cx> for HubTabFactory<Cx> {
     fn create(&mut self, cx: &mut Cx, tab_type: Option<TabType>) -> Result<TabParts<Cx>, JsError> {
         let uuid = JsString::from(create_uuid(cx.tab_rng()));
-        let (controller, renderer) = Self::halves(cx, &uuid, tab_type)?;
+        let dom = SharedDom::default();
+        let controller = controller(cx, &uuid, tab_type, &dom)?;
+        let renderer = renderer(cx, tab_type, true, &dom);
         let renderer = match &mut self.hook {
             Some(hook) => hook.renderer(cx, tab_type, renderer),
             None => renderer,

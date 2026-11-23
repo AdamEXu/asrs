@@ -3,7 +3,9 @@
 use gpui_kit::Window;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{
+    NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior, NSWindowOcclusionState,
+};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 use super::ns_window;
@@ -74,6 +76,15 @@ impl NativeWindow {
         if let Some(parent) = self.0.sheetParent() {
             parent.endSheet(&self.0);
         }
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.0.isVisible()
+            && !self.0.isMiniaturized()
+            && self
+                .0
+                .occlusionState()
+                .contains(NSWindowOcclusionState::Visible)
     }
 
     pub fn show(&self, focus: bool) {

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use asrs_canvas::pixels::transform_bilinear;
 use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState};
 use asrs_hub::hub::{HubModel, HubPage};
+use asrs_hub::tabs::TabRef;
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_model::scroll_sensor::ScrollSensor;
@@ -286,26 +287,41 @@ fn renderer_key(renderer: &Field2dRenderer) -> usize {
     Rc::as_ptr(renderer.dom()) as *const () as usize
 }
 
-/// The displayed tab when it is a 2D field, with its index, its renderer and its controller.
-fn displayed(hub: &HubModel) -> Option<(usize, &Field2dRenderer, &Field2dController)> {
+/// The displayed tab when it is a 2D field, with its index and its renderer.
+fn displayed(hub: &HubModel) -> Option<(usize, &Field2dRenderer, TabRef<'_, HubPage>)> {
     hub.tabs().tabs().enumerate().find_map(|(i, tab)| {
         if tab.content_hidden() || tab.tab_type() != Some(TabType::Field2d) {
             return None;
         }
         let renderer = tab.renderer().downcast_ref::<Field2dRenderer>()?;
-        let controller = tab.controller().downcast_ref::<Field2dController>()?;
-        Some((i, renderer, controller))
+        Some((i, renderer, tab))
     })
 }
 
-/// The image path of the field a controller's select names.
-fn field_path(hub: &HubModel, controller: &Field2dController) -> Option<JsString> {
+/// The image path of the field a tab's select names, or in a satellite, which has none, of the
+/// one its last command names.
+fn field_path(hub: &HubModel, tab: &TabRef<'_, HubPage>) -> Option<JsString> {
+    let renderer = tab.renderer().downcast_ref::<Field2dRenderer>()?;
+    let field = match tab.controller().downcast_ref::<Field2dController>() {
+        Some(controller) => &controller.controls.field,
+        None => renderer.field()?,
+    };
     hub.page()
         .assets()?
         .field2ds
         .iter()
-        .find(|f| f.id == controller.controls.field)
+        .find(|f| f.id == *field)
         .map(|f| f.path.clone())
+}
+
+fn with_renderer<R>(
+    hub: &mut HubModel,
+    index: usize,
+    f: impl FnOnce(&mut Field2dRenderer, &mut HubPage) -> R,
+) -> Option<R> {
+    let (tabs, page) = hub.tabs_mut();
+    let renderer = tabs.tab_mut(index)?.renderer;
+    Some(f(renderer.downcast_mut::<Field2dRenderer>()?, page))
 }
 
 fn with_tab<R>(
@@ -389,15 +405,12 @@ impl<H: FrameHost> HubFrame<H> {
             if let Some(renderer) = tab.renderer().downcast_ref::<Field2dRenderer>() {
                 live.insert(renderer_key(renderer));
             }
-            if let Some(controller) = tab.controller().downcast_ref::<Field2dController>()
-                && let Some(path) = field_path(hub, controller)
-            {
-                paths.insert(path);
-            }
+            paths.extend(field_path(hub, &tab));
         }
-        let shown = displayed(hub).map(|(index, renderer, controller)| {
-            (index, renderer_key(renderer), field_path(hub, controller))
-        });
+        let shown = displayed(hub)
+            .map(|(index, renderer, tab)| (index, renderer_key(renderer), field_path(hub, &tab)));
+        let satellite = hub.page().is_satellite();
+        let overhang = if satellite { 0.0 } else { OVERHANG };
         let now = self.host().frame_time(cx);
         let views = &mut self.field_2d;
         views.covered = covered;
@@ -424,7 +437,7 @@ impl<H: FrameHost> HubFrame<H> {
                 .entry(path.clone())
                 .or_insert_with(|| field_image::load(path).map(Rc::new));
         }
-        let container = [rect[0], rect[1] - OVERHANG, rect[2], rect[3] + OVERHANG];
+        let container = [rect[0], rect[1] - overhang, rect[2], rect[3] + overhang];
         let shown = Shown {
             key,
             index,
@@ -465,13 +478,13 @@ impl<H: FrameHost> HubFrame<H> {
         let painted = self
             .host_mut()
             .input(cx, |hub| {
-                with_tab(hub, index, |renderer, _, page| {
+                with_renderer(hub, index, |renderer, page| {
                     {
                         let mut dom = renderer.dom().borrow_mut();
                         dom.container = container;
                         dom.scroll_container = container;
                         dom.device_pixel_ratio = shown.device_pixel_ratio;
-                        dom.satellite = false;
+                        dom.satellite = satellite;
                         dom.images = images.into_iter().collect();
                     }
                     if left_under_pointer {
@@ -615,7 +628,8 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let hub = self.host().hub(cx);
-        let (_, renderer, controller) = displayed(hub)?;
+        let (_, renderer, tab) = displayed(hub)?;
+        let controller = tab.controller().downcast_ref::<Field2dController>()?;
         let key = renderer_key(renderer);
         let state = controller.controls.clone();
         let source_shown = !state.source_hidden;
@@ -835,7 +849,7 @@ impl<H: FrameHost> HubFrame<H> {
             return;
         }
         self.host_mut().input(cx, |hub| {
-            with_tab(hub, shown.index, |renderer, _, page| {
+            with_renderer(hub, shown.index, |renderer, page| {
                 if inside {
                     renderer.mouse(page, "move", 0.0, shift, x, y);
                 } else {
@@ -859,7 +873,7 @@ impl<H: FrameHost> HubFrame<H> {
         let button = mouse_button(event.button);
         let shift = event.modifiers.shift;
         self.host_mut().input(cx, |hub| {
-            with_tab(hub, shown.index, |renderer, _, page| {
+            with_renderer(hub, shown.index, |renderer, page| {
                 renderer.mouse(page, "down", button, shift, x, y);
             });
         });
@@ -879,7 +893,7 @@ impl<H: FrameHost> HubFrame<H> {
         let button = mouse_button(event.button);
         let shift = event.modifiers.shift;
         self.host_mut().input(cx, |hub| {
-            with_tab(hub, shown.index, |renderer, _, page| {
+            with_renderer(hub, shown.index, |renderer, page| {
                 renderer.mouse(page, "up", button, shift, x, y);
             });
         });

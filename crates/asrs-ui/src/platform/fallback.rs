@@ -111,6 +111,10 @@ pub(super) mod window {
             match *self {}
         }
 
+        pub fn is_visible(&self) -> bool {
+            match *self {}
+        }
+
         pub fn show(&self, _focus: bool) {
             match *self {}
         }

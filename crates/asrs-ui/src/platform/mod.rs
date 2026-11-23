@@ -252,6 +252,11 @@ impl NativeWindow {
         self.0.end_sheet();
     }
 
+    /// Electron's `isVisible()`: on screen, not minimized and not covered by other windows.
+    pub fn is_visible(&self) -> bool {
+        self.0.is_visible()
+    }
+
     /// Shows a window opened hidden, making it key when `focus` is set.
     pub fn show(&self, focus: bool) {
         self.0.show(focus);

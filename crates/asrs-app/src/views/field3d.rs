@@ -355,7 +355,7 @@ fn ease_in_out(t: f64) -> f64 {
 }
 
 /// `KeyboardEvent.code` for the key GPUI reports.
-fn key_code(key: &str) -> String {
+pub(super) fn key_code(key: &str) -> String {
     let mut chars = key.chars();
     match (chars.next(), chars.next()) {
         (Some(c), None) if c.is_ascii_alphabetic() => format!("Key{}", c.to_ascii_uppercase()),
@@ -832,7 +832,9 @@ impl<H: FrameHost> HubFrame<H> {
         let dark = appearance == Appearance::Dark;
         let now = self.host().frame_time(cx);
 
-        let extra = if dom.container_fixed {
+        let extra = if hub.page().is_satellite() {
+            0.0
+        } else if dom.container_fixed {
             CONTAINER_EXTRA_FIXED
         } else {
             CONTAINER_EXTRA

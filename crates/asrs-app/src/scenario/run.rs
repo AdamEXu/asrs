@@ -798,7 +798,7 @@ impl Variant<'_> {
             .map_err(|e| format!("prefs.json: {e:?}"))?;
         self.headless
             .context()
-            .update(|cx| cx.set_global(MainProcess::headless(main)));
+            .update(|cx| cx.set_global(MainProcess::headless(main, RANDOM_SEED)));
         Ok((assets, preferences))
     }
 

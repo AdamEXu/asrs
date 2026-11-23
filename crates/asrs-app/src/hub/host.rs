@@ -7,6 +7,7 @@ use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling,
 use asrs_formats::historical::{MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
 use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubTimeout, LiveSourceKind};
+use asrs_hub::tabs::SatelliteUpdate;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, V8MathRandom};
 use asrs_js::value::JsValue;
@@ -39,6 +40,28 @@ fn interval_period(period_ms: f64) -> Duration {
 fn next_fire(scheduled: Instant, now: Instant, period: Duration) -> Instant {
     let late = now.saturating_duration_since(scheduled).as_nanos() % period.as_nanos();
     now + period - Duration::from_nanos(late as u64)
+}
+
+/// `setInterval(fire, period_ms)` in the page of `cx`'s entity, until the task is dropped.
+pub(crate) fn interval<T: 'static>(
+    cx: &Context<'_, T>,
+    period_ms: f64,
+    mut fire: impl FnMut(&mut T, &mut Context<'_, T>) + 'static,
+) -> Task<()> {
+    let period = interval_period(period_ms);
+    cx.spawn(async move |this, cx| {
+        let executor = cx.background_executor().clone();
+        let mut next = executor.now() + period;
+        loop {
+            executor
+                .timer(next.saturating_duration_since(executor.now()))
+                .await;
+            next = next_fire(next, executor.now(), period);
+            if this.update(cx, &mut fire).is_err() {
+                break;
+            }
+        }
+    })
 }
 
 struct WorkerSlot {
@@ -316,6 +339,10 @@ impl HubHost for GpuiHost<'_, '_> {
         self.emit(HubEvent::Main(message));
     }
 
+    fn update_satellite(&mut self, update: SatelliteUpdate) {
+        self.emit(HubEvent::SatelliteUpdate(update));
+    }
+
     fn send_historical_request(&mut self, request: MainRequest) {
         let temp_dir = self.state.temp_dir.clone();
         let read = self.cx.background_spawn(async move {
@@ -344,23 +371,9 @@ impl HubHost for GpuiHost<'_, '_> {
     }
 
     fn set_interval(&mut self, interval: HubInterval, period_ms: f64) {
-        let period = interval_period(period_ms);
         let key = interval.clone();
-        let task = self.cx.spawn(async move |this, cx| {
-            let executor = cx.background_executor().clone();
-            let mut next = executor.now() + period;
-            loop {
-                executor
-                    .timer(next.saturating_duration_since(executor.now()))
-                    .await;
-                next = next_fire(next, executor.now(), period);
-                if this
-                    .update(cx, |hub, cx| hub.fire_interval(&key, cx))
-                    .is_err()
-                {
-                    break;
-                }
-            }
+        let task = super::interval(self.cx, period_ms, move |hub: &mut Hub, cx| {
+            hub.fire_interval(&key, cx)
         });
         self.state.intervals.insert(interval, task);
     }

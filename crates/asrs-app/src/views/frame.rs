@@ -39,7 +39,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
 use super::console::ConsoleViews;
 use super::field_2d::Field2dViews;
-use super::field3d::Field3dViews;
+use super::field3d::{Field3dViews, key_code};
 use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
@@ -69,6 +69,10 @@ pub trait FrameHost: 'static {
     /// The geometry the hub model's `HubView` answers from.
     fn geometry(&self) -> FrameGeometry;
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel;
+    /// The window's `resize` event, once the page has been laid out at its new size.
+    fn resized(&mut self, _cx: &mut App) {}
+    /// The window's `keydown` event with this `code`, outside editable elements.
+    fn key_down(&mut self, _code: &str, _cx: &mut App) {}
     /// The hub's frame clock (ms), which its scroll sensors animate on.
     fn frame_time(&self, cx: &App) -> f64;
     /// Runs `f`, the frame's handler for an input event, as one page task.
@@ -142,6 +146,7 @@ pub struct HubFrame<H: FrameHost> {
     host: H,
     shell: HubShell,
     started: Instant,
+    viewport: Option<(f64, f64)>,
     geometry: FrameGeometry,
     timeline: Timeline,
     timeline_sensor: ScrollSensor,
@@ -228,6 +233,7 @@ impl<H: FrameHost> HubFrame<H> {
             host,
             shell: HubShell::default(),
             started: Instant::now(),
+            viewport: None,
             geometry,
             timeline: Timeline::new(Rc::new(asrs_js::time::SystemClock)),
             timeline_sensor: ScrollSensor::default(),
@@ -279,6 +285,16 @@ impl<H: FrameHost> HubFrame<H> {
 
     fn now(&self) -> f64 {
         asrs_js::math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock))
+    }
+
+    fn key_down(&mut self, event: &KeyDownEvent, window: &Window, cx: &mut Context<'_, Self>) {
+        if self.console.editing()
+            || self.table_editing(window, cx)
+            || self.host.editable_focused(cx)
+        {
+            return;
+        }
+        self.host.key_down(&key_code(&event.keystroke.key), cx);
     }
 
     fn handle_down(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
@@ -711,9 +727,23 @@ impl<H: FrameHost> Render for HubFrame<H> {
             .as_ref()
             .map_or((0.0, 0.0), |t| text::measure(cx, &fps_style(), t, scale));
         let inputs = self.inputs(cx, width, height, f64::from(scale), fps_size);
-        let layout = FrameLayout::compute(&inputs);
+        let satellite = self.host.hub(cx).page().is_satellite();
+        let compute = |inputs: &FrameInputs| {
+            if satellite {
+                FrameLayout::satellite(width, height)
+            } else {
+                FrameLayout::compute(inputs)
+            }
+        };
+        let layout = compute(&inputs);
+        if self.viewport.replace((width, height)) != Some((width, height)) {
+            let resized = cx.entity().downgrade();
+            window.on_next_frame(move |_, cx| {
+                let _ = resized.update(cx, |frame, cx| frame.host.resized(cx));
+            });
+        }
         self.geometry.set_inner_height(height);
-        self.geometry.0.borrow_mut().table = FrameLayout::compute(&FrameInputs {
+        self.geometry.0.borrow_mut().table = compute(&FrameInputs {
             show_timeline: Some(false),
             show_tab_controls: Some(false),
             tab_controls_height: Some(0.0),
@@ -795,6 +825,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let _ = frame.update(cx, |frame, cx| {
                             frame.field3d_key_down(event, cx);
                             frame.console_key_down(event, window, cx);
+                            frame.key_down(event, window, cx);
                         });
                     }
                 });
@@ -811,10 +842,12 @@ impl<H: FrameHost> Render for HubFrame<H> {
             .id("hub-frame")
             .relative()
             .size_full()
-            .child(window_listeners)
-            .on_drop(
+            .child(window_listeners);
+        if !satellite {
+            root = root.on_drop(
                 cx.listener(|frame, paths: &ExternalPaths, _, cx| frame.drop_files(paths, cx)),
             );
+        }
         root = match self.shell.cursor() {
             BodyCursor::ColResize => root.cursor(CursorStyle::ResizeColumn),
             BodyCursor::RowResize => root.cursor(CursorStyle::ResizeRow),

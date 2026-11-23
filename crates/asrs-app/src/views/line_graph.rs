@@ -10,6 +10,7 @@ use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_model::scroll_sensor::ScrollSensor;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::cx::TabCx;
 use asrs_tabs::line_graph::{LineGraphRenderer, OverlayStyle, Pointer};
 use asrs_ui::canvas_view::geometry::{client_size, mouse_client};
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view};
@@ -276,7 +277,7 @@ impl<H: FrameHost> HubFrame<H> {
         if left_under_pointer {
             self.host_mut().input(cx, |hub| {
                 with_renderer(hub, index, |renderer, page| {
-                    renderer.mouse_leave(page.selection_mut())
+                    renderer.mouse_leave(page.tab_selection())
                 });
             });
         }
@@ -382,7 +383,7 @@ impl<H: FrameHost> HubFrame<H> {
                         false,
                         pointer,
                         preferences.as_ref(),
-                        page.selection_mut(),
+                        page.tab_selection(),
                     );
                 }
                 renderer.dom().borrow_mut().painted.take()
@@ -439,16 +440,16 @@ impl<H: FrameHost> HubFrame<H> {
             with_renderer(hub, shown.index, |renderer, page| {
                 let preferences = page.preferences().cloned();
                 if was_inside && !inside {
-                    renderer.mouse_leave(page.selection_mut());
+                    renderer.mouse_leave(page.tab_selection());
                 }
                 if inside {
                     renderer.overlay_mouse_move(
                         pointer,
                         preferences.as_ref(),
-                        page.selection_mut(),
+                        page.tab_selection(),
                     );
                 }
-                renderer.window_mouse_move(pointer, page.selection_mut());
+                renderer.window_mouse_move(pointer, page.tab_selection());
             });
         });
         cx.notify();
@@ -463,7 +464,7 @@ impl<H: FrameHost> HubFrame<H> {
         let pointer = shown.pointer(x, shift);
         self.host_mut().input(cx, |hub| {
             with_renderer(hub, shown.index, |renderer, page| {
-                renderer.window_mouse_up(pointer, page.selection_mut())
+                renderer.window_mouse_up(pointer, page.tab_selection())
             });
         });
         cx.notify();
@@ -480,7 +481,7 @@ impl<H: FrameHost> HubFrame<H> {
             with_renderer(hub, shown.index, |renderer, page| {
                 renderer.mouse_down(pointer);
                 if right {
-                    renderer.context_menu(page.selection_mut());
+                    renderer.context_menu(page.tab_selection());
                 }
             });
         });
@@ -505,7 +506,7 @@ impl<H: FrameHost> HubFrame<H> {
         let pointer = shown.pointer(x, event.modifiers().shift);
         self.host_mut().input(cx, |hub| {
             with_renderer(hub, shown.index, |renderer, page| {
-                renderer.click(pointer, page.selection_mut())
+                renderer.click(pointer, page.tab_selection())
             });
         });
         cx.notify();
