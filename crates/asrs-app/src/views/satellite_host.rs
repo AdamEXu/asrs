@@ -153,6 +153,11 @@ impl FrameHost for SatelliteHost {
             .update(cx, |satellite, cx| satellite.resized(cx));
     }
 
+    fn animation_frame(&mut self, cx: &mut App) {
+        self.satellite
+            .update(cx, |satellite, cx| satellite.animation_frame(cx));
+    }
+
     fn key_down(&mut self, _event: &KeyDownEvent, code: &str, cx: &mut App) -> bool {
         self.satellite
             .update(cx, |satellite, cx| satellite.key_down(code, cx))

@@ -10,7 +10,8 @@
 mod host;
 
 use std::rc::Rc;
-use std::time::Instant;
+use std::sync::mpsc::RecvTimeoutError;
+use std::time::{Duration, Instant};
 
 use asrs_formats::historical::Status;
 use asrs_hub::hub::{HubHost, HubModel, HubView, LoadingGlow};
@@ -197,6 +198,12 @@ impl Hub {
     /// Decode threads still running, terminated workers included until their thread exits.
     pub fn decode_threads(&self) -> usize {
         self.host.decode_threads()
+    }
+
+    /// Blocks until a decode or export thread posts to the page. False, at once, when none of
+    /// them has anything left to post.
+    pub fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
+        self.host.wait_for_threads(timeout)
     }
 
     fn task<R>(

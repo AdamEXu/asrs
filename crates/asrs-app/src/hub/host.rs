@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -68,6 +69,8 @@ struct WorkerSlot {
     id: u64,
     source: String,
     thread: WorkerThread,
+    unfinished: usize,
+    stuck: bool,
     _pump: Task<()>,
 }
 
@@ -110,6 +113,7 @@ pub(super) struct HostState {
     workers: Vec<WorkerSlot>,
     terminated: Vec<WorkerThread>,
     exports: Vec<(u64, Task<()>)>,
+    posted: (SyncSender<()>, Receiver<()>),
 }
 
 impl HostState {
@@ -134,6 +138,7 @@ impl HostState {
             workers: Vec::new(),
             terminated: Vec::new(),
             exports: Vec::new(),
+            posted: sync_channel(1),
         }
     }
 
@@ -144,6 +149,13 @@ impl HostState {
             .chain(&self.terminated)
             .filter(|t| !t.is_finished())
             .count()
+    }
+
+    pub(super) fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
+        if self.exports.is_empty() && self.workers.iter().all(|w| w.unfinished == 0) {
+            return Ok(false);
+        }
+        self.posted.1.recv_timeout(timeout).map(|()| true)
     }
 }
 
@@ -223,11 +235,16 @@ impl Hub {
     }
 
     fn worker_ready(&mut self, id: u64, cx: &mut Context<'_, Self>) {
-        let Some(slot) = self.host.workers.iter().find(|w| w.id == id) else {
+        let Some(slot) = self.host.workers.iter_mut().find(|w| w.id == id) else {
             return;
         };
         let source = slot.source.clone();
-        let error = match slot.thread.try_recv() {
+        let message = slot.thread.try_recv();
+        if let Some(WorkerMessage::Done(end)) = &message {
+            slot.stuck = matches!(end, Err(Abort::NeverReturns | Abort::Unmodeled(_)));
+            slot.unfinished = if slot.stuck { 0 } else { slot.unfinished - 1 };
+        }
+        let error = match message {
             Some(WorkerMessage::Response(response)) => {
                 self.task(cx, |model, host| {
                     model.worker_message(&source, response, host)
@@ -268,10 +285,13 @@ impl Hub {
                 self.task(cx, |model, host| model.export_reply(id, reply, host));
                 self.host.exports.retain(|(i, _)| *i != id);
             }
-            ExportMessage::Unmodeled(what) => cx.emit(HubEvent::Exception {
-                task: "worker",
-                error: format!("unmodeled: {what}"),
-            }),
+            ExportMessage::Unmodeled(what) => {
+                cx.emit(HubEvent::Exception {
+                    task: "worker",
+                    error: format!("unmodeled: {what}"),
+                });
+                self.host.exports.retain(|(i, _)| *i != id);
+            }
         }
     }
 }
@@ -396,8 +416,10 @@ impl HubHost for GpuiHost<'_, '_> {
 
     fn spawn_worker(&mut self, source: &str, _name: WorkerName, worker: Box<dyn DecodeWorker>) {
         let (ready, wake) = async_channel::unbounded::<()>();
+        let posted = self.state.posted.0.clone();
         let thread = match WorkerThread::spawn_notifying(source, worker, move || {
             let _ = ready.try_send(());
+            let _ = posted.try_send(());
         }) {
             Ok(thread) => thread,
             Err(e) => {
@@ -421,12 +443,15 @@ impl HubHost for GpuiHost<'_, '_> {
             id,
             source: source.to_owned(),
             thread,
+            unfinished: 0,
+            stuck: false,
             _pump: pump,
         });
     }
 
     fn post_worker(&mut self, source: &str, request: Request) {
-        if let Some(slot) = self.state.workers.iter().rfind(|w| w.source == source) {
+        if let Some(slot) = self.state.workers.iter_mut().rfind(|w| w.source == source) {
+            slot.unfinished += usize::from(!slot.stuck);
             slot.thread.post(request);
         }
     }
@@ -445,15 +470,18 @@ impl HubHost for GpuiHost<'_, '_> {
         let (send, receive) = async_channel::unbounded();
         let progress = ExportProgress::default();
         let worker = progress.clone();
+        let posted = self.state.posted.0.clone();
         let spawned = std::thread::Builder::new()
             .name(format!("export-{id}"))
             .spawn(move || {
                 let end = run_export(log, &options, &mut |value| {
                     if worker.post(value) {
                         let _ = send.send_blocking(ExportMessage::Progressed);
+                        let _ = posted.try_send(());
                     }
                 });
                 let _ = send.send_blocking(end);
+                let _ = posted.try_send(());
             });
         if let Err(e) = spawned {
             self.emit(HubEvent::Exception {

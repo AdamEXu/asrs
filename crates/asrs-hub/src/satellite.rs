@@ -396,6 +396,12 @@ impl SatelliteModel {
         );
     }
 
+    /// The renderer's `requestAnimationFrame` callbacks, and what they throw.
+    pub fn animation_frame(&mut self) -> Vec<JsError> {
+        let (tabs, page) = self.hub.tabs_mut();
+        tabs.animation_frame(page)
+    }
+
     /// The window's `resize` listener.
     pub fn resize(&mut self) -> Result<(), TabsError> {
         let null_command = match &self.last_command {

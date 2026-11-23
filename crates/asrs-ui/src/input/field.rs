@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui_kit::base::input::{Input, InputEvent, InputState, Paste};
+use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Context, Entity, EntityInputHandler, EventEmitter,
     FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement,
@@ -297,6 +297,11 @@ impl<M: FieldModel> TextField<M> {
         changed
     }
 
+    /// Changes attributes of the element, which fires no events.
+    pub fn update_model<R>(&mut self, f: impl FnOnce(&mut M) -> R) -> R {
+        f(self.value.model_mut())
+    }
+
     pub fn model(&self) -> &M {
         self.value.model()
     }
@@ -398,6 +403,25 @@ impl<M: FieldModel> TextField<M> {
             let selected = editor.selected_range();
             insert::<M>(&text, selected, &pasted, editor, window, cx);
         });
+    }
+
+    /// `HandleKeydownEventForSpinButton`.
+    fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.kind != FieldKind::Number {
+            return;
+        }
+        cx.stop_propagation();
+        if self.disabled || !self.value.arrow_key(up) {
+            return;
+        }
+        let shown = self.value.shown().to_owned();
+        self.committed = self.value.value();
+        self.editor_text.borrow_mut().clone_from(&shown);
+        self.editor
+            .update(cx, |editor, cx| editor.set_value(shown, window, cx));
+        cx.emit(FieldEvent::Input);
+        cx.emit(FieldEvent::Change);
+        cx.notify();
     }
 
     fn text_style(&self) -> TextStyle {
@@ -505,6 +529,12 @@ impl<M: FieldModel> Render for TextField<M> {
             .id("text-field")
             .key_context(KEY_CONTEXT)
             .capture_action(cx.listener(Self::paste))
+            .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
+                this.arrow_key(true, window, cx);
+            }))
+            .capture_action(cx.listener(|this, _: &MoveDown, window, cx| {
+                this.arrow_key(false, window, cx);
+            }))
             .relative()
             .w(px(width))
             .h(px(height))

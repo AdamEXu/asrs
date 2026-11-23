@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 asrs-js = { path = "../asrs-js" }
+icu_segmenter = { version = "=2.4.0", default-features = false, features = ["compiled_data"] }
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

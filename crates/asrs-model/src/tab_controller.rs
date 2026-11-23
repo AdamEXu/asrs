@@ -110,6 +110,12 @@ pub trait TabRenderer<Cx: ?Sized>: AsAny {
     /// `render(command)`, once per frame while the tab is shown.
     fn render(&mut self, cx: &mut Cx, command: &dyn TabCommand) -> Result<(), JsError>;
 
+    /// The animation frame callbacks the renderer requested itself, once per frame whether or not
+    /// the tab is shown, after the hub's own. Each one's exception is reported on its own.
+    fn animation_frame(&mut self, _cx: &mut Cx) -> Vec<JsError> {
+        Vec::new()
+    }
+
     /// `TableRenderer.UUID`. `Tabs` reads it only on Table tabs.
     fn renderer_uuid(&self) -> Option<&JsString> {
         None

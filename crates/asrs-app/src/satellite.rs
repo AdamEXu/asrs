@@ -92,6 +92,14 @@ impl Satellite {
         });
     }
 
+    /// The renderer's own `requestAnimationFrame` callbacks.
+    pub fn animation_frame(&mut self, cx: &mut Context<'_, Self>) {
+        for e in self.model.animation_frame() {
+            eprintln!("asrs: satellite: {}: {}", e.name, e.message);
+        }
+        self.after_task(cx);
+    }
+
     pub fn resized(&mut self, cx: &mut Context<'_, Self>) {
         self.task(cx, SatelliteModel::resize);
     }

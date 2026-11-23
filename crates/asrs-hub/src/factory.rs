@@ -27,6 +27,7 @@ use asrs_tabs::mechanism_renderer::MechanismRenderer;
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::points::PointsController;
 use asrs_tabs::points_renderer::PointsRenderer;
+use asrs_tabs::statistics::renderer::StatisticsRenderer;
 use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::SwerveController;
 use asrs_tabs::swerve_renderer::{SwerveDom, SwerveRenderer};
@@ -173,7 +174,14 @@ fn renderer<Cx: HubTabCx + 'static>(
             cx.lay_out_console(controller, &mut renderer);
             Box::new(renderer)
         }
-        Some(TabType::Statistics) => pending(TabType::Statistics),
+        Some(TabType::Statistics) => match cx.canvas_env() {
+            Some(env) => {
+                let mut renderer = StatisticsRenderer::new(env.clock, env.text);
+                renderer.set_rendered_in_frames(has_controller);
+                Box::new(renderer)
+            }
+            None => pending(TabType::Statistics),
+        },
         Some(TabType::Video) => pending(TabType::Video),
         Some(TabType::Joysticks) => cx.view_renderer(TabType::Joysticks).unwrap_or_else(|| {
             Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
