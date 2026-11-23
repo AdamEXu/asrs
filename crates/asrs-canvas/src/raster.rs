@@ -16,6 +16,7 @@ use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::gradient;
 use crate::hairline;
+use crate::mip::Mip;
 use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
 use crate::raster_clip::RasterClip;
@@ -162,11 +163,79 @@ pub struct Raster<'a> {
     path: Path,
     fast: Fast,
     lines: RasterState,
-    images: HashMap<String, Arc<Pixmap>>,
+    images: HashMap<String, ImageSource>,
     registers: HashMap<String, ImageData>,
     text: Option<TextRaster<'a>>,
     errors: Vec<(usize, CanvasError)>,
     calls: usize,
+    shades: ShadeCache,
+}
+
+/// What `drawImage` draws: an `<img>` is decoded by cc at the mip level the draw needs, while a
+/// canvas or a bitmap is sampled as it is.
+#[derive(Clone)]
+struct ImageSource {
+    pixmap: Arc<Pixmap>,
+    element: bool,
+}
+
+/// The resampled images the last frame of a canvas drew, so a frame that draws the same image
+/// through the same transform does not sample it again.
+#[derive(Clone, Default)]
+pub struct ShadeCache {
+    entries: Vec<Shade>,
+}
+
+#[derive(Clone)]
+struct Shade {
+    image: Arc<Pixmap>,
+    key: ShadeKey,
+    scratch: Arc<Pixmap>,
+    used: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct ShadeKey {
+    transform: Affine,
+    quality: FilterQuality,
+    opacity: f32,
+    mip: Option<Mip>,
+    bounds: [i32; 4],
+}
+
+impl ShadeCache {
+    fn get(&mut self, image: &Arc<Pixmap>, key: ShadeKey) -> Option<Arc<Pixmap>> {
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|e| Arc::ptr_eq(&e.image, image) && e.key == key)?;
+        entry.used = true;
+        Some(entry.scratch.clone())
+    }
+
+    fn insert(&mut self, image: &Arc<Pixmap>, key: ShadeKey, scratch: Arc<Pixmap>) {
+        self.entries.push(Shade {
+            image: image.clone(),
+            key,
+            scratch,
+            used: true,
+        });
+    }
+
+    fn next_frame(mut self) -> ShadeCache {
+        for entry in &mut self.entries {
+            entry.used = false;
+        }
+        self
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 /// An exception Blink throws from a canvas call instead of drawing.
@@ -191,6 +260,7 @@ enum Source {
         transform: Affine,
         quality: FilterQuality,
         opacity: f32,
+        mip: Option<Mip>,
     },
 }
 
@@ -379,7 +449,21 @@ impl<'a> Raster<'a> {
             text: None,
             errors: Vec::new(),
             calls: 0,
+            shades: ShadeCache::default(),
         })
+    }
+
+    /// Reuses the images an earlier frame of the same canvas resampled.
+    pub fn with_shades(mut self, shades: ShadeCache) -> Raster<'a> {
+        self.shades = shades.next_frame();
+        self
+    }
+
+    /// The resampled images this frame drew, to hand to the next frame of this canvas.
+    pub fn take_shades(&mut self) -> ShadeCache {
+        let mut shades = std::mem::take(&mut self.shades);
+        shades.entries.retain(|e| e.used);
+        shades
     }
 
     /// Continues from the state an earlier frame of the same canvas left; a state from a
@@ -399,9 +483,22 @@ impl<'a> Raster<'a> {
         self
     }
 
-    /// Makes `pixmap` (premultiplied) available to `drawImage` as `id`.
+    /// Makes `pixmap` (premultiplied), a canvas or a bitmap, available to `drawImage` as `id`.
     pub fn add_image(&mut self, id: &str, pixmap: impl Into<Arc<Pixmap>>) {
-        self.images.insert(id.to_owned(), pixmap.into());
+        let source = ImageSource {
+            pixmap: pixmap.into(),
+            element: false,
+        };
+        self.images.insert(id.to_owned(), source);
+    }
+
+    /// [`Raster::add_image`] for an `<img>` element.
+    pub fn add_image_element(&mut self, id: &str, pixmap: impl Into<Arc<Pixmap>>) {
+        let source = ImageSource {
+            pixmap: pixmap.into(),
+            element: true,
+        };
+        self.images.insert(id.to_owned(), source);
     }
 
     pub fn register(&self, name: &str) -> Option<&ImageData> {
@@ -994,7 +1091,7 @@ impl<'a> Raster<'a> {
                 &clipped
             }
         };
-        let shader = match source {
+        let scratch = match source {
             Source::Solid(color) => {
                 scan::blit_spans_solid(&mut self.pixmap, spans, *color);
                 return;
@@ -1008,24 +1105,47 @@ impl<'a> Raster<'a> {
                 });
                 return;
             }
-            Source::Shader(shader) => shader.clone(),
+            Source::Shader(shader) => spans
+                .bounds()
+                .and_then(|bounds| shade(bounds, shader.clone()))
+                .map(Arc::new),
             Source::Image {
                 pixmap,
                 transform,
                 quality,
                 opacity,
-            } => Pattern::new(
-                pixmap.as_ref().as_ref(),
-                SpreadMode::Pad,
-                *quality,
-                *opacity,
-                transform.to_skia(),
-            ),
+                mip,
+            } => spans.bounds().and_then(|bounds| {
+                let key = ShadeKey {
+                    transform: *transform,
+                    quality: *quality,
+                    opacity: *opacity,
+                    mip: *mip,
+                    bounds,
+                };
+                self.shades.get(pixmap, key).or_else(|| {
+                    let level = match mip {
+                        Some(mip) => Some((mip, mip.build(pixmap)?)),
+                        None => None,
+                    };
+                    let (source, transform) = match &level {
+                        Some((mip, level)) => (level.as_ref(), mip.placed(transform)),
+                        None => (pixmap.as_ref().as_ref(), *transform),
+                    };
+                    let pattern = Pattern::new(
+                        source,
+                        SpreadMode::Pad,
+                        *quality,
+                        *opacity,
+                        transform.to_skia(),
+                    );
+                    let scratch = Arc::new(shade(bounds, pattern)?);
+                    self.shades.insert(pixmap, key, scratch.clone());
+                    Some(scratch)
+                })
+            }),
         };
-        let Some(bounds) = spans.bounds() else {
-            return;
-        };
-        let Some(scratch) = shade(bounds, shader) else {
+        let (Some(bounds), Some(scratch)) = (spans.bounds(), scratch) else {
             return;
         };
         let stride = scratch.width() as usize;
@@ -1778,9 +1898,14 @@ impl<'a> Raster<'a> {
     }
 
     fn draw_image(&mut self, id: &str, args: &[f64]) {
-        let Some(image) = self.images.get(id) else {
+        let Some(ImageSource {
+            pixmap: image,
+            element,
+        }) = self.images.get(id)
+        else {
             return;
         };
+        let element = *element;
         let (iw, ih) = (f64::from(image.width()), f64::from(image.height()));
         let (src, dst) = match *args {
             [dx, dy] => ([0.0, 0.0, iw, ih], [dx, dy, iw, ih]),
@@ -1851,6 +1976,12 @@ impl<'a> Raster<'a> {
             }
             return;
         }
+        let mip = if element && quality == FilterQuality::Bilinear {
+            let scale = [m.a.hypot(m.b), m.c.hypot(m.d)];
+            Mip::of(src, scale, [image.width(), image.height()])
+        } else {
+            None
+        };
         let anti_alias = if ctm.is_scale_translate() {
             dst[2] * ctm.a.abs() < 1.0 || dst[3] * ctm.d.abs() < 1.0
         } else if ctm.a == 0.0 && ctm.d == 0.0 {
@@ -1863,6 +1994,7 @@ impl<'a> Raster<'a> {
             transform: m,
             quality,
             opacity: self.state.alpha as f32,
+            mip,
         };
         let dst = [
             dst[0] as f32,
@@ -2284,5 +2416,68 @@ mod dash_tests {
         assert_eq!(fresh, resized);
         let (_, off) = after(RasterState::new(false), &paths);
         assert_eq!(after(off, &line).0, fresh);
+    }
+}
+
+#[cfg(test)]
+mod shade_tests {
+    use super::*;
+    use crate::display::Canvas2d;
+
+    fn image() -> Arc<Pixmap> {
+        let mut pixmap = Pixmap::new(90, 60).unwrap();
+        for (i, p) in pixmap
+            .data_mut()
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            let v = (i * 37 % 251) as u8;
+            *p = [v / 3, v / 2, v, v];
+        }
+        Arc::new(pixmap)
+    }
+
+    fn frame(width: f64, x: f64) -> Canvas2d {
+        let mut c = Canvas2d::new(120, 80);
+        c.clear_rect(0.0, 0.0, 120.0, 80.0);
+        c.draw_image_scaled("a", 3.25, 2.5, width, 50.0);
+        c.set_fill_style("#ff0000");
+        c.fill_rect(x, 10.0, 8.0, 8.0);
+        c
+    }
+
+    fn draw(c: &Canvas2d, image: &Arc<Pixmap>, shades: ShadeCache) -> (Pixmap, ShadeCache) {
+        let mut raster = Raster::new(c.width, c.height).unwrap().with_shades(shades);
+        raster.add_image_element("a", image.clone());
+        raster.run(&c.calls);
+        let shades = raster.take_shades();
+        (raster.into_pixmap(), shades)
+    }
+
+    #[test]
+    fn resampled_images_carry_over_to_equal_draws_only() {
+        for width in [101.0, 40.0, 20.0] {
+            let image = image();
+            let (_, shades) = draw(&frame(width, 5.0), &image, ShadeCache::default());
+            assert_eq!(shades.len(), 1);
+            let sampled = Arc::as_ptr(&shades.entries[0].scratch);
+            let (cached, shades) = draw(&frame(width, 40.0), &image, shades);
+            assert_eq!(Arc::as_ptr(&shades.entries[0].scratch), sampled);
+            let (fresh, _) = draw(&frame(width, 40.0), &image, ShadeCache::default());
+            assert!(cached.data() == fresh.data(), "{width}");
+
+            let wider = frame(width + 1.0, 40.0);
+            let (cached, shades) = draw(&wider, &image, shades);
+            let (fresh, _) = draw(&wider, &image, ShadeCache::default());
+            assert!(cached.data() == fresh.data(), "{width}");
+            assert_eq!(shades.len(), 1);
+
+            let other = Arc::new(Pixmap::new(90, 60).unwrap());
+            let (cached, _) = draw(&wider, &other, shades);
+            let (fresh, _) = draw(&wider, &other, ShadeCache::default());
+            assert!(cached.data() == fresh.data(), "{width}");
+        }
     }
 }

@@ -30,6 +30,10 @@ impl FormSelect {
         &mut self.select
     }
 
+    pub fn hidden(&self) -> &[bool] {
+        &self.hidden
+    }
+
     /// `display: none` per list item, which hides it from the popup.
     pub fn set_hidden(&mut self, hidden: Vec<bool>) {
         self.hidden = hidden;
