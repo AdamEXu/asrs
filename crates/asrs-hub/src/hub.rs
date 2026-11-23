@@ -42,6 +42,7 @@ use asrs_model::source_list_config::{
 };
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::console::controller::ConsoleController;
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::Field2dRenderer;
 use asrs_tabs::line_graph::LineGraphController;
@@ -735,6 +736,22 @@ impl HubModel {
     /// throw come back for the caller to report.
     pub fn source_list_input(&mut self, input: ListInput<'_>) -> (ListOutput, Vec<JsError>) {
         self.tabs.source_list_input(&mut self.page, input)
+    }
+
+    /// The `drag-update` listeners of the tab controllers; `detail` is the event's.
+    pub fn tab_drag_update(&mut self, detail: &JsValue) -> Result<(), JsError> {
+        let mut result = Ok(());
+        for index in 0..self.tabs.len() {
+            let hidden = self.tabs.tab(index).is_none_or(|t| t.content_hidden());
+            let Some(tab) = self.tabs.tab_mut(index) else {
+                continue;
+            };
+            if let Some(console) = tab.controller.downcast_mut::<ConsoleController>() {
+                console.dom().borrow_mut().hidden = hidden;
+                result = result.and(console.handle_drag(&mut self.page, detail));
+            }
+        }
+        result
     }
 
     /// The tabs with the page they run against.
