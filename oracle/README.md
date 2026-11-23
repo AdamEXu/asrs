@@ -1010,6 +1010,29 @@ use: each `{"eval"}` value lists `[property, namespace, tag, [[input, getPropert
 attribute or null], ...]]` per group, and `declarations` replays attribute and style scripts
 with the attribute list after each `["sync"]` step and at the end.
 
+### Swerve and Joysticks renderers
+
+`dom/swerve/<case>` and `dom/joysticks/<case>` (`crates/asrs-tabs/tests/swerve_joysticks_dom.rs`)
+record every `render` of every `SwerveRenderer` and `JoysticksRenderer`. `node
+oracle/tools/r07Specs.mjs` writes the specs, `parity/specs/dom/assets/r07.json` and the hub-level
+`dom/tabs/{swerve,joysticks}-r07` cases; edit the script, not the specs. The fixtures run on Blink
+with `"geometry": "real"`. Their recorder eval adds `window.__r07Render(type, index, command)` and
+`window.__r07Size(width, height)`, as the Mechanism and Points one does.
+
+| Record | Written |
+|---|---|
+| `{"r07": "create", "kind", "id", "aspect", "state"}` | when a renderer is hooked: `getAspectRatio()` and `saveState()` |
+| `{"r07": "assets", "assets"}` | before a Joysticks `render`, when `window.assets` is another object than at the last one |
+| `{"r07": "load", "id", "index"}` | on each `load` event of `IMAGES[index]` |
+| `{"r07": "render", "kind", "id", "command", "dark", "dpr", "reads", "style", "threw"?, "loads"?, "aspect", "size"?, "calls"?}` | after `render` returns or throws: the `clientWidth` and `clientHeight` reads it made, the `CANVAS.style` width and height strings as assigned, `imageLoadCount` before it (Joysticks) and, when it reset the canvas, the pixel size and recorded calls |
+
+The recording canvas never throws, so each renderer's `arc` and `ellipse` calls first run on a
+`CanvasRenderingContext2D` of an about:blank frame, whose `IndexSizeError` reaches upstream before
+the call is recorded. NaN is written as the canonical NaN: V8's tiers give `x * -1` different NaN
+signs, and which tier runs depends on when a background compile finishes.
+`node oracle/tools/r07Traces.mjs` copies a few painted frames into
+`oracle/src/canvas/r07Traces.json`, the `swerve-trace-*` and `joysticks-trace-*` canvas scenes.
+
 Not modelled on jsdom: CSS (so no computed styles or real text layout), scrolling (`scrollTop`
 stays 0). On either backend: workers and historical or live sources (logs are built with `log`
 steps), drag sessions other than through dispatched events, the documentation iframe's

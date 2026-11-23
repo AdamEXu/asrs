@@ -19,6 +19,7 @@ use asrs_tabs::documentation::DocumentationRenderer;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
+use asrs_tabs::joysticks_renderer::{JoysticksDom, JoysticksRenderer};
 use asrs_tabs::line_graph::{LineGraphController, LineGraphDom, LineGraphRenderer};
 use asrs_tabs::list_cx::SourceListCx;
 use asrs_tabs::mechanism::MechanismController;
@@ -28,6 +29,7 @@ use asrs_tabs::points::PointsController;
 use asrs_tabs::points_renderer::PointsRenderer;
 use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::SwerveController;
+use asrs_tabs::swerve_renderer::{SwerveDom, SwerveRenderer};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
 
@@ -167,11 +169,15 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
             Some(TabType::Video) => (Box::new(VideoController::new()), pending(TabType::Video)),
             Some(TabType::Joysticks) => (
                 Box::new(JoysticksController::new(cx)),
-                pending(TabType::Joysticks),
+                Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
+                    JoysticksDom::default(),
+                )))),
             ),
             Some(TabType::Swerve) => (
                 Box::new(SwerveController::new(cx)),
-                pending(TabType::Swerve),
+                Box::new(SwerveRenderer::new(Rc::new(RefCell::new(
+                    SwerveDom::default(),
+                )))),
             ),
             Some(TabType::Mechanism) => (
                 Box::new(MechanismController::new(cx)),
