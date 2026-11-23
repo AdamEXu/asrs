@@ -1,7 +1,8 @@
 #![allow(clippy::disallowed_methods)]
 
 //! The Console tab in the real hub window, headless: a first frame that does not unlock, locked
-//! autoscroll, the wheel unlocking it, and the hover a console leaves when its tab is hidden.
+//! autoscroll, the wheel unlocking it, the hover a console leaves when its tab is hidden, and a
+//! field dragged in.
 
 #[path = "support/hub_page.rs"]
 mod hub_page;
@@ -10,6 +11,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_app::views::console_layout::{ConsoleLayout, LINE_HEIGHT};
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
@@ -136,6 +138,27 @@ fn hiding_leaves_the_hovered_row(headless: &mut HeadlessCapture, scale: f32) {
     page.close();
 }
 
+fn dragging_a_field_in_fills_the_console(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = Page::open(headless, scale);
+    page.lines(0..LINES);
+    page.open_tab(TabType::Console, &JsValue::Null);
+    page.frames(1);
+    for (x, end, rows) in [(100.0, true, 0), (700.0, false, 0), (700.0, true, LINES)] {
+        let data = ops::object([("fields", JsValue::Array(vec![JsValue::string(KEY)]))]);
+        let detail = ops::object([
+            ("end", JsValue::Bool(end)),
+            ("x", JsValue::Number(x)),
+            ("y", JsValue::Number(400.0)),
+            ("data", data),
+        ]);
+        page.model(|model| model.tab_drag_update(&detail).expect("drag-update"));
+        page.frames(1);
+        let count = page.layout(|_, rows| rows.len());
+        assert_eq!(count, rows, "{scale}x: dragged to {x}, end {end}");
+    }
+    page.close();
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub console: skipped, no headless renderer on this platform");
@@ -147,6 +170,7 @@ fn main() {
             opening_stays_locked(&mut headless, scale, from);
         }
         hiding_leaves_the_hovered_row(&mut headless, scale);
+        dragging_a_field_in_fills_the_console(&mut headless, scale);
     }
     println!("hub_console: ok");
 }
