@@ -87,7 +87,7 @@ function licenseCases(): Case[] {
   }
   for (const at of sizes([600, 731, 1200], 597)) add(`real ${at.width} ${at.scale}x`, true, real, at);
 
-  const words = ["the", "Software", "WARRANTIES", "copyright-holder", "(c)", "http://example.com/a/very/long/path/that/does/not/fit?query=string&more=parameters#fragment-identifier", "\"AS-IS\"", "and/or", "2.0.", "A", "To", "Va", "WA", "i", "fi", "3-clause", "-", "--", "—", "“Licensor”", "©", "Straße", "x.y.z", "[name]", "{year}", "50%", "$5", "don't", "'q'", "a:b", "e.g.,", " ", "Björn", "1,000", "#1", "*", "***", "=====", "a=b", "~/x", "C++", "<you@example.com>"];
+  const words = ["the", "Software", "WARRANTIES", "copyright-holder", "(c)", "http://example.com/a/very/long/path/that/does/not/fit?query=string&more=parameters#fragment-identifier", "\"AS-IS\"", "and/or", "2.0.", "A", "To", "Va", "WA", "i", "fi", "3-clause", "-", "--", "\u2014", "“Licensor”", "©", "Straße", "x.y.z", "[name]", "{year}", "50%", "$5", "don't", "'q'", "a:b", "e.g.,", " ", "Björn", "1,000", "#1", "*", "***", "=====", "a=b", "~/x", "C++", "<you@example.com>"];
   const random: [string, string][] = Array.from({ length: 40 }, (_, i) => [`Random ${words[i % words.length]} ${i}`, Array.from({ length: rng.range(1, 160) }, () => rng.pick(words)).join(rng.pick([" ", " ", "\n", " \n"]))]);
   random.push(["wide", "supercalifragilisticexpialidocious".repeat(6) + " after"], ["spaces", "a " + "b".repeat(80) + " c"], ["@electron/a-module-name-that-does-not-fit-on-one-line-of-the-window/with/a-path", "x"]);
   // Zoomed, the CJK fallback font's advances differ from Blink's (asrs issue 273).
