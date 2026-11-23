@@ -12,7 +12,7 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_parity::cve1::Value;
 use asrs_parity::vectors;
-use asrs_tabs::documentation::DocumentationRenderer;
+use asrs_tabs::documentation::{DOCS_URL, DocumentationRenderer};
 
 fn js(value: &Value) -> JsValue {
     match value {
@@ -124,5 +124,28 @@ fn a_report_from_before_the_latest_assignment_is_out_of_date() {
     assert_eq!(
         TabRenderer::<()>::save_state(&renderer, cx),
         JsValue::string("#/")
+    );
+}
+
+#[test]
+fn the_first_render_sets_the_source_and_a_reload_drops_what_was_assigned() {
+    let mut renderer = DocumentationRenderer::new();
+    let cx = &mut ();
+    let frame = renderer.frame().clone();
+    assert_eq!(frame.borrow().src(), None);
+    let command = Rc::new(JsValue::Null);
+    TabRenderer::<()>::render(&mut renderer, cx, &*command).unwrap();
+    assert_eq!(frame.borrow().src(), Some(DOCS_URL));
+    frame.borrow_mut().load(JsString::from("#/"));
+    let state = JsValue::string("#/whats-new");
+    TabRenderer::<()>::restore_state(&mut renderer, cx, &state).unwrap();
+    frame.borrow_mut().load(JsString::from("#/"));
+    assert_eq!(frame.borrow_mut().take_assignment(), None);
+    frame
+        .borrow_mut()
+        .navigated(0, JsString::from("#/legal/support"));
+    assert_eq!(
+        TabRenderer::<()>::save_state(&renderer, cx),
+        JsValue::string("#/legal/support")
     );
 }
