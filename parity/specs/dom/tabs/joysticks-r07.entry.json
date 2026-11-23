@@ -1,0 +1,63 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../assets/r07.json",
+  "../logs/c05.json"
+ ],
+ "fixture": {
+  "seed": 707,
+  "assets": "../assets/r07.json",
+  "images": {
+   "/Users/pilot/Assets/Joystick_Wide/image.png": [
+    1250,
+    800
+   ],
+   "bundledAssets/Joystick_Tall/image.png": [
+    333,
+    1000
+   ],
+   "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png": [
+    101,
+    67
+   ]
+  },
+  "steps": [
+   {
+    "log": "../logs/c05.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 8
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"Wide\",\"Generic Joystick\",\"Tall\",\"Broken\",\"None\",\"None\"])"
+   },
+   {
+    "eval": "window.selection.setSelectedTime(1)"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "drawn"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"Generic Joystick\",\"None\",\"None\",\"None\",\"None\",\"Generic Joystick\"])"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "generic"
+   }
+  ]
+ }
+}

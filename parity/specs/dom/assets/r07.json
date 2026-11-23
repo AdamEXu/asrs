@@ -1,0 +1,415 @@
+{
+ "field2ds": [],
+ "field3ds": [],
+ "robots": [],
+ "joysticks": [
+  {
+   "name": "Wide",
+   "path": "/Users/pilot/Assets/Joystick_Wide/image.png",
+   "components": [
+    {
+     "type": "button",
+     "isYellow": true,
+     "isEllipse": true,
+     "centerPx": [
+      100,
+      120
+     ],
+     "sizePx": [
+      40,
+      40
+     ],
+     "sdlSourceIndex": 0,
+     "niSourceIndex": 1
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      160,
+      120
+     ],
+     "sizePx": [
+      44,
+      30
+     ],
+     "sdlSourceIndex": 1,
+     "niSourceIndex": 2
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": true,
+     "centerPx": [
+      160,
+      180
+     ],
+     "sizePx": [
+      44.5,
+      30.25
+     ],
+     "niSourceIndex": 3
+    },
+    {
+     "type": "button",
+     "isYellow": true,
+     "isEllipse": false,
+     "centerPx": [
+      220,
+      180
+     ],
+     "sizePx": [
+      44,
+      30
+     ],
+     "sdlSourceIndex": 2
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      300,
+      100
+     ],
+     "sizePx": [
+      30,
+      30
+     ],
+     "sdlSourceIndex": 0,
+     "sdlSourcePov": "up",
+     "niSourceIndex": 0,
+     "niSourcePov": "up"
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      330,
+      130
+     ],
+     "sizePx": [
+      30,
+      30
+     ],
+     "sdlSourceIndex": 0,
+     "sdlSourcePov": "right",
+     "niSourceIndex": 0,
+     "niSourcePov": "right"
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      300,
+      160
+     ],
+     "sizePx": [
+      30,
+      30
+     ],
+     "sdlSourceIndex": 0,
+     "sdlSourcePov": "down",
+     "niSourceIndex": 0,
+     "niSourcePov": "down"
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      270,
+      130
+     ],
+     "sizePx": [
+      30,
+      30
+     ],
+     "sdlSourceIndex": 0,
+     "sdlSourcePov": "left",
+     "niSourceIndex": 1,
+     "niSourcePov": "left"
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      400,
+      130
+     ],
+     "sizePx": [
+      30,
+      30
+     ],
+     "sdlSourcePov": "left",
+     "niSourceIndex": 1
+    },
+    {
+     "type": "joystick",
+     "isYellow": false,
+     "centerPx": [
+      500,
+      400
+     ],
+     "radiusPx": 90,
+     "sdlXSourceIndex": 0,
+     "sdlYSourceIndex": 1,
+     "sdlButtonSourceIndex": 1,
+     "niXSourceIndex": 1,
+     "niYSourceIndex": 0
+    },
+    {
+     "type": "joystick",
+     "isYellow": true,
+     "centerPx": [
+      760,
+      400
+     ],
+     "radiusPx": 90.5,
+     "sdlXSourceIndex": 2,
+     "sdlXSourceInverted": true,
+     "sdlYSourceIndex": 3,
+     "sdlYSourceInverted": true,
+     "sdlButtonSourceIndex": 2,
+     "niXSourceIndex": 0,
+     "niXSourceInverted": true,
+     "niYSourceIndex": 1,
+     "niYSourceInverted": true,
+     "niButtonSourceIndex": 1
+    },
+    {
+     "type": "joystick",
+     "isYellow": false,
+     "centerPx": [
+      900,
+      600
+     ],
+     "radiusPx": 33,
+     "niXSourceIndex": 0,
+     "niXSourceInverted": false,
+     "niYSourceIndex": 1,
+     "niButtonSourceIndex": 2
+    },
+    {
+     "type": "axis",
+     "isYellow": false,
+     "centerPx": [
+      1000,
+      200
+     ],
+     "sizePx": [
+      40,
+      160
+     ],
+     "sdlSourceIndex": 0,
+     "sdlSourceRange": [
+      0,
+      1
+     ],
+     "niSourceIndex": 1
+    },
+    {
+     "type": "axis",
+     "isYellow": true,
+     "centerPx": [
+      1060,
+      200
+     ],
+     "sizePx": [
+      40,
+      160
+     ],
+     "sdlSourceIndex": 1,
+     "niSourceIndex": 0,
+     "niSourceRange": [
+      1,
+      -1
+     ]
+    },
+    {
+     "type": "axis",
+     "isYellow": false,
+     "centerPx": [
+      1120,
+      200
+     ],
+     "sizePx": [
+      40,
+      160
+     ],
+     "sdlSourceIndex": 2,
+     "sdlSourceRange": [
+      1,
+      1
+     ]
+    },
+    {
+     "type": "axis",
+     "isYellow": false,
+     "centerPx": [
+      1180,
+      200
+     ],
+     "sizePx": [
+      40,
+      160
+     ],
+     "niSourceIndex": 2
+    },
+    {
+     "type": "touchpad",
+     "isYellow": false,
+     "centerPx": [
+      600,
+      650
+     ],
+     "sizePx": [
+      200,
+      100
+     ],
+     "sdlSourceIndex": 0
+    },
+    {
+     "type": "touchpad",
+     "isYellow": true,
+     "centerPx": [
+      850,
+      650
+     ],
+     "sizePx": [
+      150.5,
+      100.25
+     ],
+     "sdlSourceIndex": 1
+    },
+    {
+     "type": "touchpad",
+     "isYellow": false,
+     "centerPx": [
+      1000,
+      650
+     ],
+     "sizePx": [
+      10,
+      100
+     ],
+     "sdlSourceIndex": 0.5
+    }
+   ]
+  },
+  {
+   "name": "Tall",
+   "path": "bundledAssets/Joystick_Tall/image.png",
+   "components": [
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      100,
+      100
+     ],
+     "sizePx": [
+      80,
+      80
+     ],
+     "sdlSourceIndex": 0,
+     "niSourceIndex": 0
+    },
+    {
+     "type": "axis",
+     "isYellow": false,
+     "centerPx": [
+      200,
+      500
+     ],
+     "sizePx": [
+      30,
+      300
+     ],
+     "sdlSourceIndex": 0,
+     "niSourceIndex": 0
+    },
+    {
+     "type": "joystick",
+     "isYellow": false,
+     "centerPx": [
+      160,
+      850
+     ],
+     "radiusPx": 70,
+     "sdlXSourceIndex": 0,
+     "sdlYSourceIndex": 1
+    }
+   ]
+  },
+  {
+   "name": "Small é",
+   "path": "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png",
+   "components": [
+    {
+     "type": "touchpad",
+     "isYellow": false,
+     "centerPx": [
+      50,
+      30
+     ],
+     "sizePx": [
+      40,
+      20
+     ],
+     "sdlSourceIndex": 0
+    },
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": true,
+     "centerPx": [
+      10.5,
+      10.25
+     ],
+     "sizePx": [
+      3,
+      4
+     ],
+     "sdlSourceIndex": 3
+    }
+   ]
+  },
+  {
+   "name": "Broken",
+   "path": "bundledAssets/Joystick_Broken/image.png",
+   "components": [
+    {
+     "type": "button",
+     "isYellow": false,
+     "isEllipse": false,
+     "centerPx": [
+      100,
+      100
+     ],
+     "sizePx": [
+      80,
+      80
+     ],
+     "sdlSourceIndex": 0
+    }
+   ]
+  },
+  {
+   "name": "Empty",
+   "path": "C:\\Users\\pilot\\Assets\\Joystick_Small%20Pad\\image.png",
+   "components": []
+  },
+  {
+   "name": "Tall",
+   "path": "/Users/pilot/Assets/Joystick_Wide/image.png",
+   "components": []
+  }
+ ],
+ "loadFailures": []
+}
