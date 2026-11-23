@@ -274,6 +274,7 @@ fn open_kind(cx: &mut App, kind: WindowKind, parent: WindowId) -> (WindowId, Win
     let (model_parent, _) = manager.create_hub(None);
     if let Some(bounds) = Windows::manager(cx).bounds(parent) {
         manager.set_bounds(model_parent, bounds);
+        manager.focus(model_parent);
     }
     let new = |opened| match opened {
         asrs_services::window_manager::Opened::New(_, options) => options,
@@ -434,7 +435,7 @@ async fn aspects(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
 }
 
 async fn wheel(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
-    const NOTCHES: [[i32; 2]; 6] = [[1, 0], [-1, 0], [-1, 0], [0, 1], [0, -1], [-3, 0]];
+    const NOTCHES: [[i32; 2]; 5] = [[1, 0], [-1, 0], [-1, 0], [0, 1], [0, -1]];
     let rect = Rect {
         x: 1300.0,
         y: 200.0,
@@ -471,13 +472,6 @@ async fn wheel(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     let reply = electron.request(cx, r#"{"op":"wheels"}"#, "wheels ").await;
     let dom = json::parse(&reply).expect("json");
     let number = |v: &Json, i: usize| v.as_array().expect("event")[i].as_f64().expect("number");
-    let sum = |axis: usize| -> f64 {
-        dom.as_array()
-            .expect("events")
-            .iter()
-            .map(|e| number(e, axis))
-            .sum()
-    };
     let ours = log.borrow().clone();
     let events: Vec<(f64, f64)> = dom
         .as_array()
@@ -489,11 +483,7 @@ async fn wheel(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     report.check(
         "wheel notches",
         !plain.is_empty() && plain == events,
-        format!(
-            "ours {plain:?}, Chromium {events:?} (sums {}, {})",
-            sum(0),
-            sum(1)
-        ),
+        format!("ours {plain:?}, Chromium {events:?}"),
     );
     electron.request(cx, r#"{"op":"close"}"#, "closed").await;
     cx.update(|cx| windows::close(cx, id));

@@ -80,7 +80,23 @@ impl SelectKeys {
     } else {
         SelectKeys::Default
     };
+
+    fn current(cx: &App) -> SelectKeys {
+        #[cfg(feature = "parity")]
+        if let Some(scripted) = cx.try_global::<ScriptedSelectKeys>() {
+            return scripted.0;
+        }
+        let _ = cx;
+        SelectKeys::HOST
+    }
 }
+
+/// The key rules of new selects where a test replays another platform's records.
+#[cfg(feature = "parity")]
+pub struct ScriptedSelectKeys(pub SelectKeys);
+
+#[cfg(feature = "parity")]
+impl gpui_kit::Global for ScriptedSelectKeys {}
 
 /// `SkipForwards` by the page keys.
 const PAGE_STEP: usize = 3;
@@ -485,7 +501,7 @@ impl<M: SelectModel> Select<M> {
             disabled: false,
             hovered: false,
             popup_open: false,
-            keys: SelectKeys::HOST,
+            keys: SelectKeys::current(cx),
             focus,
             bounds: Rc::default(),
             epoch: Instant::now(),
@@ -568,7 +584,8 @@ impl<M: SelectModel> Select<M> {
             }
             SelectKey::OpenPopup => {
                 self.open_popup(window, cx);
-                true
+                // The page's `keydown` listeners get Enter, which opens the popup at `keypress`.
+                keystroke.key != "enter"
             }
             SelectKey::TypeAhead(code) => {
                 if self.model.type_ahead(code, time) {

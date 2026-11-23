@@ -15,6 +15,8 @@ pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry, text_
 pub use model::{FieldModel, FieldValue, PlainText, RangeModel};
 pub use native::{Checkbox, Progress, paint_checkbox, paint_progress, paint_text_field};
 pub use segmented::{Segment, SegmentedControl, segment_boxes};
+#[cfg(feature = "parity")]
+pub use select::ScriptedSelectKeys;
 pub use select::{
     Select, SelectEvent, SelectGeometry, SelectItem, SelectKey, SelectKeys, SelectModel,
     SelectState, SelectStep, geometry as select_geometry, paint_select, popup_menu, select_key,
