@@ -145,7 +145,7 @@ impl AppUnderTest {
     }
 
     /// A message the hub sends main.
-    fn from_hub(&mut self, window: WindowId, name: HubToMain, data: JsValue) {
+    fn send_main(&mut self, window: WindowId, name: HubToMain, data: JsValue) {
         self.cx.update(|cx| {
             let hubs = MainProcess::hub_windows(cx);
             let hub = hubs.iter().find(|(id, _)| *id == window).expect("a hub");
@@ -326,7 +326,7 @@ fn routing_in_a_fresh_home() {
     let ds = app.write("ds.wpilog", &ds_log());
 
     let shown = app.run(&[], |app| {
-        app.from_hub(hub, HubToMain::OpenFilesRequest, files(&plain))
+        app.send_main(hub, HubToMain::OpenFilesRequest, files(&plain))
     });
     assert!(shown.is_empty());
     assert_eq!(app.logs(hub), [text(&plain)]);
@@ -366,7 +366,7 @@ fn routing_in_a_fresh_home() {
     assert_eq!(app.hubs(), [ds_hub, hub], "the DS window is focused");
 
     let shown = app.run(&[], |app| {
-        app.from_hub(ds_hub, HubToMain::OpenFilesRequest, files(&ds))
+        app.send_main(ds_hub, HubToMain::OpenFilesRequest, files(&ds))
     });
     assert!(shown.is_empty(), "a DS window takes DS logs unasked");
     assert_eq!(app.logs(ds_hub), [text(&ds)]);
@@ -452,7 +452,7 @@ fn runs() -> Vec<Run> {
 fn open_log(app: &mut AppUnderTest, hub: WindowId, path: &Path) {
     let data = files(path);
     app.run(&[], |app| {
-        app.from_hub(hub, HubToMain::OpenFilesRequest, data)
+        app.send_main(hub, HubToMain::OpenFilesRequest, data)
     });
     app.until("the log to open", |app| {
         app.hub(hub, |hub| {
@@ -473,10 +473,10 @@ fn the_prompt_exports(app: &mut AppUnderTest, hub: WindowId) {
     let prompt = app.prompt().expect("the export prompt");
     app.click_at(prompt, 300.0 - 58.0, 189.0 - 23.0);
     assert!(app.prompt().is_none(), "exit closes it");
-    assert_eq!(app.hub(hub, HubModel::is_exporting), false);
+    assert!(!app.hub(hub, HubModel::is_exporting));
 
     app.click(Command::ExportData, &[]);
-    assert_eq!(app.hub(hub, HubModel::is_exporting), true);
+    assert!(app.hub(hub, HubModel::is_exporting));
     let prompt = app.prompt().expect("the export prompt");
     let confirm = (300.0 - 23.0, 189.0 - 23.0);
     let shown = app.run(&[Reply::Save(None)], |app| {
@@ -498,7 +498,7 @@ fn the_prompt_exports(app: &mut AppUnderTest, hub: WindowId) {
     });
     assert!(app.prompt().is_none());
     app.until("the export", |app| app.glow(hub) == Some(false));
-    assert_eq!(app.hub(hub, HubModel::is_exporting), false);
+    assert!(!app.hub(hub, HubModel::is_exporting));
     let defaults = ops::object([
         ("format", JsValue::string("csv-table")),
         ("samplingMode", JsValue::string("changes")),
@@ -557,7 +557,7 @@ fn every_run_writes_upstreams_bytes(app: &mut AppUnderTest, hub: WindowId) {
 fn a_hub_asks_before_closing_on_an_export(app: &mut AppUnderTest, hub: WindowId) {
     app.click(Command::NewWindow, &[]);
     app.focus(hub);
-    app.from_hub(hub, HubToMain::SetExporting, JsValue::Bool(true));
+    app.send_main(hub, HubToMain::SetExporting, JsValue::Bool(true));
     let shown = app.click(Command::CloseWindow, &[Reply::Button(0)]);
     let [(Some(parent), Shown::Message(options))] = &shown[..] else {
         panic!("{shown:?}");
@@ -572,8 +572,8 @@ fn a_hub_asks_before_closing_on_an_export(app: &mut AppUnderTest, hub: WindowId)
         panic!("{:?}", app.hubs());
     };
     app.focus(other);
-    app.from_hub(other, HubToMain::SetExporting, JsValue::Bool(true));
-    app.from_hub(other, HubToMain::SetExporting, JsValue::Bool(false));
+    app.send_main(other, HubToMain::SetExporting, JsValue::Bool(true));
+    app.send_main(other, HubToMain::SetExporting, JsValue::Bool(false));
     app.click(Command::NewWindow, &[]);
     app.focus(other);
     assert!(app.click(Command::CloseWindow, &[]).is_empty());
