@@ -90,3 +90,8 @@ harness = false
 name = "source_list_view"
 harness = false
 required-features = ["parity"]
+
+[[test]]
+name = "prompt_windows"
+harness = false
+required-features = ["parity"]

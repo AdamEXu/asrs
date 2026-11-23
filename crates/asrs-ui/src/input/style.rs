@@ -25,6 +25,11 @@ pub const fn system_font(size: f32) -> FontSpec {
 /// changes, so it holds in dark mode too.
 pub const PLACEHOLDER: u32 = 0x757575ff;
 pub const NATIVE_BORDER: u32 = 0x767676ff;
+/// The native theme's disabled text field and menu list, and the UA colour of disabled text.
+pub const DISABLED_BORDER: u32 = 0x7676764d;
+pub const DISABLED_BACKGROUND: u32 = 0xffffff99;
+pub const LIGHTEN_LAYER: u32 = 0xa9a9a933;
+pub const DISABLED_TEXT: u32 = 0x545454ff;
 pub const NATIVE_RADIUS: f32 = 2.0;
 pub const ACCENT: u32 = 0x0075ffff;
 pub const NATIVE_FILL: u32 = 0xefefefff;

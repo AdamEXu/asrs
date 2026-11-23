@@ -1,0 +1,510 @@
+{
+  "about": "Interaction (U19): the prompt windows, each opened through upstream's own route on both sides (the tab and axis context menus' items, and main's start-export) and driven with real input: a tab renamed, a locked range edited, a conversion prompt cancelled and another confirmed with typed picks and a typed factor, and the export prompt filled in and cancelled. Saved HubState (title, locked range, conversion) and recent-units.json are compared; nothing is masked but focused text inputs",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Speeds",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": [
+                  -2.5,
+                  7.123456789
+                ],
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": {
+                    "type": "length",
+                    "from": "meters",
+                    "to": "feet",
+                    "factor": 2
+                  }
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 64,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Rename..."
+      ]
+    },
+    {
+      "prompt": "renameTab"
+    },
+    {
+      "capture": "rename",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "N"
+    },
+    {
+      "key": "e"
+    },
+    {
+      "key": "w"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "rename-typed",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "renamed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 551,
+      "y": 465
+    },
+    {
+      "mouse": "click",
+      "x": 551,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "menu": [
+        "Edit Range..."
+      ]
+    },
+    {
+      "prompt": "editRange"
+    },
+    {
+      "capture": "range",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "9"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "2"
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "-"
+    },
+    {
+      "key": "1"
+    },
+    {
+      "key": "."
+    },
+    {
+      "capture": "range-min",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 85
+    },
+    {
+      "capture": "range-hover",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "ranged",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 551,
+      "y": 465
+    },
+    {
+      "mouse": "click",
+      "x": 551,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "menu": [
+        "Manual Units",
+        "Edit Conversion..."
+      ]
+    },
+    {
+      "prompt": "unitConversion"
+    },
+    {
+      "capture": "conversion-none",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 139
+    },
+    {
+      "mouse": "click",
+      "x": 242,
+      "y": 139
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 1085,
+      "y": 465
+    },
+    {
+      "mouse": "click",
+      "x": 1085,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "menu": [
+        "Manual Units",
+        "Edit Conversion..."
+      ]
+    },
+    {
+      "prompt": "unitConversion"
+    },
+    {
+      "capture": "conversion",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "a"
+    },
+    {
+      "key": "n"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "1"
+    },
+    {
+      "key": "/"
+    },
+    {
+      "key": "4"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "conversion-typed",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "converted",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "main": "start-export"
+    },
+    {
+      "prompt": "export"
+    },
+    {
+      "capture": "export",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "m"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "f"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "/"
+    },
+    {
+      "key": "A"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "export-typed",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 166
+    },
+    {
+      "mouse": "click",
+      "x": 242,
+      "y": 166
+    },
+    {
+      "prompt": null
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "cancelled",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    }
+  ]
+}

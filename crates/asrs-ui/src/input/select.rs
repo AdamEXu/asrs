@@ -18,7 +18,8 @@ use gpui_kit::{
 
 use crate::input::skia;
 use crate::input::style::{
-    CONTROL_FONT, NATIVE_BORDER, NATIVE_RADIUS, device_border, native_stroke,
+    CONTROL_FONT, DISABLED_BACKGROUND, DISABLED_BORDER, LIGHTEN_LAYER, NATIVE_BORDER,
+    NATIVE_RADIUS, device_border, native_stroke,
 };
 use crate::platform::{self, SelectMenu, SelectMenuItem, SelectMenuItemKind};
 use crate::text::{self, LineHeight, Overflow, TextStyle, WhiteSpace};
@@ -142,9 +143,6 @@ pub enum SelectState {
 /// Chromium's light control colours (upstream sets no `color-scheme`), as
 /// `NativeThemeBase::GetControlColor` resolves them: `0xRRGGBBAA`.
 const HOVERED_BORDER: u32 = 0x4f4f4fff;
-const DISABLED_BORDER: u32 = 0x7676764d;
-const DISABLED_BACKGROUND: u32 = 0xffffff99;
-const LIGHTEN_LAYER: u32 = 0xa9a9a933;
 const FIELD_TEXT: u32 = 0x000000;
 /// `light-dark(GrayText, #aaa)` of `select:disabled` in light mode.
 const GRAY_TEXT: u32 = 0x808080;
@@ -263,7 +261,7 @@ fn draw(
         String::new()
     };
     let mut pixmap = skia::svg(w, h, 1.0, &lighten)?;
-    fill_aliased_rrect(&mut pixmap, [i, i, bw, bh], radius, fill);
+    skia::fill_aliased_rrect(&mut pixmap, [i, i, bw, bh], radius, fill);
     let mut body = skia::rect(
         i,
         i,
@@ -314,35 +312,6 @@ fn draw(
         }
     }
     Some(pixmap)
-}
-
-/// `PaintTextField`'s background, which it draws without antialiasing: a pixel is in when its
-/// centre is, with the straight edges rounded as `SkScan::FillRect` rounds them.
-fn fill_aliased_rrect(pixmap: &mut Pixmap, [x, y, w, h]: [f64; 4], radius: f64, rgba: u32) {
-    let alpha = rgba & 0xff;
-    let rgb = [(rgba >> 24) & 0xff, (rgba >> 16) & 0xff, (rgba >> 8) & 0xff];
-    let round = |v: f64| (v + 0.5).floor() as i64;
-    let (left, top, right, bottom) = (round(x), round(y), round(x + w), round(y + h));
-    let width = i64::from(pixmap.width());
-    let height = i64::from(pixmap.height());
-    let data = pixmap.data_mut();
-    for py in top.max(0)..bottom.min(height) {
-        for px in left.max(0)..right.min(width) {
-            let (cx, cy) = (px as f64 + 0.5, py as f64 + 0.5);
-            let dx = (x + radius - cx).max(cx - (x + w - radius)).max(0.0);
-            let dy = (y + radius - cy).max(cy - (y + h - radius)).max(0.0);
-            if dx > 0.0 && dy > 0.0 && dx * dx + dy * dy > radius * radius {
-                continue;
-            }
-            let p = ((py * width + px) * 4) as usize;
-            let inverse = 255 - alpha;
-            for (c, &v) in rgb.iter().enumerate() {
-                let src = (v * alpha + 127) / 255;
-                data[p + c] = (src + (u32::from(data[p + c]) * inverse + 127) / 255) as u8;
-            }
-            data[p + 3] = (alpha + (u32::from(data[p + 3]) * inverse + 127) / 255) as u8;
-        }
-    }
 }
 
 /// Source-over of each coverage mask in `color` onto the premultiplied pixmap, inside `clip`.

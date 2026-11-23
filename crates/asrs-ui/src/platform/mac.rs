@@ -12,8 +12,8 @@ use objc2::{
 };
 use objc2_app_kit::{
     NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSControlStateValueOff,
-    NSControlStateValueOn, NSEvent, NSEventMask, NSEventModifierFlags, NSFont, NSFontAttributeName,
-    NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle,
+    NSControlStateValueOn, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont,
+    NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle,
     NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
     NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
     NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection,
@@ -43,6 +43,18 @@ pub(super) fn init() {
     if MainThreadMarker::new().is_some() {
         install_wheel_monitor();
     }
+}
+
+/// `kVK_ANSI_KeypadEnter`.
+const KEYPAD_ENTER: u16 = 0x4C;
+
+pub(super) fn numpad_enter() -> bool {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
+    NSApplication::sharedApplication(mtm)
+        .currentEvent()
+        .is_some_and(|e| e.r#type() == NSEventType::KeyDown && e.keyCode() == KEYPAD_ENTER)
 }
 
 fn ns_view(window: &Window) -> Option<Retained<NSView>> {
@@ -1159,17 +1171,26 @@ pub(super) mod probe {
         true
     }
 
-    pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {
-        let Some(mtm) = MainThreadMarker::new() else {
-            return false;
-        };
-        let Some(menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
-            return false;
-        };
+    pub fn numpad_enter_for(key_code: u16) -> Option<bool> {
+        let app = NSApplication::sharedApplication(MainThreadMarker::new()?);
+        let event = key_down("\r", 0, key_code)?;
+        app.postEvent_atStart(&event, true);
+        // SAFETY: the mode is a static AppKit string.
+        let mode = unsafe { objc2_foundation::NSDefaultRunLoopMode };
+        app.nextEventMatchingMask_untilDate_inMode_dequeue(
+            objc2_app_kit::NSEventMask::KeyDown,
+            None,
+            mode,
+            true,
+        )?;
+        Some(super::numpad_enter())
+    }
+
+    fn key_down(key: &str, modifiers: u32, key_code: u16) -> Option<Retained<NSEvent>> {
         let characters = objc2_foundation::NSString::from_str(key);
         // SAFETY: NSEvent's documented key event constructor; a nil graphics context is the
         // value AppKit requires.
-        let event: Option<Retained<NSEvent>> = unsafe {
+        unsafe {
             msg_send![
                 <NSEvent as objc2::ClassType>::class(),
                 keyEventWithType: objc2_app_kit::NSEventType::KeyDown,
@@ -1183,10 +1204,19 @@ pub(super) mod probe {
                 characters: &*characters,
                 charactersIgnoringModifiers: &*characters,
                 isARepeat: false,
-                keyCode: 0u16
+                keyCode: key_code
             ]
+        }
+    }
+
+    pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
         };
-        event.is_some_and(|event| menu.performKeyEquivalent(&event))
+        let Some(menu) = NSApplication::sharedApplication(mtm).mainMenu() else {
+            return false;
+        };
+        key_down(key, modifiers, 0).is_some_and(|event| menu.performKeyEquivalent(&event))
     }
 
     thread_local! {

@@ -125,7 +125,7 @@ pub enum SelectItem {
 /// options runs the selectedness algorithm, which selects the first option that is not disabled
 /// when none is selected; assigning `value` or `selectedIndex` does not, so a value no option
 /// has leaves nothing selected. A disabled option stays selectable by script.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Select {
     items: Vec<SelectItem>,
     selected: Option<usize>,

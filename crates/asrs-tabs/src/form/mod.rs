@@ -133,6 +133,11 @@ impl NumberInput {
         self.value = if keep { value } else { JsString::new() };
     }
 
+    /// The user edits the field, whose editor now shows `visible`.
+    pub fn set_visible_value(&mut self, visible: &JsString) {
+        self.set_value(convert_from_visible_value(visible));
+    }
+
     /// `Number(input.value)`.
     pub fn number(&self) -> f64 {
         number::to_number(self.value.units())
@@ -141,6 +146,82 @@ impl NumberInput {
     pub fn value_as_number(&self) -> f64 {
         value_as_number(&self.value)
     }
+}
+
+/// `NumberInputType::HandleBeforeTextInsertedEvent` for en-US: what of `text` the user can insert
+/// between `left` and `right` in a number field's editor.
+pub fn insertable_number_text(left: &[u16], text: &[u16], right: &[u16]) -> Vec<u16> {
+    let is_e = |u: u16| u == u16::from(b'e') || u == u16::from(b'E');
+    let is_sign = |u: u16| u == u16::from(b'+') || u == u16::from(b'-');
+    let point = u16::from(b'.');
+    let has_e = |s: &[u16]| s.iter().any(|&u| is_e(u));
+    let signs = |s: &[u16]| s.iter().filter(|&&u| is_sign(u)).count();
+    let after_e = |s: &[u16]| s.last().is_some_and(|&u| is_e(u));
+    let has_sign_not_after_e = |s: &[u16]| (0..s.len()).any(|i| is_sign(s[i]) && !after_e(&s[..i]));
+    let mut left = left.to_vec();
+    let start = left.len();
+    for &unit in text {
+        let unit = match unit {
+            0xFF10..=0xFF19 => unit - 0xFF10 + u16::from(b'0'),
+            0xFF0E => point,
+            0xFF0D | 0x30FC => u16::from(b'-'),
+            _ => unit,
+        };
+        let accepted = if unit == point {
+            !left.contains(&point)
+                && !right.contains(&point)
+                && !has_e(&left)
+                && !has_sign_not_after_e(right)
+        } else if is_e(unit) {
+            !has_e(&left) && !has_e(right) && !right.contains(&point)
+        } else if is_sign(unit) {
+            signs(&left) + signs(right) < 2
+                && (left.is_empty() || after_e(&left) || !(has_e(&left) || has_e(right)))
+        } else if is_digit(unit) {
+            !(right.first().is_some_and(|&u| is_sign(u)) && (left.is_empty() || after_e(&left)))
+        } else {
+            false
+        };
+        if accepted {
+            left.push(unit);
+        }
+    }
+    left.split_off(start)
+}
+
+/// `NumberInputType::ConvertFromVisibleValue` for en-US: text with an exponent as it is, else
+/// `Locale::ConvertFromLocalizedNumber`, which drops whitespace, one leading `+` and a trailing
+/// `.`, and reads anything but digits and points after an optional `-` as empty.
+fn convert_from_visible_value(visible: &JsString) -> JsString {
+    let is = |u: u16, c: u8| u == u16::from(c);
+    if visible.units().iter().any(|&u| is(u, b'e') || is(u, b'E')) {
+        return visible.clone();
+    }
+    let input: Vec<u16> = visible
+        .units()
+        .iter()
+        .copied()
+        .filter(|u| !matches!(u, 0x09..=0x0D | 0x20))
+        .collect();
+    let (negative, mut digits) = match input.split_first() {
+        Some((&sign, rest)) if is(sign, b'-') => (true, rest),
+        _ => (false, &input[..]),
+    };
+    if !negative && digits.len() >= 2 && is(digits[0], b'+') {
+        digits = &digits[1..];
+    }
+    if !digits.iter().all(|&u| is_digit(u) || is(u, b'.')) {
+        return JsString::new();
+    }
+    let mut converted: Vec<u16> = Vec::with_capacity(digits.len() + 1);
+    if negative {
+        converted.push(u16::from(b'-'));
+    }
+    converted.extend_from_slice(digits);
+    if converted.len() >= 2 && converted.last() == Some(&u16::from(b'.')) {
+        converted.pop();
+    }
+    JsString::from_units(converted)
 }
 
 /// `StepRange` as `RangeInputType::CreateStepRange(kRejectAny)` builds it.

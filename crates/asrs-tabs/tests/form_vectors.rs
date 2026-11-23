@@ -12,7 +12,9 @@ use asrs_parity::record_vectors;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::Record;
 use asrs_tabs::form::css::{Property, Style};
-use asrs_tabs::form::{NumberInput, OptGroup, RangeInput, Select, SelectItem, SelectOption};
+use asrs_tabs::form::{
+    NumberInput, OptGroup, RangeInput, Select, SelectItem, SelectOption, insertable_number_text,
+};
 
 enum Element {
     Number(NumberInput),
@@ -377,3 +379,45 @@ form_vectors!(number_input, "form/number-input");
 form_vectors!(range_input, "form/range-input");
 form_vectors!(select, "form/select");
 form_vectors!(css_value, "form/css-value");
+
+record_vectors!(number_insert, "form/number-insert", |record: &Record| {
+    let Json::Object(fields) = &record.json else {
+        return Err("record is not an object".to_owned());
+    };
+    let names: Vec<String> = fields.iter().map(|(k, _)| k.to_string_lossy()).collect();
+    if names != ["shown", "start", "end", "insert", "result", "value"] {
+        return Err(format!("unexpected fields {names:?}"));
+    }
+    let units = |name: &str| {
+        let text = record.field(name).and_then(Json::as_str);
+        Ok::<_, String>(
+            text.ok_or(format!("{name} is not a string"))?
+                .units()
+                .to_vec(),
+        )
+    };
+    let index = |name: &str| match record.field(name) {
+        Some(Json::Number(n)) if n.fract() == 0.0 && *n >= 0.0 => Ok(*n as usize),
+        other => Err(format!("{name} is {other:?}")),
+    };
+    let (shown, insert) = (units("shown")?, units("insert")?);
+    let (left, right) = (&shown[..index("start")?], &shown[index("end")?..]);
+    let kept = insertable_number_text(left, &insert, right);
+    let result = [left, &kept, right].concat();
+    let mut input = NumberInput::default();
+    input.set_visible_value(&JsString::from_units(result.clone()));
+    let expected = (units("result")?, units("value")?);
+    if (&result, input.value().units()) == (&expected.0, &expected.1[..]) {
+        return Ok(());
+    }
+    let text = |u: &[u16]| String::from_utf16_lossy(u);
+    Err(format!(
+        "{:?} in {:?}: expected {:?} with value {:?}, got {:?} with value {:?}",
+        text(&insert),
+        (text(left), text(right)),
+        text(&expected.0),
+        text(&expected.1),
+        text(&result),
+        input.value().to_string_lossy()
+    ))
+});
