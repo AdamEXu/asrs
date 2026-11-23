@@ -2,6 +2,8 @@
 
 //! A `TabCx` that records what a renderer asks of it, for replays of Blink runs.
 
+pub mod table_geometry;
+
 use std::cell::{Ref, RefCell};
 
 use asrs_js::time::Rng;

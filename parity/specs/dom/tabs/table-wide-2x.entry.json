@@ -2942,7 +2942,7 @@
           "commands",
           {
             "kind": "eval",
-            "expr": "window.__oracleQuiet(() => [window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.scrollTop, window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.scrollLeft])"
+            "expr": "window.__oracleQuiet(() => window.tabs.tabList[window.tabs.selectedTab].renderer.TABLE_CONTAINER.scrollTop)"
           }
         ],
         "label": "clamped"

@@ -23,31 +23,22 @@ use crate::cx::{TabCx, display_offset, display_time};
 use crate::dom_tree::inner_text;
 use crate::form::NumberInput;
 
+pub mod layout;
 pub mod view;
+use layout::TableLayout;
 use view::{TableHeader, TableRow, TableView, boolean_icon};
 
 const DRAG_THRESHOLD_PX: f64 = 5.0;
 const DEFAULT_ROW_HEIGHT_PX: f64 = 25.0;
 const DATA_ROW_BUFFER: usize = 15;
 const DRAG_HIGHLIGHT_OFFSET_PX: f64 = 12.5;
+pub(crate) const FILLER_UPPER_PX: f64 = 500.0;
+pub(crate) const FILLER_LOWER_PX: f64 = 1000.0;
 
-/// The DOM facts of the shared renderer element. `header_cells` has one entry per `th` in the
-/// header row: cell 0 is the jump-input cell, the rest follow `lastFields`.
-#[derive(Clone, Debug, Default)]
+/// The DOM facts of the shared renderer element.
 pub struct TableDom {
     /// `ROOT.hidden`.
     pub hidden: bool,
-    /// `TABLE_CONTAINER.getBoundingClientRect()`.
-    pub container: Rect,
-    /// `HEADER.children[i].getBoundingClientRect()` for every `th`.
-    pub header_cells: Vec<Rect>,
-    /// `HEADER.getBoundingClientRect()` (the header row).
-    pub header_row: Rect,
-    /// `dataRows[i].getBoundingClientRect()` for every visible row. The DOM oracle's layout
-    /// resolves all rows alike, so one rect stands for them; hidden rows are skipped.
-    pub data_row: Rect,
-    /// `TABLE_CONTAINER.scrollTop`, persisted across frames.
-    pub scroll_top: f64,
     /// `HEADER.childElementCount`, written by the renderer's `updateFields`.
     pub header_count: usize,
     /// `DRAG_HIGHLIGHT.hidden` and its `style.left` px value.
@@ -57,6 +48,33 @@ pub struct TableDom {
     pub jump_input: NumberInput,
     /// The last `mousemove` `clientY` on `TABLE_BODY`; `None` after `mouseleave`.
     pub hover_cursor_y: Option<f64>,
+    pub layout: TableLayout,
+    /// Answers the layout reads in place of `layout`.
+    pub geometry: Option<Box<dyn TableGeometry>>,
+}
+
+impl Default for TableDom {
+    fn default() -> Self {
+        TableDom {
+            hidden: false,
+            header_count: 1,
+            drag_highlight_hidden: true,
+            drag_highlight_left: None,
+            jump_input: NumberInput::default(),
+            hover_cursor_y: None,
+            layout: TableLayout::default(),
+            geometry: None,
+        }
+    }
+}
+
+impl TableDom {
+    pub fn geometry(&mut self) -> &mut dyn TableGeometry {
+        match self.geometry.as_deref_mut() {
+            Some(geometry) => geometry,
+            None => &mut self.layout,
+        }
+    }
 }
 
 /// One entry of the command's `fields` array.
@@ -234,6 +252,8 @@ pub struct ColumnDrag {
     pub offset_x: f64,
     pub offset_y: f64,
     pub table_index: usize,
+    /// The `style.width` px value of the container inside `#dragItem`.
+    pub width: f64,
 }
 
 pub struct TableController {
@@ -268,8 +288,13 @@ impl TableController {
 
     /// `mousedown` on `ROOT`.
     pub fn root_mouse_down(&mut self, x: f64, y: f64) {
-        let dom = self.dom.borrow();
-        if y < dom.header_cells.first().map_or(0.0, Rect::bottom) {
+        if y < self
+            .dom
+            .borrow_mut()
+            .geometry()
+            .header_cell_rect(0)
+            .bottom()
+        {
             self.mouse_down = Some([x, y]);
         }
     }
@@ -286,28 +311,34 @@ impl TableController {
         if math::abs(x - down_x) < DRAG_THRESHOLD_PX && math::abs(y - down_y) < DRAG_THRESHOLD_PX {
             return None;
         }
+        self.mouse_down = None;
+        let mut dom = self.dom.borrow_mut();
+        let count = dom.header_count;
+        let geometry = dom.geometry();
         let mut index = None;
-        let mut cell = Rect::default();
-        {
-            let dom = self.dom.borrow();
-            for (i, rect) in dom.header_cells.iter().enumerate().skip(1) {
-                if down_x >= rect.left()
-                    && down_x <= rect.right()
-                    && down_y >= rect.top()
-                    && down_y <= rect.bottom()
-                {
-                    index = Some(i);
-                    cell = *rect;
-                }
+        for i in 1..count {
+            let rect = geometry.header_cell_rect(i);
+            if down_x >= rect.left()
+                && down_x <= rect.right()
+                && down_y >= rect.top()
+                && down_y <= rect.bottom()
+            {
+                index = Some(i);
             }
         }
-        self.mouse_down = None;
-        index.map(|i| ColumnDrag {
+        let i = index?;
+        let width = math::min2(
+            geometry.header_key_client_width(i),
+            geometry.header_key_text_width(i),
+        );
+        let cell = geometry.header_cell_rect(i);
+        Some(ColumnDrag {
             x,
             y,
             offset_x: x - cell.left(),
             offset_y: y - cell.top(),
             table_index: i - 1,
+            width,
         })
     }
 
@@ -353,31 +384,36 @@ impl TableController {
         let y = ops::value_to_number(&ops::get(detail, "y")?).unwrap_or(f64::NAN);
         let end = ops::to_boolean(&ops::get(detail, "end")?);
 
-        let table_box = self.dom.borrow().container;
+        let table_box = self.dom.borrow_mut().geometry().container_rect();
         let mut selected = None;
         let mut selected_x = 0.0;
         if y > table_box.y {
-            let dom = self.dom.borrow();
+            let mut dom = self.dom.borrow_mut();
             let count = dom.header_count;
+            let geometry = dom.geometry();
             for i in 0..count {
-                let cell = |i: usize| dom.header_cells.get(i).copied().unwrap_or_default();
                 let target_x = if i == 0 && !self.fields.is_empty() {
-                    cell(1).left()
+                    if count == 1 {
+                        return Err(JsError::type_error(
+                            "Cannot read properties of undefined (reading 'getBoundingClientRect')",
+                        ));
+                    }
+                    geometry.header_cell_rect(1).left()
                 } else {
-                    cell(i).right()
+                    geometry.header_cell_rect(i).right()
                 };
-                if target_x < cell(0).right() {
+                if target_x < geometry.header_cell_rect(0).right() {
                     continue;
                 }
                 let left_bound = if i == 0 {
                     table_box.x
                 } else {
-                    target_x - cell(i).width / 2.0
+                    target_x - geometry.header_cell_rect(i).width / 2.0
                 };
                 let right_bound = if i == count - 1 {
                     f64::INFINITY
                 } else {
-                    target_x + cell(i + 1).width / 2.0
+                    target_x + geometry.header_cell_rect(i + 1).width / 2.0
                 };
                 if left_bound < x && right_bound > x {
                     selected = Some(i);
@@ -555,9 +591,27 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for TableController {
     }
 }
 
-/// The layout reads `TableRenderer` makes and the scroll position it writes, one call per
-/// upstream access and in upstream's order. `TableDom` answers from its fields; a replay of a
-/// Blink run with real geometry answers from the recorded reads.
+/// The content that sets the table's height: the fillers and how many pooled rows are shown.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TableRows {
+    pub filler_upper_px: f64,
+    pub shown: usize,
+    pub filler_lower_px: f64,
+}
+
+impl Default for TableRows {
+    fn default() -> Self {
+        TableRows {
+            filler_upper_px: FILLER_UPPER_PX,
+            shown: 0,
+            filler_lower_px: FILLER_LOWER_PX,
+        }
+    }
+}
+
+/// The layout reads the two halves make and the scroll position they write, one call per
+/// upstream access and in upstream's order. `TableLayout` answers from its model of Blink's
+/// layout; a replay of a Blink run with real geometry checks the recorded reads.
 pub trait TableGeometry {
     /// `TABLE_CONTAINER.scrollTop`.
     fn scroll_top(&mut self) -> f64;
@@ -570,42 +624,21 @@ pub trait TableGeometry {
     fn header_rect(&mut self) -> Rect;
     /// `dataRows[index].getBoundingClientRect()`; `hidden` is the row's `hidden` flag.
     fn data_row_rect(&mut self, index: usize, hidden: bool) -> Rect;
-}
-
-impl TableGeometry for TableDom {
-    fn scroll_top(&mut self) -> f64 {
-        self.scroll_top
-    }
-
-    fn set_scroll_top(&mut self, value: f64) {
-        self.scroll_top = value;
-    }
-
-    fn container_client_height(&mut self) -> f64 {
-        math::round(self.container.height)
-    }
-
-    fn header_client_height(&mut self) -> f64 {
-        math::round(self.header_row.height)
-    }
-
-    fn header_rect(&mut self) -> Rect {
-        self.header_row
-    }
-
-    fn data_row_rect(&mut self, _index: usize, hidden: bool) -> Rect {
-        if hidden {
-            Rect::default()
-        } else {
-            self.data_row
-        }
-    }
+    /// `TABLE_CONTAINER.getBoundingClientRect()`.
+    fn container_rect(&mut self) -> Rect;
+    /// `HEADER.children[index].getBoundingClientRect()`.
+    fn header_cell_rect(&mut self, index: usize) -> Rect;
+    /// `clientWidth` of the key container in `HEADER.children[index]`.
+    fn header_key_client_width(&mut self, index: usize) -> f64;
+    /// `offsetWidth` of the key text in `HEADER.children[index]`.
+    fn header_key_text_width(&mut self, index: usize) -> f64;
+    /// The renderer changed the rows; the next read lays them out.
+    fn rows_changed(&mut self, _rows: TableRows) {}
 }
 
 pub struct TableRenderer {
     uuid: JsString,
     dom: Rc<RefCell<TableDom>>,
-    geometry: Option<Box<dyn TableGeometry>>,
     view: TableView,
     row_height_px: f64,
     data_row_timestamps: Vec<f64>,
@@ -629,7 +662,6 @@ impl TableRenderer {
         Self {
             uuid,
             dom,
-            geometry: None,
             view: TableView::new(has_controller),
             row_height_px: DEFAULT_ROW_HEIGHT_PX,
             data_row_timestamps: Vec::new(),
@@ -654,16 +686,22 @@ impl TableRenderer {
         &self.view
     }
 
-    /// Answers the renderer's layout reads from `geometry` instead of the shared `TableDom`.
+    /// Answers the renderer element's layout reads from `geometry` instead of the layout model.
     pub fn set_geometry(&mut self, geometry: Box<dyn TableGeometry>) {
-        self.geometry = Some(geometry);
+        self.dom.borrow_mut().geometry = Some(geometry);
     }
 
-    fn geometry<R>(&mut self, f: impl FnOnce(&mut dyn TableGeometry) -> R) -> R {
-        match self.geometry.as_deref_mut() {
-            Some(geometry) => f(geometry),
-            None => f(&mut *self.dom.borrow_mut()),
-        }
+    fn geometry<R>(&self, f: impl FnOnce(&mut dyn TableGeometry) -> R) -> R {
+        f(self.dom.borrow_mut().geometry())
+    }
+
+    fn rows_changed(&self) {
+        let rows = TableRows {
+            filler_upper_px: self.view.filler_upper_px,
+            shown: self.view.rows.iter().filter(|row| !row.hidden).count(),
+            filler_lower_px: self.view.filler_lower_px,
+        };
+        self.geometry(|g| g.rows_changed(rows));
     }
 
     /// `TABLE_BODY`'s `mousemove`.
@@ -860,6 +898,7 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
         let data_row_count =
             math::ceil(client_height / self.row_height_px) as usize + DATA_ROW_BUFFER * 2;
         self.view.rows.resize_with(data_row_count, TableRow::new);
+        self.rows_changed();
         if let Some(hidden) = self.view.rows.first().map(|row| row.hidden) {
             let row_height = self.geometry(|g| g.data_row_rect(0, hidden)).height;
             if row_height > 0.0 && row_height != self.row_height_px {
@@ -893,6 +932,7 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             }
             self.view.filler_upper_px = 0.0;
             self.view.filler_lower_px = 0.0;
+            self.rows_changed();
             data_row_start = 0;
             data_row_end = self.timestamps.len();
         } else {
@@ -911,6 +951,7 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             for row in &mut self.view.rows {
                 row.hidden = false;
             }
+            self.rows_changed();
             self.geometry(|g| g.set_scroll_top(scroll_top));
             data_row_start = filler_upper as usize;
             data_row_end = data_row_start + data_row_count;
