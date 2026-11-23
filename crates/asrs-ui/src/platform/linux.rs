@@ -92,11 +92,14 @@ fn placement(window: &Window, bounds: Bounds<Pixels>) -> Placement {
     if is_wayland(window) {
         return Placement::Anchored(handle_of(window), bounds);
     }
-    let origin = match X11Window::of(window) {
-        Some(x11) => x11.origin().unwrap_or(window.bounds().origin),
-        None => window.bounds().origin,
-    };
-    Placement::Screen(Bounds::new(origin + bounds.origin, bounds.size))
+    let x11 = X11Window::of(window);
+    let origin = x11.as_ref().and_then(|x11| x11.origin().ok());
+    let anchor = Bounds::new(
+        origin.unwrap_or(window.bounds().origin) + bounds.origin,
+        bounds.size,
+    );
+    let monitor = x11.and_then(|x11| x11.monitor_at(anchor.origin).ok().flatten());
+    Placement::Screen(anchor, monitor)
 }
 
 pub(super) fn popup_menu(
@@ -185,7 +188,7 @@ fn show(
             }
             return;
         };
-        if matches!(placement, Placement::Screen(_)) {
+        if matches!(placement, Placement::Screen(..)) {
             parent
                 .update(cx, |_, window, cx| {
                     view.update(cx, |view, cx| view.dismiss_with(window, cx));

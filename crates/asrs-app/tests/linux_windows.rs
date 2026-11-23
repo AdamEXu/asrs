@@ -28,7 +28,9 @@ use asrs_ui::gpui::{
     Render, ScrollEvent, Styled, Window, div,
 };
 use asrs_ui::platform::probe::{self, MouseAction, WheelSample};
-use asrs_ui::platform::{self, MenuPath, PopupEntry, PopupMenu};
+use asrs_ui::platform::{
+    self, MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind,
+};
 
 const ELECTRON_MAIN: &str = r#"
 const { app, BrowserWindow, Menu } = require("electron");
@@ -664,6 +666,146 @@ async fn menus(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
     report.check("the hub keeps the focus", active, "");
 }
 
+fn popup_bounds(cx: &mut AsyncApp, parent: AnyWindowHandle) -> Option<(f64, f64, f64, f64)> {
+    let popup = cx.update(|cx| cx.windows().into_iter().find(|w| *w != parent))?;
+    with_window(cx, popup, |w| platform::window_bounds(w))
+}
+
+/// A menu and a select list at the edge of the left of two monitors, and a list longer than it
+/// shows that opens on its selected option.
+async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+    const ROWS: f64 = 20.0;
+    let handle = handle_of(cx, hub);
+    with_window(cx, handle, |w| w.activate_window());
+    sleep(cx, 600).await;
+    let (x, y, _, _) = with_window(cx, handle, |w| platform::window_bounds(w)).expect("bounds");
+    let chosen: Rc<RefCell<Vec<Option<usize>>>> = Rc::default();
+    let open = |cx: &mut AsyncApp, at: [f64; 4]| {
+        let sink = chosen.clone();
+        let items = (0..60).map(|i| SelectMenuItem {
+            label: format!("Option {i}"),
+            kind: SelectMenuItemKind::Option,
+            enabled: true,
+            tool_tip: String::new(),
+        });
+        let menu = SelectMenu {
+            items: items.collect(),
+            font_size: 13.0,
+            selected: Some(50),
+            right_aligned: false,
+        };
+        cx.update(|cx| {
+            handle.update(cx, |_, window, cx| {
+                platform::select_popup(window, cx, menu, at, move |row, _| {
+                    sink.borrow_mut().push(row);
+                });
+            })
+        })
+        .expect("window");
+    };
+    let row = f64::from(asrs_ui::menu::ROW_HEIGHT);
+    let padding = 2.0 * f64::from(asrs_ui::menu::PADDING);
+    let at = [100.0, 120.0, 200.0, 22.0];
+
+    open(cx, at);
+    sleep(cx, 900).await;
+    let bounds = popup_bounds(cx, handle).expect("a list");
+    let want = (x + 100.0, y + 142.0, 200.0, ROWS * row + padding);
+    report.check(
+        "the list shows 20 rows",
+        bounds == want,
+        format!("{bounds:?}"),
+    );
+    click(cx, (x + 140.0, bounds.1 + bounds.3 - row / 2.0)).await;
+    sleep(cx, 700).await;
+    let got = chosen.take();
+    report.check(
+        "the list opens on its selected option",
+        got == [Some(50)],
+        format!("{got:?}"),
+    );
+
+    open(cx, at);
+    sleep(cx, 900).await;
+    for key in [DOWN, ' ' as u32, DOWN, RETURN] {
+        probe::post_keys(&[key]);
+        sleep(cx, 250).await;
+    }
+    sleep(cx, 700).await;
+    let got = chosen.take();
+    report.check(
+        "Space chooses nothing in a list",
+        got == [Some(52)],
+        format!("{got:?}"),
+    );
+
+    let edge = x + 400.0;
+    let split = probe::split_monitors(Some(edge as u16));
+    report.check("two monitors", split, "");
+    sleep(cx, 900).await;
+    let (x, _, _, _) = with_window(cx, handle, |w| platform::window_bounds(w)).expect("bounds");
+    with_window(cx, handle, |w| w.activate_window());
+    sleep(cx, 600).await;
+    for (name, left, inside) in [
+        ("left", edge - x - 50.0, 0.0..edge),
+        ("right", edge - x + 5.0, edge..f64::MAX),
+    ] {
+        open(cx, [left, 120.0, 200.0, 22.0]);
+        sleep(cx, 900).await;
+        let list = popup_bounds(cx, handle).expect("a list");
+        let ok = list.0 >= inside.start && list.0 + list.2 <= inside.end;
+        report.check(
+            &format!("the list stays on the {name} monitor"),
+            ok,
+            format!("{list:?}"),
+        );
+        probe::post_keys(&[ESCAPE]);
+        sleep(cx, 700).await;
+        cx.update(|cx| {
+            handle.update(cx, |_, window, cx| {
+                platform::popup_menu(window, cx, menu(), left as i32, 120, |_, _| {});
+            })
+        })
+        .expect("window");
+        sleep(cx, 900).await;
+        let menu = popup_bounds(cx, handle).expect("a menu");
+        let ok = menu.0 >= inside.start && menu.0 + menu.2 <= inside.end;
+        report.check(
+            &format!("the menu stays on the {name} monitor"),
+            ok,
+            format!("{menu:?}"),
+        );
+        probe::post_mouse(MouseAction::Drag, menu.0 + 20.0, menu.1 + 15.0);
+        sleep(cx, 200).await;
+        probe::post_mouse(
+            MouseAction::Drag,
+            menu.0 + 20.0,
+            menu.1 + menu.3 - 4.0 - 1.5 * row,
+        );
+        sleep(cx, 900).await;
+        let more = cx.update(|cx| cx.windows()).into_iter();
+        let boxes: Vec<_> = more
+            .filter(|w| *w != handle)
+            .filter_map(|w| with_window(cx, w, |w| platform::window_bounds(w)))
+            .collect();
+        let ok = boxes.len() == 2
+            && boxes
+                .iter()
+                .all(|b| b.0 >= inside.start && b.0 + b.2 <= inside.end);
+        report.check(
+            &format!("the submenu stays on the {name} monitor"),
+            ok,
+            format!("{boxes:?}"),
+        );
+        for _ in 0..2 {
+            probe::post_keys(&[ESCAPE]);
+            sleep(cx, 400).await;
+        }
+    }
+    report.check("one monitor", probe::split_monitors(None), "");
+    sleep(cx, 900).await;
+}
+
 fn main() {
     if asrs_parity::ci::skip_in_ci("linux windows", "a display and the oracle's Electron") {
         return;
@@ -690,6 +832,7 @@ fn main() {
                 .0;
             sleep(cx, 1000).await;
             menus(cx, &mut report, hub).await;
+            lists(cx, &mut report, hub).await;
             accelerators(cx, &mut report, hub).await;
             wheel(cx, &electron, &mut report).await;
             aspects(cx, &electron, &mut report).await;

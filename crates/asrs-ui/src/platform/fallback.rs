@@ -385,4 +385,8 @@ pub(super) mod probe {
     pub fn post_keys(_keysyms: &[u32]) -> bool {
         false
     }
+
+    pub fn split_monitors(_x: Option<u16>) -> bool {
+        false
+    }
 }

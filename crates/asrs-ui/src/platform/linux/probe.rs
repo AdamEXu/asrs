@@ -67,3 +67,7 @@ pub fn post_wheel_at(x: f64, y: f64, sample: &WheelSample) -> bool {
 pub fn post_keys(keysyms: &[u32]) -> bool {
     x11::fake_keys(keysyms).is_ok()
 }
+
+pub fn split_monitors(x: Option<u16>) -> bool {
+    x11::split_monitors(x).is_ok()
+}

@@ -357,7 +357,7 @@
     "form/range-pointer-2x": {"cases":395,"content":"4628f781a1332f39","generator":"8fe430ce97e1240d","spec":"parity/specs/form/range-pointer-2x.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "form/select": {"cases":61,"content":"3475ffefe8b87290","generator":"2d9ca0727e63252c","spec":"parity/specs/form/select.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "form/select-keys": {"cases":71,"content":"0c3981120d657d5d","generator":"3cc661cc3ae72aed","spec":"parity/specs/form/select-keys.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "form/select-keys-host/linux-x86_64": {"cases":323,"content":"813e96136c3a4b8b","generator":"ab51277473dde4b3","spec":"parity/specs/form/select-keys-host.entry.json","zone":"UTC","generatedOn":"linux-x86_64"},
+    "form/select-keys-host/linux-x86_64": {"cases":397,"content":"a76d4e79cf2a7697","generator":"743f630d9e3121df","spec":"parity/specs/form/select-keys-host.entry.json","zone":"UTC","generatedOn":"linux-x86_64"},
     "hub/entity-sessions": {"cases":3768,"content":"84c33dd9586529d0","generator":"05547e2bf0f96cb3","spec":"parity/specs/hub/entity-sessions.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/entity-titles": {"cases":55,"content":"5cd8c2b5a9b7f077","generator":"977595bafd145d09","spec":"parity/specs/hub/entity-titles.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-errors-and-files": {"cases":83,"content":"77b158a7ab32f5c3","generator":"8c443f3f3df18390","spec":"parity/specs/hub/lifecycle-errors-and-files.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

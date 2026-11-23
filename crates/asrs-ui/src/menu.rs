@@ -3,7 +3,6 @@
 //! parent (context menus, title bar menus and select lists where no native backend exists). Also
 //! the accelerator table that stands in for a native menu bar.
 
-use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -24,7 +23,9 @@ use crate::theme::Appearance;
 
 pub const ROW_HEIGHT: f32 = 22.0;
 pub const SEPARATOR_HEIGHT: f32 = 9.0;
+/// From the menu's edge, its border included.
 pub const PADDING: f32 = 4.0;
+const BORDER: f32 = 1.0;
 pub const LABEL_INSET: f32 = 24.0;
 pub const TRAILING_INSET: f32 = 24.0;
 const SHORTCUT_GAP: f32 = 24.0;
@@ -38,6 +39,8 @@ pub type CloseHandler = Rc<dyn Fn(Option<MenuPath>, &mut Window, &mut App)>;
 /// How far the pointer moves over a menu before a button release chooses an entry: the release
 /// of the press that opened the menu chooses nothing.
 const ARM_DISTANCE: f32 = 4.0;
+/// The most rows a select list shows, which is also how far its page keys go, less one.
+const LIST_ROWS: usize = 20;
 const TYPE_AHEAD_TIMEOUT: Duration = Duration::from_secs(1);
 /// How far a submenu overlaps its parent.
 const SUBMENU_OVERLAP: f32 = 2.0;
@@ -98,8 +101,8 @@ pub fn place(
 /// Where a menu's window goes.
 #[derive(Clone, Copy, Debug)]
 pub enum Placement {
-    /// A `PopUp` window against a box on screen.
-    Screen(Bounds<Pixels>),
+    /// A `PopUp` window against a box on screen, inside the box of its monitor.
+    Screen(Bounds<Pixels>, Option<Bounds<Pixels>>),
     /// A popup of this window against a box in it, where the compositor places windows.
     Anchored(AnyWindowHandle, Bounds<Pixels>),
 }
@@ -157,10 +160,10 @@ pub fn menu_size(cx: &mut App, menu: &PopupMenu, scale: f32) -> (f32, f32) {
     )
 }
 
-fn row_top(menu: &PopupMenu, index: usize) -> f32 {
+fn row_bottom(menu: &PopupMenu, index: usize) -> f32 {
     PADDING
         + visible_items(menu)
-            .take_while(|(i, _)| *i < index)
+            .take_while(|(i, _)| *i <= index)
             .map(|(_, item)| row_height(item))
             .sum::<f32>()
 }
@@ -184,7 +187,6 @@ pub struct MenuView {
     focus: FocusHandle,
     highlighted: Option<usize>,
     submenu: Option<(usize, Entity<MenuView>, Option<AnyWindowHandle>)>,
-    bounds: Rc<Cell<Bounds<Pixels>>>,
     on_close: CloseHandler,
     own_window: Option<AnyWindowHandle>,
     list: Option<ListStyle>,
@@ -194,6 +196,7 @@ pub struct MenuView {
     typed_at: Option<Instant>,
     /// Where a `PopUp` window was put, on screen.
     screen: Option<Bounds<Pixels>>,
+    monitor: Option<Bounds<Pixels>>,
     armed: bool,
     first_move: Option<Point<Pixels>>,
     scroll: ScrollHandle,
@@ -215,7 +218,6 @@ impl MenuView {
             focus: cx.focus_handle(),
             highlighted: None,
             submenu: None,
-            bounds: Rc::default(),
             on_close,
             own_window: None,
             list: None,
@@ -223,6 +225,7 @@ impl MenuView {
             typed: String::new(),
             typed_at: None,
             screen: None,
+            monitor: None,
             armed: host == Host::InWindow,
             first_move: None,
             scroll: ScrollHandle::new(),
@@ -257,6 +260,7 @@ impl MenuView {
             Vec::new(),
             WindowKind::PopUp,
             bounds,
+            None,
             None,
             cx,
             on_close,
@@ -298,11 +302,19 @@ impl MenuView {
     ) -> Option<(AnyWindowHandle, Entity<MenuView>)> {
         let (width, height) = menu_size(cx, &menu, scale);
         let width = width.max(list.as_ref().map_or(0.0, |list| list.min_width));
-        let screen = cx.primary_display().map(|display| display.bounds());
+        let height = match &list {
+            Some(_) => height.min(2.0 * PADDING + LIST_ROWS as f32 * ROW_HEIGHT),
+            None => height,
+        };
+        let monitor = match placement {
+            Placement::Screen(_, monitor) => monitor,
+            Placement::Anchored(..) => None,
+        };
+        let screen = monitor.or_else(|| cx.primary_display().map(|display| display.bounds()));
         let height = screen.map_or(height, |s| height.min(f32::from(s.size.height)));
         let size = size(px(width), px(height));
         let (kind, bounds) = match placement {
-            Placement::Screen(anchor) => {
+            Placement::Screen(anchor, _) => {
                 let bounds = match screen {
                     Some(screen) => place(anchor, size, screen, side),
                     None => Bounds::new(anchor.bottom_left(), size),
@@ -339,14 +351,16 @@ impl MenuView {
                 )
             }
         };
-        Self::open_at(menu, prefix, kind, bounds, list, cx, on_close)
+        Self::open_at(menu, prefix, kind, bounds, monitor, list, cx, on_close)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn open_at(
         menu: PopupMenu,
         prefix: MenuPath,
         kind: WindowKind,
         bounds: Bounds<Pixels>,
+        monitor: Option<Bounds<Pixels>>,
         list: Option<ListStyle>,
         cx: &mut App,
         on_close: CloseHandler,
@@ -375,6 +389,12 @@ impl MenuView {
                 view.own_window = Some(window.window_handle());
                 view.highlighted = list.as_ref().and_then(|list| list.selected);
                 view.list = list;
+                view.monitor = monitor;
+                if let Some(index) = view.highlighted {
+                    let hidden = px(row_bottom(&view.menu, index)) - bounds.size.height;
+                    let offset = point(px(0.0), -hidden.max(px(0.0)));
+                    view.scroll.set_offset(offset);
+                }
                 if host == Host::PopUpWindow {
                     view.screen = Some(bounds);
                 }
@@ -585,7 +605,8 @@ impl MenuView {
             Host::InWindow => None,
             Host::PopUpWindow => self.screen.map(|screen| {
                 let row = self.row_bounds(index);
-                Placement::Screen(Bounds::new(screen.origin + row.origin, row.size))
+                let anchor = Bounds::new(screen.origin + row.origin, row.size);
+                Placement::Screen(anchor, self.monitor)
             }),
             Host::AnchoredPopup => self
                 .own_window
@@ -619,13 +640,25 @@ impl MenuView {
         cx.notify();
     }
 
-    /// The row's box in the menu's window.
+    /// The child of the menu's body that shows `index`.
+    fn child(&self, index: usize) -> usize {
+        visible_items(&self.menu)
+            .take_while(|(i, _)| *i < index)
+            .count()
+    }
+
+    fn scroll_to(&self, index: usize) {
+        self.scroll.scroll_to_item(self.child(index));
+    }
+
+    /// The row's box in the menu's window, as wide as the menu.
     fn row_bounds(&self, index: usize) -> Bounds<Pixels> {
-        let bounds = self.bounds.get();
-        let top = px(row_top(&self.menu, index)) + self.scroll.offset().y;
+        let body = self.scroll.bounds();
+        let row = self.scroll.bounds_for_item(self.child(index));
+        let row = row.unwrap_or_default();
         Bounds::new(
-            point(bounds.origin.x, bounds.origin.y + top),
-            size(bounds.size.width, px(ROW_HEIGHT)),
+            point(body.left(), row.top() + self.scroll.offset().y),
+            size(body.size.width, row.size.height),
         )
     }
 
@@ -657,18 +690,7 @@ impl MenuView {
     fn highlight(&mut self, index: usize, cx: &mut Context<'_, Self>) {
         self.highlighted = Some(index);
         self.provisional = self.list.as_ref().map(|_| index);
-        let row = self.row_bounds(index);
-        let height = self.bounds.get().size.height;
-        let offset = self.scroll.offset();
-        if self.screen.is_some() || self.host == Host::AnchoredPopup {
-            let top = row.top() - self.bounds.get().top();
-            let below = top + row.size.height - height;
-            if top < px(0.0) {
-                self.scroll.set_offset(point(offset.x, offset.y - top));
-            } else if below > px(0.0) {
-                self.scroll.set_offset(point(offset.x, offset.y - below));
-            }
-        }
+        self.scroll_to(index);
         cx.notify();
     }
 
@@ -700,6 +722,33 @@ impl MenuView {
             candidates.first()
         };
         if let Some(&index) = end {
+            self.highlight(index, cx);
+        }
+    }
+
+    /// `ListBoxSelectType::NextSelectableOptionPageAway`: the last selectable option among the next
+    /// page of rows, and past them only where the page ends on none.
+    fn page(&mut self, forward: bool, cx: &mut Context<'_, Self>) {
+        let candidates = self.candidates();
+        let mut rows: Vec<usize> = visible_items(&self.menu).map(|(i, _)| i).collect();
+        let page = rows.len().min(LIST_ROWS).saturating_sub(1);
+        if !forward {
+            rows.reverse();
+        }
+        let start = self
+            .highlighted
+            .and_then(|h| rows.iter().position(|&row| row == h))
+            .map_or(0, |start| start + 1);
+        let mut found = None;
+        for (at, row) in rows.into_iter().skip(start).enumerate() {
+            if candidates.contains(&row) {
+                found = Some(row);
+                if at + 1 >= page {
+                    break;
+                }
+            }
+        }
+        if let Some(index) = found {
             self.highlight(index, cx);
         }
     }
@@ -749,9 +798,15 @@ impl MenuView {
             "down" | "up" if list && alt => self.dismiss(window, cx),
             "down" => self.step(true, cx),
             "up" => self.step(false, cx),
+            "pageup" if list => self.page(false, cx),
+            "pagedown" if list => self.page(true, cx),
             "home" | "pageup" => self.step_to_end(false, cx),
             "end" | "pagedown" => self.step_to_end(true, cx),
-            "space" if list && self.typing() => self.find_typed(" ", cx),
+            "space" if list => {
+                if self.typing() {
+                    self.find_typed(" ", cx);
+                }
+            }
             "enter" | "space" => {
                 if let Some(index) = self.highlighted {
                     self.activate(index, window, cx);
@@ -886,7 +941,6 @@ impl Render for MenuView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();
-        let bounds = self.bounds.clone();
         let own_window = self.host != Host::InWindow;
         let grabbed = self.screen.is_some() && self.prefix.is_empty();
         let view = cx.entity();
@@ -901,26 +955,14 @@ impl Render for MenuView {
                 }
             }))
             .relative()
-            .py(px(PADDING))
+            .py(px(PADDING - BORDER))
             .min_w(px(MIN_WIDTH))
             .track_scroll(&self.scroll)
             .bg(rgb(theme.background))
-            .border_1()
+            .border(px(BORDER))
             .border_color(rgb(appearance.pick(0xc8c8c8, 0x4a4a4a)))
             .rounded(px(6.0))
-            .shadow_md()
-            .child(
-                canvas(
-                    move |b, _, _| bounds.set(b),
-                    move |_, _, window, _| {
-                        if grabbed {
-                            Self::route_pointer(&view, window);
-                        }
-                    },
-                )
-                .absolute()
-                .size_full(),
-            );
+            .shadow_md();
         if own_window {
             body = body.size_full().overflow_y_scroll();
         }
@@ -947,17 +989,11 @@ impl Render for MenuView {
         }
         let submenu = match &self.submenu {
             Some((index, view, None)) => {
-                let b = self.bounds.get();
+                let row = self.row_bounds(*index);
                 Some(
                     deferred(
                         anchored()
-                            .position(
-                                b.origin
-                                    + point(
-                                        b.size.width - px(2.0),
-                                        px(row_top(&self.menu, *index) - PADDING),
-                                    ),
-                            )
+                            .position(row.top_right() - point(px(SUBMENU_OVERLAP), px(PADDING)))
                             .snap_to_window()
                             .child(view.clone()),
                     )
@@ -967,7 +1003,17 @@ impl Render for MenuView {
             _ => None,
         };
         let root = if own_window { div().size_full() } else { div() };
-        root.child(body).children(submenu)
+        let pointer = canvas(
+            |_, _, _| (),
+            move |_, _, window, _| {
+                if grabbed {
+                    Self::route_pointer(&view, window);
+                }
+            },
+        );
+        root.child(pointer.absolute().size_full())
+            .child(body)
+            .children(submenu)
     }
 }
 

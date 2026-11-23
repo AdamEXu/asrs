@@ -345,3 +345,8 @@ pub fn size_hints(window: &Window, number: u32) -> Option<SizeHints> {
 pub fn post_keys(keysyms: &[u32]) -> bool {
     imp::probe::post_keys(keysyms)
 }
+
+/// Divides an X11 screen into two RandR monitors at `x`, in device px, or undoes that.
+pub fn split_monitors(x: Option<u16>) -> bool {
+    imp::probe::split_monitors(x)
+}

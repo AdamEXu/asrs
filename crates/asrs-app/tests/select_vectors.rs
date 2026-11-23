@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_methods)]
 
-//! Replays Blink's `form/select-keys` vector (macOS) and, on Linux, `form/select-keys-host`, whose
-//! keys also drive the open popup, through the real [`Select`] component over
+//! Replays Blink's `form/select-keys` vector (macOS) and, off macOS, `form/select-keys-host`, whose
+//! keys also drive the open popup (on Linux), through the real [`Select`] component over
 //! [`FormSelect`] in a headless window: each key goes through the component's key routing and
 //! its model, and after every op the select's `value`, `selectedIndex`, focus and the `input`
 //! and `change` events it dispatched are compared with the record. Then every `form/select`
@@ -20,8 +20,8 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::form::{OptGroup, Select as FormModel, SelectItem as FormItem, SelectOption};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AppContext, Entity, Focusable, Keystroke, Modifiers, MouseButton, MouseDownEvent,
-    PlatformInput, WindowHandle, point, px, size,
+    AnyWindowHandle, AppContext, Entity, Focusable, HeadlessAppContext, Keystroke, Modifiers,
+    MouseButton, MouseDownEvent, NoopTextSystem, PlatformInput, WindowHandle, point, px, size,
 };
 use asrs_ui::input::{Select, SelectEvent, SelectKeys, SelectModel, popup_menu};
 use asrs_ui::platform::SelectMenuItemKind;
@@ -178,18 +178,61 @@ fn time_arg(op: &[Json]) -> f64 {
         .expect("numeric time")
 }
 
+/// A headless app, with a renderer where the platform has one.
+enum Headless {
+    Rendered(HeadlessCapture),
+    Unrendered(HeadlessAppContext),
+}
+
+impl Headless {
+    fn new() -> Headless {
+        if cfg!(any(target_os = "macos", target_os = "linux")) {
+            return Headless::Rendered(HeadlessCapture::new(Arc::new(())).expect("headless app"));
+        }
+        let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
+        cx.update(asrs_ui::init);
+        cx.run_until_parked();
+        Headless::Unrendered(cx)
+    }
+
+    fn context(&mut self) -> &mut HeadlessAppContext {
+        match self {
+            Headless::Rendered(headless) => headless.context(),
+            Headless::Unrendered(cx) => cx,
+        }
+    }
+
+    fn draw(&mut self, window: AnyWindowHandle) {
+        match self {
+            Headless::Rendered(headless) => {
+                headless.capture(window).expect("frame");
+            }
+            Headless::Unrendered(cx) => {
+                cx.update_window(window, |_, window, _| window.refresh())
+                    .expect("window");
+                cx.run_until_parked();
+            }
+        }
+    }
+}
+
+/// The steps of `form/select-keys-host` whose keys never open the popup, which is drawn on Linux
+/// only.
+const CLOSED_STEPS: usize = 7;
+
 struct Step {
     window: WindowHandle<Select<FormSelect>>,
     entity: Entity<Select<FormSelect>>,
     events: Rc<RefCell<Vec<&'static str>>>,
 }
 
-fn open(headless: &mut HeadlessCapture, markup: &str, focus: bool, keys: SelectKeys) -> Step {
+fn open(headless: &mut Headless, markup: &str, focus: bool, keys: SelectKeys) -> Step {
     let (model, disabled) = parse(markup);
     let mut model = FormSelect::new(model);
     model.set_hidden(hidden(markup));
     let window = headless
-        .open_window(size(px(300.0), px(60.0)), 1.0, |window, cx| {
+        .context()
+        .open_window(size(px(300.0), px(60.0)), |window, cx| {
             cx.new(|cx| {
                 let mut select = Select::new(model, window, cx);
                 select.set_keys(keys);
@@ -199,6 +242,9 @@ fn open(headless: &mut HeadlessCapture, markup: &str, focus: bool, keys: SelectK
             })
         })
         .expect("open window");
+    headless
+        .context()
+        .simulate_scale_factor_change(window.into(), 1.0);
     let events = Rc::new(RefCell::new(Vec::new()));
     let entity = headless
         .context()
@@ -222,7 +268,7 @@ fn open(headless: &mut HeadlessCapture, markup: &str, focus: bool, keys: SelectK
         })
         .expect("window");
     headless.context().run_until_parked();
-    headless.capture(window.into()).expect("first frame");
+    headless.draw(window.into());
     Step {
         window,
         entity,
@@ -230,7 +276,7 @@ fn open(headless: &mut HeadlessCapture, markup: &str, focus: bool, keys: SelectK
     }
 }
 
-fn apply(headless: &mut HeadlessCapture, step: &Step, op: &[Json]) {
+fn apply(headless: &mut Headless, step: &Step, op: &[Json]) {
     let kind = text_arg(op, 0);
     let entity = step.entity.clone();
     headless
@@ -298,7 +344,7 @@ fn apply(headless: &mut HeadlessCapture, step: &Step, op: &[Json]) {
         })
         .expect("window");
     headless.context().run_until_parked();
-    headless.capture(step.window.into()).expect("frame");
+    headless.draw(step.window.into());
 }
 
 fn number(record: &Record, key: &str) -> f64 {
@@ -308,12 +354,7 @@ fn number(record: &Record, key: &str) -> f64 {
         .unwrap_or_else(|| panic!("record has no {key}"))
 }
 
-fn compare(
-    headless: &mut HeadlessCapture,
-    step: &Step,
-    record: &Record,
-    keys: SelectKeys,
-) -> Vec<String> {
+fn compare(headless: &mut Headless, step: &Step, record: &Record, keys: SelectKeys) -> Vec<String> {
     let (value, index, focused, popup) = headless
         .context()
         .update_window(step.window.into(), |_, window, cx| {
@@ -366,10 +407,11 @@ fn compare(
 }
 
 fn select_keys(
-    headless: &mut HeadlessCapture,
+    headless: &mut Headless,
     spec: &str,
     vector: &str,
     keys: SelectKeys,
+    limit: usize,
 ) -> usize {
     let spec_path = vectors::workspace_root().join(format!("parity/specs/{spec}.entry.json"));
     let specs = asrs_parity::json::parse(&std::fs::read_to_string(spec_path).expect("spec"))
@@ -380,10 +422,14 @@ fn select_keys(
         .and_then(Json::as_array)
         .expect("spec steps");
     let records = vectors::load(vector).unwrap_or_else(|e| panic!("{vector}: {e}"));
+    let records: Vec<&Record> = records
+        .iter()
+        .filter(|record| (number(record, "step") as usize) < limit)
+        .collect();
     let mut current: Option<Step> = None;
     let mut compared = 0;
     let mut failures = Vec::new();
-    for record in &records {
+    for &record in &records {
         let index = number(record, "step") as usize;
         match record.field("op") {
             Some(Json::Null) => {
@@ -558,18 +604,19 @@ fn replayed(records: &[Record], target: &Record) -> FormModel {
 fn main() {
     let view = select_view();
     println!("select_vectors: form/select, {view} records shown and listed");
-    if !cfg!(any(target_os = "macos", target_os = "linux")) {
-        println!("select_vectors: form/select-keys skipped, no headless renderer on this platform");
-        return;
-    }
-    let mut headless = HeadlessCapture::new(Arc::new(())).expect("headless app");
+    let mut headless = Headless::new();
     let spec = "form/select-keys";
-    let keys = select_keys(&mut headless, spec, spec, SelectKeys::Mac);
+    let keys = select_keys(&mut headless, spec, spec, SelectKeys::Mac, usize::MAX);
     println!("select_vectors: {spec}, {keys} records compared");
-    if cfg!(target_os = "linux") {
+    if !cfg!(target_os = "macos") {
         let spec = "form/select-keys-host";
         let vector = "form/select-keys-host/linux-x86_64";
-        let keys = select_keys(&mut headless, spec, vector, SelectKeys::Default);
+        let steps = if cfg!(target_os = "linux") {
+            usize::MAX
+        } else {
+            CLOSED_STEPS
+        };
+        let keys = select_keys(&mut headless, spec, vector, SelectKeys::HOST, steps);
         println!("select_vectors: {vector}, {keys} records compared");
     }
 }
