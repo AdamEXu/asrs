@@ -296,7 +296,7 @@ fn path_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn message_box_options(options: &MessageBox) -> MessageBoxOptions {
+pub(crate) fn message_box_options(options: &MessageBox) -> MessageBoxOptions {
     let index = |id: Option<f64>| id.map(|id| id as usize);
     MessageBoxOptions {
         kind: match options.kind {
@@ -343,7 +343,7 @@ fn open_dialog_options(options: &services::OpenDialog) -> OpenDialogOptions {
     }
 }
 
-fn save_dialog_options(options: &services::SaveDialog) -> SaveDialogOptions {
+pub(crate) fn save_dialog_options(options: &services::SaveDialog) -> SaveDialogOptions {
     SaveDialogOptions {
         title: options.title.to_owned(),
         message: String::new(),

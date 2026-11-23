@@ -314,7 +314,7 @@ fn break_opportunities(text: &str) -> Vec<(usize, usize)> {
     out
 }
 
-fn utf16_len(s: &str) -> usize {
+pub(super) fn utf16_len(s: &str) -> usize {
     s.encode_utf16().count()
 }
 
@@ -340,7 +340,7 @@ fn align_offset(align: Align, direction: Direction, space: Lu) -> Lu {
 
 /// Positions of the character boundaries of `shaped` in CSS px, by UTF-16 offset, for the
 /// `len` code units it covers; offsets inside a cluster share their cluster's start.
-fn boundaries(shaped: &Shaped, len: usize) -> Vec<f32> {
+pub(super) fn boundaries(shaped: &Shaped, len: usize) -> Vec<f32> {
     let mut at = vec![f32::NAN; len + 1];
     for g in &shaped.glyphs {
         let c = g.cluster as usize;
