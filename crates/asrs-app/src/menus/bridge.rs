@@ -170,6 +170,45 @@ pub fn popup_context_menu(
     show_popup(window, cx, menu, x, y, choose);
 }
 
+/// The context menu that popped up last, in parity scenarios, which click its items themselves
+/// instead of showing it.
+#[cfg(feature = "parity")]
+#[derive(Default)]
+pub struct ScriptedMenu(Option<(ContextMenu, EffectHandler)>);
+
+#[cfg(feature = "parity")]
+impl asrs_ui::gpui::Global for ScriptedMenu {}
+
+#[cfg(feature = "parity")]
+impl ScriptedMenu {
+    /// Clicks the item at `path` of the menu that popped up.
+    pub fn click(cx: &mut App, path: &[String]) -> Result<(), String> {
+        let (menu, on_effects) = cx
+            .global_mut::<ScriptedMenu>()
+            .0
+            .take()
+            .ok_or("no menu popped up")?;
+        let mut items = menu.items.as_slice();
+        let mut command = None;
+        for label in path {
+            let item = items
+                .iter()
+                .find(|i| i.label.as_deref() == Some(label))
+                .ok_or_else(|| format!("no menu item {label:?}"))?;
+            if item.enabled == Some(false) {
+                return Err(format!("menu item {label:?} is disabled"));
+            }
+            command = item.command;
+            items = item.submenu.as_deref().unwrap_or_default();
+        }
+        let effects = command
+            .and_then(|command| menu.effects(command))
+            .ok_or_else(|| format!("{path:?} is not a clickable item"))?;
+        on_effects(effects.to_vec(), cx);
+        Ok(())
+    }
+}
+
 /// Pops up a menu `main.ts` built with `new Menu()` and `append`, at its position or, without
 /// one, at the mouse. The chosen item's effects go to `on_effects`.
 pub fn popup_context(
@@ -179,6 +218,11 @@ pub fn popup_context(
     menu: &ContextMenu,
     on_effects: EffectHandler,
 ) {
+    #[cfg(feature = "parity")]
+    if cx.has_global::<ScriptedMenu>() {
+        cx.global_mut::<ScriptedMenu>().0 = Some((menu.clone(), on_effects));
+        return;
+    }
     let built = build_appended(&menu.items, platform, APP_NAME);
     let popup = to_popup(&built, platform, false);
     let (x, y) = menu

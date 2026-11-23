@@ -14,7 +14,7 @@ use asrs_services::path::PathStyle;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyDownEvent, KeyUpEvent, Keystroke,
+    AnyWindowHandle, App, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke,
     Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
     PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
     point, px, rgb, size,
@@ -27,10 +27,13 @@ use super::{
     Action, Button, COLUMNS, MouseKind, PATCH, Page, Scenario, Theme, Wheel, patch_colours,
 };
 use crate::hub::{Hub, HubEvent};
-use crate::main_process::process_platform;
+use crate::main_process::{MainProcess, process_platform};
+use crate::menus::bridge::ScriptedMenu;
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
+use crate::views::prompts;
+use crate::windows::{self, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
@@ -185,6 +188,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     let probes = Probes::load(&probes_file)?;
     let mut headless = HeadlessCapture::new(Arc::new(())).map_err(|e| e.to_string())?;
+    headless.context().update(windows::init);
     for &scale in &scenario.scales {
         if !options.scales.is_empty() && !options.scales.contains(&scale) {
             continue;
@@ -201,11 +205,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 inputs: options.inputs.as_deref(),
                 bundled_assets: options.bundled_assets.as_deref(),
                 work_area: options.work_area,
-                main: Rc::default(),
                 scale,
                 theme,
                 dir: &dir,
                 window: None,
+                prompt: None,
                 hub: None,
                 frame: None,
                 saves: Rc::default(),
@@ -234,11 +238,12 @@ struct Variant<'a> {
     inputs: Option<&'a Path>,
     bundled_assets: Option<&'a Path>,
     work_area: (f64, f64),
-    main: Rc<RefCell<Option<(MainState, Screen)>>>,
     scale: u32,
     theme: Theme,
     dir: &'a Path,
     window: Option<AnyWindowHandle>,
+    /// The prompt window input and captures go to until it closes.
+    prompt: Option<AnyWindowHandle>,
     hub: Option<(Entity<Hub>, crate::views::frame::FrameGeometry)>,
     frame: Option<WindowHandle<HubFrame<HubEntityHost>>>,
     saves: Rc<RefCell<Saves>>,
@@ -371,9 +376,66 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
     )))
 }
 
+/// `prompt-export` up to the window: confirming it is P08's export flow.
+fn open_export(id: WindowId, hub: &Entity<Hub>, data: &JsValue, cx: &mut App) {
+    let supports_akit = data.get("supportsAkit").and_then(JsValue::as_bool) == Some(true);
+    let hub = hub.downgrade();
+    let opened = prompts::open_export(cx, id, supports_akit, move |value, prompt, cx| {
+        if value.is_null() {
+            windows::close(cx, prompt);
+            if let Some(hub) = hub.upgrade() {
+                let message = NamedMessage::new(MainToHub::CancelExport, JsValue::Undefined);
+                hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
+            }
+        }
+    });
+    if let Err(e) = opened {
+        eprintln!("asrs: opening the export prompt: {e}");
+    }
+}
+
 impl Variant<'_> {
     fn window(&self) -> AnyWindowHandle {
         self.window.expect("the window is open")
+    }
+
+    fn is_open(&mut self, window: AnyWindowHandle) -> bool {
+        self.headless
+            .context()
+            .update_window(window, |_, _, _| ())
+            .is_ok()
+    }
+
+    /// The window input goes to: the prompt while it is open, else the hub.
+    fn active(&mut self) -> AnyWindowHandle {
+        if let Some(prompt) = self.prompt
+            && !self.is_open(prompt)
+        {
+            self.prompt = None;
+        }
+        self.prompt.unwrap_or(self.window())
+    }
+
+    fn switch_prompt(&mut self, page: Option<WindowKind>) -> Result<(), String> {
+        self.settle();
+        self.prompt = match page {
+            Some(kind) => {
+                let window = self
+                    .headless
+                    .context()
+                    .update(|cx| Windows::of_kind(cx, kind))
+                    .ok_or_else(|| format!("no {kind:?} prompt is open"))?;
+                self.headless
+                    .set_scale_factor(window, self.scale as f32)
+                    .map_err(|e| e.to_string())?;
+                Some(window)
+            }
+            None if self.active() != self.window() => {
+                return Err("the prompt is still open".to_owned());
+            }
+            None => None,
+        };
+        self.tick()
     }
 
     fn settle(&mut self) {
@@ -382,12 +444,17 @@ impl Variant<'_> {
 
     /// One animation frame, `FRAME` of executor time, and everything that then runs.
     fn tick(&mut self) -> Result<(), String> {
-        let window = self.window();
+        let (hub, active) = (self.window(), self.active());
         self.headless.context().advance_clock(FRAME);
-        self.headless
-            .context()
-            .update_window(window, |_, window, cx| window.simulate_next_frame(cx))
-            .map_err(|e| e.to_string())?;
+        for window in [Some(hub), (active != hub).then_some(active)]
+            .into_iter()
+            .flatten()
+        {
+            self.headless
+                .context()
+                .update_window(window, |_, window, cx| window.simulate_next_frame(cx))
+                .map_err(|e| e.to_string())?;
+        }
         self.settle();
         Ok(())
     }
@@ -494,7 +561,7 @@ impl Variant<'_> {
     }
 
     fn dispatch(&mut self, input: PlatformInput) -> Result<(), String> {
-        let window = self.window();
+        let window = self.active();
         self.headless
             .context()
             .update_window(window, |_, window, cx| {
@@ -568,12 +635,17 @@ impl Variant<'_> {
             key: gpui_key(key),
             key_char,
         };
-        self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
-            keystroke: keystroke.clone(),
-            is_held: false,
-            prefer_character_input: false,
-        }))?;
-        self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }))
+        let window = self.active();
+        let down = keystroke.clone();
+        self.headless
+            .context()
+            .update_window(window, |_, window, cx| window.dispatch_keystroke(down, cx))
+            .map_err(|e| e.to_string())?;
+        self.settle();
+        if self.is_open(window) {
+            self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }))?;
+        }
+        Ok(())
     }
 
     fn perform(&mut self, action: &Action) -> Result<(), String> {
@@ -626,6 +698,13 @@ impl Variant<'_> {
                 }))?;
             }
             Action::Key { key, modifiers } => self.key(key, modifiers)?,
+            Action::Menu { path } => {
+                self.headless
+                    .context()
+                    .update(|cx| ScriptedMenu::click(cx, path))?;
+                self.settle();
+            }
+            Action::Prompt { page } => self.switch_prompt(*page)?,
             Action::Capture {
                 name,
                 probes,
@@ -645,7 +724,7 @@ impl Variant<'_> {
     /// Main's startup in the variant's `userData/`: the Electron driver's seeded `prefs.json`,
     /// then module load and `whenReady` up to the windows. Returns the `set-assets` and
     /// `set-preferences` data.
-    fn start_main(&self) -> Result<(JsValue, JsValue), String> {
+    fn start_main(&mut self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
         std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
         capture::write(&user_data.join("prefs.json"), &self.prefs_seed()?)?;
@@ -665,22 +744,27 @@ impl Variant<'_> {
             bundled_assets: bundled,
             packaged: false,
         };
-        let screen = Screen {
+        let (main, _) = MainState::start(&RealFs, &self.screen(), paths, process_platform())
+            .map_err(|e| format!("main startup: {e:?}"))?;
+        let assets = main.assets.set_assets_data();
+        let preferences = main
+            .preferences(&RealFs)
+            .map_err(|e| format!("prefs.json: {e:?}"))?;
+        self.headless
+            .context()
+            .update(|cx| cx.set_global(MainProcess::headless(main)));
+        Ok((assets, preferences))
+    }
+
+    fn screen(&self) -> Screen {
+        Screen {
             window: Rect {
                 x: self.work_area.0 + WINDOW_ORIGIN,
                 y: self.work_area.1 + WINDOW_ORIGIN,
                 width: self.scenario.width,
                 height: self.scenario.height,
             },
-        };
-        let (main, _) = MainState::start(&RealFs, &screen, paths, process_platform())
-            .map_err(|e| format!("main startup: {e:?}"))?;
-        let assets = main.assets.set_assets_data();
-        let preferences = main
-            .preferences(&RealFs)
-            .map_err(|e| format!("prefs.json: {e:?}"))?;
-        *self.main.borrow_mut() = Some((main, screen));
-        Ok((assets, preferences))
+        }
     }
 
     fn prefs_seed(&self) -> Result<String, String> {
@@ -727,6 +811,7 @@ impl Variant<'_> {
                         )
                     })
                     .map_err(|e| e.to_string())?;
+                self.headless.set_transparent_windows(false);
                 let (hub, geometry) = self
                     .headless
                     .context()
@@ -737,25 +822,26 @@ impl Variant<'_> {
                     })
                     .map_err(|e| e.to_string())?;
                 let (saves, exceptions) = (self.saves.clone(), self.exceptions.clone());
-                let main = self.main.clone();
+                let screen = self.screen();
                 self.headless.context().update(|cx| {
-                    cx.subscribe(&hub, move |_, event, _| match event {
+                    let id = Windows::adopt_hub(cx, window.into());
+                    cx.set_global(ScriptedMenu::default());
+                    cx.subscribe(&hub, move |hub, event, cx| match event {
                         HubEvent::Main(m) => {
-                            if let Some((main, screen)) = main.borrow_mut().as_mut() {
-                                let saved =
-                                    main.hub_message(&RealFs, HUB_WINDOW_ID, m).and_then(|()| {
-                                        match m.name {
-                                            HubToMain::SaveState => {
-                                                main.tracker.tick(&RealFs, screen)
-                                            }
-                                            _ => Ok(()),
-                                        }
+                            let main = cx.global_mut::<MainProcess>().state_mut();
+                            let saved =
+                                main.hub_message(&RealFs, HUB_WINDOW_ID, m)
+                                    .and_then(|()| match m.name {
+                                        HubToMain::SaveState => main.tracker.tick(&RealFs, &screen),
+                                        _ => Ok(()),
                                     });
-                                if let Err(e) = saved {
-                                    exceptions
-                                        .borrow_mut()
-                                        .push(format!("main {}: {e:?}", m.name.name()));
-                                }
+                            if let Err(e) = saved {
+                                exceptions
+                                    .borrow_mut()
+                                    .push(format!("main {}: {e:?}", m.name.name()));
+                            }
+                            if m.name == HubToMain::PromptExport {
+                                open_export(id, &hub, &m.data, cx);
                             }
                             if m.name == HubToMain::SaveState {
                                 let mut saves = saves.borrow_mut();
@@ -834,7 +920,7 @@ impl Variant<'_> {
     }
 
     fn shoot(&mut self) -> Result<Shot, String> {
-        let window = self.window();
+        let window = self.active();
         self.headless
             .context()
             .update(|cx| cx.set_global(Recorder::default()));
@@ -880,13 +966,16 @@ impl Variant<'_> {
             ));
         }
         let (scenario, scale) = (self.scenario, self.scale);
+        let content = if self.active() == self.window() {
+            (scenario.width, scenario.height)
+        } else {
+            shot.viewport
+        };
         let expected = (
-            (scenario.width * f64::from(scale)) as u32,
-            (scenario.height * f64::from(scale)) as u32,
+            (content.0 * f64::from(scale)) as u32,
+            (content.1 * f64::from(scale)) as u32,
         );
-        if (shot.image.width, shot.image.height) != expected
-            || shot.viewport != (scenario.width, scenario.height)
-        {
+        if (shot.image.width, shot.image.height) != expected || shot.viewport != content {
             return Err(format!(
                 "capture {name}: content is {}x{} px ({:?} logical), expected {}x{}",
                 shot.image.width, shot.image.height, shot.viewport, expected.0, expected.1

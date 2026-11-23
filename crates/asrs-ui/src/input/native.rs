@@ -9,17 +9,43 @@ use gpui_kit::{
 
 use crate::input::skia;
 use crate::input::style::{
-    ACCENT, NATIVE_BORDER, NATIVE_FILL, NATIVE_RADIUS, NATIVE_TRACK_BORDER, native_stroke,
+    ACCENT, DISABLED_BACKGROUND, DISABLED_BORDER, LIGHTEN_LAYER, NATIVE_BORDER, NATIVE_FILL,
+    NATIVE_RADIUS, NATIVE_TRACK_BORDER, native_stroke,
 };
 
 /// `PaintTextField`: a white rounded rect, radius 2 zoomed px, in a `#767676` stroke one
-/// zoomed pixel wide, both inset by half the stroke.
-pub fn paint_text_field(bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+/// zoomed pixel wide, both inset by half the stroke. Disabled, the fill is a translucent white
+/// over a lightening layer and the stroke is translucent.
+pub fn paint_text_field(bounds: Bounds<Pixels>, disabled: bool, window: &mut Window, cx: &mut App) {
     let scale = window.scale_factor();
     let (w, h) = skia::device_size(bounds, scale);
     let stroke = f64::from(native_stroke(scale));
     let radius = f64::from(NATIVE_RADIUS * scale);
+    let draw_disabled = || {
+        let i = stroke / 2.0;
+        let (fw, fh) = (f64::from(w) - stroke, f64::from(h) - stroke);
+        let lighten = skia::rect(
+            i,
+            i,
+            fw,
+            fh,
+            radius,
+            &skia::paint_attrs("fill", LIGHTEN_LAYER),
+        );
+        let mut pixmap = skia::svg(w, h, 1.0, &lighten)?;
+        skia::fill_aliased_rrect(&mut pixmap, [i, i, fw, fh], radius, DISABLED_BACKGROUND);
+        let paint = format!(
+            "fill=\"none\" {} stroke-width=\"{stroke}\"",
+            skia::paint_attrs("stroke", DISABLED_BORDER)
+        );
+        let border = skia::rect(i, i, fw, fh, radius, &paint);
+        skia::over(&mut pixmap, &skia::svg(w, h, 1.0, &border)?);
+        Some(pixmap)
+    };
     let draw = || {
+        if disabled {
+            return draw_disabled();
+        }
         let i = stroke / 2.0;
         let paint = format!(
             "{} {} stroke-width=\"{stroke}\"",
@@ -36,7 +62,7 @@ pub fn paint_text_field(bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Ap
         );
         skia::svg(w, h, 1.0, &body)
     };
-    skia::paint(("text-field", w, h), bounds, draw, window, cx);
+    skia::paint(("text-field", w, h, disabled), bounds, draw, window, cx);
 }
 
 type Toggle = Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>;

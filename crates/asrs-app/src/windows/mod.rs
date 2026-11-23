@@ -83,6 +83,17 @@ impl Windows {
         id
     }
 
+    /// The open window of this kind a parity scenario drives.
+    #[cfg(feature = "parity")]
+    pub fn of_kind(cx: &App, kind: WindowKind) -> Option<AnyWindowHandle> {
+        let windows = cx.global::<Windows>();
+        windows
+            .handles
+            .iter()
+            .find(|(id, _)| windows.manager.kind(*id) == Some(kind))
+            .map(|(_, h)| *h)
+    }
+
     /// `hubWindows`: most recently focused first.
     pub fn hubs(cx: &App) -> Vec<AnyWindowHandle> {
         Self::manager(cx)

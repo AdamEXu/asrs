@@ -470,13 +470,14 @@ impl PromptWindow {
             .child(
                 Text::new("Help", help_style())
                     .color(theme.link)
+                    .underline()
                     .subpixel(
                         snap_remainder(x as f32, scale),
                         snap_remainder(y as f32, scale),
                     )
                     .probe("a"),
             );
-        if self.help_from_keyboard {
+        if self.help_from_keyboard && window.is_window_active() {
             link = link.child(
                 div()
                     .absolute()

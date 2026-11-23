@@ -8,7 +8,7 @@ use gpui_kit::{
 use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::model::{FieldModel, FieldValue, number_accepts};
 use crate::input::native::paint_text_field;
-use crate::input::style::{FieldStyle, Frame, device_border};
+use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::symbols::Symbol;
 use crate::text::{self, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
@@ -303,12 +303,17 @@ impl<M: FieldModel> Render for TextField<M> {
         let g = geometry(&style, self.size.0, self.size.1, line, scale);
         let focused = self.focus_handle(cx).is_focused(window);
         let (width, height) = self.size;
+        let disabled = self.disabled;
+        let color = match style.frame {
+            Frame::Native if disabled => DISABLED_TEXT,
+            _ => style.color,
+        };
 
         let frame = match style.frame {
             Frame::Native => div().child(
                 canvas(
                     |_, _, _| {},
-                    |bounds, _, window, cx| paint_text_field(bounds, window, cx),
+                    move |bounds, _, window, cx| paint_text_field(bounds, disabled, window, cx),
                 )
                 .size_full(),
             ),
@@ -334,7 +339,7 @@ impl<M: FieldModel> Render for TextField<M> {
         let (top, dy) = split(ey, scale);
         let (right, _) = split(ex + ew, scale);
         let (bottom, _) = split(ey + eh, scale);
-        let text_color = rgba(style.color);
+        let text_color = rgba(color);
         let editor_text_color: Hsla = if focused {
             text_color.into()
         } else {
@@ -369,14 +374,14 @@ impl<M: FieldModel> Render for TextField<M> {
                     .child(paint(&self.placeholder, style.placeholder)),
             );
         } else if !focused && !self.value.shown().is_empty() {
-            let alpha = (style.color & 0xff) as f32 / 255.0;
+            let alpha = (color & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
                 div()
                     .absolute()
                     .left_0()
                     .top_0()
                     .opacity(alpha)
-                    .child(paint(self.value.shown(), style.color)),
+                    .child(paint(self.value.shown(), color)),
             );
         }
 

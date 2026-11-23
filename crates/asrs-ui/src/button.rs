@@ -24,7 +24,7 @@ type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 ///
 /// An enabled button is a tab stop. Focused from the keyboard it takes `global.css`'s
 /// `:focus-visible` style: a 2 px `#446ce3` outline outside the box, which follows the 3 px
-/// border radius that rule also sets.
+/// border radius that rule also sets. No element matches `:focus` while the window is inactive.
 #[derive(IntoElement)]
 pub struct IconButton {
     id: ElementId,
@@ -137,10 +137,11 @@ impl RenderOnce for IconButton {
         let focus_visible = focus.as_ref().is_some_and(|state| {
             let focused = state.read(cx).handle.is_focused(window);
             let keyboard = window.last_input_was_keyboard();
-            state.update(cx, |s, _| {
+            let from_keyboard = state.update(cx, |s, _| {
                 s.from_keyboard = focused && (s.from_keyboard || keyboard);
                 s.from_keyboard
-            })
+            });
+            from_keyboard && window.is_window_active()
         });
         let radius = if focus_visible {
             FOCUS_RING_RADIUS
