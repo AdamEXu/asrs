@@ -224,7 +224,7 @@ fn saved_bounds(state: &JsValue) -> Option<Rect> {
 }
 
 /// `set-aspect-ratio` from a satellite: the content keeps its area at the new ratio.
-fn set_aspect_ratio(cx: &mut App, id: WindowId, aspect_ratio: Option<f64>, lock: bool) {
+pub fn set_aspect_ratio(cx: &mut App, id: WindowId, aspect_ratio: Option<f64>, lock: bool) {
     let Some(aspect_ratio) = aspect_ratio else {
         windows::set_aspect_ratio(cx, id, 0.0, |_| None);
         return;
@@ -234,7 +234,7 @@ fn set_aspect_ratio(cx: &mut App, id: WindowId, aspect_ratio: Option<f64>, lock:
 }
 
 /// `None` where Electron refuses the size (`NaN`).
-fn content_size(original: (f64, f64), aspect_ratio: f64) -> Option<(f64, f64)> {
+pub fn content_size(original: (f64, f64), aspect_ratio: f64) -> Option<(f64, f64)> {
     let area = original.0 * original.1;
     let height = math::sqrt(area / aspect_ratio);
     let width = aspect_ratio * height;

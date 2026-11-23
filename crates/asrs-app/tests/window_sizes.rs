@@ -17,6 +17,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use asrs_app::main_process;
 use asrs_app::windows::{
     self, FileFilter, MessageBoxOptions, MessageBoxResult, MessageBoxType, OpenDialogOptions, Rect,
     SatellitePlacement, SaveDialogOptions, WindowId, WindowKind, Windows,
@@ -48,6 +49,20 @@ app.whenReady().then(() => {
       win.show();
       await wait(500);
       out("size " + JSON.stringify([...win.getContentSize(), ...Object.values(win.getBounds())]));
+      win.destroy();
+      await wait(200);
+    } else if (request.op === "aspect") {
+      const win = new BrowserWindow({ ...request.options, show: false });
+      win.show();
+      await wait(500);
+      const frames = [];
+      for (const [ratio, lock, width, height] of request.steps) {
+        win.setAspectRatio(lock ? ratio : 0);
+        if (ratio !== 0) win.setContentSize(width, height);
+        await wait(300);
+        frames.push([...win.getContentSize(), ...Object.values(win.getBounds())]);
+      }
+      out("aspect " + JSON.stringify(frames));
       win.destroy();
       await wait(200);
     } else if (request.op === "cancelId") {
@@ -465,6 +480,86 @@ async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     );
 }
 
+/// A satellite's `set-aspect-ratio` messages against `setAspectRatio` and `setContentSize` with
+/// the same sizes in Electron, and the lock a live resize meets.
+async fn aspects(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+    const RATIOS: [(f64, bool); 8] = [
+        (1.0, true),
+        (5.0, true),
+        (0.2, true),
+        (16.0 / 9.0, false),
+        (0.0, false),
+        (2.0, true),
+        (1.3333, true),
+        (1.0, false),
+    ];
+    let rect = Rect {
+        x: 160.0,
+        y: 160.0,
+        width: 300.0,
+        height: 160.0,
+    };
+    let build = |_: &mut Window, cx: &mut App| cx.new(|_| Blank);
+    let opened = cx
+        .update(|cx| windows::open_satellite(cx, "aspect", SatellitePlacement::Saved(rect), build));
+    let (id, _) = opened.expect("open window");
+    let handle = cx.update(|cx| Windows::handle(cx, id)).expect("handle");
+    sleep(cx, 700).await;
+    let (mut ours, mut steps) = (Vec::new(), Vec::new());
+    let mut locked = Vec::new();
+    for (ratio, lock) in RATIOS {
+        let content = with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+        let (width, height) = match ratio {
+            0.0 => (0.0, 0.0),
+            _ => main_process::content_size(content, ratio).expect("a size"),
+        };
+        steps.push(format!("[{ratio},{lock},{width},{height}]"));
+        let message = (ratio != 0.0).then_some(ratio);
+        cx.update(|cx| main_process::set_aspect_ratio(cx, id, message, lock));
+        sleep(cx, 400).await;
+        let content = with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+        let (x, y, w, h) = frame_of(cx, handle);
+        ours.push([content.0, content.1, x, y, w, h]);
+        let proposed = (w + 137.0, h + 1000.0);
+        let answer = with_window(cx, handle, |w| probe::will_resize(w, proposed));
+        let title_bar = h - content.1;
+        locked.push(match answer {
+            Some((w, h)) if lock => (w / (h - title_bar) - ratio).abs() < 0.02 * ratio,
+            answer => answer.is_none_or(|size| size == proposed),
+        });
+    }
+    let request = format!(
+        r#"{{"op":"aspect","options":{{"x":160,"y":160,"width":300,"height":160,"minWidth":200,"minHeight":100,"resizable":true}},"steps":[{}]}}"#,
+        steps.join(",")
+    );
+    let reply = electron.request(cx, &request, "aspect ").await;
+    let theirs: Vec<[f64; 6]> = asrs_parity::json::parse(&reply)
+        .expect("json")
+        .as_array()
+        .expect("frames")
+        .iter()
+        .map(|frame| {
+            let values = frame.as_array().expect("frame").iter();
+            let values: Vec<f64> = values.map(|v| v.as_f64().expect("number")).collect();
+            values.try_into().expect("six numbers")
+        })
+        .collect();
+    for (i, (ratio, lock)) in RATIOS.into_iter().enumerate() {
+        report.check(
+            &format!("satellite ratio {ratio} frame"),
+            ours[i] == theirs[i],
+            format!("ours {:?}, Electron {:?}", ours[i], theirs[i]),
+        );
+        report.check(
+            &format!("satellite ratio {ratio} lock {lock}"),
+            locked[i],
+            "",
+        );
+    }
+    cx.update(|cx| windows::close(cx, id));
+    sleep(cx, 300).await;
+}
+
 fn case_rect(case: &Case, origin: Option<(f64, f64)>) -> Rect {
     let (x, y) = origin.unwrap_or((140.0, 140.0));
     Rect {
@@ -801,6 +896,12 @@ fn main() {
             let version = electron.reply(cx, "ready ").await;
             let mut report = Report::default();
             report.check("Electron is upstream's", version == "39.2.7", &version);
+            aspects(cx, &electron, &mut report).await;
+            if std::env::args().any(|a| a == "aspects") {
+                drop(electron);
+                println!("{} failed {:?}", report.failed.len(), report.failed);
+                std::process::exit(i32::from(!report.failed.is_empty()));
+            }
             sizes(cx, &electron, &mut report).await;
             dialogs(cx, &electron, &mut report).await;
             floating(cx, &electron, &mut report).await;

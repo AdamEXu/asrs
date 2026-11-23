@@ -165,6 +165,11 @@ pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {
     imp::probe::perform_key_equivalent(key, modifiers)
 }
 
+/// The frame size the window's delegate answers a live resize to `size` with.
+pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {
+    imp::probe::will_resize(window, size)
+}
+
 /// How much taller a titled, resizable window's frame is than its content.
 pub fn framed_title_bar() -> Option<f64> {
     imp::probe::framed_title_bar()

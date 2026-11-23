@@ -252,6 +252,10 @@ pub(super) mod probe {
         false
     }
 
+    pub fn will_resize(_window: &Window, _size: (f64, f64)) -> Option<(f64, f64)> {
+        None
+    }
+
     pub fn framed_title_bar() -> Option<f64> {
         None
     }
