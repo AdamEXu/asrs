@@ -1,4 +1,5 @@
 import field2dTraces from "./field2dTraces.json";
+import histogramTraces from "./histogramTraces.json";
 import lineGraphTraces from "./lineGraphTraces.json";
 import timelineTraces from "./timelineTraces.json";
 
@@ -283,6 +284,8 @@ export function measureFonts(): string[] {
     `200 14px ${SYSTEM_FONT}`,
     `16px ${SYSTEM_FONT}`,
     `bold 12px ${SYSTEM_FONT}`,
+    "normal 12px 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    "normal bold 12px 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
     "10px sans-serif",
     "italic 16px sans-serif",
     "13.5px sans-serif",
@@ -1335,6 +1338,74 @@ function longHairlines(): Scene {
   return scene("hairlines-1x", "coverage", "pixel", [800, 800], 1, LIGHT, r.cmds);
 }
 
+// Rect clips on and off the pixel grid, nested, under fills, strokes, text and clearRect, then
+// rotated and curved clips.
+function clipping(name: string, dpr: number): Scene {
+  const r = new Rec();
+  r.call("setTransform", dpr, 0, 0, dpr, 0, 0);
+  const paint = (x: number, y: number) => {
+    r.set("fillStyle", "#2b66a2");
+    r.call("beginPath");
+    r.call("rect", x - 4.3, y - 3.7, 70.6, 30.4);
+    r.call("fill");
+    r.set("fillStyle", "rgba(229, 179, 27, 0.6)");
+    r.call("fillRect", x + 10.25, y + 5.5, 60, 60);
+    r.set("strokeStyle", "#af2437");
+    r.set("lineWidth", 3);
+    r.call("beginPath");
+    r.call("moveTo", x - 10, y + 40);
+    r.call("lineTo", x + 90, y + 12.5);
+    r.call("stroke");
+    r.set("fillStyle", "#222");
+    r.set("font", `12px ${SYSTEM_FONT}`);
+    r.set("textBaseline", "middle");
+    r.call("fillText", "Clipped text", x + 2, y + 30.4);
+    r.call("clearRect", x + 30, y + 44, 12, 60);
+  };
+  [0, 0.05, 0.1, 0.2, 0.25, 0.4, 0.5, 0.75].forEach((offset, i) => {
+    const x = 20 + (i % 4) * 95;
+    const y = 15 + Math.floor(i / 4) * 85;
+    r.call("save");
+    r.call("beginPath");
+    r.call("rect", x + offset, y + offset, 62 + offset, 56 - offset);
+    r.call("clip");
+    paint(x, y);
+    r.call("restore");
+  });
+  r.call("save");
+  r.call("beginPath");
+  r.call("rect", 20.3, 190.6, 80.4, 60.2);
+  r.call("clip");
+  r.call("beginPath");
+  r.call("rect", 30.7, 180.2, 80.4, 50.9);
+  r.call("clip");
+  paint(20, 190);
+  r.call("restore");
+  r.call("save");
+  r.call("beginPath");
+  r.call("arc", 160, 220, 31.4, 0, 2 * Math.PI);
+  r.call("clip");
+  paint(125, 190);
+  r.call("restore");
+  r.call("save");
+  r.call("translate", 260, 190);
+  r.call("rotate", 0.35);
+  r.call("beginPath");
+  r.call("rect", 0, 0, 50.5, 50.5);
+  r.call("clip");
+  r.call("resetTransform");
+  r.call("setTransform", dpr, 0, 0, dpr, 0, 0);
+  paint(230, 190);
+  r.call("restore");
+  r.call("save");
+  r.call("beginPath");
+  r.call("rect", 330, 190, 0, 0);
+  r.call("clip");
+  paint(330, 190);
+  r.call("restore");
+  return scene(name, "coverage", "pixel", [400, 280], dpr, LIGHT, r.cmds);
+}
+
 // Frames recorded from upstream's Timeline in dom/timeline vectors (asrs-hub's timeline
 // traces equal them call for call), extracted to plain JSON numbers.
 function timelineScenes(): Scene[] {
@@ -1348,6 +1419,14 @@ function timelineScenes(): Scene[] {
 function lineGraphScenes(): Scene[] {
   return lineGraphTraces.map((t) =>
     scene(t.name, "linegraph", "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, t.cmds as Cmd[])
+  );
+}
+
+// Frames recorded from upstream's StatisticsRenderer (Chart.js) in dom/histogram vectors, which
+// asrs-tabs's histogram reproduces call for call.
+function histogramScenes(): Scene[] {
+  return histogramTraces.map((t) =>
+    scene(t.name, "histogram", "pixel", [t.width, t.height], t.dpr, t.dark ? DARK : LIGHT, t.cmds as Cmd[])
   );
 }
 
@@ -1401,7 +1480,11 @@ export function allScenes(): Scene[] {
     longHairlines(),
     ...timelineScenes(),
     ...lineGraphScenes(),
-    ...field2dScenes()
+    ...field2dScenes(),
+    ...histogramScenes(),
+    clipping("clip-1x", 1),
+    clipping("clip-1.5x", 1.5),
+    clipping("clip-2x", 2)
   ];
   for (const dpr of [1, 2]) {
     out.push(paths(dpr), transforms(dpr), rects(dpr, false), rects(dpr, true), dashes(dpr), colors(dpr));
