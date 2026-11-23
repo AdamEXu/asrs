@@ -3,7 +3,7 @@
 use gpui_kit::Window;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
+use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 use super::ns_window;
@@ -16,6 +16,8 @@ pub fn native(window: &Window) -> Option<NativeWindow> {
 
 #[cfg(feature = "parity")]
 pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+    use objc2_app_kit::NSWindowStyleMask;
+
     let Some(mtm) = MainThreadMarker::new() else {
         return (width, height);
     };

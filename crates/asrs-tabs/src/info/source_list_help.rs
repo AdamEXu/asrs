@@ -94,7 +94,7 @@ impl SourceListHelp {
             // Upstream pushes onto the config's own list, so types after this one that share
             // its prefix get what it collected too.
             for (extra, extra_config) in config.types.iter().enumerate() {
-                if extra != index && extra_config.key.starts_with(&type_config.key) {
+                if extra_config.key.starts_with(&type_config.key) {
                     for t in source_types[extra].clone() {
                         if !source_types[index].contains(&t) {
                             source_types[index].push(t);

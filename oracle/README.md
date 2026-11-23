@@ -1195,6 +1195,15 @@ insertions are `execCommand("insertText")`, which takes typing's and pasting's r
 `BeforeTextInsertedEvent`. Fixed starting texts with every caret position come first, then seeded
 random ones.
 
+### Licenses, Help and beta welcome vectors
+
+`info/*` (`src/genInfoWindows.ts`) records upstream's `licenses.html`, `sourceListHelp.html` and
+`betaWelcome.html` in an offscreen Electron window, one process per device scale. A `dump` record is
+the whole body after the page settled, `[tag, class, box, colour, extra, children]` per element and
+`[text, line boxes]` per text node; a `step` record is the beta page's state after one trusted click
+or key. `src/licenses.ts` is bundled with its `licenses.json` read from the page, so cases can give
+it a list; the other two pages run their rolldown bundles. Cases with `layout: false` carry no boxes.
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:

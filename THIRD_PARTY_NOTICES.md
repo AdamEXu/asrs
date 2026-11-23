@@ -192,8 +192,8 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Copyright The Chromium Authors
 - Version: m142 (as shipped in Electron 39)
 - Used in: `crates/asrs-canvas/src/` (`color.rs` CSS colour parsing, `path.rs` and `raster.rs`
-  `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/inline.rs`,
-  `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`),
+  `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/flow.rs`,
+  `text/inline.rs`, `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`),
   `crates/asrs-tabs/src/form/step.rs`, and behaviour reproduced in
   `crates/asrs-ui` (SVG painting, filters, theme) and `crates/asrs-live/src/timers.rs`
   (`DOMTimer` scheduling)
