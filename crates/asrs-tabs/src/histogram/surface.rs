@@ -27,6 +27,7 @@ pub struct Surface {
     text: TextState,
     stack: Vec<TextState>,
     recorder: Option<Recorder>,
+    revision: u64,
 }
 
 #[derive(Default)]
@@ -40,6 +41,11 @@ impl Surface {
         &self.canvas
     }
 
+    /// Differs whenever the canvas may show something else.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn record_calls(&mut self) {
         self.recorder = Some(Recorder::default());
     }
@@ -51,6 +57,7 @@ impl Surface {
     }
 
     pub fn set_size(&mut self, width: u32, height: u32) {
+        self.revision += 1;
         self.canvas = Canvas2d::new(width, height);
         self.text = TextState::default();
         self.stack.clear();
@@ -63,6 +70,7 @@ impl Surface {
     }
 
     fn push(&mut self, call: Call) {
+        self.revision += 1;
         match &call {
             Call::Save => self.stack.push(self.text.clone()),
             Call::Restore => {

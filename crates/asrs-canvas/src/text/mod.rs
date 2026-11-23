@@ -4,6 +4,7 @@ pub mod dom;
 pub mod font;
 pub mod inline;
 pub mod layout;
+pub mod line_break;
 #[cfg(target_os = "linux")]
 pub mod linux;
 pub mod lut;

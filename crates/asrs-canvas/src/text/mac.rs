@@ -248,6 +248,17 @@ fn vertical_metrics(font: &CTFont) -> FontMetrics {
     }
 }
 
+/// The byte offset in `text` of each UTF-16 offset, the one past a surrogate pair's first unit
+/// being the next character's.
+fn byte_offsets(text: &str) -> Vec<usize> {
+    let mut out = Vec::with_capacity(text.len() + 1);
+    out.push(0);
+    for (byte, c) in text.char_indices() {
+        out.resize(out.len() + c.len_utf16(), byte + c.len_utf8());
+    }
+    out
+}
+
 fn has_color_glyphs(font: &CTFont) -> bool {
     font.symbolic_traits() & kCTFontColorGlyphsTrait != 0
 }
@@ -425,13 +436,18 @@ impl CoreText {
             })
             .collect();
         let mut overrides = Vec::new();
+        if runs.iter().all(|(_, font)| font.is_none()) {
+            return overrides;
+        }
+        let bytes = byte_offsets(word);
         for (k, (start, font)) in runs.iter().enumerate() {
             let Some(font) = font else {
                 continue;
             };
             let end = runs.get(k + 1).map_or(len, |r| r.0);
             let fallback = exact_copy(font, size);
-            for (from, to, emoji) in emoji_clusters(word, *start, end) {
+            let run = word.get(bytes[*start as usize]..bytes[end as usize]);
+            for (from, to, emoji) in emoji_clusters(run.unwrap_or_default(), *start) {
                 let font = if emoji {
                     let named = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
                     exact_copy(&named, size)

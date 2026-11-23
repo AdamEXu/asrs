@@ -11,6 +11,7 @@
 use std::sync::Arc;
 
 use super::layout::normalize_space;
+use super::line_break::LineBreaks;
 use super::lut::MaskGammaLut;
 use super::{FontSpec, Mask, Shaped, ShapedGlyph, TextBackend};
 
@@ -82,6 +83,8 @@ pub struct Style {
     pub overflow: Overflow,
     /// `letter-spacing` in CSS px.
     pub letter_spacing: f32,
+    /// `overflow-wrap: break-word`.
+    pub break_word: bool,
     /// `unicode-bidi: plaintext` on the text's inline box: its bidi paragraph takes the
     /// direction of its first strong character, while alignment and truncation keep the
     /// block's `direction`.
@@ -98,13 +101,14 @@ impl Style {
             white_space: WhiteSpace::Normal,
             overflow: Overflow::Visible,
             letter_spacing: 0.0,
+            break_word: false,
             bidi_plaintext: false,
         }
     }
 
     /// A style from CSS declarations: `font` (required), `line-height`, `text-align`,
     /// `direction`, `white-space`, `text-overflow` (which implies `overflow: hidden`) and
-    /// `letter-spacing` and `unicode-bidi` (`normal` or `plaintext`).
+    /// `letter-spacing`, `overflow-wrap` and `unicode-bidi` (`normal` or `plaintext`).
     /// Unknown properties and values are `None`.
     pub fn from_css<'a>(
         declarations: impl IntoIterator<Item = (&'a str, &'a str)>,
@@ -153,6 +157,13 @@ impl Style {
                     style.letter_spacing = match value {
                         "normal" => 0.0,
                         v => v.strip_suffix("px")?.parse().ok()?,
+                    }
+                }
+                "overflow-wrap" => {
+                    style.break_word = match value {
+                        "normal" => false,
+                        "break-word" => true,
+                        _ => return None,
                     }
                 }
                 "unicode-bidi" => {
@@ -294,27 +305,6 @@ pub fn collapse(text: &str, white_space: WhiteSpace) -> Vec<String> {
         }
     }
     vec![out]
-}
-
-/// Where a line may break in collapsed `white-space: normal` text, as `(end of the line's
-/// content, start of the next line)` byte offsets: at each space, which neither line keeps, and
-/// after a hyphen between two letters.
-fn break_opportunities(text: &str) -> Vec<(usize, usize)> {
-    let chars: Vec<(usize, char)> = text.char_indices().collect();
-    let mut out = Vec::new();
-    for (i, &(byte, c)) in chars.iter().enumerate() {
-        let next = chars.get(i + 1);
-        if c == ' ' {
-            out.push((byte, byte + 1));
-        } else if c == '-'
-            && i > 0
-            && chars[i - 1].1.is_alphabetic()
-            && next.is_some_and(|n| n.1.is_alphabetic())
-        {
-            out.push((byte + 1, byte + 1));
-        }
-    }
-    out
 }
 
 pub(super) fn utf16_len(s: &str) -> usize {
@@ -664,7 +654,8 @@ fn truncate(
 }
 
 /// Greedy line breaking of collapsed `white-space: normal` text into lines no wider than
-/// `available`; a word wider than that gets a line of its own.
+/// `available`; a word wider than that gets a line of its own, or under
+/// `overflow-wrap: break-word` as many as it takes.
 fn wrap(
     backend: &mut dyn TextBackend,
     style: &Style,
@@ -681,30 +672,42 @@ fn wrap(
         count += c.len_utf16();
     }
     units[text.len()] = count;
-    let fits =
-        |from: usize, to: usize| lu_ceil((at[units[to]] - at[units[from]]) * scale) <= available;
-    let mut breaks = break_opportunities(text);
-    breaks.push((text.len(), text.len()));
-    let mut lines = Vec::new();
-    let mut start = 0;
-    let mut candidate: Option<(usize, usize)> = None;
-    let mut i = 0;
-    while i < breaks.len() {
-        let (end, next) = breaks[i];
-        if fits(start, end) {
-            candidate = Some((end, next));
-            i += 1;
-        } else if let Some((end, next)) = candidate.take() {
-            lines.push(text[start..end].to_owned());
-            start = next;
-        } else {
-            lines.push(text[start..end].to_owned());
-            start = next;
-            i += 1;
+    let mut cluster = vec![false; count + 1];
+    for glyph in &shaped.glyphs {
+        if let Some(start) = cluster.get_mut(glyph.cluster as usize) {
+            *start = true;
         }
     }
-    if let Some((end, _)) = candidate {
+    let fits =
+        |from: usize, to: usize| lu_ceil((at[units[to]] - at[units[from]]) * scale) <= available;
+    let content = |next: usize| text[..next].trim_end_matches(' ').len();
+    let mut breaks = LineBreaks::new(text);
+    let mut lines = Vec::new();
+    let mut start = 0;
+    while start < text.len() {
+        let ends = breaks.ends();
+        let count = ends.partition_point(|&next| fits(start, content(next)));
+        let (end, next) = if count > 0 {
+            (content(ends[count - 1]), ends[count - 1])
+        } else if style.break_word {
+            let word = content(ends[0]);
+            let mut offsets = text[start..word]
+                .char_indices()
+                .map(|(byte, _)| start + byte)
+                .skip(1)
+                .filter(|&byte| cluster[units[byte]]);
+            let first = offsets.next().unwrap_or(word);
+            let end = offsets
+                .take_while(|&byte| fits(start, byte))
+                .last()
+                .unwrap_or(first);
+            (end, end)
+        } else {
+            (content(ends[0]), ends[0])
+        };
         lines.push(text[start..end].to_owned());
+        start = next;
+        breaks.restart(start);
     }
     lines
 }
@@ -795,7 +798,7 @@ pub fn layout(
 }
 
 /// `InlineBoxState::AccumulateUsedFonts`: under `line-height: normal` a line box also holds the
-/// ascent and descent, with half the line gap each side, of every fallback font its glyphs use.
+/// ascent and descent, with about half the line gap each side, of every fallback font its glyphs use.
 fn used_fonts(
     backend: &mut dyn TextBackend,
     fragments: &[Fragment],
@@ -806,8 +809,9 @@ fn used_fonts(
         if let Some(m) = backend.fallback_metrics(glyph.glyph, scale) {
             let (a, d) = (m.ascent as Lu * LU_PER_PX, m.descent as Lu * LU_PER_PX);
             let gap = m.line_gap as Lu * LU_PER_PX;
-            above = above.max(a + gap / 2);
-            below = below.max(d + gap - gap / 2);
+            let leading = lu_floor_px(gap / 2);
+            above = above.max(a + leading);
+            below = below.max(d + gap - leading);
         }
     }
     (above, below)

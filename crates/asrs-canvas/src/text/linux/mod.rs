@@ -495,7 +495,7 @@ impl Fontations {
         }
         bytes.insert(units, word.len());
         let mut runs = Vec::new();
-        let clusters = emoji_clusters(word, 0, units);
+        let clusters = emoji_clusters(word, 0);
         for segment in clusters.chunk_by(|a, b| a.2 == b.2) {
             let range = (bytes[&segment[0].0], bytes[&segment[segment.len() - 1].1]);
             self.shape_segment(spec, primary, word, range, segment[0].2, &mut runs);

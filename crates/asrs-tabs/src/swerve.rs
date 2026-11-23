@@ -61,8 +61,8 @@ impl SwerveController {
         SwerveController {
             source_list: SourceList::new(configs::swerve(), uuid, false),
             max_speed: NumberInput::new("5"),
-            size_x: NumberInput::new("0.65"),
-            size_y: NumberInput::new("0.65"),
+            size_x: NumberInput::new("0.65").with_step("0.01"),
+            size_y: NumberInput::new("0.65").with_step("0.01"),
             orientation: ORIENTATION_90,
         }
     }

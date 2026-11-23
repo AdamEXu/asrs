@@ -1,0 +1,17 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "geometry": "real",
+    "steps": [
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*line-break*/ window.__oracleQuiet(() => { const body = () => Array.from({ length: 94 }, (_, i) => Array.from({ length: 94 }, (_, j) => (breaks(\"x\" + String.fromCharCode(33 + i, 33 + j) + \"x\").includes(2) ? \"1\" : \"0\")).join(\"\")); \n  const div = document.createElement(\"div\");\n  div.style.cssText = \"position: absolute; left: 0px; top: 0px; width: 0px; font: 16px/20px Courier; white-space: normal;\";\n  document.body.appendChild(div);\n  const range = document.createRange();\n  const breaks = (text) => {\n    div.textContent = text;\n    const node = div.firstChild;\n    const out = [];\n    let last = null;\n    let at = 0;\n    for (const c of text) {\n      if (c !== \" \" && c !== \"​\" && c !== \"­\") {\n        range.setStart(node, at);\n        range.setEnd(node, at + c.length);\n        const rects = range.getClientRects();\n        const top = rects[rects.length - 1].y;\n        if (last !== null && top - last > 10) out.push(at);\n        last = top;\n      }\n      at += c.length;\n    }\n    return out;\n  };\n  try {\n    return body();\n  } finally {\n    div.remove();\n  }\n })"
+          }
+        ],
+        "label": "pairs"
+      }
+    ]
+  }
+}
