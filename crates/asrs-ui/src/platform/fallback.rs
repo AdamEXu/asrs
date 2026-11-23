@@ -382,7 +382,7 @@ pub(super) mod probe {
         None
     }
 
-    pub fn post_key(_keysym: u32) -> bool {
+    pub fn post_keys(_keysyms: &[u32]) -> bool {
         false
     }
 }

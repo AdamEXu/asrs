@@ -298,8 +298,8 @@ pub fn fake_pointer(position: Option<(f64, f64)>, button: Option<(u8, bool)>) ->
     Ok(())
 }
 
-/// Presses and releases the key `keysym` is on.
-pub fn fake_key(keysym: u32) -> Result<()> {
+/// Presses the keys the keysyms are on in turn, then releases them.
+pub fn fake_keys(keysyms: &[u32]) -> Result<()> {
     let (connection, screen) = x11rb::connect(None)?;
     let setup = connection.setup();
     let root = setup.roots[screen].root;
@@ -307,13 +307,18 @@ pub fn fake_key(keysym: u32) -> Result<()> {
     let keys = connection
         .get_keyboard_mapping(setup.min_keycode, count)?
         .reply()?;
-    let index = keys
-        .keysyms
-        .chunks(usize::from(keys.keysyms_per_keycode))
-        .position(|syms| syms.contains(&keysym))
-        .ok_or("no key for the keysym")?;
-    let code = setup.min_keycode + index as u8;
-    for event in [KEY_PRESS_EVENT, KEY_RELEASE_EVENT] {
+    let mut codes = Vec::new();
+    for keysym in keysyms {
+        let index = keys
+            .keysyms
+            .chunks(usize::from(keys.keysyms_per_keycode))
+            .position(|syms| syms.contains(keysym))
+            .ok_or("no key for the keysym")?;
+        codes.push(setup.min_keycode + index as u8);
+    }
+    let presses = codes.iter().map(|code| (KEY_PRESS_EVENT, *code));
+    let releases = codes.iter().rev().map(|code| (KEY_RELEASE_EVENT, *code));
+    for (event, code) in presses.chain(releases) {
         connection
             .xtest_fake_input(event, code, CURRENT_TIME, root, 0, 0, 0)?
             .check()?;

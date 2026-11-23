@@ -341,7 +341,7 @@ pub fn size_hints(window: &Window, number: u32) -> Option<SizeHints> {
     imp::probe::size_hints(window, number)
 }
 
-/// Presses and releases the key of an X11 keysym.
-pub fn post_key(keysym: u32) -> bool {
-    imp::probe::post_key(keysym)
+/// Presses the keys of X11 keysyms in turn, then releases them.
+pub fn post_keys(keysyms: &[u32]) -> bool {
+    imp::probe::post_keys(keysyms)
 }

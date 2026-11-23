@@ -27,6 +27,7 @@ pub const SEPARATOR_HEIGHT: f32 = 9.0;
 pub const PADDING: f32 = 4.0;
 pub const LABEL_INSET: f32 = 24.0;
 pub const TRAILING_INSET: f32 = 24.0;
+const SHORTCUT_GAP: f32 = 24.0;
 pub const MIN_WIDTH: f32 = 120.0;
 const GROUP_FONT: &str = "bold 13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont";
 const FONT: &str = "13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont";
@@ -144,7 +145,10 @@ pub fn menu_size(cx: &mut App, menu: &PopupMenu, scale: f32) -> (f32, f32) {
         if let PopupItem::Entry(entry) = item {
             let label = platform::native_menu_label(&entry.label);
             let (w, _) = crate::text::measure(cx, &style, &label, scale);
-            width = width.max(w as f32);
+            let shortcut = entry.shortcut.as_ref().map_or(0.0, |shortcut| {
+                SHORTCUT_GAP + crate::text::measure(cx, &style, shortcut, scale).0 as f32
+            });
+            width = width.max(w as f32 + shortcut);
         }
     }
     (
@@ -979,6 +983,21 @@ fn current_os() -> OperatingSystem {
     }
 }
 
+/// The keystroke GPUI reports on Linux for `keystroke` typed on a US layout: a shifted symbol is
+/// that symbol without the shift.
+fn typed_on_linux(mut keystroke: Keystroke) -> Keystroke {
+    const PLAIN: &str = "`1234567890-=[]\\;',./";
+    const SHIFTED: &str = "~!@#$%^&*()_+{}|:\"<>?";
+    if keystroke.modifiers.shift
+        && let Some(i) = PLAIN.find(&keystroke.key)
+        && keystroke.key.len() == 1
+    {
+        keystroke.modifiers.shift = false;
+        keystroke.key = SHIFTED[i..=i].to_owned();
+    }
+    keystroke
+}
+
 struct Accelerators(#[allow(dead_code)] Subscription);
 
 impl Global for Accelerators {}
@@ -993,10 +1012,13 @@ pub fn install_accelerators(
     let table: Vec<(Keystroke, MenuPath)> = table
         .into_iter()
         .filter_map(|(keystroke, path)| {
-            Some((
-                Keystroke::parse_with_os(&keystroke, current_os()).ok()?,
-                path,
-            ))
+            let keystroke = Keystroke::parse_with_os(&keystroke, current_os()).ok()?;
+            let keystroke = if cfg!(target_os = "linux") {
+                typed_on_linux(keystroke)
+            } else {
+                keystroke
+            };
+            Some((keystroke, path))
         })
         .collect();
     let subscription = cx.observe_keystrokes(move |event, window, cx| {
@@ -1012,4 +1034,57 @@ pub fn install_accelerators(
         }
     });
     cx.set_global(Accelerators(subscription));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shifted_symbols_lose_the_shift_on_linux() {
+        for (accelerator, typed) in [
+            ("ctrl-shift-=", "ctrl-+"),
+            ("ctrl-shift-/", "ctrl-?"),
+            ("ctrl-shift-o", "ctrl-shift-o"),
+            ("ctrl-shift-left", "ctrl-shift-left"),
+            ("ctrl-=", "ctrl-="),
+        ] {
+            let parse = |k| Keystroke::parse_with_os(k, OperatingSystem::Linux).expect("keystroke");
+            assert_eq!(typed_on_linux(parse(accelerator)), parse(typed));
+        }
+    }
+
+    fn bounds(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
+        Bounds::new(point(px(x), px(y)), size(px(w), px(h)))
+    }
+
+    #[test]
+    fn menus_stay_on_the_screen() {
+        let screen = bounds(0.0, 0.0, 1000.0, 800.0);
+        let menu = size(px(200.0), px(300.0));
+        let at = |anchor, side| place(anchor, menu, screen, side);
+        let point = |x, y| bounds(x, y, 0.0, 0.0);
+        assert_eq!(
+            at(point(50.0, 60.0), Side::Below),
+            bounds(50.0, 60.0, 200.0, 300.0)
+        );
+        assert_eq!(
+            at(point(900.0, 60.0), Side::Below),
+            bounds(800.0, 60.0, 200.0, 300.0)
+        );
+        assert_eq!(
+            at(point(50.0, 700.0), Side::Below),
+            bounds(50.0, 400.0, 200.0, 300.0)
+        );
+        let row = bounds(50.0, 100.0, 120.0, ROW_HEIGHT);
+        assert_eq!(
+            at(row, Side::Beside),
+            bounds(170.0 - SUBMENU_OVERLAP, 100.0 - PADDING, 200.0, 300.0)
+        );
+        let row = bounds(850.0, 100.0, 120.0, ROW_HEIGHT);
+        assert_eq!(
+            at(row, Side::Beside),
+            bounds(650.0 + SUBMENU_OVERLAP, 100.0 - PADDING, 200.0, 300.0)
+        );
+    }
 }

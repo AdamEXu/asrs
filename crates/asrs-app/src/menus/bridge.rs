@@ -32,8 +32,8 @@ pub type ActionHandler = Rc<dyn Fn(MenuAction, &mut App)>;
 
 pub type EffectHandler = Rc<dyn Fn(Vec<Effect>, &mut App)>;
 
-/// The native menu for built items. Key equivalents are filled in on macOS only, from the
-/// item's accelerator or, with `use_default_accelerator`, its role's default.
+/// The native menu for built items. Key equivalents (macOS) and shortcut texts (elsewhere) come
+/// from the item's accelerator or, with `use_default_accelerator`, its role's default.
 pub fn to_popup(
     items: &[BuiltItem],
     platform: Platform,
@@ -56,14 +56,18 @@ pub fn to_popup(
         if let Some(rgb) = item.icon {
             entry = entry.swatch(rgb);
         }
-        if platform == Platform::Mac
-            && item.submenu.is_none()
-            && let Some((key, modifiers)) = item
-                .accelerator_for(use_default_accelerator)
-                .and_then(|a| Accelerator::parse(a, platform))
-                .and_then(|a| a.mac_key_equivalent())
-        {
-            entry = entry.key_equivalent(key, modifiers);
+        let accelerator = item
+            .accelerator_for(use_default_accelerator)
+            .filter(|_| item.submenu.is_none())
+            .and_then(|a| Accelerator::parse(a, platform));
+        if let Some(accelerator) = accelerator {
+            if platform == Platform::Mac {
+                if let Some((key, modifiers)) = accelerator.mac_key_equivalent() {
+                    entry = entry.key_equivalent(key, modifiers);
+                }
+            } else if let Some(shortcut) = accelerator.shortcut_text() {
+                entry = entry.shortcut(shortcut);
+            }
         }
         if let Some(submenu) = &item.submenu {
             entry = entry.submenu(to_popup(submenu, platform, use_default_accelerator));

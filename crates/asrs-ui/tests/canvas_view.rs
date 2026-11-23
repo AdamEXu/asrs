@@ -274,8 +274,8 @@ fn main() {
     if asrs_parity::ci::skip_in_ci("canvas view", "a GPU") {
         return;
     }
-    if !cfg!(target_os = "macos") {
-        println!("canvas view: skipped, needs the macOS text backend and headless renderer");
+    if !cfg!(any(target_os = "macos", target_os = "linux")) {
+        println!("canvas view: skipped, no headless renderer on this platform");
         return;
     }
     for scale in [1.0f32, 2.0] {

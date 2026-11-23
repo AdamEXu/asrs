@@ -50,6 +50,8 @@ pub struct PopupEntry {
     pub submenu: Option<PopupMenu>,
     /// A macOS key equivalent and `NSEventModifierFlags` mask.
     pub key_equivalent: Option<(String, u32)>,
+    /// The accelerator as a drawn menu shows it.
+    pub shortcut: Option<String>,
     pub works_when_hidden: bool,
     /// The item's Electron role, lowercased. On macOS some roles become AppKit selectors or
     /// system menus, as `ElectronMenuController` makes them.
@@ -89,6 +91,7 @@ impl PopupEntry {
             swatch: None,
             submenu: None,
             key_equivalent: None,
+            shortcut: None,
             works_when_hidden: true,
             role: None,
         }
@@ -96,6 +99,11 @@ impl PopupEntry {
 
     pub fn key_equivalent(mut self, key: impl Into<String>, modifiers: u32) -> Self {
         self.key_equivalent = Some((key.into(), modifiers));
+        self
+    }
+
+    pub fn shortcut(mut self, shortcut: impl Into<String>) -> Self {
+        self.shortcut = Some(shortcut.into());
         self
     }
 

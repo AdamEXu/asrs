@@ -1122,6 +1122,7 @@ pub(super) mod probe {
                 visible: !item.isHidden(),
                 checked: item.state() == NSControlStateValueOn,
                 swatch,
+                shortcut: None,
                 works_when_hidden: key.is_empty() || works_when_hidden.as_bool(),
                 key_equivalent: (!key.is_empty())
                     .then(|| (key, item.keyEquivalentModifierMask().bits() as u32)),
@@ -1652,7 +1653,7 @@ pub(super) mod probe {
         None
     }
 
-    pub fn post_key(_keysym: u32) -> bool {
+    pub fn post_keys(_keysyms: &[u32]) -> bool {
         false
     }
 }

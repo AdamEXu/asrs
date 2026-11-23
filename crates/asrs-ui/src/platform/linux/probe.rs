@@ -64,6 +64,6 @@ pub fn post_wheel_at(x: f64, y: f64, sample: &WheelSample) -> bool {
     ok
 }
 
-pub fn post_key(keysym: u32) -> bool {
-    x11::fake_key(keysym).is_ok()
+pub fn post_keys(keysyms: &[u32]) -> bool {
+    x11::fake_keys(keysyms).is_ok()
 }

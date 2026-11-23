@@ -18,10 +18,11 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use asrs_app::main_process;
+use asrs_app::menus::accelerator::Accelerator;
 use asrs_app::windows::{self, Rect, SatellitePlacement, WindowId, WindowKind, Windows};
 use asrs_parity::json::{self, Json};
 use asrs_parity::vectors;
-use asrs_services::window_manager::{OptionValue, WindowOptions};
+use asrs_services::window_manager::{OptionValue, Platform, WindowOptions};
 use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, AsyncApp, Context, Entity, InteractiveElement, IntoElement,
     Render, ScrollEvent, Styled, Window, div,
@@ -514,6 +515,46 @@ fn menu() -> PopupMenu {
 const ESCAPE: u32 = 0xff1b;
 const DOWN: u32 = 0xff54;
 const RETURN: u32 = 0xff0d;
+const CONTROL: u32 = 0xffe3;
+const SHIFT: u32 = 0xffe1;
+
+/// The accelerator table of the hidden menu bar, on real keys.
+async fn accelerators(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+    let cases: [(&str, &[u32]); 4] = [
+        ("CommandOrControl+Plus", &[CONTROL, SHIFT, '=' as u32]),
+        ("CmdOrCtrl+Shift+O", &[CONTROL, SHIFT, 'o' as u32]),
+        ("CmdOrCtrl+,", &[CONTROL, ',' as u32]),
+        ("F11", &[0xffc8]),
+    ];
+    let table = cases
+        .iter()
+        .enumerate()
+        .map(|(i, (accelerator, _))| {
+            let parsed = Accelerator::parse(accelerator, Platform::Linux).expect("accelerator");
+            (parsed.gpui_keystroke().expect("keystroke"), vec![i])
+        })
+        .collect();
+    let seen: Rc<RefCell<Vec<MenuPath>>> = Rc::default();
+    let sink = seen.clone();
+    cx.update(|cx| {
+        asrs_ui::menu::install_accelerators(cx, table, move |path, _, _| {
+            sink.borrow_mut().push(path);
+        });
+    });
+    let handle = handle_of(cx, hub);
+    with_window(cx, handle, |w| w.activate_window());
+    sleep(cx, 600).await;
+    for (i, (accelerator, keys)) in cases.iter().enumerate() {
+        probe::post_keys(keys);
+        sleep(cx, 400).await;
+        let got = seen.take();
+        report.check(
+            &format!("accelerator {accelerator}"),
+            got == [vec![i]],
+            format!("{got:?}"),
+        );
+    }
+}
 
 async fn click(cx: &mut AsyncApp, (x, y): (f64, f64)) {
     for action in [MouseAction::Drag, MouseAction::Down, MouseAction::Up] {
@@ -575,7 +616,7 @@ async fn menus(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
                 click(cx, disabled).await;
                 let still = closed.borrow().len() == 1;
                 report.check("a disabled entry keeps the menu open", still, "");
-                probe::post_key(ESCAPE);
+                probe::post_keys(&[ESCAPE]);
                 None
             }
             2 => {
@@ -584,7 +625,7 @@ async fn menus(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
             }
             3 => {
                 for key in [DOWN, DOWN, DOWN, RETURN] {
-                    probe::post_key(key);
+                    probe::post_keys(&[key]);
                     sleep(cx, 200).await;
                 }
                 Some(vec![4])
@@ -659,6 +700,7 @@ fn main() {
                 .0;
             sleep(cx, 1000).await;
             menus(cx, &mut report, hub).await;
+            accelerators(cx, &mut report, hub).await;
             wheel(cx, &electron, &mut report).await;
             aspects(cx, &electron, &mut report).await;
             sizes(cx, &electron, &mut report, hub).await;

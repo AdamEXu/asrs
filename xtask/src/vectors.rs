@@ -585,7 +585,12 @@ const ENTRY_INPUTS: &str = "inputs.json";
 /// Entries that load another entry's page bundle at runtime, as build.mjs's `runtimeLoads`
 /// records for its own entries. Kept here because any edit to build.mjs changes every
 /// vector's generator hash.
-const BORROWED_INPUTS: &[(&str, &str)] = &[("hubSession", "dom"), ("selectKeys", "selectKeysMain")];
+const BORROWED_INPUTS: &[(&str, &str)] = &[
+    ("hubSession", "dom"),
+    ("selectKeys", "selectKeysMain"),
+    ("genMenusHost", "genMenus"),
+    ("genMenusHost", "genMenusMain"),
+];
 const LAZY_HELPER_PREFIX: &str = "lazyHelpers/";
 
 fn read_entry_inputs(path: &Path) -> Result<Vec<(String, Vec<String>)>> {

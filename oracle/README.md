@@ -1216,6 +1216,13 @@ can reach Electron's menu, so fixtures avoid them. The entry's generator hash al
 be an `<input>`, for which `ArrowUp` and `ArrowDown` are keys too. Its fixture is written by
 `oracle/tools/u14Specs.mjs` and covers `step` attributes, start values and modifiers.
 
+`form/select-keys-host` is the same entry with `"platforms": ["linux-x86_64"]`: off macOS the popup
+is a page of its own that does not block, so its steps also press the keys that open it and the
+keys the open popup takes. Its vector is generated and content-checked on Linux x86_64 only.
+
+`menus/electron-linux` (`src/genMenusHost.ts`) is `genMenus electron` on the platform it runs on,
+for Electron's role defaults there, and is likewise generated on Linux x86_64 only.
+
 ### Number insertion vectors
 
 `form/number-insert` (`src/genNumberInsert.ts`) records what Chromium lets the user insert into an
