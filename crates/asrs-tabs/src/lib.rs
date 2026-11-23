@@ -9,6 +9,7 @@ pub mod field3d;
 pub mod field_2d;
 pub mod form;
 pub use asrs_canvas::heatmap;
+pub mod histogram;
 pub mod joysticks;
 pub mod joysticks_renderer;
 pub mod line_graph;

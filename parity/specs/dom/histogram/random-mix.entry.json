@@ -1,0 +1,998 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "seed": 909,
+  "ignoreMain": [
+   "save-state",
+   "save-type-memory",
+   "update-touch-bar-slider",
+   "show"
+  ],
+  "layout": [
+   {
+    "selector": "div.stats-histogram-container",
+    "rect": [
+     530,
+     92,
+     560,
+     348
+    ]
+   }
+  ],
+  "steps": [
+   {
+    "eval": "(() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const charts = [];\n  const observers = new Map();\n  w.ResizeObserver = class {\n    constructor(callback) {\n      this.callback = callback;\n    }\n    observe(el) {\n      observers.set(el, this.callback);\n    }\n    unobserve(el) {\n      observers.delete(el);\n    }\n    disconnect() {\n      for (const [el, callback] of observers) if (callback === this.callback) observers.delete(el);\n    }\n  };\n  const containerOf = (chart) => chart.canvas.parentNode;\n  let depth = 0;\n  const state = (chart) => ({\n    size: [chart.width, chart.height, chart.currentDevicePixelRatio],\n    area: chart.chartArea === undefined ? undefined : [\"left\", \"top\", \"right\", \"bottom\", \"width\", \"height\"].map((k) => chart.chartArea[k]),\n    scales: Object.fromEntries(\n      Object.entries(chart.scales).map(([id, s]) => [\n        id,\n        {\n          box: [s.left, s.top, s.right, s.bottom, s.width, s.height],\n          range: [s.min, s.max],\n          rotation: s.labelRotation,\n          ticks: s.ticks.map((t) => [t.value, t.label])\n        }\n      ])\n    ),\n    legend: [chart.legend.left, chart.legend.top, chart.legend.right, chart.legend.bottom],\n    bars: chart.data.datasets.map((_, i) => chart.getDatasetMeta(i).data.map((b) => [b.x, b.y, b.base, b.width, b.height]))\n  });\n  const observe = (chart, record, body) => {\n    if (depth > 0) return body();\n    const ctx = chart.canvas.__oracleContext;\n    const [frames, length] = [ctx.frames, ctx.calls.length];\n    depth++;\n    try {\n      return body();\n    } catch (e) {\n      record.threw = tree(e instanceof Error ? e.name + \": \" + e.message : String(e));\n      throw e;\n    } finally {\n      depth--;\n      record.reset = ctx.frames !== frames;\n      record.calls = tree(record.reset ? ctx.calls : ctx.calls.slice(length));\n      record.canvas = tree([chart.canvas.width, chart.canvas.height]);\n      if (record.layout) record.state = tree(state(chart));\n      delete record.layout;\n      write(record);\n    }\n  };\n  const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n  const hook = (r) => {\n    const chart = r.histogram;\n    const id = charts.length;\n    charts.push(chart);\n    const ctx = chart.canvas.__oracleContext;\n    write({ hist: \"create\", id: tree(id), dpr: tree(w.devicePixelRatio), calls: tree(ctx.calls), canvas: tree([chart.canvas.width, chart.canvas.height]) });\n    let last;\n    const render = r.render;\n    r.render = function (command) {\n      const record = { hist: \"render\", id: tree(id), t: tree(Date.now()), dark: dark() };\n      const theme = r.lastIsLight !== !record.dark;\n      record.layout = theme || r.changeCounter !== command.changeCounter || r.firstRender;\n      if (command !== last) record.command = tree({ changeCounter: command.changeCounter, bins: command.bins, stepSize: command.stepSize, fields: command.fields.map((f) => ({ title: f.title, color: f.color, histogramCounts: f.histogramCounts })) });\n      last = command;\n      return observe(chart, record, () => render.apply(this, arguments));\n    };\n    const resize = chart.resize;\n    chart.resize = function (width, height) {\n      const rect = containerOf(chart).getBoundingClientRect();\n      const record = { hist: \"resize\", id: tree(id), t: tree(Date.now()), args: tree([width, height]), container: tree([rect.width, rect.height]), layout: true };\n      return observe(chart, record, () => resize.apply(this, arguments));\n    };\n    const handler = chart._eventHandler;\n    chart._eventHandler = function (e) {\n      const record = { hist: \"event\", id: tree(id), t: tree(Date.now()), type: e.type, at: tree([e.x, e.y]) };\n      return observe(chart, record, () => handler.apply(this, arguments));\n    };\n    const draw = chart.draw;\n    chart.draw = function () {\n      return observe(chart, { hist: \"draw\", id: tree(id), t: tree(Date.now()) }, () => draw.apply(this, arguments));\n    };\n    for (const type of [\"mousemove\", \"mouseout\", \"click\"]) {\n      chart.canvas.addEventListener(type, (e) => write({ hist: \"dom\", id: tree(id), type, at: tree([e.offsetX, e.offsetY]) }));\n    }\n  };\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const before = this.tabList.slice();\n    const result = addTab.apply(this, args);\n    this.tabList.forEach((t) => {\n      if (t.type === 6 && !before.includes(t)) hook(t.renderer);\n    });\n    return result;\n  };\n  const frame = () => {\n    write({ hist: \"frame\", t: tree(Date.now()) });\n    w.requestAnimationFrame(frame);\n  };\n  w.requestAnimationFrame(frame);\n  const last = () => charts[charts.length - 1];\n  w.__histCommand = (command) => {\n    const tab = w.tabs.tabList.filter((t) => t.type === 6).pop();\n    let counter = w.__histCounter ?? 0;\n    w.__histCounter = ++counter;\n    const value = { changeCounter: counter, ...command, fields: command.fields.map((f) => ({ ...f, stats: new Proxy({}, { get: () => 0 }) })) };\n    tab.controller.getCommand = () => value;\n  };\n  w.__histSize = (width, height) => {\n    const chart = last();\n    const container = containerOf(chart);\n    container.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height });\n    write({ hist: \"observe\", id: tree(charts.length - 1), size: tree([width, height]) });\n    const callback = observers.get(container);\n    if (callback === undefined) throw new Error(\"no ResizeObserver on the chart's container\");\n    callback([{ contentRect: { width, height } }]);\n  };\n  w.__histDpr = (dpr) => {\n    Object.defineProperty(w, \"devicePixelRatio\", { configurable: true, get: () => dpr });\n    write({ hist: \"dpr\", id: tree(charts.length - 1), dpr: tree(dpr) });\n    w.dispatchEvent(new Event(\"resize\"));\n  };\n  w.__histMouse = (type, x, y) => {\n    const rect = last().canvas.getBoundingClientRect();\n    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: rect.left + x, clientY: rect.top + y });\n    Object.defineProperty(e, \"offsetX\", { value: x });\n    Object.defineProperty(e, \"offsetY\", { value: y });\n    last().canvas.dispatchEvent(e);\n  };\n  w.__histHover = (type, dataset, index, fx, fy) => {\n    const b = last().getDatasetMeta(dataset).data[index];\n    w.__histMouse(type, Math.round(b.x + (fx - 0.5) * b.width), Math.round(b.y + (b.base - b.y) * fy));\n  };\n})()"
+   },
+   {
+    "main": "new-tab",
+    "data": 6
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/Field/Number0\",\"color\":\"#2b66a2\",\"histogramCounts\":[10,14,18,1,10,16,11,4,1,5]},{\"title\":\"/Field/Number1\",\"color\":\"#e5b31b\",\"histogramCounts\":[2,13,14,24,7,0,28,1,10,12]},{\"title\":\"/Field/Number2\",\"color\":\"#af2437\",\"histogramCounts\":[4,27,0,2,10,5,2,1,11,16]}]})"
+   },
+   {
+    "advance": 32
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 128, 247)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 18, 14)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 46, 110)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 87, 211)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 86, 5)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-5],\"stepSize\":1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#c0b487\",\"histogramCounts\":[26]},{\"title\":\"/S1\",\"color\":\"#858584\",\"histogramCounts\":[5]},{\"title\":\"/S2\",\"color\":\"#3b875a\",\"histogramCounts\":[32]}]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0],\"stepSize\":4.983194532105699,\"fields\":[{\"title\":\"/S0\",\"color\":\"#858584\",\"histogramCounts\":[1]},{\"title\":\"/S1\",\"color\":\"#3b875a\",\"histogramCounts\":[0]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(746, 320)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histDpr(2)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 382, 301)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 533, 124)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 230, 309)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 426, 115)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histSize(560, 348)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 257, 332)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 217, 217)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 28, 146)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 417, 66)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-4.981897387187928,-4.944897387187928,-4.907897387187928,-4.870897387187928,-4.833897387187928,-4.796897387187928,-4.759897387187928,-4.722897387187928,-4.685897387187928,-4.648897387187928],\"stepSize\":0.037,\"fields\":[]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 436, 156)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 555, 103)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 138, 280)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(0, 0)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 0, 0)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],\"stepSize\":1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#858584\",\"histogramCounts\":[0,20,6,0,27,26,17,15,11,24,2,0,0,28,15,2,34,10,0,14]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-5,-4,-3],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,0.9110382163431495,1.7220764326862992,2.5331146490294487,3.3441528653725983,4.155191081715747,4.966229298058897,5.7772675144020464,6.588305730745196,7.3993439470883455],\"stepSize\":0.8110382163431495,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1.3726949726697057,2.7453899453394115],\"stepSize\":1.3726949726697057,\"fields\":[{\"title\":\"/S0\",\"color\":\"#3b875a\",\"histogramCounts\":[0,4,4]},{\"title\":\"/S1\",\"color\":\"#d993aa\",\"histogramCounts\":[1,0,0]}]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(315, 325)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 267, 262)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 192, 192)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,0.6,1.1],\"stepSize\":0.5,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(300, 40)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histDpr(2)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histSize(300, 40)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 116, 18)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 130, 32)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 168, 9)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 262, 7)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 107, 34)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,1.8612068413291127,3.6224136826582254,5.383620523987338,7.14482736531645,8.906034206645563,10.667241047974676,12.428447889303788,14.1896547306329,15.950861571962013,17.712068413291128,19.47327525462024,21.234482095949353,22.995688937278466,24.75689577860758,26.51810261993669,28.279309461265804,30.040516302594916,31.80172314392403,33.56292998525314],\"stepSize\":1.7612068413291126,\"fields\":[{\"title\":\"/S0\",\"color\":\"#af2437\",\"histogramCounts\":[1222,2406,0,1869,2097,1247,1323,0,2543,1349,956,0,1985,1642,0,0,2388,0,2853,668]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histSize(198, 372)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 180, 33)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 151, 344)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-5],\"stepSize\":0.037,\"fields\":[{\"title\":\"/S0\",\"color\":\"#858584\",\"histogramCounts\":[2038]},{\"title\":\"/S1\",\"color\":\"#3b875a\",\"histogramCounts\":[0]}]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 194, 301)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 114, 292)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1],\"stepSize\":0.5,\"fields\":[]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-4.16887859813869,-1.16887859813869,1.83112140186131],\"stepSize\":3,\"fields\":[]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 170, 261)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 15, 81)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 151, 333)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histSize(112.43542868178338, 30.91313030803576)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(560, 348)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 505, 61)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,0.2,0.30000000000000004],\"stepSize\":0.1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#5f4528\",\"histogramCounts\":[305,1675,0]},{\"title\":\"/S1\",\"color\":\"#2b66a2\",\"histogramCounts\":[1706,2576,0]},{\"title\":\"/S2\",\"color\":\"#e5b31b\",\"histogramCounts\":[1040,0,0]}]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 374, 225)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 319, 187)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 488, 341)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 270, 54)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-5],\"stepSize\":0.5,\"fields\":[]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 2, 81)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 402, 119)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 29, 314)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[4.537977958098054,4.574977958098054,4.611977958098054],\"stepSize\":0.037,\"fields\":[{\"title\":\"/S0\",\"color\":\"#d993aa\",\"histogramCounts\":[0,26,0]},{\"title\":\"/S1\",\"color\":\"#5f4528\",\"histogramCounts\":[7,25,16]}]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[4.7397031472064555,5.7397031472064555,6.7397031472064555],\"stepSize\":1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#5f4528\",\"histogramCounts\":[0,2183,1030]},{\"title\":\"/S1\",\"color\":\"#2b66a2\",\"histogramCounts\":[532,0,2161]},{\"title\":\"/S2\",\"color\":\"#e5b31b\",\"histogramCounts\":[2664,0,0]}]})"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 400, 134)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,0.5,1],\"stepSize\":0.5,\"fields\":[{\"title\":\"/S0\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,4,4]},{\"title\":\"/S1\",\"color\":\"#af2437\",\"histogramCounts\":[1,0,0]},{\"title\":\"/S2\",\"color\":\"#80588e\",\"histogramCounts\":[1,0,3]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 214, 54)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 421, 53)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 92, 15)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 15, 259)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 465, 275)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,0.7778223847504705,1.4556447695009411],\"stepSize\":0.6778223847504705,\"fields\":[{\"title\":\"/S0\",\"color\":\"#3b875a\",\"histogramCounts\":[1,1,0]},{\"title\":\"/S1\",\"color\":\"#d993aa\",\"histogramCounts\":[0,0,0]},{\"title\":\"/S2\",\"color\":\"#5f4528\",\"histogramCounts\":[0,1,0]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-1.406432951334864,-0.8554386952891946,-0.30444443924352527,0.24654981680214405,0.7975440728478134,1.3485383288934827,1.899532584939152,2.4505268409848213,3.0015210970304906,3.55251535307616],\"stepSize\":0.5509942560456693,\"fields\":[{\"title\":\"/S0\",\"color\":\"#d993aa\",\"histogramCounts\":[0,0,0,1,0,1,0,0,1,1]},{\"title\":\"/S1\",\"color\":\"#5f4528\",\"histogramCounts\":[1,0,1,1,0,1,1,0,1,0]},{\"title\":\"/S2\",\"color\":\"#2b66a2\",\"histogramCounts\":[0,1,1,1,0,0,0,0,0,0]}]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histSize(328.8677819306031, 70.56309696519747)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[2.6119050569832325,2.7119050569832326,2.8119050569832327,2.9119050569832323,3.0119050569832324,3.1119050569832325,3.2119050569832326,3.3119050569832327,3.4119050569832323,3.5119050569832324],\"stepSize\":0.1,\"fields\":[]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 165, 66)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,3.1,6.1],\"stepSize\":3,\"fields\":[{\"title\":\"/S0\",\"color\":\"#af2437\",\"histogramCounts\":[1105,0,1323]},{\"title\":\"/S1\",\"color\":\"#80588e\",\"histogramCounts\":[799,129,0]},{\"title\":\"/S2\",\"color\":\"#e48b32\",\"histogramCounts\":[939,0,1161]}]})"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histSize(300, 40)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 68, 30)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-2.8543084277771413],\"stepSize\":0.037,\"fields\":[{\"title\":\"/S0\",\"color\":\"#c0b487\",\"histogramCounts\":[0]},{\"title\":\"/S1\",\"color\":\"#858584\",\"histogramCounts\":[2060]}]})"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histDpr(1.75)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 293, 31)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 160, 16)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 206, 39)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(251, 128)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-2.3781219590455294],\"stepSize\":0.8167918492108583,\"fields\":[]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[2.6800141809508204,2.7800141809508205,2.8800141809508206],\"stepSize\":0.1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#80588e\",\"histogramCounts\":[0,2646,0]},{\"title\":\"/S1\",\"color\":\"#e48b32\",\"histogramCounts\":[0,1552,2038]},{\"title\":\"/S2\",\"color\":\"#c0b487\",\"histogramCounts\":[1535,1775,849]}]})"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 64, 66)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 138, 122)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 216, 81)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 96, 48)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-5],\"stepSize\":0.5,\"fields\":[]})"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 208, 99)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 173, 113)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 245, 20)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 141, 123)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 52, 69)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-3.5215004929341376,-3.4845004929341377,-3.4475004929341377],\"stepSize\":0.037,\"fields\":[{\"title\":\"/S0\",\"color\":\"#e48b32\",\"histogramCounts\":[31,0,12]},{\"title\":\"/S1\",\"color\":\"#c0b487\",\"histogramCounts\":[32,21,0]},{\"title\":\"/S2\",\"color\":\"#858584\",\"histogramCounts\":[18,0,0]}]})"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__oracleTheme = \"light\""
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1],\"stepSize\":1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#858584\",\"histogramCounts\":[0]},{\"title\":\"/S1\",\"color\":\"#3b875a\",\"histogramCounts\":[3]}]})"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histSize(186, 164)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histSize(548.8133722916245, 34.745784408878535)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 369, 29)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 446, 12)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histSize(188, 143)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 22, 111)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(560, 348)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 16, 100)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 151, 340)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 27, 308)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mouseout\", 21, 315)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 462, 51)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 346, 89)"
+   },
+   {
+    "advance": 1
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 219, 71)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 197, 47)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 61, 81)"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"click\", 269, 284)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 182, 181)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histSize(0, 0)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histSize(300, 40)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histSize(358, 395)"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[-5,-4.9,-4.8],\"stepSize\":0.1,\"fields\":[]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 312, 259)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2],\"stepSize\":1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#80588e\",\"histogramCounts\":[21,4,5]}]})"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 33, 73)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 130, 348)"
+   },
+   {
+    "advance": 180
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 118, 348)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 82, 150)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 207, 252)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 87, 325)"
+   },
+   {
+    "advance": 450
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,0.5,1,1.5,2,2.5,3,3.5,4,4.5],\"stepSize\":0.5,\"fields\":[]})"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__oracleTheme = \"dark\""
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histSize(0, 0)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,1.1,2.1,3.1,4.1,5.1,6.1,7.1,8.1,9.1,10.1,11.1,12.1,13.1,14.1,15.1,16.1,17.1,18.1,19.1],\"stepSize\":1,\"fields\":[]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 0
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0,1,2,3,4,5,6,7,8,9],\"stepSize\":1,\"fields\":[{\"title\":\"/S0\",\"color\":\"#858584\",\"histogramCounts\":[17,1,11,27,33,6,13,0,27,16]},{\"title\":\"/S1\",\"color\":\"#3b875a\",\"histogramCounts\":[0,0,0,0,30,16,0,24,29,0]},{\"title\":\"/S2\",\"color\":\"#d993aa\",\"histogramCounts\":[2,36,0,10,0,14,0,28,32,9]},{\"title\":\"/S3\",\"color\":\"#5f4528\",\"histogramCounts\":[35,28,22,31,21,2,5,36,31,19]}]})"
+   },
+   {
+    "advance": 33
+   },
+   {
+    "eval": "window.__histCommand({\"bins\":[0.1,4.235320702334866,8.370641404669732],\"stepSize\":4.135320702334866,\"fields\":[]})"
+   },
+   {
+    "advance": 70
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 16
+   },
+   {
+    "eval": "window.__histMouse(\"mousemove\", 0, 0)"
+   },
+   {
+    "advance": 1
+   }
+  ]
+ }
+}
