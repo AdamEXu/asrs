@@ -27,6 +27,7 @@ use asrs_ui::theme::{Appearance, ThemeSource};
 
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
+use crate::hub_dialogs;
 use crate::menus::app_menu;
 use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
@@ -308,7 +309,12 @@ impl MainProcess {
                 let files = files.map(|f| f.to_string_lossy()).collect();
                 Self::open_files(cx, files, Some(id));
             }
-            Ok(()) => export_flow::hub_message(id, message, cx),
+            Ok(()) => {
+                export_flow::hub_message(id, message, cx);
+                if let Some(window) = Windows::handle(cx, id) {
+                    hub_dialogs::show(message, window, cx);
+                }
+            }
         }
     }
 

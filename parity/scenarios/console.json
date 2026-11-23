@@ -1,0 +1,606 @@
+{
+  "about": "Interaction (U13): the generated console log on a restored empty Console tab with a selected time; /RobotConsole dragged from the sidebar into the table with the pointer (captured while the drag highlights the table and after the drop, over a hovered row), a row clicked to select its time, trackpad scrolling, the highlight button and a hovered warning row, a filter typed into the filter field, a click outside it and a key that no longer reaches it, the filter cleared with its cancel button, a time typed into the jump field with Enter, notched wheel ticks past the end and one back, the export button answered with a file name (files/dialog/console.txt and the dialog are compared), a right click that goes idle, the field removed with its delete button and an export with nothing to export (main's error box), then a restored field the log does not have. Saved HubState is compared at each capture. Nothing is masked but the focused filter and jump fields (gate 5)",
+  "actions": [
+    {
+      "open": [
+        "app:console"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": null,
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "dragging",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 420
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "lines",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 640,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 332
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "selected",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 332,
+        "deltaY": -90,
+        "precise": true
+      }
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 332,
+        "deltaY": -147,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 899,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 899,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 392
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "highlight",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "click",
+      "x": 1000,
+      "y": 103
+    },
+    {
+      "key": "P"
+    },
+    {
+      "key": "e"
+    },
+    {
+      "key": "r"
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 600
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "filtered",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "click",
+      "x": 150,
+      "y": 600
+    },
+    {
+      "key": "z"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "blurred",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1084,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 1084,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 330,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 330,
+      "y": 103
+    },
+    {
+      "key": "6"
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 600
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "jumped",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 103
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 103,
+        "deltaY": -400,
+        "wheelTicksY": -10
+      }
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 103,
+        "deltaY": -400,
+        "wheelTicksY": -10
+      }
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 103,
+        "deltaY": -400,
+        "wheelTicksY": -10
+      }
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 103,
+        "deltaY": -400,
+        "wheelTicksY": -10
+      }
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 103,
+        "deltaY": -400,
+        "wheelTicksY": -10
+      }
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 103,
+        "deltaY": 40,
+        "wheelTicksY": 1
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "notched",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "dialog": "console.txt"
+    },
+    {
+      "mouse": "click",
+      "x": 871,
+      "y": 103
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 300
+    },
+    {
+      "mouse": "click",
+      "x": 640,
+      "y": 300,
+      "button": "right"
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "idle",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 521,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 521,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 600
+    },
+    {
+      "wait": 2600
+    },
+    {
+      "dialog": 0
+    },
+    {
+      "mouse": "click",
+      "x": 871,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 600
+    },
+    {
+      "wait": 500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "closed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": "/Missing/Console",
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "missing",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".console-table-container",
+        "table.console-table th",
+        "input.console-table-jump-input",
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button",
+        "input.filter",
+        "img.large-table-hand-icon",
+        "button.console-table-key-delete"
+      ]
+    }
+  ]
+}

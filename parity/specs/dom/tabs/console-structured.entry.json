@@ -1,11 +1,12 @@
 {
   "entry": "dom",
-  "backend": "jsdom",
+  "backend": "blink",
   "inputs": [
     "../assets/minimal.json",
     "../logs/robot.json"
   ],
   "fixture": {
+    "geometry": "real",
     "assets": "../assets/minimal.json",
     "images": {
       "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
@@ -14,17 +15,6 @@
       ]
     },
     "seed": 1103,
-    "layout": [
-      {
-        "selector": "div.console-table-container",
-        "rect": [
-          300,
-          92,
-          800,
-          358
-        ]
-      }
-    ],
     "steps": [
       {
         "log": "../logs/robot.json"
@@ -396,7 +386,7 @@
                   "/Str/Log"
                 ]
               },
-              "x": 200,
+              "x": 300,
               "y": 200,
               "end": true
             }
@@ -416,7 +406,7 @@
                 ]
               },
               "x": 600,
-              "y": 460,
+              "y": 650,
               "end": true
             }
           }
@@ -609,7 +599,200 @@
         "eval": "window.tabs.tabList[window.tabs.selectedTab].renderer.restoreState({\"highlight\": false})"
       },
       {
-        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/RealOutputs/Console\")"
+        "log": [
+          [
+            "putString",
+            "/Long",
+            0.0,
+            "line 0\nsecond line 0"
+          ],
+          [
+            "putString",
+            "/Long",
+            0.25,
+            "line 1\nsecond line 1"
+          ],
+          [
+            "putString",
+            "/Long",
+            0.5,
+            "line 2\nsecond line 2"
+          ],
+          [
+            "putString",
+            "/Long",
+            0.75,
+            "line 3\nsecond line 3"
+          ],
+          [
+            "putString",
+            "/Long",
+            1.0,
+            "line 4\nsecond line 4"
+          ],
+          [
+            "putString",
+            "/Long",
+            1.25,
+            "line 5\nsecond line 5"
+          ],
+          [
+            "putString",
+            "/Long",
+            1.5,
+            "line 6\nsecond line 6"
+          ],
+          [
+            "putString",
+            "/Long",
+            1.75,
+            "line 7\nsecond line 7"
+          ],
+          [
+            "putString",
+            "/Long",
+            2.0,
+            "line 8\nsecond line 8"
+          ],
+          [
+            "putString",
+            "/Long",
+            2.25,
+            "line 9\nsecond line 9"
+          ],
+          [
+            "putString",
+            "/Long",
+            2.5,
+            "line 10\nsecond line 10"
+          ],
+          [
+            "putString",
+            "/Long",
+            2.75,
+            "line 11\nsecond line 11"
+          ],
+          [
+            "putString",
+            "/Long",
+            3.0,
+            "line 12\nsecond line 12"
+          ],
+          [
+            "putString",
+            "/Long",
+            3.25,
+            "line 13\nsecond line 13"
+          ],
+          [
+            "putString",
+            "/Long",
+            3.5,
+            "line 14\nsecond line 14"
+          ],
+          [
+            "putString",
+            "/Long",
+            3.75,
+            "line 15\nsecond line 15"
+          ],
+          [
+            "putString",
+            "/Long",
+            4.0,
+            "line 16\nsecond line 16"
+          ],
+          [
+            "putString",
+            "/Long",
+            4.25,
+            "line 17\nsecond line 17"
+          ],
+          [
+            "putString",
+            "/Long",
+            4.5,
+            "line 18\nsecond line 18"
+          ],
+          [
+            "putString",
+            "/Long",
+            4.75,
+            "line 19\nsecond line 19"
+          ],
+          [
+            "putString",
+            "/Long",
+            5.0,
+            "line 20\nsecond line 20"
+          ],
+          [
+            "putString",
+            "/Long",
+            5.25,
+            "line 21\nsecond line 21"
+          ],
+          [
+            "putString",
+            "/Long",
+            5.5,
+            "line 22\nsecond line 22"
+          ],
+          [
+            "putString",
+            "/Long",
+            5.75,
+            "line 23\nsecond line 23"
+          ],
+          [
+            "putString",
+            "/Long",
+            6.0,
+            "line 24\nsecond line 24"
+          ],
+          [
+            "putString",
+            "/Long",
+            6.25,
+            "line 25\nsecond line 25"
+          ],
+          [
+            "putString",
+            "/Long",
+            6.5,
+            "line 26\nsecond line 26"
+          ],
+          [
+            "putString",
+            "/Long",
+            6.75,
+            "line 27\nsecond line 27"
+          ],
+          [
+            "putString",
+            "/Long",
+            7.0,
+            "line 28\nsecond line 28"
+          ],
+          [
+            "putString",
+            "/Long",
+            7.25,
+            "line 29\nsecond line 29"
+          ]
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Long\")"
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": ""
+          }
+        }
       },
       {
         "liveTime": 9
@@ -640,13 +823,7 @@
         "label": "locked"
       },
       {
-        "event": {
-          "target": "div.console-table-container",
-          "type": "scroll",
-          "props": {
-            "scrollTop": -1
-          }
-        }
+        "eval": "/*console:scroll*/ window.__oracleQuiet(() => { document.querySelector('div.renderer-content > :not([hidden]) div.console-table-container').scrollTop = 100; })"
       },
       {
         "frames": 2

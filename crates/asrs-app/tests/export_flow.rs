@@ -9,14 +9,13 @@
 #[allow(dead_code)]
 mod js_json;
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use asrs_app::hub::HubEvent;
 use asrs_app::main_process::{self, MainProcess};
 use asrs_app::menus::bridge::MenuAction;
 use asrs_app::menus::dispatch::dispatch;
@@ -158,24 +157,6 @@ impl AppUnderTest {
         });
     }
 
-    /// Counts the `error` messages the hub sends main from now on.
-    fn errors(&mut self, window: WindowId) -> Rc<Cell<usize>> {
-        let errors: Rc<Cell<usize>> = Rc::default();
-        let count = errors.clone();
-        self.cx.update(|cx| {
-            let hubs = MainProcess::hub_windows(cx);
-            let hub = hubs.iter().find(|(id, _)| *id == window).expect("a hub");
-            let hub = hub.1.upgrade().expect("a live hub");
-            cx.subscribe(&hub, move |_, event, _| {
-                if matches!(event, HubEvent::Main(m) if m.name == HubToMain::Error) {
-                    count.set(count.get() + 1);
-                }
-            })
-            .detach();
-        });
-        errors
-    }
-
     fn logs(&mut self, window: WindowId) -> Vec<String> {
         self.hub(window, |hub| {
             hub.historical_paths()
@@ -230,6 +211,20 @@ impl AppUnderTest {
                 script.replies
             );
             std::mem::take(&mut script.shown)
+        })
+    }
+
+    /// [`run`](Self::run) until every reply has been given.
+    fn run_until_shown(
+        &mut self,
+        replies: &[Reply],
+        act: impl FnOnce(&mut AppUnderTest),
+    ) -> Vec<(Option<AnyWindowHandle>, Shown)> {
+        self.run(replies, |app| {
+            act(app);
+            app.until("the dialogs", |app| {
+                app.cx.update(|cx| cx.global::<Script>().replies.is_empty())
+            });
         })
     }
 
@@ -321,6 +316,13 @@ fn buttons(shown: &[(Option<AnyWindowHandle>, Shown)]) -> Vec<&str> {
     };
     assert_eq!(options.message, "Open this log using the DS layout?");
     options.buttons.iter().map(String::as_str).collect()
+}
+
+fn error_title(shown: &[(Option<AnyWindowHandle>, Shown)]) -> &str {
+    let [(_, Shown::Message(options))] = shown else {
+        panic!("{shown:?}");
+    };
+    &options.message
 }
 
 fn ds_tabs() -> Vec<Option<TabType>> {
@@ -489,8 +491,9 @@ fn open_log(app: &mut AppUnderTest, hub: WindowId, path: &Path) {
 }
 
 fn the_prompt_exports(app: &mut AppUnderTest, hub: WindowId) {
-    let shown = app.click(Command::ExportData, &[]);
-    assert!(shown.is_empty() && app.prompt().is_none(), "{shown:?}");
+    let shown = app.click(Command::ExportData, &[Reply::Button(0)]);
+    assert_eq!(error_title(&shown), "Cannot export data");
+    assert!(app.prompt().is_none());
 
     let log = vectors::workspace_root().join("parity/specs/hub/logs/match.csv");
     open_log(app, hub, &log);
@@ -551,7 +554,6 @@ fn the_prompt_exports(app: &mut AppUnderTest, hub: WindowId) {
 }
 
 fn every_run_writes_upstreams_bytes(app: &mut AppUnderTest, hub: WindowId) {
-    let errors = app.errors(hub);
     let (mut written, mut rejected) = (0, 0);
     let mut open = None;
     for (i, run) in runs().into_iter().enumerate() {
@@ -564,10 +566,13 @@ fn every_run_writes_upstreams_bytes(app: &mut AppUnderTest, hub: WindowId) {
             ("path", JsValue::string(&text(&out))),
             ("options", run.options.clone()),
         ]);
-        app.cx
-            .update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::PrepareExport, data));
+        let prepare = |app: &mut AppUnderTest| {
+            app.cx
+                .update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::PrepareExport, data))
+        };
         match run.bytes {
             Some(bytes) => {
+                prepare(app);
                 app.until("the file", |_| {
                     std::fs::metadata(&out).is_ok_and(|m| m.len() == bytes.len() as u64)
                 });
@@ -577,13 +582,13 @@ fn every_run_writes_upstreams_bytes(app: &mut AppUnderTest, hub: WindowId) {
             }
             None => {
                 rejected += 1;
-                app.until("the rejection", |_| errors.get() == rejected);
+                let shown = app.run_until_shown(&[Reply::Button(0)], prepare);
+                assert_eq!(error_title(&shown), "Failed to export data");
                 assert!(!out.exists(), "{:?} {:?}", run.file, run.options);
             }
         }
         let _ = std::fs::remove_file(&out);
     }
-    assert_eq!(errors.get(), rejected);
     assert!(written > 60 && rejected > 10, "{written} {rejected}");
 }
 
@@ -595,12 +600,9 @@ fn a_write_that_fails_is_reported(app: &mut AppUnderTest, hub: WindowId) {
         ("path", JsValue::string(&text(&out))),
         ("options", run.options),
     ]);
-    let shown = app.run(&[Reply::Button(0)], |app| {
+    let shown = app.run_until_shown(&[Reply::Button(0)], |app| {
         app.cx
-            .update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::PrepareExport, data));
-        app.until("the error", |app| {
-            app.cx.update(|cx| !cx.global::<Script>().shown.is_empty())
-        });
+            .update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::PrepareExport, data))
     });
     let [(_, Shown::Message(options))] = &shown[..] else {
         panic!("{shown:?}");

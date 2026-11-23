@@ -1,0 +1,59 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../logs/console-wrap.json"
+  ],
+  "fixture": {
+    "geometry": "real",
+    "window": {
+      "width": 1100,
+      "height": 650
+    },
+    "seed": 1304,
+    "steps": [
+      {
+        "log": "../logs/console-wrap.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Wrap\")"
+      },
+      {
+        "frames": 3
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:rows*/ window.__oracleQuiet(() => {\n  const range = document.createRange();\n  const body = document.querySelector(\"div.renderer-content > :not([hidden]) table.console-table > tbody\");\n  return Array.from(body.children).slice(1).map((row) => {\n    const top = row.getBoundingClientRect().top;\n    return [row.clientHeight, ...Array.from(row.children).map((cell) => {\n      const left = cell.getBoundingClientRect().left;\n      const out = [];\n      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n        range.selectNodeContents(node);\n        out.push([node.data, Array.from(range.getClientRects(), (r) => [r.x - left, r.y - top, r.width, r.height])]);\n      }\n      return [cell.getBoundingClientRect().width, out];\n    })];\n  });\n})"
+          }
+        ],
+        "label": "plain"
+      },
+      {
+        "event": {
+          "target": "input.filter",
+          "type": "input",
+          "props": {
+            "value": "ro"
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*console-layout:rows*/ window.__oracleQuiet(() => {\n  const range = document.createRange();\n  const body = document.querySelector(\"div.renderer-content > :not([hidden]) table.console-table > tbody\");\n  return Array.from(body.children).slice(1).map((row) => {\n    const top = row.getBoundingClientRect().top;\n    return [row.clientHeight, ...Array.from(row.children).map((cell) => {\n      const left = cell.getBoundingClientRect().left;\n      const out = [];\n      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n        range.selectNodeContents(node);\n        out.push([node.data, Array.from(range.getClientRects(), (r) => [r.x - left, r.y - top, r.width, r.height])]);\n      }\n      return [cell.getBoundingClientRect().width, out];\n    })];\n  });\n})"
+          }
+        ],
+        "label": "filtered"
+      }
+    ]
+  }
+}
