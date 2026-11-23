@@ -65,20 +65,31 @@ pub enum ExportError {
     Unported(&'static str),
 }
 
-/// `onmessage`: select fields, compute timestamps, dispatch on the format.
-pub fn export(log: &Log, options: &ExportOptions) -> Result<Output, ExportError> {
+/// `onmessage`: select fields, compute timestamps, dispatch on the format. `progress` gets every
+/// value the worker posts, in order.
+pub fn export(
+    log: &Log,
+    options: &ExportOptions,
+    progress: &mut dyn FnMut(f64),
+) -> Result<Output, ExportError> {
     let fields = select_fields(log, options)?;
     let timestamps = sample_timestamps(log, options)?;
     match options.format {
-        Format::CsvTable => Ok(Output::Text(csv_table(log, &fields, &timestamps))),
-        Format::CsvList => Ok(Output::Text(csv_list(log, &fields, &timestamps))),
-        Format::Wpilog => Ok(Output::Bytes(wpilog(log, &fields, &timestamps)?)),
+        Format::CsvTable => Ok(Output::Text(csv_table(log, &fields, &timestamps, progress))),
+        Format::CsvList => Ok(Output::Text(csv_list(log, &fields, &timestamps, progress))),
+        Format::Wpilog => Ok(Output::Bytes(wpilog(log, &fields, &timestamps, progress)?)),
         Format::Mcap => Ok(Output::Bytes(crate::mcap_export::generate_mcap(
             log,
             &fields,
             &timestamps,
+            progress,
         )?)),
     }
+}
+
+/// `(fieldIndex + index / length) / fields.length`.
+pub(crate) fn fraction(field: usize, index: usize, length: usize, fields: usize) -> f64 {
+    (field as f64 + index as f64 / length as f64) / fields as f64
 }
 
 /// The worker's field list: the tree flattened parent-first with numeric `localeCompare`
@@ -266,7 +277,12 @@ fn is_akit_timestamp_key(key: &JsString) -> bool {
 /// `generateCsvTable`: the timestamp union for `changes`, the last sample at or before
 /// each timestamp otherwise, `getLogValueText` with commas folded to semicolons, and no
 /// quoting or trailing newline.
-fn csv_table(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> JsString {
+fn csv_table(
+    log: &Log,
+    fields: &[JsString],
+    timestamps: &Option<Vec<f64>>,
+    progress: &mut dyn FnMut(f64),
+) -> JsString {
     let timestamps = timestamps
         .clone()
         .unwrap_or_else(|| log.get_timestamps(fields, None));
@@ -275,7 +291,7 @@ fn csv_table(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> J
     for &timestamp in &timestamps {
         data.push(vec![JsString::from(number::to_string(timestamp))]);
     }
-    for field in fields {
+    for (field_index, field) in fields.iter().enumerate() {
         data[0].push(field.clone());
         let field_data = log.get_range(field, f64::NEG_INFINITY, f64::INFINITY, None);
         let mut next_index = 0usize;
@@ -288,16 +304,24 @@ fn csv_table(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> J
                 "null".to_owned()
             };
             data[index + 1].push(JsString::from(text.replace(',', ";")));
+            progress(fraction(field_index, index, timestamps.len(), fields.len()));
         }
     }
-    join_rows(&data)
+    let text = join_rows(&data);
+    progress(1.0);
+    text
 }
 
 /// `generateCsvList`: one row per sample per field, a stable sort by timestamp, the
 /// header spliced in front, and the same no-quoting text rules.
-fn csv_list(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> JsString {
+fn csv_list(
+    log: &Log,
+    fields: &[JsString],
+    timestamps: &Option<Vec<f64>>,
+    progress: &mut dyn FnMut(f64),
+) -> JsString {
     let mut rows: Vec<(f64, JsString, JsString)> = Vec::new();
-    for field in fields {
+    for (field_index, field) in fields.iter().enumerate() {
         let Some(field_data) = log.get_range(field, f64::NEG_INFINITY, f64::INFINITY, None) else {
             continue;
         };
@@ -311,11 +335,17 @@ fn csv_list(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> Js
                         field.clone(),
                         JsString::from(text.replace(',', ";")),
                     ));
+                    progress(fraction(
+                        field_index,
+                        index,
+                        field_data.len(),
+                        fields.len(),
+                    ));
                 }
             }
             Some(timestamps) => {
                 let mut next_index = 0usize;
-                for &timestamp in timestamps {
+                for (index, &timestamp) in timestamps.iter().enumerate() {
                     next_index = upper_bound(field_data.timestamps(), timestamp, next_index);
                     let text = if next_index != 0 {
                         get_log_value_text_at(&field_data, next_index - 1)
@@ -328,6 +358,7 @@ fn csv_list(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> Js
                         field.clone(),
                         JsString::from(text.replace(',', ";")),
                     ));
+                    progress(fraction(field_index, index, timestamps.len(), fields.len()));
                 }
             }
         }
@@ -342,6 +373,7 @@ fn csv_list(log: &Log, fields: &[JsString], timestamps: &Option<Vec<f64>>) -> Js
         out.push_unit(u16::from(b','));
         out.push_str(&value);
     }
+    progress(1.0);
     out
 }
 
@@ -352,6 +384,7 @@ fn wpilog(
     log: &Log,
     fields: &[JsString],
     timestamps: &Option<Vec<f64>>,
+    progress: &mut dyn FnMut(f64),
 ) -> Result<Vec<u8>, ExportError> {
     let mut encoder = WpilogEncoder::new(&JsString::from("AdvantageScope"));
     for (field_index, field) in fields.iter().enumerate() {
@@ -423,19 +456,27 @@ fn wpilog(
             None => {
                 for index in 0..field_data.len() {
                     add_value(field_data.timestamps()[index], index)?;
+                    progress(fraction(
+                        field_index,
+                        index,
+                        field_data.len(),
+                        fields.len(),
+                    ));
                 }
             }
             Some(timestamps) => {
                 let mut next_index = 0usize;
-                for &timestamp in timestamps {
+                for (index, &timestamp) in timestamps.iter().enumerate() {
                     next_index = upper_bound(field_data.timestamps(), timestamp, next_index);
                     if next_index != 0 {
                         add_value(timestamp, next_index - 1)?;
                     }
+                    progress(fraction(field_index, index, timestamps.len(), fields.len()));
                 }
             }
         }
     }
+    progress(1.0);
     encoder.get_encoded(true)
 }
 
