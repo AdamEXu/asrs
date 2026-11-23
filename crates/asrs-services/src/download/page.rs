@@ -179,6 +179,11 @@ impl DownloadPage {
         (!self.progress_hidden).then(|| (self.progress, self.details.as_str()))
     }
 
+    /// `process.platform`.
+    pub fn platform(&self) -> &str {
+        &self.platform
+    }
+
     pub fn set_platform(&mut self, platform: &str) {
         platform.clone_into(&mut self.platform);
     }

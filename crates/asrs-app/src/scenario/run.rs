@@ -9,6 +9,7 @@ use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
+use asrs_services::download::page::alert_runs;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{AppPaths, MainState};
 use asrs_services::path::PathStyle;
@@ -27,9 +28,10 @@ use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Seed, Theme, Wheel,
-    patch_colours,
+    Action, Button, COLUMNS, DialogReply, DownloadShows, MouseKind, PATCH, Page, Scenario, Seed,
+    Theme, Wheel, patch_colours,
 };
+use crate::download_flow::{self, RobotPort};
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
@@ -45,19 +47,21 @@ use crate::windows::{self, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--work-area <x>,<y>]
+[--bundled-assets <dir>] [--work-area <x>,<y>] [--robot <port>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
 automatic folders of each variant's userData/; --work-area is the primary display's work area
-origin on the Electron driver's host, which places its window 16 px inside it (default 0,0).";
+origin on the Electron driver's host, which places its window 16 px inside it (default 0,0);
+--robot is where the scenario's robot listens on 127.0.0.1.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
 const FRAME: Duration = Duration::from_millis(16);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const STATE_SAVE_TIMEOUT: Duration = Duration::from_secs(5);
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(90);
 const STABLE_ATTEMPTS: usize = 120;
 /// The Electron driver's `--js-flags=--random-seed`.
 const RANDOM_SEED: u64 = 1;
@@ -115,12 +119,14 @@ struct Options {
     probes: Option<PathBuf>,
     bundled_assets: Option<PathBuf>,
     work_area: (f64, f64),
+    robot: Option<u16>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
     let mut bundled_assets = None;
     let mut work_area = (0.0, 0.0);
+    let mut robot = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -133,6 +139,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--inputs" => inputs = Some(PathBuf::from(value()?)),
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
+            "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--work-area" => {
                 let text = value()?;
                 work_area = text
@@ -152,6 +159,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         probes,
         bundled_assets,
         work_area,
+        robot,
     })
 }
 
@@ -197,6 +205,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let probes = Probes::load(&probes_file)?;
     let mut headless = HeadlessCapture::new(Arc::new(())).map_err(|e| e.to_string())?;
     headless.context().update(windows::init);
+    match options.robot {
+        Some(port) => headless
+            .context()
+            .update(|cx| cx.set_global(RobotPort(port))),
+        None if scenario.robot => return Err(format!("{name} needs --robot")),
+        None => {}
+    }
     for &scale in &scenario.scales {
         if !options.scales.is_empty() && !options.scales.contains(&scale) {
             continue;
@@ -445,7 +460,11 @@ impl Variant<'_> {
         windows
     }
 
-    fn switch_prompt(&mut self, page: Option<WindowKind>) -> Result<(), String> {
+    fn switch_prompt(
+        &mut self,
+        page: Option<WindowKind>,
+        content: Option<(f64, f64)>,
+    ) -> Result<(), String> {
         self.settle();
         self.prompt = match page {
             Some(kind) => {
@@ -454,15 +473,30 @@ impl Variant<'_> {
                     .context()
                     .update(|cx| Windows::of_kind(cx, kind))
                     .ok_or_else(|| format!("no {kind:?} prompt is open"))?;
+                if let Some((width, height)) = content {
+                    self.headless
+                        .context()
+                        .update_window(window, |_, window, _| {
+                            window.resize(size(px(width as f32), px(height as f32)));
+                        })
+                        .map_err(|e| e.to_string())?;
+                }
                 self.headless
                     .set_scale_factor(window, self.scale as f32)
                     .map_err(|e| e.to_string())?;
                 Some(window)
             }
-            None if self.active() != self.window() => {
-                return Err("the prompt is still open".to_owned());
+            None => {
+                let start = Instant::now();
+                while self.active() != self.window() {
+                    if start.elapsed() > IDLE_TIMEOUT {
+                        return Err("the prompt is still open".to_owned());
+                    }
+                    std::thread::sleep(Duration::from_millis(1));
+                    self.tick()?;
+                }
+                None
             }
-            None => None,
         };
         self.tick()
     }
@@ -482,6 +516,50 @@ impl Variant<'_> {
         }
         self.settle();
         Ok(())
+    }
+
+    /// The download service runs on its own thread, so this waits in real time.
+    fn wait_download(&mut self, shows: &DownloadShows) -> Result<(), String> {
+        let view = self
+            .headless
+            .context()
+            .update(|cx| download_flow::view(cx))
+            .ok_or("the download window is not open")?;
+        let start = Instant::now();
+        loop {
+            self.tick()?;
+            let shown = self.headless.context().update(|cx| {
+                let page = view.read(cx).page();
+                let alert = page.alert().map(|html| {
+                    let runs = alert_runs(html).into_iter().map(|run| run.text);
+                    runs.collect::<String>()
+                });
+                let progress = page.progress();
+                match shows {
+                    DownloadShows::Listed => {
+                        !page.loading() && alert.is_none() && progress.is_none()
+                    }
+                    DownloadShows::Text(text) => alert
+                        .as_deref()
+                        .into_iter()
+                        .chain(progress.map(|(_, details)| details))
+                        .any(|shown| shown.starts_with(text)),
+                    DownloadShows::Progress(value) => {
+                        progress.is_some_and(|(shown, _)| shown == *value)
+                    }
+                }
+            });
+            if shown {
+                return Ok(());
+            }
+            if start.elapsed() > DOWNLOAD_TIMEOUT {
+                return Err(format!(
+                    "the download window did not show {shows:?} within {} s",
+                    DOWNLOAD_TIMEOUT.as_secs()
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     fn with_hub<R>(
@@ -604,7 +682,9 @@ impl Variant<'_> {
         y: f64,
         button: Button,
         click_count: usize,
+        names: &[String],
     ) -> Result<(), String> {
+        let modifiers = modifiers(names)?;
         let position = point(px(x as f32), px(y as f32));
         let button = match button {
             Button::Left => MouseButton::Left,
@@ -614,21 +694,21 @@ impl Variant<'_> {
         let down = PlatformInput::MouseDown(MouseDownEvent {
             button,
             position,
-            modifiers: Modifiers::default(),
+            modifiers,
             click_count,
             first_mouse: false,
         });
         let up = PlatformInput::MouseUp(MouseUpEvent {
             button,
             position,
-            modifiers: Modifiers::default(),
+            modifiers,
             click_count,
         });
         match kind {
             MouseKind::Move => self.dispatch(PlatformInput::MouseMove(MouseMoveEvent {
                 position,
                 pressed_button: self.pressed,
-                modifiers: Modifiers::default(),
+                modifiers,
             }))?,
             MouseKind::Down => {
                 self.dispatch(down)?;
@@ -711,7 +791,8 @@ impl Variant<'_> {
                 y,
                 button,
                 click_count,
-            } => self.mouse(*kind, *x, *y, *button, *click_count)?,
+                modifiers,
+            } => self.mouse(*kind, *x, *y, *button, *click_count, modifiers)?,
             Action::Wheel(wheel) => {
                 let delta = scroll_delta(wheel)?;
                 self.dispatch(PlatformInput::Scroll(ScrollEvent {
@@ -730,8 +811,13 @@ impl Variant<'_> {
                     DialogReply::File(name) => {
                         let file = std::path::absolute(self.dir.join("files/dialog").join(name))
                             .map_err(|e| e.to_string())?;
-                        if let Some(parent) = file.parent() {
-                            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                        let folder = if name.ends_with('/') {
+                            Some(file.as_path())
+                        } else {
+                            file.parent()
+                        };
+                        if let Some(folder) = folder {
+                            std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
                         }
                         Reply::Save(Some(file))
                     }
@@ -752,7 +838,8 @@ impl Variant<'_> {
                     .update(|cx| click_app_menu(labels, cx))?;
                 self.settle();
             }
-            Action::Prompt { page } => self.switch_prompt(*page)?,
+            Action::Prompt { page, size } => self.switch_prompt(*page, *size)?,
+            Action::Download(shows) => self.wait_download(shows)?,
             Action::Capture {
                 name,
                 probes,
@@ -1032,7 +1119,8 @@ impl Variant<'_> {
         for _ in 0..STABLE_ATTEMPTS {
             self.tick()?;
             let next = self.shoot()?;
-            let same = next.same_as(&shot);
+            let rects = next.masks(self.probes, masks)?;
+            let same = next.same_as(&shot, &rects, f64::from(self.scale));
             shot = next;
             if same {
                 stable = true;

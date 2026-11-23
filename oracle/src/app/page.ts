@@ -30,6 +30,16 @@ export function sendMainMessage(name: string, data: unknown) {
   port.dispatchEvent(new MessageEvent("message", { data: { name, data } }));
 }
 
+/** Whether the download window shows its list ("listed"), an alert or progress text starting with this, or this much of its progress bar. */
+export function downloadShows(expected: string | number): boolean {
+  const alert = document.querySelector("div.alert-text") as HTMLElement;
+  const progress = document.querySelector("progress") as HTMLProgressElement;
+  const details = document.querySelector("div.progress-details") as HTMLElement;
+  if (typeof expected === "number") return !progress.hidden && progress.value === expected;
+  if (expected === "listed") return (document.querySelector("div.loading") as HTMLElement).hidden && alert.hidden && progress.hidden;
+  return [alert, details].some((el) => !el.hidden && el.innerText.startsWith(expected));
+}
+
 export function domDump(probes: string[], maskSelectors: string[]) {
   const rect = (el: Element | Range) => {
     const r = el.getBoundingClientRect();

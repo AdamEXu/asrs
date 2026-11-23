@@ -539,6 +539,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
  "parking_lot",
+ "png 0.18.1",
  "raw-window-handle",
  "roxmltree 0.21.2",
  "simplecss",

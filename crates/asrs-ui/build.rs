@@ -32,6 +32,25 @@ fn svgs(dir: &Path) -> Vec<String> {
     names
 }
 
+fn download_icons(dir: &Path) {
+    let dir = fs::canonicalize(dir).expect("upstream icons/download beside www");
+    println!("cargo:rerun-if-changed={}", dir.display());
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .expect("read icons/download")
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|n| n.ends_with(".png"))
+        .collect();
+    names.sort();
+    let mut out = String::from("static DOWNLOAD_ICONS: &[(&str, &[u8])] = &[\n");
+    for name in names {
+        let path = dir.join(&name).display().to_string();
+        writeln!(out, "    ({name:?}, include_bytes!({path:?})),").unwrap();
+    }
+    out.push_str("];\n");
+    let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("download_icons.rs");
+    fs::write(dest, out).expect("write download_icons.rs");
+}
+
 fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dir = symbols_dir(&root);
@@ -68,4 +87,5 @@ fn main() {
     }
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("symbols.rs");
     fs::write(dest, out).expect("write symbols.rs");
+    download_icons(&dir.join("../../icons/download"));
 }

@@ -7,7 +7,7 @@ mod model;
 mod native;
 mod segmented;
 mod select;
-mod skia;
+pub(crate) mod skia;
 mod slider;
 pub mod style;
 
