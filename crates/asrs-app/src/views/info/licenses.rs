@@ -10,11 +10,12 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::theme::Appearance;
 
-use super::layout::{LicenseBlock, LicensesLayout, license_style, module_style};
+use super::layout::{LicenseBlock, LicensesLayout, Typesetter, license_style, module_style};
 use super::page::{self, PageScroll, Placer, ScrolledPage};
 
 pub struct LicensesPage {
     licenses: Vec<License>,
+    typesetter: Typesetter,
     /// The layout at a width and scale.
     layout: Option<(Lu, f32, Rc<LicensesLayout>)>,
     scroll: PageScroll,
@@ -27,6 +28,7 @@ impl LicensesPage {
         window.focus(&focus, cx);
         LicensesPage {
             licenses,
+            typesetter: Typesetter::default(),
             layout: None,
             scroll: PageScroll::new(cx),
             focus,
@@ -42,7 +44,8 @@ impl LicensesPage {
         match &self.layout {
             Some((w, s, layout)) if (*w, *s) == (width, scale) => layout.clone(),
             _ => {
-                let layout = Rc::new(LicensesLayout::new(&self.licenses, width, scale));
+                let t = &mut self.typesetter;
+                let layout = Rc::new(LicensesLayout::new(t, &self.licenses, width, scale));
                 self.layout = Some((width, scale, layout.clone()));
                 layout
             }

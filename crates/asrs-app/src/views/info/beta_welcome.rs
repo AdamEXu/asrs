@@ -15,7 +15,7 @@ use asrs_ui::input::{Checkbox, PointerState};
 use asrs_ui::parity::probed;
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH};
 
-use super::layout::{BetaLayout, BetaRow, LuRect, TextBlock};
+use super::layout::{BetaLayout, BetaRow, LuRect, TextBlock, Typesetter};
 use super::page::{self, PageScroll, Placer, ScrolledPage};
 
 /// `h2` and `button`: a colour per theme, light then dark.
@@ -48,6 +48,7 @@ struct Fade {
 pub struct BetaWelcomePage {
     page: BetaWelcome,
     app_name: &'static str,
+    typesetter: Typesetter,
     scroll: PageScroll,
     body: FocusHandle,
     checkboxes: [FocusHandle; CHECKBOXES],
@@ -71,6 +72,7 @@ impl BetaWelcomePage {
         BetaWelcomePage {
             page: BetaWelcome::default(),
             app_name,
+            typesetter: Typesetter::default(),
             scroll: PageScroll::new(cx),
             body,
             checkboxes: std::array::from_fn(|_| cx.focus_handle()),
@@ -401,7 +403,8 @@ impl BetaWelcomePage {
 impl Render for BetaWelcomePage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let (width, scale): (Lu, f32) = (page::device_width(window), window.scale_factor());
-        let layout = BetaLayout::new(&self.page, self.app_name, width, scale);
+        let t = &mut self.typesetter;
+        let layout = BetaLayout::new(t, &self.page, self.app_name, width, scale);
         self.scroll.lay_out(layout.height, window, cx);
         if let Some(fade) = self.fade {
             if cx.background_executor().now() - fade.start < OPACITY_TRANSITION {

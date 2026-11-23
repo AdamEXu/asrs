@@ -59,14 +59,16 @@ pub struct Typesetter {
     scale: f32,
 }
 
-impl Typesetter {
-    pub fn new(scale: f32) -> Typesetter {
+impl Default for Typesetter {
+    fn default() -> Self {
         Typesetter {
             backend: platform_backend().unwrap_or_else(|| Box::new(FixedAdvance)),
-            scale,
+            scale: 1.0,
         }
     }
+}
 
+impl Typesetter {
     fn px(&self, css: f64) -> Lu {
         length(css, self.scale)
     }
@@ -183,8 +185,13 @@ pub struct LicensesLayout {
 }
 
 impl LicensesLayout {
-    pub fn new(licenses: &[License], width: Lu, scale: f32) -> LicensesLayout {
-        let mut typesetter = Typesetter::new(scale);
+    pub fn new(
+        typesetter: &mut Typesetter,
+        licenses: &[License],
+        width: Lu,
+        scale: f32,
+    ) -> LicensesLayout {
+        typesetter.scale = scale;
         let (margin, padding) = (typesetter.px(8.0), typesetter.px(10.0));
         let below = typesetter.px(25.0);
         let inset = margin + padding;
@@ -203,7 +210,7 @@ impl LicensesLayout {
                     .entry((module, parts))
                     .or_insert_with_key(|(_, parts)| {
                         let style = &styles[usize::from(module)];
-                        Rc::new(Paragraphs::new(&mut typesetter, style, parts, out.width))
+                        Rc::new(Paragraphs::new(typesetter, style, parts, out.width))
                     });
                 out.blocks.push(LicenseBlock {
                     module,
@@ -276,12 +283,17 @@ pub struct HelpLayout {
 }
 
 impl HelpLayout {
-    pub fn new(items: &[HelpItem], width: Lu, scale: f32) -> HelpLayout {
-        let mut typesetter = Typesetter::new(scale);
+    pub fn new(
+        typesetter: &mut Typesetter,
+        items: &[HelpItem],
+        width: Lu,
+        scale: f32,
+    ) -> HelpLayout {
+        typesetter.scale = scale;
         let mut out = HelpLayout::default();
         for item in items {
             let first = out.items.is_empty();
-            let layout = help_item(&mut typesetter, item, width, out.height, first);
+            let layout = help_item(typesetter, item, width, out.height, first);
             out.height = layout.sources[1] + layout.sources[3];
             out.items.push(layout);
         }
@@ -335,9 +347,8 @@ fn help_item(
 impl HelpItemLayout {
     /// The line boxes `Range.getClientRects()` gives for `div.type-title`'s text: the whole
     /// text's, and where an ellipsis cuts it, what is left.
-    pub fn title_rects(&self, title: &str, scale: f32) -> Vec<LuRect> {
+    pub fn title_rects(&self, typesetter: &mut Typesetter, title: &str, scale: f32) -> Vec<LuRect> {
         let [x, y, w, _] = self.title;
-        let mut typesetter = Typesetter::new(scale);
         let style = help_title_style();
         let layout = dom::layout(typesetter.backend.as_mut(), &style, title, Some(w), scale);
         let height = layout.ascent + layout.descent;
@@ -463,9 +474,14 @@ pub struct BetaLayout {
 }
 
 impl BetaLayout {
-    pub fn new(page: &BetaWelcome, app_name: &str, width: Lu, scale: f32) -> BetaLayout {
-        let mut typesetter = Typesetter::new(scale);
-        let t = &mut typesetter;
+    pub fn new(
+        t: &mut Typesetter,
+        page: &BetaWelcome,
+        app_name: &str,
+        width: Lu,
+        scale: f32,
+    ) -> BetaLayout {
+        t.scale = scale;
         let inset = t.px(8.0) + t.px(15.0);
         let content = width - 2 * inset;
         let heading_margin = t.px(15.0);

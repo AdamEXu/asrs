@@ -6,7 +6,7 @@
 
 use asrs_app::views::cell_text::{css, length};
 use asrs_app::views::info::layout::{
-    BetaLayout, HelpLayout, LicensesLayout, LuRect, TextBlock, snapped,
+    BetaLayout, HelpLayout, LicensesLayout, LuRect, TextBlock, Typesetter, snapped,
 };
 use asrs_canvas::text::dom::{LU_PER_PX, Lu};
 use asrs_js::string::JsString;
@@ -244,6 +244,7 @@ fn report(failures: &[String], equal: usize) {
 fn licenses() {
     let name = |tag: &str, class: &str| (tag == "div").then(|| class.to_owned());
     let (mut failures, mut equal, mut recorded) = (Vec::new(), 0, 0);
+    let mut typesetter = Typesetter::default();
     let pages = pages("info/licenses", &name);
     assert_eq!(pages.len(), 15);
     for page in pages {
@@ -251,7 +252,7 @@ fn licenses() {
             .iter()
             .map(|l| License::new(&js_string(get(l, "module")), &js_string(get(l, "text"))))
             .collect();
-        let layout = LicensesLayout::new(&licenses, page.width, page.scale);
+        let layout = LicensesLayout::new(&mut typesetter, &licenses, page.width, page.scale);
         let mut laid = Laid {
             scale: page.scale,
             ..Laid::default()
@@ -292,6 +293,7 @@ fn source_list_help() {
         other => Some(other.to_owned()),
     };
     let (mut failures, mut equal, mut recorded) = (Vec::new(), 0, 0);
+    let mut typesetter = Typesetter::default();
     let pages = pages("info/source-list-help", &name);
     assert_eq!(pages.len(), 96);
     for page in pages {
@@ -302,7 +304,7 @@ fn source_list_help() {
                 let _ = help.set_config(&config);
             }
         }
-        let layout = HelpLayout::new(help.items(), page.width, page.scale);
+        let layout = HelpLayout::new(&mut typesetter, help.items(), page.width, page.scale);
         let mut laid = Laid {
             scale: page.scale,
             ..Laid::default()
@@ -315,7 +317,7 @@ fn source_list_help() {
             let [x, y, w, h] = l.icon;
             laid.named("object", [x + inset(w), y + inset(h), icon, icon]);
             laid.named("type-title", l.title);
-            laid.text(l.title_rects(&item.title, page.scale));
+            laid.text(l.title_rects(&mut typesetter, &item.title, page.scale));
             if let Some((rect, block)) = &l.warning {
                 laid.named("parent-warning", *rect);
                 laid.block(block, 1);
@@ -347,6 +349,7 @@ fn beta_welcome() {
         other => Some(other.to_owned()),
     };
     let (mut failures, mut equal, mut recorded) = (Vec::new(), 0, 0);
+    let mut typesetter = Typesetter::default();
     let pages = pages("info/beta-welcome", &name);
     assert_eq!(pages.len(), 7);
     for page in pages {
@@ -354,7 +357,13 @@ fn beta_welcome() {
         for message in items(&page.data) {
             beta.message(&js(message));
         }
-        let layout = BetaLayout::new(&beta, "AdvantageScope", page.width, page.scale);
+        let layout = BetaLayout::new(
+            &mut typesetter,
+            &beta,
+            "AdvantageScope",
+            page.width,
+            page.scale,
+        );
         let mut laid = Laid {
             scale: page.scale,
             ..Laid::default()

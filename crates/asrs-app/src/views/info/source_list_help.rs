@@ -16,7 +16,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::Text;
 use asrs_ui::theme::Appearance;
 
-use super::layout::{HelpItemLayout, HelpLayout, LuRect, TextBlock, help_title_style};
+use super::layout::{HelpItemLayout, HelpLayout, LuRect, TextBlock, Typesetter, help_title_style};
 use super::page::{self, PageScroll, Placer, ScrolledPage};
 use crate::views::cell_text::css;
 
@@ -25,6 +25,7 @@ const SOURCES_OPACITY: f32 = 0.6;
 
 pub struct SourceListHelpPage {
     help: SourceListHelp,
+    typesetter: Typesetter,
     /// The layout at a width and scale.
     layout: Option<(Lu, f32, Rc<HelpLayout>)>,
     scroll: PageScroll,
@@ -37,6 +38,7 @@ impl SourceListHelpPage {
         window.focus(&focus, cx);
         SourceListHelpPage {
             help,
+            typesetter: Typesetter::default(),
             layout: None,
             scroll: PageScroll::new(cx),
             focus,
@@ -52,7 +54,8 @@ impl SourceListHelpPage {
         match &self.layout {
             Some((w, s, layout)) if (*w, *s) == (width, scale) => layout.clone(),
             _ => {
-                let layout = Rc::new(HelpLayout::new(self.help.items(), width, scale));
+                let t = &mut self.typesetter;
+                let layout = Rc::new(HelpLayout::new(t, self.help.items(), width, scale));
                 self.layout = Some((width, scale, layout.clone()));
                 layout
             }

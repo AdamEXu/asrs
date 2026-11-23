@@ -3,6 +3,8 @@
 //! Replays the scripted flows of `info/beta-welcome` (oracle/src/genInfoWindows.ts: upstream's
 //! page in Blink, driven with real input) through the GPUI window. After every step the
 //! checkboxes, the button's state, the focused control and the replies must equal the recording.
+//! The page is taller than the window with some platforms' fonts, so clicks scroll to their target
+//! first, and the flows also run in a window that is too short with any.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -10,17 +12,20 @@ use std::sync::Arc;
 
 use asrs_app::views::cell_text::{css, length};
 use asrs_app::views::info::beta_welcome::Control;
-use asrs_app::views::info::layout::{BetaLayout, LuRect};
+use asrs_app::views::info::layout::{BetaLayout, LuRect, Typesetter};
 use asrs_app::views::info::{Acknowledged, BetaWelcomePage};
 use asrs_parity::cve1::Value;
 use asrs_parity::vectors;
 use asrs_ui::gpui::{
     AnyWindowHandle, AppContext, Bounds, Entity, HeadlessAppContext, KeyDownEvent, KeyUpEvent,
     Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    NoopTextSystem, PlatformInput, WindowBounds, WindowOptions, point, px, size,
+    NoopTextSystem, PlatformInput, ScrollDelta, ScrollEvent, WindowBounds, WindowOptions, point,
+    px, size,
 };
 
-const SIZE: (f32, f32) = (450.0, 490.0);
+const WIDTH: f32 = 450.0;
+/// The window's height in the recordings, and one no platform's fonts fit the page in.
+const HEIGHTS: [f32; 2] = [490.0, 240.0];
 
 fn items(value: &Value) -> &[Value] {
     match value {
@@ -38,6 +43,8 @@ fn get<'a>(value: &'a Value, key: &str) -> &'a Value {
 }
 
 struct Beta {
+    height: f32,
+    typesetter: Typesetter,
     cx: HeadlessAppContext,
     window: AnyWindowHandle,
     page: Entity<BetaWelcomePage>,
@@ -45,7 +52,7 @@ struct Beta {
 }
 
 impl Beta {
-    fn open(data: &Value) -> Beta {
+    fn open(data: &Value, height: f32) -> Beta {
         let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
         cx.update(asrs_ui::init);
         let replies = Rc::new(Cell::new(0));
@@ -54,7 +61,7 @@ impl Beta {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                     point(px(0.0), px(0.0)),
-                    size(px(SIZE.0), px(SIZE.1)),
+                    size(px(WIDTH), px(height)),
                 ))),
                 ..Default::default()
             };
@@ -75,6 +82,8 @@ impl Beta {
             window
         });
         let mut beta = Beta {
+            height,
+            typesetter: Typesetter::default(),
             cx,
             window,
             page: page.expect("the page"),
@@ -101,9 +110,21 @@ impl Beta {
         self.settle();
     }
 
+    fn wheel(&mut self, by: f32) {
+        self.input(PlatformInput::Scroll(ScrollEvent {
+            position: point(px(1.0), px(1.0)),
+            delta: ScrollDelta::Pixels(point(px(0.0), px(-by))),
+            ..ScrollEvent::default()
+        }));
+    }
+
+    /// Scrolls the window from the top just far enough to show `rect`, and clicks its centre.
     fn click(&mut self, rect: LuRect) {
         let [x, y, w, h] = rect.map(|v| css(v, 1.0) as f32);
-        let position = point(px(x + w / 2.0), px(y + h / 2.0));
+        let scrolled = (y + h - self.height).ceil().max(0.0);
+        self.wheel(-1e6);
+        self.wheel(scrolled);
+        let position = point(px(x + w / 2.0), px(y + h / 2.0 - scrolled));
         let modifiers = Modifiers::default();
         self.input(PlatformInput::MouseMove(MouseMoveEvent {
             position,
@@ -156,9 +177,10 @@ impl Beta {
         if op == "key" {
             return self.key(what);
         }
+        let (t, width) = (&mut self.typesetter, length(f64::from(WIDTH), 1.0));
         let layout = self.cx.update(|cx| {
             let page = self.page.read(cx).page();
-            BetaLayout::new(page, "AdvantageScope", length(f64::from(SIZE.0), 1.0), 1.0)
+            BetaLayout::new(t, page, "AdvantageScope", width, 1.0)
         });
         self.click(match what {
             "button" => layout.button,
@@ -201,15 +223,14 @@ impl Beta {
     }
 }
 
-#[test]
-fn beta_welcome_flows() {
+fn replay(height: f32) {
     let records = vectors::load("info/beta-welcome").expect("the vector");
     let (mut beta, mut flows, mut steps): (Option<Beta>, usize, usize) = (None, 0, 0);
     for record in &records {
         match record.string("kind").expect("a kind").as_str() {
             "dump" => {
                 flows += 1;
-                beta = Some(Beta::open(&record.value("data").expect("data")));
+                beta = Some(Beta::open(&record.value("data").expect("data"), height));
             }
             "step" => {
                 steps += 1;
@@ -219,7 +240,7 @@ fn beta_welcome_flows() {
                 beta.step(&step);
                 beta.check(
                     &record.value("state").expect("state"),
-                    &format!("{case}: {step}"),
+                    &format!("{height} px, {case}: {step}"),
                 );
             }
             other => assert_eq!(other, "end"),
@@ -233,10 +254,17 @@ fn beta_welcome_flows() {
 }
 
 #[test]
+fn beta_welcome_flows() {
+    for height in HEIGHTS {
+        replay(height);
+    }
+}
+
+#[test]
 fn a_held_space_clicks_once_at_its_release() {
     let records = vectors::load("info/beta-welcome").expect("the vector");
     let data = records[0].value("data").expect("data");
-    let mut beta = Beta::open(&data);
+    let mut beta = Beta::open(&data, HEIGHTS[0]);
     beta.key("Tab");
     let keystroke = Keystroke {
         modifiers: Modifiers::default(),
