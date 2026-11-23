@@ -228,6 +228,7 @@ impl MainProcess {
     pub(crate) fn headless(state: MainState) -> MainProcess {
         MainProcess {
             state,
+            menu: Vec::new(),
             hubs: Vec::new(),
         }
     }
