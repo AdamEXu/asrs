@@ -303,6 +303,7 @@
     "hub/entity-titles": {"cases":55,"content":"5cd8c2b5a9b7f077","generator":"977595bafd145d09","spec":"parity/specs/hub/entity-titles.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-errors-and-files": {"cases":83,"content":"77b158a7ab32f5c3","generator":"8c443f3f3df18390","spec":"parity/specs/hub/lifecycle-errors-and-files.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-export-outcomes": {"cases":49,"content":"ed44e9fb4b4aa98f","generator":"6e7f4399641a7428","spec":"parity/specs/hub/lifecycle-export-outcomes.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "hub/lifecycle-export-progress": {"cases":76,"content":"a92d6446afd09571","generator":"e1dbc50ed0ba8ca2","spec":"parity/specs/hub/lifecycle-export-progress.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-merge-without-logs": {"cases":12,"content":"a6d5568974af23a7","generator":"90bd9525a7953d7d","spec":"parity/specs/hub/lifecycle-merge-without-logs.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-open-merge-export": {"cases":67,"content":"e53d28fab814c427","generator":"140dd9491e87467f","spec":"parity/specs/hub/lifecycle-open-merge-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-partial-export": {"cases":38,"content":"93c9f96d4b49d0d3","generator":"4e1cff84f14eda83","spec":"parity/specs/hub/lifecycle-partial-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

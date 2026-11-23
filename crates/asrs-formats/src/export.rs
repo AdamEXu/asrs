@@ -335,12 +335,7 @@ fn csv_list(
                         field.clone(),
                         JsString::from(text.replace(',', ";")),
                     ));
-                    progress(fraction(
-                        field_index,
-                        index,
-                        field_data.len(),
-                        fields.len(),
-                    ));
+                    progress(fraction(field_index, index, field_data.len(), fields.len()));
                 }
             }
             Some(timestamps) => {
@@ -456,12 +451,7 @@ fn wpilog(
             None => {
                 for index in 0..field_data.len() {
                     add_value(field_data.timestamps()[index], index)?;
-                    progress(fraction(
-                        field_index,
-                        index,
-                        field_data.len(),
-                        fields.len(),
-                    ));
+                    progress(fraction(field_index, index, field_data.len(), fields.len()));
                 }
             }
             Some(timestamps) => {

@@ -285,13 +285,8 @@ mod tests {
             Err(ExportError::Rejected)
         ));
 
-        let file = generate_mcap(
-            &log,
-            &fields,
-            &Some(vec![1.0, 2.0, 1.8e299]),
-            &mut |_| {},
-        )
-        .unwrap();
+        let file =
+            generate_mcap(&log, &fields, &Some(vec![1.0, 2.0, 1.8e299]), &mut |_| {}).unwrap();
         assert_eq!(
             summary_channels(&file),
             [(0, 2, "/Value".to_owned()), (1, 0, String::new())]

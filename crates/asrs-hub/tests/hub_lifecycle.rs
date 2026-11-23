@@ -104,6 +104,9 @@ impl HubView for View {
     }
 }
 
+/// Records each value the loading glow's style takes.
+const WATCH_GLOW: &str = "(() => { const read = () => [document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]; window.__glow = []; let last = JSON.stringify(read()); new MutationObserver(() => { const now = read(); if (JSON.stringify(now) !== last) { last = JSON.stringify(now); window.__glow.push(now); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] }); return read(); })()";
+
 struct Emit(Vec<(&'static str, Value)>);
 
 enum Task {
@@ -344,29 +347,23 @@ impl HubHost for Host {
             ("type", cve_str("request")),
         ]);
         let mut realm = JsRealm::new(Box::new(V8MathRandom::from_entropy()));
+        let mut replies = Vec::new();
         let output = match (
             Log::from_serialized(log, &mut realm),
             export_options(&options),
         ) {
-            (Ok(log), Some(options)) => export(&log, &options),
+            (Ok(log), Some(options)) => export(&log, &options, &mut |value| {
+                replies.push(ExportReply::Progress(value))
+            }),
             (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
             (_, None) => Err(ExportError::Unported("export options of another shape")),
         };
-        let replies = match output {
-            Ok(Output::Text(text)) => vec![
-                ExportReply::Progress(1.0),
-                ExportReply::Payload(JsValue::String(text)),
-            ],
-            Ok(Output::Bytes(_)) => {
-                self.unmodeled.push("a binary export payload".to_owned());
-                Vec::new()
-            }
-            Err(ExportError::Rejected) => vec![ExportReply::Failed],
-            Err(ExportError::Unported(what)) => {
-                self.unmodeled.push(what.to_owned());
-                Vec::new()
-            }
-        };
+        match output {
+            Ok(Output::Text(text)) => replies.push(ExportReply::Payload(JsValue::String(text))),
+            Ok(Output::Bytes(bytes)) => replies.push(ExportReply::Payload(JsValue::Bytes(bytes))),
+            Err(ExportError::Rejected) => replies.push(ExportReply::Failed),
+            Err(ExportError::Unported(what)) => self.unmodeled.push(what.to_owned()),
+        }
 
         self.slots.push(Slot {
             work: Work::Export { id, replies },
@@ -408,9 +405,43 @@ impl HubHost for Host {
 struct Runner {
     host: Host,
     hub: HubModel,
+    glow: Option<Glow>,
+}
+
+/// The loading glow's style as the watching expression sees it: its value after the last task
+/// and the values it changed to since the last drain.
+struct Glow {
+    last: [String; 2],
+    seen: Vec<[String; 2]>,
+}
+
+fn glow_value(pair: &[String; 2]) -> Value {
+    Value::Array(pair.iter().map(|s| cve_str(s)).collect())
 }
 
 impl Runner {
+    fn read_glow(&self) -> [String; 2] {
+        let loading = self.hub.loading();
+        let show = match loading.show {
+            None => "",
+            Some(true) => "1",
+            Some(false) => "0",
+        };
+        let progress = loading.progress.clone().unwrap_or_default();
+        [show.to_owned(), progress.to_string_lossy()]
+    }
+
+    /// The end of a task, where a `MutationObserver` runs.
+    fn observe(&mut self) {
+        let now = self.read_glow();
+        if let Some(glow) = &mut self.glow
+            && now != glow.last
+        {
+            glow.seen.push(now.clone());
+            glow.last = now;
+        }
+    }
+
     /// The page between tasks: each worker message in turn, from the oldest worker that has
     /// one or is still busy.
     fn settle(&mut self) -> Result<(), String> {
@@ -435,6 +466,7 @@ impl Runner {
                     Some(WorkerMessage::Response(response)) => {
                         let source = source.clone();
                         self.hub.worker_message(&source, response, &mut self.host);
+                        self.observe();
                     }
                     Some(WorkerMessage::Done(end)) => {
                         *pending -= 1;
@@ -455,6 +487,7 @@ impl Runner {
                         self.host.emit(vec![("terminate", number(index as f64))]);
                     }
                     self.hub.export_reply(id, reply, &mut self.host);
+                    self.observe();
                 }
             }
         }
@@ -474,6 +507,7 @@ impl Runner {
             Task::Timeout(timeout) => self.hub.run_timeout(timeout, &mut self.host),
             Task::Main(reply) => self.hub.historical_data(&reply, &mut self.host),
         }
+        self.observe();
         self.settle()
     }
 
@@ -501,6 +535,7 @@ impl Runner {
                     for frame in std::mem::take(&mut self.host.frames) {
                         self.hub.animation_frame(&frame, &mut self.host);
                     }
+                    self.observe();
                     self.settle()?;
                 }
                 _ => {
@@ -516,6 +551,7 @@ impl Runner {
             MainToHub::from_name(name).ok_or_else(|| err(format!("unknown message {name}")))?;
         self.hub
             .handle_main_message(&NamedMessage::new(name, data), &mut self.host);
+        self.observe();
         self.settle()
     }
 
@@ -545,6 +581,19 @@ impl Runner {
                     cve_str(flag(loading.show)),
                     cve(&JsValue::String(progress)),
                 ])
+            }
+            WATCH_GLOW => {
+                let last = self.read_glow();
+                let value = glow_value(&last);
+                self.glow = Some(Glow {
+                    last,
+                    seen: Vec::new(),
+                });
+                value
+            }
+            "window.__glow.splice(0)" => {
+                let glow = self.glow.as_mut().ok_or_else(|| err("no watched glow"))?;
+                Value::Array(glow.seen.drain(..).map(|pair| glow_value(&pair)).collect())
             }
             "window.log.getFieldKeys()" => strings(self.hub.page().log().get_field_keys()),
             "window.log.getTimestampRange()" => {
@@ -697,7 +746,11 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         Box::new(View { sidebar: NoLayout }),
         &mut host,
     );
-    let mut runner = Runner { host, hub };
+    let mut runner = Runner {
+        host,
+        hub,
+        glow: None,
+    };
 
     let version = asrs_js::ops::object([
         ("platform", JsValue::string("darwin")),
