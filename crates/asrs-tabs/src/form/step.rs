@@ -1,3 +1,5 @@
+// Ported from Blink, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 //! Stepping an `<input type="number">` without `min` or `max` with the arrow keys:
 //! `InputType::StepUpFromLayoutObject` and `ApplyStep`.
 

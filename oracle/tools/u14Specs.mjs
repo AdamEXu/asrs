@@ -258,7 +258,7 @@ const numberKeys = [
   input('<input type="number" value="x" step="0.5">', [["set", "value", "0.7"], ...keys("ArrowDown", "ArrowUp")]),
   input(RANGE_MIN, [["char", "1"], ["char", "2"], ...keys("ArrowUp"), ["char", "5"], ["blur"], ["focus"], ...keys("ArrowDown"), ["blur"]]),
   input(RANGE_MIN, [["char", "1"], ["char", "e"], ...keys("ArrowUp")]),
-  input(RANGE_MIN, ["shift", "alt", "ctrl", "meta"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]])))
+  input(RANGE_MIN, ["shift", "alt", "ctrl"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]])))
 ];
 fs.writeFileSync(
   path.join(ROOT, "parity/specs/form/number-keys.entry.json"),

@@ -149,6 +149,32 @@ impl StatisticsRenderer {
         }
         Ok(())
     }
+
+    /// The frame in which the hub renders the tab: the chart's callbacks requested before the
+    /// hub's own, then `render`.
+    pub fn frame(&mut self, command: &StatisticsCommand, dark: bool) -> Result<(), JsError> {
+        if !self.histogram().is_some_and(Histogram::is_attached) {
+            return Ok(());
+        }
+        let rest = self.callbacks() - self.first;
+        let first = std::mem::take(&mut self.first);
+        self.run_callbacks(first);
+        let result = self.render_command(command, dark);
+        self.first = self.callbacks() - rest;
+        self.rest = Some(rest);
+        result
+    }
+
+    /// The chart's callbacks behind the hub's, or all of them when the tab was not rendered.
+    pub fn frame_rest(&mut self) {
+        match self.rest.take() {
+            Some(rest) => self.run_callbacks(rest),
+            None => {
+                self.first = 0;
+                self.run_callbacks(self.callbacks());
+            }
+        }
+    }
 }
 
 impl<Cx: StatisticsCx + ?Sized> TabRenderer<Cx> for StatisticsRenderer {
@@ -168,26 +194,11 @@ impl<Cx: StatisticsCx + ?Sized> TabRenderer<Cx> for StatisticsRenderer {
         let Some(command) = command.downcast_ref::<StatisticsCommand>() else {
             return Err(JsError::type_error("not a statistics command"));
         };
-        if !self.histogram().is_some_and(Histogram::is_attached) {
-            return Ok(());
-        }
-        let rest = self.callbacks() - self.first;
-        let first = std::mem::take(&mut self.first);
-        self.run_callbacks(first);
-        let result = self.render_command(command, cx.tab_dark());
-        self.first = self.callbacks() - rest;
-        self.rest = Some(rest);
-        result
+        self.frame(command, cx.tab_dark())
     }
 
     fn animation_frame(&mut self, _cx: &mut Cx) -> Vec<JsError> {
-        match self.rest.take() {
-            Some(rest) => self.run_callbacks(rest),
-            None => {
-                self.first = 0;
-                self.run_callbacks(self.callbacks());
-            }
-        }
+        self.frame_rest();
         std::mem::take(&mut self.errors)
     }
 }

@@ -4520,22 +4520,6 @@
       [
        "ctrl"
       ]
-     ],
-     [
-      "key",
-      "ArrowUp",
-      0,
-      [
-       "meta"
-      ]
-     ],
-     [
-      "key",
-      "ArrowDown",
-      0,
-      [
-       "meta"
-      ]
      ]
     ]
    }

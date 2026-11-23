@@ -651,3 +651,78 @@ fn the_kept_display_list_paints_what_the_whole_history_paints() {
         );
     }
 }
+
+#[test]
+fn callbacks_run_around_the_hubs_own() {
+    let clock = Rc::new(Cell::new(1000.0));
+    let text = Rc::new(RefCell::new(FixedAdvance));
+    let mut renderer = StatisticsRenderer::new(Rc::new(PageClock(clock.clone())), text);
+    let mut stats = JsObject::new();
+    for key in STATS {
+        stats.insert(key, JsValue::Number(0.0));
+    }
+    let data = |change_counter, counts: [f64; 2]| StatisticsCommand {
+        change_counter,
+        bins: vec![0.0, 1.0],
+        step_size: 1.0,
+        fields: vec![StatisticsField {
+            title: JsString::from("/Field"),
+            color: JsValue::string("#2b66a2"),
+            histogram_counts: counts.to_vec(),
+            stats: stats.clone(),
+        }],
+    };
+    let queued = |r: &StatisticsRenderer| r.histogram().map_or(0, Histogram::callbacks);
+    renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+    assert!(
+        renderer.table().rows().is_empty(),
+        "nothing before the chart has a canvas"
+    );
+
+    renderer.mount(1.0, Box::new(FixedWidth));
+    renderer.attach((400.0, 300.0)).unwrap();
+    renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+    assert_eq!(renderer.histogram_left(), Some(10.0));
+    let [x, y, base, ..] = renderer.histogram().unwrap().bars()[0][0];
+    let hover = (x, (y + base) / 2.0);
+    renderer.frame_rest();
+    let chart = renderer.histogram_mut().unwrap();
+    chart.pointer(EventKind::MouseMove, hover.0, hover.1);
+    renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+    assert_eq!(
+        queued(&renderer),
+        1,
+        "the event waits behind the hub's frame"
+    );
+    renderer.frame_rest();
+    assert_eq!(queued(&renderer), 1, "the hover animation's first frame");
+
+    for _ in 0..4 {
+        clock.set(clock.get() + 1000.0);
+        renderer.frame(&data(1.0, [3.0, 4.0]), false).unwrap();
+        renderer.frame_rest();
+    }
+    assert_eq!(queued(&renderer), 0, "the animation is over");
+    renderer.frame(&data(2.0, [9.0, 1.0]), false).unwrap();
+    assert_eq!(queued(&renderer), 1, "requested by render");
+    renderer.frame_rest();
+    assert_eq!(queued(&renderer), 1);
+    let chart = renderer.histogram_mut().unwrap();
+    chart.pointer(EventKind::MouseMove, hover.0, hover.1 + 1.0);
+    let before = renderer.histogram().unwrap().revision();
+    clock.set(clock.get() + 16.0);
+    renderer.frame(&data(2.0, [9.0, 1.0]), false).unwrap();
+    assert!(
+        renderer.histogram().unwrap().revision() > before,
+        "drawn before the hub's frame"
+    );
+
+    let chart = renderer.histogram_mut().unwrap();
+    chart.pointer(EventKind::MouseOut, 0.0, 0.0);
+    clock.set(clock.get() + 1000.0);
+    for _ in 0..6 {
+        renderer.frame_rest();
+        clock.set(clock.get() + 1000.0);
+    }
+    assert_eq!(queued(&renderer), 0, "a hidden tab's callbacks run too");
+}

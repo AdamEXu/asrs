@@ -1,3 +1,5 @@
+// Ported from Blink, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 //! Where a line of `white-space: normal` text may end, as Blink's `LazyLineBreakIterator` has
 //! it: after spaces, between two ASCII characters by its pair table, and elsewhere by ICU.
 
