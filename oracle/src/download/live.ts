@@ -24,8 +24,8 @@ import { World, electronFake, fakeFs } from "./world";
 // events error (with the message), ready and close, and `onError` says whether the error listener
 // calls Client.end(), as main.ts's downloadStart does.
 // Timers main.ts sets run ten times faster; `readyTimeout` is the scenario's `timeoutMs`.
-// Each scenario is one record {scenario, effects}; effects stop at the moment its last step was
-// satisfied. `attempt` is a Client.connect call, `uncaught` an uncaught exception (repeats of the
+// Each scenario is one record {scenario, effects}; after a last `await` step nothing later than
+// the effect it waited for is kept. `attempt` is a Client.connect call, `uncaught` an uncaught exception (repeats of the
 // same one in a row are one effect), `saved` the local folder at the end
 // (names only where the scenario is `partial`). set-list is sorted by
 // name (the server's order is its filesystem's) and repeats in a row are one effect; a run of
@@ -367,7 +367,8 @@ export async function runLiveOne(name: string): Promise<void> {
         };
       }
     });
-    const matching = (step: Step) => effects.filter((e) => (e.k === "send" ? e.name === step.name : e.k === step.name)).length;
+    const matches = (step: Step) => (e: any) => (e.k === "send" ? e.name === step.name : e.k === step.name);
+    const matching = (step: Step) => effects.filter(matches(step)).length;
     for (const step of scenario.steps) {
       switch (step.op) {
         case "start":
@@ -415,6 +416,11 @@ export async function runLiveOne(name: string): Promise<void> {
         default:
           throw new Error(`unknown step ${step.op}`);
       }
+    }
+    const last = scenario.steps[scenario.steps.length - 1];
+    if (last.op === "await") {
+      let count = last.count ?? 1;
+      effects.splice(effects.findIndex((e) => matches(last)(e) && --count === 0) + 1);
     }
     push({ k: "saved", files: fixture.saved() });
     await out({ scenario: name, effects });

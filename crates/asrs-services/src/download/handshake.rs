@@ -323,9 +323,9 @@ impl Handshake {
             _,
         ] = lists;
         let negotiated = choose(&OFFERED_KEX, &kex, "key exchange algorithm")?;
-        if first_follows && kex.first().is_none_or(|first| first != negotiated) {
-            self.skip_next = true;
-        }
+        // ssh2 means to compare the server's first choice, but has already replaced the list with the
+        // negotiated name, so every guess counts as wrong (kex.js line 252).
+        self.skip_next = first_follows;
         self.host_key = choose(&OFFERED_HOST_KEYS, &host_key, "host key format")?;
         let cs = choose(&OFFERED_CIPHERS, &cs_cipher, "C->S cipher")?;
         let sc = choose(&OFFERED_CIPHERS, &sc_cipher, "S->C cipher")?;

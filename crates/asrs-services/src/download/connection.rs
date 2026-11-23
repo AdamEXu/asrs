@@ -357,11 +357,9 @@ fn report(error: &russh::Error, disconnected: &AtomicBool, events: &Events) {
         return;
     }
     let event = match error {
-        Error::IO(_)
-        | Error::Disconnect
-        | Error::HUP
-        | Error::SendError
-        | Error::RecvError => return,
+        Error::IO(_) | Error::Disconnect | Error::HUP | Error::SendError | Error::RecvError => {
+            return;
+        }
         Error::NoAuthMethod => {
             events.send(ConnectionEvent::AuthFailed);
             return;

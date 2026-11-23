@@ -204,6 +204,7 @@
   "genDownload": [
     "src/cve1.ts",
     "src/download/bundle.ts",
+    "src/download/handshake.ts",
     "src/download/live.ts",
     "src/download/offer.ts",
     "src/download/script.ts",

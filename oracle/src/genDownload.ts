@@ -1,4 +1,5 @@
 import "./environment";
+import { runHandshake } from "./download/handshake";
 import { runLive, runLiveOne } from "./download/live";
 import { runOffer } from "./download/offer";
 import { runScript } from "./download/script";
@@ -14,6 +15,9 @@ import { runWindow } from "./download/window";
 //   genDownload sftp <count> <seed>
 //     ssh2's SFTP session and fastGet against scripted packets (see download/sftp.ts): hand written
 //     cases, then <count> random sessions.
+//   genDownload handshake <count> <seed>
+//     ssh2's parser on a server's unencrypted bytes (see download/handshake.ts), each input cut whole,
+//     byte by byte and <count> times at random.
 //   genDownload offer
 //     ssh2's ident and KEXINIT (see download/offer.ts).
 //   genDownload window
@@ -35,6 +39,9 @@ switch (mode) {
   case "sftp":
     await runSftp(Number(args[0]), Number(args[1]));
     break;
+  case "handshake":
+    await runHandshake(Number(args[0]), Number(args[1]));
+    break;
   case "offer":
     await runOffer();
     break;
@@ -42,7 +49,7 @@ switch (mode) {
     await runWindow();
     break;
   default:
-    console.error("usage: genDownload <script|live|sftp|offer|window> ...");
+    console.error("usage: genDownload <script|live|sftp|handshake|offer|window> ...");
     process.exit(2);
 }
 await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));

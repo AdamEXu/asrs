@@ -129,13 +129,24 @@ impl Effects {
     }
 
     fn count(&self, name: &str) -> usize {
-        self.list
-            .iter()
-            .filter(|effect| match text(effect, "k").as_str() {
-                "send" => text(effect, "name") == name,
-                other => other == name,
-            })
-            .count()
+        self.list.iter().filter(|e| matches(e, name)).count()
+    }
+
+    /// Drops what came after the effect `await` was satisfied by.
+    fn stop_at(&mut self, name: &str, count: usize) {
+        let mut left = count;
+        let end = self.list.iter().position(|effect| {
+            left -= usize::from(matches(effect, name));
+            left == 0
+        });
+        self.list.truncate(end.expect("an awaited effect") + 1);
+    }
+}
+
+fn matches(effect: &Json, name: &str) -> bool {
+    match text(effect, "k").as_str() {
+        "send" => text(effect, "name") == name,
+        other => other == name,
     }
 }
 
