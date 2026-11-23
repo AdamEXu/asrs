@@ -810,6 +810,10 @@ impl MainProcess {
             _ => {}
         })
         .detach();
+        if Platform::current() != Platform::Mac {
+            let title = hub.read(cx).model().title().to_string_lossy();
+            Self::set_title(cx, id, &title);
+        }
         if let Some(handle) = Windows::handle(cx, id) {
             let _ = handle.update(cx, |_, window, cx| {
                 window.on_window_should_close(cx, move |_, cx| {

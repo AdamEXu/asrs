@@ -842,6 +842,16 @@ impl MenuView {
                     }),
             )
             .child(div().flex_1().child(Text::new(label, style).color(text)))
+            .children(entry.shortcut.clone().map(|shortcut| {
+                let color = if highlighted {
+                    0xffffff
+                } else {
+                    appearance.pick(0x777777, 0xaaaaaa)
+                };
+                div()
+                    .flex_none()
+                    .child(Text::new(shortcut, label_style()).color(color))
+            }))
             .child(
                 div()
                     .w(px(TRAILING_INSET - PADDING))

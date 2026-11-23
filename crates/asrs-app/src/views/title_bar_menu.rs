@@ -107,7 +107,6 @@ pub fn title_bar_menu(
     layout: &MenuLayout,
     rect: [f64; 4],
     scroll: &ScrollHandle,
-    appearance: Appearance,
     on_click: impl Fn(usize, &mut Window, &mut App) + Clone + 'static,
     on_leave: impl Fn(usize, &mut App) + Clone + 'static,
     window: &mut Window,
@@ -124,7 +123,6 @@ pub fn title_bar_menu(
             index,
             (rect[0], *button),
             (text, *label),
-            appearance,
             on_click.clone(),
             on_leave.clone(),
             window,
@@ -141,18 +139,17 @@ pub fn title_bar_menu(
         .child(content)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn menu_button(
     index: usize,
     (menu_x, [x, y, w, h]): (f64, [f64; 4]),
     (text, label): (&'static str, [f64; 4]),
-    appearance: Appearance,
     on_click: impl Fn(usize, &mut Window, &mut App) + 'static,
     on_leave: impl Fn(usize, &mut App) + 'static,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let scale = window.scale_factor();
+    let appearance = Appearance::of(window, cx);
     let id = ("title-bar-menu-button", index);
     let focus = FocusRing::of(id, None, window, cx);
     let (color, hover, active) = appearance.pick(

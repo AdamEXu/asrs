@@ -745,7 +745,6 @@ impl<H: FrameHost> HubFrame<H> {
     fn title_bar_menu(
         &mut self,
         rect: [f64; 4],
-        appearance: Appearance,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
@@ -758,7 +757,6 @@ impl<H: FrameHost> HubFrame<H> {
             &layout,
             rect,
             &self.menu_scroll,
-            appearance,
             move |index, _, cx| {
                 let _ = clicked.update(cx, |frame, cx| {
                     frame.host.input(cx, |hub| {
@@ -1195,7 +1193,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             root = root.child(probe(FrameElement::TitleBar, bar));
         }
         if let Some(rect) = layout.rect(FrameElement::TitleBarMenu) {
-            let menu = self.title_bar_menu(rect, appearance, window, cx);
+            let menu = self.title_bar_menu(rect, window, cx);
             root = root.child(probe(
                 FrameElement::TitleBarMenu,
                 place(rect, (0.0, 0.0)).child(menu),

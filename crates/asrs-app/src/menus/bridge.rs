@@ -149,11 +149,13 @@ fn collect_accelerators(
     }
 }
 
+type PathHandler = Rc<dyn Fn(MenuPath, &mut App)>;
+
 /// `Menu.getApplicationMenu()` and what its clicks run.
 struct ApplicationMenu {
     platform: Platform,
     items: Vec<BuiltItem>,
-    dispatch: Rc<dyn Fn(MenuPath, &mut App)>,
+    dispatch: PathHandler,
 }
 
 impl Global for ApplicationMenu {}
@@ -205,7 +207,7 @@ fn show_application_menu(
     let menu = (platform == Platform::Mac).then(|| to_popup(&built, platform, true));
     let table = accelerator_table(&built, platform);
     let shown = built.clone();
-    let dispatch: Rc<dyn Fn(MenuPath, &mut App)> = Rc::new(move |path, cx| {
+    let dispatch: PathHandler = Rc::new(move |path, cx| {
         if !item_at(&built, &path).is_some_and(|item| item.enabled) {
             return;
         }
