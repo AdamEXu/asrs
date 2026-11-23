@@ -46,6 +46,7 @@
   "button.data-table-jump-button": ["button.data-table-jump-button"],
   "button.data-table-key-delete": ["button.data-table-key-delete"],
   ".renderer-content > :not([hidden]) img.large-table-hand-icon": ["img.large-table-hand-icon"],
+  ".documentation-container": ["div.documentation-container"],
   ".console-table-container": [".console-table-container"],
   "table.console-table th": ["table.console-table th"],
   "input.console-table-jump-input": ["input.console-table-jump-input"],
@@ -105,5 +106,14 @@
   "table": ["table"],
   "td": ["td"],
   "input": ["input"],
-  "button": ["button"]
+  "button": ["button"],
+  ".video-container": ["div.video-container"],
+  ".video-container > img": ["video-image"],
+  ".video-source": ["div.video-source"],
+  ".video-source > button": ["div.video-source > button"],
+  ".video-timeline-section > button": ["div.video-timeline-section > button"],
+  ".video-timeline-container": ["div.video-timeline-container"],
+  "input.video-timeline-slider": ["input.video-timeline-slider"],
+  ".video-timeline-marker-container > div": ["div.video-timeline-marker-container > div"],
+  ".video-timeline-controls > button": ["div.video-timeline-controls > button"]
 }

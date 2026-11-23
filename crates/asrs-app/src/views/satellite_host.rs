@@ -13,7 +13,7 @@ use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
-use asrs_ui::gpui::{App, AppContext, Entity, KeyDownEvent};
+use asrs_ui::gpui::{App, AppContext, Entity};
 
 use super::frame::{FrameGeometry, FrameHost, HubFrame};
 use super::hub_host;
@@ -158,7 +158,7 @@ impl FrameHost for SatelliteHost {
             .update(cx, |satellite, cx| satellite.animation_frame(cx));
     }
 
-    fn key_down(&mut self, _event: &KeyDownEvent, code: &str, cx: &mut App) -> bool {
+    fn satellite_key_down(&mut self, code: &str, cx: &mut App) -> bool {
         self.satellite
             .update(cx, |satellite, cx| satellite.key_down(code, cx))
     }

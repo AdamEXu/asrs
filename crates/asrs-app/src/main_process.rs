@@ -42,6 +42,8 @@ use crate::menus::click::ClickEnv;
 use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
 use crate::satellite::{Satellite, SatelliteEvent};
+use crate::video;
+use crate::views::documentation::DocumentationRoot;
 use crate::views::hub_host::{HubEntityHost, boot_messages, show_satellite_menu};
 use crate::views::info::{self, SourceListHelpPage};
 use crate::views::prompts;
@@ -128,6 +130,28 @@ pub fn bundled_assets_dir() -> PathBuf {
             .normalize(&dir.to_string_lossy().as_ref().into())
             .to_string_lossy(),
     )
+}
+
+/// `docs/build`, which the hub page loads as `../docs/build`: beside the executable in a packaged
+/// build, what `cargo xtask docs` wrote otherwise.
+pub fn documentation_dir() -> PathBuf {
+    if PACKAGED {
+        let exe = std::env::current_exe().unwrap_or_default();
+        return exe.parent().unwrap_or(Path::new(".")).join("docs/build");
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/docs/build")
+}
+
+/// `asrs-webview`: beside the executable, and for tests in the build directory above them.
+pub fn webview_host() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let dir = exe.parent().unwrap_or(Path::new("."));
+    let depth = if PACKAGED { 1 } else { usize::MAX };
+    dir.ancestors()
+        .take(depth)
+        .map(|dir| dir.join("asrs-webview"))
+        .find(|host| host.is_file())
+        .unwrap_or_else(|| dir.join("asrs-webview"))
 }
 
 /// The host's `app.getPath` values, with the user-data directory created as Chromium does at
@@ -599,6 +623,7 @@ impl MainProcess {
             }
             Ok(()) => {
                 export_flow::hub_message(id, message, cx);
+                video::hub_message(id, message, cx);
                 if let Some(window) = Windows::handle(cx, id) {
                     hub_dialogs::show(message, window, cx);
                 }
@@ -1210,6 +1235,11 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         }
     };
     lifecycle::clear_akit_input(&RealFs, &paths.akit_path_input());
+    cx.set_global(DocumentationRoot {
+        build: documentation_dir(),
+        user_data: PathBuf::from(&paths.user_data),
+        host: webview_host(),
+    });
     let screens = Screens::now(cx);
     let (state, prefs) = match MainState::start(&RealFs, &screens, paths, process_platform()) {
         Ok(started) => started,
@@ -1220,6 +1250,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         }
     };
     cx.set_global(theme_source(prefs.theme));
+    video::init(&state.paths, cx);
     let saved = state
         .tracker
         .get_saved_application_state(&RealFs, &screens, true);
@@ -1290,6 +1321,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     })
     .detach();
     cx.on_app_quit(|cx| {
+        video::cleanup(cx);
         if let Some(main) = cx.try_global::<MainProcess>() {
             lifecycle::quit_cleanup(
                 &RealFs,

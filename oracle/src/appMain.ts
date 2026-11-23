@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { Socket } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
+import { clipFolder } from "./app/clips";
 import { saveDisplayProfile, type DisplayProfile } from "./app/display";
 import { GENERATED_LOGS } from "./app/logs";
 import { busyReasons, domDump, downloadShows, hubReady, sendMainMessage } from "./app/page";
@@ -538,13 +539,22 @@ function resolveLog(spec: string): string {
   return file;
 }
 
+// `{"$clip": name}` is the folder of a generated clip.
+function resolveClips(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  if (Array.isArray(value)) return value.map(resolveClips);
+  const clip = (value as { $clip?: string }).$clip;
+  if (clip !== undefined) return clipFolder(path.join(out, "inputs"), clip);
+  return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, resolveClips(v)]));
+}
+
 let pressedButton: string | null = null;
 const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"] } as const;
 
 async function perform(action: Action) {
   const contents = active().webContents;
   if ("main" in action) {
-    await exec(call(sendMainMessage, action.main, action.data));
+    await exec(call(sendMainMessage, action.main, resolveClips(action.data)));
   } else if ("open" in action) {
     await exec(call(sendMainMessage, "open-files", { files: action.open.map(resolveLog), merge: action.merge ?? false }));
   } else if ("eval" in action) {

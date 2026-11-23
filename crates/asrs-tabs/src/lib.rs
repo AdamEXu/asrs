@@ -27,3 +27,4 @@ pub mod swerve;
 pub mod swerve_renderer;
 pub mod table;
 pub mod video;
+pub mod video_renderer;

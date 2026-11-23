@@ -292,6 +292,24 @@ pub fn popup_context(
     show_popup(window, cx, popup, x, y, choose);
 }
 
+/// A menu of plain items popped up at window content coordinates. `on_close` gets the chosen
+/// item's index.
+pub fn popup_labels(
+    window: &mut Window,
+    cx: &mut App,
+    platform: Platform,
+    labels: Vec<String>,
+    x: i32,
+    y: i32,
+    on_close: impl FnOnce(Option<usize>, &mut App) + 'static,
+) {
+    let items: Vec<MenuItem> = labels.into_iter().map(MenuItem::new).collect();
+    let popup = to_popup(&build_appended(&items, platform, APP_NAME), platform, false);
+    show_popup(window, cx, popup, x, y, move |path, cx| {
+        on_close(path.and_then(|path| path.first().copied()), cx)
+    });
+}
+
 fn show_popup(
     window: &mut Window,
     cx: &mut App,

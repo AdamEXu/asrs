@@ -17,14 +17,6 @@ use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::symbols::Symbol;
 use crate::text::{self, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
-const KEY_CONTEXT: &str = "TextField";
-
-/// Whether the target of a key event is a text field.
-pub fn text_field_focused(window: &Window) -> bool {
-    let stack = window.context_stack();
-    stack.iter().any(|context| context.contains(KEY_CONTEXT))
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldKind {
     Text,
@@ -527,7 +519,7 @@ impl<M: FieldModel> Render for TextField<M> {
 
         let mut root = div()
             .id("text-field")
-            .key_context(KEY_CONTEXT)
+            .key_context(super::CONTEXT)
             .capture_action(cx.listener(Self::paste))
             .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
                 this.arrow_key(true, window, cx);

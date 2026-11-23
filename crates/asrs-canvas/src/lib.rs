@@ -11,7 +11,7 @@ pub mod geometry;
 pub mod gradient;
 pub mod hairline;
 pub mod heatmap;
-mod mip;
+pub mod mip;
 pub mod msaa;
 pub mod path;
 pub mod pixels;
@@ -25,4 +25,4 @@ pub mod trace;
 
 pub use display::{Call, Canvas2d, Gradient, ImageData, ImageDataSource, Property, Style};
 pub use raster::{Raster, RasterState, ShadeCache, TextRaster};
-pub use tiny_skia::Pixmap;
+pub use tiny_skia::{IntSize, Pixmap};

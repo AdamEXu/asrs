@@ -21,6 +21,9 @@ TypeScript, CSS and C sources (including the WPILOG indexer,
 
 - `www/symbols` and `icons/download` icons, embedded into `asrs-ui` at build time, and `www/textures`,
   `icons`, `bundledAssets` and `licenses`, copied into `assets/` by `cargo xtask assets`.
+- `docs`, built by `cargo xtask docs` with upstream's own `docusaurus-embed.config.ts` and
+  shipped unmodified as `docs/build` except for two images upstream's license does not cover,
+  which are replaced: the photo on the "not found" page and Apple's App Store badge.
 - `crates/asrs-model/src/source_list/configs/*.json`: upstream's tab controller
   source list configs.
 - `crates/asrs-log/src/units/tables.rs` and `crates/asrs-formats/src/spark/tables.rs`,
@@ -28,7 +31,24 @@ TypeScript, CSS and C sources (including the WPILOG indexer,
 - `parity/specs/assets/release`: asset `config.json` files from AdvantageScopeAssets
   releases (test data, with its own [`LICENSE`](parity/specs/assets/release/LICENSE)).
 
+The documentation shows AdvantageScope's name, logo and screenshots, some with FIRST field
+images, match footage or other vendors' software in them, to describe AdvantageScope. Those
+names and marks belong to their owners.
+
 asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
+
+## npm packages in the documentation
+
+The built documentation contains Docusaurus, React, Infima, Prism and their dependencies (MIT,
+BSD-3-Clause, Apache-2.0, ISC and 0BSD). `docs/build/THIRD_PARTY_LICENSES.txt`, written by
+`cargo xtask docs` from the packages the build compiled in, lists each with its license text;
+Infima's, which its package omits, is [`licenses/infima.txt`](licenses/infima.txt).
+
+## WebKitGTK and GTK (Linux)
+
+- License: LGPL-2.1-or-later ([`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt)) and BSD
+- Used in: `asrs-webview`, the process behind the Documentation tab, linked dynamically from the
+  system's libraries and not shipped. asrs itself does not link them.
 
 ## Google Material Symbols
 

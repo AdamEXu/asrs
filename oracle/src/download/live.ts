@@ -15,7 +15,8 @@ import { World, electronFake, fakeFs } from "./world";
 //           "lvuser") that exists: connecting as it logs in with the fixture's key, every other
 //           username goes through upstream's own password authentication and fails.
 //   proxy   every sshd scenario connects through a byte-counting proxy that can drop the
-//           connection after `bytes` from the server, or on a `drop` step
+//           connection after `bytes` from the server, or on a `drop` step. `stall` forwards nothing
+//           more from the server but its end
 //   raw     a TCP server that sends `send` (latin1), then holds, closes or resets the connection, or
 //           lingers: holds it and never closes its own side
 //           (`when`: at once, after the client's ident, or after its KEXINIT)
@@ -28,7 +29,9 @@ import { World, electronFake, fakeFs } from "./world";
 // A scenario with `level: "client"` runs one ssh2 Client with no main.ts: its effects are the
 // events error (with the message), ready and close, and `onError` says whether the error listener
 // calls Client.end(), as main.ts's downloadStart does.
-// Timers main.ts sets run ten times faster; `readyTimeout` is the scenario's `timeoutMs`.
+// main.ts's retry delay is `retryMs` and its refresh interval `refreshMs`. Without `refreshMs` it
+// never refreshes, because what a refresh falls between depends on the load. `readyTimeout` is the
+// scenario's `timeoutMs`. `remote` and `removeRemote` steps take effect at once, as one rename.
 // Each scenario is one record {scenario, effects}; after a last `await` step nothing later than
 // the effect it waited for is kept. `attempt` is a Client.connect call, `uncaught` an uncaught exception (repeats of the
 // same one in a row are one effect), `saved` the local folder at the end
@@ -38,17 +41,21 @@ import { World, electronFake, fakeFs } from "./world";
 
 declare const __filename: string;
 
-const SETTLE_LIMIT_MS = 30000;
-const TIME_SCALE = 10;
+const SETTLE_LIMIT_MS = 150000;
+const RETRY_MS = 100;
+const NEVER_MS = 0x7fffffff;
 
 type TreeEntry = { path: string; size?: number; dir?: boolean; link?: string; mode?: number };
 type Step = { op: string; [key: string]: any };
+type Link = { client: net.Socket; server: net.Socket; dropped: boolean; stalled: boolean };
 type Scenario = {
   name: string;
   server: any;
   host?: string;
   path?: string;
   timeoutMs?: number;
+  retryMs?: number;
+  refreshMs?: number;
   partial?: boolean;
   level?: "client";
   onError?: "end" | "ignore";
@@ -106,7 +113,8 @@ class Fixture {
   stalled = false;
   private sshd: ChildProcess | null = null;
   private servers: net.Server[] = [];
-  private links: { client: net.Socket; server: net.Socket; dropped: boolean }[] = [];
+  private links: Link[] = [];
+  private renames = 0;
 
   constructor(private spec: Spec, private scenario: Scenario) {
     this.root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "asrs-sshd-")));
@@ -190,6 +198,21 @@ class Fixture {
     if (entry.mode !== undefined) fs.chmodSync(full, entry.mode);
   }
 
+  putAtOnce(entry: TreeEntry): void {
+    const full = path.join(this.root, "remote", entry.path);
+    let top = full;
+    while (!fs.existsSync(path.dirname(top))) top = path.dirname(top);
+    const staged = path.join(this.root, `staged-${this.renames++}`);
+    const file = path.join(staged, path.relative(top, full));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, fileBytes(entry.size!));
+    fs.renameSync(staged, top);
+  }
+
+  removeAtOnce(name: string): void {
+    fs.renameSync(path.join(this.root, "remote", name), path.join(this.root, `removed-${this.renames++}`));
+  }
+
   private async startSshd(server: any): Promise<void> {
     const file = (name: string) => path.join(this.root, name);
     const keygen = (type: string, name: string) => {
@@ -200,12 +223,10 @@ class Fixture {
     keygen(server.hostKey ?? "ed25519", "host");
     this.key = fs.readFileSync(file("user"), "utf8");
     fs.copyFileSync(file("user.pub"), file("authorized"));
-    const reserve = net.createServer();
-    const sshdPort = await listen(reserve);
-    await new Promise((resolve) => reserve.close(resolve));
-    const subsystem = server.subsystem === undefined ? sftpServer() : server.subsystem;
+    // It logs a read that failed to syslog, which blocks while the system's logger is stalled.
+    const sftp = `${sftpServer()} -l QUIET`;
+    const subsystem = server.subsystem === undefined ? sftp : server.subsystem;
     const base = [
-      `Port ${sshdPort}`,
       "ListenAddress 127.0.0.1",
       `HostKey ${file("host")}`,
       "PidFile none",
@@ -214,7 +235,7 @@ class Fixture {
       "UsePAM no",
       "PasswordAuthentication yes",
       "KbdInteractiveAuthentication no",
-      ...(subsystem === null ? [] : [`Subsystem sftp ${String(subsystem).replace("SFTP_SERVER", sftpServer())}`]),
+      ...(subsystem === null ? [] : [`Subsystem sftp ${String(subsystem).replace("SFTP_SERVER", sftp)}`]),
       ...(server.options ?? [])
     ];
     const config = file("sshd_config");
@@ -222,14 +243,14 @@ class Fixture {
     if (spawnSync(sshdPath(), ["-t", "-f", config]).status !== 0) fs.writeFileSync(config, base.join("\n") + "\n");
     const check = spawnSync(sshdPath(), ["-t", "-f", config]);
     if (check.status !== 0) throw new Error(`sshd -t: ${check.stderr}`);
-    this.sshd = spawn(sshdPath(), ["-D", "-e", "-f", config], { stdio: ["ignore", "ignore", fs.openSync(file("sshd.log"), "w")] });
-    for (let i = 0; !(await reachable(sshdPort)); i++) {
-      if (i > 200) throw new Error("sshd did not start: " + fs.readFileSync(file("sshd.log"), "utf8"));
-      await sleep(25);
+    let sshdPort = 0;
+    for (let i = 0; this.sshd === null; i++) {
+      if (i === 20) throw new Error("sshd did not start: " + fs.readFileSync(file("sshd.log"), "utf8"));
+      sshdPort = await this.spawnSshd(config);
     }
     const proxy = net.createServer({ allowHalfOpen: true }, (client) => {
       if (this.stalled) return;
-      const link = { client, server: net.connect({ port: sshdPort, host: "127.0.0.1", allowHalfOpen: true }), dropped: false };
+      const link = { client, server: net.connect({ port: sshdPort, host: "127.0.0.1", allowHalfOpen: true }), dropped: false, stalled: false };
       this.links.push(link);
       client.on("error", () => link.server.destroy());
       link.server.on("error", () => client.destroy());
@@ -238,7 +259,7 @@ class Fixture {
       let sent = 0;
       const limit: number = server.drop?.bytes ?? Infinity;
       link.server.on("data", (data) => {
-        if (link.dropped || this.stalled) return;
+        if (link.dropped || link.stalled || this.stalled) return;
         const left = limit - sent;
         sent += data.length;
         client.write(data.subarray(0, Math.max(0, Math.min(left, data.length))));
@@ -250,8 +271,29 @@ class Fixture {
     this.port = await listen(proxy);
   }
 
-  private drop(link: { client: net.Socket; server: net.Socket; dropped: boolean }, how: string): void {
+  /** Another process may take the port before sshd does. */
+  private async spawnSshd(config: string): Promise<number> {
+    const log = path.join(this.root, "sshd.log");
+    const reserve = net.createServer();
+    const port = await listen(reserve);
+    await new Promise((resolve) => reserve.close(resolve));
+    const sshd = spawn(sshdPath(), ["-D", "-e", "-f", config, "-p", String(port)], { stdio: ["ignore", "ignore", fs.openSync(log, "w")] });
+    while (sshd.exitCode === null && sshd.signalCode === null) {
+      if (fs.readFileSync(log, "utf8").includes(`Server listening on 127.0.0.1 port ${port}.`)) {
+        this.sshd = sshd;
+        break;
+      }
+      await sleep(5);
+    }
+    return port;
+  }
+
+  private drop(link: Link, how: string): void {
     if (link.dropped) return;
+    if (how === "stall") {
+      link.stalled = true;
+      return;
+    }
     link.dropped = true;
     link.server.destroy();
     if (how === "rst") link.client.resetAndDestroy();
@@ -300,11 +342,6 @@ class Fixture {
 
 const listen = (server: net.Server): Promise<number> =>
   new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as net.AddressInfo).port)));
-const reachable = (port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const socket = net.connect(port, "127.0.0.1");
-    socket.on("data", () => (socket.destroy(), resolve(true))).on("error", () => resolve(false));
-  });
 const firstExisting = (candidates: string[]): string => {
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (found === undefined) throw new Error(`none of ${candidates.join(", ")} exists`);
@@ -364,12 +401,12 @@ export async function runLiveOne(name: string): Promise<void> {
         return super.connect({
           ...config,
           port: fixture.port,
-          readyTimeout: scenario.timeoutMs ?? 15000,
+          readyTimeout: scenario.timeoutMs ?? 60000,
           ...(login ? { username: os.userInfo().username, password: undefined, privateKey: fixture.key } : {})
         });
       }
     }
-    const scale = (ms: number) => (ms === 1000 || ms === 5000 ? ms / TIME_SCALE : ms);
+    const delay = (ms: number) => (ms === 1000 ? scenario.retryMs ?? RETRY_MS : ms === 5000 ? scenario.refreshMs ?? NEVER_MS : ms);
     const realFs = (call: string) => (name: any, ...args: any[]) =>
       (String(name).startsWith(fixture.root) ? (fs as any) : (fakeFs as any))[call](name, ...args);
     const localFs = { existsSync: realFs("existsSync"), statSync: realFs("statSync"), mkdirSync: realFs("mkdirSync") };
@@ -377,9 +414,9 @@ export async function runLiveOne(name: string): Promise<void> {
       electron: electronFake,
       fs: { ...fakeFs, default: { ...(fakeFs as any).default, ...localFs }, ...localFs },
       ssh2: { ...ssh2, Client },
-      setTimeout: (callback: () => void, ms: number) => setTimeout(callback, scale(ms)),
+      setTimeout: (callback: () => void, ms: number) => setTimeout(callback, delay(ms)),
       clearTimeout: (id: any) => clearTimeout(id),
-      setInterval: (callback: () => void, ms: number) => setInterval(callback, scale(ms)),
+      setInterval: (callback: () => void, ms: number) => setInterval(callback, delay(ms)),
       clearInterval: (id: any) => clearInterval(id)
     };
     world = new World(await buildMain("posix"));
@@ -438,10 +475,10 @@ export async function runLiveOne(name: string): Promise<void> {
           fixture.dropAll(step.how);
           break;
         case "remote":
-          fixture.put(step as any);
+          fixture.putAtOnce(step as any);
           break;
         case "removeRemote":
-          fs.rmSync(path.join(fixture.root, "remote", step.path), { recursive: true });
+          fixture.removeAtOnce(step.path);
           break;
         case "local":
           fs.writeFileSync(path.join(fixture.root, "local", step.path), fileBytes(step.size));
@@ -488,7 +525,7 @@ async function runClient(scenario: Scenario, fixture: Fixture, ssh2: any, push: 
           host: scenario.host ?? "127.0.0.1",
           port: fixture.port,
           forceIPv4: true,
-          readyTimeout: scenario.timeoutMs ?? 15000,
+          readyTimeout: scenario.timeoutMs ?? 60000,
           username: login ? os.userInfo().username : "systemcore",
           ...(login ? { privateKey: fixture.key } : { password: "systemcore" })
         });

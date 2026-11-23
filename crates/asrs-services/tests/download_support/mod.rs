@@ -3,12 +3,12 @@
 
 use std::fs;
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream as StdStream};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use asrs_parity::Json;
 use asrs_parity::vectors::workspace_root;
@@ -16,6 +16,7 @@ use russh::keys::{Algorithm, PrivateKey, key::safe_rng};
 use russh::server::{self, Auth, ChannelOpenHandle, Msg, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet};
 use sha2::{Digest, Sha256};
+use socket2::{Domain, Socket, Type};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
@@ -116,6 +117,7 @@ pub struct Fixture {
     pub key: String,
     pub on_auth: OnAuth,
     partial: bool,
+    renames: AtomicU32,
     sshd: Option<Child>,
     drops: watch::Sender<Option<&'static str>>,
     runtime: Option<Runtime>,
@@ -154,6 +156,7 @@ impl Fixture {
             key: String::new(),
             on_auth: OnAuth::default(),
             partial: matches!(scenario.get("partial"), Some(Json::Bool(true))),
+            renames: AtomicU32::new(0),
             sshd: None,
             drops: watch::channel(None).0,
             runtime: None,
@@ -162,13 +165,12 @@ impl Fixture {
         match text(server, "kind").as_str() {
             "closed" => {
                 let ipv6 = optional_text(scenario, "host").is_some_and(|host| host == "::1");
-                let listener = if ipv6 {
-                    std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0))
-                        .map_err(|e| format!("no IPv6 loopback: {e}"))?
+                let ip = if ipv6 {
+                    IpAddr::V6(Ipv6Addr::LOCALHOST)
                 } else {
-                    std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind")
+                    IpAddr::V4(Ipv4Addr::LOCALHOST)
                 };
-                fixture.port = listener.local_addr().expect("address").port();
+                fixture.port = closed_port(ip).map_err(|e| format!("no loopback: {e}"))?;
             }
             "unroutable" if !cfg!(target_os = "macos") => {
                 return Err("recorded with macOS's error code".to_owned());
@@ -256,7 +258,8 @@ impl Fixture {
     }
 
     fn start_sshd(&mut self, server: &Json, tools: &Tools) -> Result<u16, String> {
-        let file = |name: &str| self.root.join(name);
+        let root = self.root.clone();
+        let file = |name: &str| root.join(name);
         let keygen = |kind: &str, name: &str| {
             let status = Command::new("ssh-keygen")
                 .args(["-q", "-t", kind, "-N", "", "-C", "asrs-fixture", "-f"])
@@ -272,18 +275,14 @@ impl Fixture {
         );
         self.key = fs::read_to_string(file("user")).expect("user key");
         fs::copy(file("user.pub"), file("authorized")).expect("authorized key");
-        let port = {
-            let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
-            listener.local_addr().expect("address").port()
-        };
-        let sftp_server = tools.sftp_server.display().to_string();
+        // It logs a read that failed to syslog, which blocks while the system's logger is stalled.
+        let sftp_server = format!("{} -l QUIET", tools.sftp_server.display());
         let subsystem = match server.get("subsystem") {
             None => Some(sftp_server.clone()),
             Some(Json::Null) => None,
             Some(_) => Some(text(server, "subsystem").replace("SFTP_SERVER", &sftp_server)),
         };
         let mut lines = vec![
-            format!("Port {port}"),
             "ListenAddress 127.0.0.1".to_owned(),
             format!("HostKey {}", file("host").display()),
             "PidFile none".to_owned(),
@@ -316,26 +315,38 @@ impl Fixture {
         let mut penalties = lines.clone();
         penalties.push("PerSourcePenalties no".to_owned());
         check(&penalties).or_else(|_| check(&lines))?;
-        let log = fs::File::create(file("sshd.log")).expect("sshd.log");
-        let child = Command::new(&tools.sshd)
+        let port = (0..20).find_map(|_| self.spawn_sshd(&config, tools));
+        Ok(port.unwrap_or_else(|| {
+            let log = fs::read_to_string(file("sshd.log")).unwrap_or_default();
+            panic!("sshd did not start: {log}")
+        }))
+    }
+
+    /// `None` if sshd exited: another process may take the port before sshd does.
+    fn spawn_sshd(&mut self, config: &Path, tools: &Tools) -> Option<u16> {
+        let port = {
+            let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+            listener.local_addr().expect("address").port()
+        };
+        let log = self.root.join("sshd.log");
+        let mut sshd = Command::new(&tools.sshd)
             .args(["-D", "-e", "-f"])
-            .arg(&config)
+            .arg(config)
+            .args(["-p", &port.to_string()])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(log)
+            .stderr(fs::File::create(&log).expect("sshd.log"))
             .spawn()
             .expect("sshd");
-        self.sshd = Some(child);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while !answers(port) {
-            assert!(
-                Instant::now() < deadline,
-                "sshd did not start: {}",
-                fs::read_to_string(file("sshd.log")).unwrap_or_default()
-            );
-            std::thread::sleep(Duration::from_millis(25));
+        let listening = format!("Server listening on 127.0.0.1 port {port}.");
+        while sshd.try_wait().expect("sshd").is_none() {
+            if fs::read_to_string(&log).is_ok_and(|log| log.contains(&listening)) {
+                self.sshd = Some(sshd);
+                return Some(port);
+            }
+            std::thread::sleep(Duration::from_millis(5));
         }
-        Ok(port)
+        None
     }
 
     pub fn remote(&self, path: &str) -> String {
@@ -365,14 +376,32 @@ impl Fixture {
         }
     }
 
-    pub fn remove_remote(&self, path: &str) {
+    pub fn put_at_once(&self, entry: &Json) {
+        let full = self.root.join("remote").join(text(entry, "path"));
+        let top = full
+            .ancestors()
+            .take_while(|path| !path.exists())
+            .last()
+            .expect("a new path");
+        let staged = self.unused("staged");
+        let file = match full.strip_prefix(top).expect("an ancestor") {
+            rest if rest.as_os_str().is_empty() => staged.clone(),
+            rest => staged.join(rest),
+        };
+        let size = number(entry, "size").expect("size") as usize;
+        fs::create_dir_all(file.parent().expect("parent")).expect("staged folder");
+        fs::write(&file, file_bytes(size)).expect("staged file");
+        fs::rename(&staged, top).expect("remote path");
+    }
+
+    pub fn remove_at_once(&self, path: &str) {
         let full = self.root.join("remote").join(path);
-        if full.is_dir() {
-            unlock(&full);
-            fs::remove_dir_all(&full).expect("remove remote folder");
-        } else {
-            fs::remove_file(&full).expect("remove remote file");
-        }
+        fs::rename(full, self.unused("removed")).expect("remove remote path");
+    }
+
+    fn unused(&self, kind: &str) -> PathBuf {
+        let n = self.renames.fetch_add(1, Ordering::SeqCst);
+        self.root.join(format!("{kind}-{n}"))
     }
 
     pub fn put_local(&self, path: &str, size: usize) {
@@ -562,19 +591,49 @@ fn unlock(dir: &Path) {
     }
 }
 
-fn answers(port: u16) -> bool {
-    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    StdStream::connect_timeout(&address, Duration::from_secs(1)).is_ok()
+/// A port nothing listens on, below the ephemeral ports so that no other fixture is handed it.
+fn closed_port(ip: IpAddr) -> io::Result<u16> {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    std::net::TcpListener::bind((ip, 0))?;
+    let ports = 20000u16..30000;
+    loop {
+        let n = NEXT.fetch_add(1, Ordering::SeqCst);
+        let n = std::process::id().wrapping_mul(64).wrapping_add(n);
+        let port = ports.start + (n % ports.len() as u32) as u16;
+        if std::net::TcpListener::bind((ip, port)).is_ok() {
+            return Ok(port);
+        }
+    }
 }
 
-/// Whether the TEST-NET address of a blackhole scenario really never answers here.
-pub fn blackhole_works(host: &str) -> bool {
-    let address = format!("{host}:22").parse().expect("an address");
-    matches!(
-        StdStream::connect_timeout(&address, Duration::from_millis(500)),
-        Err(e) if e.kind() == io::ErrorKind::TimedOut
-    )
+/// A connection to the TEST-NET address of a blackhole scenario, which must never be answered.
+pub struct Blackhole(io::Result<Socket>);
+
+impl Blackhole {
+    pub fn open(host: &str) -> Blackhole {
+        let address: SocketAddr = format!("{host}:22").parse().expect("an address");
+        Blackhole(
+            Socket::new(Domain::IPV4, Type::STREAM, None).and_then(|socket| {
+                socket.set_nonblocking(true)?;
+                match socket.connect(&address.into()) {
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(e) if cfg!(unix) && e.raw_os_error() == Some(EINPROGRESS) => {}
+                    Err(e) => return Err(e),
+                    Ok(()) => {}
+                }
+                Ok(socket)
+            }),
+        )
+    }
+
+    pub fn answered(&self) -> bool {
+        !self.0.as_ref().is_ok_and(|socket| {
+            matches!(socket.take_error(), Ok(None)) && socket.peer_addr().is_err()
+        })
+    }
 }
+
+const EINPROGRESS: i32 = if cfg!(target_os = "macos") { 36 } else { 115 };
 
 fn reset(socket: TcpStream) {
     socket.set_zero_linger().expect("linger");
@@ -651,12 +710,15 @@ async fn proxy(
                 Ok(n) => if server.write_all(&from_client[..n]).await.is_err() { return },
                 Err(_) => return,
             },
-            result = server.read(&mut from_server), if server_open && !stalled => match result {
+            result = server.read(&mut from_server), if server_open => match result {
                 Ok(0) | Err(_) => {
                     server_open = false;
                     let _ = client.shutdown().await;
                 }
                 Ok(n) => {
+                    if stalled {
+                        continue;
+                    }
                     let left = rule.as_ref().map_or(usize::MAX, |rule| rule.bytes - sent);
                     if client.write_all(&from_server[..n.min(left)]).await.is_err() {
                         return;
@@ -664,7 +726,10 @@ async fn proxy(
                     if let Some(rule) = &rule {
                         sent += n.min(left);
                         if sent >= rule.bytes {
-                            break rule.how;
+                            if rule.how != "stall" {
+                                break rule.how;
+                            }
+                            stalled = true;
                         }
                     }
                 }

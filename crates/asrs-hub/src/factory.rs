@@ -33,6 +33,7 @@ use asrs_tabs::swerve::SwerveController;
 use asrs_tabs::swerve_renderer::{SwerveDom, SwerveRenderer};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
+use asrs_tabs::video_renderer::VideoRenderer;
 
 use crate::tabs::{TabFactory, TabParts, TabsHost};
 
@@ -182,7 +183,7 @@ fn renderer<Cx: HubTabCx + 'static>(
             }
             None => pending(TabType::Statistics),
         },
-        Some(TabType::Video) => pending(TabType::Video),
+        Some(TabType::Video) => Box::new(VideoRenderer::new(Rc::default())),
         Some(TabType::Joysticks) => cx.view_renderer(TabType::Joysticks).unwrap_or_else(|| {
             Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
                 JoysticksDom::default(),
