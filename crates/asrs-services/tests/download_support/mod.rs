@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream as StdStream};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -283,7 +283,8 @@ impl Fixture {
         );
         self.key = fs::read_to_string(file("user")).expect("user key");
         fs::copy(file("user.pub"), file("authorized")).expect("authorized key");
-        let sftp_server = tools.sftp_server.display().to_string();
+        // It logs a read that failed to syslog, which blocks while the system's logger is stalled.
+        let sftp_server = format!("{} -l QUIET", tools.sftp_server.display());
         let subsystem = match server.get("subsystem") {
             None => Some(sftp_server.clone()),
             Some(Json::Null) => None,
@@ -598,14 +599,34 @@ fn unlock(dir: &Path) {
     }
 }
 
-/// Whether the TEST-NET address of a blackhole scenario really never answers here.
-pub fn blackhole_works(host: &str) -> bool {
-    let address = format!("{host}:22").parse().expect("an address");
-    matches!(
-        StdStream::connect_timeout(&address, Duration::from_millis(500)),
-        Err(e) if e.kind() == io::ErrorKind::TimedOut
-    )
+/// A connection to the TEST-NET address of a blackhole scenario, which must never be answered.
+pub struct Blackhole(io::Result<Socket>);
+
+impl Blackhole {
+    pub fn open(host: &str) -> Blackhole {
+        let address: SocketAddr = format!("{host}:22").parse().expect("an address");
+        Blackhole(
+            Socket::new(Domain::IPV4, Type::STREAM, None).and_then(|socket| {
+                socket.set_nonblocking(true)?;
+                match socket.connect(&address.into()) {
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(e) if cfg!(unix) && e.raw_os_error() == Some(EINPROGRESS) => {}
+                    Err(e) => return Err(e),
+                    Ok(()) => {}
+                }
+                Ok(socket)
+            }),
+        )
+    }
+
+    pub fn answered(&self) -> bool {
+        !self.0.as_ref().is_ok_and(|socket| {
+            matches!(socket.take_error(), Ok(None)) && socket.peer_addr().is_err()
+        })
+    }
 }
+
+const EINPROGRESS: i32 = if cfg!(target_os = "macos") { 36 } else { 115 };
 
 fn reset(socket: TcpStream) {
     socket.set_zero_linger().expect("linger");

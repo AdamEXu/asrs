@@ -22,7 +22,7 @@ use asrs_services::download::downloader::{
 use asrs_services::download::{DownloadConfig, DownloadEvent, DownloadEvents, DownloadService};
 use asrs_services::path::PathStyle;
 use download_support::{
-    Fixture, Tools, array, blackhole_works, number, optional_text, scenarios, text, tools,
+    Blackhole, Fixture, Tools, array, number, optional_text, scenarios, text, tools,
 };
 
 const VECTOR: &str = "files/download-live/macos-aarch64";
@@ -30,6 +30,7 @@ const LIMIT: Duration = Duration::from_secs(60);
 const RETRY_MS: f64 = 100.0;
 const NEVER_MS: f64 = 2147483647.0;
 const DEFAULT_TIMEOUT_MS: f64 = 30000.0;
+const BLACKHOLE_CHECK: Duration = Duration::from_millis(500);
 const WORKERS: usize = 4;
 
 fn kind(scenario: &Json) -> String {
@@ -520,12 +521,18 @@ fn run_all(wanted: impl Fn(&Json) -> bool, tools: Option<Tools>, skippable: &[&s
             scope.spawn(|| {
                 while let Some(scenario) = selected.get(next.fetch_add(1, Ordering::SeqCst)) {
                     let name = text(scenario, "name");
-                    if kind(scenario) == "blackhole" && !blackhole_works(&host(scenario)) {
-                        let reason = "the network answers for TEST-NET";
-                        skipped
-                            .lock()
-                            .expect("skipped")
-                            .push((name, reason.to_owned()));
+                    let blackhole = (kind(scenario) == "blackhole").then(|| {
+                        let blackhole = Blackhole::open(&host(scenario));
+                        thread::sleep(BLACKHOLE_CHECK);
+                        blackhole
+                    });
+                    let answered = || blackhole.as_ref().is_some_and(Blackhole::answered);
+                    let skip_answered = |name: String| {
+                        let reason = "the network answers for TEST-NET".to_owned();
+                        skipped.lock().expect("skipped").push((name, reason));
+                    };
+                    if answered() {
+                        skip_answered(name);
                         continue;
                     }
                     let fixture = match Fixture::start(&spec, scenario, tools.as_ref()) {
@@ -540,6 +547,10 @@ fn run_all(wanted: impl Fn(&Json) -> bool, tools: Option<Tools>, skippable: &[&s
                     } else {
                         run_main(scenario, &fixture, tools.as_ref())
                     };
+                    if answered() {
+                        skip_answered(name);
+                        continue;
+                    }
                     let expected = &recorded[&name];
                     if expected.to_compact() != Json::Array(actual.clone()).to_compact() {
                         failures.lock().expect("failures").push(format!(

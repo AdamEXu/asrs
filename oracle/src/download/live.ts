@@ -223,7 +223,9 @@ class Fixture {
     keygen(server.hostKey ?? "ed25519", "host");
     this.key = fs.readFileSync(file("user"), "utf8");
     fs.copyFileSync(file("user.pub"), file("authorized"));
-    const subsystem = server.subsystem === undefined ? sftpServer() : server.subsystem;
+    // It logs a read that failed to syslog, which blocks while the system's logger is stalled.
+    const sftp = `${sftpServer()} -l QUIET`;
+    const subsystem = server.subsystem === undefined ? sftp : server.subsystem;
     const base = [
       "ListenAddress 127.0.0.1",
       `HostKey ${file("host")}`,
@@ -233,7 +235,7 @@ class Fixture {
       "UsePAM no",
       "PasswordAuthentication yes",
       "KbdInteractiveAuthentication no",
-      ...(subsystem === null ? [] : [`Subsystem sftp ${String(subsystem).replace("SFTP_SERVER", sftpServer())}`]),
+      ...(subsystem === null ? [] : [`Subsystem sftp ${String(subsystem).replace("SFTP_SERVER", sftp)}`]),
       ...(server.options ?? [])
     ];
     const config = file("sshd_config");
