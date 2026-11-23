@@ -1,9 +1,7 @@
-//! A drop-down `<select>` as Chromium 142 draws and drives it on macOS. Closed, it is the native
-//! theme's menu list (`NativeThemeBase::PaintMenuList`: the text-field frame and a stroked
-//! chevron) with the selected option's label in Blink's inner element. Open, it is the native
-//! popup `WebMenuRunner` shows ([`platform::select_popup`]). Keys follow `LayoutThemeMac`:
-//! up, down and F4 open the popup, space opens it outside a type-ahead session, printable
-//! characters search by prefix, and nothing else changes the selection.
+//! A drop-down `<select>` as Chromium 142 draws and drives it. Closed, it is the native theme's
+//! menu list (`NativeThemeBase::PaintMenuList`: the text-field frame and a stroked chevron) with
+//! the selected option's label in Blink's inner element. Open, it is the popup of
+//! [`platform::select_popup`]. Keys follow the platform's `LayoutTheme` ([`SelectKeys`]).
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -52,7 +50,40 @@ pub trait SelectModel: 'static {
     fn type_ahead_active(&self, time: f64) -> bool;
     /// The type-ahead session ends when the select loses focus.
     fn end_type_ahead(&mut self);
+    /// The option an arrow or paging key selects in a closed select: true when the selection
+    /// changed.
+    fn step(&mut self, step: SelectStep) -> bool;
 }
+
+/// `NextValidOption(list_index, direction, skip)`, `FirstSelectableOption` and
+/// `LastSelectableOption`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectStep {
+    Forward(usize),
+    Back(usize),
+    First,
+    Last,
+}
+
+/// Which keys open a closed select's popup and which change its selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectKeys {
+    /// `LayoutThemeMac`: `PopsMenuByArrowKeys`, so nothing but type-ahead changes the selection.
+    Mac,
+    /// `LayoutThemeDefault`: `PopsMenuByAltDownUpOrF4Key` and `PopsMenuByReturnKey`.
+    Default,
+}
+
+impl SelectKeys {
+    pub const HOST: SelectKeys = if cfg!(target_os = "macos") {
+        SelectKeys::Mac
+    } else {
+        SelectKeys::Default
+    };
+}
+
+/// `SkipForwards` by the page keys.
+const PAGE_STEP: usize = 3;
 
 /// The DOM events a select dispatches that upstream can listen for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,19 +98,38 @@ pub enum SelectEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SelectKey {
     OpenPopup,
+    Step(SelectStep),
     TypeAhead(u16),
     Ignore,
 }
 
-/// `MenuListSelectType::DefaultEventHandler` and `HTMLSelectElement::DefaultEventHandler` under
-/// `LayoutThemeMac` (`PopsMenuByArrowKeys`, not `PopsMenuByReturnKey`): the keydown checks,
-/// then the keypress of the key's character.
-pub fn select_key(keystroke: &Keystroke, type_ahead_active: bool) -> SelectKey {
+/// `MenuListSelectType::DefaultEventHandler` and `HTMLSelectElement::DefaultEventHandler`: the
+/// keydown checks, then the keypress of the key's character.
+pub fn select_key(keys: SelectKeys, keystroke: &Keystroke, type_ahead_active: bool) -> SelectKey {
     let m = keystroke.modifiers;
-    match keystroke.key.as_str() {
-        "up" | "down" => return SelectKey::OpenPopup,
-        "f4" if !m.alt && !m.control => return SelectKey::OpenPopup,
+    let key = keystroke.key.as_str();
+    match (keys, key) {
+        (SelectKeys::Mac, "up" | "down") => return SelectKey::OpenPopup,
+        (SelectKeys::Default, "up" | "down") if m.alt => return SelectKey::OpenPopup,
+        (_, "f4") if !m.alt && !m.control => return SelectKey::OpenPopup,
+        (SelectKeys::Default, _) if !(m.shift || m.control || m.alt || m.platform) => {
+            let step = match key {
+                "down" | "right" => Some(SelectStep::Forward(1)),
+                "up" | "left" => Some(SelectStep::Back(1)),
+                "pagedown" => Some(SelectStep::Forward(PAGE_STEP)),
+                "pageup" => Some(SelectStep::Back(PAGE_STEP)),
+                "home" => Some(SelectStep::First),
+                "end" => Some(SelectStep::Last),
+                _ => None,
+            };
+            if let Some(step) = step {
+                return SelectKey::Step(step);
+            }
+        }
         _ => {}
+    }
+    if keys == SelectKeys::Default && key == "enter" {
+        return SelectKey::OpenPopup;
     }
     let Some(ch) = keystroke.key_char.as_deref() else {
         return SelectKey::Ignore;
@@ -401,6 +451,7 @@ pub struct Select<M: SelectModel> {
     disabled: bool,
     hovered: bool,
     popup_open: bool,
+    keys: SelectKeys,
     focus: FocusHandle,
     bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     epoch: Instant,
@@ -419,8 +470,11 @@ impl<M: SelectModel> Select<M> {
         let focus = cx.focus_handle();
         cx.on_focus(&focus, window, |_, _, cx| cx.emit(SelectEvent::Focus))
             .detach();
-        cx.on_blur(&focus, window, |this, _, cx| {
+        cx.on_blur(&focus, window, |this, window, cx| {
             this.model.end_type_ahead();
+            if this.popup_open {
+                platform::close_popup_menu(window);
+            }
             cx.emit(SelectEvent::Blur);
         })
         .detach();
@@ -431,10 +485,16 @@ impl<M: SelectModel> Select<M> {
             disabled: false,
             hovered: false,
             popup_open: false,
+            keys: SelectKeys::HOST,
             focus,
             bounds: Rc::default(),
             epoch: Instant::now(),
         }
+    }
+
+    /// The key rules of another platform, for replaying its records.
+    pub fn set_keys(&mut self, keys: SelectKeys) {
+        self.keys = keys;
     }
 
     pub fn model(&self) -> &M {
@@ -499,7 +559,13 @@ impl<M: SelectModel> Select<M> {
         if self.disabled {
             return false;
         }
-        match select_key(keystroke, self.model.type_ahead_active(time)) {
+        match select_key(self.keys, keystroke, self.model.type_ahead_active(time)) {
+            SelectKey::Step(step) => {
+                if self.model.step(step) {
+                    self.changed(cx);
+                }
+                true
+            }
             SelectKey::OpenPopup => {
                 self.open_popup(window, cx);
                 true
@@ -707,9 +773,61 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                select_key(&stroke, active),
+                select_key(SelectKeys::Mac, &stroke, active),
                 want,
                 "{stroke:?} active {active}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_keys() {
+        let none = Modifiers::default();
+        let alt = with(|m| m.alt = true);
+        let ctrl = with(|m| m.control = true);
+        let open = SelectKey::OpenPopup;
+        for (stroke, want) in [
+            (
+                key("down", None, none),
+                SelectKey::Step(SelectStep::Forward(1)),
+            ),
+            (
+                key("right", None, none),
+                SelectKey::Step(SelectStep::Forward(1)),
+            ),
+            (key("up", None, none), SelectKey::Step(SelectStep::Back(1))),
+            (
+                key("left", None, none),
+                SelectKey::Step(SelectStep::Back(1)),
+            ),
+            (
+                key("pagedown", None, none),
+                SelectKey::Step(SelectStep::Forward(3)),
+            ),
+            (
+                key("pageup", None, none),
+                SelectKey::Step(SelectStep::Back(3)),
+            ),
+            (key("home", None, none), SelectKey::Step(SelectStep::First)),
+            (key("end", None, none), SelectKey::Step(SelectStep::Last)),
+            (key("down", None, alt), open),
+            (key("up", None, alt), open),
+            (key("f4", None, none), open),
+            (key("f4", None, alt), SelectKey::Ignore),
+            (key("f4", None, ctrl), SelectKey::Ignore),
+            (key("enter", Some("\r"), none), open),
+            (key("enter", Some("\r"), ctrl), open),
+            (key("down", None, ctrl), SelectKey::Ignore),
+            (key("end", None, alt), SelectKey::Ignore),
+            (key("right", None, alt), SelectKey::Ignore),
+            (key("space", Some(" "), none), open),
+            (key("a", Some("a"), none), SelectKey::TypeAhead(0x61)),
+            (key("escape", None, none), SelectKey::Ignore),
+        ] {
+            assert_eq!(
+                select_key(SelectKeys::Default, &stroke, false),
+                want,
+                "{stroke:?}"
             );
         }
     }

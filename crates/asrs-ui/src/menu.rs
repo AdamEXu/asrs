@@ -5,6 +5,7 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use gpui_kit::popup::{PopupAnchor, PopupConstraintAdjustment, PopupGravity, PopupOptions};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -36,6 +37,7 @@ pub type CloseHandler = Rc<dyn Fn(Option<MenuPath>, &mut Window, &mut App)>;
 /// How far the pointer moves over a menu before a button release chooses an entry: the release
 /// of the press that opened the menu chooses nothing.
 const ARM_DISTANCE: f32 = 4.0;
+const TYPE_AHEAD_TIMEOUT: Duration = Duration::from_secs(1);
 /// How far a submenu overlaps its parent.
 const SUBMENU_OVERLAP: f32 = 2.0;
 
@@ -174,7 +176,10 @@ pub struct MenuView {
     on_close: CloseHandler,
     own_window: Option<AnyWindowHandle>,
     list: Option<ListStyle>,
+    /// The entry keys chose in a select list, which closing it keeps.
+    provisional: Option<usize>,
     typed: String,
+    typed_at: Option<Instant>,
     /// Where a `PopUp` window was put, on screen.
     screen: Option<Bounds<Pixels>>,
     armed: bool,
@@ -202,7 +207,9 @@ impl MenuView {
             on_close,
             own_window: None,
             list: None,
+            provisional: None,
             typed: String::new(),
+            typed_at: None,
             screen: None,
             armed: host == Host::InWindow,
             first_move: None,
@@ -523,7 +530,8 @@ impl MenuView {
     }
 
     fn dismiss(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.finish(None, window, cx);
+        let path = self.provisional.map(|index| vec![index]);
+        self.finish(path, window, cx);
     }
 
     fn open_submenu(
@@ -636,6 +644,7 @@ impl MenuView {
 
     fn highlight(&mut self, index: usize, cx: &mut Context<'_, Self>) {
         self.highlighted = Some(index);
+        self.provisional = self.list.as_ref().map(|_| index);
         let row = self.row_bounds(index);
         let height = self.bounds.get().size.height;
         let offset = self.scroll.offset();
@@ -683,19 +692,37 @@ impl MenuView {
         }
     }
 
-    /// A character typed over a select list looks for the next entry that starts with it.
+    fn typing(&self) -> bool {
+        self.typed_at
+            .is_some_and(|at| at.elapsed() <= TYPE_AHEAD_TIMEOUT)
+    }
+
+    /// Typing over a select list looks for the next entry that starts with the typed characters,
+    /// or cycles through those that start with one repeated character.
     fn find_typed(&mut self, typed: &str, cx: &mut Context<'_, Self>) {
-        self.typed = typed.to_lowercase();
+        if !self.typing() {
+            self.typed.clear();
+        }
+        self.typed_at = Some(Instant::now());
+        self.typed.push_str(&typed.to_lowercase());
+        let mut chars = self.typed.chars();
+        let repeated = chars
+            .next()
+            .filter(|first| chars.all(|c| c == *first))
+            .map(String::from);
         let candidates = self.candidates();
-        let after = self
+        let start = self
             .highlighted
             .and_then(|h| candidates.iter().position(|&c| c == h))
-            .map_or(0, |p| p + 1);
+            .map_or(0, |p| p + usize::from(repeated.is_some()));
+        let prefix = repeated.unwrap_or_else(|| self.typed.clone());
         let found = (0..candidates.len())
-            .map(|i| candidates[(after + i) % candidates.len()])
+            .map(|i| candidates[(start + i) % candidates.len()])
             .find(|&index| {
-                self.entry(index)
-                    .is_some_and(|e| e.label.trim_start().to_lowercase().starts_with(&self.typed))
+                let label = self
+                    .entry(index)
+                    .map(|e| e.label.trim_start().to_lowercase());
+                label.is_some_and(|label| label.starts_with(&prefix))
             });
         if let Some(index) = found {
             self.highlight(index, cx);
@@ -705,12 +732,14 @@ impl MenuView {
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
         let list = self.list.is_some();
         let alt = event.keystroke.modifiers.alt;
-        match event.keystroke.key.as_str() {
+        let key = event.keystroke.key.as_str();
+        match key {
             "down" | "up" if list && alt => self.dismiss(window, cx),
             "down" => self.step(true, cx),
             "up" => self.step(false, cx),
             "home" | "pageup" => self.step_to_end(false, cx),
             "end" | "pagedown" => self.step_to_end(true, cx),
+            "space" if list && self.typing() => self.find_typed(" ", cx),
             "enter" | "space" => {
                 if let Some(index) = self.highlighted {
                     self.activate(index, window, cx);
@@ -726,11 +755,7 @@ impl MenuView {
                 }
             }
             "left" if !self.prefix.is_empty() => self.finish(None, window, cx),
-            "escape" => self.finish(None, window, cx),
-            "tab" if list => match self.highlighted {
-                Some(index) => self.activate(index, window, cx),
-                None => self.dismiss(window, cx),
-            },
+            "escape" | "tab" => self.dismiss(window, cx),
             _ => {
                 if list && let Some(typed) = event.keystroke.key_char.as_deref() {
                     self.find_typed(typed, cx);

@@ -571,6 +571,7 @@ dependencies = [
  "simplecss",
  "svgtypes 0.16.2",
  "tiny-skia",
+ "x11rb",
 ]
 
 [[package]]
