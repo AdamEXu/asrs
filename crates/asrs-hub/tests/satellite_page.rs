@@ -44,7 +44,7 @@ impl HubView for Window {
         0.0
     }
 
-    fn table_box(&self) -> Option<(Rect, f64)> {
+    fn large_table_box(&self) -> Option<(Rect, f64)> {
         let (width, height) = self.size.get();
         let rect = Rect {
             x: 0.0,

@@ -372,7 +372,7 @@ impl SatelliteModel {
         let Some(command) = self.last_command.clone() else {
             return Ok(None);
         };
-        self.hub.lay_out_table();
+        self.hub.lay_out_large_table();
         let (tabs, page) = self.hub.tabs_mut();
         let Some(tab) = tabs.tab_mut(0) else {
             return Ok(None);

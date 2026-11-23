@@ -142,9 +142,10 @@ fn controller<Cx: HubTabCx + 'static>(
 fn renderer<Cx: HubTabCx + 'static>(
     cx: &mut Cx,
     tab_type: Option<TabType>,
-    has_controller: bool,
+    controller: Option<&mut dyn TabController<Cx>>,
     dom: &SharedDom,
 ) -> Box<dyn TabRenderer<Cx>> {
+    let has_controller = controller.is_some();
     match tab_type {
         Some(TabType::Documentation) => Box::new(DocumentationRenderer::new()),
         Some(TabType::LineGraph) => match cx.canvas_env() {
@@ -167,7 +168,10 @@ fn renderer<Cx: HubTabCx + 'static>(
             Box::new(TableRenderer::new(uuid, dom.table.clone(), has_controller))
         }
         Some(TabType::Console) => {
-            Box::new(ConsoleRenderer::new(dom.console.clone(), has_controller))
+            let mut renderer = ConsoleRenderer::new(dom.console.clone(), has_controller);
+            let controller = controller.and_then(|c| c.downcast_mut::<ConsoleController>());
+            cx.lay_out_console(controller, &mut renderer);
+            Box::new(renderer)
         }
         Some(TabType::Statistics) => pending(TabType::Statistics),
         Some(TabType::Video) => pending(TabType::Video),
@@ -196,7 +200,7 @@ impl<Cx: HubTabCx + 'static> TabFactory<Cx> for SatelliteFactory {
         Ok(TabParts {
             uuid: JsString::new(),
             controller: Box::new(NoopController),
-            renderer: renderer(cx, tab_type, false, &SharedDom::default()),
+            renderer: renderer(cx, tab_type, None, &SharedDom::default()),
         })
     }
 }
@@ -205,8 +209,8 @@ impl<Cx: HubTabCx + 'static> TabFactory<Cx> for HubTabFactory<Cx> {
     fn create(&mut self, cx: &mut Cx, tab_type: Option<TabType>) -> Result<TabParts<Cx>, JsError> {
         let uuid = JsString::from(create_uuid(cx.tab_rng()));
         let dom = SharedDom::default();
-        let controller = controller(cx, &uuid, tab_type, &dom)?;
-        let renderer = renderer(cx, tab_type, true, &dom);
+        let mut controller = controller(cx, &uuid, tab_type, &dom)?;
+        let renderer = renderer(cx, tab_type, Some(&mut *controller), &dom);
         let renderer = match &mut self.hook {
             Some(hook) => hook.renderer(cx, tab_type, renderer),
             None => renderer,

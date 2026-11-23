@@ -42,7 +42,7 @@ use asrs_model::source_list_config::{
 };
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
-use asrs_tabs::console::controller::ConsoleController;
+use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::Field2dRenderer;
 use asrs_tabs::line_graph::LineGraphController;
@@ -187,9 +187,10 @@ pub trait HubView {
     fn inner_height(&self) -> f64;
     /// `RENDERER_CONTENT.getBoundingClientRect().top` while `--show-timeline` is `show_timeline`.
     fn renderer_top(&self, show_timeline: bool) -> f64;
-    /// `RENDERER_CONTENT.getBoundingClientRect()` while a Table tab is displayed, which has
-    /// neither timeline nor controls, and `devicePixelRatio`; `None` before the first layout.
-    fn table_box(&self) -> Option<(Rect, f64)> {
+    /// `RENDERER_CONTENT.getBoundingClientRect()` while a Table or Console tab is displayed,
+    /// which have neither timeline nor controls, and `devicePixelRatio`; `None` before the first
+    /// layout.
+    fn large_table_box(&self) -> Option<(Rect, f64)> {
         None
     }
     /// `prefers-color-scheme: dark`.
@@ -222,6 +223,13 @@ pub trait HubView {
     /// unrendered.
     fn canvas_text(&self) -> Option<Rc<RefCell<dyn TextBackend>>> {
         None
+    }
+    /// See [`TabsHost::lay_out_console`].
+    fn lay_out_console(
+        &self,
+        _controller: Option<&mut ConsoleController>,
+        _renderer: &mut ConsoleRenderer,
+    ) {
     }
     /// The renderer of a `kind` tab whose renderer lives in the view (`Field3dRenderer`), built
     /// with `window.preferences` and `window.isBattery`; `None` leaves it pending.
@@ -517,6 +525,14 @@ impl TabsHost for HubPage {
             clock: self.clock.clone(),
             text,
         })
+    }
+
+    fn lay_out_console(
+        &self,
+        controller: Option<&mut ConsoleController>,
+        renderer: &mut ConsoleRenderer,
+    ) {
+        self.view.lay_out_console(controller, renderer);
     }
 
     fn view_renderer(&mut self, kind: TabType) -> Option<Box<dyn TabRenderer<Self>>> {
@@ -1394,26 +1410,25 @@ impl HubModel {
         self.flush(host);
     }
 
-    /// The displayed table's box, which upstream's render reads from a fresh layout: the view's
-    /// last one may be from before the tab was selected, and a box that then changes looks like
-    /// scrolling up.
-    pub(crate) fn lay_out_table(&mut self) {
-        let Some((container, device_pixel_ratio)) = self.page.view.table_box() else {
+    /// The displayed table's or console's box, which upstream's render reads from a fresh layout:
+    /// the view's last one may be from before the tab was selected, and a box that then changes
+    /// looks like scrolling up.
+    pub(crate) fn lay_out_large_table(&mut self) {
+        let Some((container, device_pixel_ratio)) = self.page.view.large_table_box() else {
             return;
         };
         let Some(index) = self.tabs.selected_index() else {
             return;
         };
-        let tab = self.tabs.tab(index);
-        if let Some(table) = tab.and_then(|tab| {
-            tab.renderer()
-                .downcast_ref::<TableRenderer>()
-                .map(TableRenderer::dom)
-                .cloned()
-        }) {
-            let layout = &mut table.borrow_mut().layout;
+        let Some(tab) = self.tabs.tab_mut(index) else {
+            return;
+        };
+        if let Some(table) = tab.renderer.downcast_ref::<TableRenderer>() {
+            let layout = &mut table.dom().borrow_mut().layout;
             layout.container = container;
             layout.device_pixel_ratio = device_pixel_ratio;
+        } else if let Some(console) = tab.renderer.downcast_mut::<ConsoleRenderer>() {
+            console.place(container, device_pixel_ratio);
         }
     }
 
@@ -1431,7 +1446,7 @@ impl HubModel {
             HubFrame::Tabs => {
                 let now = host.frame_time();
                 self.tabs.scroll_step(&self.page, now);
-                self.lay_out_table();
+                self.lay_out_large_table();
                 let out = self.tabs.periodic(&mut self.page, now);
                 for update in out.satellite_updates {
                     host.update_satellite(update);

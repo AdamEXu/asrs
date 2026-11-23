@@ -111,7 +111,7 @@ struct GeometryState {
     classes: BodyClasses,
     inner_height: f64,
     side_bar: [f64; 4],
-    table: Option<(Rect, f64)>,
+    large_table: Option<(Rect, f64)>,
 }
 
 impl FrameGeometry {
@@ -137,9 +137,10 @@ impl FrameGeometry {
         renderer_top(self.0.borrow().classes, show_timeline)
     }
 
-    /// `div.renderer-content`'s box while a Table tab is displayed, and the window's scale.
-    pub fn table_box(&self) -> Option<(Rect, f64)> {
-        self.0.borrow().table
+    /// `div.renderer-content`'s box while a Table or Console tab is displayed, and the window's
+    /// scale.
+    pub fn large_table_box(&self) -> Option<(Rect, f64)> {
+        self.0.borrow().large_table
     }
 
     /// `div.side-bar`'s box as last laid out.
@@ -801,7 +802,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             });
         }
         self.geometry.set_inner_height(height);
-        self.geometry.0.borrow_mut().table = compute(&FrameInputs {
+        self.geometry.0.borrow_mut().large_table = compute(&FrameInputs {
             show_timeline: Some(false),
             show_tab_controls: Some(false),
             tab_controls_height: Some(0.0),

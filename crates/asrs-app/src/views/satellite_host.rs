@@ -12,6 +12,7 @@ use asrs_model::preferences::Preferences;
 use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use asrs_ui::gpui::{App, AppContext, Entity, KeyDownEvent};
 
 use super::frame::{FrameGeometry, FrameHost, HubFrame};
@@ -36,8 +37,16 @@ impl HubView for SatelliteView {
         0.0
     }
 
-    fn table_box(&self) -> Option<(Rect, f64)> {
-        self.geometry.table_box()
+    fn large_table_box(&self) -> Option<(Rect, f64)> {
+        self.geometry.large_table_box()
+    }
+
+    fn lay_out_console(
+        &self,
+        controller: Option<&mut ConsoleController>,
+        renderer: &mut ConsoleRenderer,
+    ) {
+        hub_host::lay_out_console(controller, renderer);
     }
 
     fn dark(&self) -> bool {
