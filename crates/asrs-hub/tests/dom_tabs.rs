@@ -47,6 +47,7 @@ use asrs_tabs::cx::TabCx;
 use asrs_tabs::field_2d::{Field2dController, Field2dDom, Field2dRenderer};
 use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
+use asrs_tabs::joysticks_renderer::JoysticksRenderer;
 use asrs_tabs::line_graph::{LineGraphController, ListId};
 use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
 use asrs_tabs::mechanism::MechanismController;
@@ -55,6 +56,7 @@ use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
 use asrs_tabs::points_renderer::PointsRenderer;
 use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
+use asrs_tabs::swerve_renderer::SwerveRenderer;
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
 
@@ -445,6 +447,12 @@ impl RendererHook<Host> for Hook {
             Some(TabType::Points) if renderer.downcast_ref::<PointsRenderer>().is_none() => {
                 Box::new(MissingPainter("PointsRenderer"))
             }
+            Some(TabType::Swerve) if renderer.downcast_ref::<SwerveRenderer>().is_none() => {
+                Box::new(MissingPainter("SwerveRenderer"))
+            }
+            Some(TabType::Joysticks) if renderer.downcast_ref::<JoysticksRenderer>().is_none() => {
+                Box::new(MissingPainter("JoysticksRenderer"))
+            }
             _ => renderer,
         };
         Box::new(Recorder {
@@ -801,9 +809,38 @@ impl Runner {
                 1,
                 root_el(hidden, pos),
             ));
+            let swerve = self.layout.rect_of(&el(
+                "div",
+                &["swerve-canvas-container"],
+                false,
+                1,
+                root_el(hidden, pos),
+            ));
+            let joysticks = self.layout.rect_of(&el(
+                "canvas",
+                &["joysticks-canvas"],
+                false,
+                1,
+                root_el(hidden, pos),
+            ));
             let index = JsValue::Number(i as f64);
             if let Ok(renderer) = self.tabs.renderer_mut(&index) {
-                if let Some(r) = inner_mut::<MechanismRenderer>(renderer) {
+                if let Some(r) = inner_mut::<SwerveRenderer>(renderer) {
+                    let mut dom = r.dom().borrow_mut();
+                    dom.client_size = [
+                        asrs_js::math::round(swerve.width),
+                        asrs_js::math::round(swerve.height),
+                    ];
+                    dom.device_pixel_ratio = self.device_pixel_ratio;
+                } else if let Some(r) = inner_mut::<JoysticksRenderer>(renderer) {
+                    let mut dom = r.dom().borrow_mut();
+                    dom.client_size = [
+                        asrs_js::math::round(joysticks.width),
+                        asrs_js::math::round(joysticks.height),
+                    ];
+                    dom.device_pixel_ratio = self.device_pixel_ratio;
+                    dom.images = self.images.clone();
+                } else if let Some(r) = inner_mut::<MechanismRenderer>(renderer) {
                     r.client_size = [
                         asrs_js::math::round(mechanism.width),
                         asrs_js::math::round(mechanism.height),
@@ -844,13 +881,13 @@ impl Runner {
         self.sync_dom();
         for i in 0..self.tabs.len() {
             let index = JsValue::Number(i as f64);
-            if let Some(r) = self
-                .tabs
-                .renderer_mut(&index)
-                .ok()
-                .and_then(|r| inner_mut::<Field2dRenderer>(r))
-            {
+            let Ok(renderer) = self.tabs.renderer_mut(&index) else {
+                continue;
+            };
+            if let Some(r) = inner_mut::<Field2dRenderer>(renderer) {
                 r.flush_image_loads();
+            } else if let Some(r) = inner_mut::<JoysticksRenderer>(renderer) {
+                while r.deliver_image_load().is_some() {}
             }
         }
         let now = self.host.clock.get();
@@ -1210,6 +1247,9 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
             .ok_or_else(|| err("table:tag needs a selected tab"))?;
         r.tagged_tables.push(uuid);
         r.sync_dom();
+        return Ok(JsValue::Undefined);
+    }
+    if expr.starts_with("/*r07:mirror*/") {
         return Ok(JsValue::Undefined);
     }
     if expr.starts_with("/*video:view*/") {
