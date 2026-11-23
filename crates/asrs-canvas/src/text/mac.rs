@@ -694,6 +694,16 @@ impl TextBackend for CoreText {
         Shaped { glyphs, width }
     }
 
+    fn shape_run(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let mut glyphs = Vec::new();
+        if spec.size <= 0.0 || text.is_empty() {
+            return Shaped { glyphs, width: 0.0 };
+        }
+        let primary = self.primary(spec);
+        let width = self.shape_word(spec, primary, text, zoom, 0.0, 0, &mut glyphs);
+        Shaped { glyphs, width }
+    }
+
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {
         if spec.size <= 0.0 {
             return FontMetrics {

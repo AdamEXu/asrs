@@ -193,7 +193,7 @@ pub trait TabsHost {
         _renderer: &mut ConsoleRenderer,
     ) {
     }
-    /// A renderer the page's view builds for a `kind` tab, in place of the pending one.
+    /// A renderer the page's view builds for a `kind` tab, in place of the factory's own.
     fn view_renderer(&mut self, _kind: TabType) -> Option<Box<dyn TabRenderer<Self>>> {
         None
     }

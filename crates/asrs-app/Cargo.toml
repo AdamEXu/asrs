@@ -70,6 +70,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "canvas_tabs_view"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "wheel_scenario"
 harness = false
 required-features = ["parity"]
