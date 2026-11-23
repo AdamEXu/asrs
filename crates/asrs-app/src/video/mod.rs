@@ -49,7 +49,7 @@ struct Io {
     random: V8MathRandom,
     events: async_channel::Sender<VideoEvent>,
     timers: Option<TimerReader>,
-    uncaught: async_channel::Sender<OcrError>,
+    uncaught: async_channel::Sender<TimerError>,
 }
 
 /// `VideoProcessor`'s module: it lives as long as the app.
@@ -75,8 +75,23 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
     })
     .detach();
     cx.spawn(async move |cx| {
+        let mut workers_failed = false;
         while let Ok(error) = thrown.recv().await {
-            cx.update(|cx| show_uncaught(&error, cx));
+            let error = match error {
+                // main.ts ignores unhandled rejections.
+                TimerError::Read(_) => continue,
+                TimerError::Job(error) => error,
+                // Upstream's failed workers throw as they start, not for each job.
+                TimerError::NoWorker(_) if workers_failed => continue,
+                TimerError::NoWorker(error) => {
+                    workers_failed = true;
+                    error
+                }
+            };
+            // `showErrorBox` blocks, so the next error waits for this one's box to close.
+            let (closed, wait) = async_channel::bounded::<()>(1);
+            cx.update(|cx| show_uncaught(&error, closed, cx));
+            let _ = wait.recv().await;
         }
     })
     .detach();
@@ -84,7 +99,7 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
 
 /// Electron's `uncaughtException` handler, for the `Error` tesseract.js throws when a job fails;
 /// the stack under its message has no counterpart here.
-fn show_uncaught(error: &OcrError, cx: &mut App) {
+fn show_uncaught(error: &OcrError, closed: async_channel::Sender<()>, cx: &mut App) {
     let options = MessageBoxOptions {
         kind: MessageBoxType::Error,
         title: "Error".to_owned(),
@@ -92,7 +107,7 @@ fn show_uncaught(error: &OcrError, cx: &mut App) {
         detail: format!("Uncaught Exception:\nError: {error}"),
         ..MessageBoxOptions::default()
     };
-    dispatch::show_message_box(None, options, cx, |_, _| {});
+    dispatch::show_message_box(None, options, cx, move |_, _| drop(closed));
 }
 
 /// `select-video` from a hub window.
@@ -124,6 +139,7 @@ pub fn hub_message(window: WindowId, message: &NamedMessage<HubToMain>, cx: &mut
 pub fn cleanup(cx: &mut App) {
     if cx.has_global::<Videos>() {
         with_processor(0, cx, |processor, host| processor.cleanup(host));
+        cx.global_mut::<Videos>().io.timers = None;
     }
 }
 
@@ -492,15 +508,15 @@ impl VideoHost for Host<'_> {
         let io = self.io();
         let uncaught = io.uncaught.clone();
         let path = path.to_string_lossy();
-        let timers = io.timers.get_or_insert_with(TimerReader::new);
+        let Some(timers) = &io.timers else {
+            return job;
+        };
         timers.read_timer_text(path, width, height, move |result| match result {
             Ok(text) => {
                 let text = JsString::from(text.as_str());
                 let _ = events.try_send(VideoEvent::TimerText { job, text });
             }
-            // main.ts ignores unhandled rejections.
-            Err(TimerError::Read(_)) => {}
-            Err(TimerError::Job(error)) => {
+            Err(error) => {
                 let _ = uncaught.try_send(error);
             }
         });

@@ -55,6 +55,8 @@ pub enum TimerError {
     Read(String),
     /// A worker's job, whose message tesseract.js also throws uncaught.
     Job(OcrError),
+    /// No worker started, so no job runs.
+    NoWorker(OcrError),
 }
 
 type Done = Box<dyn FnOnce(Result<String, TimerError>) + Send>;
@@ -149,8 +151,8 @@ impl Shared {
         queue.live_workers == 0
     }
 
-    fn work(&self) {
-        match Worker::new() {
+    fn work(&self, worker: Result<Worker, OcrError>) {
+        match worker {
             Ok(mut worker) => {
                 while let Some(job) = self.pop() {
                     if let Some(rest) = job.step(&mut worker) {
@@ -161,7 +163,7 @@ impl Shared {
             Err(error) => {
                 if self.lose_worker() {
                     while let Some(job) = self.pop() {
-                        (job.done)(Err(TimerError::Job(error.clone())));
+                        (job.done)(Err(TimerError::NoWorker(error.clone())));
                     }
                 }
             }
@@ -194,7 +196,7 @@ impl TimerReader {
             thread::Builder::new()
                 .name("timer-ocr".to_owned())
                 .stack_size(8 << 20)
-                .spawn(move || shared.work())
+                .spawn(move || shared.work(Worker::new()))
                 .expect("a worker thread starts");
         }
         Self { shared }
@@ -231,5 +233,39 @@ impl Drop for TimerReader {
         queue.jobs.clear();
         drop(queue);
         self.shared.wake.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+
+    use super::*;
+
+    #[test]
+    fn jobs_fail_once_no_worker_is_left() {
+        let reader = TimerReader {
+            shared: Arc::default(),
+        };
+        reader.shared.queue.lock().expect("queue").live_workers = 2;
+        let (sender, receiver) = mpsc::channel();
+        for _ in 0..3 {
+            let sender = sender.clone();
+            reader.read_timer_text("/nonexistent.jpg", 1920.0, 1080.0, move |result| {
+                sender.send(result).expect("receiver is alive");
+            });
+        }
+        let error = OcrError("Error: no memory".to_owned());
+        reader.shared.work(Err(error.clone()));
+        assert!(receiver.try_recv().is_err(), "a worker is left");
+        let shared = Arc::clone(&reader.shared);
+        let last = error.clone();
+        let worker = thread::spawn(move || shared.work(Err(last)));
+        for _ in 0..3 {
+            let result = receiver.recv().expect("a result");
+            assert_eq!(result, Err(TimerError::NoWorker(error.clone())));
+        }
+        drop(reader);
+        worker.join().expect("the worker ends with its reader");
     }
 }

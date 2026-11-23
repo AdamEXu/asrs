@@ -574,6 +574,7 @@ fn queued_reads_interleave_and_a_failed_one_costs_only_itself() {
             let result = result.map_err(|error| match error {
                 TimerError::Read(_) => "read",
                 TimerError::Job(_) => "job",
+                TimerError::NoWorker(_) => "no worker",
             });
             sender.send((id, result)).expect("receiver is alive");
         });
