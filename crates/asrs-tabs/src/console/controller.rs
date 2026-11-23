@@ -1,6 +1,7 @@
 //! `src/hub/controllers/ConsoleController.ts` and `src/shared/renderers/ConsoleRenderer.ts`. Line
 //! formatting and filtering are [`super::format_value`] and [`super::line_visible`].
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -394,7 +395,10 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for ConsoleController {
 /// The layout reads `ConsoleController` and `ConsoleRenderer` make and the scroll position the
 /// renderer writes, one call per upstream access and in upstream's order. `rows` are the table's
 /// rows as the access finds them, which a layout read lays out first.
-pub trait ConsoleGeometry {
+pub trait ConsoleGeometry: Any {
+    /// Puts `TABLE_CONTAINER` at `container` in a window of this `devicePixelRatio`, before a
+    /// `render`.
+    fn place(&mut self, _container: Rect, _device_pixel_ratio: f64) {}
     /// `TABLE_CONTAINER.getBoundingClientRect()`.
     fn container_rect(&mut self) -> Rect;
     /// `TABLE_CONTAINER.scrollTop`.
@@ -503,6 +507,19 @@ impl ConsoleRenderer {
     /// Answers the renderer's layout reads from `geometry` instead of the shared `ConsoleDom`.
     pub fn set_geometry(&mut self, geometry: Box<dyn ConsoleGeometry>) {
         self.geometry = Some(geometry);
+    }
+
+    /// The geometry `set_geometry` gave, if it is a `T`.
+    pub fn geometry_ref<T: ConsoleGeometry>(&self) -> Option<&T> {
+        let geometry: &dyn Any = self.geometry.as_deref()?;
+        geometry.downcast_ref()
+    }
+
+    /// Places the container in the geometry `set_geometry` gave.
+    pub fn place(&mut self, container: Rect, device_pixel_ratio: f64) {
+        if let Some(geometry) = self.geometry.as_deref_mut() {
+            geometry.place(container, device_pixel_ratio);
+        }
     }
 
     fn geometry<R>(&mut self, f: impl FnOnce(&mut dyn ConsoleGeometry, &[ConsoleRow]) -> R) -> R {
