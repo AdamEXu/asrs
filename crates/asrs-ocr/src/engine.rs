@@ -1,4 +1,4 @@
-//! One tesseract.js worker: `tesseract-core-simd-lstm.wasm` and the parts of its Emscripten glue
+//! One tesseract.js worker: `tesseract-core-simd.wasm` and the parts of its Emscripten glue
 //! and of `worker-script/index.js` that `createWorker("eng")` and `recognize` reach.
 
 use std::collections::BTreeMap;
@@ -11,7 +11,7 @@ use wasmtime::{
     OptLevel, Ref, Store, Table, Trap, TypedFunc, Val,
 };
 
-const CORE_WASM: &[u8] = include_bytes!("../data/tesseract-core-simd-lstm.wasm");
+const CORE_WASM: &[u8] = include_bytes!("../data/tesseract-core-simd.wasm");
 const ENG_TRAINEDDATA_GZ: &[u8] = include_bytes!("../data/eng.traineddata.gz");
 
 const OEM_LSTM_ONLY: i32 = 1;
@@ -21,26 +21,30 @@ const EINVAL: i32 = 28;
 const ENOTTY: i32 = 59;
 const ESPIPE: i32 = 70;
 const ENXIO: i32 = 6;
+const EOVERFLOW: i32 = 61;
+const MAX_FILE: usize = 1 << 31;
+const MAX_IO_VECTORS: u32 = 1024;
 const O_CREAT: i32 = 0o100;
 const O_TRUNC: i32 = 0o1000;
 
 mod export {
-    pub const MEMORY: &str = "Y";
-    pub const TABLE: &str = "vf";
-    pub const CALL_CTORS: &str = "Z";
-    pub const NEW_TESS_BASE_API: &str = "Oc";
-    pub const VERSION: &str = "Pc";
-    pub const INIT_3: &str = "ed";
-    pub const GET_PAGE_SEG_MODE: &str = "ld";
-    pub const SET_IMAGE_FILE: &str = "qd";
-    pub const SET_RECTANGLE: &str = "sd";
-    pub const RECOGNIZE: &str = "Id";
-    pub const GET_UTF8_TEXT: &str = "Md";
-    pub const MEAN_TEXT_CONF: &str = "Td";
-    pub const OEM: &str = "ce";
-    pub const MALLOC: &str = "Df";
-    pub const STACK_SAVE: &str = "Ff";
-    pub const STACK_RESTORE: &str = "Gf";
+    pub const MEMORY: &str = "U";
+    pub const TABLE: &str = "rf";
+    pub const CALL_CTORS: &str = "V";
+    pub const NEW_TESS_BASE_API: &str = "Kc";
+    pub const VERSION: &str = "Lc";
+    pub const INIT_3: &str = "ad";
+    pub const GET_PAGE_SEG_MODE: &str = "hd";
+    pub const SET_IMAGE_FILE: &str = "md";
+    pub const SET_RECTANGLE: &str = "od";
+    pub const RECOGNIZE: &str = "Ed";
+    pub const GET_UTF8_TEXT: &str = "Id";
+    pub const MEAN_TEXT_CONF: &str = "Pd";
+    pub const OEM: &str = "_d";
+    pub const FREE: &str = "yf";
+    pub const MALLOC: &str = "zf";
+    pub const STACK_SAVE: &str = "Bf";
+    pub const STACK_RESTORE: &str = "Cf";
 }
 
 /// What tesseract.js rejects a job with: `err.toString()`.
@@ -180,9 +184,9 @@ fn read_string(caller: &HostCaller<'_>, at: u32) -> String {
 fn load_embedded_files(caller: &mut HostCaller<'_>, mut at: u32) -> HostResult<()> {
     loop {
         let name = read_u32(caller, at)?;
-        let len = read_u32(caller, at + 4)?;
-        let content = read_u32(caller, at + 8)?;
-        at += 12;
+        let len = read_u32(caller, at.wrapping_add(4))?;
+        let content = read_u32(caller, at.wrapping_add(8))?;
+        at = at.wrapping_add(12);
         let path = absolute(&read_string(caller, name));
         let data = memory(caller).data(&mut *caller);
         let bytes = data[range(data.len(), content, len)?].to_vec();
@@ -245,12 +249,13 @@ fn set_position(caller: &mut HostCaller<'_>, fd: i32, to: u64) {
 }
 
 fn io_vectors(caller: &HostCaller<'_>, iov: u32, count: u32) -> HostResult<Vec<(u32, u32)>> {
+    if count > MAX_IO_VECTORS {
+        return Err(Trap::MemoryOutOfBounds.into());
+    }
     (0..count)
         .map(|i| {
-            Ok((
-                read_u32(caller, iov + i * 8)?,
-                read_u32(caller, iov + i * 8 + 4)?,
-            ))
+            let at = iov.wrapping_add(i * 8);
+            Ok((read_u32(caller, at)?, read_u32(caller, at.wrapping_add(4))?))
         })
         .collect()
 }
@@ -298,21 +303,31 @@ fn fd_write(
     let Some(entry) = fd(caller, handle) else {
         return Ok(EBADF);
     };
-    let mut bytes = Vec::new();
-    for (pointer, len) in io_vectors(caller, iov, count)? {
-        let data = memory(caller).data(&*caller);
-        bytes.extend_from_slice(&data[range(data.len(), pointer, len)?]);
+    let vectors = io_vectors(caller, iov, count)?;
+    let (data, host) = memory(caller).data_and_store_mut(&mut *caller);
+    let mut total = 0;
+    for (_, len) in &vectors {
+        total += *len as usize;
     }
     if let Fd::File { path, position } = entry {
-        let file = caller.data_mut().files.entry(path).or_default();
         let start = position as usize;
-        if file.len() < start + bytes.len() {
-            file.resize(start + bytes.len(), 0);
+        let end = start.saturating_add(total);
+        if end > MAX_FILE {
+            return Err(Thrown::Error("RangeError: Invalid typed array length".to_owned()).into());
         }
-        file[start..start + bytes.len()].copy_from_slice(&bytes);
-        set_position(caller, handle, position + bytes.len() as u64);
+        let file = host.files.entry(path).or_default();
+        if file.len() < end {
+            file.resize(end, 0);
+        }
+        let mut at = start;
+        for (pointer, len) in vectors {
+            let source = &data[range(data.len(), pointer, len)?];
+            file[at..at + source.len()].copy_from_slice(source);
+            at += source.len();
+        }
+        set_position(caller, handle, end as u64);
     }
-    write_u32(caller, result, bytes.len() as u32)?;
+    write_u32(caller, result, total as u32)?;
     Ok(0)
 }
 
@@ -324,6 +339,9 @@ fn fd_seek(
     whence: i32,
     result: u32,
 ) -> HostResult<i32> {
+    if !(-(1 << 21)..=1 << 21).contains(&high) {
+        return Ok(EOVERFLOW);
+    }
     let offset = (i64::from(high) << 32) | i64::from(low as u32);
     let Some(entry) = fd(caller, handle) else {
         return Ok(EBADF);
@@ -337,7 +355,9 @@ fn fd_seek(
         2 => caller.data().files[&path].len() as i64,
         _ => return Ok(EINVAL),
     };
-    let target = base + offset;
+    let Some(target) = base.checked_add(offset) else {
+        return Ok(EOVERFLOW);
+    };
     if target < 0 {
         return Ok(EINVAL);
     }
@@ -394,12 +414,14 @@ const ENVIRONMENT: [&str; 7] = [
 ];
 
 fn environ_get(caller: &mut HostCaller<'_>, pointers: u32, buffer: u32) -> HostResult<()> {
-    let mut offset = 0;
-    for (index, entry) in ENVIRONMENT.iter().enumerate() {
-        write_u32(caller, pointers + 4 * index as u32, buffer + offset)?;
-        write_bytes(caller, buffer + offset, entry.as_bytes())?;
-        write_bytes(caller, buffer + offset + entry.len() as u32, &[0])?;
-        offset += entry.len() as u32 + 1;
+    let (mut pointer, mut at) = (pointers, buffer);
+    for entry in ENVIRONMENT {
+        write_u32(caller, pointer, at)?;
+        write_bytes(caller, at, entry.as_bytes())?;
+        let end = at.wrapping_add(entry.len() as u32);
+        write_bytes(caller, end, &[0])?;
+        pointer = pointer.wrapping_add(4);
+        at = end.wrapping_add(1);
     }
     Ok(())
 }
@@ -454,7 +476,7 @@ fn call_import(
 ) -> HostResult<()> {
     let mut answer = |value: i32| results[0] = Val::I32(value);
     match name {
-        "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "s" | "t" => {
+        "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "u" | "v" => {
             invoke(caller, args, results)?;
         }
         "a" => {
@@ -468,34 +490,33 @@ fn call_import(
                 function.unwrap_or_else(|| "unknown function".to_owned()),
             )));
         }
-        "k" => return Err(abort("")),
-        "l" => return Err(Thrown::Number(format!("{}", int(args, 0))).into()),
-        "x" => return Err(Thrown::Number("Infinity".to_owned()).into()),
-        "F" | "P" | "U" | "X" => return Err(abort("-1")),
+        "l" => return Err(abort("")),
+        "n" => return Err(Thrown::Number(format!("{}", int(args, 0))).into()),
+        "y" => return Err(Thrown::Number("Infinity".to_owned()).into()),
         "m" | "O" => results[0] = Val::F64(now_ms().to_bits()),
-        "n" => answer(fd_write(
+        "o" => answer(fd_write(
             caller,
             int(args, 0),
             uint(args, 1),
             uint(args, 2),
             uint(args, 3),
         )?),
-        "o" => answer(close(caller, int(args, 0))),
-        "p" => answer(open(caller, uint(args, 1), int(args, 2))),
-        "q" => answer(fd_read(
+        "p" => answer(close(caller, int(args, 0))),
+        "r" => answer(open(caller, uint(args, 1), int(args, 2))),
+        "s" => answer(fd_read(
             caller,
             int(args, 0),
             uint(args, 1),
             uint(args, 2),
             uint(args, 3),
         )?),
-        "r" => answer(fcntl(caller, int(args, 0), int(args, 1))?),
-        "u" => {
+        "t" => answer(fcntl(caller, int(args, 0), int(args, 1))?),
+        "q" => {
             if let Some(result) = results.first_mut() {
                 *result = Val::I32(0);
             }
         }
-        "v" => answer(fd_seek(
+        "w" => answer(fd_seek(
             caller,
             int(args, 0),
             int(args, 1),
@@ -503,7 +524,7 @@ fn call_import(
             int(args, 3),
             uint(args, 4),
         )?),
-        "y" => answer(i32::from(resize_heap(caller, uint(args, 0)))),
+        "z" => answer(i32::from(resize_heap(caller, uint(args, 0)))),
         "I" => {
             environ_get(caller, uint(args, 0), uint(args, 1))?;
             answer(0);
@@ -514,19 +535,19 @@ fn call_import(
             write_u32(caller, uint(args, 1), size as u32)?;
             answer(0);
         }
-        "R" => {
+        "Q" => {
             let [to, from, count] = [0, 1, 2].map(|i| uint(args, i));
             let data = memory(caller).data_mut(&mut *caller);
             let source = range(data.len(), from, count)?;
             range(data.len(), to, count)?;
             data.copy_within(source, to as usize);
         }
-        "S" => match fd(caller, int(args, 0)) {
+        "R" => match fd(caller, int(args, 0)) {
             None => answer(-EBADF),
             Some(Fd::Tty) => answer(0),
             Some(Fd::File { .. }) => answer(-ENOTTY),
         },
-        "T" => load_embedded_files(caller, uint(args, 0))?,
+        "S" => load_embedded_files(caller, uint(args, 0))?,
         _ => {
             return Err(Thrown::Error(format!("unported import {name}")).into());
         }
@@ -613,6 +634,7 @@ pub struct Worker {
     set_rectangle: TypedFunc<(i32, i32, i32, i32, i32), ()>,
     recognize: TypedFunc<(i32, i32), i32>,
     get_utf8_text: TypedFunc<i32, i32>,
+    free: TypedFunc<i32, ()>,
     mean_text_conf: TypedFunc<i32, i32>,
     get_page_seg_mode: TypedFunc<i32, i32>,
     oem: TypedFunc<i32, i32>,
@@ -673,6 +695,7 @@ impl Worker {
             set_rectangle: instance.get_typed_func(&mut store, export::SET_RECTANGLE)?,
             recognize: instance.get_typed_func(&mut store, export::RECOGNIZE)?,
             get_utf8_text: instance.get_typed_func(&mut store, export::GET_UTF8_TEXT)?,
+            free: instance.get_typed_func(&mut store, export::FREE)?,
             mean_text_conf: instance.get_typed_func(&mut store, export::MEAN_TEXT_CONF)?,
             get_page_seg_mode: instance.get_typed_func(&mut store, export::GET_PAGE_SEG_MODE)?,
             oem: instance.get_typed_func(&mut store, export::OEM)?,
@@ -725,6 +748,7 @@ impl Worker {
         self.recognize.call(&mut *store, (api, 0))?;
         let pointer = self.get_utf8_text.call(&mut *store, api)?;
         let text = c_string(self.memory.data(store.as_context()), pointer as u32);
+        self.free.call(&mut *store, pointer)?;
         self.mean_text_conf.call(&mut *store, api)?;
         self.get_page_seg_mode.call(&mut *store, api)?;
         self.oem.call(&mut *store, api)?;

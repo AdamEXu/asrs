@@ -150,8 +150,8 @@ above is the one REV attached to the utilities shipped alongside them.
   into it are listed with their licenses in
   [`licenses/tesseract.js-core.txt`](licenses/tesseract.js-core.txt)
 - Version: 6.0.0 (npm), source https://github.com/naptha/tesseract.js-core
-- Used in: `crates/asrs-ocr/data/tesseract-core-simd-lstm.wasm`, copied unmodified
-  (sha256 `187d76742dfc0d8929f0b49a619f145bb6370730776c7bd0d3e20c6b2098808d`)
+- Used in: `crates/asrs-ocr/data/tesseract-core-simd.wasm`, copied unmodified
+  (sha256 `ca11ee92a02023e4f5083eefd0966fb83b297416da54e997b9f6ce445f719c9b`)
 
 It contains Tesseract OCR 5.1.0-284-g9c08 (Apache-2.0, Copyright Google Inc. and the Tesseract
 contributors; built from https://github.com/Balearica/tesseract/tree/5a21eeb), Leptonica, libjpeg,

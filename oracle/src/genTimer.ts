@@ -2,6 +2,7 @@ import "./environment";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { Worker } from "node:worker_threads";
 import { toTree } from "./cve1";
 import { buildBundles } from "./video/bundle";
 import { World } from "./video/world";
@@ -27,9 +28,25 @@ const upstreamDir = __UPSTREAM_DIR__;
 const requireUpstream = createRequire(path.join(upstreamDir, "package.json"));
 const Tesseract = requireUpstream("tesseract.js");
 
-function checkVendoredData() {
+// Node's getCore compares the boolean `lstmOnly` with OEM numbers, so it loads the core with the
+// legacy engine; the file compared is the one it loads for the options createWorker sends.
+async function checkVendoredData() {
+  let lstmOnly: unknown;
+  const postMessage = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function (packet: any, ...rest: any[]) {
+    if (packet.action === "load") lstmOnly = packet.payload.options.lstmOnly;
+    return postMessage.call(this, packet, ...rest);
+  };
+  const worker = await Tesseract.createWorker("eng", undefined, LANG_OPTIONS);
+  await worker.terminate();
+  Worker.prototype.postMessage = postMessage;
+  if (lstmOnly === undefined) throw new Error("createWorker sent no load options");
+  await requireUpstream("tesseract.js/src/worker-script/node/getCore")(lstmOnly, undefined, { progress() {} });
+  const cores = Object.keys(requireUpstream.cache).filter((file) => path.basename(path.dirname(file)) === "tesseract.js-core");
+  if (cores.length !== 1) throw new Error(`one core expected: ${cores}`);
+  const core = path.basename(cores[0], ".js") + ".wasm";
   const pairs = [
-    [requireUpstream.resolve("tesseract.js-core/tesseract-core-simd-lstm.wasm"), "tesseract-core-simd-lstm.wasm"],
+    [path.join(path.dirname(cores[0]), core), core],
     [path.join(upstreamDir, "eng.traineddata.gz"), "eng.traineddata.gz"]
   ];
   for (const [upstream, vendored] of pairs) {
@@ -284,7 +301,7 @@ async function runRects(clips: Clip[]) {
   await worker.terminate();
 }
 
-checkVendoredData();
+await checkVendoredData();
 if (mode === "clip" && args.length === 1) {
   await runClip(readClip(args[0]));
 } else if (mode === "rects" && args.length > 0) {

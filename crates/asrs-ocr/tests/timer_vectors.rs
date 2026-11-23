@@ -532,6 +532,60 @@ fn banner_lower_in_a_720p_source() {
 }
 
 #[test]
+fn queued_reads_interleave_and_a_failed_one_costs_only_itself() {
+    let name = "banner-lower-720p";
+    let clip = read_clip(name);
+    let dir = TempDir(std::env::temp_dir().join(format!("asrs-ocr-queue-{}", std::process::id())));
+    std::fs::create_dir_all(&dir.0).expect("temp dir");
+    for (frame, data) in &clip.frames {
+        std::fs::write(dir.0.join(format!("{frame:08}.jpg")), data).expect("frame");
+    }
+    let damaged = dir.0.join("damaged.jpg");
+    std::fs::write(&damaged, [0; 1000]).expect("frame");
+
+    let mut reads: BTreeMap<u64, (u32, f64, f64)> = BTreeMap::new();
+    let mut expected: BTreeMap<u64, Option<String>> = BTreeMap::new();
+    for record in vectors::load(&format!("video/timer-{name}")).expect("vectors") {
+        let get = |key: &str| record.field(key).expect("a field").clone();
+        match text(&get("k")).as_str() {
+            "read" => {
+                reads.insert(
+                    number(&get("id")) as u64,
+                    (
+                        number(&get("frame")) as u32,
+                        tree_number(&get("width")),
+                        tree_number(&get("height")),
+                    ),
+                );
+            }
+            "text" => {
+                expected.insert(number(&get("id")) as u64, Some(text(&get("text"))));
+            }
+            _ => {}
+        }
+    }
+    assert!(reads.len() > 8 && reads.len() == expected.len());
+
+    let reader = TimerReader::new();
+    let (sender, receiver) = mpsc::channel();
+    let submit = |id: u64, path: PathBuf, width: f64, height: f64| {
+        let sender = sender.clone();
+        reader.read_timer_text(path, width, height, move |result| {
+            sender.send((id, result.ok())).expect("receiver is alive");
+        });
+    };
+    for (id, (frame, width, height)) in &reads {
+        submit(*id, dir.0.join(format!("{frame:08}.jpg")), *width, *height);
+        submit(1000 + id, damaged.clone(), *width, *height);
+        submit(2000 + id, dir.0.join("missing.jpg"), *width, *height);
+        expected.insert(1000 + id, None);
+        expected.insert(2000 + id, None);
+    }
+    let results: BTreeMap<u64, Option<String>> = receiver.iter().take(expected.len()).collect();
+    assert_eq!(results, expected);
+}
+
+#[test]
 fn a_missing_frame_is_an_error() {
     let reader = TimerReader::new();
     let (sender, receiver) = mpsc::channel();
