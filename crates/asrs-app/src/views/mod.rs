@@ -22,3 +22,4 @@ pub mod statistics;
 pub mod statistics_layout;
 pub mod tab_bar;
 pub mod table;
+pub mod title_bar_menu;

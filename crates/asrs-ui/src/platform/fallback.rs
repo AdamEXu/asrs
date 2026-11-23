@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use gpui_kit::{App, ScrollEvent, Window};
+use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 
 use super::{MenuPath, PopupMenu, WheelDelta};
 
@@ -53,6 +53,14 @@ pub(super) fn set_application_menu(
     _on_select: impl Fn(MenuPath, &mut App) + 'static,
 ) -> bool {
     false
+}
+
+pub(super) fn popup_window_opened(
+    _window: &Window,
+    _bounds: Bounds<Pixels>,
+    _root: bool,
+    _cx: &mut App,
+) {
 }
 
 pub(super) fn close_popup_menu(_window: &Window) {}
@@ -364,5 +372,9 @@ pub(super) mod probe {
 
     pub fn can_capture_screen() -> bool {
         false
+    }
+
+    pub fn size_hints(_window: &Window) -> Option<super::super::probe::SizeHints> {
+        None
     }
 }

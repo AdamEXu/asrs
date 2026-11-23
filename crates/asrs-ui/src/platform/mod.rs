@@ -1,12 +1,17 @@
 #![allow(unsafe_code)]
 
 #[cfg(not(target_os = "macos"))]
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 mod fallback;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod mac;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use fallback as imp;
+#[cfg(target_os = "linux")]
+use linux as imp;
 #[cfg(target_os = "macos")]
 use mac as imp;
 
@@ -15,7 +20,7 @@ pub mod probe;
 
 use std::path::Path;
 
-use gpui_kit::{App, ScrollDelta, ScrollEvent, Window};
+use gpui_kit::{App, Bounds, Pixels, ScrollDelta, ScrollEvent, Window};
 
 /// Chromium's pixel size of one notched wheel tick on macOS (`kScrollbarPixelsPerCocoaTick`).
 pub const PIXELS_PER_WHEEL_TICK: f32 = 40.0;
@@ -195,13 +200,13 @@ pub fn set_aspect_ratio(window: &Window, aspect_ratio: f64) {
 
 /// A window's native handle for the work AppKit answers with synchronous resize and move
 /// notifications. GPUI handles those by borrowing the app, so these calls belong in a
-/// foreground task outside any window update. `None` off macOS.
+/// foreground task outside any window update. `None` on Windows and Wayland.
 pub fn native_window(window: &Window) -> Option<NativeWindow> {
     imp::window::native(window).map(NativeWindow)
 }
 
-/// Electron's `getBounds()`: the window frame as `(x, y, width, height)` in top-left
-/// coordinates of the primary screen. `None` off macOS.
+/// Electron's `getBounds()`: the window frame (on X11 its content) as `(x, y, width, height)` in
+/// top-left coordinates of the primary screen. `None` on Windows and Wayland.
 pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
     imp::window::bounds(window)
 }
@@ -252,8 +257,8 @@ impl NativeWindow {
         self.0.end_sheet();
     }
 
-    /// Electron's `isVisible()`: on screen and not minimized. Being covered by other windows does
-    /// not count, whatever its documentation says.
+    /// Electron's `isVisible()`: on screen and, on macOS, not minimized. Being covered by other
+    /// windows does not count, whatever its documentation says.
     pub fn is_visible(&self) -> bool {
         self.0.is_visible()
     }
@@ -323,7 +328,7 @@ pub enum SelectMenuItemKind {
 }
 
 /// Chromium's popup for a `<select>`: on macOS an `NSPopUpButtonCell` menu with the selected
-/// item over the control, as `WebMenuRunner` shows it. `bounds` is the select's border box in
+/// item over the control, as `WebMenuRunner` shows it, on Linux a drawn list below it. `bounds` is the select's border box in
 /// window content coordinates `[x, y, width, height]`. The menu opens on a later turn of the
 /// event loop, and `on_close` gets the chosen item's index in `menu.items`, if any.
 pub fn select_popup(
@@ -334,6 +339,17 @@ pub fn select_popup(
     on_close: impl FnOnce(Option<usize>, &mut App) + 'static,
 ) {
     imp::select_popup(window, cx, menu, bounds, on_close);
+}
+
+/// Finishes a drawn menu's `PopUp` window, which belongs at `bounds` on screen. The outermost menu
+/// (`root`) takes the pointer where the platform needs that to dismiss it.
+pub(crate) fn popup_window_opened(
+    window: &Window,
+    bounds: Bounds<Pixels>,
+    root: bool,
+    cx: &mut App,
+) {
+    imp::popup_window_opened(window, bounds, root, cx);
 }
 
 /// Electron's `menu.closePopup(window)`.

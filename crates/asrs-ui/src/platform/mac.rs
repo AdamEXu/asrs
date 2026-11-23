@@ -4,7 +4,7 @@ use std::path::Path;
 use std::ptr::{self, NonNull};
 
 use block2::RcBlock;
-use gpui_kit::{App, ScrollEvent, Window};
+use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, NSObject, Sel};
 use objc2::{
@@ -891,6 +891,8 @@ fn min_y(rect: CGRect) -> f64 {
     rect.origin.y.min(rect.origin.y + rect.size.height)
 }
 
+pub(super) fn popup_window_opened(_: &Window, _: Bounds<Pixels>, _: bool, _: &mut App) {}
+
 pub(super) fn close_popup_menu(window: &Window) {
     let Some(window) = ns_window(window) else {
         return;
@@ -1644,5 +1646,9 @@ pub(super) mod probe {
 
     pub fn can_capture_screen() -> bool {
         CGPreflightScreenCaptureAccess()
+    }
+
+    pub fn size_hints(_window: &Window) -> Option<super::super::probe::SizeHints> {
+        None
     }
 }

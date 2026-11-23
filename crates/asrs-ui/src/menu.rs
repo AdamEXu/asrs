@@ -1,21 +1,23 @@
 //! The drawn popup menu: a [`PopupMenu`] painted by GPUI, either inside the window that opens it
-//! (`deferred(anchored())`, for in-window popups such as select lists) or in a `PopUp` window of
-//! its own that can overflow its parent (context menus where no native backend exists). Also
+//! (`deferred(anchored())`, for in-window popups) or in windows of its own that can overflow its
+//! parent (context menus, title bar menus and select lists where no native backend exists). Also
 //! the accelerator table that stands in for a native menu bar.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
+use gpui_kit::popup::{PopupAnchor, PopupConstraintAdjustment, PopupGravity, PopupOptions};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, Global,
-    InteractiveElement, IntoElement, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent,
-    OperatingSystem, ParentElement, Pixels, Point, Render, Styled, Subscription, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, anchored, canvas,
-    deferred, div, point, px, rgb, size,
+    AnyWindowHandle, App, AppContext, Bounds, Context, DispatchPhase, Entity, FocusHandle,
+    Focusable, Global, InteractiveElement, IntoElement, KeyDownEvent, Keystroke, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, OperatingSystem, ParentElement, Pixels,
+    PlatformInput, Point, Render, ScrollEvent, ScrollHandle, Size, StatefulInteractiveElement,
+    Styled, Subscription, Window, WindowBackgroundAppearance, WindowBounds, WindowKind,
+    WindowOptions, anchored, canvas, deferred, div, point, px, rgb, size,
 };
 
-use crate::platform::{MenuPath, PopupEntry, PopupItem, PopupMenu};
+use crate::platform::{self, MenuPath, PopupEntry, PopupItem, PopupMenu};
 use crate::text::{Text, TextStyle};
 use crate::theme::Appearance;
 
@@ -25,15 +27,88 @@ pub const PADDING: f32 = 4.0;
 pub const LABEL_INSET: f32 = 24.0;
 pub const TRAILING_INSET: f32 = 24.0;
 pub const MIN_WIDTH: f32 = 120.0;
+const GROUP_FONT: &str = "bold 13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont";
 const FONT: &str = "13px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont";
 
 /// Called once when the menu closes: with the chosen entry's path, or `None` when dismissed.
 pub type CloseHandler = Rc<dyn Fn(Option<MenuPath>, &mut Window, &mut App)>;
 
+/// How far the pointer moves over a menu before a button release chooses an entry: the release
+/// of the press that opened the menu chooses nothing.
+const ARM_DISTANCE: f32 = 4.0;
+/// How far a submenu overlaps its parent.
+const SUBMENU_OVERLAP: f32 = 2.0;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Host {
     InWindow,
+    /// A `PopUp` window at a position on screen.
     PopUpWindow,
+    /// A popup surface the compositor places against its parent's.
+    AnchoredPopup,
+}
+
+/// Which side of its anchor a menu opens on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    /// Below it, or above where the screen has no room below.
+    Below,
+    /// To its right, or left where the screen has no room there: a submenu.
+    Beside,
+}
+
+/// Where a menu of `size` opens for `anchor`, all in screen coordinates.
+pub fn place(
+    anchor: Bounds<Pixels>,
+    size: Size<Pixels>,
+    screen: Bounds<Pixels>,
+    side: Side,
+) -> Bounds<Pixels> {
+    let fit = |v: Pixels, low: Pixels, high: Pixels| v.min(high).max(low);
+    let max_x = screen.right() - size.width;
+    let max_y = screen.bottom() - size.height;
+    let (x, y) = match side {
+        Side::Below => {
+            let above = anchor.top() - size.height;
+            let y = if anchor.bottom() > max_y && above >= screen.top() {
+                above
+            } else {
+                anchor.bottom()
+            };
+            (anchor.left(), y)
+        }
+        Side::Beside => {
+            let right = anchor.right() - px(SUBMENU_OVERLAP);
+            let left = anchor.left() + px(SUBMENU_OVERLAP) - size.width;
+            let x = if right > max_x && left >= screen.left() {
+                left
+            } else {
+                right
+            };
+            (x, anchor.top() - px(PADDING))
+        }
+    };
+    let origin = point(fit(x, screen.left(), max_x), fit(y, screen.top(), max_y));
+    Bounds::new(origin, size)
+}
+
+/// Where a menu's window goes.
+#[derive(Clone, Copy, Debug)]
+pub enum Placement {
+    /// A `PopUp` window against a box on screen.
+    Screen(Bounds<Pixels>),
+    /// A popup of this window against a box in it, where the compositor places windows.
+    Anchored(AnyWindowHandle, Bounds<Pixels>),
+}
+
+/// A select list's differences from a menu.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListStyle {
+    pub min_width: f32,
+    /// The entry highlighted as the list opens.
+    pub selected: Option<usize>,
+    /// The `<optgroup>` labels.
+    pub groups: Vec<usize>,
 }
 
 fn label_style() -> TextStyle {
@@ -65,7 +140,8 @@ pub fn menu_size(cx: &mut App, menu: &PopupMenu, scale: f32) -> (f32, f32) {
     for (_, item) in visible_items(menu) {
         height += row_height(item);
         if let PopupItem::Entry(entry) = item {
-            let (w, _) = crate::text::measure(cx, &style, &entry.label, scale);
+            let label = platform::native_menu_label(&entry.label);
+            let (w, _) = crate::text::measure(cx, &style, &label, scale);
             width = width.max(w as f32);
         }
     }
@@ -97,7 +173,14 @@ pub struct MenuView {
     bounds: Rc<Cell<Bounds<Pixels>>>,
     on_close: CloseHandler,
     own_window: Option<AnyWindowHandle>,
-    _activation: Option<Subscription>,
+    list: Option<ListStyle>,
+    typed: String,
+    /// Where a `PopUp` window was put, on screen.
+    screen: Option<Bounds<Pixels>>,
+    armed: bool,
+    first_move: Option<Point<Pixels>>,
+    scroll: ScrollHandle,
+    subscriptions: Vec<Subscription>,
 }
 
 impl MenuView {
@@ -118,7 +201,13 @@ impl MenuView {
             bounds: Rc::default(),
             on_close,
             own_window: None,
-            _activation: None,
+            list: None,
+            typed: String::new(),
+            screen: None,
+            armed: host == Host::InWindow,
+            first_move: None,
+            scroll: ScrollHandle::new(),
+            subscriptions: Vec::new(),
         }
     }
 
@@ -142,50 +231,273 @@ impl MenuView {
         cx: &mut App,
         on_close: CloseHandler,
     ) -> Option<AnyWindowHandle> {
-        Self::open_window_at(menu, Vec::new(), origin, scale, cx, on_close)
-            .map(|(handle, _)| handle)
+        let size = menu_size(cx, &menu, scale);
+        let bounds = Bounds::new(origin, gpui_kit::size(px(size.0), px(size.1)));
+        Self::open_at(
+            menu,
+            Vec::new(),
+            WindowKind::PopUp,
+            bounds,
+            None,
+            cx,
+            on_close,
+        )
+        .map(|(handle, _)| handle)
     }
 
-    fn open_window_at(
+    /// A menu in a window of its own, placed by the screen's edges and no taller than the screen.
+    pub fn open(
+        menu: PopupMenu,
+        placement: Placement,
+        list: Option<ListStyle>,
+        scale: f32,
+        cx: &mut App,
+        on_close: CloseHandler,
+    ) -> Option<(AnyWindowHandle, Entity<MenuView>)> {
+        Self::open_placed(
+            menu,
+            Vec::new(),
+            placement,
+            Side::Below,
+            list,
+            scale,
+            cx,
+            on_close,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn open_placed(
         menu: PopupMenu,
         prefix: MenuPath,
-        origin: Point<Pixels>,
+        placement: Placement,
+        side: Side,
+        list: Option<ListStyle>,
         scale: f32,
         cx: &mut App,
         on_close: CloseHandler,
     ) -> Option<(AnyWindowHandle, Entity<MenuView>)> {
         let (width, height) = menu_size(cx, &menu, scale);
+        let width = width.max(list.as_ref().map_or(0.0, |list| list.min_width));
+        let screen = cx.primary_display().map(|display| display.bounds());
+        let height = screen.map_or(height, |s| height.min(f32::from(s.size.height)));
+        let size = size(px(width), px(height));
+        let (kind, bounds) = match placement {
+            Placement::Screen(anchor) => {
+                let bounds = match screen {
+                    Some(screen) => place(anchor, size, screen, side),
+                    None => Bounds::new(anchor.bottom_left(), size),
+                };
+                (WindowKind::PopUp, bounds)
+            }
+            Placement::Anchored(parent, anchor_rect) => {
+                let (anchor, flip, offset) = match side {
+                    Side::Below => (
+                        PopupAnchor::BottomLeft,
+                        PopupConstraintAdjustment::FLIP_Y,
+                        point(px(0.0), px(0.0)),
+                    ),
+                    Side::Beside => (
+                        PopupAnchor::TopRight,
+                        PopupConstraintAdjustment::FLIP_X,
+                        point(px(-SUBMENU_OVERLAP), px(-PADDING)),
+                    ),
+                };
+                let options = PopupOptions {
+                    parent,
+                    anchor_rect,
+                    anchor,
+                    gravity: PopupGravity::BottomRight,
+                    constraint_adjustment: flip
+                        | PopupConstraintAdjustment::SLIDE_X
+                        | PopupConstraintAdjustment::SLIDE_Y,
+                    offset,
+                    grab: true,
+                };
+                (
+                    WindowKind::AnchoredPopup(options),
+                    Bounds::new(Point::default(), size),
+                )
+            }
+        };
+        Self::open_at(menu, prefix, kind, bounds, list, cx, on_close)
+    }
+
+    fn open_at(
+        menu: PopupMenu,
+        prefix: MenuPath,
+        kind: WindowKind,
+        bounds: Bounds<Pixels>,
+        list: Option<ListStyle>,
+        cx: &mut App,
+        on_close: CloseHandler,
+    ) -> Option<(AnyWindowHandle, Entity<MenuView>)> {
+        let host = if kind == WindowKind::PopUp {
+            Host::PopUpWindow
+        } else {
+            Host::AnchoredPopup
+        };
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                origin,
-                size(px(width), px(height)),
-            ))),
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: None,
             focus: true,
             show: true,
-            kind: WindowKind::PopUp,
+            kind,
             window_background: WindowBackgroundAppearance::Transparent,
             is_movable: false,
             is_resizable: false,
             is_minimizable: false,
             ..WindowOptions::default()
         };
+        let root = prefix.is_empty();
         crate::open_window(options, cx, move |window, cx| {
             let view = cx.new(|cx| {
-                let mut view = MenuView::new(menu, prefix, Host::PopUpWindow, on_close, cx);
+                let mut view = MenuView::new(menu, prefix, host, on_close, cx);
                 view.own_window = Some(window.window_handle());
-                view._activation =
-                    Some(cx.observe_window_activation(window, |view, window, cx| {
+                view.highlighted = list.as_ref().and_then(|list| list.selected);
+                view.list = list;
+                if host == Host::PopUpWindow {
+                    view.screen = Some(bounds);
+                }
+                view.subscriptions.push(cx.observe_window_activation(
+                    window,
+                    |view, window, cx| {
                         if !window.is_window_active() && view.submenu.is_none() {
                             view.dismiss(window, cx);
                         }
-                    }));
+                    },
+                ));
                 view
             });
+            if host == Host::PopUpWindow {
+                platform::popup_window_opened(window, bounds, root, cx);
+            }
             view.read(cx).focus.clone().focus(window, cx);
             view
         })
         .ok()
+    }
+
+    /// Closes the menu with no choice.
+    pub fn cancel(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.dismiss(window, cx);
+    }
+
+    /// Dismisses the menu when `window`, which it popped up for, loses the focus.
+    pub fn dismiss_with(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.subscriptions
+            .push(cx.observe_window_activation(window, |view, window, cx| {
+                if !window.is_window_active() {
+                    view.dismiss(window, cx);
+                }
+            }));
+    }
+
+    /// The window of the innermost open submenu, or the menu's own.
+    pub fn innermost_window(&self, cx: &App) -> Option<AnyWindowHandle> {
+        match &self.submenu {
+            Some((_, view, _)) => view.read(cx).innermost_window(cx),
+            None => self.own_window,
+        }
+    }
+
+    /// Whether `window` is the menu's or one of its submenus'.
+    pub fn owns_window(&self, window: AnyWindowHandle, cx: &App) -> bool {
+        self.own_window == Some(window)
+            || self
+                .submenu
+                .as_ref()
+                .is_some_and(|(_, view, _)| view.read(cx).owns_window(window, cx))
+    }
+
+    /// The innermost menu window at a screen position.
+    fn window_at(
+        &self,
+        position: Point<Pixels>,
+        cx: &App,
+    ) -> Option<(AnyWindowHandle, Bounds<Pixels>)> {
+        let inner = self
+            .submenu
+            .as_ref()
+            .and_then(|(_, view, _)| view.read(cx).window_at(position, cx));
+        inner.or_else(|| {
+            let bounds = self.screen.filter(|b| b.contains(&position))?;
+            Some((self.own_window?, bounds))
+        })
+    }
+
+    /// The pointer is grabbed by the outermost menu's window, which hands its events on to the
+    /// submenu under it and closes on a press outside every menu. Returns whether `event` is
+    /// not this window's own.
+    fn route(
+        &mut self,
+        position: Point<Pixels>,
+        event: impl FnOnce(Point<Pixels>) -> PlatformInput,
+        press: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> bool {
+        let Some(screen) = self.screen.filter(|_| self.prefix.is_empty()) else {
+            return false;
+        };
+        let on_screen = screen.origin + position;
+        match self.window_at(on_screen, cx) {
+            Some((handle, _)) if Some(handle) == self.own_window => false,
+            Some((handle, bounds)) => {
+                let event = event(on_screen - bounds.origin);
+                cx.defer(move |cx| {
+                    handle
+                        .update(cx, |_, window, cx| {
+                            window.dispatch_event(event, cx);
+                        })
+                        .ok();
+                });
+                true
+            }
+            None => {
+                if press {
+                    self.dismiss(window, cx);
+                }
+                true
+            }
+        }
+    }
+
+    fn route_pointer(view: &Entity<MenuView>, window: &mut Window) {
+        macro_rules! route {
+            ($event:ident, $variant:ident, $press:expr) => {
+                let view = view.downgrade();
+                window.on_mouse_event(move |event: &$event, phase, window, cx| {
+                    if phase != DispatchPhase::Capture {
+                        return;
+                    }
+                    let routed = view.update(cx, |view, cx| {
+                        let at = |position| {
+                            PlatformInput::$variant($event {
+                                position,
+                                ..event.clone()
+                            })
+                        };
+                        view.route(event.position, at, $press, window, cx)
+                    });
+                    if routed.unwrap_or(false) {
+                        cx.stop_propagation();
+                    }
+                });
+            };
+        }
+        route!(MouseDownEvent, MouseDown, true);
+        route!(MouseUpEvent, MouseUp, false);
+        route!(MouseMoveEvent, MouseMove, false);
+        route!(ScrollEvent, Scroll, false);
+    }
+
+    fn arm(&mut self, position: Point<Pixels>) {
+        let first = *self.first_move.get_or_insert(position);
+        let moved = position - first;
+        if moved.x.abs().max(moved.y.abs()) >= px(ARM_DISTANCE) {
+            self.armed = true;
+        }
     }
 
     fn entry(&self, index: usize) -> Option<&PopupEntry> {
@@ -249,13 +561,18 @@ impl MenuView {
                 });
             }
         });
-        let bounds = self.bounds.get();
-        let offset = point(
-            bounds.size.width - px(2.0),
-            px(row_top(&self.menu, index) - PADDING),
-        );
-        match self.host {
-            Host::InWindow => {
+        let placement = match self.host {
+            Host::InWindow => None,
+            Host::PopUpWindow => self.screen.map(|screen| {
+                let row = self.row_bounds(index);
+                Placement::Screen(Bounds::new(screen.origin + row.origin, row.size))
+            }),
+            Host::AnchoredPopup => self
+                .own_window
+                .map(|own| Placement::Anchored(own, self.row_bounds(index))),
+        };
+        match placement {
+            None => {
                 let view =
                     cx.new(|cx| MenuView::new(submenu, prefix, Host::InWindow, on_close, cx));
                 if focus {
@@ -263,21 +580,33 @@ impl MenuView {
                 }
                 self.submenu = Some((index, view, None));
             }
-            Host::PopUpWindow => {
-                let origin = window.bounds().origin + bounds.origin + offset;
-                if let Some((handle, view)) = Self::open_window_at(
+            Some(placement) => {
+                if let Some((handle, view)) = Self::open_placed(
                     submenu,
                     prefix,
-                    origin,
+                    placement,
+                    Side::Beside,
+                    None,
                     window.scale_factor(),
                     cx,
                     on_close,
                 ) {
+                    view.update(cx, |view, _| view.armed = true);
                     self.submenu = Some((index, view, Some(handle)));
                 }
             }
         }
         cx.notify();
+    }
+
+    /// The row's box in the menu's window.
+    fn row_bounds(&self, index: usize) -> Bounds<Pixels> {
+        let bounds = self.bounds.get();
+        let top = px(row_top(&self.menu, index)) + self.scroll.offset().y;
+        Bounds::new(
+            point(bounds.origin.x, bounds.origin.y + top),
+            size(bounds.size.width, px(ROW_HEIGHT)),
+        )
     }
 
     fn activate(&mut self, index: usize, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -296,33 +625,92 @@ impl MenuView {
         }
     }
 
-    fn step(&mut self, forward: bool, cx: &mut Context<'_, Self>) {
-        let candidates: Vec<usize> = visible_items(&self.menu)
+    fn candidates(&self) -> Vec<usize> {
+        visible_items(&self.menu)
             .filter_map(|(i, item)| match item {
                 PopupItem::Entry(entry) if selectable(entry) => Some(i),
                 _ => None,
             })
-            .collect();
+            .collect()
+    }
+
+    fn highlight(&mut self, index: usize, cx: &mut Context<'_, Self>) {
+        self.highlighted = Some(index);
+        let row = self.row_bounds(index);
+        let height = self.bounds.get().size.height;
+        let offset = self.scroll.offset();
+        if self.screen.is_some() || self.host == Host::AnchoredPopup {
+            let top = row.top() - self.bounds.get().top();
+            let below = top + row.size.height - height;
+            if top < px(0.0) {
+                self.scroll.set_offset(point(offset.x, offset.y - top));
+            } else if below > px(0.0) {
+                self.scroll.set_offset(point(offset.x, offset.y - below));
+            }
+        }
+        cx.notify();
+    }
+
+    fn step(&mut self, forward: bool, cx: &mut Context<'_, Self>) {
+        let candidates = self.candidates();
         if candidates.is_empty() {
             return;
         }
         let position = self
             .highlighted
             .and_then(|h| candidates.iter().position(|&c| c == h));
+        let last = candidates.len() - 1;
         let next = match (position, forward) {
             (None, true) => 0,
-            (None, false) => candidates.len() - 1,
+            (None, false) => last,
+            (Some(p), true) if self.list.is_some() => (p + 1).min(last),
+            (Some(p), false) if self.list.is_some() => p.saturating_sub(1),
             (Some(p), true) => (p + 1) % candidates.len(),
-            (Some(p), false) => (p + candidates.len() - 1) % candidates.len(),
+            (Some(p), false) => (p + last) % candidates.len(),
         };
-        self.highlighted = Some(candidates[next]);
-        cx.notify();
+        self.highlight(candidates[next], cx);
+    }
+
+    fn step_to_end(&mut self, last: bool, cx: &mut Context<'_, Self>) {
+        let candidates = self.candidates();
+        let end = if last {
+            candidates.last()
+        } else {
+            candidates.first()
+        };
+        if let Some(&index) = end {
+            self.highlight(index, cx);
+        }
+    }
+
+    /// A character typed over a select list looks for the next entry that starts with it.
+    fn find_typed(&mut self, typed: &str, cx: &mut Context<'_, Self>) {
+        self.typed = typed.to_lowercase();
+        let candidates = self.candidates();
+        let after = self
+            .highlighted
+            .and_then(|h| candidates.iter().position(|&c| c == h))
+            .map_or(0, |p| p + 1);
+        let found = (0..candidates.len())
+            .map(|i| candidates[(after + i) % candidates.len()])
+            .find(|&index| {
+                self.entry(index)
+                    .is_some_and(|e| e.label.trim_start().to_lowercase().starts_with(&self.typed))
+            });
+        if let Some(index) = found {
+            self.highlight(index, cx);
+        }
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let list = self.list.is_some();
+        let alt = event.keystroke.modifiers.alt;
         match event.keystroke.key.as_str() {
+            "down" | "up" if list && alt => self.dismiss(window, cx),
             "down" => self.step(true, cx),
             "up" => self.step(false, cx),
+            "home" | "pageup" => self.step_to_end(false, cx),
+            "end" | "pagedown" => self.step_to_end(true, cx),
             "enter" | "space" => {
                 if let Some(index) = self.highlighted {
                     self.activate(index, window, cx);
@@ -339,7 +727,15 @@ impl MenuView {
             }
             "left" if !self.prefix.is_empty() => self.finish(None, window, cx),
             "escape" => self.finish(None, window, cx),
-            _ => return,
+            "tab" if list => match self.highlighted {
+                Some(index) => self.activate(index, window, cx),
+                None => self.dismiss(window, cx),
+            },
+            _ => {
+                if list && let Some(typed) = event.keystroke.key_char.as_deref() {
+                    self.find_typed(typed, cx);
+                }
+            }
         }
         cx.stop_propagation();
     }
@@ -360,7 +756,17 @@ impl MenuView {
         } else {
             (None, appearance.pick(0x9a9a9a, 0x7a7a7a))
         };
-        let style = label_style();
+        let group = self
+            .list
+            .as_ref()
+            .is_some_and(|list| list.groups.contains(&index));
+        let text = if group { theme.text } else { text };
+        let style = if group {
+            TextStyle::from_css([("font", GROUP_FONT), ("white-space", "pre")]).expect("menu font")
+        } else {
+            label_style()
+        };
+        let label = platform::native_menu_label(&entry.label);
         let mut row = div()
             .id(("menu-row", index))
             .h(px(ROW_HEIGHT))
@@ -368,23 +774,34 @@ impl MenuView {
             .rounded(px(4.0))
             .flex()
             .items_center()
-            .on_mouse_move(cx.listener(move |view, _, window, cx| {
-                if view.highlighted != Some(index) {
-                    view.highlighted = Some(index);
-                    let has_submenu = view
-                        .entry(index)
-                        .is_some_and(|e| e.submenu.is_some() && e.enabled);
-                    if has_submenu {
-                        view.open_submenu(index, false, window, cx);
-                    } else {
-                        view.close_submenu(cx);
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|view, _, _, _| view.armed = true),
+            )
+            .on_mouse_move(
+                cx.listener(move |view, event: &MouseMoveEvent, window, cx| {
+                    view.arm(event.position);
+                    if view.highlighted != Some(index) {
+                        view.highlighted = Some(index);
+                        let has_submenu = view
+                            .entry(index)
+                            .is_some_and(|e| e.submenu.is_some() && e.enabled);
+                        if has_submenu {
+                            view.open_submenu(index, false, window, cx);
+                        } else {
+                            view.close_submenu(cx);
+                        }
+                        cx.notify();
                     }
-                    cx.notify();
-                }
-            }))
+                }),
+            )
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(move |view, _, window, cx| view.activate(index, window, cx)),
+                cx.listener(move |view, _, window, cx| {
+                    if view.armed {
+                        view.activate(index, window, cx);
+                    }
+                }),
             )
             .child(
                 div()
@@ -395,11 +812,7 @@ impl MenuView {
                         d.child(Text::new("\u{2713}", style).color(text))
                     }),
             )
-            .child(
-                div()
-                    .flex_1()
-                    .child(Text::new(entry.label.clone(), style).color(text)),
-            )
+            .child(div().flex_1().child(Text::new(label, style).color(text)))
             .child(
                 div()
                     .w(px(TRAILING_INSET - PADDING))
@@ -427,6 +840,9 @@ impl Render for MenuView {
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();
         let bounds = self.bounds.clone();
+        let own_window = self.host != Host::InWindow;
+        let grabbed = self.screen.is_some() && self.prefix.is_empty();
+        let view = cx.entity();
         let mut body = div()
             .id("menu")
             .track_focus(&self.focus)
@@ -439,16 +855,27 @@ impl Render for MenuView {
             .relative()
             .py(px(PADDING))
             .min_w(px(MIN_WIDTH))
+            .track_scroll(&self.scroll)
             .bg(rgb(theme.background))
             .border_1()
             .border_color(rgb(appearance.pick(0xc8c8c8, 0x4a4a4a)))
             .rounded(px(6.0))
             .shadow_md()
             .child(
-                canvas(move |b, _, _| bounds.set(b), |_, _, _, _| {})
-                    .absolute()
-                    .size_full(),
+                canvas(
+                    move |b, _, _| bounds.set(b),
+                    move |_, _, window, _| {
+                        if grabbed {
+                            Self::route_pointer(&view, window);
+                        }
+                    },
+                )
+                .absolute()
+                .size_full(),
             );
+        if own_window {
+            body = body.size_full().overflow_y_scroll();
+        }
         let items: Vec<(usize, PopupItem)> = visible_items(&self.menu)
             .map(|(i, item)| (i, item.clone()))
             .collect();
@@ -491,7 +918,8 @@ impl Render for MenuView {
             }
             _ => None,
         };
-        div().child(body).children(submenu)
+        let root = if own_window { div().size_full() } else { div() };
+        root.child(body).children(submenu)
     }
 }
 

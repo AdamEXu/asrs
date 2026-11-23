@@ -325,3 +325,17 @@ pub fn can_post_events() -> bool {
 pub fn can_capture_screen() -> bool {
     imp::probe::can_capture_screen()
 }
+
+/// An X11 window's `WM_NORMAL_HINTS`, in device px, and whether it is kept above others.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SizeHints {
+    pub min: Option<(i32, i32)>,
+    pub max: Option<(i32, i32)>,
+    /// The minimum's and the maximum's numerator and denominator.
+    pub aspect: Option<[i32; 4]>,
+    pub above: bool,
+}
+
+pub fn size_hints(window: &Window) -> Option<SizeHints> {
+    imp::probe::size_hints(window)
+}

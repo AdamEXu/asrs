@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use asrs_services::window_manager::Platform;
-use asrs_ui::gpui::{App, Window, point, px};
+use asrs_ui::gpui::{App, Global, Window, point, px};
 use asrs_ui::menu::{CloseHandler, MenuView};
 use asrs_ui::platform::{self, MenuPath, PopupEntry, PopupMenu};
 
@@ -145,6 +145,37 @@ fn collect_accelerators(
     }
 }
 
+/// `Menu.getApplicationMenu()` and what its clicks run.
+struct ApplicationMenu {
+    platform: Platform,
+    items: Vec<BuiltItem>,
+    dispatch: Rc<dyn Fn(MenuPath, &mut App)>,
+}
+
+impl Global for ApplicationMenu {}
+
+/// `Menu.getApplicationMenu().items[index].submenu`, for `open-app-menu`.
+fn application_submenu(cx: &App, index: usize) -> Option<PopupMenu> {
+    let menu = cx.try_global::<ApplicationMenu>()?;
+    let submenu = menu.items.get(index)?.submenu.as_deref()?;
+    Some(to_popup(submenu, menu.platform, true))
+}
+
+/// `open-app-menu`'s `submenu.popup({ window, x, y })`.
+pub fn popup_application_submenu(window: &mut Window, cx: &mut App, index: usize, x: i32, y: i32) {
+    let Some(menu) = application_submenu(cx, index) else {
+        return;
+    };
+    show_popup(window, cx, menu, x, y, move |path, cx| {
+        if let Some(path) = path {
+            let mut full = vec![index];
+            full.extend(path);
+            let dispatch = cx.global::<ApplicationMenu>().dispatch.clone();
+            dispatch(full, cx);
+        }
+    });
+}
+
 /// Installs `template` as the application menu: the menu bar on macOS, the accelerator table
 /// elsewhere. Call again with the rewritten template whenever upstream rebuilds its menu.
 pub fn install_application_menu(
@@ -169,7 +200,8 @@ fn show_application_menu(
 ) {
     let menu = (platform == Platform::Mac).then(|| to_popup(&built, platform, true));
     let table = accelerator_table(&built, platform);
-    let dispatch = move |path: MenuPath, cx: &mut App| {
+    let shown = built.clone();
+    let dispatch: Rc<dyn Fn(MenuPath, &mut App)> = Rc::new(move |path, cx| {
         if !item_at(&built, &path).is_some_and(|item| item.enabled) {
             return;
         }
@@ -182,13 +214,17 @@ fn show_application_menu(
         if let Some(action) = action {
             on_action(action, cx);
         }
-    };
+    });
+    cx.set_global(ApplicationMenu {
+        platform,
+        items: shown,
+        dispatch: dispatch.clone(),
+    });
     match menu {
         Some(menu) => {
-            platform::set_application_menu(cx, &menu, dispatch);
+            platform::set_application_menu(cx, &menu, move |path, cx| dispatch(path, cx));
         }
         None => {
-            let dispatch = Rc::new(dispatch);
             // The keystroke's window is borrowed until its event ends, and the handlers reach
             // windows by handle.
             asrs_ui::menu::install_accelerators(cx, table, move |path, _, cx| {
@@ -199,8 +235,8 @@ fn show_application_menu(
     }
 }
 
-/// `menu.popup({ window, x, y })` for a context menu template: native on macOS, drawn in a
-/// `PopUp` window elsewhere until the Windows backend exists. `x` and `y` are window content
+/// `menu.popup({ window, x, y })` for a context menu template: native on macOS, drawn in windows
+/// of its own on Linux, and on Windows until its native backend exists. `x` and `y` are window content
 /// coordinates.
 pub fn popup_context_menu(
     window: &mut Window,
@@ -228,7 +264,7 @@ pub fn popup_context_menu(
 pub struct ScriptedMenu(Option<(ContextMenu, EffectHandler)>);
 
 #[cfg(feature = "parity")]
-impl asrs_ui::gpui::Global for ScriptedMenu {}
+impl Global for ScriptedMenu {}
 
 #[cfg(feature = "parity")]
 impl ScriptedMenu {
@@ -300,7 +336,7 @@ fn show_popup(
     y: i32,
     choose: impl FnOnce(Option<MenuPath>, &mut App) + 'static,
 ) {
-    if cfg!(target_os = "macos") {
+    if !cfg!(windows) {
         platform::popup_menu(window, cx, menu, x, y, choose);
     } else {
         let origin = window.bounds().origin + point(px(x as f32), px(y as f32));

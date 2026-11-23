@@ -29,8 +29,8 @@ use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
     Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
     MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Render, ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window,
-    canvas, div, point, px, rgb, rgba,
+    Render, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement,
+    Styled, Window, canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::input::text_field_focused;
@@ -50,6 +50,7 @@ use super::source_list::{self, ListsGeometry};
 use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
 use super::table::{self, TableViews};
+use super::title_bar_menu::{self, MenuLayout};
 
 /// `element` under its parity id, which is its selector in `www/hub.html` (`div.title-bar`).
 fn probe(element: FrameElement, child: impl IntoElement) -> Probed {
@@ -91,6 +92,8 @@ pub trait FrameHost: 'static {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
     /// The layout the hub model's `HubView` answers source list reads from.
     fn source_list_geometry(&self) -> ListsGeometry;
+    /// The boxes of `div.title-bar-menu`'s buttons, as last laid out.
+    fn set_menu_buttons(&mut self, _rects: Vec<[f64; 4]>) {}
     /// The contents of `slot`, laid out in a box of the slot's size.
     fn slot(
         &mut self,
@@ -173,6 +176,7 @@ pub struct HubFrame<H: FrameHost> {
     timeline_canvas: Option<Entity<CanvasState>>,
     timeline_rect: Option<[f64; 4]>,
     timeline_hovered: bool,
+    menu_scroll: ScrollHandle,
     pub(super) line_graph: LineGraphViews,
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
@@ -297,6 +301,7 @@ impl<H: FrameHost> HubFrame<H> {
             timeline_canvas: None,
             timeline_rect: None,
             timeline_hovered: false,
+            menu_scroll: ScrollHandle::new(),
             line_graph: LineGraphViews::default(),
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
@@ -737,6 +742,45 @@ impl<H: FrameHost> HubFrame<H> {
 }
 
 impl<H: FrameHost> HubFrame<H> {
+    fn title_bar_menu(
+        &mut self,
+        rect: [f64; 4],
+        appearance: Appearance,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let layout = MenuLayout::compute(rect[2], window.scale_factor(), cx);
+        self.host
+            .set_menu_buttons(layout.client_rects(rect, &self.menu_scroll));
+        let clicked = cx.entity().downgrade();
+        let left = clicked.clone();
+        title_bar_menu::title_bar_menu(
+            &layout,
+            rect,
+            &self.menu_scroll,
+            appearance,
+            move |index, _, cx| {
+                let _ = clicked.update(cx, |frame, cx| {
+                    frame.host.input(cx, |hub| {
+                        hub.with_sidebar(|sidebar, env| {
+                            sidebar.menu_button_click(env.geometry, index)
+                        })
+                    })
+                });
+            },
+            move |index, cx| {
+                let _ = left.update(cx, |frame, cx| {
+                    frame.host.input(cx, |hub| {
+                        hub.with_sidebar(|sidebar, _| sidebar.menu_button_mouse_leave(index))
+                    })
+                });
+            },
+            window,
+            cx,
+        )
+        .into_any_element()
+    }
+
     fn timeline_element(&mut self, dark: bool, cx: &mut Context<'_, Self>) -> AnyElement {
         let state = self
             .timeline_canvas
@@ -1149,6 +1193,13 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 ));
             }
             root = root.child(probe(FrameElement::TitleBar, bar));
+        }
+        if let Some(rect) = layout.rect(FrameElement::TitleBarMenu) {
+            let menu = self.title_bar_menu(rect, appearance, window, cx);
+            root = root.child(probe(
+                FrameElement::TitleBarMenu,
+                place(rect, (0.0, 0.0)).child(menu),
+            ));
         }
         for element in [
             FrameElement::Update,
