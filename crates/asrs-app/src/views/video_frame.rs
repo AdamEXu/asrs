@@ -3,8 +3,10 @@
 use std::path::PathBuf;
 
 use asrs_canvas::Pixmap;
-use asrs_canvas::mip::Mip;
+use asrs_canvas::mip::{Mip, downsample};
+use asrs_js::math;
 use asrs_js::string::JsString;
+use asrs_ui::svg::Backend;
 use zune_core::bytestream::ZCursor;
 use zune_core::colorspace::ColorSpace;
 use zune_core::options::DecoderOptions;
@@ -85,8 +87,103 @@ fn taps(source: u32, target: u32) -> Vec<(usize, usize, f32)> {
         .collect()
 }
 
-/// `image` drawn `width` x `height`, opaque BGRA: the mip level cc picks for the size, then a
-/// linear filter.
+/// A part of `image` averaged into each of `width` x `height` pixels.
+fn area(image: &Pixmap, width: u32, height: u32) -> Option<Pixmap> {
+    let spans = |source: u32, target: u32| -> Vec<(usize, Vec<f32>)> {
+        let step = f64::from(source) / f64::from(target);
+        (0..target)
+            .map(|i| {
+                let (start, end) = (f64::from(i) * step, f64::from(i + 1) * step);
+                let first = start.floor() as u32;
+                let last = (end.ceil() as u32).min(source);
+                let weights = (first..last).map(|j| {
+                    let covered = end.min(f64::from(j + 1)) - start.max(f64::from(j));
+                    (covered / step) as f32
+                });
+                (first as usize, weights.collect())
+            })
+            .collect()
+    };
+    let columns = spans(image.width(), width);
+    let rows = spans(image.height(), height);
+    let stride = image.width() as usize * 4;
+    let mut out = Pixmap::new(width, height)?;
+    let line_bytes = width as usize * 4;
+    let data = image.data();
+    in_bands(out.data_mut(), line_bytes, &rows, |line, (y0, weights)| {
+        let mut sums = vec![[0.0f32; 3]; width as usize];
+        for (j, &wy) in weights.iter().enumerate() {
+            let row = &data[(y0 + j) * stride..][..stride];
+            for (sum, (x0, weights)) in sums.iter_mut().zip(&columns) {
+                for (i, &wx) in weights.iter().enumerate() {
+                    let pixel = &row[(x0 + i) * 4..][..3];
+                    for (s, &v) in sum.iter_mut().zip(pixel) {
+                        *s += f32::from(v) * wx * wy;
+                    }
+                }
+            }
+        }
+        for (pixel, sum) in line.as_chunks_mut::<4>().0.iter_mut().zip(&sums) {
+            let [r, g, b] = sum.map(|v| (v + 0.5) as u8);
+            *pixel = [r, g, b, 255];
+        }
+    });
+    Some(out)
+}
+
+/// Runs `paint` over every line of `out` with its row, on a few threads.
+fn in_bands<R: Sync>(
+    out: &mut [u8],
+    line_bytes: usize,
+    rows: &[R],
+    paint: impl Fn(&mut [u8], &R) + Sync,
+) {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
+    let band = rows.len().div_ceil(threads).max(1);
+    std::thread::scope(|scope| {
+        for (lines, rows) in out.chunks_mut(band * line_bytes).zip(rows.chunks(band)) {
+            let paint = &paint;
+            scope.spawn(move || {
+                for (line, row) in lines.chunks_exact_mut(line_bytes).zip(rows) {
+                    paint(line, row);
+                }
+            });
+        }
+    });
+}
+
+/// `source` through a linear filter, opaque BGRA.
+fn linear(source: &Pixmap, width: u32, height: u32) -> Vec<u8> {
+    let columns = taps(source.width(), width);
+    let rows = taps(source.height(), height);
+    let stride = source.width() as usize * 4;
+    let data = source.data();
+    let line_bytes = width as usize * 4;
+    let mut out = vec![0; line_bytes * height as usize];
+    in_bands(&mut out, line_bytes, &rows, |line, &(y0, y1, ty)| {
+        let top = &data[y0 * stride..][..stride];
+        let bottom = &data[y1 * stride..][..stride];
+        for (pixel, &(x0, x1, tx)) in line.as_chunks_mut::<4>().0.iter_mut().zip(&columns) {
+            let mix = |row: &[u8], k: usize| {
+                let a = f32::from(row[x0 * 4 + k]);
+                a + (f32::from(row[x1 * 4 + k]) - a) * tx
+            };
+            let channel = |k: usize| {
+                let a = mix(top, k);
+                (a + (mix(bottom, k) - a) * ty + 0.5) as u8
+            };
+            *pixel = [channel(2), channel(1), channel(0), 255];
+        }
+    });
+    out
+}
+
+/// What Skia's GPU backends subtract from the level of detail of a mipmapped texture.
+const SHARPEN: f64 = 0.475;
+
+/// `image` drawn `width` x `height`, opaque BGRA. cc hands Skia the mip level it picks for the
+/// size. Where Chromium rasterizes the page with Graphite that level is a texture with mips of
+/// its own, sampled trilinearly with a sharpening bias; elsewhere CPU Skia samples it linearly.
 pub fn resample(image: &Pixmap, width: u32, height: u32) -> Option<Vec<u8>> {
     let natural = [image.width(), image.height()];
     let scale = [
@@ -94,40 +191,26 @@ pub fn resample(image: &Pixmap, width: u32, height: u32) -> Option<Vec<u8>> {
         f64::from(height) / f64::from(natural[1]),
     ];
     let whole = [0.0, 0.0, f64::from(natural[0]), f64::from(natural[1])];
-    let level = Mip::of(whole, scale, natural).and_then(|mip| mip.build(image));
-    let source = level.as_ref().unwrap_or(image);
-    let columns = taps(source.width(), width);
-    let rows = taps(source.height(), height);
-    let stride = source.width() as usize * 4;
-    let data = source.data();
-    let mut out = vec![0; width as usize * height as usize * 4];
-    let line_bytes = width as usize * 4;
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
-    let band = rows.len().div_ceil(threads).max(1);
-    std::thread::scope(|scope| {
-        for (lines, rows) in out.chunks_mut(band * line_bytes).zip(rows.chunks(band)) {
-            let columns = &columns;
-            scope.spawn(move || {
-                for (line, &(y0, y1, ty)) in lines.chunks_exact_mut(line_bytes).zip(rows) {
-                    let top = &data[y0 * stride..][..stride];
-                    let bottom = &data[y1 * stride..][..stride];
-                    for (pixel, &(x0, x1, tx)) in
-                        line.as_chunks_mut::<4>().0.iter_mut().zip(columns)
-                    {
-                        let mix = |row: &[u8], k: usize| {
-                            let a = f32::from(row[x0 * 4 + k]);
-                            a + (f32::from(row[x1 * 4 + k]) - a) * tx
-                        };
-                        let channel = |k: usize| {
-                            let a = mix(top, k);
-                            (a + (mix(bottom, k) - a) * ty + 0.5) as u8
-                        };
-                        *pixel = [channel(2), channel(1), channel(0), 255];
-                    }
-                }
-            });
+    let Some(mip) = Mip::of(whole, scale, natural) else {
+        return Some(linear(image, width, height));
+    };
+    if Backend::HOST == Backend::Raster {
+        return Some(linear(&mip.build(image)?, width, height));
+    }
+    let level = area(image, mip.size[0], mip.size[1])?;
+    let mut out = linear(&level, width, height);
+    let detail = math::max2(
+        f64::from(mip.size[0]) / f64::from(width),
+        f64::from(mip.size[1]) / f64::from(height),
+    );
+    let fraction = (math::log2(detail) - SHARPEN).clamp(0.0, 1.0) as f32;
+    if fraction > 0.0 {
+        let next = linear(&downsample(&level)?, width, height);
+        for (a, b) in out.iter_mut().zip(next) {
+            let mixed = f32::from(*a) + (f32::from(b) - f32::from(*a)) * fraction;
+            *a = (mixed + 0.5) as u8;
         }
-    });
+    }
     Some(out)
 }
 

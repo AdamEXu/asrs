@@ -356,10 +356,25 @@ struct SourceStroke {
     presenter: FramePresenter,
 }
 
-/// The decoded frame the tab paints, and the size it was last painted at.
+/// The decoded frame the tab paints.
 struct Decoded {
     src: JsString,
     image: Arc<Pixmap>,
+    /// The frame resampled for its size on screen when it was requested, until it is presented.
+    fitted: Option<Fitted>,
+}
+
+struct Fitted {
+    size: [i32; 2],
+    bgra: Vec<u8>,
+}
+
+impl Fitted {
+    fn new(image: &Pixmap, size: [i32; 2]) -> Option<Fitted> {
+        let [width, height] = size.map(|v| u32::try_from(v).ok().filter(|v| *v > 0));
+        let bgra = video_frame::resample(image, width?, height?)?;
+        Some(Fitted { size, bgra })
+    }
 }
 
 #[derive(Default)]
@@ -369,6 +384,8 @@ struct TabView {
     presented: Option<(JsString, [i32; 2])>,
     load: Option<Task<()>>,
     wanted: Option<JsString>,
+    /// `div.renderer-content` and the window's scale when the tab was last displayed.
+    place: Option<([f64; 4], f64)>,
     strokes: [SourceStroke; 2],
     slider: Option<SliderView>,
 }
@@ -568,10 +585,23 @@ impl<H: FrameHost> HubFrame<H> {
             return;
         };
         let path = src.clone();
-        let decode = cx.background_spawn(async move { video_frame::load(&path).map(Arc::new) });
+        let place = view.place;
+        let decode = cx.background_spawn(async move {
+            let image = Arc::new(video_frame::load(&path)?);
+            let fitted = place.and_then(|(rect, scale)| {
+                let natural = [image.width(), image.height()];
+                let [_, _, width, height] = video_frame::contained(rect, natural, scale);
+                Fitted::new(&image, [width, height])
+            });
+            Some(Decoded {
+                src: path,
+                image,
+                fitted,
+            })
+        });
         view.load = Some(cx.spawn(async move |this, cx| {
-            let image = decode.await;
-            let _ = this.update(cx, |frame, cx| frame.video_loaded(key, src, image, cx));
+            let decoded = decode.await;
+            let _ = this.update(cx, |frame, cx| frame.video_loaded(key, src, decoded, cx));
         }));
     }
 
@@ -579,12 +609,12 @@ impl<H: FrameHost> HubFrame<H> {
         &mut self,
         key: usize,
         src: JsString,
-        image: Option<Arc<Pixmap>>,
+        decoded: Option<Decoded>,
         cx: &mut Context<'_, Self>,
     ) {
-        let natural = image
+        let natural = decoded
             .as_ref()
-            .map(|i| [f64::from(i.width()), f64::from(i.height())]);
+            .map(|d| [f64::from(d.image.width()), f64::from(d.image.height())]);
         let index = tab_index(self.host().hub(cx), key);
         if let Some(index) = index {
             self.host_mut().input(cx, |hub| {
@@ -593,8 +623,8 @@ impl<H: FrameHost> HubFrame<H> {
         }
         if let Some(view) = self.video.tabs.get_mut(&key) {
             view.load = None;
-            if let Some(image) = image {
-                view.decoded = Some(Decoded { src, image });
+            if decoded.is_some() {
+                view.decoded = decoded;
             }
         }
         self.start_video_load(key, cx);
@@ -609,6 +639,9 @@ impl<H: FrameHost> HubFrame<H> {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
+        if let Some((_, key)) = displayed(self.host().hub(cx)) {
+            self.video.tabs.entry(key).or_default().place = Some((rect, f64::from(scale)));
+        }
         self.video_loads(cx);
         let hub = self.host().hub(cx);
         let (index, key) = displayed(hub)?;
@@ -620,20 +653,21 @@ impl<H: FrameHost> HubFrame<H> {
         };
         let view = self.video.tabs.get_mut(&key)?;
         let mut placed = None;
-        if let (Some(Shown::Image(_)), Some(decoded)) = (&shown, &view.decoded) {
+        if let (Some(Shown::Image(_)), Some(decoded)) = (&shown, &mut view.decoded) {
             let natural = [decoded.image.width(), decoded.image.height()];
             let dest = video_frame::contained(rect, natural, f64::from(scale));
             let target = [dest[2], dest[3]];
-            if target[0] > 0 && target[1] > 0 {
-                let presented = (decoded.src.clone(), target);
-                if view.presented.as_ref() != Some(&presented) {
+            let presented = (decoded.src.clone(), target);
+            if view.presented.as_ref() != Some(&presented) {
+                let fitted = decoded.fitted.take().filter(|f| f.size == target);
+                let fitted = fitted.or_else(|| Fitted::new(&decoded.image, target));
+                if let Some(Fitted { bgra, .. }) = fitted {
                     let [width, height] = target.map(|v| v as u32);
-                    let bgra = video_frame::resample(&decoded.image, width, height)?;
                     view.presenter.present_bgra(width, height, bgra, window, cx);
                     view.presented = Some(presented);
                 }
-                placed = view.presenter.image().cloned().map(|image| (image, dest));
             }
+            placed = view.presenter.image().cloned().map(|image| (image, dest));
         } else if view.presented.take().is_some() {
             view.presenter.clear(window, cx);
         }

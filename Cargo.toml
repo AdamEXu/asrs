@@ -57,6 +57,9 @@ opt-level = 3
 [profile.dev.package.tiny-skia]
 opt-level = 3
 
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
 [profile.dev.package.png]
 opt-level = 3
 
