@@ -89,9 +89,10 @@ function install() {
           const copy = path.join(dir, `${process.pid}-${serial++}`);
           copyFileSync(real, `${copy}.js`);
           const map = JSON.parse(fs.readFileSync(`${real}.map`, "utf8"));
-          map.sources = map.sources.map((s) => path.resolve(path.dirname(real), s));
+          // esbuild writes them relative to the directory as it was named, symlinks and all.
+          map.sources = map.sources.map((s) => path.resolve(path.dirname(options.outfile), s));
           writeFileSync(`${copy}.map`, JSON.stringify(map));
-          writeFileSync(`${copy}.url`, real);
+          writeFileSync(`${copy}.url`, JSON.stringify([options.outfile, real]));
         }
         return result;
       }
@@ -102,7 +103,8 @@ function install() {
     const attached = [];
     app.on("web-contents-created", (_event, contents) => {
       const dbg = contents.debugger;
-      const send = (method, params) => dbg.sendCommand(method, params);
+      const sendCommand = dbg.sendCommand;
+      const send = (method, params) => sendCommand.call(dbg, method, params);
       const attach = dbg.attach;
       try {
         attach.call(dbg, "1.3");
@@ -117,15 +119,34 @@ function install() {
         send("Profiler.enable"),
         send("Profiler.startPreciseCoverage", { callCount: true, detailed: true })
       ]).catch((error) => fail("starting renderer coverage", error));
-      attached.push({ contents, send, started });
+      // A window may be destroyed as soon as its last command answers.
+      const entry = { contents, taken: false };
+      entry.take = async () => {
+        await started;
+        save((await send("Profiler.takePreciseCoverage")).result);
+        entry.taken = true;
+      };
+      attached.push(entry);
+      const then = (target, method) => {
+        const original = target[method];
+        target[method] = async (...args) => {
+          const result = await original.apply(target, args);
+          await entry.take();
+          return result;
+        };
+      };
+      then(contents, "executeJavaScript");
+      then(dbg, "sendCommand");
     });
     const appExit = app.exit;
     app.exit = function (code) {
       (async () => {
-        for (const { contents, send, started } of attached) {
-          if (contents.isDestroyed()) continue;
-          await started;
-          save((await send("Profiler.takePreciseCoverage")).result);
+        for (const entry of attached) {
+          try {
+            if (!entry.contents.isDestroyed()) await entry.take();
+          } catch (error) {
+            if (!entry.taken) throw error;
+          }
         }
       })().then(
         () => appExit.call(app, code),

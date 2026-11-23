@@ -114,11 +114,12 @@ function loadScript(file, mapFile, dir) {
   return loaded.get(file);
 }
 
-const strip = (text) => text.replace(/\s*\/\/# sourceMappingURL=.*\s*$/, "");
+const strip = (text) => text.replace(/\/\/# sourceMappingURL=.*\s*$/, "").trimEnd();
 const verified = new Set();
 function upstreamBundle(file) {
   const twin = path.join(request.bundles, path.relative(bundleDir, file));
-  if (!fs.existsSync(twin)) return null;
+  // rolldown's runtime helpers are a chunk of their own, with no source and so no map.
+  if (!fs.existsSync(twin + ".map")) return null;
   if (!verified.has(file)) {
     // The build date is the only difference between two builds, and its length is fixed.
     const [a, b] = [file, twin].map((f) => strip(fs.readFileSync(f, "utf8")).length);
@@ -130,7 +131,8 @@ function upstreamBundle(file) {
 
 /** The script a coverage URL names, or null for one that holds no upstream code. */
 function scriptOf(url, runtime) {
-  const file = real(fileURLToPath(url.replace(/[?#].*$/, "")));
+  const named = fileURLToPath(url.replace(/[?#].*$/, ""));
+  const file = runtime.has(named) ? named : real(named);
   if (runtime.has(file)) {
     const copy = runtime.get(file);
     return loadScript(copy + ".js", copy + ".map", path.dirname(copy));
@@ -167,7 +169,7 @@ function readRun(dir) {
   if (fs.existsSync(copies)) {
     for (const name of fs.readdirSync(copies).filter((n) => n.endsWith(".url"))) {
       const base = path.join(copies, name.slice(0, -4));
-      runtime.set(fs.readFileSync(base + ".url", "utf8"), base);
+      for (const name of JSON.parse(fs.readFileSync(base + ".url", "utf8"))) runtime.set(name, base);
     }
   }
   const raw = fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"));
@@ -357,11 +359,34 @@ if (request.files.length === 0) {
   for (const name of names) fileReport(name);
 }
 
+/** Functions of `name` no run has compiled, as bundling dropped them, outermost ones only. */
+function unbundled(name, known) {
+  const text = fs.readFileSync(srcDir + name, "utf8");
+  const root = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+  const lineOf = (offset) => root.getLineAndCharacterOfPosition(offset).line + 1;
+  const out = [];
+  const visit = (node) => {
+    if (ts.isFunctionLike(node) && node.body !== undefined) {
+      const [from, to] = [lineOf(node.getStart(root)), lineOf(node.body.getStart(root))];
+      const seen = known.filter((f) => f.line >= from && f.line <= to);
+      if (seen.length === 0) {
+        out.push({ name: node.name?.getText(root) ?? (ts.isConstructorDeclaration(node) ? "constructor" : "(anonymous)"), line: from });
+        return;
+      }
+      if (seen.every((f) => f.runs.length === 0)) return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return out;
+}
+
 function fileReport(name) {
   const file = union.get(name);
   const fns = [...file.fns.entries()].sort((a, b) => a[1].line - b[1].line);
+  const absent = unbundled(name, [...file.fns.values()]);
   const hit = [...file.lines].filter(([, l]) => l.runs.length > 0);
-  print(`## \`${name}\`: ${hit.length} of ${file.lines.size} lines, ${fns.filter(([, f]) => f.runs.length > 0).length} of ${fns.length} functions`);
+  print(`## \`${name}\`: ${hit.length} of ${file.lines.size} lines, ${fns.filter(([, f]) => f.runs.length > 0).length} of ${fns.length + absent.length} functions`);
   print();
   print("| Function | Line | Runs | Lines | Uncovered lines |");
   print("|---|---|---|---|---|");
@@ -371,6 +396,7 @@ function fileReport(name) {
     const covered = own.length - missed.length;
     print(`| \`${f.name}\` | ${f.line} | ${f.runs.length} of ${runs.length} | ${covered} of ${own.length} | ${f.runs.length === 0 ? "**never called**" : spans(missed, file.lines.keys())} |`);
   }
+  for (const f of absent) print(`| \`${f.name}\` | ${f.line} | 0 of ${runs.length} | | **not in what any run bundles** |`);
   print();
   if (runs.length < 2) return;
   const groups = new Map();
