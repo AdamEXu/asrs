@@ -1,5 +1,6 @@
 {
   "appMain": [
+    "src/app/clips.ts",
     "src/app/display.ts",
     "src/app/logs.ts",
     "src/app/page.ts",
