@@ -342,6 +342,13 @@ fn number_format(args: &[Value]) -> Response {
         Ok(x) => x,
         Err(r) => return r,
     };
+    match options.get("notation") {
+        None | Some(Value::Undefined) => {}
+        Some(Value::String(s)) if s.eq_str("scientific") && min_fraction == max_fraction => {
+            return ok_string(number::intl_format_scientific(value, max_fraction as u32));
+        }
+        Some(_) => return Response::Error("no port of this notation".to_owned()),
+    }
     let opts = IntlOptions {
         min_integer: min_integer.max(0.0) as u32,
         min_fraction: min_fraction.max(0.0) as u32,

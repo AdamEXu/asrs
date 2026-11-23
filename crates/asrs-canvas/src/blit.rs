@@ -21,6 +21,14 @@ impl Spans {
         }
     }
 
+    pub fn same_size(&self) -> Spans {
+        Spans {
+            width: self.width,
+            height: self.height,
+            ..Spans::default()
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.runs.is_empty()
     }

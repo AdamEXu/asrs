@@ -73,10 +73,8 @@ fn style_value(style: &Style) -> JsValue {
 fn property_value(p: &Property) -> JsValue {
     match p {
         Property::FillStyle(s) | Property::StrokeStyle(s) => style_value(s),
-        Property::LineWidth(v)
-        | Property::MiterLimit(v)
-        | Property::LineDashOffset(v)
-        | Property::GlobalAlpha(v) => num(*v),
+        Property::LineWidth(v) | Property::MiterLimit(v) | Property::GlobalAlpha(v) => num(*v),
+        Property::LineDashOffset(v) => v.map_or(JsValue::Undefined, num),
         Property::LineCap(s)
         | Property::LineJoin(s)
         | Property::Font(s)
@@ -101,6 +99,8 @@ pub fn call_to_value(call: &Call) -> JsValue {
         Call::Scale(x, y) => named("scale", &[*x, *y]),
         Call::Rotate(a) => named("rotate", &[*a]),
         Call::Translate(x, y) => named("translate", &[*x, *y]),
+        Call::SetTransform(m) => named("setTransform", m),
+        Call::ResetTransform => named("resetTransform", &[]),
         Call::BeginPath => named("beginPath", &[]),
         Call::ClosePath => named("closePath", &[]),
         Call::MoveTo(x, y) => named("moveTo", &[*x, *y]),
@@ -144,7 +144,9 @@ pub fn call_to_value(call: &Call) -> JsValue {
             v
         }
         Call::Fill => named("fill", &[]),
+        Call::FillEvenOdd => array([string("fill"), string("evenodd")]),
         Call::Stroke => named("stroke", &[]),
+        Call::Clip => named("clip", &[]),
         Call::FillRect(x, y, w, h) => named("fillRect", &[*x, *y, *w, *h]),
         Call::StrokeRect(x, y, w, h) => named("strokeRect", &[*x, *y, *w, *h]),
         Call::ClearRect(x, y, w, h) => named("clearRect", &[*x, *y, *w, *h]),
@@ -411,7 +413,10 @@ fn property_from(name: &str, v: &JsValue) -> Result<Property, String> {
         "strokeStyle" => Property::StrokeStyle(style_from(v)?),
         "lineWidth" => Property::LineWidth(number()?),
         "miterLimit" => Property::MiterLimit(number()?),
-        "lineDashOffset" => Property::LineDashOffset(number()?),
+        "lineDashOffset" => Property::LineDashOffset(match v {
+            JsValue::Undefined => None,
+            _ => Some(number()?),
+        }),
         "globalAlpha" => Property::GlobalAlpha(number()?),
         "lineCap" => Property::LineCap(text()?),
         "lineJoin" => Property::LineJoin(text()?),
@@ -477,6 +482,8 @@ pub fn call_from_value(v: &JsValue) -> Result<Call, String> {
                 let [x, y] = nums(args)?;
                 Call::Translate(x, y)
             }
+            "setTransform" => Call::SetTransform(nums(args)?),
+            "resetTransform" => Call::ResetTransform,
             "beginPath" => Call::BeginPath,
             "closePath" => Call::ClosePath,
             "moveTo" => {
@@ -523,8 +530,13 @@ pub fn call_from_value(v: &JsValue) -> Result<Call, String> {
                     anticlockwise: optional_bool(args, 7)?,
                 }
             }
-            "fill" => Call::Fill,
+            "fill" => match args {
+                [] => Call::Fill,
+                _ if arg_str(args, 0)? == "evenodd" => Call::FillEvenOdd,
+                _ => return Err("unsupported fill rule".to_owned()),
+            },
             "stroke" => Call::Stroke,
+            "clip" if args.is_empty() => Call::Clip,
             "fillRect" | "strokeRect" | "clearRect" => {
                 let [x, y, w, h] = nums(args)?;
                 match name.as_str() {

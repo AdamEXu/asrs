@@ -73,6 +73,21 @@ asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
 - Version: 2.0.5, the fork at `github.com/jwbonner/heatmap.js#24b4455`
 - Used in: `crates/asrs-canvas/src/heatmap.rs`
 
+## Chart.js
+
+- License: MIT ([`licenses/chart.js.txt`](licenses/chart.js.txt))
+- Copyright (c) 2014-2022 Chart.js Contributors
+- Version: 4.4.0
+- Used in: `crates/asrs-tabs/src/histogram/` (`chart.rs`, `scale.rs`, `ticks.rs`, `tooltip.rs`,
+  `animation.rs`), translated to Rust for the one bar chart configuration upstream uses
+
+## @kurkle/color
+
+- License: MIT ([`licenses/kurkle-color.txt`](licenses/kurkle-color.txt))
+- Copyright (c) 2018-2021 Jukka Kurkela
+- Version: 0.3.2 (as bundled with Chart.js 4.4.0)
+- Used in: `crates/asrs-tabs/src/histogram/color.rs`
+
 ## @msgpack/msgpack
 
 - License: ISC ([`licenses/msgpack-javascript.txt`](licenses/msgpack-javascript.txt))
@@ -163,10 +178,11 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Copyright (c) 2011 Google Inc.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
-  `stroke.rs`; `dash.rs`; `clip.rs`; `geometry.rs`; `hairline.rs`; `skpath.rs`; `pixels.rs`;
-  Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and the raster pipeline in
-  `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in `text/layout.rs`; skcms,
-  `SkColorSpace` and the colour-conversion pipeline stages in `color_profile.rs`)
+  `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
+  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and
+  the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
+  `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
+  `color_profile.rs`)
 
 ## Chromium and Blink
 
@@ -280,8 +296,3 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Used in: `crates/asrs-services/src/{asset_downloader,download_deps,file_type,zip}.rs`,
   translated to Rust; `crates/asrs-services/src/ext_list.rs` is generated from ext-list over
   mime-db, and `zip.rs` carries yauzl's CP437 table
-
-## Not yet ported
-
-Upstream also depends on Chart.js (MIT). No code from it has been ported yet; add an entry
-here and a file header when one is.
