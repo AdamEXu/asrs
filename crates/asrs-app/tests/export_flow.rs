@@ -9,12 +9,15 @@
 #[allow(dead_code)]
 mod js_json;
 
+#[path = "support/settle.rs"]
+mod settle;
+
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use asrs_app::main_process::{self, MainProcess};
 use asrs_app::menus::bridge::MenuAction;
@@ -37,7 +40,6 @@ use asrs_ui::gpui::{
 use asrs_ui::platform::dialog::{Reply, Script, Shown};
 
 const HOME: &str = "ASRS_EXPORT_FLOW_HOME";
-const TIMEOUT: Duration = Duration::from_secs(60);
 
 fn in_fresh_home(test: &str) {
     let home = std::env::temp_dir().join(format!("asrs-{test}-{}", std::process::id()));
@@ -101,21 +103,12 @@ impl AppUnderTest {
     }
 
     fn settle(&mut self) {
-        self.cx.run_until_parked();
+        settle::settle(&mut self.cx);
     }
 
     fn advance(&mut self, ms: u64) {
         self.cx.advance_clock(Duration::from_millis(ms));
         self.settle();
-    }
-
-    fn until(&mut self, what: &str, mut done: impl FnMut(&mut AppUnderTest) -> bool) {
-        let start = Instant::now();
-        while !done(self) {
-            assert!(start.elapsed() < TIMEOUT, "waiting for {what}");
-            self.advance(10);
-            std::thread::sleep(Duration::from_millis(1));
-        }
     }
 
     fn hubs(&mut self) -> Vec<WindowId> {
@@ -211,20 +204,6 @@ impl AppUnderTest {
                 script.replies
             );
             std::mem::take(&mut script.shown)
-        })
-    }
-
-    /// [`run`](Self::run) until every reply has been given.
-    fn run_until_shown(
-        &mut self,
-        replies: &[Reply],
-        act: impl FnOnce(&mut AppUnderTest),
-    ) -> Vec<(Option<AnyWindowHandle>, Shown)> {
-        self.run(replies, |app| {
-            act(app);
-            app.until("the dialogs", |app| {
-                app.cx.update(|cx| cx.global::<Script>().replies.is_empty())
-            });
         })
     }
 
@@ -352,10 +331,10 @@ fn routing_in_a_fresh_home() {
     });
     assert!(shown.is_empty());
     assert_eq!(app.logs(hub), [text(&plain)]);
-    app.until("the recent document", |app| {
-        app.cx
-            .update(|cx| cx.global::<Script>().recent_documents == [plain.clone()])
-    });
+    let recent = app
+        .cx
+        .update(|cx| cx.global::<Script>().recent_documents.clone());
+    assert_eq!(recent, [plain.clone()]);
     let written = std::env::temp_dir().join("akit-log-path.txt");
     assert_eq!(std::fs::read_to_string(&written).ok(), Some(text(&plain)));
 
@@ -482,11 +461,10 @@ fn open_log(app: &mut AppUnderTest, hub: WindowId, path: &Path) {
     app.run(&[], |app| {
         app.send_main(hub, HubToMain::OpenFilesRequest, data)
     });
-    app.until("the log to open", |app| {
-        app.hub(hub, |hub| {
-            !hub.title().to_string_lossy().contains("(Loading)")
-                && hub.page().log().field_keys().next().is_some()
-        })
+    app.hub(hub, |hub| {
+        let title = hub.title().to_string_lossy();
+        assert!(!title.contains("(Loading)"), "{title}");
+        assert!(hub.page().log().field_keys().next().is_some(), "{title}");
     });
 }
 
@@ -527,9 +505,8 @@ fn the_prompt_exports(app: &mut AppUnderTest, hub: WindowId) {
         app.click_at(prompt, confirm.0, confirm.1)
     });
     assert!(app.prompt().is_none());
-    app.until("the export", |app| {
-        !app.hub(hub, HubModel::is_exporting) && app.glow(hub) == Some(false)
-    });
+    assert!(!app.hub(hub, HubModel::is_exporting));
+    assert_eq!(app.glow(hub), Some(false));
     let glow = glow.borrow();
     assert!(
         glow.contains(&JsString::from("1")),
@@ -572,17 +549,14 @@ fn every_run_writes_upstreams_bytes(app: &mut AppUnderTest, hub: WindowId) {
         };
         match run.bytes {
             Some(bytes) => {
-                prepare(app);
-                app.until("the file", |_| {
-                    std::fs::metadata(&out).is_ok_and(|m| m.len() == bytes.len() as u64)
-                });
+                app.run(&[], prepare);
                 let got = std::fs::read(&out).expect("the export");
                 assert!(got == bytes, "{:?} {:?}", run.file, run.options);
                 written += 1;
             }
             None => {
                 rejected += 1;
-                let shown = app.run_until_shown(&[Reply::Button(0)], prepare);
+                let shown = app.run(&[Reply::Button(0)], prepare);
                 assert_eq!(error_title(&shown), "Failed to export data");
                 assert!(!out.exists(), "{:?} {:?}", run.file, run.options);
             }
@@ -600,7 +574,7 @@ fn a_write_that_fails_is_reported(app: &mut AppUnderTest, hub: WindowId) {
         ("path", JsValue::string(&text(&out))),
         ("options", run.options),
     ]);
-    let shown = app.run_until_shown(&[Reply::Button(0)], |app| {
+    let shown = app.run(&[Reply::Button(0)], |app| {
         app.cx
             .update(|cx| MainProcess::send_to_hub(cx, hub, MainToHub::PrepareExport, data))
     });
