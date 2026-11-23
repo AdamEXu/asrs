@@ -1,0 +1,440 @@
+{
+  "about": "Interaction (U20): the preferences window, opened through the application menu's own item on both sides and driven with real input: hovered and pressed controls, values typed in and picked by type-ahead and confirmed, which the hub's timeline shows, an edit cancelled, and the theme changed last (nothing is captured after it). prefs.json is compared byte for byte; nothing is masked but focused text inputs",
+  "prefs": {
+    "robotAddress": "",
+    "remotePath": "/media/sda1/logs",
+    "liveDiscard": 300,
+    "hasScrolledLineGraph": true,
+    "hasScrolledTimeline": true
+  },
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Speeds",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hub",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Settings...",
+        "Show Preferences..."
+      ]
+    },
+    {
+      "prompt": "preferences"
+    },
+    {
+      "capture": "opened",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 300,
+      "y": 50
+    },
+    {
+      "capture": "select-hover",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 377,
+      "y": 450
+    },
+    {
+      "capture": "confirm-hover",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "b"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "o"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "k"
+    },
+    {
+      "key": "-"
+    },
+    {
+      "key": "1"
+    },
+    {
+      "capture": "typed",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "1"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "2"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "l"
+    },
+    {
+      "key": "o"
+    },
+    {
+      "key": "g"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "n"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "/"
+    },
+    {
+      "key": "T"
+    },
+    {
+      "key": ","
+    },
+    {
+      "key": "/"
+    },
+    {
+      "key": "U"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "c"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "l"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "o"
+    },
+    {
+      "key": "f"
+    },
+    {
+      "capture": "edited",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "confirmed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Settings...",
+        "Show Preferences..."
+      ]
+    },
+    {
+      "prompt": "preferences"
+    },
+    {
+      "capture": "reopened",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 300,
+      "y": 192
+    },
+    {
+      "mouse": "click",
+      "x": 300,
+      "y": 192
+    },
+    {
+      "key": "z"
+    },
+    {
+      "key": "z"
+    },
+    {
+      "mouse": "move",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "capture": "clicked",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 342,
+      "y": 450
+    },
+    {
+      "mouse": "down",
+      "x": 342,
+      "y": 450
+    },
+    {
+      "capture": "exit-pressed",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "up",
+      "x": 342,
+      "y": 450
+    },
+    {
+      "prompt": null
+    },
+    {
+      "appMenu": [
+        "Settings...",
+        "Show Preferences..."
+      ]
+    },
+    {
+      "prompt": "preferences"
+    },
+    {
+      "capture": "after-cancel",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.title",
+        "td.title > hr",
+        "td.subtitle",
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "m"
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    }
+  ]
+}

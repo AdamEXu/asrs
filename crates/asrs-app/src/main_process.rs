@@ -237,6 +237,11 @@ impl MainProcess {
     }
 
     #[cfg(feature = "parity")]
+    pub(crate) fn adopt_hub(&mut self, id: WindowId, hub: &Entity<Hub>) {
+        self.hubs.push((id, hub.downgrade()));
+    }
+
+    #[cfg(feature = "parity")]
     pub(crate) fn state_mut(&mut self) -> &mut MainState {
         &mut self.state
     }

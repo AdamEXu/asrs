@@ -7,10 +7,12 @@ use asrs_tabs::form::NumberInput;
 use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage, TableRow};
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, KeyboardButton, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
+    AnyElement, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, EventEmitter,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, KeyboardButton, ParentElement, Pixels,
+    Render, StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, fill, point, px,
+    rgb, size,
 };
+use asrs_ui::input::style::device_border;
 use asrs_ui::input::{
     FieldEvent, FieldKind, FieldModel, FieldStyle, PlainText, Select, SelectEvent, TextField,
 };
@@ -534,6 +536,45 @@ fn positioned([x, y, w, h]: [f64; 4]) -> Div {
         .h(px(h as f32))
 }
 
+/// An `hr`'s `1px inset gray` border, in the colours Blink paints it and with its mitred corners,
+/// whose diagonal pixels are half of each side's.
+fn rule_border() -> impl IntoElement {
+    const DARK: u32 = 0x9a9a9a;
+    const CORNER: u32 = 0xc4c4c4;
+    const LIGHT: u32 = 0xeeeeee;
+    canvas(
+        |_, _, _| {},
+        |bounds, _, window, _| {
+            let scale = window.scale_factor();
+            let device = |v: Pixels| (f32::from(v) * scale).round();
+            let (x, y) = (device(bounds.origin.x), device(bounds.origin.y));
+            let width = device(bounds.right()) - x;
+            let border = device_border(1.0, scale);
+            let rows = (2.0 * border) as usize;
+            for row in 0..rows {
+                let at = row as f32;
+                let corner = if at < border {
+                    width - 1.0 - at
+                } else {
+                    2.0 * border - 1.0 - at
+                };
+                for (from, to, color) in [
+                    (0.0, corner, DARK),
+                    (corner, corner + 1.0, CORNER),
+                    (corner + 1.0, width, LIGHT),
+                ] {
+                    if to > from {
+                        let origin = point(px((x + from) / scale), px((y + at) / scale));
+                        let extent = size(px((to - from) / scale), px(1.0 / scale));
+                        window.paint_quad(fill(Bounds::new(origin, extent), rgb(color)));
+                    }
+                }
+            }
+        },
+    )
+    .size_full()
+}
+
 /// A heading's text in the middle of `bounds`, whose lines start at its top.
 fn centred(
     bounds: [f64; 4],
@@ -655,7 +696,7 @@ impl Render for PromptWindow {
                 (Row::Title { cell, rule, line }, TableRow::Title(text)) => {
                     root = root
                         .child(probed("td.title", positioned(cell)))
-                        .child(probed("hr", positioned(rule)))
+                        .child(probed("hr", positioned(rule).child(rule_border())))
                         .child(centred(line, text, title_style(), window, cx));
                 }
                 (Row::Subtitle { cell }, TableRow::Subtitle(text)) => {
