@@ -346,7 +346,7 @@ mod tests {
             let mut starts: Vec<usize> =
                 text.char_indices().map(|(byte, _)| byte).skip(1).collect();
             let keep = 1 + random(&mut state) % 4;
-            starts.retain(|_| random(&mut state) % keep == 0);
+            starts.retain(|_| random(&mut state).is_multiple_of(keep));
             assert_matches_fresh_scans(&text, starts.into_iter());
         }
     }
