@@ -60,13 +60,15 @@ const MIRROR = String.raw`const frame = document.body.appendChild(document.creat
 // Records every render of every Swerve and Joysticks renderer: the size reads it made, the
 // theme and device pixel ratio it ran under, the canvas style strings as assigned, the canvas
 // size and calls when it reset the canvas, and a throw. Style accessors are shadowed per
-// instance because Blink serves the names from a named-property interceptor.
+// instance because Blink serves the names from a named-property interceptor. Every NaN is written
+// as the canonical one: V8's tiers give `x * -1` different NaN signs, and which tier runs depends
+// on when a background compile finishes.
 const RECORDER = String.raw`(() => {
   const w = window;
   const write = (record) => w.__oracleWrite(JSON.stringify(record));
   const view = new DataView(new ArrayBuffer(8));
   const bits = (x) => {
-    view.setFloat64(0, x);
+    view.setFloat64(0, Number.isNaN(x) ? NaN : x);
     return view.getUint32(0).toString(16).padStart(8, "0") + view.getUint32(4).toString(16).padStart(8, "0");
   };
   const tree = (v) => {
@@ -193,7 +195,8 @@ const theme = (name) => ({ eval: `window.__oracleTheme = ${JSON.stringify(name)}
 const dpr = (value) => ({ eval: `window.devicePixelRatio = ${value}` });
 
 function spec(area, id, fixture, inputs = []) {
-  const body = { entry: "dom", inputs, fixture: { geometry: "real", ...fixture } };
+  const steps = [...fixture.steps, { advance: 1 }];
+  const body = { entry: "dom", inputs, fixture: { geometry: "real", ...fixture, steps } };
   if (inputs.length === 0) delete body.inputs;
   write(path.join(SPECS, area), `${id}.entry.json`, body);
 }
