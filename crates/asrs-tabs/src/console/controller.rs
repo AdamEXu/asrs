@@ -404,8 +404,10 @@ pub trait ConsoleGeometry {
     fn scroll_height(&mut self, rows: &[ConsoleRow]) -> f64;
     /// `TABLE_CONTAINER.clientHeight`.
     fn container_client_height(&mut self) -> f64;
+    /// Lays `rows` out, before a batch of `row_client_height` reads.
+    fn lay_out(&mut self, rows: &[ConsoleRow]);
     /// `TABLE_BODY.children[index + 1].clientHeight`.
-    fn row_client_height(&mut self, rows: &[ConsoleRow], index: usize) -> f64;
+    fn row_client_height(&mut self, index: usize) -> f64;
 }
 
 impl ConsoleGeometry for ConsoleDom {
@@ -429,7 +431,9 @@ impl ConsoleGeometry for ConsoleDom {
         asrs_js::math::round(self.container.height)
     }
 
-    fn row_client_height(&mut self, _rows: &[ConsoleRow], index: usize) -> f64 {
+    fn lay_out(&mut self, _rows: &[ConsoleRow]) {}
+
+    fn row_client_height(&mut self, index: usize) -> f64 {
         self.row_heights.get(index).copied().unwrap_or(0.0)
     }
 }
@@ -567,7 +571,8 @@ impl ConsoleRenderer {
             .unwrap_or(self.lines.len());
         let above = row.saturating_sub(1).min(self.view.rows.len());
         self.geometry(|g, rows| {
-            let height = (0..above).fold(0.0, |sum, i| sum + g.row_client_height(rows, i));
+            g.lay_out(rows);
+            let height = (0..above).fold(0.0, |sum, i| sum + g.row_client_height(i));
             g.set_scroll_top(rows, height);
         });
     }

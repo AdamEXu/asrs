@@ -25,8 +25,9 @@ use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_ba
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
     Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollEvent,
-    SharedString, StatefulInteractiveElement, Styled, Window, canvas, div, point, px, rgb, rgba,
+    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
+    ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window, canvas,
+    div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::parity::{Probed, probed};
@@ -738,6 +739,23 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                     if phase == DispatchPhase::Bubble {
                         let _ = frame.update(cx, |frame, cx| frame.mouse_up(event, cx));
+                    }
+                });
+                let frame = entity.clone();
+                window.on_mouse_event(move |event: &MouseExitEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble && event.pressed_button.is_none() {
+                        let _ = frame.update(cx, |frame, cx| frame.console_mouse_exit(cx));
+                    }
+                });
+                let frame = entity.clone();
+                // Before the press focuses what it is on.
+                window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture {
+                        let x = mouse_client(f32::from(event.position.x));
+                        let y = mouse_client(f32::from(event.position.y));
+                        let _ = frame.update(cx, |frame, cx| {
+                            frame.console_window_mouse_down(x, y, window, cx)
+                        });
                     }
                 });
                 let frame = entity.clone();

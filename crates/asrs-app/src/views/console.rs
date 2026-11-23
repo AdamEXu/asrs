@@ -322,10 +322,15 @@ impl Rows<'_> {
             if let Some(color) = background {
                 layer = layer.child(self.grid.place(rect).bg(rgb(blend(color))));
             }
+            // Underlines take the colour of the box that has the decoration, outside the highlight.
+            let decoration = if *link {
+                theme.link
+            } else {
+                style.fg.map_or(theme.text, of)
+            };
             let color = match (highlight, self.appearance) {
                 (true, Appearance::Dark) => 0x000000,
-                _ if *link => theme.link,
-                _ => style.fg.map_or(theme.text, of),
+                _ => decoration,
             };
             let [x, y, ..] = rect;
             if !tabs {
@@ -348,7 +353,7 @@ impl Rows<'_> {
             if style.underline || *link {
                 let font = cell_font(first || style.bold, style.italic);
                 let text = if tabs { "" } else { text };
-                layer = layer.child(self.underline(font, text, rect, blend(color)));
+                layer = layer.child(self.underline(font, text, rect, blend(decoration)));
             }
         }
         layer
@@ -516,8 +521,8 @@ impl<H: FrameHost> HubFrame<H> {
             .top_0()
             .size_full()
             .overflow_hidden()
-            .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, window, cx| {
-                frame.console_mouse_down(event, window, cx)
+            .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
+                frame.console_mouse_down(event, cx)
             }))
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.console_wheel(event, cx)),
@@ -915,7 +920,33 @@ impl<H: FrameHost> HubFrame<H> {
 
     pub(super) fn console_mouse_move(&mut self, x: f64, y: f64, cx: &mut Context<'_, Self>) {
         self.console_point(x, y, cx);
-        cx.notify();
+        if self.console.shown.is_some() {
+            cx.notify();
+        }
+    }
+
+    /// The pointer left the window.
+    pub(super) fn console_mouse_exit(&mut self, cx: &mut Context<'_, Self>) {
+        if self.console.hovered.is_some() {
+            self.console_hover(None, cx);
+            cx.notify();
+        }
+    }
+
+    /// A press anywhere in the window: outside the focused input it takes the focus away.
+    pub(super) fn console_window_mouse_down(
+        &mut self,
+        x: f64,
+        y: f64,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some(shown) = self.console.shown else {
+            return;
+        };
+        if !inside(shown.jump_rect(), x, y) && !inside(shown.filter_rect(), x, y) {
+            self.console_blur(shown.key, window, cx);
+        }
     }
 
     /// The pointer is at a client position: every mouse event moves the hover there.
@@ -931,21 +962,13 @@ impl<H: FrameHost> HubFrame<H> {
         self.console_hover(row, cx);
     }
 
-    fn console_mouse_down(
-        &mut self,
-        event: &MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
+    fn console_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
         let Some(shown) = self.console.shown else {
             return;
         };
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
         self.console_point(x, y, cx);
-        if !inside(shown.jump_rect(), x, y) && !inside(shown.filter_rect(), x, y) {
-            self.console_blur(shown.key, window, cx);
-        }
         let row = self.console_row_at(shown, x, y);
         match event.button {
             MouseButton::Left => self.console.pressed_row = row,

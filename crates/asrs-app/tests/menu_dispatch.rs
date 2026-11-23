@@ -327,6 +327,17 @@ fn dialogs_show_and_resume(app: &mut AppUnderTest, hub: WindowId) {
     assert_eq!(options.filters[0].extensions.len(), 9);
     assert_eq!(app.historical_paths(hub), [log.to_string_lossy()]);
 
+    let empty = app.home.join("empty.csv");
+    std::fs::write(&empty, "").expect("a log");
+    let shown = app.click(Command::OpenLogs, &[open(&[&empty]), Reply::Button(0)]);
+    let [(_, Shown::Open(_)), error] = &shown[..] else {
+        panic!("{shown:?}");
+    };
+    let (window, kind, text, detail) = message(std::slice::from_ref(error));
+    assert_eq!((window, kind), (Some(hub), MessageBoxType::Error));
+    assert_eq!(text, "Failed to open log");
+    assert!(detail.ends_with("the required format of CSV files."));
+
     let shown = app.click(Command::About, &[Reply::Button(1)]);
     let (window, kind, text, detail) = message(&shown);
     assert_eq!((window, kind), (unparented(hub), MessageBoxType::Info));

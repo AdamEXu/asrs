@@ -317,8 +317,9 @@ impl ConsoleLayout {
     pub fn wheel(&self, wheel: Wheel, now: f64) {
         let mut state = self.0.borrow_mut();
         let offset = [0.0, state.offset];
+        let max = [0.0, state.max_offset()];
         let client = [state.container[2], state.container[3]];
-        if let Some([_, to]) = state.wheel.wheel(wheel, now, offset, client) {
+        if let Some([_, to]) = state.wheel.wheel(wheel, now, offset, max, client) {
             state.scroll_to(to);
         }
     }
@@ -475,9 +476,12 @@ impl ConsoleGeometry for ConsoleLayout {
         asrs_js::math::round(self.0.borrow().container[3])
     }
 
-    fn row_client_height(&mut self, rows: &[ConsoleRow], index: usize) -> f64 {
-        let mut state = self.0.borrow_mut();
-        state.sync(rows);
+    fn lay_out(&mut self, rows: &[ConsoleRow]) {
+        self.0.borrow_mut().sync(rows);
+    }
+
+    fn row_client_height(&mut self, index: usize) -> f64 {
+        let state = self.0.borrow();
         (state.tops[index + 1] - state.tops[index]) as f64 * LINE_HEIGHT
     }
 }

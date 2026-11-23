@@ -366,7 +366,9 @@ impl ConsoleGeometry for RecordedConsole {
         reads.read_f64("clientHeight", CONSOLE_CONTAINER)
     }
 
-    fn row_client_height(&mut self, _: &[ConsoleRow], index: usize) -> f64 {
+    fn lay_out(&mut self, _: &[ConsoleRow]) {}
+
+    fn row_client_height(&mut self, index: usize) -> f64 {
         let mut reads = self.0.borrow_mut();
         reads.read_f64("clientHeight", &format!("{CONSOLE_BODY}>tr:{}", index + 1))
     }

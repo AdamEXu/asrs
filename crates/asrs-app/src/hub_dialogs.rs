@@ -18,11 +18,7 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
                 Ok(options) => options,
                 Err(e) => return eprintln!("asrs: error: {}: {}", e.name, e.message),
             };
-            let mut options = message_box_options(&options);
-            // Off macOS the platform dialogs answer for the user when they have no button.
-            if !cfg!(target_os = "macos") {
-                options.buttons.push("OK".to_owned());
-            }
+            let options = message_box_options(&options);
             on(window, cx, move |window, cx| {
                 windows::message_box(Some(window), cx, options, |_, _| {});
             });

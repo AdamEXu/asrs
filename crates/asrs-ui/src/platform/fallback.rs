@@ -129,7 +129,7 @@ pub(super) mod dialog {
         on_done: impl FnOnce(MessageBoxResult, &mut App) + 'static,
     ) {
         let checkbox_checked = options.checkbox_checked;
-        let (Some(window), false) = (window, options.buttons.is_empty()) else {
+        let Some(window) = window else {
             cx.defer(move |cx| {
                 on_done(
                     MessageBoxResult {
@@ -146,7 +146,10 @@ pub(super) mod dialog {
             MessageBoxType::Error => PromptLevel::Critical,
             _ => PromptLevel::Info,
         };
-        let buttons: Vec<&str> = options.buttons.iter().map(String::as_str).collect();
+        let mut buttons: Vec<&str> = options.buttons.iter().map(String::as_str).collect();
+        if buttons.is_empty() {
+            buttons.push("OK");
+        }
         let detail = (!options.detail.is_empty()).then_some(options.detail.as_str());
         let answer = window.prompt(level, &options.message, detail, &buttons, cx);
         cx.spawn(async move |cx| {

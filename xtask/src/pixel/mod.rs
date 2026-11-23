@@ -2,6 +2,7 @@ mod gates;
 mod plant;
 mod report;
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -550,6 +551,29 @@ fn undated(text: &str) -> String {
     out
 }
 
+/// The save panel `properties` the port's dialogs have no switch for: Electron reads them on
+/// Linux and Windows only.
+const OFF_MAC_PROPERTIES: [&str; 2] = ["showOverwriteConfirmation", "dontAddToRecent"];
+
+/// Option `key` of a recorded dialog, null when absent.
+fn option_of(dialog: &Json, key: &str) -> Json {
+    let value = dialog.get("options").and_then(|o| o.get(key));
+    match value {
+        Some(Json::Array(items)) if key == "properties" => Json::Array(
+            items
+                .iter()
+                .filter(|p| {
+                    let name = p.as_str().map(|p| p.to_string_lossy());
+                    !name.is_some_and(|n| OFF_MAC_PROPERTIES.contains(&n.as_str()))
+                })
+                .cloned()
+                .collect(),
+        ),
+        Some(value) => value.clone(),
+        None => Json::Null,
+    }
+}
+
 fn same_option(upstream: &Json, port: &Json) -> bool {
     match (upstream.as_str(), port.as_str()) {
         (Some(u), Some(p)) => undated(&u.to_string_lossy()) == undated(&p.to_string_lossy()),
@@ -557,7 +581,8 @@ fn same_option(upstream: &Json, port: &Json) -> bool {
     }
 }
 
-/// The dialogs main showed, in order: the same kinds, and the options the port passes equal.
+/// The dialogs main showed, in order: the same kinds and options. `icon` is not compared: on
+/// macOS upstream passes none, and the port's dialogs take none.
 fn compare_dialogs(reference: &Path, port: &Path, outcome: &mut Outcome) -> Result {
     let theirs = read_json(&reference.join("run.json"))?;
     let ours = read_json(&port.join("run.json"))?;
@@ -582,14 +607,20 @@ fn compare_dialogs(reference: &Path, port: &Path, outcome: &mut Outcome) -> Resu
             problems.push(format!("dialog {i}: the port recorded no options"));
             continue;
         };
-        for (key, value) in options {
-            let expected = t
-                .get("options")
-                .and_then(|o| o.get(&key.to_string_lossy()))
-                .cloned()
-                .unwrap_or(Json::Null);
-            if !same_option(&expected, value) {
-                problems.push(format!("dialog {i} {key:?}: {expected:?} vs {value:?}"));
+        let Some(Json::Object(expected)) = t.get("options") else {
+            problems.push(format!("dialog {i}: upstream recorded no options"));
+            continue;
+        };
+        let keys: BTreeSet<String> = expected
+            .iter()
+            .chain(options)
+            .map(|(key, _)| key.to_string_lossy())
+            .filter(|key| key != "icon")
+            .collect();
+        for key in keys {
+            let (theirs, ours) = (option_of(t, &key), option_of(o, &key));
+            if !same_option(&theirs, &ours) {
+                problems.push(format!("dialog {i} {key}: {theirs:?} vs {ours:?}"));
             }
         }
     }
@@ -1055,7 +1086,7 @@ mod tests {
         };
         let upstream = side(
             "upstream",
-            r#"{"kind":"showSaveDialog","options":{"title":"T","defaultPath":"Console 2026-01-02.txt","properties":[]}}"#,
+            r#"{"kind":"showSaveDialog","options":{"title":"T","defaultPath":"Console 2026-01-02.txt","properties":["createDirectory","dontAddToRecent"],"buttons":["Save"]}}"#,
         );
         let check = |dialogs: &str| {
             let mut outcome = Outcome::default();
@@ -1064,9 +1095,13 @@ mod tests {
         };
         let port = |title: &str, path: &str| {
             format!(
-                r#"{{"kind":"showSaveDialog","options":{{"title":"{title}","defaultPath":"{path}"}}}}"#
+                r#"{{"kind":"showSaveDialog","options":{{"title":"{title}","defaultPath":"{path}","properties":["createDirectory"],"buttons":["Save"]}}}}"#
             )
         };
+        let without = |part: &str| port("T", "Console 2026-01-02.txt").replace(part, "");
+        assert!(!check(&without(r#","buttons":["Save"]"#)));
+        assert!(!check(&without(r#","properties":["createDirectory"]"#)));
+        assert!(!check(&without(r#""title":"T","#)));
         assert!(check(&port("T", "Console 2025-12-31.txt")));
         assert!(!check(&port("T", "Console 2025-12-31.json")));
         assert!(!check(&port("U", "Console 2026-01-02.txt")));
