@@ -1,6 +1,6 @@
 use gpui_kit::{
-    App, ClickEvent, ElementId, FocusHandle, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement, Styled, Window, div, px, rgb,
+    AnyElement, App, ClickEvent, ElementId, FocusHandle, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, px, rgb,
 };
 
 use crate::icon::{Icon, IconFit, IconSource};
@@ -35,10 +35,13 @@ pub struct IconButton {
     fit: IconFit,
     translate: [f64; 2],
     subpixel: [f64; 2],
+    box_size: Option<[f64; 2]>,
     disabled: bool,
     blurred: bool,
     appearance: Option<Appearance>,
     focus: Option<FocusHandle>,
+    backgrounds: Option<[u32; 3]>,
+    overlay: Option<AnyElement>,
     on_click: Option<ClickHandler>,
 }
 
@@ -53,10 +56,13 @@ impl IconButton {
             fit: IconFit::BUTTON,
             translate: [0.0, 0.0],
             subpixel: [0.0, 0.0],
+            box_size: None,
             disabled: false,
             blurred: false,
             appearance: None,
             focus: None,
+            backgrounds: None,
+            overlay: None,
             on_click: None,
         }
     }
@@ -90,6 +96,12 @@ impl IconButton {
         self
     }
 
+    /// The button's CSS size, where its size on whole pixels differs, for its icon.
+    pub fn box_size(mut self, width: f64, height: f64) -> Self {
+        self.box_size = Some([width, height]);
+        self
+    }
+
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -102,6 +114,18 @@ impl IconButton {
 
     pub fn appearance(mut self, appearance: Appearance) -> Self {
         self.appearance = Some(appearance);
+        self
+    }
+
+    /// The background colours at rest, hovered and pressed, in place of the theme's.
+    pub fn backgrounds(mut self, colors: [u32; 3]) -> Self {
+        self.backgrounds = Some(colors);
+        self
+    }
+
+    /// Drawn over the icon, in a box of the button's size.
+    pub fn overlay(mut self, element: impl IntoElement) -> Self {
+        self.overlay = Some(element.into_any_element());
         self
     }
 
@@ -159,8 +183,17 @@ impl RenderOnce for IconButton {
                 Icon::new(self.icon, chain)
                     .fit(self.fit)
                     .translate(self.translate[0], self.translate[1])
-                    .subpixel(self.subpixel[0], self.subpixel[1]),
+                    .subpixel(self.subpixel[0], self.subpixel[1])
+                    .box_size(self.box_size),
             );
+        button = button.children(self.overlay);
+        let (rest, hover, active) = match self.backgrounds {
+            Some([rest, hover, active]) => (Some(rest), hover, active),
+            None => (None, theme.button_hover, theme.button_active),
+        };
+        if let Some(rest) = rest {
+            button = button.bg(rgb(rest));
+        }
         if let Some(focus) = &focus {
             button = button.track_focus(&focus.read(cx).handle);
         }
@@ -179,7 +212,6 @@ impl RenderOnce for IconButton {
             );
         }
         if !self.disabled {
-            let (hover, active) = (theme.button_hover, theme.button_active);
             button = button
                 .hover(move |s| s.bg(rgb(hover)))
                 .active(move |s| s.bg(rgb(active)));

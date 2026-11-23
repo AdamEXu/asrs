@@ -6,39 +6,20 @@
 //! not expose are listed in [`UNEXPOSED`] and counted, and any other read, op or element fails.
 
 use asrs_app::views::number::FormNumber;
+use asrs_app::views::range::FormRange;
 use asrs_js::string::JsString;
 use asrs_parity::json::Json;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::form::{NumberInput, RangeInput};
-use asrs_ui::input::{FieldValue, RangeModel};
+use asrs_ui::input::{FieldValue, RangeControl, RangeModel, SliderEvent, SliderTrack};
 
 /// Reads upstream never makes, so the components have no API for them: upstream reads
 /// `Number(input.value)`, never `valueAsNumber`, and never reads back a range's attributes.
 const UNEXPOSED: [&str; 4] = ["valueAsNumber", "min", "max", "step"];
 
-struct Range(RangeInput);
-
-impl RangeModel for Range {
-    fn value(&self) -> String {
-        self.0.value().to_string_lossy()
-    }
-
-    fn set_value(&mut self, value: &str) {
-        self.0.set_value(JsString::from(value));
-    }
-
-    fn proportion(&self) -> f64 {
-        unreachable!("no vector reads the thumb position")
-    }
-
-    fn value_at(&self, _: f64) -> String {
-        unreachable!("no vector drags the thumb")
-    }
-}
-
 enum Element {
     Number(FieldValue<FormNumber>),
-    Range(Range),
+    Range(FormRange),
 }
 
 /// The value of attribute `name` in the first start tag of `markup`, for the flat markup the
@@ -55,7 +36,7 @@ fn parse(markup: &str) -> Result<Element, String> {
         Some("number") => Ok(Element::Number(FieldValue::new(FormNumber(
             NumberInput::new(attr("value")),
         )))),
-        Some("range") => Ok(Element::Range(Range(range_input(
+        Some("range") => Ok(Element::Range(FormRange(range_input(
             attr("value"),
             attr("min"),
             attr("max"),
@@ -195,4 +176,130 @@ fn number_fields_follow_blink() {
 #[test]
 fn sliders_follow_blink() {
     run("form/range-input");
+}
+
+/// Replays the `form/range-pointer*` vectors, trusted pointer and keyboard input to the video
+/// timeline slider, through the control the slider drives. `events` is compared as recorded,
+/// apart from `keydown`, which the window dispatches.
+fn run_pointer(id: &str, scale: f32) {
+    let spec = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../parity/specs")
+        .join(format!("{id}.entry.json"));
+    let spec = std::fs::read_to_string(&spec).unwrap_or_else(|e| panic!("{id}: {e}"));
+    let spec = asrs_parity::json::parse(&spec).expect("spec is JSON");
+    let fixture = spec.get("fixture").expect("fixture");
+    assert_eq!(
+        fixture.get("scale").and_then(Json::as_f64),
+        Some(f64::from(scale))
+    );
+    let steps = fixture
+        .get("steps")
+        .and_then(Json::as_array)
+        .expect("steps");
+    let records = vectors::load(id).unwrap_or_else(|e| panic!("{id}: {e}"));
+    let (mut compared, mut dragged) = (0, 0);
+    let mut current = None;
+    for record in &records {
+        let what = format!("{id} line {}", record.line);
+        let step = &steps[record.field("step").and_then(Json::as_f64).expect("step") as usize];
+        let width = step.get("width").and_then(Json::as_f64).expect("width") as f32;
+        let at = SliderTrack {
+            track: width * scale,
+            thumb: 4.0 * scale,
+        };
+        let op = match record.field("op") {
+            Some(Json::Null) => {
+                let mut control = RangeControl::new(FormRange(RangeInput::new("0", "1", "1", "1")));
+                let sets = step.get("set").and_then(Json::as_array).expect("set");
+                for set in sets {
+                    set_property(&mut control, set.as_array().expect("pair"));
+                }
+                current = Some((control, false));
+                None
+            }
+            Some(Json::Array(op)) => Some(op),
+            _ => panic!("{what}: no op"),
+        };
+        let (control, focused) = current.as_mut().expect("an op before its step");
+        let mut events: Vec<&str> = Vec::new();
+        if let Some(op) = op {
+            let name = arg(op, 0).expect("op kind");
+            let x = || op[1].as_f64().expect("x") as f32 * scale;
+            let was_focused = *focused;
+            let mut push = |event: Option<SliderEvent>| {
+                events.extend(event.map(|event| match event {
+                    SliderEvent::Input => "input",
+                    SliderEvent::Change => "change",
+                }))
+            };
+            match name.as_str() {
+                "press" => {
+                    dragged += 1;
+                    push(control.press(x(), at));
+                    *focused |= !control.disabled();
+                }
+                "move" => push(control.drag(x(), at)),
+                "release" => push(control.release()),
+                "key" => {
+                    if *focused {
+                        let key = arg(op, 1).expect("key");
+                        events.push("keydown");
+                        if control.key_down(&key) {
+                            events.extend(["input", "change"]);
+                        }
+                    }
+                }
+                "set" => {
+                    set_property(control, &op[1..]);
+                    *focused &= !control.disabled();
+                }
+                "focus" => *focused = !control.disabled(),
+                "blur" => *focused = false,
+                other => panic!("{what}: unknown op {other}"),
+            }
+            if *focused != was_focused {
+                events.push(if *focused { "focus" } else { "blur" });
+            }
+        }
+        let recorded: Vec<String> = record
+            .field("events")
+            .and_then(Json::as_array)
+            .expect("events")
+            .iter()
+            .map(|e| e.as_str().expect("event").to_string_lossy())
+            .collect();
+        assert_eq!(recorded, events, "{what}: events");
+        assert_eq!(
+            record.string("value"),
+            Some(control.model().value()),
+            "{what}: value"
+        );
+        assert_eq!(
+            record.field("focused"),
+            Some(&Json::Bool(*focused)),
+            "{what}: focused"
+        );
+        compared += 1;
+    }
+    assert_eq!(compared, records.len());
+    assert!(dragged > 10, "{id}: {dragged} presses");
+}
+
+fn set_property(control: &mut RangeControl<FormRange>, pair: &[Json]) {
+    let name = arg(pair, 0).expect("property");
+    match (name.as_str(), &pair[1]) {
+        ("max", Json::String(value)) => {
+            let max = JsString::from_units(value.units().to_vec());
+            control.model_mut().0.set_max(max);
+        }
+        ("value", Json::String(value)) => control.model_mut().set_value(&value.to_string_lossy()),
+        ("disabled", Json::Bool(disabled)) => control.set_disabled(*disabled),
+        other => panic!("unknown property {other:?}"),
+    }
+}
+
+#[test]
+fn dragged_sliders_follow_blink() {
+    run_pointer("form/range-pointer", 1.0);
+    run_pointer("form/range-pointer-2x", 2.0);
 }

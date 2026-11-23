@@ -25,8 +25,9 @@ pub trait FieldModel: 'static {
     }
 }
 
-/// An `<input type="range">`: its `value`, the sanitization assigning it runs, and the
-/// proportion the thumb sits at, which `asrs_tabs::form` does not model yet (#160).
+/// An `<input type="range">`: its `value`, the sanitization assigning it runs, the proportion
+/// the thumb sits at and the values a pointer and the keyboard move it to. Views implement it
+/// over `asrs_tabs::form`.
 pub trait RangeModel: 'static {
     fn value(&self) -> String;
     fn set_value(&mut self, value: &str);
@@ -34,6 +35,8 @@ pub trait RangeModel: 'static {
     fn proportion(&self) -> f64;
     /// The value a pointer at `proportion` along the track assigns.
     fn value_at(&self, proportion: f64) -> String;
+    /// The value the DOM key `key` moves it to, `None` where the key leaves it alone.
+    fn value_for_key(&self, key: &str) -> Option<String>;
 }
 
 /// What a field holds: its model and the text its editor shows. A script's assignment shows the

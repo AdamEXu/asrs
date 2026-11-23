@@ -1,0 +1,176 @@
+{
+  "entry": "genVideoRenderer",
+  "inputs": [
+    "../../../oracle/src/genVideoRendererMain.ts"
+  ],
+  "fixture": {
+    "frames": {
+      "00000001.jpg": [
+        64,
+        36
+      ],
+      "00000002.jpg": [
+        30,
+        40
+      ],
+      "00000003.jpg": [
+        7,
+        3
+      ],
+      "00000004.jpg": [
+        1,
+        90
+      ],
+      "00000005.jpg": [
+        16,
+        9
+      ],
+      "00000006.jpg": [
+        50,
+        50
+      ],
+      "00000007.jpg": [
+        33,
+        7
+      ]
+    },
+    "steps": [
+      {
+        "render": ""
+      },
+      {
+        "render": "00000001.jpg"
+      },
+      {
+        "render": "00000001.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000001.jpg"
+      },
+      {
+        "render": "00000002.jpg"
+      },
+      {
+        "render": "00000002.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000002.jpg"
+      },
+      {
+        "render": "__undefined"
+      },
+      {
+        "render": null
+      },
+      {
+        "render": 5
+      },
+      {
+        "render": {
+          "a": 1
+        }
+      },
+      {
+        "render": [
+          "00000003.jpg"
+        ]
+      },
+      {
+        "render": true
+      },
+      {
+        "render": ""
+      },
+      {
+        "render": ""
+      },
+      {
+        "render": "00000003.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000003.jpg"
+      },
+      {
+        "render": "missing.jpg"
+      },
+      {
+        "render": "missing.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "missing.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000004.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000004.jpg"
+      },
+      {
+        "render": "corrupt.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "corrupt.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000005.jpg"
+      },
+      {
+        "render": ""
+      },
+      {
+        "render": "00000006.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000006.jpg"
+      },
+      {
+        "render": ""
+      },
+      {
+        "render": "missing2.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": ""
+      },
+      {
+        "render": "00000007.jpg"
+      },
+      {
+        "load": true
+      },
+      {
+        "render": "00000007.jpg"
+      }
+    ]
+  }
+}

@@ -94,5 +94,14 @@
   "td.input > select": ["select"],
   "#exit": ["button#exit"],
   "#confirm": ["button#confirm"],
-  "div.help-div": ["div.help-div"]
+  "div.help-div": ["div.help-div"],
+  ".video-container": ["div.video-container"],
+  ".video-container > img": ["video-image"],
+  ".video-source": ["div.video-source"],
+  ".video-source > button": ["div.video-source > button"],
+  ".video-timeline-section > button": ["div.video-timeline-section > button"],
+  ".video-timeline-container": ["div.video-timeline-container"],
+  "input.video-timeline-slider": ["input.video-timeline-slider"],
+  ".video-timeline-marker-container > div": ["div.video-timeline-marker-container > div"],
+  ".video-timeline-controls > button": ["div.video-timeline-controls > button"]
 }

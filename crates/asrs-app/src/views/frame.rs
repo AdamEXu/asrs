@@ -18,7 +18,7 @@ use asrs_hub::timeline::{ScrollTarget, Timeline, TimelineFrame};
 use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
-use asrs_model::selection_impl::ControlButton;
+use asrs_model::selection_impl::{ControlButton, KeyTarget};
 use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
@@ -33,7 +33,8 @@ use asrs_ui::gpui::{
     canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
-use asrs_ui::input::text_field_focused;
+use asrs_ui::input;
+use asrs_ui::menu;
 use asrs_ui::parity::{Probed, probed};
 use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
@@ -51,6 +52,7 @@ use super::source_list::{self, ListsGeometry};
 use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
 use super::table::{self, TableViews};
+use super::video::VideoViews;
 
 /// `element` under its parity id, which is its selector in `www/hub.html` (`div.title-bar`).
 fn probe(element: FrameElement, child: impl IntoElement) -> Probed {
@@ -80,9 +82,9 @@ pub trait FrameHost: 'static {
     fn resized(&mut self, _cx: &mut App) {}
     /// An animation frame of a page without a frame loop of its own.
     fn animation_frame(&mut self, _cx: &mut App) {}
-    /// The window's `keydown` event outside editable elements. Returns whether `preventDefault`
-    /// was called.
-    fn key_down(&mut self, _event: &KeyDownEvent, _code: &str, _cx: &mut App) -> bool {
+    /// `satellite.ts`'s `keydown` listener, outside editable elements. Returns whether
+    /// `preventDefault` was called.
+    fn satellite_key_down(&mut self, _code: &str, _cx: &mut App) -> bool {
         false
     }
     /// The hub's frame clock (ms), which its scroll sensors animate on.
@@ -161,6 +163,17 @@ impl FrameGeometry {
     }
 }
 
+/// What a key event the page gets is dispatched to; `None` while an open menu takes the keys.
+pub(super) fn key_target(window: &Window) -> Option<KeyTarget> {
+    if menu::focused(window) {
+        None
+    } else if input::focused(window) {
+        Some(KeyTarget::Input)
+    } else {
+        Some(KeyTarget::Other)
+    }
+}
+
 pub struct HubFrame<H: FrameHost> {
     host: H,
     shell: HubShell,
@@ -183,6 +196,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) documentation: DocumentationViews,
     pub(super) statistics: StatisticsViews,
     pub(super) metadata: MetadataView,
+    pub(super) video: VideoViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -308,6 +322,7 @@ impl<H: FrameHost> HubFrame<H> {
             documentation: DocumentationViews::default(),
             statistics: StatisticsViews::default(),
             metadata: MetadataView::default(),
+            video: VideoViews::default(),
         }
     }
 
@@ -353,20 +368,27 @@ impl<H: FrameHost> HubFrame<H> {
     /// The window's `keydown` listeners, before the focused element's own key handling, which
     /// `preventDefault` keeps from running.
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let editable = text_field_focused(window);
-        self.field3d_key_down(event, editable, cx);
-        self.console_key_down(event, editable, window, cx);
-        if !editable
-            && self
-                .host
-                .key_down(event, &key_code(&event.keystroke.key), cx)
-        {
+        let Some(target) = key_target(window) else {
+            return;
+        };
+        let editable = target == KeyTarget::Input;
+        let code = key_code(&event.keystroke.key);
+        let prevented = if !self.host.hub(cx).page().is_satellite() {
+            self.playback_key_down(event, &code, target, cx)
+        } else {
+            !editable && self.host.satellite_key_down(&code, cx)
+        };
+        if prevented {
             window.prevent_default();
         }
+        self.field3d_key_down(event, editable, cx);
+        self.console_key_down(event, editable, window, cx);
     }
 
     fn key_up(&mut self, event: &KeyUpEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
-        self.field3d_key_up(event, text_field_focused(window), cx);
+        if let Some(target) = key_target(window) {
+            self.field3d_key_up(event, target == KeyTarget::Input, cx);
+        }
     }
 
     fn handle_down(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
@@ -1074,6 +1096,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(tab) = self.canvas_tab_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(tab);
                 }
+                if let Some(video) = self.video_element(rect, scale, window, cx) {
+                    renderer = renderer.child(video);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
@@ -1102,6 +1127,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(tab) = self.canvas_tab_controls(rect, appearance, scale, window, cx) {
                     controls = controls.child(tab);
+                }
+                if let Some(video) = self.video_controls(rect, appearance, scale, window, cx) {
+                    controls = controls.child(video);
                 }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }

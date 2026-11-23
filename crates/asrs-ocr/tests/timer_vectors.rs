@@ -9,7 +9,7 @@ use std::sync::mpsc;
 
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::JsValue;
-use asrs_ocr::{OcrError, TIMER_RECTS, TimerReader, Worker};
+use asrs_ocr::{OcrError, TIMER_RECTS, TimerError, TimerReader, Worker};
 use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
 use asrs_parity::vectors::{self, Record};
@@ -544,7 +544,7 @@ fn queued_reads_interleave_and_a_failed_one_costs_only_itself() {
     std::fs::write(&damaged, [0; 1000]).expect("frame");
 
     let mut reads: BTreeMap<u64, (u32, f64, f64)> = BTreeMap::new();
-    let mut expected: BTreeMap<u64, Option<String>> = BTreeMap::new();
+    let mut expected: BTreeMap<u64, Result<String, &str>> = BTreeMap::new();
     for record in vectors::load(&format!("video/timer-{name}")).expect("vectors") {
         let get = |key: &str| record.field(key).expect("a field").clone();
         match text(&get("k")).as_str() {
@@ -559,7 +559,7 @@ fn queued_reads_interleave_and_a_failed_one_costs_only_itself() {
                 );
             }
             "text" => {
-                expected.insert(number(&get("id")) as u64, Some(text(&get("text"))));
+                expected.insert(number(&get("id")) as u64, Ok(text(&get("text"))));
             }
             _ => {}
         }
@@ -571,18 +571,23 @@ fn queued_reads_interleave_and_a_failed_one_costs_only_itself() {
     let submit = |id: u64, path: PathBuf, width: f64, height: f64| {
         let sender = sender.clone();
         reader.read_timer_text(path, width, height, move |result| {
-            sender.send((id, result.ok())).expect("receiver is alive");
+            let result = result.map_err(|error| match error {
+                TimerError::Read(_) => "read",
+                TimerError::Job(_) => "job",
+                TimerError::NoWorker(_) => "no worker",
+            });
+            sender.send((id, result)).expect("receiver is alive");
         });
     };
     for (id, (frame, width, height)) in &reads {
         submit(*id, dir.0.join(format!("{frame:08}.jpg")), *width, *height);
         submit(1000 + id, damaged.clone(), *width, *height);
         submit(2000 + id, dir.0.join("missing.jpg"), *width, *height);
-        expected.insert(1000 + id, None);
-        expected.insert(2000 + id, None);
+        expected.insert(1000 + id, Err("job"));
+        expected.insert(2000 + id, Err("read"));
     }
     drop(sender);
-    let results: BTreeMap<u64, Option<String>> = receiver.iter().collect();
+    let results: BTreeMap<u64, Result<String, &str>> = receiver.iter().collect();
     assert_eq!(results, expected);
 }
 
@@ -593,5 +598,6 @@ fn a_missing_frame_is_an_error() {
     reader.read_timer_text("/nonexistent/00000001.jpg", 1920.0, 1080.0, move |result| {
         sender.send(result).expect("receiver is alive");
     });
-    assert!(receiver.recv().expect("a result").is_err());
+    let result = receiver.recv().expect("a result");
+    assert!(matches!(result, Err(TimerError::Read(_))), "{result:?}");
 }

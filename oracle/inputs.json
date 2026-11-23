@@ -484,6 +484,15 @@
     "src/genProto.ts",
     "src/shims.ts"
   ],
+  "genRangePointer": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genRangePointer.ts",
+    "src/shims.ts"
+  ],
+  "genRangePointerMain": [
+    "src/genRangePointerMain.ts"
+  ],
   "genRegex": [
     "src/consoleExport.ts",
     "src/cve1.ts",
@@ -634,6 +643,15 @@
     "src/video/samples/prores-480p60.json",
     "src/video/samples/vp9-360p25.json",
     "src/video/world.ts"
+  ],
+  "genVideoRenderer": [
+    "src/canvas/png.ts",
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genVideoRenderer.ts"
+  ],
+  "genVideoRendererMain": [
+    "src/genVideoRendererMain.ts"
   ],
   "genWindows": [
     "src/cve1.ts",
