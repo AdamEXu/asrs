@@ -146,6 +146,17 @@
     "src/historical/timers.ts",
     "src/shims.ts"
   ],
+  "exportRuns": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/exportRuns.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/shims.ts"
+  ],
   "fn": [
     "src/consoleExport.ts",
     "src/cve1.ts",
@@ -259,6 +270,7 @@
     "src/fakes/mainFs.ts",
     "src/files/assetLoader.ts",
     "src/files/historicalStart.ts",
+    "src/files/routing.ts",
     "src/genFiles.ts"
   ],
   "genGeometry": [

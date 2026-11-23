@@ -22,6 +22,8 @@ import { toTree } from "./cve1";
 //   genFiles assets <count> <seed>
 //     assetLoader's createAssetFolders / getUserAssetsPath / loadAssets over fake folder
 //     trees (see files/assetLoader.ts).
+//   genFiles routing 0 0 dev <scenario>
+//     main.ts's Driver Station log routing and export flow (see files/routing.ts).
 //
 // `main.ts` is bundled as strict ESM here and sloppy CJS in the real app, but the window
 // bounds reset assigns inside the StateTracker class body, which is strict in both.
@@ -911,4 +913,5 @@ else if (mode === "flows") {
 } else if (mode === "beta") await betaMode(count);
 else if (mode === "historical") await (await import("./files/historicalStart")).run();
 else if (mode === "assets") await (await import("./files/assetLoader")).run(count, Number(seedArg));
+else if (mode === "routing") await (await import("./files/routing")).run(process.argv[6]);
 else throw new Error(`genFiles: unknown mode ${mode}`);

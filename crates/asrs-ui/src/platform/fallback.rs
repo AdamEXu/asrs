@@ -1,8 +1,12 @@
+use std::path::Path;
+
 use gpui_kit::{App, ScrollEvent, Window};
 
 use super::{MenuPath, PopupMenu, WheelDelta};
 
 pub(super) fn init() {}
+
+pub(super) fn add_recent_document(_path: &Path) {}
 
 pub(super) fn numpad_enter() -> bool {
     false

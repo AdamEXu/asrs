@@ -60,6 +60,7 @@ features = [
     "NSButtonCell",
     "NSCell",
     "NSControl",
+    "NSDocumentController",
     "NSEvent",
     "NSFont",
     "NSGraphics",
