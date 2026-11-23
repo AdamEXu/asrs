@@ -20,7 +20,8 @@ use asrs_model::tab_type::TabType;
 use asrs_tabs::table::TableRenderer;
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    Entity, MouseMoveEvent, PlatformInput, ScrollDelta, ScrollEvent, WindowHandle, point, px, size,
+    Entity, MouseExitEvent, MouseMoveEvent, PlatformInput, ScrollDelta, ScrollEvent, WindowHandle,
+    point, px, size,
 };
 
 const WIDTH: f32 = 1100.0;
@@ -258,7 +259,7 @@ fn wheel_past_an_edge(headless: &mut HeadlessCapture, scale: f32) {
     );
 }
 
-fn hiding_leaves_the_body(headless: &mut HeadlessCapture, scale: f32) {
+fn leaving_the_window_and_hiding_leave_the_body(headless: &mut HeadlessCapture, scale: f32) {
     let mut page = Page::open(headless, scale);
     page.log();
     page.open_table();
@@ -270,6 +271,15 @@ fn hiding_leaves_the_body(headless: &mut HeadlessCapture, scale: f32) {
     page.frames(2);
     let hovered = page.selection(|selection| selection.get_hovered_time());
     assert!(hovered.is_some(), "{scale}x: no row is hovered");
+    page.dispatch(PlatformInput::MouseExited(MouseExitEvent::default()));
+    page.frames(2);
+    let hovered = page.selection(|selection| selection.get_hovered_time());
+    assert_eq!(hovered, None, "{scale}x: hovered outside the window");
+    page.dispatch(PlatformInput::MouseMove(MouseMoveEvent {
+        position: point(px(400.0), px(400.0)),
+        ..MouseMoveEvent::default()
+    }));
+    page.frames(2);
     page.model(|model| {
         let (tabs, page) = model.tabs_mut();
         tabs.set_selected(page, &JsValue::Number(0.0))
@@ -291,7 +301,7 @@ fn main() {
         locked_autoscrolls_and_wheel_unlocks(&mut headless, scale);
         playback_autoscrolls(&mut headless, scale);
         wheel_past_an_edge(&mut headless, scale);
-        hiding_leaves_the_body(&mut headless, scale);
+        leaving_the_window_and_hiding_leave_the_body(&mut headless, scale);
     }
     println!("hub_table: ok");
 }

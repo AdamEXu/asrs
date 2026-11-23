@@ -1006,6 +1006,17 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    /// The pointer left the window.
+    pub(super) fn table_mouse_exit(&mut self, cx: &mut Context<'_, Self>) {
+        let Some(shown) = self.table.shown.clone() else {
+            return;
+        };
+        if self.table.over_body {
+            self.table_leave(shown.index, cx);
+            cx.notify();
+        }
+    }
+
     /// The pooled data row at a client position, outside the header.
     fn table_row_at(&mut self, shown: &Shown, x: f64, y: f64, cx: &mut App) -> Option<usize> {
         if !shown.contains(x, y) {
@@ -1095,7 +1106,7 @@ impl<H: FrameHost> HubFrame<H> {
             let mut dom = renderer.dom().borrow_mut();
             let offset = dom.layout.wheel_offset();
             let max = dom.layout.scroll_range();
-            if let Some(to) = state.wheel(wheel, now, offset, [width, height], max) {
+            if let Some(to) = state.wheel(wheel, now, offset, max, [width, height]) {
                 dom.layout.set_wheel_offset(to);
             }
         });
