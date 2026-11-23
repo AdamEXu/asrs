@@ -19,7 +19,7 @@ asrs as a whole is a derived work of AdvantageScope: every crate ports its
 TypeScript, CSS and C sources (including the WPILOG indexer,
 `src/hub/dataSources/wpilog/indexer/wpilogIndexer.c`). Also taken from upstream:
 
-- `www/symbols` icons, embedded into `asrs-ui` at build time, and `www/textures`,
+- `www/symbols` and `icons/download` icons, embedded into `asrs-ui` at build time, and `www/textures`,
   `icons`, `bundledAssets` and `licenses`, copied into `assets/` by `cargo xtask assets`.
 - `crates/asrs-model/src/source_list/configs/*.json`: upstream's tab controller
   source list configs.
@@ -208,13 +208,14 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 ## Skia
 
 - License: BSD-3-Clause ([`licenses/Skia.txt`](licenses/Skia.txt))
-- Copyright (c) 2011 Google Inc.
+- Copyright (c) 2006-2023 Google Inc.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
   `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
-  `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
+  `text/layout.rs`; the Fontations scaler, fontconfig matching and bitmap glyphs in
+  `text/linux/`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)
 
 ## Chromium and Blink
@@ -226,7 +227,8 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: m142 (as shipped in Electron 39)
 - Used in: `crates/asrs-canvas/src/` (`color.rs` CSS colour parsing, `path.rs` and `raster.rs`
   `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/inline.rs`,
-  `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`),
+  `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`,
+  `text/shaping.rs` and `text/linux/` word shaping and font fallback),
   `crates/asrs-tabs/src/form/step.rs`, and behaviour reproduced in
   `crates/asrs-ui` (SVG painting, filters, theme) and `crates/asrs-live/src/timers.rs`
   (`DOMTimer` scheduling)

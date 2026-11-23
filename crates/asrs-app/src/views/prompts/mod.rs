@@ -117,7 +117,7 @@ fn close_and(
 }
 
 /// `window.alert(message)` in Electron: a message box with only an OK button.
-fn alert(message: String, id: WindowId, cx: &mut App) {
+pub(crate) fn alert(message: String, id: WindowId, cx: &mut App) {
     if let Some(handle) = Windows::handle(cx, id) {
         let options = MessageBoxOptions {
             message,

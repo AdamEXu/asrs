@@ -230,6 +230,12 @@
   "genDownloadHelpers": [
     "src/genDownloadHelpers.ts"
   ],
+  "genDownloadPage": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genDownloadPage.ts",
+    "src/shims.ts"
+  ],
   "genField3dFields": [
     "src/cve1.ts",
     "src/environment.ts",
@@ -793,6 +799,10 @@
     "src/logRun.ts",
     "src/registry.ts",
     "src/shims.ts"
+  ],
+  "robotServer": [
+    "src/environment.ts",
+    "src/robotServer.ts"
   ],
   "selectKeys": [
     "src/dom/fixtureFile.ts",
