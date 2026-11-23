@@ -20,7 +20,11 @@ pub const APP_NAME: &str = crate::IDENTITY.name;
 /// itself (reload, zoom and the like) that has no native selector.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuAction {
-    Command(Command),
+    Command {
+        command: Command,
+        /// `item.checked` as the click handler sees it.
+        checked: bool,
+    },
     Role(String),
 }
 
@@ -82,9 +86,31 @@ pub fn item_at<'a>(items: &'a [BuiltItem], path: &[usize]) -> Option<&'a BuiltIt
 pub fn action_at(items: &[BuiltItem], path: &[usize]) -> Option<MenuAction> {
     let item = item_at(items, path)?;
     match (&item.command, &item.role) {
-        (Some(command), _) => Some(MenuAction::Command(*command)),
+        (Some(command), _) => Some(MenuAction::Command {
+            command: *command,
+            checked: item.checked,
+        }),
         (None, Some(role)) => Some(MenuAction::Role(role.clone())),
         (None, None) => None,
+    }
+}
+
+/// The `MenuItem` constructor's click wrapper: a checkbox flips before its handler runs. Returns
+/// whether it did.
+fn flip_checkbox(items: &mut [BuiltItem], path: &[usize]) -> bool {
+    let Some((&first, rest)) = path.split_first() else {
+        return false;
+    };
+    let Some(item) = items.get_mut(first) else {
+        return false;
+    };
+    match (&mut item.submenu, rest.is_empty()) {
+        (Some(submenu), false) => flip_checkbox(submenu, rest),
+        (_, true) if item.item_type == ItemType::Checkbox => {
+            item.checked = !item.checked;
+            true
+        }
+        _ => false,
     }
 }
 
@@ -127,14 +153,33 @@ pub fn install_application_menu(
     template: &[MenuItem],
     on_action: ActionHandler,
 ) {
-    let built = build_from_template(template, platform, APP_NAME);
+    show_application_menu(
+        cx,
+        platform,
+        build_from_template(template, platform, APP_NAME),
+        on_action,
+    );
+}
+
+fn show_application_menu(
+    cx: &mut App,
+    platform: Platform,
+    built: Vec<BuiltItem>,
+    on_action: ActionHandler,
+) {
     let menu = (platform == Platform::Mac).then(|| to_popup(&built, platform, true));
     let table = accelerator_table(&built, platform);
     let dispatch = move |path: MenuPath, cx: &mut App| {
-        if let Some(item) = item_at(&built, &path)
-            && item.enabled
-            && let Some(action) = action_at(&built, &path)
-        {
+        if !item_at(&built, &path).is_some_and(|item| item.enabled) {
+            return;
+        }
+        let mut clicked = built.clone();
+        let flipped = flip_checkbox(&mut clicked, &path);
+        let action = action_at(&clicked, &path);
+        if flipped {
+            show_application_menu(cx, platform, clicked, on_action.clone());
+        }
+        if let Some(action) = action {
             on_action(action, cx);
         }
     };
@@ -143,7 +188,13 @@ pub fn install_application_menu(
             platform::set_application_menu(cx, &menu, dispatch);
         }
         None => {
-            asrs_ui::menu::install_accelerators(cx, table, move |path, _, cx| dispatch(path, cx))
+            let dispatch = Rc::new(dispatch);
+            // The keystroke's window is borrowed until its event ends, and the handlers reach
+            // windows by handle.
+            asrs_ui::menu::install_accelerators(cx, table, move |path, _, cx| {
+                let dispatch = dispatch.clone();
+                cx.defer(move |cx| dispatch(path, cx));
+            });
         }
     }
 }

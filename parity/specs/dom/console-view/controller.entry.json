@@ -1,0 +1,978 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "geometry": "real",
+  "seed": 1112,
+  "steps": [
+   {
+    "log": [
+     [
+      "putString",
+      "/Console",
+      3,
+      "Robot program starting #0"
+     ],
+     [
+      "putString",
+      "/Console",
+      3.25,
+      "\u001b[31mERROR\u001b[0m something failed #1"
+     ],
+     [
+      "putString",
+      "/Console",
+      3.5,
+      "Warning: loop overrun #2"
+     ],
+     [
+      "putString",
+      "/Console",
+      3.75,
+      "multi\nline\nvalue #3"
+     ],
+     [
+      "putString",
+      "/Console",
+      4,
+      "value 4 #4"
+     ],
+     [
+      "putString",
+      "/Console",
+      4.25,
+      "Robot program starting #5"
+     ],
+     [
+      "putString",
+      "/Console",
+      4.5,
+      "\u001b[31mERROR\u001b[0m something failed #6"
+     ],
+     [
+      "putString",
+      "/Console",
+      4.75,
+      "Warning: loop overrun #7"
+     ],
+     [
+      "putString",
+      "/Console",
+      5,
+      "multi\nline\nvalue #8"
+     ],
+     [
+      "putString",
+      "/Console",
+      5.25,
+      "value 9 #9"
+     ],
+     [
+      "putString",
+      "/Console",
+      5.5,
+      "Robot program starting #10"
+     ],
+     [
+      "putString",
+      "/Console",
+      5.75,
+      "\u001b[31mERROR\u001b[0m something failed #11"
+     ],
+     [
+      "putString",
+      "/Console",
+      6,
+      "Warning: loop overrun #12"
+     ],
+     [
+      "putString",
+      "/Console",
+      6.25,
+      "multi\nline\nvalue #13"
+     ],
+     [
+      "putString",
+      "/Console",
+      6.5,
+      "value 14 #14"
+     ],
+     [
+      "putString",
+      "/Console",
+      6.75,
+      "Robot program starting #15"
+     ],
+     [
+      "putString",
+      "/Console",
+      7,
+      "\u001b[31mERROR\u001b[0m something failed #16"
+     ],
+     [
+      "putString",
+      "/Console",
+      7.25,
+      "Warning: loop overrun #17"
+     ],
+     [
+      "putString",
+      "/Console",
+      7.5,
+      "multi\nline\nvalue #18"
+     ],
+     [
+      "putString",
+      "/Console",
+      7.75,
+      "value 19 #19"
+     ],
+     [
+      "putString",
+      "/Console",
+      8,
+      "Robot program starting #20"
+     ],
+     [
+      "putString",
+      "/Console",
+      8.25,
+      "\u001b[31mERROR\u001b[0m something failed #21"
+     ],
+     [
+      "putString",
+      "/Console",
+      8.5,
+      "Warning: loop overrun #22"
+     ],
+     [
+      "putString",
+      "/Console",
+      8.75,
+      "multi\nline\nvalue #23"
+     ],
+     [
+      "putString",
+      "/Console",
+      9,
+      "value 24 #24"
+     ],
+     [
+      "putString",
+      "/Console",
+      9.25,
+      "Robot program starting #25"
+     ],
+     [
+      "putString",
+      "/Console",
+      9.5,
+      "\u001b[31mERROR\u001b[0m something failed #26"
+     ],
+     [
+      "putString",
+      "/Console",
+      9.75,
+      "Warning: loop overrun #27"
+     ],
+     [
+      "putString",
+      "/Console",
+      10,
+      "multi\nline\nvalue #28"
+     ],
+     [
+      "putString",
+      "/Console",
+      10.25,
+      "value 29 #29"
+     ],
+     [
+      "putString",
+      "/Console",
+      10.5,
+      "Robot program starting #30"
+     ],
+     [
+      "putString",
+      "/Console",
+      10.75,
+      "\u001b[31mERROR\u001b[0m something failed #31"
+     ],
+     [
+      "putString",
+      "/Console",
+      11,
+      "Warning: loop overrun #32"
+     ],
+     [
+      "putString",
+      "/Console",
+      11.25,
+      "multi\nline\nvalue #33"
+     ],
+     [
+      "putString",
+      "/Console",
+      11.5,
+      "value 34 #34"
+     ],
+     [
+      "putString",
+      "/Console",
+      11.75,
+      "Robot program starting #35"
+     ],
+     [
+      "putString",
+      "/Console",
+      12,
+      "\u001b[31mERROR\u001b[0m something failed #36"
+     ],
+     [
+      "putString",
+      "/Console",
+      12.25,
+      "Warning: loop overrun #37"
+     ],
+     [
+      "putString",
+      "/Console",
+      12.5,
+      "multi\nline\nvalue #38"
+     ],
+     [
+      "putString",
+      "/Console",
+      12.75,
+      "value 39 #39"
+     ],
+     [
+      "putString",
+      "/Console",
+      13,
+      "Robot program starting #40"
+     ],
+     [
+      "putString",
+      "/Console",
+      13.25,
+      "\u001b[31mERROR\u001b[0m something failed #41"
+     ],
+     [
+      "putString",
+      "/Console",
+      13.5,
+      "Warning: loop overrun #42"
+     ],
+     [
+      "putString",
+      "/Console",
+      13.75,
+      "multi\nline\nvalue #43"
+     ],
+     [
+      "putString",
+      "/Console",
+      14,
+      "value 44 #44"
+     ],
+     [
+      "putString",
+      "/Console",
+      14.25,
+      "Robot program starting #45"
+     ],
+     [
+      "putString",
+      "/Console",
+      14.5,
+      "\u001b[31mERROR\u001b[0m something failed #46"
+     ],
+     [
+      "putString",
+      "/Console",
+      14.75,
+      "Warning: loop overrun #47"
+     ],
+     [
+      "putString",
+      "/Console",
+      15,
+      "multi\nline\nvalue #48"
+     ],
+     [
+      "putString",
+      "/Console",
+      15.25,
+      "value 49 #49"
+     ],
+     [
+      "putString",
+      "/Console",
+      15.5,
+      "Robot program starting #50"
+     ],
+     [
+      "putString",
+      "/Console",
+      15.75,
+      "\u001b[31mERROR\u001b[0m something failed #51"
+     ],
+     [
+      "putString",
+      "/Console",
+      16,
+      "Warning: loop overrun #52"
+     ],
+     [
+      "putString",
+      "/Console",
+      16.25,
+      "multi\nline\nvalue #53"
+     ],
+     [
+      "putString",
+      "/Console",
+      16.5,
+      "value 54 #54"
+     ],
+     [
+      "putString",
+      "/Console",
+      16.75,
+      "Robot program starting #55"
+     ],
+     [
+      "putString",
+      "/Console",
+      17,
+      "\u001b[31mERROR\u001b[0m something failed #56"
+     ],
+     [
+      "putString",
+      "/Console",
+      17.25,
+      "Warning: loop overrun #57"
+     ],
+     [
+      "putString",
+      "/Console",
+      17.5,
+      "multi\nline\nvalue #58"
+     ],
+     [
+      "putString",
+      "/Console",
+      17.75,
+      "value 59 #59"
+     ],
+     [
+      "putString",
+      "/Console",
+      18,
+      "Robot program starting #60"
+     ],
+     [
+      "putString",
+      "/Console",
+      18.25,
+      "\u001b[31mERROR\u001b[0m something failed #61"
+     ],
+     [
+      "putString",
+      "/Console",
+      18.5,
+      "Warning: loop overrun #62"
+     ],
+     [
+      "putString",
+      "/Console",
+      18.75,
+      "multi\nline\nvalue #63"
+     ],
+     [
+      "putString",
+      "/Console",
+      19,
+      "value 64 #64"
+     ],
+     [
+      "putString",
+      "/Console",
+      19.25,
+      "Robot program starting #65"
+     ],
+     [
+      "putString",
+      "/Console",
+      19.5,
+      "\u001b[31mERROR\u001b[0m something failed #66"
+     ],
+     [
+      "putString",
+      "/Console",
+      19.75,
+      "Warning: loop overrun #67"
+     ],
+     [
+      "putString",
+      "/Console",
+      20,
+      "multi\nline\nvalue #68"
+     ],
+     [
+      "putString",
+      "/Console",
+      20.25,
+      "value 69 #69"
+     ],
+     [
+      "putString",
+      "/Console",
+      20.5,
+      "Robot program starting #70"
+     ],
+     [
+      "putString",
+      "/Console",
+      20.75,
+      "\u001b[31mERROR\u001b[0m something failed #71"
+     ],
+     [
+      "putString",
+      "/Console",
+      21,
+      "Warning: loop overrun #72"
+     ],
+     [
+      "putString",
+      "/Console",
+      21.25,
+      "multi\nline\nvalue #73"
+     ],
+     [
+      "putString",
+      "/Console",
+      21.5,
+      "value 74 #74"
+     ],
+     [
+      "putString",
+      "/Console",
+      21.75,
+      "Robot program starting #75"
+     ],
+     [
+      "putString",
+      "/Console",
+      22,
+      "\u001b[31mERROR\u001b[0m something failed #76"
+     ],
+     [
+      "putString",
+      "/Console",
+      22.25,
+      "Warning: loop overrun #77"
+     ],
+     [
+      "putString",
+      "/Console",
+      22.5,
+      "multi\nline\nvalue #78"
+     ],
+     [
+      "putString",
+      "/Console",
+      22.75,
+      "value 79 #79"
+     ],
+     [
+      "putString",
+      "/Console",
+      23,
+      "Robot program starting #80"
+     ],
+     [
+      "putString",
+      "/Console",
+      23.25,
+      "\u001b[31mERROR\u001b[0m something failed #81"
+     ],
+     [
+      "putString",
+      "/Console",
+      23.5,
+      "Warning: loop overrun #82"
+     ],
+     [
+      "putString",
+      "/Console",
+      23.75,
+      "multi\nline\nvalue #83"
+     ],
+     [
+      "putString",
+      "/Console",
+      24,
+      "value 84 #84"
+     ],
+     [
+      "putString",
+      "/Console",
+      24.25,
+      "Robot program starting #85"
+     ],
+     [
+      "putString",
+      "/Console",
+      24.5,
+      "\u001b[31mERROR\u001b[0m something failed #86"
+     ],
+     [
+      "putString",
+      "/Console",
+      24.75,
+      "Warning: loop overrun #87"
+     ],
+     [
+      "putString",
+      "/Console",
+      25,
+      "multi\nline\nvalue #88"
+     ],
+     [
+      "putString",
+      "/Console",
+      25.25,
+      "value 89 #89"
+     ],
+     [
+      "putString",
+      "/Console",
+      25.5,
+      "Robot program starting #90"
+     ],
+     [
+      "putString",
+      "/Console",
+      25.75,
+      "\u001b[31mERROR\u001b[0m something failed #91"
+     ],
+     [
+      "putString",
+      "/Console",
+      26,
+      "Warning: loop overrun #92"
+     ],
+     [
+      "putString",
+      "/Console",
+      26.25,
+      "multi\nline\nvalue #93"
+     ],
+     [
+      "putString",
+      "/Console",
+      26.5,
+      "value 94 #94"
+     ],
+     [
+      "putString",
+      "/Console",
+      26.75,
+      "Robot program starting #95"
+     ],
+     [
+      "putString",
+      "/Console",
+      27,
+      "\u001b[31mERROR\u001b[0m something failed #96"
+     ],
+     [
+      "putString",
+      "/Console",
+      27.25,
+      "Warning: loop overrun #97"
+     ],
+     [
+      "putString",
+      "/Console",
+      27.5,
+      "multi\nline\nvalue #98"
+     ],
+     [
+      "putString",
+      "/Console",
+      27.75,
+      "value 99 #99"
+     ],
+     [
+      "putString",
+      "/Console",
+      28,
+      "Robot program starting #100"
+     ],
+     [
+      "putString",
+      "/Console",
+      28.25,
+      "\u001b[31mERROR\u001b[0m something failed #101"
+     ],
+     [
+      "putString",
+      "/Console",
+      28.5,
+      "Warning: loop overrun #102"
+     ],
+     [
+      "putString",
+      "/Console",
+      28.75,
+      "multi\nline\nvalue #103"
+     ],
+     [
+      "putString",
+      "/Console",
+      29,
+      "value 104 #104"
+     ],
+     [
+      "putString",
+      "/Console",
+      29.25,
+      "Robot program starting #105"
+     ],
+     [
+      "putString",
+      "/Console",
+      29.5,
+      "\u001b[31mERROR\u001b[0m something failed #106"
+     ],
+     [
+      "putString",
+      "/Console",
+      29.75,
+      "Warning: loop overrun #107"
+     ],
+     [
+      "putString",
+      "/Console",
+      30,
+      "multi\nline\nvalue #108"
+     ],
+     [
+      "putString",
+      "/Console",
+      30.25,
+      "value 109 #109"
+     ],
+     [
+      "putString",
+      "/Console",
+      30.5,
+      "Robot program starting #110"
+     ],
+     [
+      "putString",
+      "/Console",
+      30.75,
+      "\u001b[31mERROR\u001b[0m something failed #111"
+     ],
+     [
+      "putString",
+      "/Console",
+      31,
+      "Warning: loop overrun #112"
+     ],
+     [
+      "putString",
+      "/Console",
+      31.25,
+      "multi\nline\nvalue #113"
+     ],
+     [
+      "putString",
+      "/Console",
+      31.5,
+      "value 114 #114"
+     ],
+     [
+      "putString",
+      "/Console",
+      31.75,
+      "Robot program starting #115"
+     ],
+     [
+      "putString",
+      "/Console",
+      32,
+      "\u001b[31mERROR\u001b[0m something failed #116"
+     ],
+     [
+      "putString",
+      "/Console",
+      32.25,
+      "Warning: loop overrun #117"
+     ],
+     [
+      "putString",
+      "/Console",
+      32.5,
+      "multi\nline\nvalue #118"
+     ],
+     [
+      "putString",
+      "/Console",
+      32.75,
+      "value 119 #119"
+     ],
+     [
+      "putNumber",
+      "/Num",
+      3,
+      1
+     ]
+    ]
+   },
+   {
+    "main": "new-tab",
+    "data": 5
+   },
+   {
+    "eval": "(() => {\n  const w = window;\n  const KINDS = {\"4\":\"table\",\"5\":\"console\",\"6\":\"statistics\",\"12\":\"metadata\"};\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const quiet = w.__oracleQuiet;\n  const instances = [];\n  let active = false;\n\n  const innerText = (el) =>\n    Array.from(el.childNodes, (n) => {\n      if (n.nodeType === 3) return n.data;\n      if (n.localName === \"br\") return \"\\n\";\n      throw new Error(\"unexpected \" + n.nodeName);\n    }).join(\"\");\n  const onlyText = (el) => {\n    if (Array.from(el.childNodes).some((n) => n.nodeType !== 3)) throw new Error(\"unexpected child\");\n    return el.textContent;\n  };\n  const classes = (el) => Array.from(el.classList).sort();\n  const node = (n) =>\n    n.nodeType === 3 ? n.data : [n.localName, n.getAttributeNames().map((a) => [a, n.getAttribute(a)]), Array.from(n.childNodes, node)];\n  const hand = (r) => [r.HAND_ICON.style.transition, r.HAND_ICON.style.opacity];\n\n  const DUMP = {\n    table: (r) => {\n      const body = Array.from(r.TABLE_BODY.children);\n      return {\n        headers: Array.from(body[0].children).slice(1).map((th) => {\n          const [key, close] = th.children;\n          if (th.children.length !== 2 || key.children.length !== 1) throw new Error(\"unexpected header cell\");\n          const text = key.firstElementChild;\n          return [th.title, innerText(text), text.style.textDecoration, classes(key), close.title, close.hidden];\n        }),\n        fillers: [body[1], body[body.length - 1]].map((el) => (el.__r11Height !== undefined ? el.__r11Height : el.style.height)),\n        rows: body.slice(2, -1).map((tr) => [classes(tr), tr.hidden, Array.from(tr.children, onlyText)]),\n        hand: hand(r),\n        placeholder: r.INPUT_FIELD.placeholder\n      };\n    },\n    console: (r) => ({\n      field: innerText(r.FIELD_TEXT),\n      decoration: r.FIELD_TEXT.style.textDecoration,\n      deleteHidden: r.FIELD_DELETE.hidden,\n      exportButton: r.EXPORT_BUTTON === null ? null : r.EXPORT_BUTTON.hidden,\n      highlight: r.HIGHLIGHT_BUTTON.classList.contains(\"active\"),\n      filter: r.FILTER_INPUT.value,\n      rows: Array.from(r.TABLE_BODY.children).slice(1).map((tr) => {\n        const [time, value] = tr.children;\n        if (tr.children.length !== 2) throw new Error(\"unexpected line\");\n        return [classes(tr), onlyText(time), Array.from(value.childNodes, node)];\n      }),\n      hand: hand(r),\n      placeholder: r.JUMP_INPUT.placeholder\n    }),\n    statistics: (r) => ({\n      rows: Array.from(r.VALUES_TABLE_BODY.children, (tr) => [\n        classes(tr),\n        Array.from(tr.children, (td) => [innerText(td), td.colSpan, td.__r11Color === undefined ? null : td.__r11Color])\n      ])\n    }),\n    metadata: (r) => ({\n      alertHidden: r.NO_DATA_ALERT.hidden,\n      tableHidden: r.TABLE_CONTAINER.hidden,\n      headers: Array.from(r.TABLE_BODY.firstElementChild.children, innerText),\n      rows: Array.from(r.TABLE_BODY.children).slice(1).map((tr) => Array.from(tr.children, (td) => [innerText(td), classes(td)]))\n    })\n  };\n\n  const shadow = (el, property, store) =>\n    Object.defineProperty(el.style, property, {\n      configurable: true,\n      get() {\n        return this.getPropertyValue(property);\n      },\n      set(value) {\n        el[store] = String(value);\n        this.setProperty(property, value);\n      }\n    });\n\n  const WATCHED = [\"setHoveredTime\", \"setSelectedTime\", \"goIdle\", \"play\", \"pause\", \"lock\", \"unlock\"];\n  const bracket = (instance, op, run) => {\n    if (active) throw new Error(\"nested bracket\");\n    active = true;\n    write({\n      r11: \"begin\",\n      id: tree(instance.id),\n      op: tree(op),\n      dark: w.matchMedia(\"(prefers-color-scheme: dark)\").matches,\n      timestamps: tree(w.preferences.timestamps)\n    });\n    const sel = w.selection;\n    const saved = WATCHED.map((name) => sel[name]);\n    WATCHED.forEach((name, i) => {\n      sel[name] = (...args) => {\n        write({ r11: \"selection\", call: tree([name, ...args]) });\n        return saved[i].apply(sel, args);\n      };\n    });\n    const createElement = document.createElement;\n    document.createElement = function (...args) {\n      const el = createElement.apply(this, args);\n      if (instance.kind === \"statistics\" && args[0] === \"td\") shadow(el, \"color\", \"__r11Color\");\n      return el;\n    };\n    const end = { r11: \"end\", id: tree(instance.id) };\n    const labels = () => instance.renderer.histogram.data.labels;\n    const before = instance.kind === \"statistics\" ? labels() : undefined;\n    try {\n      const result = run();\n      if (op[0] === \"save\") end.result = tree(result);\n    } catch (e) {\n      // The bundler renames shadowed variables, so a message can name \"color2\" for \"color\".\n      end.threw = tree(e.name + \": \" + e.message.replace(/^([a-z]+)\\d+(\\.\\w+ is not a function)$/, \"$1$2\"));\n      throw e;\n    } finally {\n      document.createElement = createElement;\n      WATCHED.forEach((name, i) => (sel[name] = saved[i]));\n      active = false;\n      if (instance.kind === \"table\") end.range = tree(instance.renderer.getTimestampRange());\n      if (instance.kind === \"statistics\") end.histogram = labels() !== before;\n      end.dom = tree(quiet(() => DUMP[instance.kind](instance.renderer)));\n      write(end);\n    }\n  };\n\n  const hook = (kind, renderer, hasController) => {\n    if (instances.some((i) => i.renderer === renderer)) return;\n    const instance = { id: instances.length, kind, renderer };\n    instances.push(instance);\n    if (kind === \"table\") {\n      shadow(renderer.fillerUpper, \"height\", \"__r11Height\");\n      shadow(renderer.fillerLower, \"height\", \"__r11Height\");\n    }\n    const render = renderer.render;\n    renderer.render = function (command) {\n      return bracket(instance, [\"render\", command], () => render.call(this, command));\n    };\n    write({ r11: \"create\", id: tree(instance.id), kind, hasController, dom: tree(quiet(() => DUMP[kind](renderer))) });\n    return instance.id;\n  };\n  const hookAll = () =>\n    w.tabs.tabList.forEach((t) => {\n      if (KINDS[t.type] !== undefined) hook(KINDS[t.type], t.renderer, true);\n    });\n  hookAll();\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const result = addTab.apply(this, args);\n    hookAll();\n    return result;\n  };\n\n  const drive = (id, op, run) => {\n    try {\n      bracket(instances[id], op, () => run(instances[id].renderer));\n    } catch (e) {}\n  };\n  const rowsOf = (r) => Array.from(r.TABLE_BODY.children).slice(1);\n  w.__r11 = {\n    // Another renderer of the first tab's class, on the hub's markup or on the given one.\n    make(type, hasController, html) {\n      const tab = w.tabs.tabList.find((t) => t.type === type);\n      let root;\n      if (html === undefined) root = document.getElementById(\"renderer\" + type).cloneNode(true);\n      else {\n        const template = document.createElement(\"template\");\n        template.innerHTML = html;\n        root = template.content.firstElementChild;\n      }\n      root.removeAttribute(\"id\");\n      root.hidden = false;\n      document.querySelector(\"div.renderer-content\").appendChild(root);\n      hook(KINDS[type], new tab.renderer.constructor(root, hasController), hasController);\n    },\n    render(id, command) {\n      try {\n        instances[id].renderer.render(command);\n      } catch (e) {}\n    },\n    // The command the first tab's controller gives this frame, to a renderer of its type.\n    share(id, type) {\n      this.render(id, w.tabs.tabList.find((t) => t.type === type).controller.getCommand());\n    },\n    filter(id, value) {\n      drive(id, [\"filter\", value], (r) => {\n        r.FILTER_INPUT.value = value;\n        r.FILTER_INPUT.dispatchEvent(new Event(\"input\", { bubbles: true }));\n      });\n    },\n    highlight: (id) => drive(id, [\"highlight\"], (r) => r.HIGHLIGHT_BUTTON.click()),\n    restore: (id, state) => drive(id, [\"restore\", state], (r) => r.restoreState(state)),\n    save: (id) => drive(id, [\"save\"], (r) => r.saveState()),\n    row: (id, type, index) => drive(id, [\"row\", type, index], (r) => rowsOf(r)[index].dispatchEvent(new MouseEvent(type))),\n    tableRow: (id, type, index) => drive(id, [\"row\", type, index], (r) => r.dataRows[index].dispatchEvent(new MouseEvent(type))),\n    jump: (id, value, enter) =>\n      drive(id, [\"jump\", value], (r) => {\n        const input = r.JUMP_INPUT ?? r.INPUT_FIELD;\n        input.value = value;\n        if (enter) input.dispatchEvent(new KeyboardEvent(\"keydown\", { code: \"Enter\" }));\n        else input.nextElementSibling.click();\n      }),\n    export: (id) => drive(id, [\"export\"], (r) => r.EXPORT_BUTTON.click()),\n    mousemove: (id, y) =>\n      drive(id, [\"mousemove\", y], (r) => r.TABLE_BODY.dispatchEvent(new MouseEvent(\"mousemove\", { clientY: y }))),\n    mouseleave: (id) => drive(id, [\"mouseleave\"], (r) => r.TABLE_BODY.dispatchEvent(new MouseEvent(\"mouseleave\"))),\n    scroll: (id, top) => quiet(() => (instances[id].renderer.TABLE_CONTAINER.scrollTop = top)),\n    size: (width, height) =>\n      quiet(() => {\n        const content = document.querySelector(\"div.renderer-content\");\n        content.style.width = width;\n        content.style.height = height;\n        content.style.bottom = \"auto\";\n      }),\n    tab: (type) => w.tabs.tabList.find((t) => t.type === type)\n  };\n})()"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.save(0)"
+   },
+   {
+    "eval": "window.__r11.export(0)"
+   },
+   {
+    "eval": "window.__r11.tab(5).controller.restoreState(\"/Console\")"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "eval": "window.__r11.export(0)"
+   },
+   {
+    "selection": [
+     "setSelectedTime",
+     5
+    ]
+   },
+   {
+    "frames": 1
+   },
+   {
+    "selection": [
+     "setHoveredTime",
+     9.9
+    ]
+   },
+   {
+    "frames": 1
+   },
+   {
+    "selection": [
+     "setHoveredTime",
+     0.5
+    ]
+   },
+   {
+    "frames": 1
+   },
+   {
+    "selection": [
+     "setHoveredTime",
+     0
+    ]
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.row(0, \"mouseenter\", 4)"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.row(0, \"mouseleave\", 4)"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.row(0, \"click\", 9)"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.filter(0, \"error\")"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.row(0, \"mouseenter\", 4)"
+   },
+   {
+    "eval": "window.__r11.row(0, \"click\", 4)"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.jump(0, \"12\", true)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"12.1\", false)"
+   },
+   {
+    "eval": "window.__r11.filter(0, \"\")"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"12\", true)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"0\", false)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"3\", true)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"3.2\", false)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"-4\", true)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"1e9\", false)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"\", true)"
+   },
+   {
+    "eval": "window.__r11.jump(0, \"abc\", false)"
+   },
+   {
+    "eval": "window.__r11.row(0, \"contextmenu\", 2)"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.jump(0, \"\", true)"
+   },
+   {
+    "eval": "window.__r11.highlight(0)"
+   },
+   {
+    "eval": "window.__r11.save(0)"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.restore(0, {\"highlight\":false})"
+   },
+   {
+    "eval": "window.__r11.restore(0, {\"highlight\":\"yes\"})"
+   },
+   {
+    "eval": "window.__r11.restore(0, null)"
+   },
+   {
+    "eval": "window.__r11.restore(0, 5)"
+   },
+   {
+    "eval": "window.__r11.restore(0, [])"
+   },
+   {
+    "eval": "window.__r11.restore(0, {\"highlight\":true})"
+   },
+   {
+    "eval": "window.preferences.timestamps = \"original\""
+   },
+   {
+    "frames": 1
+   },
+   {
+    "liveTime": 40
+   },
+   {
+    "selection": [
+     "setLiveConnected"
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "log": [
+     [
+      "putString",
+      "/Console",
+      39,
+      "live error"
+     ]
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "eval": "window.__r11.scroll(0, 100)"
+   },
+   {
+    "frames": 2
+   },
+   {
+    "selection": [
+     "lock"
+    ]
+   },
+   {
+    "frames": 2
+   },
+   {
+    "selection": [
+     "setLiveDisconnected"
+    ]
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.preferences.timestamps = \"start-zero\""
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.tab(5).controller.restoreState(\"/Missing\")"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.tab(5).controller.restoreState(\"/Num\")"
+   },
+   {
+    "frames": 1
+   },
+   {
+    "eval": "window.__r11.tab(5).controller.restoreState(null)"
+   },
+   {
+    "frames": 1
+   }
+  ]
+ }
+}

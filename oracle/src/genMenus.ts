@@ -2,6 +2,7 @@ import { install as installGlobals } from "./fakes/globals";
 import * as fakeFs from "./fakes/mainFs";
 import * as electronFake from "./fakes/mainElectron";
 import { toTree } from "./cve1";
+import { runClicks } from "./menus/clicks";
 import { runContext } from "./menus/context";
 import { UPSTREAM_DIR } from "./shims";
 import { spawnSync } from "node:child_process";
@@ -20,13 +21,16 @@ import { fileURLToPath } from "node:url";
 //   genMenus context <light|dark>
 //     every context menu main.ts's message handlers pop up, and what each item's click does
 //     (menus/context.ts), with nativeTheme dark or light
+//   genMenus clicks <darwin|win32|linux> <dev|packaged>
+//     every item of the application menu clicked with each kind of window focused, and what its
+//     handler did (menus/clicks.ts)
 //   genMenus electron
 //     the darwin `fresh` template handed to Electron's real Menu.buildFromTemplate in an Electron
 //     main process (genMenusMain.mjs), which fills in role defaults; records Electron's items
 
 const [mode, ...rest] = process.argv.slice(2);
 const usage = () => {
-  console.error("usage: genMenus template <darwin|win32|linux> <fresh|prefs> | genMenus context <light|dark> | genMenus electron");
+  console.error("usage: genMenus template <darwin|win32|linux> <fresh|prefs> | genMenus context <light|dark> | genMenus clicks <darwin|win32|linux> <dev|packaged> | genMenus electron");
   process.exit(2);
 };
 let platform: string;
@@ -34,6 +38,9 @@ let scenario: string;
 if (mode === "template") {
   [platform, scenario] = rest;
   if (!["darwin", "win32", "linux"].includes(platform) || !["fresh", "prefs"].includes(scenario)) usage();
+} else if (mode === "clicks") {
+  [platform, scenario] = rest;
+  if (!["darwin", "win32", "linux"].includes(platform) || !["dev", "packaged"].includes(scenario)) usage();
 } else if (mode === "context") {
   [platform, scenario] = ["darwin", rest[0]];
   if (!["light", "dark"].includes(scenario)) usage();
@@ -44,6 +51,10 @@ if (mode === "template") {
 }
 
 installGlobals();
+if (mode === "clicks") {
+  await runClicks(platform!, scenario! === "packaged");
+  process.exit(0);
+}
 Object.defineProperty(process, "platform", { value: platform! });
 
 const Constants = await import("@upstream/main/electron/ElectronConstants");

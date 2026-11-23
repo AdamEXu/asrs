@@ -86,6 +86,8 @@ fn bounds(window: &Window) -> Rect {
 }
 
 fn track<V: Render>(id: WindowId, window: &mut Window, entity: &Entity<V>, cx: &mut App) {
+    let opened = bounds(window);
+    cx.global_mut::<Windows>().manager.set_bounds(id, opened);
     entity.update(cx, |_, cx| {
         cx.observe_window_activation(window, move |_, window, cx| {
             let manager = &mut cx.global_mut::<Windows>().manager;

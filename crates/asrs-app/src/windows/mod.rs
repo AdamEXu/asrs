@@ -94,6 +94,11 @@ impl Windows {
             .map(|(_, h)| *h)
     }
 
+    /// `BrowserWindow.getFocusedWindow()`.
+    pub fn focused(cx: &App) -> Option<AnyWindowHandle> {
+        Self::handle(cx, Self::manager(cx).focused()?)
+    }
+
     /// `hubWindows`: most recently focused first.
     pub fn hubs(cx: &App) -> Vec<AnyWindowHandle> {
         Self::manager(cx)

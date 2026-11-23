@@ -321,6 +321,18 @@ impl WindowManager {
         self.live(self.download)
     }
 
+    /// The windows "Bring All to Front" moves, in order, before the focused one.
+    pub fn bring_to_front_order(&self) -> Vec<WindowId> {
+        let mut out = self.hubs.clone();
+        out.extend(self.download());
+        out.extend(self.live(self.preferences));
+        out.extend(self.live(self.licenses));
+        for (_, list) in self.satellites() {
+            out.extend_from_slice(list);
+        }
+        out
+    }
+
     /// The windows `sendAllPreferences` sends to, in order: hubs, satellites, the download
     /// window.
     pub fn preference_targets(&self) -> Vec<WindowId> {

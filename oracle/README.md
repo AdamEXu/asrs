@@ -948,6 +948,29 @@ a `requestAnimationFrame` exception must match what the port's render or list fr
 canvas pixel scenes: each field image is a generated stand-in at its recorded natural size and
 the heatmap canvas is transparent (its pixels are gated by `cargo xtask canvas heatmap`).
 
+### Table, Console, Statistics and Metadata renderers
+
+`dom/{table,console,statistics,metadata}-view/<case>` (`crates/asrs-tabs/tests/dom_tab_views.rs`)
+record the DOM the four renderers leave after every `render` and every driven event.
+`node oracle/tools/r11Specs.mjs` writes the specs; edit the script, not the specs. The table and
+console fixtures use `"geometry": "real"`. Their recorder eval adds `window.__r11`, which
+drives a renderer by id (`filter`, `highlight`, `row`, `jump`, `export`, `restore`, ...),
+makes further renderers on the hub's or satellite.html's markup (`make`), and renders a command
+on one directly (`render`) or the current one of the tab's controller (`share`).
+
+| Record | Written |
+|---|---|
+| `{"r11": "create", "id", "kind", "hasController", "dom"}` | when a renderer is hooked |
+| `{"r11": "begin", "id", "op", "dark", "timestamps"}` | before an operation: `op` is `["render", command]` or the event and its arguments, `timestamps` is `window.preferences.timestamps` |
+| `{"r11": "selection", "call"}` | a `window.selection` call the operation made |
+| `{"r11": "end", "id", "threw"?, "result"?, "range"?, "histogram"?, "dom"}` | after it, with `saveState()`'s result, `getTimestampRange()` or whether the Statistics renderer replaced its histogram's data, where they apply |
+
+`dom` per kind: the Table's header cells, fillers (`style.height` as assigned) and pooled rows
+`[classes, hidden, cell texts]`; the Console's field cell, buttons and rows `[classes,
+timestamp, value nodes]` with nodes as `[localName, attributes, children]` or text; the
+Statistics rows `[classes, [[text, colSpan, style.color as assigned], ...]]`; the Metadata
+headers and rows `[[text, classes], ...]` with the alert's and table's `hidden`.
+
 ### Mechanism and Points renderers
 
 `dom/mechanism/<case>` and `dom/points/<case>` (`crates/asrs-tabs/tests/mechanism_points_dom.rs`)

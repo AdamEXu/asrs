@@ -19,10 +19,7 @@ pub fn tab_title(tab: TabType, name: &str) -> String {
     format!("{} {name}", tab_icon(tab))
 }
 
-/// The prefix `TableRenderer` puts before a boolean cell's text.
-pub fn table_boolean(value: bool) -> &'static str {
-    if value { "\u{1f7e9}" } else { "\u{1f7e5}" }
-}
+pub use asrs_tabs::table::view::boolean_icon as table_boolean;
 
 #[cfg(test)]
 mod tests {

@@ -91,6 +91,9 @@ pub struct SaveDialogOptions {
     pub create_directory: bool,
 }
 
+#[cfg(feature = "parity")]
+pub use script::{Reply, Script, Shown};
+
 /// Shows a message box, as a sheet on `window` when given. `on_done` runs once it closes.
 pub fn message_box(
     window: Option<&mut Window>,
@@ -98,6 +101,22 @@ pub fn message_box(
     options: MessageBoxOptions,
     on_done: impl FnOnce(MessageBoxResult, &mut App) + 'static,
 ) {
+    #[cfg(feature = "parity")]
+    let Some(on_done) = script::answer(
+        window.as_deref(),
+        cx,
+        || Shown::Message(options.clone()),
+        |reply| match reply {
+            Reply::Button(response) => MessageBoxResult {
+                response,
+                checkbox_checked: options.checkbox_checked,
+            },
+            other => panic!("{other:?} for {options:?}"),
+        },
+        on_done,
+    ) else {
+        return;
+    };
     imp::dialog::message_box(window, cx, options, on_done);
 }
 
@@ -109,6 +128,19 @@ pub fn open_dialog(
     options: OpenDialogOptions,
     on_done: impl FnOnce(Vec<PathBuf>, &mut App) + 'static,
 ) {
+    #[cfg(feature = "parity")]
+    let Some(on_done) = script::answer(
+        window.as_deref(),
+        cx,
+        || Shown::Open(options.clone()),
+        |reply| match reply {
+            Reply::Open(paths) => paths,
+            other => panic!("{other:?} for {options:?}"),
+        },
+        on_done,
+    ) else {
+        return;
+    };
     imp::dialog::open_dialog(window, cx, options, on_done);
 }
 
@@ -120,5 +152,79 @@ pub fn save_dialog(
     options: SaveDialogOptions,
     on_done: impl FnOnce(Option<PathBuf>, &mut App) + 'static,
 ) {
+    #[cfg(feature = "parity")]
+    let Some(on_done) = script::answer(
+        window.as_deref(),
+        cx,
+        || Shown::Save(options.clone()),
+        |reply| match reply {
+            Reply::Save(path) => path,
+            other => panic!("{other:?} for {options:?}"),
+        },
+        on_done,
+    ) else {
+        return;
+    };
     imp::dialog::save_dialog(window, cx, options, on_done);
+}
+
+/// Answers for dialogs in headless tests.
+#[cfg(feature = "parity")]
+mod script {
+    use std::collections::VecDeque;
+    use std::path::PathBuf;
+
+    use gpui_kit::{AnyWindowHandle, App, Global, Window};
+
+    use super::{MessageBoxOptions, OpenDialogOptions, SaveDialogOptions};
+
+    /// While this global is set, dialogs are recorded in `shown` with their parent window and
+    /// answered from `replies` instead of reaching the platform.
+    #[derive(Default)]
+    pub struct Script {
+        pub replies: VecDeque<Reply>,
+        pub shown: Vec<(Option<AnyWindowHandle>, Shown)>,
+    }
+
+    impl Global for Script {}
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum Reply {
+        Button(usize),
+        Open(Vec<PathBuf>),
+        Save(Option<PathBuf>),
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum Shown {
+        Message(MessageBoxOptions),
+        Open(OpenDialogOptions),
+        Save(SaveDialogOptions),
+    }
+
+    /// Gives `on_done` back when no script is set.
+    pub(super) fn answer<T: 'static, F: FnOnce(T, &mut App) + 'static>(
+        window: Option<&Window>,
+        cx: &mut App,
+        shown: impl FnOnce() -> Shown,
+        read: impl FnOnce(Reply) -> T,
+        on_done: F,
+    ) -> Option<F> {
+        if !cx.has_global::<Script>() {
+            return Some(on_done);
+        }
+        let shown = shown();
+        let script = cx.global_mut::<Script>();
+        let reply = script
+            .replies
+            .pop_front()
+            .unwrap_or_else(|| panic!("no reply for {shown:?}"));
+        script
+            .shown
+            .push((window.map(Window::window_handle), shown));
+        let value = read(reply);
+        cx.spawn(async move |cx| cx.update(|cx| on_done(value, cx)))
+            .detach();
+        None
+    }
 }

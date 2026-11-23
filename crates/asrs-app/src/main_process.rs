@@ -3,21 +3,30 @@
 //! poll, `window-all-closed`, `activate` and the quit cleanup.
 
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::Duration;
 
+use asrs_js::time::{Clock, NamedZone, SystemClock};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::{Preferences, Theme};
-use asrs_services::constants::AKIT_PATH_INPUT_PERIOD_MS;
+use asrs_services::asset_downloader;
+use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{self, AppPaths, HubRestore, MainState, StartupWindow};
 use asrs_services::path::PathStyle;
+use asrs_services::update::ReleaseProfile;
 use asrs_services::window_manager::Platform;
 use asrs_services::windows::WindowSystem;
 use asrs_ui::gpui::{App, Entity, Global, WeakEntity};
 use asrs_ui::theme::{Appearance, ThemeSource};
 
 use crate::hub::{Hub, HubEvent};
+use crate::menus::app_menu;
+use crate::menus::bridge;
+use crate::menus::click::ClickEnv;
+use crate::menus::dispatch;
+use crate::menus::model::MenuItem;
 use crate::views::hub_host::{HubEntityHost, boot_messages};
 use crate::windows::{self, Rect, WindowId, Windows};
 
@@ -30,8 +39,17 @@ const IS_BETA: bool = cfg!(feature = "parity");
 const ASSET_RELOAD_PERIOD: Duration = Duration::from_millis(5000);
 const STATE_SAVE_PERIOD: Duration = Duration::from_millis(250);
 
+/// Upstream's repository in `parity` builds, asrs's otherwise.
+pub const RELEASE_PROFILE: ReleaseProfile = if cfg!(feature = "parity") {
+    ReleaseProfile::PARITY
+} else {
+    ReleaseProfile::RELEASE
+};
+
 pub struct MainProcess {
     state: MainState,
+    /// `menuTemplate`.
+    menu: Vec<MenuItem>,
     hubs: Vec<(WindowId, WeakEntity<Hub>)>,
 }
 
@@ -42,6 +60,15 @@ pub fn process_platform() -> &'static str {
     match std::env::consts::OS {
         "macos" => "darwin",
         "windows" => "win32",
+        other => other,
+    }
+}
+
+/// `process.arch`.
+pub fn process_arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
         other => other,
     }
 }
@@ -219,7 +246,7 @@ impl MainProcess {
     }
 
     /// `hubWindows`, most recently focused first.
-    fn hub_windows(cx: &App) -> Vec<(WindowId, WeakEntity<Hub>)> {
+    pub fn hub_windows(cx: &App) -> Vec<(WindowId, WeakEntity<Hub>)> {
         let Some(main) = cx.try_global::<MainProcess>() else {
             return Vec::new();
         };
@@ -251,18 +278,104 @@ impl MainProcess {
     }
 
     fn hub_message(cx: &mut App, id: WindowId, message: &NamedMessage<HubToMain>) {
-        if cx.has_global::<MainProcess>()
-            && let Err(e) = cx
-                .global_mut::<MainProcess>()
-                .state
-                .hub_message(&RealFs, id as f64, message)
-        {
-            eprintln!("asrs: {}: {e:?}", message.name.name());
+        if !cx.has_global::<MainProcess>() {
+            return;
         }
+        let handled = cx
+            .global_mut::<MainProcess>()
+            .state
+            .hub_message(&RealFs, id as f64, message);
+        match handled {
+            Err(e) => eprintln!("asrs: {}: {e:?}", message.name.name()),
+            Ok(()) if message.name == HubToMain::UpdatePreferences => {
+                Self::send_all_preferences(cx);
+            }
+            Ok(()) => {}
+        }
+    }
+
+    /// `sendMessage(window, name, data)` to a hub window.
+    pub fn send_to_hub(cx: &mut App, window: WindowId, name: MainToHub, data: JsValue) {
+        let hub = Self::hub_windows(cx)
+            .into_iter()
+            .find(|(id, _)| *id == window);
+        if let Some((_, hub)) = hub {
+            Self::send(cx, &hub, name, data);
+        }
+    }
+
+    /// `sendAllPreferences()`: the theme, every hub window, and the application menu.
+    pub fn send_all_preferences(cx: &mut App) {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return;
+        };
+        let data = match main.state.preferences(&RealFs) {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("asrs: prefs.json: {e:?}");
+                return;
+            }
+        };
+        let prefs = Preferences::from_js(&data);
+        cx.set_global(theme_source(prefs.theme));
+        for (_, hub) in Self::hub_windows(cx) {
+            Self::send(cx, &hub, MainToHub::SetPreferences, data.clone());
+        }
+        let menu = &mut cx.global_mut::<MainProcess>().menu;
+        if !menu.is_empty() {
+            app_menu::apply_preferences(menu, &prefs);
+            Self::install_menu(cx);
+        }
+    }
+
+    /// `menuTemplate`, as the last `sendAllPreferences` left it.
+    pub fn menu(cx: &App) -> &[MenuItem] {
+        &cx.global::<MainProcess>().menu
+    }
+
+    fn install_menu(cx: &mut App) {
+        let menu = cx.global::<MainProcess>().menu.clone();
+        bridge::install_application_menu(
+            cx,
+            Platform::current(),
+            &menu,
+            Rc::new(dispatch::dispatch),
+        );
+    }
+
+    /// `loadAssets()`, then `sendAllPreferences()` and `sendAssets()`.
+    pub fn reload_assets(cx: &mut App) {
+        if Self::load_assets(cx) {
+            Self::send_all_preferences(cx);
+            Self::send_assets(cx);
+        }
+    }
+
+    /// Runs `f` with what the application menu's click handlers read.
+    pub fn with_click_env<R>(cx: &App, f: impl FnOnce(&ClickEnv<'_>) -> R) -> Option<R> {
+        let main = cx.try_global::<MainProcess>()?;
+        let application_state = || {
+            main.state
+                .tracker
+                .current_application_state(&Screens::now(cx))
+        };
+        Some(f(&ClickEnv {
+            platform: Platform::current(),
+            arch: process_arch(),
+            identity: crate::IDENTITY,
+            repository: RELEASE_PROFILE.repository,
+            fs: &RealFs,
+            paths: &main.state.paths,
+            windows: Windows::manager(cx),
+            asset_status: asset_downloader::INITIAL_STATUS,
+            layout_default_path: layout_default_path(SystemClock.now(), &NamedZone::system()),
+            application_state: &application_state,
+        }))
     }
 
     /// `createHubWindow(state)` with its `dom-ready` sends; `files` are opened after them.
     pub fn open_hub(cx: &mut App, saved: Option<&JsValue>, files: Vec<String>) -> Option<WindowId> {
+        Self::send_all_preferences(cx);
         let main = cx.try_global::<MainProcess>()?;
         let preferences = main.state.preferences(&RealFs).unwrap_or_else(|e| {
             eprintln!("asrs: prefs.json: {e:?}");
@@ -343,15 +456,23 @@ impl MainProcess {
         }
     }
 
-    fn send_assets(cx: &mut App) {
+    /// `advantageScopeAssets = await loadAssets()`; false when it failed.
+    fn load_assets(cx: &mut App) -> bool {
         if !cx.has_global::<MainProcess>() {
-            return;
+            return false;
         }
         let main = cx.global_mut::<MainProcess>();
-        if let Err(e) = main.state.assets.reload(&RealFs) {
+        let loaded = main.state.assets.reload(&RealFs);
+        if let Err(e) = &loaded {
             eprintln!("asrs: loading assets: {e:?}");
-            return;
         }
+        loaded.is_ok()
+    }
+
+    fn send_assets(cx: &mut App) {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return;
+        };
         let data = main.state.assets.set_assets_data();
         for (_, hub) in Self::hub_windows(cx) {
             Self::send(cx, &hub, MainToHub::SetAssets, data.clone());
@@ -453,8 +574,10 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         .get_saved_application_state(&RealFs, &screens, true);
     cx.set_global(MainProcess {
         state,
+        menu: app_menu::template(Platform::current(), &prefs, crate::IDENTITY),
         hubs: Vec::new(),
     });
+    MainProcess::install_menu(cx);
     let mut first_open_path = None;
     while let Ok(path) = open_events.try_recv() {
         first_open_path = Some(path);
@@ -493,7 +616,11 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         eprintln!("asrs: restoring windows: {e:?}");
     }
 
-    every(cx, ASSET_RELOAD_PERIOD, MainProcess::send_assets);
+    every(cx, ASSET_RELOAD_PERIOD, |cx| {
+        if MainProcess::load_assets(cx) {
+            MainProcess::send_assets(cx);
+        }
+    });
     every(cx, STATE_SAVE_PERIOD, MainProcess::save_state);
     every(
         cx,

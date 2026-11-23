@@ -105,23 +105,36 @@ pub enum ConsoleExport {
     Save(Vec<u8>),
 }
 
+/// The `error` message's title and content when there is nothing to export.
+pub const EXPORT_ERROR: (&str, &str) = (
+    "Cannot export console log",
+    "Please add a field with console data, then try again.",
+);
+
 pub fn export(values: &[JsString]) -> ConsoleExport {
-    if values.is_empty() {
-        return ConsoleExport::Error {
-            title: "Cannot export console log",
-            content: "Please add a field with console data, then try again.",
-        };
+    match export_text(values) {
+        None => ConsoleExport::Error {
+            title: EXPORT_ERROR.0,
+            content: EXPORT_ERROR.1,
+        },
+        Some(text) => ConsoleExport::Save(text.to_string_lossy().into_bytes()),
     }
-    let mut text = JsString::new();
-    for (i, value) in values.iter().enumerate() {
-        if i > 0 {
-            text.push_str(&js("\n"));
-        }
-        text.push_str(value);
-    }
-    ConsoleExport::Save(text.to_string_lossy().into_bytes())
 }
 
+/// The `export-console` message's data; `None` without lines.
+pub fn export_text<'a>(values: impl IntoIterator<Item = &'a JsString>) -> Option<JsString> {
+    let mut text: Option<JsString> = None;
+    for value in values {
+        match &mut text {
+            None => text = Some(value.clone()),
+            Some(text) => {
+                text.push_str(&js("\n"));
+                text.push_str(value);
+            }
+        }
+    }
+    text
+}
 /// One node of the DOM a console value cell holds after `innerHTML = formatValue(...)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConsoleNode {
@@ -303,6 +316,7 @@ fn decode_references(u: &[u16]) -> Vec<u16> {
 }
 
 pub mod controller;
+pub mod view;
 
 #[cfg(test)]
 mod tests {
