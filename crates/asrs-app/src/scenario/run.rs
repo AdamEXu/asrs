@@ -563,16 +563,29 @@ impl Variant<'_> {
                 key.to_owned()
             }
         });
+        let typed = key_char.is_some();
         let keystroke = Keystroke {
             modifiers,
             key: gpui_key(key),
             key_char,
         };
-        self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
-            keystroke: keystroke.clone(),
-            is_held: false,
-            prefer_character_input: false,
-        }))?;
+        if typed {
+            let keystroke = keystroke.clone();
+            let window = self.window();
+            self.headless
+                .context()
+                .update_window(window, |_, window, cx| {
+                    window.dispatch_keystroke(keystroke, cx);
+                })
+                .map_err(|e| e.to_string())?;
+            self.settle();
+        } else {
+            self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
+                keystroke: keystroke.clone(),
+                is_held: false,
+                prefer_character_input: false,
+            }))?;
+        }
         self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }))
     }
 

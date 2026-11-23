@@ -278,6 +278,10 @@ impl TableController {
         }
     }
 
+    pub fn dom(&self) -> &Rc<RefCell<TableDom>> {
+        &self.dom
+    }
+
     /// The `close-field` event on `ROOT`; `detail` is the raw event detail.
     pub fn close_field(&mut self, detail: &JsValue) {
         let index = ops::value_to_number(detail).unwrap_or(f64::NAN);

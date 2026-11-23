@@ -47,6 +47,7 @@ use asrs_tabs::field_2d::Field2dRenderer;
 use asrs_tabs::line_graph::LineGraphController;
 use asrs_tabs::list_cx::{ListParts, SourceListCx};
 use asrs_tabs::statistics::StatisticsCx;
+use asrs_tabs::table::TableController;
 use asrs_tabs::video::{VideoController, VideoCx};
 
 use crate::factory::{CanvasEnv, HubTabFactory};
@@ -734,6 +735,22 @@ impl HubModel {
     /// throw come back for the caller to report.
     pub fn source_list_input(&mut self, input: ListInput<'_>) -> (ListOutput, Vec<JsError>) {
         self.tabs.source_list_input(&mut self.page, input)
+    }
+
+    /// The `drag-update` listeners of the tab controllers; `detail` is the event's.
+    pub fn tab_drag_update(&mut self, detail: &JsValue) -> Result<(), JsError> {
+        let mut result = Ok(());
+        for index in 0..self.tabs.len() {
+            let hidden = self.tabs.tab(index).is_none_or(|t| t.content_hidden());
+            let Some(tab) = self.tabs.tab_mut(index) else {
+                continue;
+            };
+            if let Some(table) = tab.controller.downcast_mut::<TableController>() {
+                table.dom().borrow_mut().hidden = hidden;
+                result = result.and(table.handle_drag(&mut self.page, detail));
+            }
+        }
+        result
     }
 
     /// The tabs with the page they run against.

@@ -3,7 +3,6 @@
 //! the text.
 
 use asrs_js::math;
-use asrs_model::scroll_sensor::assign_scroll_offset;
 use asrs_model::source_list::Rect;
 
 use super::{TableGeometry, TableRows};
@@ -24,6 +23,7 @@ pub struct TableLayout {
     /// `offsetWidth` of every field's key text.
     pub key_text: Vec<f64>,
     rows: TableRows,
+    /// The scroll offset in device px, which wheel input leaves between device pixels.
     scroll: [f64; 2],
 }
 
@@ -92,25 +92,36 @@ impl TableLayout {
         ]
     }
 
-    /// How far the table scrolls along each axis, in CSS px.
-    pub fn scroll_range(&self) -> [f64; 2] {
+    fn scroll_range_device(&self) -> [f64; 2] {
         let content = self.table_device();
         let size = [self.container.width, self.container.height];
-        [0, 1].map(|axis| math::max2(content[axis] / self.device_pixel_ratio - size[axis], 0.0))
+        [0, 1].map(|axis| math::max2(content[axis] - size[axis] * self.device_pixel_ratio, 0.0))
     }
 
+    fn set_offset_device(&mut self, offset: [f64; 2]) {
+        let range = self.scroll_range_device();
+        self.scroll = [0, 1].map(|axis| math::min2(math::max2(offset[axis], 0.0), range[axis]));
+    }
+
+    /// Assigns `scrollLeft` and `scrollTop`, which land on whole device pixels.
     pub fn scroll_to(&mut self, offset: [f64; 2]) {
-        let range = self.scroll_range();
-        for axis in 0..2 {
-            let css = assign_scroll_offset(offset[axis], range[axis], self.device_pixel_ratio);
-            self.scroll[axis] = math::round(css * self.device_pixel_ratio);
-        }
+        self.set_offset_device(offset.map(|v| v * self.device_pixel_ratio));
+        self.scroll = self.scroll.map(math::round);
+    }
+
+    /// The scroll offset wheel input moves, in CSS px, not on the pixel grid.
+    pub fn wheel_offset(&mut self) -> [f64; 2] {
+        self.set_offset_device(self.scroll);
+        self.scroll.map(|v| v / self.device_pixel_ratio)
+    }
+
+    pub fn set_wheel_offset(&mut self, offset: [f64; 2]) {
+        self.set_offset_device(offset.map(|v| v * self.device_pixel_ratio));
     }
 
     fn scroll_device(&mut self) -> [f64; 2] {
-        let offset = self.scroll.map(|v| v / self.device_pixel_ratio);
-        self.scroll_to(offset);
-        self.scroll
+        self.set_offset_device(self.scroll);
+        self.scroll.map(math::round)
     }
 
     /// `scrollLeft` and `scrollTop`, which layout clamps to the content.
@@ -147,6 +158,19 @@ impl TableLayout {
         self.css(device)
     }
 
+    /// `table.data-table`'s box.
+    pub fn table_rect(&mut self) -> Rect {
+        let [left, top] = self.scroll_device();
+        let dpr = self.device_pixel_ratio;
+        let [width, height] = self.table_device();
+        Rect {
+            x: self.css(self.container.x * dpr - left),
+            y: self.css(self.container.y * dpr - top),
+            width: self.css(width),
+            height: self.css(height),
+        }
+    }
+
     /// The shown data row under client y `y`.
     pub fn row_at(&mut self, y: f64) -> Option<usize> {
         let top = self.row_top_device(0);
@@ -156,18 +180,8 @@ impl TableLayout {
 
     /// Whether a client position is inside `TABLE_BODY` as the container clips it.
     pub fn body_contains(&mut self, x: f64, y: f64) -> bool {
-        let scroll = self.scroll_device();
-        let content = self.table_device();
-        let dpr = self.device_pixel_ratio;
-        let Rect {
-            x: left,
-            y: top,
-            width,
-            height,
-        } = self.container;
-        let right = math::min2(left + width, left + (content[0] - scroll[0]) / dpr);
-        let bottom = math::min2(top + height, top + (content[1] - scroll[1]) / dpr);
-        x >= left && x < right && y >= top && y < bottom
+        let inside = |r: Rect| x >= r.left() && x < r.right() && y >= r.top() && y < r.bottom();
+        inside(self.container) && inside(self.table_rect())
     }
 }
 
@@ -191,13 +205,9 @@ impl TableGeometry for TableLayout {
 
     /// The row scrolls with the body: only its cells are sticky.
     fn header_rect(&mut self) -> Rect {
-        let [left, top] = self.scroll_device();
-        let dpr = self.device_pixel_ratio;
         Rect {
-            x: self.css(self.container.x * dpr - left),
-            y: self.css(self.container.y * dpr - top),
-            width: self.table_width(),
             height: self.header_height(),
+            ..self.table_rect()
         }
     }
 

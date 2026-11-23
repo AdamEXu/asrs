@@ -1,11 +1,642 @@
 {
-  "about": "Generated drive log on a new Table tab with numeric, boolean, string and array columns, sidebar expanded",
+  "about": "Interaction (U12): a restored empty Table tab; three sidebar fields dragged into it with the pointer, the last in front; a selected time, a row hover, a row click; trackpad scrolling; the close button's hover; a column dragged in front of the first, captured mid-drag; a column closed; a timestamp typed into the jump input and entered; a row's context menu, which goes idle. Then a restored tab with array, boolean, missing and nested fields whose keys are cut with an ellipsis, scrolled right and to the end, and an empty one again. Saved HubState (the field list) and the written files are compared; waits after scrolling let macOS fade the scrollbar, which gate 5 leaves out",
   "actions": [
-    { "open": ["app:drive"] },
-    { "idle": true },
-    { "main": "new-tab", "data": 4 },
-    { "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState([\"/Drive/LeftVelocity\", \"/DriverStation/Enabled\", \"/Drive/Mode\", \"/Drive/ModuleSpeeds\"])" },
-    { "selection": ["setSelectedTime", 2.5] },
-    { "capture": "selected", "probes": [".side-bar", ".tab-bar", ".renderer-content", ".timeline", "table", "th", "tr"] }
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 150
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 150
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 154
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 225
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 297
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 240
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 240
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 244
+    },
+    {
+      "mouse": "move",
+      "x": 545,
+      "y": 270
+    },
+    {
+      "mouse": "move",
+      "x": 998,
+      "y": 297
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 184
+    },
+    {
+      "mouse": "move",
+      "x": 255,
+      "y": 240
+    },
+    {
+      "mouse": "move",
+      "x": 418,
+      "y": 297
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        0.5
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "fields",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 400
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "clicked",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 400,
+        "deltaX": 0,
+        "deltaY": -300,
+        "precise": true
+      }
+    },
+    {
+      "wait": 100
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 400,
+        "deltaX": 0,
+        "deltaY": -233,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 103
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "close-hovered",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 100
+    },
+    {
+      "mouse": "down",
+      "x": 640,
+      "y": 100
+    },
+    {
+      "mouse": "move",
+      "x": 650,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 550,
+      "y": 160
+    },
+    {
+      "mouse": "move",
+      "x": 458,
+      "y": 217
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 220
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "column-drag",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 220
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "column-moved",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 560,
+      "y": 103
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "closed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 330,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 330,
+      "y": 103
+    },
+    {
+      "key": "4"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "jumped",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 300,
+      "button": "right"
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 300,
+      "button": "right"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "idle",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [
+                "/Drive/LeftVelocity",
+                "/Drive/ModuleSpeeds",
+                "/DriverStation/Enabled",
+                "/Missing/Field/WithALongName",
+                "/Odometry/Robot3d/rotation/q/w"
+              ],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 250
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "restored",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 400,
+        "deltaX": -150,
+        "deltaY": -12000,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "mouse": "move",
+      "x": 650,
+      "y": 500
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "scrolled-end",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "cleared",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th",
+        "input.data-table-jump-input",
+        "button.data-table-jump-button",
+        "button.data-table-key-delete",
+        ".renderer-content > :not([hidden]) img.large-table-hand-icon"
+      ]
+    }
   ]
 }

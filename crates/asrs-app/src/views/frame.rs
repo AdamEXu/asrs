@@ -40,6 +40,7 @@ use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
 use super::source_list::{self, ListsGeometry};
 use super::tab_bar::{self, TabBarGeometry};
+use super::table::{self, TableViews};
 
 /// `element` under its parity id, which is its selector in `www/hub.html` (`div.title-bar`).
 fn probe(element: FrameElement, child: impl IntoElement) -> Probed {
@@ -141,6 +142,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) line_graph: LineGraphViews,
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
+    pub(super) table: TableViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -225,6 +227,7 @@ impl<H: FrameHost> HubFrame<H> {
             line_graph: LineGraphViews::default(),
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
+            table: TableViews::default(),
         }
     }
 
@@ -309,6 +312,7 @@ impl<H: FrameHost> HubFrame<H> {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
         self.source_list_mouse_move(x, y, cx);
+        self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -352,6 +356,7 @@ impl<H: FrameHost> HubFrame<H> {
     fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
+        self.table_mouse_up(event, x, y, cx);
         let shell = &mut self.shell;
         if let Err(e) = self.host.input(cx, |hub| shell.window_mouse_up(hub)) {
             eprintln!("asrs: {e}");
@@ -869,6 +874,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(field) = self.field3d_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(field);
                 }
+                if let Some(table) = self.table_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(table);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
@@ -1032,6 +1040,15 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     };
                     item.opacity(0.5).child(tab).into_any_element()
                 }
+                DragContent::Column {
+                    text,
+                    available,
+                    width,
+                } => item
+                    .child(table::drag_column(
+                        &text, available, width, appearance, scale, cx,
+                    ))
+                    .into_any_element(),
                 DragContent::ListItem {
                     item: list_item,
                     width,
