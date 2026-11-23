@@ -82,7 +82,7 @@ fn replay(
         "aspectRatio",
         ratio.map_or("null".into(), |r| Value::number(r).encode()),
     )?;
-    expect("hidden", image.hidden().to_string())?;
+    expect("hidden", format!("{}", image.hidden()))?;
     expect(
         "src",
         image
