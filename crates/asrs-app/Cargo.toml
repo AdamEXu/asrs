@@ -79,6 +79,10 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "menu_dispatch"
+required-features = ["parity"]
+
+[[test]]
 name = "app_menu_mac"
 harness = false
 

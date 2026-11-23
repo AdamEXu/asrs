@@ -166,6 +166,25 @@ fn verify(built: &[BuiltItem]) -> usize {
     compared
 }
 
+fn command(command: Command, checked: bool) -> MenuAction {
+    MenuAction::Command { command, checked }
+}
+
+fn checked(paths: &[&[usize; 2]]) -> Vec<bool> {
+    let (read, _) = read_application_menu().expect("a main menu");
+    let entry = |menu: &PopupMenu, index: usize| match &menu.items[index] {
+        PopupItem::Entry(entry) => entry.clone(),
+        PopupItem::Separator => panic!("item {index} is a separator"),
+    };
+    paths
+        .iter()
+        .map(|[menu, item]| {
+            let submenu = entry(&read, *menu).submenu.expect("a submenu");
+            entry(&submenu, *item).checked
+        })
+        .collect()
+}
+
 async fn settle(cx: &mut AsyncApp) {
     cx.background_executor()
         .timer(std::time::Duration::from_millis(100))
@@ -214,15 +233,39 @@ fn main() {
                 "Cmd+Plus reaches Zoom In"
             );
             settle(cx).await;
+            for (path, state) in [
+                (&[1, 7], [true, true]),
+                (&[1, 8], [true, false]),
+                (&[1, 8], [true, true]),
+            ] {
+                assert!(perform_application_menu_item(path), "{path:?}");
+                settle(cx).await;
+                assert_eq!(checked(&[&[1, 7], &[1, 8]]), state, "after {path:?}");
+            }
             let got = received.borrow().clone();
             let want = vec![
-                MenuAction::Command(Command::OpenLogs),
-                MenuAction::Command(Command::StartLive {
-                    simulator: false,
-                    mode: Some(asrs_model::preferences::LiveMode::Nt4Systemcore),
-                }),
-                MenuAction::Command(Command::NewTabPopup),
+                command(Command::OpenLogs, false),
+                command(
+                    Command::StartLive {
+                        simulator: false,
+                        mode: Some(asrs_model::preferences::LiveMode::Nt4Systemcore),
+                    },
+                    false,
+                ),
+                command(Command::NewTabPopup, false),
                 MenuAction::Role("zoomin".to_owned()),
+                command(
+                    Command::UseSystemcoreAddress(SystemcoreStaticAddress::Usb),
+                    true,
+                ),
+                command(
+                    Command::UseSystemcoreAddress(SystemcoreStaticAddress::Wifi),
+                    false,
+                ),
+                command(
+                    Command::UseSystemcoreAddress(SystemcoreStaticAddress::Wifi),
+                    true,
+                ),
             ];
             let ok = got == want;
             println!("app menu mac: {compared} items equal, dispatch {got:?}");
