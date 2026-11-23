@@ -326,7 +326,7 @@ impl<H: FrameHost> HubFrame<H> {
                         .left(px((x - controls[0]) as f32))
                         .top(px((y - controls[1]) as f32))
                         .child(
-                            Text::new(label(i), style.clone())
+                            Text::new(label(i), style)
                                 .color(appearance.theme().text)
                                 .subpixel(
                                     snap_remainder(x as f32, scale),
