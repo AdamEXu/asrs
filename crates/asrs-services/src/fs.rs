@@ -40,6 +40,13 @@ pub trait Fs {
     /// `fs.open(path, "r")`, then `fs.readFile` on the descriptor.
     fn read_file(&self, path: &str) -> Result<Vec<u8>, ReadError>;
 
+    /// `fs.openSync(path, "r")`, then `fs.readSync` of at most `length` bytes from the start.
+    fn read_prefix(&self, path: &str, length: usize) -> Result<Vec<u8>, ReadError> {
+        let mut data = self.read_file(path)?;
+        data.truncate(length);
+        Ok(data)
+    }
+
     /// `fs.rmSync(path, { force: true })`.
     fn remove(&self, path: &str);
 
@@ -153,6 +160,16 @@ impl Fs for RealFs {
             std::fs::File::open(path).map_err(|e| ReadError::Open(node_error("open", path, &e)))?;
         let mut data = Vec::new();
         file.read_to_end(&mut data)
+            .map_err(|e| ReadError::Read(node_error("read", path, &e)))?;
+        Ok(data)
+    }
+
+    fn read_prefix(&self, path: &str, length: usize) -> Result<Vec<u8>, ReadError> {
+        let file =
+            std::fs::File::open(path).map_err(|e| ReadError::Open(node_error("open", path, &e)))?;
+        let mut data = Vec::new();
+        file.take(length as u64)
+            .read_to_end(&mut data)
             .map_err(|e| ReadError::Read(node_error("read", path, &e)))?;
         Ok(data)
     }
