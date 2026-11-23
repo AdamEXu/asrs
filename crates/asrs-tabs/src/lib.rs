@@ -18,6 +18,7 @@ pub mod mechanism_renderer;
 pub mod metadata;
 pub mod points;
 pub mod points_renderer;
+pub mod prompts;
 pub mod simple_statistics;
 pub mod statistics;
 pub mod swerve;

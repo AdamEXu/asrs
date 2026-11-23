@@ -1,0 +1,181 @@
+{
+  "about": "Interaction (U19): the camera field of view set through the 3D camera menu's prompt, then a second edit cancelled; the saved HubState holds the new value at the later captures. Only the prompt is captured, since the hub's 3D view is field-3d's",
+  "actions": [
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 250,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Set FOV..."
+      ]
+    },
+    {
+      "prompt": "editFov"
+    },
+    {
+      "capture": "fov",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "7"
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "5"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "fov-typed",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 250,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Set FOV..."
+      ]
+    },
+    {
+      "prompt": "editFov"
+    },
+    {
+      "capture": "fov-again",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "9"
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 58
+    },
+    {
+      "mouse": "click",
+      "x": 242,
+      "y": 58
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 250
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 250,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Set FOV..."
+      ]
+    },
+    {
+      "prompt": "editFov"
+    },
+    {
+      "capture": "fov-cancelled",
+      "probes": [
+        "td.label",
+        "td.input",
+        "td.input > input",
+        "#exit",
+        "#confirm"
+      ]
+    }
+  ]
+}

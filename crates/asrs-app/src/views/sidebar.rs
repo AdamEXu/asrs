@@ -12,7 +12,6 @@ use std::rc::Rc;
 use asrs_hub::hub::HubModel;
 use asrs_hub::sidebar::{RowRect, RowRef, RowValue, SidebarGeometry, SidebarRow};
 use asrs_js::string::JsString;
-use asrs_tabs::form::NumberInput;
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent,
@@ -21,12 +20,13 @@ use asrs_ui::gpui::{
     rgb, rgba,
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
-use asrs_ui::input::{FieldEvent, FieldKind, FieldModel, FieldStyle, PlainText, TextField};
+use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{Measurer, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 
 use crate::hub::Hub;
+use crate::views::number::FormNumber;
 
 const TITLE_HEIGHT: f64 = 30.0;
 const SEARCH_TOP: f64 = TITLE_HEIGHT + 5.0;
@@ -279,31 +279,13 @@ impl SidebarGeometry for ViewGeometry {
     }
 }
 
-/// A number input's value, through `asrs_tabs::form`.
-#[derive(Default)]
-pub(super) struct NumberValue(NumberInput);
-
-impl FieldModel for NumberValue {
-    fn value(&self) -> String {
-        self.0.value().to_string_lossy()
-    }
-
-    fn set_value(&mut self, value: &str) {
-        self.0.set_value(JsString::from(value));
-    }
-
-    fn accepts(&self, c: char) -> bool {
-        asrs_ui::input::number_accepts(c)
-    }
-}
-
 pub struct SidebarView {
     hub: Entity<Hub>,
     layout: Rc<RefCell<SidebarLayout>>,
     scroll: ScrollHandle,
     results_scroll: ScrollHandle,
     search: Option<(Entity<TextField<PlainText>>, Subscription)>,
-    tuning: HashMap<JsString, (Entity<TextField<NumberValue>>, Subscription)>,
+    tuning: HashMap<JsString, (Entity<TextField<FormNumber>>, Subscription)>,
     rendered: Range<usize>,
 }
 
@@ -405,7 +387,7 @@ impl SidebarView {
         row: &SidebarRow,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
-    ) -> Option<Entity<TextField<NumberValue>>> {
+    ) -> Option<Entity<TextField<FormNumber>>> {
         let key = row.full_key.clone()?;
         let RowValue::Number {
             input_value,
@@ -419,7 +401,7 @@ impl SidebarView {
         let entry = self.tuning.entry(key).or_insert_with(|| {
             let field = cx.new(|cx| {
                 TextField::new(
-                    NumberValue(NumberInput::default()),
+                    FormNumber::default(),
                     FieldKind::Number,
                     FieldStyle::field_value(),
                     window,

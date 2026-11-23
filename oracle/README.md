@@ -1143,6 +1143,15 @@ loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift
 can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
 `selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
+### Number insertion vectors
+
+`form/number-insert` (`src/genNumberInsert.ts`) records what Chromium lets the user insert into an
+en-US `<input type="number">` in an offscreen window: each record is the shown text, the selection
+(UTF-16 offsets), the inserted text, the text shown afterwards and the `value` then read. The
+insertions are `execCommand("insertText")`, which takes typing's and pasting's route through
+`BeforeTextInsertedEvent`. Fixed starting texts with every caret position come first, then seeded
+random ones.
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
@@ -1186,7 +1195,7 @@ script runs (the driver exits naming the expected set when one is missing):
 `--enable-unsafe-swiftshader`, plus `--use-angle=d3d11-warp` with `--gl d3d11-warp`.
 
 What the driver pins besides switches: windows are shown inactive (`show` becomes
-`showInactive`) at the primary display's work-area origin plus 16 px with the scenario's content
+`showInactive`, except for modal prompts, whose `show` begins a sheet) at the primary display's work-area origin plus 16 px with the scenario's content
 size, ignore the real pointer, and never open DevTools; `fetch` and `net.fetch` in the main
 process and non-loopback HTTP and WebSocket requests from pages are refused (the refused URLs
 are in `run.json`); every `dialog` call is answered from the scenario's `dialog` actions, and an
@@ -1217,7 +1226,11 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 `{"selection": [method, ...args]}`, `{"mouse": "move"|"down"|"up"|"click", "x", "y"}`,
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}`, `{"dialog": button index | file name | null}` (queued
-answer for the next dialog), `{"wait": ms}`, `{"idle": true}` and
+answer for the next dialog), `{"menu": [label, ...]}` (clicks the item at that label path of the
+context menu that popped up; neither side shows menus natively), `{"prompt": page | null}`
+(`editRange`, `editFov`, `renameTab`, `unitConversion` or `export`: later input and captures go to
+that prompt window, whose content size is its own; `null` waits until it has closed),
+`{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 
 A capture waits until the page is idle (fonts loaded, no log or field loading, no playback) and

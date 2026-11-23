@@ -42,5 +42,12 @@
   "div.field-3d-alert": ["div.field-3d-alert"],
   "div.field-3d-settings": ["div.field-3d-settings"],
   "select.field-select": ["select.field-select"],
-  "div.xr-button": ["div.xr-button"]
+  "div.xr-button": ["div.xr-button"],
+  "td.label": ["td.label"],
+  "td.input": ["td.input"],
+  "td.input > input": ["input"],
+  "td.input > select": ["select"],
+  "#exit": ["button#exit"],
+  "#confirm": ["button#confirm"],
+  "div.help-div": ["div.help-div"]
 }

@@ -24,7 +24,7 @@ type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 ///
 /// An enabled button is a tab stop. Focused from the keyboard it takes `global.css`'s
 /// `:focus-visible` style: a 2 px `#446ce3` outline outside the box, which follows the 3 px
-/// border radius that rule also sets.
+/// border radius that rule also sets. No element matches `:focus` while the window is inactive.
 #[derive(IntoElement)]
 pub struct IconButton {
     id: ElementId,
@@ -38,6 +38,7 @@ pub struct IconButton {
     disabled: bool,
     blurred: bool,
     appearance: Option<Appearance>,
+    focus: Option<FocusHandle>,
     on_click: Option<ClickHandler>,
 }
 
@@ -55,6 +56,7 @@ impl IconButton {
             disabled: false,
             blurred: false,
             appearance: None,
+            focus: None,
             on_click: None,
         }
     }
@@ -103,6 +105,12 @@ impl IconButton {
         self
     }
 
+    /// The handle that holds the button's focus, for a view that moves or reads it.
+    pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
+        self.focus = Some(handle.clone());
+        self
+    }
+
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -119,19 +127,21 @@ impl RenderOnce for IconButton {
             .unwrap_or_else(|| Appearance::of(window, cx));
         let theme = appearance.theme();
         let chain = self.tint.chain(appearance, self.blurred, self.disabled);
+        let given = self.focus;
         let focus = (!self.disabled).then(|| {
             window.use_keyed_state(self.id.clone(), cx, |_, cx| FocusState {
-                handle: cx.focus_handle().tab_stop(true),
+                handle: given.unwrap_or_else(|| cx.focus_handle()).tab_stop(true),
                 from_keyboard: false,
             })
         });
         let focus_visible = focus.as_ref().is_some_and(|state| {
             let focused = state.read(cx).handle.is_focused(window);
             let keyboard = window.last_input_was_keyboard();
-            state.update(cx, |s, _| {
+            let from_keyboard = state.update(cx, |s, _| {
                 s.from_keyboard = focused && (s.from_keyboard || keyboard);
                 s.from_keyboard
-            })
+            });
+            from_keyboard && window.is_window_active()
         });
         let radius = if focus_visible {
             FOCUS_RING_RADIUS

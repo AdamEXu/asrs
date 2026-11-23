@@ -33,7 +33,7 @@ use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
-use super::sidebar::NumberValue;
+use super::number::FormNumber;
 
 const JUMP_INPUT: [f64; 4] = [4.0, 4.5, 64.0, 21.0];
 const JUMP_BUTTON_LEFT: f64 = 70.0;
@@ -100,7 +100,7 @@ fn over(top: u32, alpha: f64, under: u32) -> u32 {
     channel(16) | channel(8) | channel(0)
 }
 
-type JumpField = Entity<TextField<NumberValue>>;
+type JumpField = Entity<TextField<FormNumber>>;
 type FilterField = Entity<TextField<PlainText>>;
 
 struct Fields {
@@ -757,7 +757,7 @@ impl<H: FrameHost> HubFrame<H> {
         let fields = tab.fields.get_or_insert_with(|| {
             let jump = cx.new(|cx| {
                 TextField::new(
-                    NumberValue::default(),
+                    FormNumber::default(),
                     FieldKind::Number,
                     FieldStyle::native(),
                     window,
