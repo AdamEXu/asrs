@@ -359,8 +359,10 @@
     "src/fakes/mainFs.ts",
     "src/genMenus.ts",
     "src/genMenusMain.ts",
+    "src/menus/clicks.ts",
     "src/menus/context.ts",
-    "src/shims.ts"
+    "src/shims.ts",
+    "src/update/bundle.ts"
   ],
   "genMenusMain": [
     "src/cve1.ts",

@@ -2213,7 +2213,7 @@ impl Runner {
                 }
             }
             (t, "scroll") => self.scroll_event(t, props),
-            // DOM-only (row filtering and the console jump scroll belong to the view layer).
+            // `asrs-tabs/tests/dom_tab_views.rs` replays the console's row filter and jump.
             (t, "input") if t.contains("input.filter") => {}
             (t, "keydown" | "click") if t.contains("console-table-jump") => {}
             (t, "change") if t.contains("input.max-speed") => {
@@ -2654,7 +2654,8 @@ impl Runner {
             .ok()
             .and_then(|r| inner_mut::<ConsoleRenderer>(r))
         {
-            r.highlight_click();
+            r.highlight_click(&self.host)
+                .expect("the console rows format");
         }
     }
 

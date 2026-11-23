@@ -152,14 +152,14 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
                 let renderer_uuid = JsString::from(create_uuid(cx.tab_rng()));
                 (
                     Box::new(controller),
-                    Box::new(TableRenderer::new(renderer_uuid, dom)),
+                    Box::new(TableRenderer::new(renderer_uuid, dom, true)),
                 )
             }
             Some(TabType::Console) => {
                 let dom = Rc::new(RefCell::new(ConsoleDom::default()));
                 (
                     Box::new(ConsoleController::new(dom.clone())),
-                    Box::new(ConsoleRenderer::new(dom)),
+                    Box::new(ConsoleRenderer::new(dom, true)),
                 )
             }
             Some(TabType::Statistics) => (
@@ -189,7 +189,7 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
             ),
             Some(TabType::Metadata) => (
                 Box::new(MetadataController::new(cx)?),
-                Box::new(MetadataRenderer),
+                Box::new(MetadataRenderer::new()),
             ),
             None => (Box::new(NoopController), Box::new(NoopRenderer)),
         })
