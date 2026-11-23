@@ -26,7 +26,7 @@ const pick = (list) => list[int(list.length)];
 const ASCII = Array.from({ length: 94 }, (_, i) => String.fromCharCode(33 + i));
 const PUNCTUATION = Array.from("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~");
 const WORDS = ["Robot", "periodic()", "error", "warning:", "0.02s", "/Drive/Module0", "frc.robot.Main", "-1.5", "x", "[0,1,2]"];
-const OTHER = ["é", "°", "µ", "→", "✓", "—", "…", " ", "\u{1f600}"];
+const OTHER = ["\u00e9", "\u00b0", "\u00b5", "\u2192", "\u2713", "\u2014", "\u2026", "\u00a0", "\u{1f600}"];
 const SGR = ["0", "1", "2", "3", "4", "22", "31", "1;32", "3;33", "38;5;208", "41;97", "0", "0"];
 
 function chunk() {
