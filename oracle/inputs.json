@@ -595,6 +595,15 @@
     "src/video/samples/vp9-360p25.json",
     "src/video/world.ts"
   ],
+  "genVideoRenderer": [
+    "src/canvas/png.ts",
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genVideoRenderer.ts"
+  ],
+  "genVideoRendererMain": [
+    "src/genVideoRendererMain.ts"
+  ],
   "genWindows": [
     "src/cve1.ts",
     "src/fakes/globals.ts",
