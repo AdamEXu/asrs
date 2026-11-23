@@ -207,6 +207,8 @@ fn error_text(e: &JsError) -> String {
     format!("{}: {}", e.name, e.message)
 }
 
+type Callback = (Work, Result<(), JsError>, bool, Vec<Call>);
+
 struct Replay {
     id: String,
     text: FixedAdvance,
@@ -218,7 +220,7 @@ struct Replay {
     frame: f64,
     rest: usize,
     first: usize,
-    work: Vec<(Work, Result<(), JsError>, bool, Vec<Call>)>,
+    work: Vec<Callback>,
     tally: BTreeMap<&'static str, usize>,
     calls: usize,
     /// Every call since the canvas was last reset.

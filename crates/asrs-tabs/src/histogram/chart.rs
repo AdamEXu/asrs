@@ -459,7 +459,7 @@ fn resize_side(side: &mut f64, size: &mut f64, box_size: f64) {
     if *size != 0.0 && !size.is_nan() {
         *side -= *size;
     }
-    *size = max2(0.0, box_size) / 1.0;
+    *size = max2(0.0, box_size);
     *side += *size;
 }
 
@@ -671,8 +671,8 @@ impl Chart {
         let ratio = self.device_pixel_ratio.unwrap_or(f64::NAN);
         Event {
             kind,
-            x: math::round((x - 0.0) / self.width * f64::from(canvas.width) / ratio),
-            y: math::round((y - 0.0) / self.height * f64::from(canvas.height) / ratio),
+            x: math::round(x / self.width * f64::from(canvas.width) / ratio),
+            y: math::round(y / self.height * f64::from(canvas.height) / ratio),
         }
     }
 
@@ -835,7 +835,7 @@ impl Chart {
         let (available_width, available_height) = (max2(width, 0.0), max2(height, 0.0));
         self.x.before_layout();
         self.y.before_layout();
-        let v_box_max_width = available_width / 2.0 / 1.0;
+        let v_box_max_width = available_width / 2.0;
         let h_box_max_height = available_height / 2.0;
         let mut area = LayoutArea {
             left: 0.0,
@@ -905,29 +905,17 @@ impl Chart {
         grow(&mut area.right, m.right);
         grow(&mut area.bottom, m.bottom);
 
-        set_box(
-            &mut self.y,
-            area.x,
-            area.top + 0.0,
-            None,
-            Some(area.h * 1.0),
-        );
+        set_box(&mut self.y, area.x, area.top, None, Some(area.h));
         area.x = self.y.right;
         let legend = &mut self.legend;
         legend.left = 0.0;
         legend.top = area.y;
-        legend.right = width - 0.0 - 0.0;
+        legend.right = width;
         legend.bottom = area.y + legend.height;
         area.y = legend.bottom;
         area.x += area.w;
         area.y += area.h;
-        set_box(
-            &mut self.x,
-            area.left + 0.0,
-            area.y,
-            Some(area.w * 1.0),
-            None,
-        );
+        set_box(&mut self.x, area.left, area.y, Some(area.w), None);
         self.area = Some(Area {
             left: area.left,
             top: area.top,
@@ -987,7 +975,7 @@ impl Chart {
             let width = widths.get(line).copied().unwrap_or(f64::NAN);
             (left + LEGEND_PADDING + (right - width)) / 2.0
         };
-        let (mut line, mut cursor_x, mut cursor_y) = (0, start(0), top + LEGEND_PADDING + 0.0);
+        let (mut line, mut cursor_x, mut cursor_y) = (0, start(0), top + LEGEND_PADDING);
         for (i, meta) in self.sorted_metasets.iter().enumerate() {
             let dataset = meta.dataset();
             ctx.stroke_style(&self.legend_color);
@@ -1008,7 +996,7 @@ impl Chart {
             ctx.stroke_style(DEFAULT_BORDER);
             ctx.line_dash();
             ctx.begin_path();
-            ctx.rect(cursor_x, cursor_y + 0.0, LEGEND_BOX_WIDTH, FONT_SIZE);
+            ctx.rect(cursor_x, cursor_y, LEGEND_BOX_WIDTH, FONT_SIZE);
             ctx.fill();
             ctx.restore();
             ctx.save();
@@ -1060,7 +1048,7 @@ impl Chart {
         if self.sorted_metasets.is_empty() {
             return;
         }
-        let size = self.min_sample_size() * 1.0;
+        let size = self.min_sample_size();
         let base_at_zero = self.y.pixel_for_value(Some(0.0));
         for (position, meta) in self.sorted_metasets.iter().enumerate() {
             let parsed = meta.parsed.borrow();
@@ -1080,11 +1068,10 @@ impl Chart {
                     base += half_grid;
                     bar_size -= half_grid;
                 }
-                let chunk = size / 1.0;
                 let left = self.x.pixel_for_value(item.x) - size / 2.0;
                 let mut bar = bar.borrow_mut();
-                bar.x = left + chunk * 0.0 + chunk / 2.0;
-                bar.width = min2(f64::INFINITY, chunk * 1.0);
+                bar.x = left + size / 2.0;
+                bar.width = size;
                 bar.y = head;
                 bar.base = base;
                 bar.height = math::abs(bar_size);
@@ -1124,12 +1111,8 @@ impl Chart {
         self.y.draw_border(&view, &mut self.surface);
         self.y.draw_labels(&view, &mut self.surface, env.text);
         for meta in self.sorted_metasets.iter().rev() {
-            self.surface.clip_area(
-                self.x.left - 0.0,
-                self.y.top - 0.0,
-                self.x.right + 0.0,
-                self.y.bottom + 0.0,
-            );
+            self.surface
+                .clip_area(self.x.left, self.y.top, self.x.right, self.y.bottom);
             for bar in meta.data.borrow().iter() {
                 bar.borrow().draw(&mut self.surface);
             }

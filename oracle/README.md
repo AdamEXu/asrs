@@ -980,6 +980,23 @@ stays 0). On either backend: workers and historical or live sources (logs are bu
 steps), drag sessions other than through dispatched events, the documentation iframe's
 content, and 3D rendering.
 
+### Histogram
+
+`tools/histogramSpecs.mjs` writes `dom/histogram/*`: upstream's StatisticsRenderer with its real
+Chart.js 4.4.0, on Blink with scripted geometry. Its first step installs a recorder that hooks
+each chart as its tab opens and writes one record per outermost entry into it, with the canvas
+calls that entry made (`reset` when it set the canvas size, which drops the calls before):
+`create`, `resize` (the attach, or a throttled ResizeObserver or scale change), `render`, `event`
+(a throttled mouse event) and `draw` (an animation frame). After a layout the record also holds
+the chart area, both scales with their tick values and labels, every bar's
+`[x, y, base, width, height]` and the legend. `observe`, `dpr` and `dom` are the inputs, and
+`frame` marks an animation frame. Commands reach the renderer through the hub's tab loop by
+replacing the controller's `getCommand`, except in `controller`, which uses a log.
+`crates/asrs-tabs/tests/histogram_dom.rs` replays them, throws included.
+
+`tools/histogramTraces.mjs` extracts painted frames from those vectors into
+`src/canvas/histogramTraces.json`, the `histogram-*` canvas scenes.
+
 ### Blink backend
 
 `src/domBlink.ts` (entry `domBlink`, chosen by `"backend": "blink"`) runs the same fixture and

@@ -346,7 +346,7 @@ impl Scale {
         let max_width = limit(chart.width - label_width, 0.0, self.max_width);
         if label_width + 6.0 > max_width / (count - 1.0) {
             let tick_width = max_width / (count - 1.0);
-            let max_height = self.max_height - TICK_LENGTH - TICK_PADDING - 0.0;
+            let max_height = self.max_height - TICK_LENGTH - TICK_PADDING;
             let diagonal = math::sqrt(label_width * label_width + label_height * label_height);
             let asin = |v: f64| math::asin(limit(v, -1.0, 1.0));
             let rotation = min2(
@@ -386,11 +386,11 @@ impl Scale {
         let mut min_size = if self.is_horizontal() {
             Size {
                 width: self.max_width,
-                height: TICK_LENGTH + 0.0,
+                height: TICK_LENGTH,
             }
         } else {
             Size {
-                width: TICK_LENGTH + 0.0,
+                width: TICK_LENGTH,
                 height: self.max_height,
             }
         };
@@ -557,7 +557,7 @@ impl Scale {
         (0..self.ticks.len())
             .map(|i| {
                 let label = JsString::from(self.ticks[i].label.as_str());
-                let pixel = self.pixel_for_tick(i) + 0.0;
+                let pixel = self.pixel_for_tick(i);
                 if !self.is_horizontal() {
                     return Label {
                         text: label,

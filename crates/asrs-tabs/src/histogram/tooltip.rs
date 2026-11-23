@@ -208,11 +208,11 @@ impl Tooltip {
         let lines = self.body.len() as f64;
         let mut height = PADDING + PADDING;
         let mut width = 0.0;
-        height += LINE_HEIGHT + 0.0 + TITLE_MARGIN_BOTTOM;
-        height += lines * max2(BOX_SIZE, LINE_HEIGHT) + 0.0 + (lines - 1.0) * BODY_SPACING;
+        height += LINE_HEIGHT + TITLE_MARGIN_BOTTOM;
+        height += lines * max2(BOX_SIZE, LINE_HEIGHT) + (lines - 1.0) * BODY_SPACING;
         ctx.save();
         ctx.font(BOLD_FONT);
-        width = max2(width, ctx.measure(text, &self.title) + 0.0);
+        width = max2(width, ctx.measure(text, &self.title));
         ctx.font(FONT);
         let box_width = BOX_SIZE + 2.0 + BOX_PADDING;
         for (line, _) in &self.body {

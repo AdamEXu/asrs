@@ -252,7 +252,7 @@ spec(
 );
 
 const SIZES = [
-  [640, 480], [641, 480], [640, 480], [300, 600], [0, 400], [400, 0], [0, 0], [1, 1], [20, 20], [60, 40], [100, 100],
+  [640, 480], [640, 480], [640, 500], [641, 500], [640, 480], [300, 600], [100.4, 0.4], [100, 30], [0, 400], [400, 0], [0, 0], [1, 1], [20, 20], [60, 40], [100, 100],
   [120, 348], [333.3, 222.7], [517.25, 301.44], [1100, 60], [99.95, 900], [2000, 1200], [250, 130], [200.04, 200.06]
 ];
 spec("resize", [...START, ...draw(THREE), ...SIZES.flatMap(([w, h]) => size(w, h)), ...draw(simple(0, 1000, 50, 2, 6)), ...SIZES.flatMap(([w, h]) => size(w, h, 16))]);
@@ -372,6 +372,16 @@ const BLACK = command(bins(0, 6, 1), 1, [
   field("/Cyan", "#00ffff", [2, 2, 2, 2, 2, 2])
 ]);
 const colorHover = range(7, (k) => hover(k, k % 6, 0.5, 0.5, 80)).flat();
+// A chart too short for its axes has a flat chart area near its top edge.
+spec("hover-flat", [
+  ...START,
+  ...draw(simple(0, 20, 1, 1, 51)),
+  ...size(300, 40, 48),
+  ...range(20, (i) => hover(0, i, 0.5, 0, 48)).flat(),
+  ...size(300, 41, 48),
+  ...range(20, (i) => hover(0, 19 - i, 0.5, 0, 48)).flat()
+]);
+
 spec("hover-colors", [...START, ...draw(BLACK), ...colorHover, ...theme("dark"), ...draw(BLACK), ...colorHover, ...mouse("mouseout", -1, -1, 600)], {
   window: { framePeriod: 20 }
 });
