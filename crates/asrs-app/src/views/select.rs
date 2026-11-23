@@ -1,7 +1,7 @@
 //! [`SelectModel`] over `asrs_tabs::form::Select`: the value semantics the views' selects use.
 
 use asrs_tabs::form::{self, SelectItem as FormItem, TypeAhead};
-use asrs_ui::input::{SelectItem, SelectModel};
+use asrs_ui::input::{SelectItem, SelectModel, SelectStep};
 
 /// A `<select>` element's state: its options, the selection and the type-ahead session.
 #[derive(Clone, Debug, Default)]
@@ -78,5 +78,18 @@ impl SelectModel for FormSelect {
 
     fn end_type_ahead(&mut self) {
         self.type_ahead.reset();
+    }
+
+    fn step(&mut self, step: SelectStep) -> bool {
+        let hidden = std::mem::take(&mut self.hidden);
+        let shown = |item: usize| !hidden.get(item).copied().unwrap_or(false);
+        let found = match step {
+            SelectStep::Forward(skip) => self.select.valid_option(true, skip, shown),
+            SelectStep::Back(skip) => self.select.valid_option(false, skip, shown),
+            SelectStep::First => self.select.end_option(false, shown),
+            SelectStep::Last => self.select.end_option(true, shown),
+        };
+        self.hidden = hidden;
+        found.is_some_and(|item| self.select.select_by_popup(item))
     }
 }

@@ -1,0 +1,629 @@
+{
+  "entry": "selectKeys",
+  "platforms": ["linux-x86_64"],
+  "fixture": {
+    "steps": [
+      {
+        "markup": "<select class=\"time-range\" title=\"Select time range\"><option value=\"visible\">Visible Range</option><option value=\"full\">Full Log</option><option value=\"enabled\">Enabled</option><option value=\"auto\">Auto</option><option value=\"teleop\">Teleop</option></select>",
+        "ops": [
+          ["char", "f", 0],
+          ["char", "u", 100],
+          ["char", "e", 1300],
+          ["char", "e", 1400],
+          ["char", "a", 2600],
+          ["char", "T", 3800],
+          ["char", "x", 5000],
+          ["key", "Home", 5200],
+          ["key", "End", 5300],
+          ["key", "PageUp", 5400],
+          ["key", "PageDown", 5500],
+          ["key", "ArrowLeft", 5600],
+          ["key", "ArrowRight", 5700],
+          ["key", "Escape", 5800],
+          ["char", "v", 7000, ["ctrl"]],
+          ["char", "v", 7100, ["alt"]],
+          ["char", "v", 8200],
+          ["char", " ", 8300],
+          ["char", "f", 9500],
+          ["char", "u", 9600],
+          ["char", "l", 9700],
+          ["char", "l", 9800],
+          ["char", " ", 9900],
+          ["char", "l", 10000],
+          ["char", "a", 10999],
+          ["char", "e", 12000],
+          ["char", "n", 13000],
+          ["char", "t", 13999],
+          ["char", "a", 13990],
+          ["char", "a", 15100],
+          ["char", "a", 15200]
+        ]
+      },
+      {
+        "markup": "<select class=\"field-select\" title=\"Select field image\"><optgroup label=\"FRC Fields\"><option value=\"frc-2025\">2025 Field</option><option value=\"frc-2024\">2024 Field</option></optgroup><optgroup label=\"FTC Fields\"><option value=\"ftc-2025\" disabled>2025 FTC</option><option value=\"ftc-2024\">2024 FTC</option></optgroup><option>Émile</option><option>  Spaced</option><optgroup label=\"Off\" disabled><option value=\"off\">2023 Off</option></optgroup></select>",
+        "ops": [
+          ["char", "2", 0],
+          ["char", "2", 100],
+          ["char", "2", 200],
+          ["char", "2", 300],
+          ["char", "e", 2000],
+          ["char", "s", 3500],
+          ["char", "F", 5000],
+          ["char", "2", 6500],
+          ["char", "0", 6600],
+          ["char", "2", 6700],
+          ["char", "4", 6800],
+          ["char", " ", 6900],
+          ["char", "f", 7000],
+          ["char", "t", 7100]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"a\">Alpha</option><option value=\"b\">Beta</option><option value=\"b2\">beta two</option></select>",
+        "ops": [
+          ["set", "value", "b"],
+          ["blur"],
+          ["focus"],
+          ["char", "b", 100],
+          ["char", "b", 200],
+          ["char", "b", 300],
+          ["blur"],
+          ["char", "a", 2000],
+          ["focus"],
+          ["char", "a", 3500]
+        ]
+      },
+      {
+        "markup": "<select disabled><option value=\"a\">Alpha</option><option value=\"b\">Beta</option></select>",
+        "ops": [
+          ["press", null, 0],
+          ["focus"],
+          ["char", "b", 100]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"a\">Alpha</option><option value=\"b\">Beta</option><option value=\"br\">Bravo</option></select>",
+        "ops": [
+          ["char", "b", 100],
+          ["blur"],
+          ["focus"],
+          ["char", "r", 300],
+          ["char", " ", 400],
+          ["char", "b", 500]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100],
+          ["key", "ArrowRight", 200],
+          ["key", "PageDown", 300],
+          ["key", "PageDown", 400],
+          ["key", "ArrowDown", 500],
+          ["key", "PageDown", 600],
+          ["key", "ArrowDown", 700],
+          ["key", "ArrowUp", 800],
+          ["key", "ArrowLeft", 900],
+          ["key", "PageUp", 1000],
+          ["key", "PageUp", 1100],
+          ["key", "PageUp", 1200],
+          ["key", "ArrowUp", 1300],
+          ["key", "End", 1400],
+          ["key", "Home", 1500],
+          ["key", "Escape", 1600]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"x\" disabled>Off</option><optgroup label=\"A\"><option value=\"a1\">A1</option><option value=\"a2\" disabled>A2</option><option value=\"a3\">A3</option></optgroup><option value=\"h\" style=\"display: none\">Hidden</option><optgroup label=\"Off\" disabled><option value=\"d1\">D1</option></optgroup><option value=\"b\">B</option><option value=\"c\" style=\"display:none\">C</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100],
+          ["key", "ArrowDown", 200],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowUp", 400],
+          ["key", "ArrowUp", 500],
+          ["key", "ArrowUp", 600],
+          ["key", "PageDown", 700],
+          ["key", "PageUp", 800],
+          ["key", "PageDown", 900],
+          ["key", "Home", 1000],
+          ["key", "End", 1100],
+          ["key", "PageUp", 1200],
+          ["key", "PageUp", 1300],
+          ["key", "End", 1400],
+          ["key", "ArrowUp", 1500],
+          ["key", "Home", 1600],
+          ["char", "a", 3000],
+          ["char", "b", 5000]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "Enter", 100],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "Enter", 100, ["ctrl"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "ArrowUp", 100, ["alt"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["ctrl"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["meta"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "Home", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["char", " ", 100],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 500],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "End", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "End", 100, ["ctrl"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "End", 100, ["alt"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "End", 100, ["meta"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "PageDown", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowRight", 100, ["alt"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowLeft", 100, ["ctrl"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowRight", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "Enter", 100, ["alt"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "Enter", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "Enter", 100, ["meta"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt", "ctrl"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt", "shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["char", " ", 100, ["ctrl"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 500],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["char", " ", 100, ["alt"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 500],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["char", " ", 100, ["shift"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 500],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["char", " ", 100, ["meta"]],
+          ["key", "ArrowDown", 300],
+          ["key", "Escape", 500],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "End", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "Home", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageUp", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowLeft", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowRight", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "Enter", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowDown", 200],
+          ["key", "Enter", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowDown", 200],
+          ["key", "ArrowUp", 300, ["alt"]],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowDown", 200],
+          ["blur"],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["key", "Enter", 100],
+          ["char", "o", 200],
+          ["char", "o", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowDown", 200],
+          ["char", " ", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["char", " ", 300],
+          ["key", "ArrowDown", 400],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "ArrowDown", 200],
+          ["key", "ArrowDown", 300, ["ctrl"]],
+          ["key", "ArrowDown", 350, ["shift"]],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option><option value=\"o9\">Option 9</option><option value=\"o10\">Option 10</option><option value=\"o11\">Option 11</option><option value=\"o12\">Option 12</option><option value=\"o13\">Option 13</option><option value=\"o14\">Option 14</option><option value=\"o15\">Option 15</option><option value=\"o16\">Option 16</option><option value=\"o17\">Option 17</option><option value=\"o18\">Option 18</option><option value=\"o19\">Option 19</option><option value=\"o20\">Option 20</option><option value=\"o21\">Option 21</option><option value=\"o22\">Option 22</option><option value=\"o23\">Option 23</option><option value=\"o24\">Option 24</option><option value=\"o25\">Option 25</option><option value=\"o26\">Option 26</option><option value=\"o27\">Option 27</option><option value=\"o28\">Option 28</option><option value=\"o29\">Option 29</option><option value=\"o30\">Option 30</option><option value=\"o31\">Option 31</option><option value=\"o32\">Option 32</option><option value=\"o33\">Option 33</option><option value=\"o34\">Option 34</option><option value=\"o35\">Option 35</option><option value=\"o36\">Option 36</option><option value=\"o37\">Option 37</option><option value=\"o38\">Option 38</option><option value=\"o39\">Option 39</option><option value=\"o40\">Option 40</option><option value=\"o41\">Option 41</option><option value=\"o42\">Option 42</option><option value=\"o43\">Option 43</option><option value=\"o44\">Option 44</option><option value=\"o45\">Option 45</option><option value=\"o46\">Option 46</option><option value=\"o47\">Option 47</option><option value=\"o48\">Option 48</option><option value=\"o49\">Option 49</option><option value=\"o50\">Option 50</option><option value=\"o51\">Option 51</option><option value=\"o52\">Option 52</option><option value=\"o53\">Option 53</option><option value=\"o54\">Option 54</option><option value=\"o55\">Option 55</option><option value=\"o56\">Option 56</option><option value=\"o57\">Option 57</option><option value=\"o58\">Option 58</option><option value=\"o59\">Option 59</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "PageDown", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option><option value=\"o9\">Option 9</option><option value=\"o10\">Option 10</option><option value=\"o11\">Option 11</option><option value=\"o12\">Option 12</option><option value=\"o13\">Option 13</option><option value=\"o14\">Option 14</option><option value=\"o15\">Option 15</option><option value=\"o16\">Option 16</option><option value=\"o17\">Option 17</option><option value=\"o18\">Option 18</option><option value=\"o19\">Option 19</option><option value=\"o20\">Option 20</option><option value=\"o21\">Option 21</option><option value=\"o22\">Option 22</option><option value=\"o23\">Option 23</option><option value=\"o24\">Option 24</option><option value=\"o25\">Option 25</option><option value=\"o26\">Option 26</option><option value=\"o27\">Option 27</option><option value=\"o28\">Option 28</option><option value=\"o29\">Option 29</option><option value=\"o30\">Option 30</option><option value=\"o31\">Option 31</option><option value=\"o32\">Option 32</option><option value=\"o33\">Option 33</option><option value=\"o34\">Option 34</option><option value=\"o35\">Option 35</option><option value=\"o36\">Option 36</option><option value=\"o37\">Option 37</option><option value=\"o38\">Option 38</option><option value=\"o39\">Option 39</option><option value=\"o40\">Option 40</option><option value=\"o41\">Option 41</option><option value=\"o42\">Option 42</option><option value=\"o43\">Option 43</option><option value=\"o44\">Option 44</option><option value=\"o45\">Option 45</option><option value=\"o46\">Option 46</option><option value=\"o47\">Option 47</option><option value=\"o48\">Option 48</option><option value=\"o49\">Option 49</option><option value=\"o50\">Option 50</option><option value=\"o51\">Option 51</option><option value=\"o52\">Option 52</option><option value=\"o53\">Option 53</option><option value=\"o54\">Option 54</option><option value=\"o55\">Option 55</option><option value=\"o56\">Option 56</option><option value=\"o57\">Option 57</option><option value=\"o58\">Option 58</option><option value=\"o59\">Option 59</option></select>",
+        "ops": [
+          ["set", "value", "o4"],
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageUp", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><optgroup label=\"G0\"><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option></optgroup><optgroup label=\"G1\"><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option></optgroup><optgroup label=\"G2\"><option value=\"o8\">Option 8</option><option value=\"o9\">Option 9</option><option value=\"o10\">Option 10</option><option value=\"o11\">Option 11</option></optgroup></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><optgroup label=\"G0\"><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option></optgroup><optgroup label=\"G1\"><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option><option value=\"o9\">Option 9</option><option value=\"o10\">Option 10</option><option value=\"o11\">Option 11</option></optgroup><optgroup label=\"G2\"><option value=\"o12\">Option 12</option><option value=\"o13\">Option 13</option><option value=\"o14\">Option 14</option><option value=\"o15\">Option 15</option><option value=\"o16\">Option 16</option><option value=\"o17\">Option 17</option></optgroup><optgroup label=\"G3\"><option value=\"o18\">Option 18</option><option value=\"o19\">Option 19</option><option value=\"o20\">Option 20</option><option value=\"o21\">Option 21</option><option value=\"o22\">Option 22</option><option value=\"o23\">Option 23</option></optgroup><optgroup label=\"G4\"><option value=\"o24\">Option 24</option><option value=\"o25\">Option 25</option><option value=\"o26\">Option 26</option><option value=\"o27\">Option 27</option><option value=\"o28\">Option 28</option><option value=\"o29\">Option 29</option></optgroup><optgroup label=\"G5\"><option value=\"o30\">Option 30</option><option value=\"o31\">Option 31</option><option value=\"o32\">Option 32</option><option value=\"o33\">Option 33</option><option value=\"o34\">Option 34</option><option value=\"o35\">Option 35</option></optgroup><optgroup label=\"G6\"><option value=\"o36\">Option 36</option><option value=\"o37\">Option 37</option><option value=\"o38\">Option 38</option><option value=\"o39\">Option 39</option><option value=\"o40\">Option 40</option><option value=\"o41\">Option 41</option></optgroup><optgroup label=\"G7\"><option value=\"o42\">Option 42</option><option value=\"o43\">Option 43</option><option value=\"o44\">Option 44</option><option value=\"o45\">Option 45</option><option value=\"o46\">Option 46</option><option value=\"o47\">Option 47</option></optgroup></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><optgroup label=\"G0\"><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option></optgroup><optgroup label=\"G1\"><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option><option value=\"o9\">Option 9</option><option value=\"o10\">Option 10</option><option value=\"o11\">Option 11</option></optgroup><optgroup label=\"G2\"><option value=\"o12\">Option 12</option><option value=\"o13\">Option 13</option><option value=\"o14\">Option 14</option><option value=\"o15\">Option 15</option><option value=\"o16\">Option 16</option><option value=\"o17\">Option 17</option></optgroup><optgroup label=\"G3\"><option value=\"o18\">Option 18</option><option value=\"o19\">Option 19</option><option value=\"o20\">Option 20</option><option value=\"o21\">Option 21</option><option value=\"o22\">Option 22</option><option value=\"o23\">Option 23</option></optgroup><optgroup label=\"G4\"><option value=\"o24\">Option 24</option><option value=\"o25\">Option 25</option><option value=\"o26\">Option 26</option><option value=\"o27\">Option 27</option><option value=\"o28\">Option 28</option><option value=\"o29\">Option 29</option></optgroup><optgroup label=\"G5\"><option value=\"o30\">Option 30</option><option value=\"o31\">Option 31</option><option value=\"o32\">Option 32</option><option value=\"o33\">Option 33</option><option value=\"o34\">Option 34</option><option value=\"o35\">Option 35</option></optgroup><optgroup label=\"G6\"><option value=\"o36\">Option 36</option><option value=\"o37\">Option 37</option><option value=\"o38\">Option 38</option><option value=\"o39\">Option 39</option><option value=\"o40\">Option 40</option><option value=\"o41\">Option 41</option></optgroup><optgroup label=\"G7\"><option value=\"o42\">Option 42</option><option value=\"o43\">Option 43</option><option value=\"o44\">Option 44</option><option value=\"o45\">Option 45</option><option value=\"o46\">Option 46</option><option value=\"o47\">Option 47</option></optgroup></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "PageUp", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">Option 0</option><option value=\"o1\">Option 1</option><option value=\"o2\">Option 2</option><option value=\"o3\">Option 3</option><option value=\"o4\">Option 4</option><option value=\"o5\">Option 5</option><option value=\"o6\">Option 6</option><option value=\"o7\">Option 7</option><option value=\"o8\">Option 8</option><option value=\"o9\">Option 9</option><option value=\"o10\">Option 10</option><option value=\"o11\">Option 11</option><option value=\"o12\">Option 12</option><option value=\"o13\">Option 13</option><option value=\"o14\">Option 14</option><option value=\"o15\">Option 15</option><option value=\"o16\">Option 16</option><option value=\"o17\">Option 17</option><option value=\"o18\">Option 18</option><option value=\"o19\">Option 19</option><option value=\"o20\">Option 20</option><option value=\"o21\">Option 21</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">O 0</option><option value=\"o1\">O 1</option><option value=\"o2\">O 2</option><option value=\"o3\">O 3</option><option value=\"o4\">O 4</option><option value=\"o5\">O 5</option><option value=\"o6\">O 6</option><option value=\"o7\">O 7</option><option value=\"o8\">O 8</option><option value=\"o9\">O 9</option><option value=\"o10\">O 10</option><option value=\"o11\">O 11</option><option value=\"o12\">O 12</option><option value=\"o13\">O 13</option><option value=\"o14\">O 14</option><option value=\"o15\">O 15</option><option value=\"o16\" disabled>O 16</option><option value=\"o17\" disabled>O 17</option><option value=\"o18\" disabled>O 18</option><option value=\"o19\" disabled>O 19</option><option value=\"o20\" disabled>O 20</option><option value=\"o21\" disabled>O 21</option><option value=\"o22\" disabled>O 22</option><option value=\"o23\" disabled>O 23</option><option value=\"o24\" disabled>O 24</option><option value=\"o25\">O 25</option><option value=\"o26\">O 26</option><option value=\"o27\">O 27</option><option value=\"o28\">O 28</option><option value=\"o29\">O 29</option><option value=\"o30\">O 30</option><option value=\"o31\">O 31</option><option value=\"o32\">O 32</option><option value=\"o33\">O 33</option><option value=\"o34\">O 34</option><option value=\"o35\">O 35</option><option value=\"o36\">O 36</option><option value=\"o37\">O 37</option><option value=\"o38\">O 38</option><option value=\"o39\">O 39</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">O 0</option><option value=\"o1\">O 1</option><option value=\"o2\">O 2</option><option value=\"o3\">O 3</option><option value=\"o4\">O 4</option><option value=\"o5\">O 5</option><option value=\"o6\">O 6</option><option value=\"o7\">O 7</option><option value=\"o8\">O 8</option><option value=\"o9\">O 9</option><option value=\"o10\">O 10</option><option value=\"o11\">O 11</option><option value=\"o12\">O 12</option><option value=\"o13\">O 13</option><option value=\"o14\">O 14</option><option value=\"o15\">O 15</option><option value=\"o16\" disabled>O 16</option><option value=\"o17\" disabled>O 17</option><option value=\"o18\" disabled>O 18</option><option value=\"o19\" disabled>O 19</option><option value=\"o20\" disabled>O 20</option><option value=\"o21\" disabled>O 21</option><option value=\"o22\" disabled>O 22</option><option value=\"o23\" disabled>O 23</option><option value=\"o24\" disabled>O 24</option><option value=\"o25\" disabled>O 25</option><option value=\"o26\" disabled>O 26</option><option value=\"o27\" disabled>O 27</option><option value=\"o28\" disabled>O 28</option><option value=\"o29\" disabled>O 29</option><option value=\"o30\" disabled>O 30</option><option value=\"o31\" disabled>O 31</option><option value=\"o32\" disabled>O 32</option><option value=\"o33\" disabled>O 33</option><option value=\"o34\" disabled>O 34</option><option value=\"o35\" disabled>O 35</option><option value=\"o36\" disabled>O 36</option><option value=\"o37\" disabled>O 37</option><option value=\"o38\" disabled>O 38</option><option value=\"o39\" disabled>O 39</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["key", "PageDown", 200],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      },
+      {
+        "markup": "<select><option value=\"o0\">O 0</option><option value=\"o1\">O 1</option><option value=\"o2\">O 2</option><option value=\"o3\">O 3</option><option value=\"o4\">O 4</option><option value=\"o5\">O 5</option><option value=\"o6\">O 6</option><option value=\"o7\">O 7</option><option value=\"o8\">O 8</option><option value=\"o9\">O 9</option><option value=\"o10\">O 10</option><option value=\"o11\">O 11</option><option value=\"o12\">O 12</option><option value=\"o13\">O 13</option><option value=\"o14\">O 14</option><option value=\"o15\">O 15</option><option value=\"o16\">O 16</option><option value=\"o17\">O 17</option><option value=\"o18\">O 18</option><option value=\"o19\">O 19</option><option value=\"o20\">O 20</option><option value=\"o21\">O 21</option><option value=\"o22\">O 22</option><option value=\"o23\">O 23</option><option value=\"o24\">O 24</option><option value=\"o25\">O 25</option><option value=\"o26\">O 26</option><option value=\"o27\">O 27</option><option value=\"o28\">O 28</option><option value=\"o29\">O 29</option><option value=\"o30\">O 30</option><option value=\"o31\">O 31</option><option value=\"o32\">O 32</option><option value=\"o33\">O 33</option><option value=\"o34\">O 34</option><option value=\"o35\">O 35</option><option value=\"o36\">O 36</option><option value=\"o37\">O 37</option><option value=\"o38\">O 38</option><option value=\"o39\">O 39</option><option value=\"o40\">O 40</option><option value=\"o41\">O 41</option><option value=\"o42\">O 42</option><option value=\"o43\">O 43</option><option value=\"o44\">O 44</option><option value=\"o45\">O 45</option><option value=\"o46\">O 46</option><option value=\"o47\">O 47</option><option value=\"o48\">O 48</option><option value=\"o49\">O 49</option><option value=\"o50\">O 50</option><option value=\"o51\">O 51</option><option value=\"o52\">O 52</option><option value=\"o53\">O 53</option><option value=\"o54\">O 54</option><option value=\"o55\">O 55</option><option value=\"o56\">O 56</option><option value=\"o57\">O 57</option><option value=\"o58\">O 58</option><option value=\"o59\">O 59</option></select>",
+        "ops": [
+          ["key", "ArrowDown", 100, ["alt"]],
+          ["char", "o", 200],
+          ["char", " ", 250],
+          ["char", "4", 300],
+          ["key", "Escape", 600],
+          ["key", "ArrowDown", 900]
+        ]
+      }
+    ]
+  }
+}

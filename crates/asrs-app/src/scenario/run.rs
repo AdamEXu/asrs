@@ -51,14 +51,15 @@ use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--licenses <file>] [--work-area <x>,<y>] [--robot <port>]
+[--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
 --bundled-assets is upstream's bundledAssets folder, which main loads with the user and
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
-places its window 16 px inside it (default 0,0); --robot is where the scenario's robot listens on 127.0.0.1.";
+places its window 16 px inside it (default 0,0), at one scale or at every scale;
+--robot is where the scenario's robot listens on 127.0.0.1.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
@@ -148,14 +149,14 @@ struct Options {
     probes: Option<PathBuf>,
     bundled_assets: Option<PathBuf>,
     licenses: Option<PathBuf>,
-    work_area: (f64, f64),
+    work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
     let (mut bundled_assets, mut licenses) = (None, None);
-    let mut work_area = (0.0, 0.0);
+    let mut work_areas = Vec::new();
     let mut robot = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
@@ -173,10 +174,18 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--work-area" => {
                 let text = value()?;
-                work_area = text
+                let (scale, at) = match text.split_once(':') {
+                    Some((scale, at)) => (
+                        Some(scale.parse().map_err(|_| "--work-area's scale is 1 or 2")?),
+                        at,
+                    ),
+                    None => (None, text.as_str()),
+                };
+                let origin = at
                     .split_once(',')
                     .and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?)))
-                    .ok_or(format!("--work-area {text}: expected <x>,<y>"))?;
+                    .ok_or(format!("--work-area {text}: expected [<scale>:]<x>,<y>"))?;
+                work_areas.push((scale, origin));
             }
             other => return Err(format!("unknown argument {other}\n{USAGE}")),
         }
@@ -190,7 +199,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         probes,
         bundled_assets,
         licenses,
-        work_area,
+        work_areas,
         robot,
     })
 }
@@ -265,7 +274,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 probes: &probes,
                 inputs: options.inputs.as_deref(),
                 bundled_assets: options.bundled_assets.as_deref(),
-                work_area: options.work_area,
+                work_area: options
+                    .work_areas
+                    .iter()
+                    .find(|(only, _)| only.is_none_or(|only| only == scale))
+                    .map_or((0.0, 0.0), |(_, origin)| *origin),
                 scale,
                 theme,
                 dir: &dir,

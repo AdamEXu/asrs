@@ -214,6 +214,31 @@ impl Accelerator {
         Some((String::from_utf16_lossy(&[character]), mask))
     }
 
+    /// `ui::Accelerator::GetShortcutText` off macOS, such as `Ctrl+Shift+O`.
+    pub fn shortcut_text(&self) -> Option<String> {
+        let name = self.key.as_ref()?.name.as_str();
+        let (shift, key) = match self.shifted_char {
+            Some(c) => (false, c.to_string()),
+            None => {
+                let mut chars = name.chars();
+                let first = chars.next()?.to_ascii_uppercase();
+                (self.shift, format!("{first}{}", chars.as_str()))
+            }
+        };
+        let mut out = String::new();
+        for (on, modifier) in [
+            (self.command, "Super+"),
+            (self.control, "Ctrl+"),
+            (self.alt && !self.control, "Alt+"),
+            (shift, "Shift+"),
+        ] {
+            if on {
+                out.push_str(modifier);
+            }
+        }
+        Some(out + &key)
+    }
+
     /// The same shortcut as a GPUI keystroke, such as `cmd-shift-o`.
     pub fn gpui_keystroke(&self) -> Option<String> {
         let key = self.key.as_ref()?;
@@ -296,6 +321,21 @@ mod tests {
             );
         }
         assert_eq!(mac("F21"), None);
+    }
+
+    #[test]
+    fn shortcut_texts() {
+        let text = |s: &str| Accelerator::parse(s, Platform::Linux)?.shortcut_text();
+        for (accelerator, shown) in [
+            ("CmdOrCtrl+Shift+O", "Ctrl+Shift+O"),
+            ("CommandOrControl+Plus", "Ctrl++"),
+            ("CmdOrCtrl+,", "Ctrl+,"),
+            ("CmdOrCtrl+Left", "Ctrl+Left"),
+            ("Alt+F4", "Alt+F4"),
+            ("F11", "F11"),
+        ] {
+            assert_eq!(text(accelerator).as_deref(), Some(shown));
+        }
     }
 
     #[test]

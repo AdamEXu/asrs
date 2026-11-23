@@ -17,9 +17,11 @@ pub use native::{
     Checkbox, PointerState, Progress, paint_checkbox, paint_progress, paint_text_field,
 };
 pub use segmented::{Segment, SegmentedControl, segment_boxes};
+#[cfg(feature = "parity")]
+pub use select::ScriptedSelectKeys;
 pub use select::{
-    Select, SelectEvent, SelectGeometry, SelectItem, SelectKey, SelectModel, SelectState,
-    geometry as select_geometry, paint_select, popup_menu, select_key,
+    Select, SelectEvent, SelectGeometry, SelectItem, SelectKey, SelectKeys, SelectModel,
+    SelectState, SelectStep, geometry as select_geometry, paint_select, popup_menu, select_key,
 };
 pub use slider::{
     RangeControl, Slider, SliderEvent, SliderTrack, paint_in_rounded, pointer_proportion,

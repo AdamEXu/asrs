@@ -10,7 +10,7 @@ use asrs_ui::capture::{Capture, HeadlessCapture};
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{
     Checkbox, FieldKind, FieldModel, FieldStyle, PlainText, Progress, RangeModel, Segment,
-    SegmentedControl, Select, SelectItem, SelectModel, Slider, SliderStyle, TextField,
+    SegmentedControl, Select, SelectItem, SelectModel, SelectStep, Slider, SliderStyle, TextField,
 };
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::snap_remainder;
@@ -331,6 +331,10 @@ impl SelectModel for Options {
     }
 
     fn end_type_ahead(&mut self) {}
+
+    fn step(&mut self, _: SelectStep) -> bool {
+        false
+    }
 }
 
 fn field<M: FieldModel>(

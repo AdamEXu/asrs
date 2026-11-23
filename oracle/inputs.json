@@ -413,6 +413,11 @@
     "src/shims.ts",
     "src/update/bundle.ts"
   ],
+  "genMenusHost": [
+    "src/environment.ts",
+    "src/genMenusHost.ts",
+    "src/shims.ts"
+  ],
   "genMenusMain": [
     "src/cve1.ts",
     "src/genMenusMain.ts"

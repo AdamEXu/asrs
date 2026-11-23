@@ -110,6 +110,7 @@ pub struct SidebarLayout {
     scroll_to: Option<f64>,
     blur: bool,
     results_scroll: Option<ResultsScroll>,
+    menu_buttons: Vec<[f64; 4]>,
 }
 
 #[derive(Clone, Copy)]
@@ -131,6 +132,7 @@ impl Default for SidebarLayout {
             scroll_to: None,
             blur: false,
             results_scroll: None,
+            menu_buttons: Vec::new(),
         }
     }
 }
@@ -259,8 +261,16 @@ impl SidebarGeometry for ViewGeometry {
         self.0.borrow_mut().scroll(value);
     }
 
-    fn menu_button_rect(&mut self, _index: usize) -> RowRect {
-        RowRect::default()
+    fn menu_button_rect(&mut self, index: usize) -> RowRect {
+        match self.0.borrow().menu_buttons.get(index) {
+            Some(&[x, y, width, height]) => RowRect {
+                x,
+                y,
+                width,
+                height,
+            },
+            None => RowRect::default(),
+        }
     }
 
     fn blur_search_input(&mut self) -> bool {
@@ -949,4 +959,8 @@ impl Render for SidebarView {
 /// `div.side-bar`'s box as the frame laid it out, for [`ViewGeometry`].
 pub fn set_side_bar(geometry: &ViewGeometry, rect: [f64; 4]) {
     geometry.0.borrow_mut().side_bar = rect;
+}
+
+pub fn set_menu_buttons(geometry: &ViewGeometry, rects: Vec<[f64; 4]>) {
+    geometry.0.borrow_mut().menu_buttons = rects;
 }

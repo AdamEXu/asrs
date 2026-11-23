@@ -219,7 +219,18 @@ fn compare_built(want: &[Value], got: &[BuiltItem], at: &str, compared: &mut usi
 
 #[test]
 fn electron_builds_the_darwin_menu() {
-    let records = vectors::load("menus/electron-darwin").unwrap_or_else(|e| panic!("{e}"));
+    let compared = replay_electron("menus/electron-darwin", Platform::Mac);
+    assert!(compared > 120, "{compared} items");
+}
+
+#[test]
+fn electron_builds_the_linux_menu() {
+    let compared = replay_electron("menus/electron-linux/linux-x86_64", Platform::Linux);
+    assert!(compared > 100, "{compared} items");
+}
+
+fn replay_electron(vector: &str, platform: Platform) -> usize {
+    let records = vectors::load(vector).unwrap_or_else(|e| panic!("{e}"));
     let mut compared = 0;
     let mut menus = 0;
     for record in &records {
@@ -230,13 +241,9 @@ fn electron_builds_the_darwin_menu() {
                     record.string("appName").as_deref(),
                     Some(AppIdentity::UPSTREAM.name)
                 );
-                let template = app_menu::template(
-                    Platform::Mac,
-                    &Preferences::default(),
-                    AppIdentity::UPSTREAM,
-                );
-                let built =
-                    build_from_template(&template, Platform::Mac, AppIdentity::UPSTREAM.name);
+                let template =
+                    app_menu::template(platform, &Preferences::default(), AppIdentity::UPSTREAM);
+                let built = build_from_template(&template, platform, AppIdentity::UPSTREAM.name);
                 let want = record.value("menu").expect("menu");
                 compare_built(array(&want), &built, "electron", &mut compared);
                 menus += 1;
@@ -245,5 +252,5 @@ fn electron_builds_the_darwin_menu() {
         }
     }
     assert_eq!(menus, 1);
-    assert!(compared > 120, "{compared} items");
+    compared
 }
