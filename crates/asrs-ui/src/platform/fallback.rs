@@ -252,6 +252,10 @@ pub(super) mod probe {
         false
     }
 
+    pub fn framed_title_bar() -> Option<f64> {
+        None
+    }
+
     pub fn numpad_enter_for(_key_code: u16) -> Option<bool> {
         None
     }

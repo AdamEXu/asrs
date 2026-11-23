@@ -17,7 +17,7 @@ export type Action =
   | { dialog: number | string | null }
   | { menu: string[] }
   | { appMenu: string[] }
-  | { prompt: string | null }
+  | { prompt: string | null; index?: number }
   | { capture: string; probes?: string[]; masks?: string[] };
 
 export type Scenario = {

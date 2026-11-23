@@ -107,22 +107,24 @@ impl Windows {
     /// Registers a hub window a parity scenario opened headless, so it can parent prompts and
     /// take the application menu's clicks.
     #[cfg(feature = "parity")]
-    pub fn adopt_hub(cx: &mut App, handle: AnyWindowHandle) -> WindowId {
+    pub fn adopt_hub(cx: &mut App, handle: AnyWindowHandle, bounds: Rect) -> WindowId {
         let windows = cx.global_mut::<Windows>();
         let (id, _) = windows.manager.create_hub(None);
         windows.handles.push((id, handle));
+        windows.manager.set_bounds(id, bounds);
         windows.manager.focus(id);
         id
     }
 
-    /// The open window of this kind a parity scenario drives.
+    /// The open window of this kind a parity scenario drives, counted in opening order.
     #[cfg(feature = "parity")]
-    pub fn of_kind(cx: &App, kind: WindowKind) -> Option<AnyWindowHandle> {
+    pub fn of_kind(cx: &App, kind: WindowKind, index: usize) -> Option<AnyWindowHandle> {
         let windows = cx.global::<Windows>();
         windows
             .handles
             .iter()
-            .find(|(id, _)| windows.manager.kind(*id) == Some(kind))
+            .filter(|(id, _)| windows.manager.kind(*id) == Some(kind))
+            .nth(index)
             .map(|(_, h)| *h)
     }
 

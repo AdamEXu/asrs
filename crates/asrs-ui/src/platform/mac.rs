@@ -1180,6 +1180,20 @@ pub(super) mod probe {
         true
     }
 
+    pub fn framed_title_bar() -> Option<f64> {
+        let mtm = MainThreadMarker::new()?;
+        let style = objc2_app_kit::NSWindowStyleMask::Titled
+            | objc2_app_kit::NSWindowStyleMask::Closable
+            | objc2_app_kit::NSWindowStyleMask::Miniaturizable
+            | objc2_app_kit::NSWindowStyleMask::Resizable;
+        let content = objc2_foundation::NSRect::new(
+            objc2_foundation::NSPoint::new(0.0, 0.0),
+            NSSize::new(100.0, 100.0),
+        );
+        let frame = objc2_app_kit::NSWindow::frameRectForContentRect_styleMask(content, style, mtm);
+        Some(frame.size.height - content.size.height)
+    }
+
     pub fn numpad_enter_for(key_code: u16) -> Option<bool> {
         let app = NSApplication::sharedApplication(MainThreadMarker::new()?);
         let event = key_down("\r", 0, key_code)?;

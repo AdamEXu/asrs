@@ -553,7 +553,7 @@ fn help_overlay(
     let box_w = root[2];
     let box_h = math::max2(root[3] - DEFAULT_SCROLL_TOP - SCROLL_BOTTOM, 0.0);
     let left = lu((box_w - container_w) / 2.0);
-    let top = DEFAULT_SCROLL_TOP + lu((box_h - container_h) / 2.0);
+    let top = lu((box_h - container_h) / 2.0);
     let color = if dark { 0xffffff } else { 0x000000 };
     let chain = if dark { chains::INVERT_ONE } else { "" };
     let mut container = div()
@@ -579,7 +579,7 @@ fn help_overlay(
         let text_left = HELP_ICON + HELP_ICON_GAP;
         let text_top = row_top + lu((HELP_ICON - h) / 2.0);
         let abs_x = (root[0] + left + text_left) as f32;
-        let abs_y = (root[1] + top + text_top) as f32;
+        let abs_y = (root[1] + DEFAULT_SCROLL_TOP + top + text_top) as f32;
         container = container.child(
             div()
                 .absolute()
@@ -599,8 +599,9 @@ fn help_overlay(
         div()
             .absolute()
             .left_0()
-            .top_0()
-            .size_full()
+            .top(px(DEFAULT_SCROLL_TOP as f32))
+            .w_full()
+            .h(px(box_h as f32))
             .child(container),
     )
     .into_any_element()

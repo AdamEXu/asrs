@@ -111,7 +111,7 @@ impl AppUnderTest {
 
     fn preferences(&mut self) -> Option<WindowId> {
         self.cx.update(|cx| {
-            let window = Windows::of_kind(cx, WindowKind::Preferences)?;
+            let window = Windows::of_kind(cx, WindowKind::Preferences, 0)?;
             Windows::id_of(cx, window)
         })
     }

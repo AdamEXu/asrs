@@ -25,10 +25,10 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
-    Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
-    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
-    ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window, canvas,
-    div, point, px, rgb, rgba,
+    Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
+    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    Render, ScrollDelta, ScrollEvent, SharedString, StatefulInteractiveElement, Styled, Window,
+    canvas, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::parity::{Probed, probed};
@@ -71,8 +71,11 @@ pub trait FrameHost: 'static {
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel;
     /// The window's `resize` event, once the page has been laid out at its new size.
     fn resized(&mut self, _cx: &mut App) {}
-    /// The window's `keydown` event with this `code`, outside editable elements.
-    fn key_down(&mut self, _code: &str, _cx: &mut App) {}
+    /// The window's `keydown` event outside editable elements. Returns whether `preventDefault`
+    /// was called.
+    fn key_down(&mut self, _event: &KeyDownEvent, _code: &str, _cx: &mut App) -> bool {
+        false
+    }
     /// The hub's frame clock (ms), which its scroll sensors animate on.
     fn frame_time(&self, cx: &App) -> f64;
     /// Runs `f`, the frame's handler for an input event, as one page task.
@@ -147,6 +150,8 @@ pub struct HubFrame<H: FrameHost> {
     shell: HubShell,
     started: Instant,
     viewport: Option<(f64, f64)>,
+    /// The focus while no element has it, which is `body`'s in a page.
+    body: FocusHandle,
     geometry: FrameGeometry,
     timeline: Timeline,
     timeline_sensor: ScrollSensor,
@@ -234,6 +239,7 @@ impl<H: FrameHost> HubFrame<H> {
             shell: HubShell::default(),
             started: Instant::now(),
             viewport: None,
+            body: cx.focus_handle(),
             geometry,
             timeline: Timeline::new(Rc::new(asrs_js::time::SystemClock)),
             timeline_sensor: ScrollSensor::default(),
@@ -288,13 +294,13 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, window: &Window, cx: &mut Context<'_, Self>) {
-        if self.console.editing()
-            || self.table_editing(window, cx)
-            || self.host.editable_focused(cx)
+        if self.body.is_focused(window)
+            && self
+                .host
+                .key_down(event, &key_code(&event.keystroke.key), cx)
         {
-            return;
+            cx.stop_propagation();
         }
-        self.host.key_down(&key_code(&event.keystroke.key), cx);
     }
 
     fn handle_down(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
@@ -614,7 +620,7 @@ impl<H: FrameHost> HubFrame<H> {
                     cx.notify();
                 });
             });
-        Some(probe(element, place(rect, (0.0, 0.0)).child(button)).into_any_element())
+        Some(probe(element, place(rect, (0.0, 0.0)).occlude().child(button)).into_any_element())
     }
 
     fn tab_control_click(&mut self, element: FrameElement, cx: &mut App) {
@@ -784,8 +790,17 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let entity = cx.entity().downgrade();
         // Window listeners, not hover-gated element ones: a press that leaves the window keeps
         // delivering moves and its release, as Chromium's mouse capture does upstream.
+        if window.focused(cx).is_none() {
+            let body = self.body.clone();
+            window.defer(cx, move |window, cx| {
+                if window.focused(cx).is_none() {
+                    body.focus(window, cx);
+                }
+            });
+        }
+        let body = self.body.clone();
         let window_listeners = canvas(
-            |_, _, _| {},
+            move |_, window, cx| window.set_focus_handle(&body, cx),
             move |_, _, window, _| {
                 let frame = entity.clone();
                 window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {

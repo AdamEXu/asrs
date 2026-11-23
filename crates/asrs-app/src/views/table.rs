@@ -707,14 +707,6 @@ impl<H: FrameHost> HubFrame<H> {
         field
     }
 
-    /// Whether the displayed table's jump input has the focus.
-    pub(super) fn table_editing(&self, window: &Window, cx: &App) -> bool {
-        let shown = self.table.shown.as_ref();
-        shown
-            .and_then(|s| self.table.tabs.get(&s.key)?.jump.as_ref())
-            .is_some_and(|(field, _)| field.focus_handle(cx).is_focused(window))
-    }
-
     /// A table that stopped being displayed: its focused input blurs and its body is left.
     fn table_hidden(&mut self, left: &Shown, window: &mut Window, cx: &mut Context<'_, Self>) {
         let index = self.host().hub(cx).tabs().tabs().position(|tab| {
