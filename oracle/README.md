@@ -1315,9 +1315,11 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 answer for the next dialog), `{"menu": [label, ...]}` (clicks the item at that label path of the
 context menu that popped up; neither side shows menus natively), `{"appMenu": [label, ...]}`
 (clicks, for the hub window, the one application menu item that has one of these labels, which
-differ per platform), `{"prompt": page | null}`
-(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export` or `preferences`: later input and captures go to
-that prompt window, whose content size is its own; `null` waits until it has closed),
+differ per platform), `{"prompt": page | "hub" | null, "index": n}`
+(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export`, `preferences` or `satellite`:
+later input and captures go to that window, the `index`th open one of its page (default 0), whose
+content size is its own, and a satellite's captures hold the state the satellite saved; `null`
+waits until it has closed; `hub` goes back to the hub and leaves satellites open),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

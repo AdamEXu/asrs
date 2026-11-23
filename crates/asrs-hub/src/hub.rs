@@ -51,9 +51,10 @@ use asrs_tabs::statistics::StatisticsCx;
 use asrs_tabs::table::{TableController, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
 
-use crate::factory::{CanvasEnv, HubTabFactory};
+use crate::factory::{CanvasEnv, HubTabFactory, SatelliteFactory};
+use crate::satellite::SatelliteSelection;
 use crate::sidebar::{EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, Tuner};
-use crate::tabs::{Tabs, TabsError, TabsHost};
+use crate::tabs::{SatelliteUpdate, Tabs, TabsError, TabsHost};
 
 pub const STATE_SAVE_PERIOD_MS: f64 = 250.0;
 pub const TYPE_MEMORY_SAVE_PERIOD_MS: f64 = 1000.0;
@@ -62,7 +63,7 @@ pub const MOCK_PROGRESS_PERIOD_MS: f64 = 1000.0 / 60.0;
 pub const TOUCH_BAR_PERIOD_MS: f64 = 1000.0 / 60.0;
 pub const SOURCE_INTERVAL_MS: f64 = 50.0;
 
-const APP_NAME: &str = "AdvantageScope";
+pub(crate) const APP_NAME: &str = "AdvantageScope";
 
 /// A repeating timer the hub sets. Each is cleared by the same value.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -145,6 +146,11 @@ pub trait HubHost {
         self.now()
     }
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>);
+    /// `update-satellite`, once per frame and satellite tab. A host in the same process can pass
+    /// the command on without its JS form.
+    fn update_satellite(&mut self, update: SatelliteUpdate) {
+        self.send_main_message(update.to_message());
+    }
     /// `historical-start` and `historical-start-raw`, whose payloads hold bytes.
     fn send_historical_request(&mut self, request: MainRequest);
     fn set_timeout(&mut self, timeout: HubTimeout);
@@ -222,7 +228,7 @@ pub trait HubView {
     /// See [`TabsHost::lay_out_console`].
     fn lay_out_console(
         &self,
-        _controller: &mut ConsoleController,
+        _controller: Option<&mut ConsoleController>,
         _renderer: &mut ConsoleRenderer,
     ) {
     }
@@ -279,6 +285,8 @@ pub struct Platform {
 pub struct HubPage {
     log: SharedLog,
     selection: SelectionImpl,
+    /// `window.selection` in a satellite window, whose page has no other.
+    satellite: Option<SatelliteSelection>,
     preferences: Option<Preferences>,
     assets: Option<Arc<AdvantageScopeAssets>>,
     assets_raw: JsValue,
@@ -310,6 +318,38 @@ impl HubPage {
 
     pub fn selection_mut(&mut self) -> &mut SelectionImpl {
         &mut self.selection
+    }
+
+    /// Whether this is a satellite window's page (`body.satellite`).
+    pub fn is_satellite(&self) -> bool {
+        self.satellite.is_some()
+    }
+
+    pub(crate) fn satellite_mut(&mut self) -> Option<&mut SatelliteSelection> {
+        self.satellite.as_mut()
+    }
+
+    pub(crate) fn take_outbox(&mut self) -> Vec<NamedMessage<HubToMain>> {
+        std::mem::take(&mut self.outbox)
+    }
+
+    /// `set-assets` in a satellite.
+    pub(crate) fn set_satellite_assets(&mut self, data: &JsValue) {
+        self.assets = assets_of(data);
+    }
+
+    /// `set-battery` in a satellite.
+    pub(crate) fn set_satellite_battery(&mut self, data: &JsValue) {
+        self.battery = truthy(data);
+    }
+
+    pub(crate) fn set_preferences(&mut self, data: &JsValue) -> Result<(), TabsError> {
+        let mut preferences = Preferences::default();
+        preferences
+            .merge(data)
+            .map_err(|_| TabsError::Unmodeled("set-preferences of another shape"))?;
+        self.preferences = Some(preferences);
+        Ok(())
     }
 
     pub fn preferences(&self) -> Option<&Preferences> {
@@ -384,7 +424,10 @@ impl TabCx for HubPage {
     }
 
     fn tab_selection(&mut self) -> &mut dyn Selection {
-        &mut self.selection
+        match &mut self.satellite {
+            Some(satellite) => satellite,
+            None => &mut self.selection,
+        }
     }
 
     fn tab_preferences(&self) -> Option<&Preferences> {
@@ -485,7 +528,11 @@ impl TabsHost for HubPage {
         })
     }
 
-    fn lay_out_console(&self, controller: &mut ConsoleController, renderer: &mut ConsoleRenderer) {
+    fn lay_out_console(
+        &self,
+        controller: Option<&mut ConsoleController>,
+        renderer: &mut ConsoleRenderer,
+    ) {
         self.view.lay_out_console(controller, renderer);
     }
 
@@ -494,6 +541,8 @@ impl TabsHost for HubPage {
             .tab_renderer(kind, self.preferences.as_ref(), self.battery)
     }
 }
+
+type Filenames = Rc<RefCell<Vec<JsString>>>;
 
 struct SourceEntry {
     source: HistoricalDataSource,
@@ -598,7 +647,7 @@ pub struct HubModel {
     page: HubPage,
     tabs: Tabs<HubPage>,
     sidebar: Sidebar,
-    filenames: Rc<RefCell<Vec<JsString>>>,
+    filenames: Filenames,
     historical: Vec<SourceEntry>,
     platform: Platform,
     body_classes: Vec<&'static str>,
@@ -652,6 +701,13 @@ fn truthy(value: &JsValue) -> bool {
     }
 }
 
+fn assets_of(data: &JsValue) -> Option<Arc<AdvantageScopeAssets>> {
+    match data {
+        JsValue::Null | JsValue::Undefined => None,
+        _ => Some(Arc::new(AdvantageScopeAssets::from_js(data))),
+    }
+}
+
 fn file_name(path: &JsString, platform: &JsString) -> JsString {
     let separator = if *platform == JsString::from("win32") {
         u16::from(b'\\')
@@ -676,14 +732,50 @@ impl HubModel {
         view: Box<dyn HubView>,
         host: &mut dyn HubHost,
     ) -> Self {
+        let now = host.now();
+        let (mut page, sidebar, filenames) = Self::page_parts(realm, clock, view, now, None);
+        host.request_animation_frame(HubFrame::Sidebar);
+        let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
+        host.request_animation_frame(HubFrame::SourceLists);
+        host.request_animation_frame(HubFrame::Tabs);
+        host.set_interval(HubInterval::SaveState, STATE_SAVE_PERIOD_MS);
+        host.set_interval(HubInterval::SaveTypeMemory, TYPE_MEMORY_SAVE_PERIOD_MS);
+        host.set_interval(HubInterval::TouchBarSlider, TOUCH_BAR_PERIOD_MS);
+        let mut hub = Self::from_parts(page, tabs, sidebar, filenames);
+        hub.flush(host);
+        hub
+    }
+
+    /// The parts of the page `satellite.ts` has in common with `hub.ts`: `window.assets`,
+    /// `preferences`, `isBattery` and `selection`, and the one renderer, as the only tab.
+    pub(crate) fn satellite(realm: JsRealm, clock: Rc<dyn Clock>, view: Box<dyn HubView>) -> Self {
+        let now = clock.now();
+        let selection = Some(SatelliteSelection::default());
+        let (page, sidebar, filenames) = Self::page_parts(realm, clock, view, now, selection);
+        Self::from_parts(
+            page,
+            Tabs::empty(Box::new(SatelliteFactory)),
+            sidebar,
+            filenames,
+        )
+    }
+
+    fn page_parts(
+        realm: JsRealm,
+        clock: Rc<dyn Clock>,
+        view: Box<dyn HubView>,
+        now: f64,
+        satellite: Option<SatelliteSelection>,
+    ) -> (HubPage, Sidebar, Filenames) {
         let log: SharedLog = Rc::new(RefCell::new(Log::new(true)));
         let selection = SelectionImpl::new(log.clone(), clock.clone());
         let filenames = Rc::new(RefCell::new(Vec::new()));
         let names = filenames.clone();
-        let sidebar = Sidebar::new(host.now(), move || names.borrow().clone());
-        let mut page = HubPage {
+        let sidebar = Sidebar::new(now, move || names.borrow().clone());
+        let page = HubPage {
             log,
             selection,
+            satellite,
             preferences: None,
             assets: None,
             assets_raw: JsValue::Null,
@@ -697,14 +789,16 @@ impl HubModel {
             outbox: Vec::new(),
             open_xr: Vec::new(),
         };
-        host.request_animation_frame(HubFrame::Sidebar);
-        let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
-        host.request_animation_frame(HubFrame::SourceLists);
-        host.request_animation_frame(HubFrame::Tabs);
-        host.set_interval(HubInterval::SaveState, STATE_SAVE_PERIOD_MS);
-        host.set_interval(HubInterval::SaveTypeMemory, TYPE_MEMORY_SAVE_PERIOD_MS);
-        host.set_interval(HubInterval::TouchBarSlider, TOUCH_BAR_PERIOD_MS);
-        let mut hub = HubModel {
+        (page, sidebar, filenames)
+    }
+
+    fn from_parts(
+        page: HubPage,
+        tabs: Tabs<HubPage>,
+        sidebar: Sidebar,
+        filenames: Filenames,
+    ) -> Self {
+        HubModel {
             page,
             tabs,
             sidebar,
@@ -733,9 +827,7 @@ impl HubModel {
             next_request: 0,
             exports: Vec::new(),
             status_changes: Vec::new(),
-        };
-        hub.flush(host);
-        hub
+        }
     }
 
     pub fn page(&self) -> &HubPage {
@@ -1322,7 +1414,7 @@ impl HubModel {
     /// The displayed table's or console's box, which upstream's render reads from a fresh layout:
     /// the view's last one may be from before the tab was selected, and a box that then changes
     /// looks like scrolling up.
-    fn lay_out_large_table(&mut self) {
+    pub(crate) fn lay_out_large_table(&mut self) {
         let Some((container, device_pixel_ratio)) = self.page.view.large_table_box() else {
             return;
         };
@@ -1358,7 +1450,7 @@ impl HubModel {
                 self.lay_out_large_table();
                 let out = self.tabs.periodic(&mut self.page, now);
                 for update in out.satellite_updates {
-                    host.send_main_message(update.to_message());
+                    host.update_satellite(update);
                 }
                 match out.error {
                     Some(e) => host.exception("requestAnimationFrame", format!("{e}")),
@@ -1688,10 +1780,7 @@ impl HubModel {
             return Ok(());
         }
         let alert = assets_alert(&self.page.assets_raw, data);
-        self.page.assets = match data {
-            JsValue::Null | JsValue::Undefined => None,
-            _ => Some(Arc::new(AdvantageScopeAssets::from_js(data))),
-        };
+        self.page.assets = assets_of(data);
         self.page.assets_raw = data.clone();
         self.tabs.new_assets(&mut self.page)?;
         if let Some(warning) = alert.warning {
@@ -1781,13 +1870,7 @@ impl HubModel {
                 self.sync_filenames();
                 self.update_fancy_window();
             }
-            MainToHub::SetPreferences => {
-                let mut preferences = Preferences::default();
-                preferences
-                    .merge(data)
-                    .map_err(|_| TabsError::Unmodeled("set-preferences of another shape"))?;
-                self.page.preferences = Some(preferences);
-            }
+            MainToHub::SetPreferences => self.page.set_preferences(data)?,
             MainToHub::SetAssets => self.set_assets(data, host)?,
             MainToHub::SetActiveSatellites => {
                 let uuids = data.as_array().map(<[JsValue]>::to_vec).unwrap_or_default();

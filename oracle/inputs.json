@@ -508,6 +508,12 @@
     "src/logRun.ts",
     "src/shims.ts"
   ],
+  "genSatellite": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genSatellite.ts",
+    "src/shims.ts"
+  ],
   "genSimpleStatistics": [
     "src/cve1.ts",
     "src/environment.ts",

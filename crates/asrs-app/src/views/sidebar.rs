@@ -159,11 +159,6 @@ impl ViewGeometry {
     pub fn new() -> Self {
         ViewGeometry::default()
     }
-
-    /// Whether the search input has focus.
-    pub fn search_focused(&self) -> bool {
-        self.0.borrow().search_focused
-    }
 }
 
 impl SidebarGeometry for ViewGeometry {

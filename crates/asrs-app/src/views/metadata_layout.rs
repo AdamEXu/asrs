@@ -98,6 +98,12 @@ pub fn alert_style() -> TextStyle {
     TextStyle::from_css([("font", font.as_str()), ("text-align", "center")]).expect("alert style")
 }
 
+/// `div.tab-centered` in a satellite, whose page does not load the hub's rules for it.
+pub fn satellite_alert_style() -> TextStyle {
+    let font = format!("16px {}", FONT_FAMILY.join(", "));
+    TextStyle::from_css([("font", font.as_str())]).expect("alert style")
+}
+
 pub struct MetadataLayout {
     backend: Box<dyn TextBackend>,
     key: Option<(MetadataTable, f64, f32)>,
@@ -145,6 +151,18 @@ impl MetadataLayout {
                 css(height / 2, scale) - css(size[1], scale) / 2.0,
             ],
             size,
+            text,
+        }
+    }
+
+    /// The no-data alert in a satellite: a block as wide as the window.
+    pub fn satellite_alert(&mut self, width: f64, scale: f32) -> PlacedAlert {
+        let width = (width as f32 * scale * 64.0).round() as Lu;
+        let style = satellite_alert_style();
+        let text = CellText::new(self.backend.as_mut(), &style, ALERT, Some(width), scale);
+        PlacedAlert {
+            origin: [0.0, 0.0],
+            size: [width, text.height],
             text,
         }
     }

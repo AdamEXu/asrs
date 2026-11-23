@@ -264,7 +264,7 @@ impl AppUnderTest {
 
     fn prompt(&mut self) -> Option<AnyWindowHandle> {
         self.cx
-            .update(|cx| Windows::of_kind(cx, WindowKind::Export))
+            .update(|cx| Windows::of_kind(cx, WindowKind::Export, 0))
     }
 
     fn write(&self, name: &str, contents: &[u8]) -> PathBuf {
