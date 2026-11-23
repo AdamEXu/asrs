@@ -148,14 +148,14 @@ fn blur_rows(values: &[f32], size: usize, kernel: &[f32]) -> Vec<f32> {
     out
 }
 
-/// The image `target` device px across with its shadow, and the device px around it.
+/// The image `target` device px across with its shadow, [`padding`] around it.
 fn raster(
     png: &[u8],
     target: usize,
     invert: bool,
     shadow: DropShadow,
     scale: f64,
-) -> Option<(Pixmap, usize)> {
+) -> Option<Pixmap> {
     let mut image = scaled(Level::decode(png)?, target);
     if invert {
         for p in &mut image {
@@ -192,7 +192,7 @@ fn raster(
         ];
         *out = pixel.map(|v| v.round().clamp(0.0, 255.0) as u8);
     }
-    Some((pixmap, pad))
+    Some(pixmap)
 }
 
 fn padding(shadow: DropShadow, scale: f64) -> usize {
@@ -224,7 +224,7 @@ pub fn image_icon(
                 shadow.blur.to_bits(),
                 shadow.color,
             );
-            let draw = || raster(png, target, invert, shadow, scale).map(|(pixmap, _)| pixmap);
+            let draw = || raster(png, target, invert, shadow, scale);
             skia::paint(key, padded, draw, window, cx);
         },
     )

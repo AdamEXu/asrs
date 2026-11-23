@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use asrs_js::collation;
 use asrs_js::math;
 use asrs_js::number;
+use asrs_js::sort::array_sort;
 use asrs_js::string::{JsError, JsString};
 use asrs_log::util::zfill;
 use asrs_model::preferences::Preferences;
@@ -178,7 +179,7 @@ impl DownloadPage {
     /// The value of the `progress` element and the text of `div.progress-details` while they
     /// show.
     pub fn progress(&self) -> Option<(f64, &str)> {
-        (!self.progress_hidden).then(|| (self.progress, self.details.as_str()))
+        (!self.progress_hidden).then_some((self.progress, self.details.as_str()))
     }
 
     /// `process.platform`.
@@ -254,7 +255,7 @@ impl DownloadPage {
                         "Failed to set the 'value' property on 'HTMLProgressElement': The provided double value is non-finite.",
                     ));
                 }
-                self.progress = value.clamp(0.0, 1.0);
+                self.progress = math::min2(math::max2(value, 0.0), 1.0);
                 self.details = details;
             }
         }
@@ -274,7 +275,7 @@ impl DownloadPage {
                 (is_randomized(&file.name), name, file)
             })
             .collect();
-        list.sort_by(|(a_random, a, _), (b_random, b, _)| {
+        array_sort(&mut list, |(a_random, a, _), (b_random, b, _)| {
             a_random
                 .cmp(b_random)
                 .then_with(|| collation::locale_compare(b, a))
@@ -337,8 +338,8 @@ impl DownloadPage {
         let target = math::ceil(
             (self.list_height - BOTTOM_FILLER_MARGIN_PX - items as f64 * FILE_ITEM_HEIGHT_PX)
                 / FILE_ITEM_HEIGHT_PX,
-        )
-        .max(0.0) as usize;
+        );
+        let target = math::max2(target, 0.0) as usize;
         self.rows.resize(
             items + target,
             Row {
@@ -473,7 +474,7 @@ pub fn alert_runs(html: &JsString) -> Vec<AlertRun> {
         match runs.last_mut() {
             Some(run) if run.underline == underline => run.text.push(c),
             _ => runs.push(AlertRun {
-                text: c.to_string(),
+                text: String::from(c),
                 underline,
             }),
         }
@@ -552,10 +553,11 @@ fn character_reference(text: &str) -> Option<(char, &str)> {
         "nbsp" => '\u{a0}',
         _ => {
             let digits = name.strip_prefix('#')?;
-            let code = match digits.strip_prefix(['x', 'X']) {
-                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-                None => digits.parse().ok()?,
+            let (digits, radix) = match digits.strip_prefix(['x', 'X']) {
+                Some(hex) => (hex, 16),
+                None => (digits, 10),
             };
+            let code = u32::from_str_radix(digits, radix).ok()?;
             char::from_u32(code).filter(|c| !c.is_control())?
         }
     };
