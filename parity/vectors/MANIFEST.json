@@ -454,6 +454,7 @@
     "oracle/zones/Pacific/Auckland": {"cases":20,"content":"fa0a6f3f5b83a239","generator":"3c890a137544a27d","spec":"parity/specs/oracle/zones.fn.json","zone":"Pacific/Auckland","generatedOn":"macos-aarch64"},
     "oracle/zones/UTC": {"cases":20,"content":"c66de66de1d609b3","generator":"a5f7d1c01ba19602","spec":"parity/specs/oracle/zones.fn.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "prompts/flows": {"cases":3185,"content":"d2b266149d8982cb","generator":"a400884d1a9eda53","spec":"parity/specs/prompts/flows.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "prompts/preferences": {"cases":1525,"content":"070852306a2789ab","generator":"a90346a46ef00f07","spec":"parity/specs/prompts/preferences.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "regex/engine": {"cases":30000,"content":"e40a050ba624ab32","generator":"07200da29ab5dd04","spec":"parity/specs/regex/engine.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "regex/sites": {"cases":29428,"content":"094e81eb7469edfa","generator":"b885dc8ec0bf27c9","spec":"parity/specs/regex/sites.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "revlog/convert": {"cases":1591,"content":"ce77f18dab454dac","generator":"2eae332bca469106","spec":"parity/specs/revlog/convert.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

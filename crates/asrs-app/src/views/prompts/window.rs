@@ -4,7 +4,7 @@
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_tabs::form::NumberInput;
-use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage};
+use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage, TableRow};
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, FocusHandle,
@@ -17,12 +17,12 @@ use asrs_ui::input::{
 use asrs_ui::parity::probed;
 use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{self, Text, snap_remainder};
+use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::Appearance;
 
 use super::layout::{
     self, BUTTON_BOTTOM, BUTTON_SIZE, CONFIRM_RIGHT, ControlHeights, EXIT_RIGHT, HELP_RIGHT,
-    HELP_WIDTH, help_style, label_style,
+    HELP_WIDTH, Row, RowKind, help_style, label_style, subtitle_style, title_style,
 };
 use crate::views::number::FormNumber;
 use crate::views::select::FormSelect;
@@ -149,7 +149,11 @@ impl PromptWindow {
         let widget = match control.value {
             ControlValue::Text(value) => {
                 let model = PlainText::new(&value.to_string_lossy());
-                let field = cx.new(|cx| TextField::new(model, FieldKind::Text, style, window, cx));
+                let field = cx.new(|cx| {
+                    let mut field = TextField::new(model, FieldKind::Text, style, window, cx);
+                    field.set_placeholder(control.placeholder);
+                    field
+                });
                 subscriptions.push(Self::on_field(id, &field, window, cx));
                 Widget::Text(field)
             }
@@ -163,7 +167,10 @@ impl PromptWindow {
                 Widget::Number(field)
             }
             ControlValue::Select(select) => {
-                let select = cx.new(|cx| Select::new(FormSelect::new(select), window, cx));
+                let hidden = hidden_items(&select, control.hidden_options);
+                let mut model = FormSelect::new(select);
+                model.set_hidden(hidden);
+                let select = cx.new(|cx| Select::new(model, window, cx));
                 subscriptions.push(cx.subscribe_in(
                     &select,
                     window,
@@ -253,9 +260,17 @@ impl PromptWindow {
                     assign(f, &value.to_string_lossy(), window, cx);
                 }
                 (Widget::Select(s), ControlValue::Select(value)) => {
-                    if *s.read(cx).model().select() != value {
+                    let hidden = hidden_items(&value, control.hidden_options);
+                    let model = s.read(cx).model();
+                    if *model.select() != value || model.hidden() != hidden {
                         s.update(cx, |s, cx| {
-                            s.update_model(|m| *m.select_mut() = value, cx);
+                            s.update_model(
+                                |m| {
+                                    *m.select_mut() = value;
+                                    m.set_hidden(hidden);
+                                },
+                                cx,
+                            );
                         });
                     }
                 }
@@ -494,6 +509,11 @@ impl PromptWindow {
     }
 }
 
+/// [`FormSelect::set_hidden`]'s list for a select whose items are all options.
+fn hidden_items(select: &asrs_tabs::form::Select, options: &[usize]) -> Vec<bool> {
+    (0..select.length()).map(|i| options.contains(&i)).collect()
+}
+
 fn assign<M: FieldModel>(
     field: &Entity<TextField<M>>,
     value: &str,
@@ -514,6 +534,54 @@ fn positioned([x, y, w, h]: [f64; 4]) -> Div {
         .h(px(h as f32))
 }
 
+/// A heading's text in the middle of `bounds`, whose lines start at its top.
+fn centred(
+    bounds: [f64; 4],
+    text: &'static str,
+    style: TextStyle,
+    window: &Window,
+    cx: &mut App,
+) -> Div {
+    let [x, y, w, _] = bounds;
+    let scale = window.scale_factor();
+    let x = x + (w - text::measure(cx, &style, text, scale).0) / 2.0;
+    let theme = Appearance::of(window, cx).theme();
+    div().absolute().left(px(x as f32)).top(px(y as f32)).child(
+        Text::new(text, style)
+            .color(theme.text)
+            .subpixel(snap_remainder(x as f32, scale), 0.0),
+    )
+}
+
+impl PromptWindow {
+    fn control(
+        &self,
+        i: usize,
+        bounds: [f64; 4],
+        scale: f32,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let [x, y, w, h] = bounds;
+        let size = (w as f32, h as f32);
+        let subpixel = (
+            snap_remainder(x as f32, scale),
+            snap_remainder(y as f32, scale),
+        );
+        let (id, control) = match &self.fields[i].widget {
+            Widget::Text(f) => ("input", sized(f, size, subpixel, cx)),
+            Widget::Number(f) => ("input", sized(f, size, subpixel, cx)),
+            Widget::Select(s) => {
+                s.update(cx, |s, _| {
+                    s.set_size(size.0, size.1);
+                    s.set_subpixel(subpixel.0, subpixel.1);
+                });
+                ("select", s.clone().into_any_element())
+            }
+        };
+        probed(id, positioned(bounds).child(control)).into_any_element()
+    }
+}
+
 impl Render for PromptWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let scale = window.scale_factor();
@@ -525,18 +593,26 @@ impl Render for PromptWindow {
         );
         let heights = ControlHeights::measure(cx, scale);
         let controls = self.page.controls();
+        let table = self.page.rows();
         let label_widths: Vec<f64> = controls
             .iter()
             .map(|c| text::measure(cx, &label_style(), c.label, scale).0)
             .collect();
-        let control_heights: Vec<f64> = controls
+        let mut unplaced = controls.iter();
+        let kinds: Vec<RowKind> = table
             .iter()
-            .map(|c| match c.value {
-                ControlValue::Select(_) => heights.select,
-                ControlValue::Text(_) | ControlValue::Number(_) => heights.input,
+            .map(|row| match row {
+                TableRow::Control => {
+                    let control = unplaced.next().expect("a control per control row");
+                    RowKind::Control(match control.value {
+                        ControlValue::Select(_) => heights.select,
+                        ControlValue::Text(_) | ControlValue::Number(_) => heights.input,
+                    })
+                }
+                TableRow::Title(_) => RowKind::Title,
+                TableRow::Subtitle(_) => RowKind::Subtitle,
             })
             .collect();
-        let rows = layout::rows(width, &label_widths, &control_heights);
 
         let mut root = div()
             .id("prompt")
@@ -544,40 +620,51 @@ impl Render for PromptWindow {
             .relative()
             .size_full()
             .bg(rgb(theme.background));
-        for (i, row) in rows.iter().enumerate() {
-            let [lx, ly, lw, _] = row.label;
-            let x = lx + lw - label_widths[i];
-            let label = Text::new(controls[i].label, label_style())
-                .color(theme.text)
-                .subpixel(snap_remainder(x as f32, scale), 0.0);
-            root = root
-                .child(probed("td.label", positioned(row.label)))
-                .child(probed("td.input", positioned(row.input)))
-                .child(
-                    div()
-                        .absolute()
-                        .left(px(x as f32))
-                        .top(px(ly as f32))
-                        .child(label),
-                );
-            let [cx0, cy0, cw, ch] = row.control;
-            let size = (cw as f32, ch as f32);
-            let subpixel = (
-                snap_remainder(cx0 as f32, scale),
-                snap_remainder(cy0 as f32, scale),
-            );
-            let (id, control) = match &self.fields[i].widget {
-                Widget::Text(f) => ("input", sized(f, size, subpixel, cx)),
-                Widget::Number(f) => ("input", sized(f, size, subpixel, cx)),
-                Widget::Select(s) => {
-                    s.update(cx, |s, _| {
-                        s.set_size(size.0, size.1);
-                        s.set_subpixel(subpixel.0, subpixel.1);
-                    });
-                    ("select", s.clone().into_any_element())
+        let mut i = 0;
+        for (row, content) in layout::rows(width, &label_widths, &kinds)
+            .into_iter()
+            .zip(table)
+        {
+            match (row, content) {
+                (
+                    Row::Control {
+                        label,
+                        input,
+                        control,
+                    },
+                    TableRow::Control,
+                ) => {
+                    let [lx, ly, lw, _] = label;
+                    let x = lx + lw - label_widths[i];
+                    let text = Text::new(controls[i].label, label_style())
+                        .color(theme.text)
+                        .subpixel(snap_remainder(x as f32, scale), 0.0);
+                    root = root
+                        .child(probed("td.label", positioned(label)))
+                        .child(probed("td.input", positioned(input)))
+                        .child(
+                            div()
+                                .absolute()
+                                .left(px(x as f32))
+                                .top(px(ly as f32))
+                                .child(text),
+                        )
+                        .child(self.control(i, control, scale, cx));
+                    i += 1;
                 }
-            };
-            root = root.child(probed(id, positioned(row.control).child(control)));
+                (Row::Title { cell, rule, line }, TableRow::Title(text)) => {
+                    root = root
+                        .child(probed("td.title", positioned(cell)))
+                        .child(probed("hr", positioned(rule)))
+                        .child(centred(line, text, title_style(), window, cx));
+                }
+                (Row::Subtitle { cell }, TableRow::Subtitle(text)) => {
+                    root = root
+                        .child(probed("td.subtitle", positioned(cell)))
+                        .child(centred(cell, text, subtitle_style(), window, cx));
+                }
+                (row, content) => unreachable!("{row:?} for {content:?}"),
+            }
         }
         let (exit, confirm) = (self.exit.clone(), self.confirm.clone());
         let icon = self.page.confirm_icon();

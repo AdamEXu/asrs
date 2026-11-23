@@ -4,8 +4,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import v8 from "node:v8";
+import jsonfile from "jsonfile";
+import { DEFAULT_PREFS } from "@upstream/shared/Preferences";
 import { toTree } from "./cve1";
 import { UPSTREAM_DIR } from "./shims";
+
+const args = process.argv.slice(2);
+if (args.length > 1 || (args.length === 1 && args[0] !== "preferences")) {
+  process.stderr.write("usage: genPrompts [preferences]\n");
+  process.exit(1);
+}
+const preferences = args.length === 1;
 
 const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n");
 
@@ -22,6 +31,9 @@ const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n"
 // records every control, the focused element, the buttons' "blurred" class, and every reply posted
 // on the port, alert and uncaught error since the previous record. A flow ends at the reply after
 // which main.ts destroys the window, which is the first one except for export.html's help URL.
+// The "preferences" set is preferences.html alone: its records also hold each option's "hidden"
+// and each input's placeholder, and an end record the bytes jsonfile writes for the first reply,
+// which is what openPreferences does with it.
 
 interface Step {
   op: "select" | "text" | "insert" | "key" | "click" | "pick" | "post";
@@ -196,13 +208,144 @@ function flows(): Flow[] {
   return list;
 }
 
+function preferenceFlows(): Flow[] {
+  const list: Flow[] = [];
+  const add = (name: string, posts: any[], steps: Step[]) => list.push({ page: "preferences", name, posts, steps });
+  const post = (prefs: any, platform: any = "darwin") => [{ platform, prefs }];
+  const defaults: Record<string, any> = { ...DEFAULT_PREFS };
+  const full: Record<string, any> = {
+    ...DEFAULT_PREFS,
+    theme: "dark",
+    robotAddress: "10.63.28.2",
+    remotePath: "/media/sda1/logs",
+    liveMode: "rlog",
+    liveSubscribeMode: "logging",
+    liveDiscard: -1,
+    publishFilter: "/Tuning,/Choosers",
+    rlogPort: 5801,
+    coordinateSystem: "center-rotated",
+    field3dModeAc: "cinematic",
+    field3dModeBattery: "low-power",
+    field3dAntialiasing: false,
+    tbaApiKey: "key",
+    userAssetsFolder: "/Users/a/assets",
+    skipHootNonProWarning: true,
+    skipFRCCoordinateSystemWarning: true,
+    skipFTCCoordinateSystemWarning: true,
+    ctreLicenseAccepted: true,
+    systemcoreStaticAddress: "usb",
+    hasScrolledLineGraph: true,
+    hasScrolledTimeline: true,
+    prefersFTC: true,
+    timestamps: "original"
+  };
+  const reordered = Object.fromEntries(Object.entries(full).reverse());
+  const extended = { zeta: [1, { b: null }], ...reordered, 7: "seven", address: "legacy" };
+
+  for (const platform of ["darwin", "win32", "linux", "freebsd", undefined]) {
+    for (const [name, prefs] of [["defaults", defaults], ["full", full], ["extended", extended]] as [string, any][]) {
+      add(`${platform} ${name} confirm`, post(prefs, platform), [click("confirm")]);
+      add(`${platform} ${name} exit`, post(prefs, platform), [click("exit")]);
+      add(`${platform} ${name} enter`, post(prefs, platform), [key("Enter")]);
+    }
+  }
+  add("shift enter", post(full), [key("Shift+Enter")]);
+  add("other keys", post(full), [key("Escape"), key("ArrowLeft"), key("Backspace"), text("x"), key(" "), key("Enter")]);
+  add("no message", [], [click("exit"), click("confirm"), key("Enter"), focused(false), focused(true)]);
+  add("null message", [null], [click("confirm")]);
+  add("string message", ["prefs"], [click("confirm")]);
+  add("empty message", [{}], [click("confirm")]);
+  add("null prefs", post(null), [click("confirm")]);
+  add("focus messages", post(full), [focused(false), focused(false), focused(true), focused(false), key("Enter")]);
+  add("focus key in prefs message", [{ platform: "darwin", prefs: full, isFocused: false }], [click("confirm")]);
+  add("two messages", [{ platform: "darwin", prefs: full }, { platform: "linux", prefs: defaults }], [click("confirm")]);
+  add("two messages exit", [{ platform: "darwin", prefs: full }, { platform: "darwin", prefs: defaults }], [click("exit")]);
+  add("second message throws", [{ platform: "darwin", prefs: full }, { platform: "linux", prefs: {} }], [key("Enter")]);
+
+  const shown = ["theme", "robotAddress", "remotePath", "liveSubscribeMode", "liveDiscard", "publishFilter", "coordinateSystem", "timestamps", "field3dModeAc", "field3dModeBattery", "field3dAntialiasing", "tbaApiKey"];
+  for (const k of Object.keys(full)) {
+    const { [k]: _, ...rest } = full;
+    add(`without ${k}`, post(rest), [click("confirm")]);
+    add(`without ${k} exit`, post(rest), [click("exit")]);
+    for (const value of shown.includes(k) ? [null, 12.5, true, "", "other", ["a", 1], { a: 1 }, "a\r\nb\n"] : [null, "other"]) {
+      add(`${k} ${JSON.stringify(value)}`, post({ ...full, [k]: value }), [click("confirm")]);
+    }
+  }
+  for (const value of [60, 300, 1200, -1, 500, 0, -0, 1.5, 1e21, NaN, "60", "060", " 60"]) {
+    add(`liveDiscard is ${typeof value} ${Object.is(value, -0) ? "-0" : value}`, post({ ...full, liveDiscard: value }), [click("confirm")]);
+  }
+  for (const value of ["", "true", "false", 1]) add(`antialiasing is ${JSON.stringify(value)}`, post({ ...full, field3dAntialiasing: value }), [key("Enter")]);
+
+  const options: Record<string, string[]> = {
+    theme: ["system", "light", "dark"],
+    coordinateSystem: ["automatic", "center-red", "wall-blue", "wall-alliance", "center-rotated"],
+    timestamps: ["start-zero", "original"],
+    liveSubscribeMode: ["low-bandwidth", "logging"],
+    liveDiscard: ["60", "300", "1200", "-1"],
+    field3dModeAc: ["cinematic", "standard", "low-power"],
+    field3dModeBattery: ["", "cinematic", "standard", "low-power"],
+    field3dAntialiasing: ["true", "false"]
+  };
+  for (const [id, values] of Object.entries(options)) {
+    for (const value of values) {
+      add(`pick ${id} ${JSON.stringify(value)} from defaults`, post(defaults), [pick(id, value), click("confirm")]);
+      add(`pick ${id} ${JSON.stringify(value)} from full`, post(full), [pick(id, value), key("Enter")]);
+      add(`pick ${id} ${JSON.stringify(value)} then exit`, post(full), [pick(id, value), click("exit")]);
+    }
+    add(`pick ${id} over another value`, post({ ...full, [id]: "other" }), [pick(id, values[values.length - 1]), click("confirm")]);
+  }
+  add("pick on linux", post(defaults, "linux"), [pick("theme", "dark"), pick("theme", "light"), click("confirm")]);
+  const typed: [string, string, string][] = [
+    ["theme", "a", "always d"],
+    ["coordinateSystem", "c", "b"],
+    ["timestamps", "o", "s"],
+    ["liveSubscribeMode", "lo", "log"],
+    ["liveDiscard", "n", "after 2"],
+    ["field3dModeAc", "c", "low"],
+    ["field3dModeBattery", "d", "s"],
+    ["field3dAntialiasing", "of", "x"]
+  ];
+  for (const [id, ...texts] of typed) {
+    for (const t of texts) add(`type ${JSON.stringify(t)} in ${id}`, post(defaults), [select(id), text(t), click("confirm")]);
+  }
+  for (const t of ["l", "d", "m", "a"]) add(`type ${JSON.stringify(t)} in theme on linux`, post({ ...defaults, theme: "dark" }, "linux"), [select("theme"), text(t), click("confirm")]);
+  add("linux system theme", post(defaults, "linux"), [select("theme"), text("d"), text("d"), key("Enter")]);
+
+  const texts = ["10.0.0.2", "  padded ", "a\"b\\c", "caf\u00e9 \u65e5\u672c", "<b>&amp;</b>", "\u{1f4c8}", "x".repeat(80)];
+  for (const id of ["robotAddress", "remotePath", "publishFilter", "tbaApiKey"]) {
+    texts.forEach((t, i) => add(`type ${JSON.stringify(t)} in ${id}`, post(defaults), [select(id), text(t), i % 2 === 0 ? key("Enter") : click("confirm")]));
+    add(`clear ${id}`, post(full), [select(id), key("Backspace"), click("confirm")]);
+    add(`append to ${id}`, post(full), [select(id), key("ArrowRight"), text("!"), key("Enter")]);
+    add(`insert in ${id}`, post(full), [select(id), insert("a\nb\r\n\rc\td\n"), key("ArrowLeft"), insert(" 1.2 "), click("confirm")]);
+    add(`type in ${id} then exit`, post(full), [select(id), text("typed"), click("exit")]);
+    add(`numpad enter in ${id}`, post(full), [select(id), text("typed"), key("NumpadEnter"), click("confirm")]);
+  }
+  add("edit everything", post(defaults), [
+    ...Object.entries(options).map(([id, values]) => pick(id, values[values.length - 1])),
+    ...["robotAddress", "remotePath", "publishFilter", "tbaApiKey"].flatMap((id) => [select(id), text(`new ${id}`)]),
+    click("confirm")
+  ]);
+  const tabs = (n: number, back = false) => Array.from({ length: n }, () => key(back ? "Shift+Tab" : "Tab"));
+  add("tab order", post(full), [...tabs(14), key(" ")]);
+  add("tab order back", post(full), [...tabs(14, true), text("l"), key("Enter")]);
+  add("tab and type", post(defaults), [...tabs(4), text("k"), ...tabs(1), text("h"), ...tabs(1), text("p"), ...tabs(1), text("log"), ...tabs(2), text("f"), key("Enter")]);
+  add("space on exit", post(full), [...tabs(2, true), key(" ")]);
+  add("enter on exit", post(full), [...tabs(2, true), key("Enter")]);
+  add("enter on confirm", post(full), [...tabs(1, true), key("Enter")]);
+  add("numpad enter on exit", post(full), [...tabs(2, true), key("NumpadEnter")]);
+  add("numpad enter on confirm", post(full), [...tabs(1, true), key("NumpadEnter")]);
+  add("enter on a select", post(full), [select("coordinateSystem"), key("NumpadEnter"), key("Enter")]);
+  return list;
+}
+
 const STATE_SCRIPT = `(() => {
   const rec = window.__rec;
+  const PREFERENCES = ${preferences};
   const controls = {};
   for (const el of document.querySelectorAll("input, select")) {
     controls[el.id] = el.tagName === "SELECT"
-      ? { options: Array.from(el.options).map((o) => ({ text: o.text, value: o.value, disabled: o.disabled })), value: el.value, selectedIndex: el.selectedIndex, disabled: el.disabled }
-      : { value: el.value, disabled: el.disabled };
+      ? { options: Array.from(el.options).map((o) => ({ text: o.text, value: o.value, disabled: o.disabled, ...(PREFERENCES ? { hidden: o.hidden } : {}) })), value: el.value, selectedIndex: el.selectedIndex, disabled: el.disabled }
+      : { value: el.value, disabled: el.disabled, ...(PREFERENCES ? { placeholder: el.placeholder } : {}) };
   }
   const active = document.activeElement;
   return {
@@ -256,7 +399,7 @@ app.whenReady().then(async () => {
     return net.fetch(req, { bypassCustomProtocolHandlers: true });
   });
   const records = [];
-  const win = new BrowserWindow({ show: false, width: 300, height: 189, useContentSize: true, webPreferences: { offscreen: true, backgroundThrottling: false, spellcheck: false } });
+  const win = new BrowserWindow({ show: false, width: request.width, height: request.height, useContentSize: true, webPreferences: { offscreen: true, backgroundThrottling: false, spellcheck: false } });
   win.webContents.debugger.attach("1.3");
   const send = (method, params) => win.webContents.debugger.sendCommand(method, params);
   const js = (code) => win.webContents.executeJavaScript(code, true);
@@ -342,7 +485,7 @@ const jsLiteral = (value: any): string => {
   return "{" + Object.keys(value).map((k) => JSON.stringify(k) + ":" + jsLiteral(value[k])).join(",") + "}";
 };
 
-const list = flows();
+const list = preferences ? preferenceFlows() : flows();
 const names = new Set(list.map((f) => f.name));
 if (names.size !== list.length) {
   process.stderr.write("genPrompts: duplicate flow names\n");
@@ -360,6 +503,8 @@ try {
     JSON.stringify({
       flows: list,
       posts: Object.fromEntries(list.map((f) => [f.name, f.posts.map(jsLiteral)])),
+      width: preferences ? 400 : 300,
+      height: preferences ? 473 : 189,
       setup: SETUP_SCRIPT,
       state: STATE_SCRIPT,
       www: fs.realpathSync(path.join(UPSTREAM_DIR, "www")),
@@ -380,11 +525,18 @@ try {
     process.exit(1);
   }
   const records: any[] = v8.deserialize(fs.readFileSync(output));
+  const prefsFile = path.join(scratch, "prefs.json");
+  const written = new Map<string, string>();
+  for (const r of preferences ? records : []) {
+    if (r.kind === "end" || r.state.replies.length === 0 || written.has(r.flow)) continue;
+    jsonfile.writeFileSync(prefsFile, r.state.replies[0]);
+    written.set(r.flow, fs.readFileSync(prefsFile, "utf8"));
+  }
   for (const r of records) {
     const flow = byName.get(r.flow)!;
     if (r.kind === "open") out({ kind: "open", flow: r.flow, page: flow.page, posts: toTree(flow.posts), state: toTree(r.state) });
     else if (r.kind === "step") out({ kind: "step", flow: r.flow, step: toTree(flow.steps[r.index]), state: toTree(r.state) });
-    else out({ kind: "end", flow: r.flow, replied: r.replied });
+    else out({ kind: "end", flow: r.flow, replied: r.replied, ...(preferences ? { written: written.get(r.flow) ?? null } : {}) });
   }
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
