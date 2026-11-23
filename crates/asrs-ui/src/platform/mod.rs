@@ -11,6 +11,8 @@ use fallback as imp;
 use mac as imp;
 
 pub mod dialog;
+#[cfg(not(target_os = "linux"))]
+pub mod parent;
 pub mod probe;
 
 use std::path::Path;

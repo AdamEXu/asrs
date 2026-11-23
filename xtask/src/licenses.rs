@@ -30,24 +30,11 @@ pub fn run() -> Result {
         fs::remove_dir_all(&dest).map_err(|e| format!("clearing {}: {e}", dest.display()))?;
     }
     fs::create_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
-    let listing = dest.join("THIRD_PARTY_LICENSES.txt");
-    let listing_arg = listing.to_string_lossy().into_owned();
-    cargo(&[
-        "about",
-        "generate",
-        "--locked",
-        "--fail",
-        "--config",
-        "about.toml",
-        "--manifest-path",
-        "crates/asrs-app/Cargo.toml",
-        "--output-file",
-        &listing_arg,
-        "about.hbs",
-    ])
-    .map_err(|e| {
-        format!("{e}\n(needs cargo-about: `cargo install cargo-about --locked --features cli`)")
-    })?;
+    list("asrs-app", &dest.join("THIRD_PARTY_LICENSES.txt"))?;
+    list(
+        "asrs-webview",
+        &dest.join("THIRD_PARTY_LICENSES-webview.txt"),
+    )?;
     for name in BUNDLED {
         fs::copy(root.join(name), dest.join(name)).map_err(|e| format!("{name}: {e}"))?;
     }
@@ -58,6 +45,25 @@ pub fn run() -> Result {
         dest.display()
     );
     Ok(())
+}
+
+fn list(package: &str, listing: &Path) -> Result {
+    cargo(&[
+        "about",
+        "generate",
+        "--locked",
+        "--fail",
+        "--config",
+        "about.toml",
+        "--manifest-path",
+        &format!("crates/{package}/Cargo.toml"),
+        "--output-file",
+        &listing.to_string_lossy(),
+        "about.hbs",
+    ])
+    .map_err(|e| {
+        format!("{e}\n(needs cargo-about: `cargo install cargo-about --locked --features cli`)")
+    })
 }
 
 fn copy_libm_source(src: &Path, dst: &Path) -> Result {
