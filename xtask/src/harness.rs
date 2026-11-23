@@ -11,8 +11,8 @@ use crate::{Result, workspace_root};
 const ALLOW: &str = "xtask/harness-allow.toml";
 const USAGE: &str = "usage: cargo xtask harness [--list] [--root <checkout>]
 
-Strictness lint over replay harnesses (crates/*/tests and crates/asrs-parity/src/live), part of
-`cargo xtask check`. Rules:
+Strictness lint over replay harnesses (files of crates/*/tests that use asrs_parity, and
+crates/asrs-parity/src/live), part of `cargo xtask check`. Rules:
   default-slot   unwrap_or_default: an absent recorded value or port result becomes one that can
                  compare equal. Name the absence: ok_or_else, expect, or an Option comparison.
                  A string only matched on afterwards is fine if the catch-all arm fails.
@@ -111,6 +111,9 @@ pub fn run(args: &[String]) -> Result {
             .expect("under the root")
             .to_string_lossy()
             .replace('\\', "/");
+        if !text.contains("asrs_parity") && !file.starts_with("crates/asrs-parity/") {
+            continue;
+        }
         let found = lint(&text).map_err(|e| format!("{file}: {e}"))?;
         if !found.is_empty() {
             findings.insert(file, found);

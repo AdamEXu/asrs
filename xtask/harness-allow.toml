@@ -400,18 +400,6 @@ rule = "default-slot"
 reason = "a session op without a list passes none; the resulting trace is compared line by line"
 
 [[allow]]
-file = "crates/asrs-live/tests/nt4_tokio.rs"
-function = "on_topic_announce"
-rule = "default-slot"
-reason = "a topic without a name joins the list the test compares as an empty string"
-
-[[allow]]
-file = "crates/asrs-live/tests/nt4_tokio.rs"
-function = "serve"
-rule = "default-slot"
-reason = "the next line asserts what the header offers"
-
-[[allow]]
 file = "crates/asrs-live/tests/phoenix_sessions.rs"
 function = "op"
 rule = "skipped-kind"
@@ -430,12 +418,6 @@ rule = "skipped-kind"
 reason = "ops for the parts of the hub this source does not read; an unknown op fails"
 
 [[allow]]
-file = "crates/asrs-live/tests/runtime_channel.rs"
-function = "runtime_uses_two_named_workers"
-rule = "default-slot"
-reason = "the received name is compared with a non-empty one"
-
-[[allow]]
 file = "crates/asrs-live/tests/support/mod.rs"
 function = "*"
 rule = "no-tally"
@@ -446,12 +428,6 @@ file = "crates/asrs-live/tests/support/mod.rs"
 function = "column"
 rule = "default-slot"
 reason = "a column of another type has no values, and the dump it goes into is compared"
-
-[[allow]]
-file = "crates/asrs-log/tests/log_snapshot.rs"
-function = "snapshot_shares_columns_and_is_isolated_from_later_writes"
-rule = "default-slot"
-reason = "a panicked thread gives zeros, which the assertions below it reject"
 
 [[allow]]
 file = "crates/asrs-log/tests/search_vectors.rs"
@@ -790,3 +766,46 @@ file = "crates/asrs-tabs/tests/form_vectors.rs"
 function = "arrow_keys_step_number_inputs_as_in_blink"
 rule = "skipped-kind"
 reason = "focusing a number input changes neither its value nor its events, which are asserted below"
+
+[[allow]]
+file = "crates/asrs-app/tests/documentation_window.rs"
+function = "replay"
+rule = "skipped-kind"
+reason = "saving reads the state, which is compared after every step"
+
+[[allow]]
+file = "crates/asrs-app/tests/download_window.rs"
+function = "main"
+rule = "default-slot"
+reason = "a label for messages only; nothing is compared through it"
+
+[[allow]]
+file = "crates/asrs-app/tests/download_window.rs"
+function = "replay"
+rule = "default-slot"
+reason = "a missing kind is counted under \"\" and the counts per kind then differ"
+
+[[allow]]
+file = "crates/asrs-app/tests/download_window.rs"
+function = "row"
+rule = "default-slot"
+reason = "an icon without a class has the empty className, as in the page; the row is compared"
+
+[[allow]]
+file = "crates/asrs-app/tests/info_layout.rs"
+function = "pages"
+rule = "silent-return"
+count = 2
+reason = "picks the laid-out dumps; each caller asserts exactly how many, and another test compares every record"
+
+[[allow]]
+file = "crates/asrs-hub/tests/satellite_page.rs"
+function = "step"
+rule = "default-slot"
+reason = "JsValue's default is undefined, what reading an absent property gives upstream"
+
+[[allow]]
+file = "crates/asrs-ocr/tests/timer_vectors.rs"
+function = "queued_reads_interleave_and_a_failed_one_costs_only_itself"
+rule = "catch-all"
+reason = "picks the reads and their texts, and asserts there are as many of one as of the other"
