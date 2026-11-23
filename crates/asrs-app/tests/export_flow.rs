@@ -334,7 +334,7 @@ fn routing_in_a_fresh_home() {
     let recent = app
         .cx
         .update(|cx| cx.global::<Script>().recent_documents.clone());
-    assert_eq!(recent, [plain.clone()]);
+    assert_eq!(recent, std::slice::from_ref(&plain));
     let written = std::env::temp_dir().join("akit-log-path.txt");
     assert_eq!(std::fs::read_to_string(&written).ok(), Some(text(&plain)));
 
