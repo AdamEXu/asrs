@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use asrs_canvas::text::{FixedAdvance, TextBackend};
 use asrs_canvas::{Call, Raster, trace};
 use asrs_js::string::{JsError, JsString};
-use asrs_parity::vectors::{load, vectors_dir};
+use asrs_parity::vectors::{encoded_match, load, values_match, vectors_dir};
 use asrs_parity::{Json, Record, Utf16String, Value};
 use asrs_tabs::histogram::{
     Env, EventKind, Histogram, HistogramCommand, HistogramField, ScaleLayout, Work,
@@ -81,7 +81,7 @@ fn keys(value: &Value) -> Vec<String> {
 }
 
 fn same(expected: f64, actual: f64) -> bool {
-    expected.to_bits() == actual.to_bits() || (expected.is_nan() && actual.is_nan())
+    values_match(&Value::number(expected), &Value::number(actual))
 }
 
 fn assert_numbers(expected: &[f64], actual: &[f64], what: &str) {
@@ -296,9 +296,11 @@ impl Replay {
         let expected: Vec<String> = recorded.iter().map(Json::to_compact).collect();
         let actual = trace::encode(calls);
         let actual: Vec<&str> = actual.lines().collect();
-        if let Some(i) = (0..expected.len().max(actual.len()))
-            .find(|&i| expected.get(i).map(String::as_str) != actual.get(i).copied())
-        {
+        let matches = |i: usize| match (expected.get(i), actual.get(i)) {
+            (Some(expected), Some(actual)) => encoded_match(expected, actual),
+            _ => false,
+        };
+        if let Some(i) = (0..expected.len().max(actual.len())).find(|&i| !matches(i)) {
             panic!(
                 "{what}: call {i} of {}: expected {:?}, got {:?} ({} calls)",
                 expected.len(),
