@@ -222,6 +222,10 @@ fn local_in_a_fresh_home() {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/assets/synthetic-frame.jpg"
     );
+    let Some(home) = std::env::var_os(HOME).map(PathBuf::from) else {
+        return;
+    };
+    let finish = home.join("finish");
     let script = format!(
         r#"#!/bin/sh
 [ "$1" = -version ] && exit 0
@@ -232,17 +236,14 @@ printf '  Duration: 00:00:00.20, start: 0.000000, bitrate: 1 kb/s\n  Stream #0:0
 for i in 1 2 3 4; do cp '{frame}' "$dir/0000000$i.jpg"; done
 sleep 0.3
 printf 'frame=    2 fps=0.0 q=2.0 size=N/A\r' >&2
-sleep 0.3
+while [ ! -e '{finish}' ] && [ -d "$dir" ]; do sleep 0.1; done
 printf 'frame=    4 fps=0.0 q=2.0 size=N/A\r' >&2
-"#
+"#,
+        finish = finish.display(),
     );
-    if install_ffmpeg(&script).is_none() {
-        return;
-    }
+    install_ffmpeg(&script).expect("ffmpeg");
     let clip = PathBuf::from("/clips/synthetic clip.mp4");
-    let Some(mut app) = AppUnderTest::start(&[Reply::Open(vec![clip])]) else {
-        return;
-    };
+    let mut app = AppUnderTest::start(&[Reply::Open(vec![clip])]).expect("a fresh home");
     app.video(|video, page, uuid| video.select_local(page, uuid));
     app.until("progress", |app| {
         app.video(|video, _, _| video.data()[4] == &JsValue::Number(2.0))
@@ -251,6 +252,7 @@ printf 'frame=    4 fps=0.0 q=2.0 size=N/A\r' >&2
         assert_eq!(video.data()[2], &JsValue::Number(30.0));
         assert_eq!(video.data()[3], &JsValue::Number(6.0), "totalFrames");
     });
+    std::fs::write(&finish, "").expect("finish");
     app.until("the conversion to finish", |app| {
         app.video(|video, _, _| video.data()[3] == &JsValue::Number(4.0))
     });
