@@ -308,7 +308,7 @@ impl PromptPage for Preferences {
             "publishFilter" => &mut self.publish_filter,
             _ => return,
         };
-        *text = text_value(visible);
+        *text = visible.clone();
     }
 
     fn pick(&mut self, id: &str, index: usize) -> Vec<PromptEvent> {

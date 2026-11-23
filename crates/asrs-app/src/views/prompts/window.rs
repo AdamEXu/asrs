@@ -127,8 +127,7 @@ impl PromptWindow {
                     if !platform::numpad_enter(cx) {
                         view.act(|page| page.click_confirm(), window, cx);
                     }
-                    let modified = modifiers.control || modifiers.alt || modifiers.platform;
-                    if view.commit(window, cx) || (!modified && view.press(window, cx)) {
+                    if view.commit(window, cx) || view.press(window, cx) {
                         cx.stop_propagation();
                     }
                 }

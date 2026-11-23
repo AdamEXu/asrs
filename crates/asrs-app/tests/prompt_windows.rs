@@ -304,10 +304,18 @@ impl Prompt<'_> {
             }
             "key" => {
                 let name = string(value, "value")?;
-                let (shift, name) = match name.strip_prefix("Shift+") {
-                    Some(rest) => (true, rest),
-                    None => (false, name.as_str()),
-                };
+                let mut modifiers = Modifiers::default();
+                let mut name = name.as_str();
+                while let Some((modifier, rest)) = name.split_once('+') {
+                    match modifier {
+                        "Shift" => modifiers.shift = true,
+                        "Control" => modifiers.control = true,
+                        "Alt" => modifiers.alt = true,
+                        "Meta" => modifiers.platform = true,
+                        other => return Err(format!("unknown modifier {other:?}")),
+                    }
+                    name = rest;
+                }
                 let numpad = name == "NumpadEnter";
                 self.cx
                     .update(|cx| cx.set_global(ScriptedNumpadEnter(numpad)));
@@ -320,10 +328,6 @@ impl Prompt<'_> {
                     "ArrowRight" => ("right", None),
                     " " => ("space", Some(" ")),
                     other => return Err(format!("no GPUI key for {other:?}")),
-                };
-                let modifiers = Modifiers {
-                    shift,
-                    ..Modifiers::default()
                 };
                 self.keystroke(key, key_char, modifiers);
             }

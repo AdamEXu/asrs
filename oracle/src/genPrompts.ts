@@ -262,6 +262,9 @@ function preferenceFlows(): Flow[] {
   add("two messages exit", [{ platform: "darwin", prefs: full }, { platform: "darwin", prefs: defaults }], [click("exit")]);
   add("second message throws", [{ platform: "darwin", prefs: full }, { platform: "linux", prefs: {} }], [key("Enter")]);
 
+  add("second message without prefs", [{ platform: "darwin", prefs: full }, { platform: "linux", prefs: null }], [click("confirm")]);
+  add("second message without prefs then exit", [{ platform: "darwin", prefs: { ...full, theme: "other" } }, { platform: "linux" }], [click("exit")]);
+
   const shown = ["theme", "robotAddress", "remotePath", "liveSubscribeMode", "liveDiscard", "publishFilter", "coordinateSystem", "timestamps", "field3dModeAc", "field3dModeBattery", "field3dAntialiasing", "tbaApiKey"];
   for (const k of Object.keys(full)) {
     const { [k]: _, ...rest } = full;
@@ -333,7 +336,7 @@ function preferenceFlows(): Flow[] {
   add("enter on exit", post(full), [...tabs(2, true), key("Enter")]);
   add("enter on confirm", post(full), [...tabs(1, true), key("Enter")]);
   for (const [name, n] of [["exit", 2], ["confirm", 1]] as [string, number][]) {
-    for (const press of ["Enter", "Shift+Enter", "NumpadEnter", "Shift+NumpadEnter", " "]) {
+    for (const press of ["Enter", "Shift+Enter", "Control+Enter", "Alt+Enter", "Meta+Enter", "NumpadEnter", "Shift+NumpadEnter", " "]) {
       add(`${press} on ${name} after an edit`, post(full), [pick("theme", "light"), select("robotAddress"), text("typed"), select("field3dAntialiasing"), ...tabs(3 - n), key(press)]);
     }
   }
@@ -412,7 +415,7 @@ app.whenReady().then(async () => {
   const press = async (name) => {
     const parts = name.length > 1 ? name.split("+") : [name];
     const key = parts.pop();
-    const modifiers = parts.includes("Shift") ? 8 : 0;
+    const modifiers = parts.reduce((bits, part) => bits | { Alt: 1, Control: 2, Meta: 4, Shift: 8 }[part], 0);
     const k = KEYS[key];
     if (k === undefined) throw new Error("unknown key " + name);
     const down = { key: k.key ?? key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers };
