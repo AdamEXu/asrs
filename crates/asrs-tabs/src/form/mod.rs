@@ -135,6 +135,12 @@ impl NumberInput {
         input
     }
 
+    /// With the `step` attribute `step`.
+    pub fn with_step(mut self, step: &str) -> NumberInput {
+        self.step = JsString::from(step);
+        self
+    }
+
     /// The `step` attribute (`""` when there is none).
     pub fn step(&self) -> &JsString {
         &self.step

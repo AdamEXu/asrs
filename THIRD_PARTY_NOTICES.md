@@ -179,7 +179,7 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
-  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and
+  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
   `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)
@@ -251,6 +251,16 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Version: @mcap/core 1.3.0, @foxglove/crc 0.0.3
 - Used in: `crates/asrs-formats/src/mcap.rs` (`McapWriter`, `McapRecordBuilder`,
   `ChunkBuilder`, `BufferBuilder` and the CRC-32, translated to Rust)
+
+## ssh2
+
+- License: MIT ([`licenses/ssh2.txt`](licenses/ssh2.txt))
+- Copyright Brian White
+- Version: 1.14.0
+- Used in: `crates/asrs-services/src/download/sftp.rs` (`lib/protocol/SFTP.js`: the client session,
+  `readdir` and `fastGet`), `handshake.rs` (the ident, packet and key exchange parsing of
+  `lib/protocol`) and `client.rs` (the event order of `lib/client.js`), translated to Rust. The SSH
+  transport is the `russh` crate (Apache-2.0)
 
 ## lzma-native
 

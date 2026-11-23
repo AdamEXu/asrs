@@ -11,7 +11,7 @@ use super::dom::{
     line_metrics, lu_ceil, utf16_len,
 };
 use super::layout::normalize_space;
-use super::line_break::breaks;
+use super::line_break::LineBreaks;
 
 /// A text node's part of a line.
 #[derive(Clone, Debug, PartialEq)]
@@ -218,42 +218,35 @@ fn line_ranges(
         widths.sum::<Lu>() <= available
     };
     let mut lines = Vec::new();
+    let mut breaks = LineBreaks::new(text);
     let mut start = 0;
     while start < len {
-        let mut end = None;
-        let mut first = len;
-        for (i, next) in breaks(&text[start..])
-            .map(|next| start + next)
-            .chain([len])
-            .enumerate()
-        {
-            if i == 0 {
-                first = next;
-            }
-            if !fits(start, content(next)) {
-                break;
-            }
-            end = Some(next);
-        }
-        let end = end.unwrap_or_else(|| {
+        let ends = breaks.ends();
+        let count = ends.partition_point(|&next| fits(start, content(next)));
+        let first = ends[0];
+        let end = if count > 0 {
+            ends[count - 1]
+        } else if style.break_word {
             let word = content(first);
-            if !style.break_word {
-                return first;
-            }
             let mut offsets = text[start..word]
                 .char_indices()
                 .map(|(byte, _)| start + byte)
                 .skip(1)
                 .filter(|&byte| cluster[units[byte]]);
             let shortest = offsets.next().unwrap_or(word);
-            let end = offsets.take_while(|&byte| fits(start, byte)).last();
-            match end.unwrap_or(shortest) {
+            let fitting = offsets.take_while(|&byte| fits(start, byte)).last();
+            match fitting.unwrap_or(shortest) {
                 end if end == word => first,
                 end => end,
             }
-        });
+        } else {
+            first
+        };
         lines.push(start..end);
         start = end;
+        if start < len {
+            breaks.restart(start);
+        }
     }
     lines
 }

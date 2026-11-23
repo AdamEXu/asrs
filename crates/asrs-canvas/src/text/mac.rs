@@ -249,34 +249,43 @@ fn vertical_metrics(font: &CTFont) -> FontMetrics {
     }
 }
 
-/// The clusters of `text` in UTF-16 `[from, to)`, each with whether Blink's
+/// The byte offset in `text` of each UTF-16 offset, the one past a surrogate pair's first unit
+/// being the next character's.
+fn byte_offsets(text: &str) -> Vec<usize> {
+    let mut out = Vec::with_capacity(text.len() + 1);
+    out.push(0);
+    for (byte, c) in text.char_indices() {
+        out.resize(out.len() + c.len_utf16(), byte + c.len_utf8());
+    }
+    out
+}
+
+/// The clusters of `text`, which starts at UTF-16 offset `from`, each with whether Blink's
 /// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
 /// sequence with VS16, a skin tone modifier, a keycap or a ZWJ; VS15 forces text.
-fn emoji_clusters(text: &str, from: isize, to: isize) -> Vec<(isize, isize, bool)> {
+fn emoji_clusters(text: &str, from: isize) -> Vec<(isize, isize, bool)> {
     let presentation = CodePointSetData::new::<EmojiPresentation>();
     let mut clusters: Vec<(isize, isize, bool)> = Vec::new();
-    let mut at = 0isize;
+    let mut at = from;
     let mut joined = false;
     for c in text.chars() {
         let units = c.len_utf16() as isize;
-        if at >= from && at < to {
-            let extends = matches!(c, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
-                || ('\u{1f3fb}'..='\u{1f3ff}').contains(&c)
-                || ('\u{e0020}'..='\u{e007f}').contains(&c);
-            match clusters.last_mut() {
-                Some(last) if last.1 == at && (extends || joined) => {
-                    last.1 = at + units;
-                    match c {
-                        '\u{fe0e}' => last.2 = false,
-                        '\u{fe0f}' | '\u{200d}' | '\u{20e3}' => last.2 = true,
-                        _ if extends => last.2 = true,
-                        _ => {}
-                    }
+        let extends = matches!(c, '\u{fe0e}' | '\u{fe0f}' | '\u{200d}' | '\u{20e3}')
+            || ('\u{1f3fb}'..='\u{1f3ff}').contains(&c)
+            || ('\u{e0020}'..='\u{e007f}').contains(&c);
+        match clusters.last_mut() {
+            Some(last) if last.1 == at && (extends || joined) => {
+                last.1 = at + units;
+                match c {
+                    '\u{fe0e}' => last.2 = false,
+                    '\u{fe0f}' | '\u{200d}' | '\u{20e3}' => last.2 = true,
+                    _ if extends => last.2 = true,
+                    _ => {}
                 }
-                _ => clusters.push((at, at + units, presentation.contains(c))),
             }
-            joined = c == '\u{200d}';
+            _ => clusters.push((at, at + units, presentation.contains(c))),
         }
+        joined = c == '\u{200d}';
         at += units;
     }
     clusters
@@ -491,13 +500,18 @@ impl CoreText {
             })
             .collect();
         let mut overrides = Vec::new();
+        if runs.iter().all(|(_, font)| font.is_none()) {
+            return overrides;
+        }
+        let bytes = byte_offsets(word);
         for (k, (start, font)) in runs.iter().enumerate() {
             let Some(font) = font else {
                 continue;
             };
             let end = runs.get(k + 1).map_or(len, |r| r.0);
             let fallback = exact_copy(font, size);
-            for (from, to, emoji) in emoji_clusters(word, *start, end) {
+            let run = word.get(bytes[*start as usize]..bytes[end as usize]);
+            for (from, to, emoji) in emoji_clusters(run.unwrap_or_default(), *start) {
                 let font = if emoji {
                     let named = new_from_name("AppleColorEmoji", size).expect("Apple Color Emoji");
                     exact_copy(&named, size)
@@ -510,30 +524,10 @@ impl CoreText {
         overrides
     }
 
-    fn shape_pieces<'a>(
-        &mut self,
-        spec: &FontSpec,
-        pieces: impl IntoIterator<Item = &'a str>,
-        zoom: f32,
-    ) -> Shaped {
-        let mut glyphs = Vec::new();
-        let mut width = 0.0f32;
-        if spec.size <= 0.0 {
-            return Shaped { glyphs, width };
-        }
-        let primary = self.primary(spec);
-        let mut start = 0;
-        for piece in pieces {
-            width += self.shape_piece(spec, primary, piece, zoom, width, start, &mut glyphs);
-            start += piece.encode_utf16().count() as u32;
-        }
-        Shaped { glyphs, width }
-    }
-
-    /// One piece as HarfBuzz shapes it in Chromium: CoreText's glyphs and kerning, with each
+    /// One word as HarfBuzz shapes it in Chromium: CoreText's glyphs and kerning, with each
     /// advance taken from the scaler and truncated to 16.16, accumulated in `f32`.
     #[allow(clippy::too_many_arguments)]
-    fn shape_piece(
+    fn shape_word(
         &mut self,
         spec: &FontSpec,
         primary: u32,
@@ -700,11 +694,31 @@ impl CoreText {
 
 impl TextBackend for CoreText {
     fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
-        self.shape_pieces(spec, words(text), zoom)
+        if spec.size <= 0.0 {
+            return Shaped {
+                glyphs: Vec::new(),
+                width: 0.0,
+            };
+        }
+        let primary = self.primary(spec);
+        let mut glyphs = Vec::new();
+        let mut width = 0.0f32;
+        let mut start = 0;
+        for word in words(text) {
+            width += self.shape_word(spec, primary, word, zoom, width, start, &mut glyphs);
+            start += word.encode_utf16().count() as u32;
+        }
+        Shaped { glyphs, width }
     }
 
     fn shape_run(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
-        self.shape_pieces(spec, [text], zoom)
+        let mut glyphs = Vec::new();
+        if spec.size <= 0.0 || text.is_empty() {
+            return Shaped { glyphs, width: 0.0 };
+        }
+        let primary = self.primary(spec);
+        let width = self.shape_word(spec, primary, text, zoom, 0.0, 0, &mut glyphs);
+        Shaped { glyphs, width }
     }
 
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {

@@ -28,7 +28,7 @@ use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, BETA_FILE, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Theme,
+    Action, BETA_FILE, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Seed, Theme,
     Wheel, patch_colours,
 };
 use crate::export_flow;
@@ -222,6 +222,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let mut variant = Variant {
                 headless: &mut headless,
                 scenario: &scenario,
+                scenario_dir: options.scenario.parent().unwrap_or(Path::new("")),
                 probes: &probes,
                 inputs: options.inputs.as_deref(),
                 bundled_assets: options.bundled_assets.as_deref(),
@@ -255,6 +256,7 @@ struct Saves {
 struct Variant<'a> {
     headless: &'a mut HeadlessCapture,
     scenario: &'a Scenario,
+    scenario_dir: &'a Path,
     probes: &'a Probes,
     inputs: Option<&'a Path>,
     bundled_assets: Option<&'a Path>,
@@ -803,8 +805,13 @@ impl Variant<'_> {
     fn start_main(&mut self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
         std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
-        for (file, seed) in self.seeds()? {
-            capture::write(&user_data.join(file), &seed)?;
+        for (file, bytes) in self.seeds()? {
+            let file = user_data.join(file);
+            if let Some(parent) = file.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("{}: {e}", parent.display()))?;
+            }
+            std::fs::write(&file, bytes).map_err(|e| format!("{}: {e}", file.display()))?;
         }
         let absolute = |p: &Path| {
             std::path::absolute(p)
@@ -845,17 +852,27 @@ impl Variant<'_> {
         }
     }
 
-    /// The files the Electron driver seeds, with their text.
-    fn seeds(&self) -> Result<[(&'static str, String); 2], String> {
-        let text = |file, value: &JsValue| {
+    /// What the Electron driver seeds in userData.
+    fn seeds(&self) -> Result<Vec<(String, Vec<u8>)>, String> {
+        let json = |file: &str, value: &JsValue| {
             asrs_js::json::stringify(value)
-                .map(|text| (file, text.unwrap_or_default()))
                 .map_err(|e| format!("{file}: {e:?}"))
+                .map(|text| text.unwrap_or_default().into_bytes())
         };
-        Ok([
-            text("prefs.json", &seeded_prefs(self.scenario, self.theme)?)?,
-            text(BETA_FILE, &self.scenario.beta)?,
-        ])
+        let prefs = seeded_prefs(self.scenario, self.theme)?;
+        let mut seeds = vec![
+            ("prefs.json".to_owned(), json("prefs", &prefs)?),
+            (BETA_FILE.to_owned(), json(BETA_FILE, &self.scenario.beta)?),
+        ];
+        for (file, seed) in &self.scenario.user_assets {
+            let bytes = match seed {
+                Seed::Json(value) => json(file, value)?,
+                Seed::File(path) => std::fs::read(self.scenario_dir.join(path))
+                    .map_err(|e| format!("{file}: {path}: {e}"))?,
+            };
+            seeds.push((file.clone(), bytes));
+        }
+        Ok(seeds)
     }
 
     fn open(&mut self) -> Result<(), String> {
@@ -996,10 +1013,7 @@ impl Variant<'_> {
                 self.scale,
                 self.theme,
                 &exceptions,
-                &capture::collect_files(
-                    self.dir,
-                    &self.seeds()?.map(|(file, seed)| (file, seed.into_bytes())),
-                )?,
+                &capture::collect_files(self.dir, &self.seeds()?)?,
                 &dialogs,
             ),
         )

@@ -77,8 +77,8 @@ pub trait TextBackend {
     /// the device scale; canvas text shapes at zoom 1.
     fn shape(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped;
 
-    /// [`TextBackend::shape`] as Blink shapes a DOM text node: in one piece, where canvas text is
-    /// shaped a word at a time, so kerning reaches across spaces.
+    /// `text` as Blink's `HarfBuzzShaper` shapes a DOM text run: in one piece, so kerning applies
+    /// across its spaces, where canvas text shapes every word apart.
     fn shape_run(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped {
         self.shape(font, text, zoom)
     }

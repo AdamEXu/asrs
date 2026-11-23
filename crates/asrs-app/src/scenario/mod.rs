@@ -144,10 +144,43 @@ pub struct Scenario {
     pub prefs: JsValue,
     /// `beta-2027.json` before the run.
     pub beta: JsValue,
+    /// Files under `userAssets/` seeded into userData before main starts.
+    pub user_assets: Vec<(String, Seed)>,
     pub actions: Vec<Action>,
 }
 
 pub const BETA_FILE: &str = "beta-2027.json";
+
+/// A seeded file: JSON, or the bytes of a file beside the scenarios (`{"$file": path}`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Seed {
+    Json(JsValue),
+    File(String),
+}
+
+/// `userData` less `beta-2027.json`, whose only other files a port run seeds are user assets.
+fn user_assets(name: &str, root: &JsValue) -> Result<Vec<(String, Seed)>, String> {
+    let Some(seeds) = root.get("userData") else {
+        return Ok(Vec::new());
+    };
+    keys(seeds)
+        .into_iter()
+        .filter(|file| file != BETA_FILE)
+        .map(|file| {
+            if !file.starts_with("userAssets/") || file.split('/').any(|c| c == "..") {
+                return Err(format!(
+                    "{name}: userData {file:?}: the port only seeds files under userAssets/"
+                ));
+            }
+            let value = seeds.get(&file).ok_or("keys() lists members")?;
+            let seed = match value.get("$file").and_then(JsValue::as_str) {
+                Some(path) => Seed::File(path.to_string_lossy()),
+                None => Seed::Json(value.clone()),
+            };
+            Ok((file, seed))
+        })
+        .collect()
+}
 
 /// The content size of a hub window opened with no saved state, which is the Electron
 /// driver's default window too.
@@ -341,14 +374,9 @@ impl Scenario {
         if let Some(key) = keys(&root).iter().find(|k| !TOP_KEYS.contains(&k.as_str())) {
             return Err(format!("{name}: unknown key {key:?}"));
         }
-        let user_data = root.get("userData");
-        let seeds = user_data.map(keys).unwrap_or_default();
-        if let Some(file) = seeds.iter().find(|file| *file != BETA_FILE) {
-            return Err(format!(
-                "{name}: userData seeds {file}, which the port does not"
-            ));
-        }
-        let beta = user_data.and_then(|u| u.get(BETA_FILE)).cloned();
+        let user_assets = user_assets(name, &root)?;
+        let beta = root.get("userData").and_then(|u| u.get(BETA_FILE));
+        let beta = beta.cloned();
         let page = match root.get("page").and_then(JsValue::as_str) {
             None => Page::App,
             Some(p) if p.to_string_lossy() == "app" => Page::App,
@@ -420,6 +448,7 @@ impl Scenario {
                 .get("prefs")
                 .cloned()
                 .unwrap_or_else(|| JsValue::Object(Default::default())),
+            user_assets,
             actions,
         })
     }
@@ -573,7 +602,26 @@ mod tests {
             r#"{"userData": {"beta-2027.json": {}, "state.json": {}}, "actions": [{"capture": "c"}]}"#,
         )
         .unwrap_err();
-        assert!(e.contains("state.json"), "{e}");
+        assert!(e.contains("userData"), "{e}");
+        let e = Scenario::parse(
+            "u",
+            r#"{"userData": {"userAssets/../state.json": {}}, "actions": [{"capture": "c"}]}"#,
+        )
+        .unwrap_err();
+        assert!(e.contains("userData"), "{e}");
+        let s = Scenario::parse(
+            "u",
+            r#"{"userData": {"userAssets/Joystick_A/image.png": {"$file": "a.png"}},
+                "actions": [{"capture": "c"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            s.user_assets,
+            [(
+                "userAssets/Joystick_A/image.png".to_owned(),
+                Seed::File("a.png".to_owned())
+            )]
+        );
         let e = Scenario::parse("m", r#"{"actions": [{"main": "nope"}, {"capture": "c"}]}"#)
             .unwrap_err();
         assert!(e.contains("nope"), "{e}");

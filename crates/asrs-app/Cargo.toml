@@ -55,12 +55,22 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hub_console"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "hub_table"
 harness = false
 required-features = ["parity"]
 
 [[test]]
 name = "hub_wheel"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "canvas_tabs_view"
 harness = false
 required-features = ["parity"]
 

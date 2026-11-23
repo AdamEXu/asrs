@@ -232,6 +232,25 @@ const breaks = (label, body) => ({
 });
 const sentence = (words) => range(2 + Math.floor(random() * 9), () => pick(words)).join(pick([" ", "", "-", "/", ","]));
 const strings = [...WORDS, ...OTHER, SOFT_HYPHEN, ...range(150, () => sentence(WORDS)), ...range(150, () => sentence([...WORDS, ...OTHER, ...OTHER, SOFT_HYPHEN]))];
+strings.push(
+  ...["x-", "x|", "1-", "x -", "-", "|", "x?", "x!", "x)", "x/"].map((s) => `${s}\u00a0y`),
+  "\u00a0-x",
+  "\u00a0|x",
+  "\u00a0(x",
+  "\u00a0-1",
+  "a\u00a0日\u00a0b",
+  ...["きゃっと", "キャッシュー", "人々の", "あぁ、ー。", "한국어 텍스트입니다.", "ภาษาไทยทดสอบ", "カタカナ・テスト", "x\u2010y", "1\u20132", "a\u2060b", "a\u2028b", "x\u3000y", "e\u0301-\u0301x", "👩‍💻👍🏽🇺🇸🇩🇪"]
+);
+// No currency, percent or degree signs, and one dictionary script a string: icu_segmenter breaks both otherwise.
+const SCRIPTS = ["\u00a0", "\u00a0", "ぁ", "ゃ", "ッ", "ー", "々", "ゝ", "・", "、", "。", "「", "」", "日", "あ", "カ", "한", "글", "é", "µ", "→", "…", "—", "\u2013", "\u2010", "«", "»", "“", "”", "½", "א", "ب", "-", "|", "/", "(", ")", "!", "?", "1", "x", " "];
+const DICTIONARY = [["ไทย", "ประเทศ"], ["ພາສາ", "ລາວ"], ["ភាសា", "ខ្មែរ"], ["မြန်မာ", "ဘာသာ"]];
+const scripts = mulberry32(1404);
+strings.push(
+  ...range(400, (i) => {
+    const words = [...SCRIPTS, ...DICTIONARY[i % 4], ...DICTIONARY[i % 4]];
+    return `x${range(3 + Math.floor(scripts() * 10), () => words[Math.floor(scripts() * words.length)]).join("")}x`;
+  })
+);
 write("line-break", "pairs", {
   geometry: "real",
   steps: [
@@ -264,7 +283,10 @@ const numberKeys = [
   input('<input type="number" value="x" step="0.5">', [["set", "value", "0.7"], ...keys("ArrowDown", "ArrowUp")]),
   input(RANGE_MIN, [["char", "1"], ["char", "2"], ...keys("ArrowUp"), ["char", "5"], ["blur"], ["focus"], ...keys("ArrowDown"), ["blur"]]),
   input(RANGE_MIN, [["char", "1"], ["char", "e"], ...keys("ArrowUp")]),
-  input(RANGE_MIN, ["shift", "alt", "ctrl"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]])))
+  input(RANGE_MIN, ["shift", "alt", "ctrl"].flatMap((m) => ["ArrowUp", "ArrowDown"].map((k) => ["key", k, 0, [m]]))),
+  ...['value="5"', 'value="0.65" step="0.01"', 'value="960" step="1"', 'value="720" step="1"', 'value="20"'].map((attributes) =>
+    input(`<input type="number" ${attributes} />`, [...keys("ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowDown"), ["set", "value", "0.9"], ...keys("ArrowUp", "ArrowDown", "ArrowDown"), ["set", "value", "12.345"], ...keys("ArrowDown", "ArrowUp", "ArrowUp")])
+  )
 ];
 fs.writeFileSync(
   path.join(ROOT, "parity/specs/form/number-keys.entry.json"),

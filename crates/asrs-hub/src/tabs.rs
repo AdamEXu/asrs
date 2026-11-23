@@ -28,6 +28,7 @@ use asrs_model::tab_controller::{Command, TabController, TabRenderer};
 
 pub use crate::factory::CanvasEnv;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use indexmap::IndexSet;
 
 use crate::drag::DragUpdate;
@@ -185,7 +186,14 @@ pub trait TabsHost {
     fn canvas_env(&self) -> Option<CanvasEnv> {
         None
     }
-    /// A renderer the page's view builds for a `kind` tab, in place of the pending one.
+    /// Gives a new Console tab the layout its view draws, in place of its `ConsoleDom`.
+    fn lay_out_console(
+        &self,
+        _controller: &mut ConsoleController,
+        _renderer: &mut ConsoleRenderer,
+    ) {
+    }
+    /// A renderer the page's view builds for a `kind` tab, in place of the factory's own.
     fn view_renderer(&mut self, _kind: TabType) -> Option<Box<dyn TabRenderer<Self>>> {
         None
     }

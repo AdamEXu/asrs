@@ -17,11 +17,14 @@ use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_services::window_manager::Platform;
+use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use asrs_ui::gpui::{
     AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
     Window,
 };
 
+use super::canvas_tabs::JoysticksTab;
+use super::console_layout::ConsoleLayout;
 use super::field3d::Field3dTab;
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::prompts;
@@ -50,8 +53,8 @@ impl HubView for FrameView {
         self.geometry.renderer_top(show_timeline)
     }
 
-    fn table_box(&self) -> Option<(Rect, f64)> {
-        self.geometry.table_box()
+    fn large_table_box(&self) -> Option<(Rect, f64)> {
+        self.geometry.large_table_box()
     }
 
     fn dark(&self) -> bool {
@@ -101,6 +104,12 @@ impl HubView for FrameView {
         Some(self.canvas_text.clone())
     }
 
+    fn lay_out_console(&self, controller: &mut ConsoleController, renderer: &mut ConsoleRenderer) {
+        let layout = ConsoleLayout::default();
+        controller.set_geometry(Box::new(layout.clone()));
+        renderer.set_geometry(Box::new(layout));
+    }
+
     fn tab_renderer(
         &self,
         kind: TabType,
@@ -109,6 +118,7 @@ impl HubView for FrameView {
     ) -> Option<Box<dyn TabRenderer<HubPage>>> {
         match kind {
             TabType::Field3d => Some(Box::new(Field3dTab::new(preferences, is_battery))),
+            TabType::Joysticks => Some(Box::new(JoysticksTab::default())),
             _ => None,
         }
     }

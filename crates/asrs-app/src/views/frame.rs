@@ -22,7 +22,9 @@ use asrs_model::selection_impl::ControlButton;
 use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
-use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view, with_text_backend};
+use asrs_ui::canvas_view::{
+    CanvasBorder, CanvasMetrics, CanvasState, canvas_view, with_text_backend,
+};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
     Entity, ExternalPaths, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton,
@@ -37,6 +39,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
+use super::canvas_tabs::CanvasTabViews;
 use super::console::ConsoleViews;
 use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
@@ -103,7 +106,7 @@ struct GeometryState {
     classes: BodyClasses,
     inner_height: f64,
     side_bar: [f64; 4],
-    table: Option<(Rect, f64)>,
+    large_table: Option<(Rect, f64)>,
 }
 
 impl FrameGeometry {
@@ -129,9 +132,10 @@ impl FrameGeometry {
         renderer_top(self.0.borrow().classes, show_timeline)
     }
 
-    /// `div.renderer-content`'s box while a Table tab is displayed, and the window's scale.
-    pub fn table_box(&self) -> Option<(Rect, f64)> {
-        self.0.borrow().table
+    /// `div.renderer-content`'s box while a Table or Console tab is displayed, and the window's
+    /// scale.
+    pub fn large_table_box(&self) -> Option<(Rect, f64)> {
+        self.0.borrow().large_table
     }
 
     /// `div.side-bar`'s box as last laid out.
@@ -153,6 +157,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) line_graph: LineGraphViews,
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
+    pub(super) canvas_tabs: CanvasTabViews,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
     pub(super) statistics: StatisticsViews,
@@ -215,6 +220,39 @@ fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
     }
 }
 
+/// `canvas.timeline-canvas`'s `border` and `border-radius`.
+const TIMELINE_BORDER: CanvasBorder = CanvasBorder {
+    width: 1.0,
+    radius: 10.0,
+};
+
+/// `div.controls-content`'s dark `box-shadow: 0px 0px 0px 0.7px black`.
+const CONTROLS_SPREAD: f32 = 0.7;
+
+/// A black `spread` px wide unblurred shadow above a box, whose last device row is only partly
+/// covered; GPUI would snap it to whole pixels.
+fn spread_rows(spread: f32, scale: f32) -> Vec<asrs_ui::gpui::Div> {
+    let device = spread * scale;
+    let whole = device.floor();
+    let row = |top: f32, rows: f32, alpha: f32| {
+        div()
+            .absolute()
+            .left_0()
+            .w_full()
+            .top(px(-top / scale))
+            .h(px(rows / scale))
+            .bg(rgba((alpha * 255.0 + 0.5) as u32))
+    };
+    let mut out = Vec::new();
+    if whole > 0.0 {
+        out.push(row(whole, whole, 1.0));
+    }
+    if device > whole {
+        out.push(row(whole + 1.0, 1.0, device - whole));
+    }
+    out
+}
+
 fn place(rect: [f64; 4], origin: (f64, f64)) -> asrs_ui::gpui::Div {
     div()
         .absolute()
@@ -241,6 +279,7 @@ impl<H: FrameHost> HubFrame<H> {
             line_graph: LineGraphViews::default(),
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
+            canvas_tabs: CanvasTabViews::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
             statistics: StatisticsViews::default(),
@@ -657,8 +696,13 @@ impl<H: FrameHost> HubFrame<H> {
     fn timeline_element(&mut self, dark: bool, cx: &mut Context<'_, Self>) -> AnyElement {
         let state = self
             .timeline_canvas
-            .get_or_insert_with(|| cx.new(CanvasState::new))
+            .get_or_insert_with(|| cx.new(|cx| CanvasState::bordered(TIMELINE_BORDER, cx)))
             .clone();
+        let (background, border) = if dark {
+            (0x444444, 0xeeeeee)
+        } else {
+            (0xeeeeee, 0x222222)
+        };
         let entity = cx.entity().downgrade();
         let painter = move |metrics: &CanvasMetrics, cx: &mut App| {
             entity
@@ -669,6 +713,15 @@ impl<H: FrameHost> HubFrame<H> {
         div()
             .id("timeline-scroll")
             .size_full()
+            .child(
+                div()
+                    .absolute()
+                    .size_full()
+                    .rounded(px(TIMELINE_BORDER.radius))
+                    .border(px(TIMELINE_BORDER.width))
+                    .border_color(rgb(border))
+                    .bg(rgb(background)),
+            )
             .child(canvas_view(state, painter).size_full())
             .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                 frame.timeline_mouse_down(event, cx)
@@ -720,7 +773,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let inputs = self.inputs(cx, width, height, f64::from(scale), fps_size);
         let layout = FrameLayout::compute(&inputs);
         self.geometry.set_inner_height(height);
-        self.geometry.0.borrow_mut().table = FrameLayout::compute(&FrameInputs {
+        self.geometry.0.borrow_mut().large_table = FrameLayout::compute(&FrameInputs {
             show_timeline: Some(false),
             show_tab_controls: Some(false),
             tab_controls_height: Some(0.0),
@@ -949,17 +1002,18 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(metadata) = self.metadata_element(rect, appearance, scale, cx) {
                     renderer = renderer.child(metadata);
                 }
+                if let Some(tab) = self.canvas_tab_element(rect, appearance, scale, window, cx) {
+                    renderer = renderer.child(tab);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
-                let shadow = if dark {
-                    box_shadow(0x000000ff, 0.0, 0.7)
+                let mut controls = place(rect, origin).bg(rgb(theme.background));
+                if dark {
+                    controls = controls.children(spread_rows(CONTROLS_SPREAD, scale));
                 } else {
-                    box_shadow(0x00000022, 3.0, 2.0)
-                };
-                let mut controls = place(rect, origin)
-                    .bg(rgb(theme.background))
-                    .shadow(vec![shadow]);
+                    controls = controls.shadow(vec![box_shadow(0x00000022, 3.0, 2.0)]);
+                }
                 if let Some(content) = self.host.slot(FrameSlot::ControlsContent, window, cx) {
                     controls = controls.child(content);
                 }
@@ -976,6 +1030,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     self.statistics_controls(rect, appearance, scale, window, cx)
                 {
                     controls = controls.child(settings);
+                }
+                if let Some(tab) = self.canvas_tab_controls(rect, appearance, scale, window, cx) {
+                    controls = controls.child(tab);
                 }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
             }

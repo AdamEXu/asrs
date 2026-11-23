@@ -444,6 +444,12 @@ impl ConsoleLayout {
 }
 
 impl ConsoleGeometry for ConsoleLayout {
+    fn place(&mut self, container: Rect, device_pixel_ratio: f64) {
+        let mut state = self.0.borrow_mut();
+        state.container = [container.x, container.y, container.width, container.height];
+        state.scale = device_pixel_ratio as f32;
+    }
+
     fn container_rect(&mut self) -> Rect {
         let [x, y, width, height] = self.0.borrow().container;
         Rect {

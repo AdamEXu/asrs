@@ -188,6 +188,23 @@ struct Shape {
     style: Style,
 }
 
+/// A `<line>` (`[x1, y1, x2, y2]`) or a `<circle>` in user space.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ElementShape {
+    Line([f32; 4]),
+    Circle { center: [f32; 2], radius: f32 },
+}
+
+/// An inline SVG element with its computed paint: unpremultiplied colours, `None` where nothing
+/// is painted.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InlineElement {
+    pub shape: ElementShape,
+    pub fill: Option<[u8; 4]>,
+    pub stroke: Option<[u8; 4]>,
+    pub stroke_width: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct Document {
     view_box: Option<[f32; 4]>,
@@ -226,6 +243,53 @@ impl simplecss::Element for El<'_, '_> {
 }
 
 impl Document {
+    /// An inline `<svg>` without a `viewBox`, from its elements in paint order.
+    pub fn inline(elements: &[InlineElement]) -> Document {
+        let paint = |color: Option<[u8; 4]>| {
+            color.map_or(Paint::None, |[r, g, b, a]| {
+                Paint::Color([r, g, b], f32::from(a) / 255.0)
+            })
+        };
+        let shapes = elements
+            .iter()
+            .filter_map(|element| {
+                let (geometry, fill) = match element.shape {
+                    ElementShape::Line([x1, y1, x2, y2]) => {
+                        let mut path = SkPath::new();
+                        path.move_to(P { x: x1, y: y1 });
+                        path.line_to(P { x: x2, y: y2 });
+                        (Geometry::Path(path), None)
+                    }
+                    ElementShape::Circle { radius, .. } if radius.is_nan() || radius <= 0.0 => {
+                        return None;
+                    }
+                    ElementShape::Circle {
+                        center: [cx, cy],
+                        radius: r,
+                    } => (
+                        Geometry::Oval([cx - r, cy - r, cx + r, cy + r]),
+                        element.fill,
+                    ),
+                };
+                Some(Shape {
+                    transform: Affine::IDENTITY,
+                    geometry,
+                    style: Style {
+                        fill: paint(fill),
+                        stroke: paint(element.stroke),
+                        stroke_width: element.stroke_width,
+                        ..Style::default()
+                    },
+                })
+            })
+            .collect();
+        Document {
+            view_box: None,
+            aspect: AspectRatio::default(),
+            shapes,
+        }
+    }
+
     pub fn parse(svg: &[u8]) -> Option<Document> {
         let text = std::str::from_utf8(svg).ok()?;
         let xml = roxmltree::Document::parse(text).ok()?;
@@ -967,6 +1031,11 @@ fn fill(
     {
         return scan::anti_fill_rect(device_rect(m, *r), pixmap.width(), pixmap.height());
     }
+    if backend == Backend::Graphite
+        && let Some((center, radius, _)) = device_circle(geometry, m)
+    {
+        return circle_coverage(center, radius, None, pixmap);
+    }
     let device = as_path(geometry).transformed(m);
     match (backend, geometry) {
         (Backend::Graphite, Geometry::Path(p)) if is_line(p) => {
@@ -1009,9 +1078,61 @@ fn stroke_outline(geometry: &Geometry, m: &Affine, style: &Style) -> SkPath {
     .transformed(m)
 }
 
+/// The device centre, radius and scale of a circle Graphite's analytic render step draws.
+fn device_circle(geometry: &Geometry, m: &Affine) -> Option<([f32; 2], f32, f32)> {
+    let Geometry::Oval([l, t, r, b]) = *geometry else {
+        return None;
+    };
+    let similar = m.b == 0.0 && m.c == 0.0 && m.a == m.d && m.a > 0.0;
+    if !similar || r - l != b - t {
+        return None;
+    }
+    let (cx, cy) = ((l + r) * 0.5, (t + b) * 0.5);
+    let scale = m.a as f32;
+    let center = [
+        (m.a * f64::from(cx) + m.e) as f32,
+        (m.d * f64::from(cy) + m.f) as f32,
+    ];
+    Some((center, (r - l) * 0.5 * scale, scale))
+}
+
+/// Coverage by the signed distance of each pixel centre to a circle of radius `outer`, less the
+/// one of radius `inner` inside it.
+fn circle_coverage(center: [f32; 2], outer: f32, inner: Option<f32>, pixmap: &Pixmap) -> Spans {
+    let (width, height) = (pixmap.width(), pixmap.height());
+    let mut spans = Spans::new(width, height);
+    let clamp = |v: f32, side: u32| v.clamp(0.0, side as f32) as u32;
+    let columns = clamp((center[0] - outer - 1.0).floor(), width)
+        ..clamp((center[0] + outer + 1.0).ceil(), width);
+    let rows = clamp((center[1] - outer - 1.0).floor(), height)
+        ..clamp((center[1] + outer + 1.0).ceil(), height);
+    for y in rows {
+        let dy = y as f32 + 0.5 - center[1];
+        let alphas: Vec<u8> = columns
+            .clone()
+            .map(|x| {
+                let dx = x as f32 + 0.5 - center[0];
+                let distance = dx.hypot(dy);
+                let mut coverage = (outer - distance + 0.5).clamp(0.0, 1.0);
+                if let Some(inner) = inner {
+                    coverage = coverage.min((distance - inner + 0.5).clamp(0.0, 1.0));
+                }
+                (coverage * 255.0 + 0.5) as u8
+            })
+            .collect();
+        spans.anti_h(columns.start as i32, y as i32, &alphas);
+    }
+    spans
+}
+
 /// Graphite draws lines, rects, round rects and circles with analytic coverage and every other
 /// stroke as a tessellated outline under MSAA.
 fn stroke_graphite(geometry: &Geometry, m: &Affine, style: &Style, pixmap: &Pixmap) -> Spans {
+    if let Some((center, radius, scale)) = device_circle(geometry, m) {
+        let half = style.stroke_width * scale * 0.5;
+        let inner = (radius > half).then_some(radius - half);
+        return circle_coverage(center, radius + half, inner, pixmap);
+    }
     let outline = stroke_outline(geometry, m, style);
     let analytic = match geometry {
         Geometry::Rect(_) | Geometry::RRect(_) | Geometry::Oval(_) => true,

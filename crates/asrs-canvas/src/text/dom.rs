@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use super::layout::normalize_space;
-use super::line_break::opportunities;
+use super::line_break::LineBreaks;
 use super::lut::MaskGammaLut;
 use super::{FontSpec, Mask, Shaped, ShapedGlyph, TextBackend};
 
@@ -684,15 +684,12 @@ fn wrap(
     }
     let fits =
         |from: usize, to: usize| lu_ceil((at[units[to]] - at[units[from]]) * scale) <= available;
+    let content = |next: usize| text[..next].trim_end_matches(' ').len();
+    let mut breaks = LineBreaks::new(text);
     let mut lines = Vec::new();
     let mut start = 0;
     while start < text.len() {
-        let mut ends: Vec<usize> = opportunities(&text[start..])
-            .into_iter()
-            .map(|next| start + next)
-            .collect();
-        ends.push(text.len());
-        let content = |next: usize| text[..next].trim_end_matches(' ').len();
+        let ends = breaks.ends();
         let count = ends.partition_point(|&next| fits(start, content(next)));
         let (end, next) = if count > 0 {
             (content(ends[count - 1]), ends[count - 1])
@@ -714,6 +711,7 @@ fn wrap(
         };
         lines.push(text[start..end].to_owned());
         start = next;
+        breaks.restart(start);
     }
     lines
 }

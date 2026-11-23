@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use asrs_canvas::{Pixmap, RasterState};
+use asrs_canvas::{Pixmap, RasterState, ShadeCache};
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_js::string::JsString;
@@ -495,7 +495,8 @@ impl<H: FrameHost> HubFrame<H> {
         if tab.drawn != Some(drawn) {
             tab.drawn = Some(drawn);
             let mut state = RasterState::default();
-            tab.bitmap = rasterize(&picture, &HashMap::new(), &mut state, cx)
+            let mut shades = ShadeCache::default();
+            tab.bitmap = rasterize(&picture, &HashMap::new(), &mut state, &mut shades, cx)
                 .map(|(pixmap, _)| Arc::new(pixmap));
             match &tab.bitmap {
                 Some(bitmap) => tab.presenter.present((**bitmap).clone(), window, cx),
