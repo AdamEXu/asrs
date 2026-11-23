@@ -17,6 +17,11 @@ impl AppIdentity {
 
     pub const RELEASE: AppIdentity = AppIdentity { name: "asrs" };
 
+    /// Upstream's presentation text with the app name this identity presents. Not for URLs.
+    pub fn text(&self, upstream: &str) -> String {
+        upstream.replace(Self::UPSTREAM.name, self.name)
+    }
+
     /// A hub window title as upstream sets it (`"<file> — AdvantageScope"`, or just the name),
     /// with the app name this identity presents.
     pub fn window_title(&self, upstream: &str) -> String {

@@ -9,7 +9,7 @@ use asrs_js::value::{JsValue, ToJs};
 use asrs_model::app_identity::USER_DATA_DIR;
 use asrs_model::json_file;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_model::preferences::Preferences;
+use asrs_model::preferences::{Preferences, merge_preferences};
 
 use crate::asset_loader::{AssetFolders, AssetService};
 use crate::fs::Fs;
@@ -327,6 +327,11 @@ impl MainState {
             }
             HubToMain::SaveTypeMemory => {
                 type_memory::save(fs, &self.paths.type_memory(), &message.data)
+            }
+            HubToMain::UpdatePreferences => {
+                let mut prefs = self.preferences(fs)?;
+                merge_preferences(&mut prefs, &message.data)?;
+                fs.write(&self.paths.prefs(), &json_file::stringify(&prefs)?)
             }
             _ => Ok(()),
         }
