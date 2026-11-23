@@ -488,7 +488,7 @@ pub(crate) fn upstream_version(paths: &Paths) -> Result<String> {
         .ok_or_else(|| format!("{}: no version", path.display()))
 }
 
-fn check_reference(paths: &Paths) -> Result {
+pub(crate) fn check_reference(paths: &Paths) -> Result {
     let reference = &paths.reference;
     let clone_hint = format!(
         "  git clone {UPSTREAM_REPO} {dir}\n  git -C {dir} checkout {UPSTREAM_COMMIT}",
@@ -841,6 +841,7 @@ const SYNC_GENERATED: &[&str] = &[
     "node_modules",
     "bundles",
     "lite/static/bundles",
+    "docs/build",
     "src/licenses.json",
     "ThirdPartyLicenses.txt",
 ];

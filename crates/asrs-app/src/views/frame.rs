@@ -43,6 +43,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
 use super::canvas_tabs::CanvasTabViews;
 use super::console::ConsoleViews;
+use super::documentation::DocumentationViews;
 use super::field_2d::Field2dViews;
 use super::field3d::{Field3dViews, key_code};
 use super::line_graph::LineGraphViews;
@@ -192,6 +193,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) canvas_tabs: CanvasTabViews,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
+    pub(super) documentation: DocumentationViews,
     pub(super) statistics: StatisticsViews,
     pub(super) metadata: MetadataView,
     pub(super) video: VideoViews,
@@ -317,6 +319,7 @@ impl<H: FrameHost> HubFrame<H> {
             canvas_tabs: CanvasTabViews::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
+            documentation: DocumentationViews::default(),
             statistics: StatisticsViews::default(),
             metadata: MetadataView::default(),
             video: VideoViews::default(),
@@ -1077,6 +1080,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(console) = self.console_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(console);
+                }
+                if let Some(page) = self.documentation_element(rect, appearance, scale, window, cx)
+                {
+                    renderer = renderer.child(page);
                 }
                 if let Some(statistics) =
                     self.statistics_element(rect, covered, appearance, scale, window, cx)

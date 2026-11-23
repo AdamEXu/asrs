@@ -48,6 +48,10 @@ name = "window_sizes"
 harness = false
 
 [[test]]
+name = "documentation_window"
+harness = false
+
+[[test]]
 name = "tab_bar_layout"
 required-features = ["parity"]
 

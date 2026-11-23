@@ -46,6 +46,7 @@
   "button.data-table-jump-button": ["button.data-table-jump-button"],
   "button.data-table-key-delete": ["button.data-table-key-delete"],
   ".renderer-content > :not([hidden]) img.large-table-hand-icon": ["img.large-table-hand-icon"],
+  ".documentation-container": ["div.documentation-container"],
   ".console-table-container": [".console-table-container"],
   "table.console-table th": ["table.console-table th"],
   "input.console-table-jump-input": ["input.console-table-jump-input"],

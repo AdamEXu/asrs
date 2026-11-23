@@ -212,6 +212,12 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "genDocumentation": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genDocumentation.ts",
+    "src/shims.ts"
+  ],
   "genDownload": [
     "src/cve1.ts",
     "src/download/bundle.ts",
