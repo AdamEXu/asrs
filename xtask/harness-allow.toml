@@ -89,24 +89,6 @@ rule = "default-slot"
 reason = "no lines means no expected boxes, and the port's boxes are compared with that list"
 
 [[allow]]
-file = "crates/asrs-canvas/tests/dom_harness.rs"
-function = "*"
-rule = "silent-return"
-reason = "hole: a vector without measure records passes; #305"
-
-[[allow]]
-file = "crates/asrs-canvas/tests/dom_harness.rs"
-function = "traces_round_trip"
-rule = "default-slot"
-reason = "a label for messages only; nothing is compared through it"
-
-[[allow]]
-file = "crates/asrs-canvas/tests/dom_harness.rs"
-function = "traces_round_trip"
-rule = "silent-return"
-reason = "hole: a vector without canvas calls passes; #305"
-
-[[allow]]
 file = "crates/asrs-field3d/tests/camera_controls_vectors.rs"
 function = "check"
 rule = "default-slot"
@@ -609,12 +591,6 @@ file = "crates/asrs-services/tests/download_vectors.rs"
 function = "step"
 rule = "catch-all"
 reason = "effects that change no harness state; all of them are compared below as one list"
-
-[[allow]]
-file = "crates/asrs-services/tests/files_vectors.rs"
-function = "*"
-rule = "no-tally"
-reason = "every record goes through check_record; counting them per kind is #305"
 
 [[allow]]
 file = "crates/asrs-services/tests/files_vectors.rs"
