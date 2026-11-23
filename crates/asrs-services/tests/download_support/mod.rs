@@ -266,7 +266,8 @@ impl Fixture {
     }
 
     fn start_sshd(&mut self, server: &Json, tools: &Tools) -> Result<u16, String> {
-        let file = |name: &str| self.root.join(name);
+        let root = self.root.clone();
+        let file = |name: &str| root.join(name);
         let keygen = |kind: &str, name: &str| {
             let status = Command::new("ssh-keygen")
                 .args(["-q", "-t", kind, "-N", "", "-C", "asrs-fixture", "-f"])
