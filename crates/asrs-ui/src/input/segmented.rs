@@ -1,6 +1,8 @@
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, Corners, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    SharedString, StatefulInteractiveElement, Styled, Window, canvas, div, px, rgb,
+    App, ClickEvent, Corners, ElementId, FocusHandle, InteractiveElement, IntoElement,
+    KeyDownEvent, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
+    Window, canvas, div, px, rgb,
 };
 
 use crate::icon::{IconSource, Placement, paint_icon};
@@ -106,13 +108,23 @@ fn blend(top: u32, under: u32, alpha: f32) -> u32 {
     mix(16) | mix(8) | mix(0)
 }
 
+struct State {
+    hovered: Option<usize>,
+    /// The segments' `tabindex="0"`.
+    focus: Vec<FocusHandle>,
+}
+
 impl RenderOnce for SegmentedControl {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let scale = window.scale_factor();
         let style = SplitStyle::of(self.appearance);
-        let hovered = window.use_keyed_state(self.id.clone(), cx, |_, _| None::<usize>);
-        let hover = *hovered.read(cx);
         let count = self.segments.len();
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| State {
+            hovered: None,
+            focus: (0..count).map(|_| cx.focus_handle()).collect(),
+        });
+        let hover = state.read(cx).hovered;
+        let focus = state.read(cx).focus.clone();
         let boxes = segment_boxes(count, self.size.0, self.size.1, scale);
         let border = scale.floor().max(1.0);
         let on_select = std::rc::Rc::new(self.on_select);
@@ -240,8 +252,8 @@ impl RenderOnce for SegmentedControl {
                     .into_any_element()
                 }
             };
-            let hovered = hovered.clone();
-            let select = on_select.clone();
+            let hovered = state.clone();
+            let (select, keyboard) = (on_select.clone(), on_select.clone());
             root = root.child(
                 div()
                     .id(("segment", i))
@@ -260,15 +272,28 @@ impl RenderOnce for SegmentedControl {
                     .on_hover(move |entered: &bool, _, cx| {
                         hovered.update(cx, |h, cx| {
                             if *entered {
-                                *h = Some(i);
-                            } else if *h == Some(i) {
-                                *h = None;
+                                h.hovered = Some(i);
+                            } else if h.hovered == Some(i) {
+                                h.hovered = None;
                             }
                             cx.notify();
                         });
                     })
-                    .on_click(move |_, window, cx| {
+                    .when_some(focus.get(i), |segment, focus| segment.track_focus(focus))
+                    .on_click(move |event: &ClickEvent, window, cx| {
+                        // GPUI clicks a focused element on key up; `setupKeyboardControls`
+                        // clicks on `keydown`, below.
+                        if matches!(event, ClickEvent::Keyboard(_)) {
+                            return;
+                        }
                         if let Some(f) = select.as_ref() {
+                            f(&i, window, cx);
+                        }
+                    })
+                    .on_key_down(move |event: &KeyDownEvent, window, cx| {
+                        if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                            && let Some(f) = keyboard.as_ref()
+                        {
                             f(&i, window, cx);
                         }
                     })

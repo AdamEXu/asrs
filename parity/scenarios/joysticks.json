@@ -1,0 +1,604 @@
+{
+  "about": "Interaction (U16): the generated panels log with a layout in userAssets on restored Joysticks tabs: no layout, a layout before any time is selected, the layout and the generic view at a selected time, a time clicked on the timeline, three, five and six joysticks, and a layout that does not exist (which falls back to None). The selects open native popups, which neither side can drive, so layouts change through restore-state. Saved HubState is compared at each capture; nothing is masked",
+  "userData": {
+    "userAssets/Joystick_ParityPad/config.json": {
+      "name": "Parity Pad",
+      "components": [
+        {
+          "type": "joystick",
+          "isYellow": false,
+          "centerPx": [
+            200,
+            180
+          ],
+          "radiusPx": 55,
+          "niXSourceIndex": 0,
+          "niXSourceInverted": false,
+          "niYSourceIndex": 1,
+          "niYSourceInverted": true,
+          "niButtonSourceIndex": 9,
+          "sdlXSourceIndex": 0,
+          "sdlYSourceIndex": 1,
+          "sdlButtonSourceIndex": 8
+        },
+        {
+          "type": "joystick",
+          "isYellow": true,
+          "centerPx": [
+            470,
+            250
+          ],
+          "radiusPx": 45,
+          "niXSourceIndex": 4,
+          "niYSourceIndex": 5,
+          "sdlXSourceIndex": 4,
+          "sdlYSourceIndex": 5
+        },
+        {
+          "type": "button",
+          "isYellow": true,
+          "isEllipse": true,
+          "centerPx": [
+            600,
+            130
+          ],
+          "sizePx": [
+            40,
+            40
+          ],
+          "niSourceIndex": 1,
+          "sdlSourceIndex": 0
+        },
+        {
+          "type": "button",
+          "isYellow": false,
+          "isEllipse": true,
+          "centerPx": [
+            645,
+            175
+          ],
+          "sizePx": [
+            40,
+            40
+          ],
+          "niSourceIndex": 2,
+          "sdlSourceIndex": 1
+        },
+        {
+          "type": "button",
+          "isYellow": false,
+          "isEllipse": false,
+          "centerPx": [
+            600,
+            220
+          ],
+          "sizePx": [
+            44,
+            30
+          ],
+          "niSourceIndex": 3,
+          "sdlSourceIndex": 2
+        },
+        {
+          "type": "button",
+          "isYellow": true,
+          "isEllipse": false,
+          "centerPx": [
+            290,
+            250
+          ],
+          "sizePx": [
+            26,
+            26
+          ],
+          "niSourceIndex": 0,
+          "niSourcePov": "up",
+          "sdlSourceIndex": 0,
+          "sdlSourcePov": "up"
+        },
+        {
+          "type": "axis",
+          "isYellow": true,
+          "centerPx": [
+            130,
+            90
+          ],
+          "sizePx": [
+            110,
+            22
+          ],
+          "niSourceIndex": 2,
+          "niSourceRange": [
+            0,
+            1
+          ],
+          "sdlSourceIndex": 2,
+          "sdlSourceRange": [
+            -1,
+            1
+          ]
+        },
+        {
+          "type": "axis",
+          "isYellow": false,
+          "centerPx": [
+            380,
+            130
+          ],
+          "sizePx": [
+            24,
+            80
+          ],
+          "niSourceIndex": 3,
+          "niSourceRange": [
+            1,
+            0
+          ],
+          "sdlSourceIndex": 3,
+          "sdlSourceRange": [
+            -1,
+            1
+          ]
+        },
+        {
+          "type": "touchpad",
+          "isYellow": false,
+          "centerPx": [
+            380,
+            230
+          ],
+          "sizePx": [
+            90,
+            60
+          ],
+          "sdlSourceIndex": 0
+        }
+      ]
+    },
+    "userAssets/Joystick_ParityPad/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "None",
+                "None",
+                "None",
+                "None",
+                "None",
+                "None"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "none",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "Parity Pad",
+                "None",
+                "None",
+                "None",
+                "None",
+                "None"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "blank",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "Generic Joystick",
+                "None",
+                "None",
+                "None",
+                "None",
+                "None"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "generic",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "Parity Pad",
+                "None",
+                "None",
+                "None",
+                "None",
+                "None"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "pad",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 104
+    },
+    {
+      "mouse": "click",
+      "x": 600,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "clicked",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "Parity Pad",
+                "Generic Joystick",
+                "Parity Pad",
+                "None",
+                "None",
+                "None"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        1.2
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "three",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "None",
+                "Parity Pad",
+                "Parity Pad",
+                "Generic Joystick",
+                "Parity Pad",
+                "Missing Layout"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.1
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "four",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 8,
+              "title": "Joysticks",
+              "controller": [
+                "Parity Pad",
+                "Generic Joystick",
+                "Generic Joystick",
+                "Parity Pad",
+                "Parity Pad",
+                "Generic Joystick"
+              ],
+              "controllerUUID": "joysticks00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        0.4
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "six",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".joysticks-canvas",
+        "table.joystick-selector",
+        "table.joystick-selector td",
+        "table.joystick-selector select"
+      ]
+    }
+  ]
+}

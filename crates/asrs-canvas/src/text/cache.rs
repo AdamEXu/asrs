@@ -14,6 +14,7 @@ type MaskKey = (Glyph, [u64; 4], (u8, u8));
 pub struct Cached<B> {
     backend: B,
     shapes: HashMap<(FontKey, u32, String), Shaped>,
+    runs: HashMap<(FontKey, u32, String), Shaped>,
     metrics: HashMap<FontKey, FontMetrics>,
     fallback_metrics: HashMap<(Glyph, u32), Option<FontMetrics>>,
     bounds: HashMap<Glyph, Option<Bounds>>,
@@ -25,6 +26,7 @@ impl<B: TextBackend> Cached<B> {
         Cached {
             backend,
             shapes: HashMap::new(),
+            runs: HashMap::new(),
             metrics: HashMap::new(),
             fallback_metrics: HashMap::new(),
             bounds: HashMap::new(),
@@ -60,6 +62,19 @@ impl<B: TextBackend> TextBackend for Cached<B> {
         }
         let shaped = self.backend.shape(font, text, zoom);
         self.shapes.insert(key, shaped.clone());
+        shaped
+    }
+
+    fn shape_run(&mut self, font: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let key = (font.key(), zoom.to_bits(), text.to_owned());
+        if let Some(shaped) = self.runs.get(&key) {
+            return shaped.clone();
+        }
+        if self.runs.len() >= MAX_SHAPES {
+            self.runs.clear();
+        }
+        let shaped = self.backend.shape_run(font, text, zoom);
+        self.runs.insert(key, shaped.clone());
         shaped
     }
 

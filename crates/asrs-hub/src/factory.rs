@@ -171,9 +171,11 @@ fn renderer<Cx: HubTabCx + 'static>(
         }
         Some(TabType::Statistics) => pending(TabType::Statistics),
         Some(TabType::Video) => pending(TabType::Video),
-        Some(TabType::Joysticks) => Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
-            JoysticksDom::default(),
-        )))),
+        Some(TabType::Joysticks) => cx.view_renderer(TabType::Joysticks).unwrap_or_else(|| {
+            Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
+                JoysticksDom::default(),
+            ))))
+        }),
         Some(TabType::Swerve) => Box::new(SwerveRenderer::new(Rc::new(RefCell::new(
             SwerveDom::default(),
         )))),
