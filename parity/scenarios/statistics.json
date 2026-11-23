@@ -1,0 +1,155 @@
+{
+  "about": "draft",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [],
+                "timeRange": "full",
+                "rangeMin": 0,
+                "rangeMax": 5,
+                "stepSize": 0.25
+              },
+              "controllerUUID": "statistics0000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-sources",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b"
+                    }
+                  }
+                ],
+                "timeRange": "full",
+                "rangeMin": 0,
+                "rangeMax": 5,
+                "stepSize": 0.25
+              },
+              "controllerUUID": "statistics0000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "two",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-sources",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    }
+  ]
+}

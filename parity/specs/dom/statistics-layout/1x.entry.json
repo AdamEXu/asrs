@@ -1,0 +1,209 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "geometry": "real",
+    "window": {
+      "width": 1100,
+      "height": 650
+    },
+    "seed": 1402,
+    "steps": [
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":1,\"bins\":[0,1],\"stepSize\":1,\"fields\":[]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "0: 0 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "0: 0 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":2,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":1,\"min\":0,\"max\":1,\"mean\":0,\"median\":0,\"mode\":0,\"geometricMean\":1,\"harmonicMean\":0,\"quadraticMean\":0,\"standardDeviation\":1,\"medianAbsoluteDeviation\":1,\"interquartileRange\":1,\"skewness\":1,\"percentile01\":1,\"percentile05\":1,\"percentile10\":0,\"percentile25\":1,\"percentile50\":0,\"percentile75\":0,\"percentile90\":1,\"percentile95\":1,\"percentile99\":1}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "1: 1 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "1: 1 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":3,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":0.25,\"min\":-0.0004,\"max\":0.25,\"mean\":-0.0004,\"median\":0,\"mode\":-1234567.891,\"geometricMean\":0,\"harmonicMean\":0.25,\"quadraticMean\":4503599627370496,\"standardDeviation\":98765.4321,\"medianAbsoluteDeviation\":1,\"interquartileRange\":123.4567,\"skewness\":-12.5,\"percentile01\":-0.0004,\"percentile05\":98765.4321,\"percentile10\":0,\"percentile25\":4503599627370496,\"percentile50\":-1234567.891,\"percentile75\":4503599627370496,\"percentile90\":-12.5,\"percentile95\":4503599627370496,\"percentile99\":1}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "2: 1 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "2: 1 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":4,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":1,\"min\":0.25,\"max\":0,\"mean\":4503599627370496,\"median\":123.4567,\"mode\":98765.4321,\"geometricMean\":0,\"harmonicMean\":-0.0004,\"quadraticMean\":123.4567,\"standardDeviation\":4503599627370496,\"medianAbsoluteDeviation\":1,\"interquartileRange\":123.4567,\"skewness\":98765.4321,\"percentile01\":4503599627370496,\"percentile05\":1,\"percentile10\":-0.0004,\"percentile25\":98765.4321,\"percentile50\":98765.4321,\"percentile75\":4503599627370496,\"percentile90\":-1234567.891,\"percentile95\":-12.5,\"percentile99\":-1234567.891}},{\"title\":\"/Layout/Field1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":4503599627370496,\"min\":0.25,\"max\":98765.4321,\"mean\":0,\"median\":-0.0004,\"mode\":0.25,\"geometricMean\":4503599627370496,\"harmonicMean\":4503599627370496,\"quadraticMean\":0,\"standardDeviation\":0,\"medianAbsoluteDeviation\":98765.4321,\"interquartileRange\":98765.4321,\"skewness\":-1234567.891,\"percentile01\":0.25,\"percentile05\":-0.0004,\"percentile10\":98765.4321,\"percentile25\":1,\"percentile50\":1,\"percentile75\":0.25,\"percentile90\":4503599627370496,\"percentile95\":123.4567,\"percentile99\":-0.0004}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "3: 2 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "3: 2 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":5,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":1,\"min\":4503599627370496,\"max\":-1234567.891,\"mean\":1,\"median\":98765.4321,\"mode\":1,\"geometricMean\":0.25,\"harmonicMean\":4503599627370496,\"quadraticMean\":123.4567,\"standardDeviation\":4503599627370496,\"medianAbsoluteDeviation\":-0.0004,\"interquartileRange\":1,\"skewness\":4503599627370496,\"percentile01\":4503599627370496,\"percentile05\":-12.5,\"percentile10\":98765.4321,\"percentile25\":0,\"percentile50\":1,\"percentile75\":98765.4321,\"percentile90\":98765.4321,\"percentile95\":123.4567,\"percentile99\":-1234567.891}},{\"title\":\"/Layout/Field1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":123.4567,\"min\":98765.4321,\"max\":0.25,\"mean\":123.4567,\"median\":98765.4321,\"mode\":0.25,\"geometricMean\":98765.4321,\"harmonicMean\":0.25,\"quadraticMean\":4503599627370496,\"standardDeviation\":98765.4321,\"medianAbsoluteDeviation\":-1234567.891,\"interquartileRange\":1,\"skewness\":123.4567,\"percentile01\":0,\"percentile05\":-0.0004,\"percentile10\":-0.0004,\"percentile25\":4503599627370496,\"percentile50\":123.4567,\"percentile75\":-1234567.891,\"percentile90\":0,\"percentile95\":-12.5,\"percentile99\":123.4567}},{\"title\":\"/Layout/Field2\",\"color\":\"#af2437\",\"histogramCounts\":[1,2],\"stats\":{\"count\":123.4567,\"min\":-0.0004,\"max\":1,\"mean\":-1234567.891,\"median\":-1234567.891,\"mode\":-0.0004,\"geometricMean\":-0.0004,\"harmonicMean\":98765.4321,\"quadraticMean\":0,\"standardDeviation\":4503599627370496,\"medianAbsoluteDeviation\":0.25,\"interquartileRange\":4503599627370496,\"skewness\":0,\"percentile01\":1,\"percentile05\":0.25,\"percentile10\":1,\"percentile25\":98765.4321,\"percentile50\":1,\"percentile75\":-12.5,\"percentile90\":98765.4321,\"percentile95\":-0.0004,\"percentile99\":123.4567}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "4: 3 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "4: 3 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":6,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":98765.4321,\"min\":-0.0004,\"max\":-12.5,\"mean\":-12.5,\"median\":1,\"mode\":0.25,\"geometricMean\":0.25,\"harmonicMean\":-12.5,\"quadraticMean\":1,\"standardDeviation\":-1234567.891,\"medianAbsoluteDeviation\":123.4567,\"interquartileRange\":-1234567.891,\"skewness\":123.4567,\"percentile01\":4503599627370496,\"percentile05\":123.4567,\"percentile10\":4503599627370496,\"percentile25\":0.25,\"percentile50\":4503599627370496,\"percentile75\":1,\"percentile90\":123.4567,\"percentile95\":1,\"percentile99\":0}},{\"title\":\"/Layout/Field1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":-0.0004,\"min\":-1234567.891,\"max\":-0.0004,\"mean\":0.25,\"median\":0.25,\"mode\":0.25,\"geometricMean\":0.25,\"harmonicMean\":1,\"quadraticMean\":-12.5,\"standardDeviation\":-0.0004,\"medianAbsoluteDeviation\":-12.5,\"interquartileRange\":-0.0004,\"skewness\":0,\"percentile01\":123.4567,\"percentile05\":0,\"percentile10\":-0.0004,\"percentile25\":1,\"percentile50\":0,\"percentile75\":-1234567.891,\"percentile90\":4503599627370496,\"percentile95\":1,\"percentile99\":123.4567}},{\"title\":\"/Layout/Field2\",\"color\":\"#af2437\",\"histogramCounts\":[1,2],\"stats\":{\"count\":1,\"min\":98765.4321,\"max\":123.4567,\"mean\":-0.0004,\"median\":4503599627370496,\"mode\":-1234567.891,\"geometricMean\":0.25,\"harmonicMean\":4503599627370496,\"quadraticMean\":4503599627370496,\"standardDeviation\":-0.0004,\"medianAbsoluteDeviation\":98765.4321,\"interquartileRange\":98765.4321,\"skewness\":4503599627370496,\"percentile01\":1,\"percentile05\":1,\"percentile10\":0.25,\"percentile25\":-12.5,\"percentile50\":123.4567,\"percentile75\":0,\"percentile90\":1,\"percentile95\":1,\"percentile99\":123.4567}},{\"title\":\"/Layout/Field3\",\"color\":\"#80588e\",\"histogramCounts\":[1,2],\"stats\":{\"count\":98765.4321,\"min\":-1234567.891,\"max\":-12.5,\"mean\":0,\"median\":-0.0004,\"mode\":-12.5,\"geometricMean\":0.25,\"harmonicMean\":0.25,\"quadraticMean\":0.25,\"standardDeviation\":-0.0004,\"medianAbsoluteDeviation\":0,\"interquartileRange\":0,\"skewness\":4503599627370496,\"percentile01\":-12.5,\"percentile05\":0,\"percentile10\":98765.4321,\"percentile25\":123.4567,\"percentile50\":-0.0004,\"percentile75\":-1234567.891,\"percentile90\":-1234567.891,\"percentile95\":0.25,\"percentile99\":-1234567.891}},{\"title\":\"/Layout/Field4\",\"color\":\"#e48b32\",\"histogramCounts\":[1,2],\"stats\":{\"count\":-12.5,\"min\":0.25,\"max\":-1234567.891,\"mean\":1,\"median\":0.25,\"mode\":1,\"geometricMean\":98765.4321,\"harmonicMean\":-1234567.891,\"quadraticMean\":0,\"standardDeviation\":-1234567.891,\"medianAbsoluteDeviation\":1,\"interquartileRange\":123.4567,\"skewness\":4503599627370496,\"percentile01\":-1234567.891,\"percentile05\":0,\"percentile10\":1,\"percentile25\":-0.0004,\"percentile50\":-12.5,\"percentile75\":-12.5,\"percentile90\":1,\"percentile95\":-1234567.891,\"percentile99\":-12.5}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "5: 5 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "5: 5 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":7,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":0,\"min\":98765.4321,\"max\":1,\"mean\":1,\"median\":-0.0004,\"mode\":-0.0004,\"geometricMean\":-12.5,\"harmonicMean\":4503599627370496,\"quadraticMean\":4503599627370496,\"standardDeviation\":-1234567.891,\"medianAbsoluteDeviation\":123.4567,\"interquartileRange\":98765.4321,\"skewness\":4503599627370496,\"percentile01\":123.4567,\"percentile05\":4503599627370496,\"percentile10\":0.25,\"percentile25\":98765.4321,\"percentile50\":-1234567.891,\"percentile75\":4503599627370496,\"percentile90\":0.25,\"percentile95\":4503599627370496,\"percentile99\":-12.5}},{\"title\":\"/Layout/Field1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":0,\"min\":0.25,\"max\":0,\"mean\":0.25,\"median\":-12.5,\"mode\":0.25,\"geometricMean\":-0.0004,\"harmonicMean\":4503599627370496,\"quadraticMean\":123.4567,\"standardDeviation\":-0.0004,\"medianAbsoluteDeviation\":-0.0004,\"interquartileRange\":0.25,\"skewness\":-0.0004,\"percentile01\":4503599627370496,\"percentile05\":0,\"percentile10\":0,\"percentile25\":98765.4321,\"percentile50\":-1234567.891,\"percentile75\":-1234567.891,\"percentile90\":-12.5,\"percentile95\":0.25,\"percentile99\":-0.0004}},{\"title\":\"/Layout/Field2\",\"color\":\"#af2437\",\"histogramCounts\":[1,2],\"stats\":{\"count\":0,\"min\":-1234567.891,\"max\":4503599627370496,\"mean\":0,\"median\":-1234567.891,\"mode\":1,\"geometricMean\":98765.4321,\"harmonicMean\":0,\"quadraticMean\":-0.0004,\"standardDeviation\":0.25,\"medianAbsoluteDeviation\":98765.4321,\"interquartileRange\":0,\"skewness\":98765.4321,\"percentile01\":-0.0004,\"percentile05\":0.25,\"percentile10\":-0.0004,\"percentile25\":123.4567,\"percentile50\":123.4567,\"percentile75\":0,\"percentile90\":0,\"percentile95\":4503599627370496,\"percentile99\":98765.4321}},{\"title\":\"/Layout/Field3\",\"color\":\"#80588e\",\"histogramCounts\":[1,2],\"stats\":{\"count\":0.25,\"min\":4503599627370496,\"max\":123.4567,\"mean\":-0.0004,\"median\":4503599627370496,\"mode\":1,\"geometricMean\":1,\"harmonicMean\":-0.0004,\"quadraticMean\":0.25,\"standardDeviation\":98765.4321,\"medianAbsoluteDeviation\":98765.4321,\"interquartileRange\":0.25,\"skewness\":1,\"percentile01\":0,\"percentile05\":-0.0004,\"percentile10\":-0.0004,\"percentile25\":-12.5,\"percentile50\":98765.4321,\"percentile75\":0,\"percentile90\":-0.0004,\"percentile95\":123.4567,\"percentile99\":-1234567.891}},{\"title\":\"/Layout/Field4\",\"color\":\"#e48b32\",\"histogramCounts\":[1,2],\"stats\":{\"count\":1,\"min\":123.4567,\"max\":98765.4321,\"mean\":4503599627370496,\"median\":98765.4321,\"mode\":1,\"geometricMean\":0,\"harmonicMean\":-0.0004,\"quadraticMean\":0.25,\"standardDeviation\":4503599627370496,\"medianAbsoluteDeviation\":0,\"interquartileRange\":98765.4321,\"skewness\":-1234567.891,\"percentile01\":-12.5,\"percentile05\":-0.0004,\"percentile10\":98765.4321,\"percentile25\":-0.0004,\"percentile50\":-12.5,\"percentile75\":1,\"percentile90\":-0.0004,\"percentile95\":-0.0004,\"percentile99\":1}},{\"title\":\"/Layout/Field5\",\"color\":\"#c0b487\",\"histogramCounts\":[1,2],\"stats\":{\"count\":0,\"min\":123.4567,\"max\":1,\"mean\":-0.0004,\"median\":1,\"mode\":4503599627370496,\"geometricMean\":-0.0004,\"harmonicMean\":123.4567,\"quadraticMean\":1,\"standardDeviation\":0,\"medianAbsoluteDeviation\":-1234567.891,\"interquartileRange\":4503599627370496,\"skewness\":98765.4321,\"percentile01\":0.25,\"percentile05\":4503599627370496,\"percentile10\":1,\"percentile25\":-0.0004,\"percentile50\":123.4567,\"percentile75\":-0.0004,\"percentile90\":4503599627370496,\"percentile95\":0.25,\"percentile99\":-1234567.891}},{\"title\":\"/Layout/Field6\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":123.4567,\"min\":123.4567,\"max\":4503599627370496,\"mean\":4503599627370496,\"median\":98765.4321,\"mode\":-12.5,\"geometricMean\":-12.5,\"harmonicMean\":1,\"quadraticMean\":-0.0004,\"standardDeviation\":1,\"medianAbsoluteDeviation\":123.4567,\"interquartileRange\":4503599627370496,\"skewness\":98765.4321,\"percentile01\":-12.5,\"percentile05\":-12.5,\"percentile10\":1,\"percentile25\":98765.4321,\"percentile50\":4503599627370496,\"percentile75\":4503599627370496,\"percentile90\":0.25,\"percentile95\":4503599627370496,\"percentile99\":-0.0004}},{\"title\":\"/Layout/Field7\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":98765.4321,\"min\":98765.4321,\"max\":-1234567.891,\"mean\":1,\"median\":-1234567.891,\"mode\":4503599627370496,\"geometricMean\":-0.0004,\"harmonicMean\":98765.4321,\"quadraticMean\":0,\"standardDeviation\":-0.0004,\"medianAbsoluteDeviation\":-0.0004,\"interquartileRange\":4503599627370496,\"skewness\":0.25,\"percentile01\":98765.4321,\"percentile05\":4503599627370496,\"percentile10\":0.25,\"percentile25\":0.25,\"percentile50\":98765.4321,\"percentile75\":-1234567.891,\"percentile90\":-12.5,\"percentile95\":123.4567,\"percentile99\":0.25}},{\"title\":\"/Layout/Field8\",\"color\":\"#af2437\",\"histogramCounts\":[1,2],\"stats\":{\"count\":-12.5,\"min\":98765.4321,\"max\":-0.0004,\"mean\":0,\"median\":1,\"mode\":0.25,\"geometricMean\":-1234567.891,\"harmonicMean\":0,\"quadraticMean\":123.4567,\"standardDeviation\":1,\"medianAbsoluteDeviation\":0,\"interquartileRange\":123.4567,\"skewness\":-0.0004,\"percentile01\":123.4567,\"percentile05\":-1234567.891,\"percentile10\":-1234567.891,\"percentile25\":-1234567.891,\"percentile50\":123.4567,\"percentile75\":98765.4321,\"percentile90\":0,\"percentile95\":1,\"percentile99\":4503599627370496}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "6: 9 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "6: 9 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":8,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":NaN,\"min\":1e+21,\"max\":NaN,\"mean\":-Infinity,\"median\":1e+21,\"mode\":1e+21,\"geometricMean\":100000000000000000000,\"harmonicMean\":-0.001,\"quadraticMean\":-1.5e+21,\"standardDeviation\":-1.5e+21,\"medianAbsoluteDeviation\":-Infinity,\"interquartileRange\":-0.001,\"skewness\":-0.001,\"percentile01\":1e+21,\"percentile05\":NaN,\"percentile10\":-Infinity,\"percentile25\":-1.5e+21,\"percentile50\":-Infinity,\"percentile75\":NaN,\"percentile90\":-1.5e+21,\"percentile95\":1e+21,\"percentile99\":100000000000000000000}},{\"title\":\"/Layout/Field1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":1e+21,\"min\":Infinity,\"max\":-1.5e+21,\"mean\":100000000000000000000,\"median\":NaN,\"mode\":1e+21,\"geometricMean\":NaN,\"harmonicMean\":100000000000000000000,\"quadraticMean\":-1.5e+21,\"standardDeviation\":Infinity,\"medianAbsoluteDeviation\":NaN,\"interquartileRange\":-Infinity,\"skewness\":NaN,\"percentile01\":-1.5e+21,\"percentile05\":Infinity,\"percentile10\":Infinity,\"percentile25\":1e+21,\"percentile50\":NaN,\"percentile75\":Infinity,\"percentile90\":-Infinity,\"percentile95\":-0.001,\"percentile99\":Infinity}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "7: 2 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "7: 2 fields"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*layout:command*/ (() => { const command = {\"changeCounter\":9,\"bins\":[0,1],\"stepSize\":1,\"fields\":[{\"title\":\"/Layout/Field0\",\"color\":\"#2b66a2\",\"histogramCounts\":[1,2],\"stats\":{\"count\":100000000000000000000,\"min\":1e+21,\"max\":-1.5e+21,\"mean\":-Infinity,\"median\":-0.001,\"mode\":100000000000000000000,\"geometricMean\":NaN,\"harmonicMean\":-1.5e+21,\"quadraticMean\":Infinity,\"standardDeviation\":1e+21,\"medianAbsoluteDeviation\":-Infinity,\"interquartileRange\":-1.5e+21,\"skewness\":100000000000000000000,\"percentile01\":Infinity,\"percentile05\":-Infinity,\"percentile10\":-0.001,\"percentile25\":-Infinity,\"percentile50\":NaN,\"percentile75\":100000000000000000000,\"percentile90\":-1.5e+21,\"percentile95\":-1.5e+21,\"percentile99\":1e+21}},{\"title\":\"/Layout/Field1\",\"color\":\"#e5b31b\",\"histogramCounts\":[1,2],\"stats\":{\"count\":Infinity,\"min\":-0.001,\"max\":-Infinity,\"mean\":-Infinity,\"median\":-Infinity,\"mode\":-1.5e+21,\"geometricMean\":NaN,\"harmonicMean\":-1.5e+21,\"quadraticMean\":-0.001,\"standardDeviation\":NaN,\"medianAbsoluteDeviation\":1e+21,\"interquartileRange\":-Infinity,\"skewness\":-Infinity,\"percentile01\":-1.5e+21,\"percentile05\":-0.001,\"percentile10\":100000000000000000000,\"percentile25\":-1.5e+21,\"percentile50\":-1.5e+21,\"percentile75\":NaN,\"percentile90\":100000000000000000000,\"percentile95\":-Infinity,\"percentile99\":1e+21}},{\"title\":\"/Layout/Field2\",\"color\":\"#af2437\",\"histogramCounts\":[1,2],\"stats\":{\"count\":-0.001,\"min\":100000000000000000000,\"max\":Infinity,\"mean\":-1.5e+21,\"median\":1e+21,\"mode\":-1.5e+21,\"geometricMean\":-0.001,\"harmonicMean\":-Infinity,\"quadraticMean\":100000000000000000000,\"standardDeviation\":NaN,\"medianAbsoluteDeviation\":100000000000000000000,\"interquartileRange\":100000000000000000000,\"skewness\":-0.001,\"percentile01\":100000000000000000000,\"percentile05\":NaN,\"percentile10\":100000000000000000000,\"percentile25\":1e+21,\"percentile50\":1e+21,\"percentile75\":Infinity,\"percentile90\":-0.001,\"percentile95\":NaN,\"percentile99\":-Infinity}},{\"title\":\"/Layout/Field3\",\"color\":\"#80588e\",\"histogramCounts\":[1,2],\"stats\":{\"count\":100000000000000000000,\"min\":1e+21,\"max\":-0.001,\"mean\":1e+21,\"median\":Infinity,\"mode\":-0.001,\"geometricMean\":-0.001,\"harmonicMean\":NaN,\"quadraticMean\":Infinity,\"standardDeviation\":Infinity,\"medianAbsoluteDeviation\":Infinity,\"interquartileRange\":-0.001,\"skewness\":Infinity,\"percentile01\":NaN,\"percentile05\":-0.001,\"percentile10\":100000000000000000000,\"percentile25\":-Infinity,\"percentile50\":100000000000000000000,\"percentile75\":Infinity,\"percentile90\":1e+21,\"percentile95\":-0.001,\"percentile99\":-1.5e+21}}]}; window.tabs.tabList[window.tabs.selectedTab].controller.getCommand = () => command; return command; })()"
+          }
+        ],
+        "label": "8: 4 fields command"
+      },
+      {
+        "frames": 4
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*statistics-layout*/ window.__oracleQuiet(() => { \n  const root = document.querySelector(\"div.renderer-content > :not([hidden])\");\n  const container = root.querySelector(\"div.stats-values-container\");\n  const origin = container.getBoundingClientRect();\n  \n  const box = (r) => [r.x - origin.x, r.y - origin.y, r.width, r.height];\n  const range = document.createRange();\n  const text = (cell) => {\n    const out = [];\n    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);\n    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {\n      range.selectNodeContents(node);\n      out.push([node.data, Array.from(range.getClientRects(), box)]);\n    }\n    return out;\n  };\n  const rows = (body) => Array.from(body.children, (row) =>\n    [row.getBoundingClientRect().height, Array.from(row.children, (cell) => [...box(cell.getBoundingClientRect()), text(cell)])]);\n  const sizes = (el) => [el.offsetWidth, el.clientWidth, el.clientHeight, el.scrollWidth, el.scrollHeight];\n\n  const table = container.firstElementChild;\n  return {\n    container: [origin.x, origin.y, origin.width, origin.height],\n    sizes: sizes(container),\n    table: box(table.getBoundingClientRect()),\n    histogram: box(root.querySelector(\"div.stats-histogram-container\").getBoundingClientRect()),\n    canvas: box(root.querySelector(\"canvas\").getBoundingClientRect()),\n    rows: rows(table.firstElementChild)\n  };\n })"
+          }
+        ],
+        "label": "8: 4 fields"
+      }
+    ]
+  }
+}

@@ -63,4 +63,34 @@ function drive(): Uint8Array {
   return encoder.getEncoded();
 }
 
-export const GENERATED_LOGS: Record<string, () => Uint8Array> = { drive };
+// Metadata as AdvantageKit publishes it: enough rows to overflow the tab, with values that wrap,
+// break inside words, hold line breaks or are missing.
+function metadata(): Uint8Array {
+  const encoder = new WPILOGEncoder("AdvantageScope");
+  let nextEntry = 1;
+  const put = (name: string, value: string) => {
+    const entry = nextEntry++;
+    encoder.add(WPILOGEncoderRecord.makeControlStart(0, { entry, name, type: "string", metadata: "" }));
+    encoder.add(WPILOGEncoderRecord.makeString(entry, 0, value));
+  };
+  const battery = nextEntry++;
+  encoder.add(WPILOGEncoderRecord.makeControlStart(0, { entry: battery, name: "/Battery", type: "double", metadata: "" }));
+  for (let i = 0; i <= 10; i++) encoder.add(WPILOGEncoderRecord.makeDouble(battery, i * 1000000, 12.5 - i / 8));
+  const build: [string, string][] = [
+    ["ProjectName", "KitBot"],
+    ["BuildDate", "2026-11-22 16:04:05 PST"],
+    ["GitSHA", "a1b2c3d4e5f60718293a4b5c6d7e8f9001122334"],
+    ["GitBranch", "feature/auto-align-to-reef-with-vision-fallback"],
+    ["GitDirty", "Uncomitted changes"],
+    ["RuntimeType", "kRoboRIO"],
+    ["Notes", "First line\nSecond line, which goes on until it is long enough that it has to wrap onto another one, even in one column\n\nLast line"],
+    ["SuperstructureConfiguration", "https://github.com/Mechanical-Advantage/AdvantageScope/blob/main/docs/docs/tab-reference/metadata.md?plain=1#L10-L20"]
+  ];
+  for (const [key, value] of build) put(`/RealMetadata/${key}`, value);
+  for (const [key, value] of build.slice(0, 5)) put(`/ReplayMetadata/${key}`, key === "BuildDate" ? "2026-11-23 09:30:00 PST" : value);
+  put("/ReplayMetadata/ReplayOnly", "only in replay");
+  for (let i = 0; i < 16; i++) put(`/RealMetadata/Extra/Setting${String(i).padStart(2, "0")}`, `value ${i * 37}`);
+  return encoder.getEncoded();
+}
+
+export const GENERATED_LOGS: Record<string, () => Uint8Array> = { drive, metadata };

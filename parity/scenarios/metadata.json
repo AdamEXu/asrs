@@ -1,0 +1,94 @@
+{
+  "about": "draft",
+  "actions": [
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 12,
+              "title": "Meta",
+              "controller": null,
+              "controllerUUID": "metadata000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "none",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".metadata-table-container",
+        "table.metadata-table th",
+        ".tab-centered"
+      ]
+    },
+    {
+      "open": [
+        "app:metadata"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "table",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".metadata-table-container",
+        "table.metadata-table th"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 400,
+        "deltaX": 0,
+        "deltaY": -150,
+        "precise": true
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".metadata-table-container",
+        "table.metadata-table th"
+      ]
+    }
+  ]
+}
