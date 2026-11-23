@@ -542,11 +542,12 @@ async function perform(action: Action) {
     } as any);
   } else if ("key" in action) {
     const modifiers = (action.modifiers ?? []) as any;
-    const send = (type: "keyDown" | "char" | "keyUp") => {
-      if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode: action.key, modifiers });
+    const send = (type: "keyDown" | "char" | "keyUp", keyCode = action.key) => {
+      if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode, modifiers });
     };
     send("keyDown");
-    if ([...action.key].length === 1) send("char");
+    if (action.key === "Enter") send("char", "\r");
+    else if ([...action.key].length === 1) send("char");
     send("keyUp");
   } else if ("dialog" in action) {
     dialogQueue.push(action.dialog);

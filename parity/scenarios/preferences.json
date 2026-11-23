@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U20): the preferences window, opened through the application menu's own item on both sides and driven with real input: hovered and pressed controls, values typed in and picked by type-ahead and confirmed, which the hub's timeline shows, an edit cancelled, and the theme changed last (nothing is captured after it). prefs.json is compared byte for byte; nothing is masked but focused text inputs",
+  "about": "Interaction (U20): the preferences window, opened through the application menu's own item on both sides and driven with real input: hovered and pressed controls, values typed in and picked by type-ahead and confirmed, which the hub's timeline shows, an edit cancelled, Enter pressed on the focused exit button (which confirms and then cancels), and the theme changed last (nothing is captured after it). prefs.json is compared byte for byte; nothing is masked but focused text inputs",
   "prefs": {
     "robotAddress": "",
     "remotePath": "/media/sda1/logs",
@@ -394,6 +394,50 @@
       "mouse": "up",
       "x": 342,
       "y": 450
+    },
+    {
+      "prompt": null
+    },
+    {
+      "appMenu": [
+        "Settings...",
+        "Show Preferences..."
+      ]
+    },
+    {
+      "prompt": "preferences"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "a"
+    },
+    {
+      "mouse": "move",
+      "x": 342,
+      "y": 450
+    },
+    {
+      "mouse": "down",
+      "x": 342,
+      "y": 450
+    },
+    {
+      "mouse": "move",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "mouse": "up",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "key": "Enter"
     },
     {
       "prompt": null
