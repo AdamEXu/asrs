@@ -41,8 +41,8 @@ class Element {
 export async function runWindow(): Promise<void> {
   const code = await buildWindow();
   for (const platform of ["darwin", "win32", "linux"]) {
-    for (const fixed of ["none", "usb", "wifi"]) {
-      for (const robotAddress of fixed === "none" ? ADDRESSES : ["10.63.28.2"]) {
+    for (const fixed of ["", "usb", "wifi"]) {
+      for (const robotAddress of fixed === "" ? ADDRESSES : ["10.63.28.2"]) {
         for (const remotePath of robotAddress === ADDRESSES[0] ? PATHS : [PATHS[0]]) {
           const preferences = { systemcoreStaticAddress: fixed, robotAddress, remotePath };
           const alert = new Element();
@@ -67,8 +67,8 @@ export async function runWindow(): Promise<void> {
           main("set-platform", platform);
           main("set-preferences", preferences);
           out({ preferences, platform, start: sent.splice(0) });
-          const interesting = robotAddress === ADDRESSES[0] || fixed !== "none" || robotAddress === "roborio-6328-frc.local" || robotAddress === "10.<b>.1";
-          if (platform !== "darwin" && fixed === "none") continue;
+          const interesting = robotAddress === ADDRESSES[0] || fixed !== "" || robotAddress === "roborio-6328-frc.local" || robotAddress === "10.<b>.1";
+          if (platform !== "darwin" && fixed === "") continue;
           if (!interesting) continue;
           for (const name of ["show-error", "show-alert"]) {
             for (const message of MESSAGES) {

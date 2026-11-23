@@ -319,7 +319,7 @@
     "files/download-offer": {"cases":1,"content":"5aca274f625e71a9","generator":"15d3b3f0b23e4e56","spec":"parity/specs/files/download-offer.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "files/download-sftp": {"cases":3727,"content":"3e6df6fecb8649d0","generator":"82471d871d11bd56","spec":"parity/specs/files/download-sftp.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "files/download-win32": {"cases":545,"content":"bf76aabdd6e6a4e8","generator":"7a7a0adfce5cb6b3","spec":"parity/specs/files/download-win32.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "files/download-window": {"cases":2499,"content":"37d2032d1a5f797d","generator":"7e3ef60b2f3ae4f2","spec":"parity/specs/files/download-window.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "files/download-window": {"cases":2499,"content":"d7ab71d7775792e3","generator":"7523330109386b94","spec":"parity/specs/files/download-window.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "files/flows": {"cases":1827,"content":"28a5e84d8769e966","generator":"2c9eec2078bc2282","spec":"parity/specs/files/flows.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "files/flows-corrupt": {"cases":1650,"content":"45a668c8bd11f8e0","generator":"7ca0bce1b0448567","spec":"parity/specs/files/flows-corrupt.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "files/flows-packaged": {"cases":1714,"content":"867679a03f2ec489","generator":"c69dee10186653b4","spec":"parity/specs/files/flows-packaged.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
