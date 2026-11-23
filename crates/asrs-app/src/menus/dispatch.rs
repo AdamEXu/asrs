@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use asrs_js::string::JsError;
 use asrs_js::value::JsValue;
 use asrs_services::dialog::{self as services, MessageBox};
 use asrs_services::window_manager::{Platform, WindowId, WindowKind};
@@ -65,11 +66,7 @@ fn run(
         Ok(()) => {}
         Err(Failure::Throw(e)) => {
             eprintln!("asrs: {what}: {e:?}");
-            show_error(
-                "The command failed",
-                &format!("{}: {}", e.name, e.message),
-                cx,
-            );
+            show_failure(&e, cx);
         }
         Err(Failure::Rejection(e)) => eprintln!("asrs: {what}: {e:?}"),
     }
@@ -164,9 +161,14 @@ fn resume(cx: &mut App, what: String, then: Then, reply: Reply) {
 }
 
 /// `openPreferences`, `openDownload` and `openLicenses`.
-fn open_window(kind: WindowKind, _parent: WindowId, _cx: &mut App) -> Result<(), Unavailable> {
+fn open_window(kind: WindowKind, parent: WindowId, cx: &mut App) -> Result<(), Unavailable> {
     Err(Unavailable(match kind {
-        WindowKind::Preferences => "The preferences window",
+        WindowKind::Preferences => {
+            if let Err(e) = MainProcess::open_preferences(cx, parent) {
+                show_failure(&e, cx);
+            }
+            return Ok(());
+        }
         WindowKind::Download => "Downloading logs",
         WindowKind::Licenses => "The licenses window",
         other => panic!("{other:?} does not open from the application menu"),
@@ -242,6 +244,14 @@ fn show_unavailable(what: &'static str, cx: &mut App) {
             "{what} is not available in this version of {}.",
             crate::IDENTITY.name
         ),
+        cx,
+    );
+}
+
+fn show_failure(e: &JsError, cx: &mut App) {
+    show_error(
+        "The command failed",
+        &format!("{}: {}", e.name, e.message),
         cx,
     );
 }

@@ -1283,8 +1283,10 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}`, `{"dialog": button index | file name | null}` (queued
 answer for the next dialog), `{"menu": [label, ...]}` (clicks the item at that label path of the
-context menu that popped up; neither side shows menus natively), `{"prompt": page | null}`
-(`editRange`, `editFov`, `renameTab`, `unitConversion` or `export`: later input and captures go to
+context menu that popped up; neither side shows menus natively), `{"appMenu": [label, ...]}`
+(clicks, for the hub window, the one application menu item that has one of these labels, which
+differ per platform), `{"prompt": page | null}`
+(`editRange`, `editFov`, `renameTab`, `unitConversion`, `export` or `preferences`: later input and captures go to
 that prompt window, whose content size is its own; `null` waits until it has closed),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
