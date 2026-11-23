@@ -11,6 +11,11 @@ pub trait FieldModel: 'static {
     fn edit(&mut self, visible: &str) {
         self.set_value(visible);
     }
+    /// The up or down arrow key in a number field. Returns whether it changed the value, which
+    /// is when the DOM fires `input` and `change`.
+    fn arrow_key(&mut self, _up: bool) -> bool {
+        false
+    }
     /// What of `text`, typed or pasted between `left` and `right`, the editor inserts: by default
     /// what `TextFieldInputType::HandleBeforeTextInsertedEvent` makes of it.
     fn insertable(_left: &str, text: &str, _right: &str) -> String {
@@ -60,6 +65,19 @@ impl<M: FieldModel> FieldValue<M> {
         self.model.edit(text);
         self.shown = text.to_owned();
         true
+    }
+
+    /// An arrow key; whether it changed the value.
+    pub fn arrow_key(&mut self, up: bool) -> bool {
+        let changed = self.model.arrow_key(up);
+        if changed {
+            self.shown = self.model.value();
+        }
+        changed
+    }
+
+    pub fn model_mut(&mut self) -> &mut M {
+        &mut self.model
     }
 
     /// `input.value`.

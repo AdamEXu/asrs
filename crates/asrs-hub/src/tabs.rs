@@ -530,6 +530,14 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         (out, errors)
     }
 
+    /// The frame callbacks every tab's renderer requested itself.
+    pub fn animation_frame(&mut self, cx: &mut Cx) -> Vec<JsError> {
+        self.tabs
+            .iter_mut()
+            .flat_map(|tab| tab.renderer.animation_frame(cx))
+            .collect()
+    }
+
     /// `getSelectedTab()`.
     pub fn selected(&self) -> &JsValue {
         &self.selected

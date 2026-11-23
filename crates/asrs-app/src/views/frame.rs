@@ -41,7 +41,9 @@ use super::console::ConsoleViews;
 use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
+use super::metadata::MetadataView;
 use super::source_list::{self, ListsGeometry};
+use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
 use super::table::{self, TableViews};
 
@@ -153,6 +155,8 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) field3d: Field3dViews,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
+    pub(super) statistics: StatisticsViews,
+    pub(super) metadata: MetadataView,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -239,6 +243,8 @@ impl<H: FrameHost> HubFrame<H> {
             field3d: Field3dViews::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
+            statistics: StatisticsViews::default(),
+            metadata: MetadataView::default(),
         }
     }
 
@@ -325,6 +331,7 @@ impl<H: FrameHost> HubFrame<H> {
         self.source_list_mouse_move(x, y, cx);
         self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
         self.console_mouse_move(x, y, cx);
+        self.statistics_mouse_move(x, y, event.pressed_button.is_some(), cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -775,6 +782,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let _ = frame.update(cx, |frame, cx| {
                             frame.table_mouse_exit(cx);
                             frame.console_mouse_exit(cx);
+                            frame.statistics_mouse_exit(cx);
                         });
                     }
                 });
@@ -785,7 +793,8 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let x = mouse_client(f32::from(event.position.x));
                         let y = mouse_client(f32::from(event.position.y));
                         let _ = frame.update(cx, |frame, cx| {
-                            frame.console_window_mouse_down(x, y, window, cx)
+                            frame.console_window_mouse_down(x, y, window, cx);
+                            frame.statistics_window_mouse_down(x, y, window, cx);
                         });
                     }
                 });
@@ -932,6 +941,14 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(console) = self.console_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(console);
                 }
+                if let Some(statistics) =
+                    self.statistics_element(rect, covered, appearance, scale, window, cx)
+                {
+                    renderer = renderer.child(statistics);
+                }
+                if let Some(metadata) = self.metadata_element(rect, appearance, scale, cx) {
+                    renderer = renderer.child(metadata);
+                }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsContent) {
@@ -953,6 +970,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     controls = controls.child(settings);
                 }
                 if let Some(settings) = self.field3d_settings(rect, appearance, scale, window, cx) {
+                    controls = controls.child(settings);
+                }
+                if let Some(settings) =
+                    self.statistics_controls(rect, appearance, scale, window, cx)
+                {
                     controls = controls.child(settings);
                 }
                 viewer = viewer.child(probe(FrameElement::ControlsContent, controls));

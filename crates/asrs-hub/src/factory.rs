@@ -27,6 +27,7 @@ use asrs_tabs::mechanism_renderer::MechanismRenderer;
 use asrs_tabs::metadata::{MetadataController, MetadataRenderer};
 use asrs_tabs::points::PointsController;
 use asrs_tabs::points_renderer::PointsRenderer;
+use asrs_tabs::statistics::renderer::StatisticsRenderer;
 use asrs_tabs::statistics::{StatisticsController, StatisticsCx};
 use asrs_tabs::swerve::SwerveController;
 use asrs_tabs::swerve_renderer::{SwerveDom, SwerveRenderer};
@@ -162,10 +163,14 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
                     Box::new(ConsoleRenderer::new(dom, true)),
                 )
             }
-            Some(TabType::Statistics) => (
-                Box::new(StatisticsController::new(cx)),
-                pending(TabType::Statistics),
-            ),
+            Some(TabType::Statistics) => {
+                let controller = StatisticsController::new(cx);
+                let renderer: Box<dyn TabRenderer<Cx>> = match cx.canvas_env() {
+                    Some(env) => Box::new(StatisticsRenderer::new(env.clock, env.text)),
+                    None => pending(TabType::Statistics),
+                };
+                (Box::new(controller), renderer)
+            }
             Some(TabType::Video) => (Box::new(VideoController::new()), pending(TabType::Video)),
             Some(TabType::Joysticks) => (
                 Box::new(JoysticksController::new(cx)),

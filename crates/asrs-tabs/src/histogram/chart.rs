@@ -1352,7 +1352,8 @@ mod tests {
                 now: 0.0,
             };
             page.run(|h, env| h.attach((400.0, 300.0), env)).unwrap();
-            page.update_data(0.0);
+            page.run(|h, env| h.set_theme(false, env)).unwrap();
+            page.update_data();
             page
         }
 
@@ -1364,9 +1365,8 @@ mod tests {
             body(&mut self.histogram, &mut env)
         }
 
-        fn update_data(&mut self, change_counter: f64) {
+        fn update_data(&mut self) {
             let command = HistogramCommand {
-                change_counter,
                 bins: vec![0.0, 1.0],
                 step_size: 1.0,
                 fields: vec![HistogramField {
@@ -1375,12 +1375,15 @@ mod tests {
                     counts: vec![2.0, 3.0],
                 }],
             };
-            self.run(|h, env| h.render(&command, false, env)).unwrap();
+            self.run(|h, env| h.set_data(&command, false, env)).unwrap();
         }
 
         fn frame(&mut self) {
             self.now += FRAME;
-            self.run(|h, env| h.frame(env)).unwrap();
+            for _ in 0..self.histogram.callbacks() {
+                let (_, result) = self.run(|h, env| h.run_callback(env)).unwrap();
+                result.unwrap();
+            }
         }
 
         /// Runs frames until none is requested and returns how many ran.
@@ -1424,7 +1427,7 @@ mod tests {
         let options = page.hover();
         assert!(animations_outlast(page.settle()));
         assert!(options.upgrade().is_some());
-        page.update_data(1.0);
+        page.update_data();
         assert!(options.upgrade().is_none());
     }
 
@@ -1434,7 +1437,7 @@ mod tests {
         let options = page.hover();
         page.frame();
         let before = background(&options);
-        page.update_data(1.0);
+        page.update_data();
         page.frame();
         assert_ne!(background(&options), before);
         let chart = &page.histogram.chart;
@@ -1449,8 +1452,8 @@ mod tests {
     fn repeated_updates_under_the_pointer_free_every_replaced_bar() {
         let mut page = Page::new();
         let mut replaced = vec![page.hover()];
-        for change_counter in 1..20 {
-            page.update_data(f64::from(change_counter));
+        for _ in 1..20 {
+            page.update_data();
             let bar = page.histogram.chart.active[0].element.clone();
             replaced.push(Rc::downgrade(&bar.borrow().options));
             page.frame();
