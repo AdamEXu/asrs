@@ -105,6 +105,10 @@ pub enum Action {
     Menu {
         path: Vec<String>,
     },
+    /// Clicks the one application menu item that has one of these labels.
+    AppMenu {
+        labels: Vec<String>,
+    },
     /// Sends input and captures to the prompt window of this page, or back to the hub once the
     /// prompt has closed.
     Prompt {
@@ -137,7 +141,39 @@ pub struct Scenario {
     pub gl: bool,
     /// Merged over the default preferences, as main merges `prefs.json`.
     pub prefs: JsValue,
+    /// Files under `userAssets/` seeded into userData before main starts.
+    pub user_assets: Vec<(String, Seed)>,
     pub actions: Vec<Action>,
+}
+
+/// A seeded file: JSON, or the bytes of a file beside the scenarios (`{"$file": path}`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Seed {
+    Json(JsValue),
+    File(String),
+}
+
+/// `userData`, whose only files a port run seeds are user assets.
+fn user_assets(name: &str, root: &JsValue) -> Result<Vec<(String, Seed)>, String> {
+    let Some(seeds) = root.get("userData") else {
+        return Ok(Vec::new());
+    };
+    keys(seeds)
+        .into_iter()
+        .map(|file| {
+            if !file.starts_with("userAssets/") || file.split('/').any(|c| c == "..") {
+                return Err(format!(
+                    "{name}: userData {file:?}: the port only seeds files under userAssets/"
+                ));
+            }
+            let value = seeds.get(&file).ok_or("keys() lists members")?;
+            let seed = match value.get("$file").and_then(JsValue::as_str) {
+                Some(path) => Seed::File(path.to_string_lossy()),
+                None => Seed::Json(value.clone()),
+            };
+            Ok((file, seed))
+        })
+        .collect()
 }
 
 /// The content size of a hub window opened with no saved state, which is the Electron
@@ -150,7 +186,7 @@ pub fn default_window() -> (f64, f64) {
 const TOP_KEYS: [&str; 9] = [
     "page", "window", "scales", "themes", "gl", "prefs", "userData", "actions", "about",
 ];
-const ACTION_KEYS: [&str; 13] = [
+const ACTION_KEYS: [&str; 14] = [
     "main",
     "open",
     "eval",
@@ -162,6 +198,7 @@ const ACTION_KEYS: [&str; 13] = [
     "key",
     "dialog",
     "menu",
+    "appMenu",
     "prompt",
     "capture",
 ];
@@ -279,6 +316,9 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
         "menu" => Action::Menu {
             path: strings(Some(value), "menu")?,
         },
+        "appMenu" => Action::AppMenu {
+            labels: strings(Some(value), "appMenu")?,
+        },
         "prompt" => Action::Prompt {
             page: match text().as_deref() {
                 Some("editRange") => Some(WindowKind::EditRange),
@@ -286,6 +326,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("renameTab") => Some(WindowKind::RenameTab),
                 Some("unitConversion") => Some(WindowKind::UnitConversion),
                 Some("export") => Some(WindowKind::Export),
+                Some("preferences") => Some(WindowKind::Preferences),
                 None if value.is_null() => None,
                 other => return Err(format!("unknown prompt page {other:?}")),
             },
@@ -324,11 +365,7 @@ impl Scenario {
         if let Some(key) = keys(&root).iter().find(|k| !TOP_KEYS.contains(&k.as_str())) {
             return Err(format!("{name}: unknown key {key:?}"));
         }
-        if root.get("userData").is_some_and(|u| !keys(u).is_empty()) {
-            return Err(format!(
-                "{name}: userData seeds files main reads, and the port has no main yet"
-            ));
-        }
+        let user_assets = user_assets(name, &root)?;
         let page = match root.get("page").and_then(JsValue::as_str) {
             None => Page::App,
             Some(p) if p.to_string_lossy() == "app" => Page::App,
@@ -394,6 +431,7 @@ impl Scenario {
                 .get("prefs")
                 .cloned()
                 .unwrap_or_else(|| JsValue::Object(Default::default())),
+            user_assets,
             actions,
         })
     }
@@ -455,6 +493,7 @@ mod tests {
                 {"menu": ["Manual Units", "Edit Conversion..."]},
                 {"prompt": "unitConversion"},
                 {"prompt": null},
+                {"appMenu": ["Settings...", "Show Preferences..."]},
                 {"capture": "c", "masks": [".side-bar"]}
             ]}"#,
         )
@@ -524,6 +563,12 @@ mod tests {
             }
         );
         assert_eq!(s.actions[10], Action::Prompt { page: None });
+        assert_eq!(
+            s.actions[11],
+            Action::AppMenu {
+                labels: vec!["Settings...".into(), "Show Preferences...".into()]
+            }
+        );
         assert_eq!(s.prefs.get("theme"), Some(&JsValue::string("dark")));
     }
 
@@ -541,6 +586,25 @@ mod tests {
         )
         .unwrap_err();
         assert!(e.contains("userData"), "{e}");
+        let e = Scenario::parse(
+            "u",
+            r#"{"userData": {"userAssets/../state.json": {}}, "actions": [{"capture": "c"}]}"#,
+        )
+        .unwrap_err();
+        assert!(e.contains("userData"), "{e}");
+        let s = Scenario::parse(
+            "u",
+            r#"{"userData": {"userAssets/Joystick_A/image.png": {"$file": "a.png"}},
+                "actions": [{"capture": "c"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            s.user_assets,
+            [(
+                "userAssets/Joystick_A/image.png".to_owned(),
+                Seed::File("a.png".to_owned())
+            )]
+        );
         let e = Scenario::parse("m", r#"{"actions": [{"main": "nope"}, {"capture": "c"}]}"#)
             .unwrap_err();
         assert!(e.contains("nope"), "{e}");

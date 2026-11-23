@@ -128,6 +128,14 @@ impl Element {
         }
     }
 
+    /// The content attribute `name`. Inline style mutations not yet synced do not show in it.
+    pub fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.as_str())
+    }
+
     pub fn style(&self) -> &InlineStyle {
         &self.style
     }

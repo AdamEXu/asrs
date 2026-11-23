@@ -16,6 +16,7 @@ export type Action =
   | { key: string; modifiers?: string[] }
   | { dialog: number | string | null }
   | { menu: string[] }
+  | { appMenu: string[] }
   | { prompt: string | null }
   | { capture: string; probes?: string[]; masks?: string[] };
 
@@ -31,7 +32,7 @@ export type Scenario = {
   actions: Action[];
 };
 
-const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "prompt", "capture"];
+const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "appMenu", "prompt", "capture"];
 const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "actions", "about"];
 
 export function actionKind(action: Action): string {

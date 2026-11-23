@@ -22,6 +22,7 @@ use asrs_ui::gpui::{
     Window,
 };
 
+use super::canvas_tabs::JoysticksTab;
 use super::field3d::Field3dTab;
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
 use super::prompts;
@@ -109,6 +110,7 @@ impl HubView for FrameView {
     ) -> Option<Box<dyn TabRenderer<HubPage>>> {
         match kind {
             TabType::Field3d => Some(Box::new(Field3dTab::new(preferences, is_battery))),
+            TabType::Joysticks => Some(Box::new(JoysticksTab::default())),
             _ => None,
         }
     }

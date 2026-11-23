@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
+use asrs_js::ops;
 use asrs_js::string::JsError;
 use asrs_js::time::{Clock, NamedZone, SystemClock};
 use asrs_js::value::{JsValue, ToJs};
@@ -35,6 +36,7 @@ use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
 use crate::views::documentation::DocumentationRoot;
 use crate::views::hub_host::{HubEntityHost, boot_messages};
+use crate::views::prompts;
 use crate::windows::{self, Rect, WindowId, Windows};
 
 /// `app.isPackaged`: set by `cargo xtask bundle`.
@@ -378,6 +380,41 @@ impl MainProcess {
         }
     }
 
+    /// `openPreferences(parent)`; an error is `dom-ready`'s throw on `prefs.json`, after which the
+    /// window shows its page's defaults.
+    pub fn open_preferences(cx: &mut App, parent: WindowId) -> Result<(), JsError> {
+        let (id, view) = match prompts::open_preferences(cx, parent, Self::write_preferences) {
+            Ok(Some(opened)) => opened,
+            Ok(None) => return Ok(()),
+            Err(e) => {
+                eprintln!("asrs: opening the preferences window: {e}");
+                return Ok(());
+            }
+        };
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return Ok(());
+        };
+        let message = ops::object([
+            ("platform", JsValue::string(process_platform())),
+            ("prefs", main.state.preferences(&RealFs)?),
+        ]);
+        if let Err(e) = prompts::post(cx, id, &view, &message) {
+            eprintln!("asrs: the preferences window: {e}");
+        }
+        Ok(())
+    }
+
+    /// `jsonfile.writeFileSync(PREFS_FILENAME, event.data); sendAllPreferences();`
+    fn write_preferences(prefs: JsValue, cx: &mut App) {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return;
+        };
+        match main.state.write_preferences(&RealFs, &prefs) {
+            Ok(()) => Self::send_all_preferences(cx),
+            Err(e) => eprintln!("asrs: prefs.json: {e:?}"),
+        }
+    }
+
     /// `menuTemplate`, as the last `sendAllPreferences` left it.
     pub fn menu(cx: &App) -> &[MenuItem] {
         &cx.global::<MainProcess>().menu
@@ -639,7 +676,7 @@ fn open_files_message(files: Vec<String>) -> NamedMessage<MainToHub> {
     let files = files.iter().map(|f| JsValue::string(f)).collect();
     NamedMessage::new(
         MainToHub::OpenFiles,
-        asrs_js::ops::object([
+        ops::object([
             ("files", JsValue::Array(files)),
             ("merge", JsValue::Bool(false)),
         ]),

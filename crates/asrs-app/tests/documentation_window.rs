@@ -9,7 +9,6 @@
 //! skipped under `ASRS_CI=1` and off macOS.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -385,7 +384,7 @@ fn main() {
         cx.activate(true);
         cx.set_global(DocumentationRoot {
             build,
-            user_data: PathBuf::from(std::env::temp_dir()),
+            user_data: std::env::temp_dir(),
         });
         cx.spawn(async move |cx| {
             let mut report = Report::default();

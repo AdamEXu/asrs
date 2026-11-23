@@ -94,6 +94,12 @@ fs.mkdirSync(userData, { recursive: true });
 fs.mkdirSync(capturesDir, { recursive: true });
 app.setPath("userData", userData);
 
+// `{"$file": path}` seeds a binary file from parity/scenarios.
+function seedContents(value: unknown): string | Buffer {
+  const file = (value as { $file?: string } | null)?.$file;
+  return file === undefined ? JSON.stringify(value) : fs.readFileSync(path.join(path.dirname(scenarioFile), file));
+}
+
 const seeds: Record<string, unknown> = {
   "prefs.json": { ...scenario.prefs, theme },
   "beta-2027.json": { welcomeComplete: true, surveyStatus: true },
@@ -102,7 +108,7 @@ const seeds: Record<string, unknown> = {
 for (const [file, value] of Object.entries(seeds)) {
   const seedFile = path.join(userData, file);
   fs.mkdirSync(path.dirname(seedFile), { recursive: true });
-  fs.writeFileSync(seedFile, JSON.stringify(value));
+  fs.writeFileSync(seedFile, seedContents(value));
 }
 const seedBytes = new Map(Object.keys(seeds).map((file) => [file, fs.readFileSync(path.join(userData, file))]));
 
@@ -217,6 +223,19 @@ async function clickMenu(labels: string[]) {
       items = item.submenu!.items;
     }
   }
+}
+
+function clickAppMenu(labels: string[]) {
+  const found: MenuItem[] = [];
+  const visit = (items: MenuItem[]) => {
+    for (const item of items) {
+      if (item.submenu) visit(item.submenu.items);
+      else if (labels.includes(item.label)) found.push(item);
+    }
+  };
+  visit(Menu.getApplicationMenu()!.items);
+  if (found.length !== 1) throw new Error(`${found.length} application menu items are labelled ${JSON.stringify(labels)}`);
+  (found[0].click as any)({}, target, target!.webContents);
 }
 
 async function switchPrompt(name: string | null) {
@@ -529,16 +548,19 @@ async function perform(action: Action) {
     } as any);
   } else if ("key" in action) {
     const modifiers = (action.modifiers ?? []) as any;
-    const send = (type: "keyDown" | "char" | "keyUp") => {
-      if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode: action.key, modifiers });
+    const send = (type: "keyDown" | "char" | "keyUp", keyCode = action.key) => {
+      if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode, modifiers });
     };
     send("keyDown");
-    if ([...action.key].length === 1) send("char");
+    if (action.key === "Enter") send("char", "\r");
+    else if ([...action.key].length === 1) send("char");
     send("keyUp");
   } else if ("dialog" in action) {
     dialogQueue.push(action.dialog);
   } else if ("menu" in action) {
     await clickMenu(action.menu);
+  } else if ("appMenu" in action) {
+    clickAppMenu(action.appMenu);
   } else if ("prompt" in action) {
     await switchPrompt(action.prompt);
   } else if ("capture" in action) {

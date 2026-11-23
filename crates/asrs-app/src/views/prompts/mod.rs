@@ -1,22 +1,23 @@
 //! `main.ts`'s prompt windows: `createEditRangeWindow`, `createUnitConversionWindow`,
-//! `createRenameTabWindow`, `createEditFovWindow` and the window of `createExportWindow`.
+//! `createRenameTabWindow`, `createEditFovWindow`, the window of `createExportWindow` and
+//! `openPreferences`.
 
 mod layout;
 pub mod window;
 
 pub use window::PromptWindow;
 
-use std::cell::Cell;
-
 use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_tabs::prompts::{
-    EditFov, EditRange, Export, PromptEvent, PromptPage, RenameTab, UnitConversion,
+    EditFov, EditRange, Export, Preferences, PromptEvent, PromptPage, RenameTab, UnitConversion,
 };
-use asrs_ui::gpui::{App, AppContext};
+use asrs_ui::gpui::{App, AppContext, Entity, Window};
 
 use crate::menus::context::Prompt;
-use crate::windows::{self, MessageBoxOptions, Opening, WindowId, WindowKind, Windows};
+use crate::windows::{
+    self, MessageBoxOptions, Opening, SingletonOpening, WindowId, WindowKind, Windows,
+};
 
 /// The page a prompt window loads.
 pub fn page(kind: WindowKind) -> Box<dyn PromptPage> {
@@ -26,6 +27,7 @@ pub fn page(kind: WindowKind) -> Box<dyn PromptPage> {
         WindowKind::RenameTab => Box::<RenameTab>::default(),
         WindowKind::EditFov => Box::<EditFov>::default(),
         WindowKind::Export => Box::<Export>::default(),
+        WindowKind::Preferences => Box::<Preferences>::default(),
         other => panic!("{other:?} is not a prompt"),
     }
 }
@@ -40,25 +42,78 @@ pub fn open(
     message: &JsValue,
     on_message: impl Fn(JsValue, WindowId, &mut App) + 'static,
 ) -> Opening<PromptWindow> {
+    let (id, view) = windows::open_modal(cx, kind, parent, |window, cx| load(kind, window, cx))?;
+    connect(cx, id, &view, on_message);
+    post(cx, id, &view, message)?;
+    Ok((id, view))
+}
+
+fn load(kind: WindowKind, window: &mut Window, cx: &mut App) -> Entity<PromptWindow> {
     let page = page(kind);
-    let title = format!("{} \u{2014} {}", page.title(), crate::IDENTITY.name);
-    let (id, view) = windows::open_modal(cx, kind, parent, |window, cx| {
-        window.set_window_title(&title);
-        cx.new(|cx| PromptWindow::new(page, window, cx))
-    })?;
-    cx.subscribe(&view, move |_, event: &PromptEvent, cx| match event {
+    window.set_window_title(&format!(
+        "{} \u{2014} {}",
+        page.title(),
+        crate::IDENTITY.name
+    ));
+    cx.new(|cx| PromptWindow::new(page, window, cx))
+}
+
+fn connect(
+    cx: &mut App,
+    id: WindowId,
+    view: &Entity<PromptWindow>,
+    on_message: impl Fn(JsValue, WindowId, &mut App) + 'static,
+) {
+    cx.subscribe(view, move |view, event: &PromptEvent, cx| match event {
         PromptEvent::Reply(value) => on_message(value.clone(), id, cx),
         PromptEvent::Alert(message) => alert(message.to_string_lossy(), id, cx),
-        PromptEvent::Error(error) => eprintln!("asrs: {title}: {error:?}"),
+        PromptEvent::Error(error) => {
+            eprintln!("asrs: {}: {error:?}", view.read(cx).page().title());
+        }
         PromptEvent::Select(_) => {}
     })
     .detach();
+}
+
+/// `port2.postMessage(message)`.
+pub fn post(
+    cx: &mut App,
+    id: WindowId,
+    view: &Entity<PromptWindow>,
+    message: &JsValue,
+) -> asrs_ui::gpui::Result<()> {
     if let Some(handle) = Windows::handle(cx, id) {
         handle.update(cx, |_, window, cx| {
             view.update(cx, |view, cx| view.message(message, window, cx));
         })?;
     }
-    Ok((id, view))
+    Ok(())
+}
+
+/// The window of `openPreferences`, or `None` when it was open and now has the focus. Its replies
+/// close it and go to `on_reply`.
+pub fn open_preferences(
+    cx: &mut App,
+    parent: WindowId,
+    on_reply: impl Fn(JsValue, &mut App) + 'static,
+) -> SingletonOpening<PromptWindow> {
+    let kind = WindowKind::Preferences;
+    let opened = windows::open_preferences(cx, parent, |window, cx| load(kind, window, cx))?;
+    if let Some((id, view)) = &opened {
+        connect(cx, *id, view, close_and(on_reply));
+    }
+    Ok(opened)
+}
+
+/// Closes the prompt and hands its reply to `on_reply`. Enter on a button posts two replies, the
+/// window's `keydown` listener's and the button's, and `main.ts` handles both.
+fn close_and(
+    on_reply: impl Fn(JsValue, &mut App) + 'static,
+) -> impl Fn(JsValue, WindowId, &mut App) + 'static {
+    move |value, id, cx| {
+        windows::close(cx, id);
+        on_reply(value, cx);
+    }
 }
 
 /// `window.alert(message)` in Electron: a message box with only an OK button.
@@ -76,26 +131,19 @@ fn alert(message: String, id: WindowId, cx: &mut App) {
     }
 }
 
-/// Opens the prompt a context menu item asks for. Its first reply closes it and goes to
-/// `on_reply`.
+/// Opens the prompt a context menu item asks for. Its replies close it and go to `on_reply`.
 pub fn ask(
     cx: &mut App,
     parent: WindowId,
     prompt: &Prompt,
-    on_reply: impl FnOnce(JsValue, &mut App) + 'static,
+    on_reply: impl Fn(JsValue, &mut App) + 'static,
 ) -> Opening<PromptWindow> {
-    let on_reply = Cell::new(Some(on_reply));
     open(
         cx,
         prompt.window(),
         parent,
         &prompt.initial(),
-        move |value, id, cx| {
-            if let Some(on_reply) = on_reply.take() {
-                windows::close(cx, id);
-                on_reply(value, cx);
-            }
-        },
+        close_and(on_reply),
     )
 }
 

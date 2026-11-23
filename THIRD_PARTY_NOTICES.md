@@ -21,6 +21,9 @@ TypeScript, CSS and C sources (including the WPILOG indexer,
 
 - `www/symbols` icons, embedded into `asrs-ui` at build time, and `www/textures`,
   `icons`, `bundledAssets` and `licenses`, copied into `assets/` by `cargo xtask assets`.
+- `docs`, built by `cargo xtask docs` with upstream's own `docusaurus-embed.config.ts` and
+  shipped unmodified as `docs/build` except for two images upstream's license does not cover,
+  which are replaced: the photo on the "not found" page and Apple's App Store badge.
 - `crates/asrs-model/src/source_list/configs/*.json`: upstream's tab controller
   source list configs.
 - `crates/asrs-log/src/units/tables.rs` and `crates/asrs-formats/src/spark/tables.rs`,
@@ -28,7 +31,23 @@ TypeScript, CSS and C sources (including the WPILOG indexer,
 - `parity/specs/assets/release`: asset `config.json` files from AdvantageScopeAssets
   releases (test data, with its own [`LICENSE`](parity/specs/assets/release/LICENSE)).
 
+The documentation shows AdvantageScope's name, logo and screenshots, some with FIRST field
+images, match footage or other vendors' software in them, to describe AdvantageScope. Those
+names and marks belong to their owners.
+
 asrs is not affiliated with or endorsed by Littleton Robotics or FRC Team 6328.
+
+## npm packages in the documentation
+
+The built documentation contains Docusaurus, React, Infima, Prism and their dependencies (MIT,
+BSD-3-Clause, Apache-2.0, ISC and 0BSD). `docs/build/THIRD_PARTY_LICENSES.txt`, written by
+`cargo xtask docs` from the packages the build compiled in, lists each with its license text;
+Infima's, which its package omits, is [`licenses/infima.txt`](licenses/infima.txt).
+
+## WebKitGTK and GTK (Linux)
+
+- License: LGPL-2.1-or-later ([`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt)) and BSD
+- Used in: the Documentation tab, linked dynamically from the system's libraries and not shipped
 
 ## Google Material Symbols
 
@@ -179,7 +198,7 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: Chromium m142
 - Used in: `crates/asrs-canvas/src/` (analytic AA in `aaa.rs`, `scan.rs`, `blit.rs`;
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
-  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; gradients, paths and
+  `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
   `text/layout.rs`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)
@@ -250,6 +269,16 @@ asrs copies them into `assets/licenses` and keeps them here for the same feature
 - Version: @mcap/core 1.3.0, @foxglove/crc 0.0.3
 - Used in: `crates/asrs-formats/src/mcap.rs` (`McapWriter`, `McapRecordBuilder`,
   `ChunkBuilder`, `BufferBuilder` and the CRC-32, translated to Rust)
+
+## ssh2
+
+- License: MIT ([`licenses/ssh2.txt`](licenses/ssh2.txt))
+- Copyright Brian White
+- Version: 1.14.0
+- Used in: `crates/asrs-services/src/download/sftp.rs` (`lib/protocol/SFTP.js`: the client session,
+  `readdir` and `fastGet`), `handshake.rs` (the ident, packet and key exchange parsing of
+  `lib/protocol`) and `client.rs` (the event order of `lib/client.js`), translated to Rust. The SSH
+  transport is the `russh` crate (Apache-2.0)
 
 ## lzma-native
 

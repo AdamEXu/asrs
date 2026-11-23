@@ -218,6 +218,21 @@
     "src/genDocumentation.ts",
     "src/shims.ts"
   ],
+  "genDownload": [
+    "src/cve1.ts",
+    "src/download/bundle.ts",
+    "src/download/handshake.ts",
+    "src/download/live.ts",
+    "src/download/offer.ts",
+    "src/download/script.ts",
+    "src/download/sftp.ts",
+    "src/download/window.ts",
+    "src/download/world.ts",
+    "src/environment.ts",
+    "src/fakes/mainElectron.ts",
+    "src/fakes/mainFs.ts",
+    "src/genDownload.ts"
+  ],
   "genDownloadHelpers": [
     "src/genDownloadHelpers.ts"
   ],

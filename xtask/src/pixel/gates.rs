@@ -426,12 +426,7 @@ fn window(reference: &Capture, port: &Capture, platform: &[PlatformMask], out: &
     let scale = reference.scale;
     let mut reasons = Vec::new();
     let masked = masked_pixels(reference, port, platform, &mut reasons);
-    let dumps: Vec<Rect> = reference
-        .canvases
-        .iter()
-        .map(|d| d.rect)
-        .chain(reference.gl.iter().map(|d| d.rect))
-        .collect();
+    let dumps: Vec<Rect> = reference.gl.iter().map(|d| d.rect).collect();
     let dumped = rect_mask(&dumps, 0.0, scale, w, h);
     let visible_texts: Vec<Rect> = reference
         .texts
@@ -992,6 +987,29 @@ mod tests {
         b.gl[0].mode = RenderMode::Standard;
         b.gl[0].edges = None;
         assert_eq!(failed(&compare(&a, &b, &[])), [("4 3D", "3D g.png".into())]);
+    }
+
+    #[test]
+    fn what_css_draws_over_a_dumped_canvas_is_compared_in_the_window() {
+        let mut a = capture(100, 100, 1.0);
+        a.canvases = vec![Dump {
+            file: "c.png".into(),
+            rect: [10.0, 10.0, 80.0, 80.0],
+            image: Rgba {
+                width: 80,
+                height: 80,
+                data: [0; 4].repeat(80 * 80),
+            },
+        }];
+        let b = a.clone();
+        assert!(compare(&a, &b, &[]).pass());
+        for x in 10..90 {
+            paint(&mut a, x, 10, [0, 0, 0, 255]);
+        }
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("2 pixels", "window".into())]
+        );
     }
 
     #[test]
