@@ -550,6 +550,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "asrs-webview"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "gtk",
+ "lb-wry",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

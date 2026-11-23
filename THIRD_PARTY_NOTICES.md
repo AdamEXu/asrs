@@ -47,7 +47,8 @@ Infima's, which its package omits, is [`licenses/infima.txt`](licenses/infima.tx
 ## WebKitGTK and GTK (Linux)
 
 - License: LGPL-2.1-or-later ([`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt)) and BSD
-- Used in: the Documentation tab, linked dynamically from the system's libraries and not shipped
+- Used in: `asrs-webview`, the process behind the Documentation tab, linked dynamically from the
+  system's libraries and not shipped. asrs itself does not link them.
 
 ## Google Material Symbols
 

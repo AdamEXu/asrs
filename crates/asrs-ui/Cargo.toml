@@ -23,27 +23,29 @@ anyhow = { version = "=1.0.104", optional = true }
 asrs-canvas = { path = "../asrs-canvas" }
 async-channel = "=2.5.0"
 gpui-kit.workspace = true
-gpui-webview = "=0.10.0"
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
 icu_properties = "=1.4.3"
 image = { version = "=0.25.10", default-features = false }
+raw-window-handle = "=0.6.2"
 roxmltree = "=0.21.2"
 simplecss = "=0.2.2"
 svgtypes = "=0.16.2"
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
-wry = { package = "lb-wry", version = "=0.53.3" }
 
 [dev-dependencies]
 asrs-js = { path = "../asrs-js" }
 asrs-parity = { path = "../asrs-parity" }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+gpui-webview = "=0.10.0"
+wry = { package = "lb-wry", version = "=0.53.3" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "=0.6.2"
 gpui-pre-apple = { version = "=0.3.12", optional = true, default-features = false }
 parking_lot = { version = "=0.12.5", optional = true }
 objc2 = "=0.6.5"
-raw-window-handle = "=0.6.2"
 
 [target.'cfg(target_os = "macos")'.dependencies.objc2-app-kit]
 version = "=0.3.2"

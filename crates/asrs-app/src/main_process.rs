@@ -114,6 +114,17 @@ pub fn documentation_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/docs/build")
 }
 
+/// `asrs-webview`, beside the executable.
+pub fn webview_host() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let dir = exe.parent().unwrap_or(Path::new("."));
+    let name = "asrs-webview";
+    if !PACKAGED && dir.ends_with("deps") {
+        return dir.with_file_name(name);
+    }
+    dir.join(name)
+}
+
 /// The host's `app.getPath` values, with the user-data directory created as Chromium does at
 /// launch.
 pub fn host_paths() -> Result<AppPaths, String> {
@@ -724,6 +735,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     cx.set_global(DocumentationRoot {
         build: documentation_dir(),
         user_data: PathBuf::from(&paths.user_data),
+        host: webview_host(),
     });
     let screens = Screens::now(cx);
     let (state, prefs) = match MainState::start(&RealFs, &screens, paths, process_platform()) {

@@ -9,10 +9,13 @@ const USAGE: &str = "usage: cargo xtask bundle [--target <triple>]
 Builds a release directory in target/bundle/<triple or host>/: the asrs binary
 (built with ASRS_LIBM_LGPL_SHIP=1, so it only loads the library next to it or from
 ASRS_LIBM_LGPL, and ASRS_PACKAGED=1, so it runs as a packaged app with bundledAssets/ beside
-it), the asrs-libm-lgpl shared library, upstream's bundledAssets/ (from assets/ or
+it), the asrs-libm-lgpl shared library, on Linux asrs-webview (the only binary that links
+WebKitGTK), upstream's bundledAssets/ (from assets/ or
 reference/AdvantageScope), the documentation `cargo xtask docs` built (as docs/build), and the
 `cargo xtask licenses` bundle including the library's LGPL
 text and source. Needs cargo-about.";
+
+const WEBVIEW: &str = "asrs-webview";
 
 pub fn run(args: &[String]) -> Result {
     let target = match args {
@@ -32,7 +35,11 @@ pub fn run(args: &[String]) -> Result {
     if !documentation.join("index.html").is_file() {
         return Err("the documentation is not built; run `cargo xtask docs`".to_owned());
     }
+    let linux = target.map_or(cfg!(target_os = "linux"), |t| t.contains("linux"));
     let mut cargo_args = vec!["build", "--locked", "--release", "-p", "asrs-app"];
+    if linux {
+        cargo_args.extend(["-p", WEBVIEW]);
+    }
     if let Some(target) = target {
         cargo_args.extend(["--target", target]);
     }
@@ -71,10 +78,28 @@ pub fn run(args: &[String]) -> Result {
     }
     copy_tree(&root.join("target/licenses"), &dest)?;
     copy(&release.join(exe), &dest.join(exe))?;
+    if linux {
+        check_startup_libraries(&dest.join(exe))?;
+        copy(&release.join(WEBVIEW), &dest.join(WEBVIEW))?;
+    }
     copy(&library, &dest.join(libm::file_name(target)))?;
     copy_tree(&bundled_assets, &dest.join("bundledAssets"))?;
     copy_tree(&documentation, &dest.join("docs/build"))?;
     eprintln!("wrote {}", dest.display());
+    Ok(())
+}
+
+/// asrs must start on machines without WebKitGTK, so it may not name it as a needed library.
+fn check_startup_libraries(exe: &Path) -> Result {
+    let bytes = fs::read(exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+    for library in ["libwebkit2gtk-", "libgtk-3.so", "libjavascriptcoregtk-"] {
+        if bytes
+            .windows(library.len())
+            .any(|window| window == library.as_bytes())
+        {
+            return Err(format!("{} links {library}", exe.display()));
+        }
+    }
     Ok(())
 }
 

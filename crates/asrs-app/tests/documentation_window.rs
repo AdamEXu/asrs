@@ -1,19 +1,20 @@
 #![allow(clippy::disallowed_methods)]
 
 //! The `tabs/documentation` records, which upstream's renderer left in Blink, on the real page in
-//! the system's webview: after every step `saveState` must return the recorded hash. Then a page
-//! hidden and shown again keeps its scroll position, and a Documentation tab in the real hub
-//! window restores a hash, saves it, hides with its tab and survives the window closing.
+//! the system's webview: after every step `saveState` must return the recorded hash. Then the
+//! page cannot reach the network or leave the documentation, a page hidden and shown again keeps
+//! its scroll position, and a Documentation tab in the real hub window restores a hash, saves it,
+//! hides with its tab and survives the window closing.
 //!
-//! Needs a display, the built documentation (`cargo xtask docs`) and the system's webview;
-//! skipped under `ASRS_CI=1` and off macOS.
+//! Needs a display, the built documentation (`cargo xtask docs`), the system's webview and, on
+//! Linux, `asrs-webview` and an X11 session; skipped under `ASRS_CI=1` and on Windows.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use asrs_app::main_process::documentation_dir;
+use asrs_app::main_process::{documentation_dir, webview_host};
 use asrs_app::views::documentation::{DocumentationPage, DocumentationRoot};
 use asrs_app::views::hub_host::HubEntityHost;
 use asrs_js::ops;
@@ -239,6 +240,35 @@ async fn replay(cx: &mut AsyncApp, report: &mut Report) {
     assert_eq!(report.compared, STEPS);
 }
 
+async fn confined(cx: &mut AsyncApp, report: &mut Report) {
+    let mut page = Page::open(cx);
+    page.render();
+    page.loaded(cx).await;
+    page.settle(cx).await;
+    page.query(
+        cx,
+        "window.blocked = 0; \
+         addEventListener('securitypolicyviolation', () => window.blocked++); \
+         fetch('https://example.com/').catch(() => {}); \
+         new Image().src = 'https://example.com/a.png'; \
+         location.href = 'https://example.com/'; \
+         open('file:///etc/passwd'); 1",
+    )
+    .await;
+    sleep(cx, 1000).await;
+    for (name, script) in [
+        ("remote requests are refused", "window.blocked === 2"),
+        (
+            "the page stays the documentation",
+            "location.protocol === 'asrs-page:' && document.querySelector('main') !== null",
+        ),
+    ] {
+        let held = page.query(cx, script).await;
+        report.equal(name, &JsValue::string(&held), &JsValue::string("true"));
+    }
+    page.close(cx);
+}
+
 async fn scroll(cx: &mut AsyncApp, report: &mut Report) {
     let mut page = Page::open(cx);
     page.render();
@@ -370,8 +400,13 @@ fn main() {
     if asrs_parity::ci::skip_in_ci("documentation window", needs) {
         return;
     }
-    if !cfg!(target_os = "macos") {
+    if cfg!(windows) {
         println!("documentation window: skipped on this platform");
+        return;
+    }
+    let set = |name| std::env::var_os(name).is_some_and(|value| !value.is_empty());
+    if cfg!(target_os = "linux") && (set("WAYLAND_DISPLAY") || !set("DISPLAY")) {
+        println!("documentation window: skipped, needs an X11 session (unset WAYLAND_DISPLAY)");
         return;
     }
     let build = documentation_dir();
@@ -385,6 +420,7 @@ fn main() {
         cx.set_global(DocumentationRoot {
             build,
             user_data: std::env::temp_dir(),
+            host: webview_host(),
         });
         cx.spawn(async move |cx| {
             let mut report = Report::default();
@@ -398,6 +434,7 @@ fn main() {
                 .expect("window")
             });
             replay(cx, &mut report).await;
+            confined(cx, &mut report).await;
             scroll(cx, &mut report).await;
             hub_tab(cx, &mut report).await;
             drop(keep);

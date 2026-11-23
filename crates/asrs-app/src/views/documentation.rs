@@ -2,7 +2,7 @@
 //! documentation in the system's webview, where upstream has an iframe. The native view draws
 //! above everything GPUI draws in its bounds.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -24,14 +24,15 @@ use super::frame::{FrameHost, HubFrame};
 const INDEX: &str = "index.html";
 const ONLINE: &str = "https://docs.advantagescope.org";
 /// The video player on four pages of the documentation.
-const EMBEDS: &[&str] = &["https://www.youtube.com/"];
+const EMBEDS: &[&str] = &["https://www.youtube.com/embed/"];
 const UNAVAILABLE: &str = "The documentation cannot be shown here. Click to open it in a browser.";
 
-/// The folder of the built documentation and the app's user-data folder. Without it, as in
-/// parity scenarios, no page is loaded.
+/// The folder of the built documentation, the app's user-data folder and the `asrs-webview`
+/// executable. Without it, as in parity scenarios, no page is loaded.
 pub struct DocumentationRoot {
     pub build: PathBuf,
     pub user_data: PathBuf,
+    pub host: PathBuf,
 }
 
 impl Global for DocumentationRoot {}
@@ -43,6 +44,7 @@ pub struct DocumentationPage {
     /// Keeps the tab's key, which is this allocation's address, from being reused.
     frame: SharedFrame,
     page: Option<Page>,
+    failed: Rc<Cell<bool>>,
     dark: bool,
 }
 
@@ -62,22 +64,29 @@ fn renderers(hub: &HubModel) -> impl Iterator<Item = (&DocumentationRenderer, bo
     })
 }
 
-fn open_page(frame: &SharedFrame, dark: bool, window: &mut Window, cx: &mut App) -> Option<Page> {
+fn open_page(
+    frame: &SharedFrame,
+    failed: &Rc<Cell<bool>>,
+    dark: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<Page> {
     let root = cx.try_global::<DocumentationRoot>()?;
     let build = root.build.clone();
-    let data_dir = Some(root.user_data.join("webview"));
     if !build.join(INDEX).is_file() {
         eprintln!("asrs: no documentation in {}", build.display());
         return None;
     }
-    let frame = Rc::downgrade(frame);
     let options = PageOptions {
         root: build,
         index: INDEX,
         embeds: EMBEDS,
-        data_dir,
+        data_dir: Some(root.user_data.join("webview")),
+        host: root.host.clone(),
         dark,
     };
+    let frame = Rc::downgrade(frame);
+    let failed = failed.clone();
     let opened = Page::open(options, window, cx, move |event, cx| {
         let Some(frame) = frame.upgrade() else {
             return;
@@ -88,6 +97,11 @@ fn open_page(frame: &SharedFrame, dark: bool, window: &mut Window, cx: &mut App)
                 frame.borrow_mut().navigated(id, JsString::from(hash));
             }
             PageEvent::Open(url) => cx.open_url(&url),
+            PageEvent::Failed(e) => {
+                eprintln!("asrs: showing the documentation: {e}");
+                failed.set(true);
+                cx.refresh_windows();
+            }
         }
     });
     opened
@@ -98,7 +112,8 @@ fn open_page(frame: &SharedFrame, dark: bool, window: &mut Window, cx: &mut App)
 /// The address of a documentation page on upstream's site.
 fn online(hash: &JsString) -> String {
     let hash = hash.to_string_lossy();
-    format!("{ONLINE}{}", hash.strip_prefix('#').unwrap_or("/"))
+    let path = hash.strip_prefix('#').filter(|path| path.starts_with('/'));
+    format!("{ONLINE}{}", path.unwrap_or("/"))
 }
 
 impl DocumentationPage {
@@ -108,14 +123,28 @@ impl DocumentationPage {
         window: &mut Window,
         cx: &mut App,
     ) -> DocumentationPage {
-        let page = open_page(frame, dark, window, cx);
-        if page.is_none() {
-            frame.borrow_mut().load(JsString::new());
-        }
-        DocumentationPage {
+        let failed = Rc::new(Cell::new(false));
+        let page = open_page(frame, &failed, dark, window, cx);
+        failed.set(page.is_none());
+        let mut tab = DocumentationPage {
             frame: frame.clone(),
             page,
+            failed,
             dark,
+        };
+        tab.close_failed();
+        tab
+    }
+
+    /// Without a page the hash is kept as it is assigned.
+    fn close_failed(&mut self) {
+        if !self.failed.get() {
+            return;
+        }
+        self.page = None;
+        let mut frame = self.frame.borrow_mut();
+        if !frame.loaded() {
+            frame.load(JsString::new());
         }
     }
 
@@ -125,6 +154,7 @@ impl DocumentationPage {
 
     /// Passes on what the renderer assigned since the last frame.
     pub fn sync(&mut self, dark: bool, cx: &mut App) {
+        self.close_failed();
         let assignment = self.frame.borrow_mut().take_assignment();
         let Some(page) = &self.page else {
             return;
@@ -207,5 +237,26 @@ impl<H: FrameHost> HubFrame<H> {
             .overflow_hidden()
             .child(content);
         Some(probed("div.documentation-container", container).into_any_element())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_online_page_is_on_the_documentation_site() {
+        for (hash, url) in [
+            ("", "https://docs.advantagescope.org/"),
+            ("#/", "https://docs.advantagescope.org/"),
+            (
+                "#/tab-reference/line-graph#units",
+                "https://docs.advantagescope.org/tab-reference/line-graph#units",
+            ),
+            ("#.example.com/", "https://docs.advantagescope.org/"),
+            ("#@example.com/", "https://docs.advantagescope.org/"),
+        ] {
+            assert_eq!(online(&JsString::from(hash)), url);
+        }
     }
 }
