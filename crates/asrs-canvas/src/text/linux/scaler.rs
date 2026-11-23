@@ -352,11 +352,6 @@ mod tests {
         assert_eq!(u32::from(lcd.data[0]), sum(&LCD_FILTER[0][8..]));
         assert_eq!(u32::from(lcd.data[2]), sum(&LCD_FILTER[2][8..]));
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     #[test]
     fn a_font_file_is_read_once() {
