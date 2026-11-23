@@ -12,24 +12,43 @@ use crate::{Result, workspace_root};
 const USAGE: &str = "usage: cargo xtask gpui <command>
 
 commands:
-  verify          vendor/gpui-pre equals the crates.io gpui-pre 0.3.12 plus
-                  patches/gpui-pre-0.3.12.patch (examples/ is not vendored)
-  vendor <dir>    write the crates.io archive plus the patch to <dir>, which must not
-                  exist (cargo cannot load the workspace without vendor/gpui-pre, so
-                  a new vendor tree is generated elsewhere and moved into place)
+  verify          vendor/gpui-pre and vendor/gpui-pre-scheduler equal the crates.io
+                  archives plus their patches in patches/ (gpui-pre's examples/ is not
+                  vendored)
+  vendor <crate> <dir>
+                  write the crates.io archive of gpui-pre or gpui-pre-scheduler plus its
+                  patch to <dir>, which must not exist (cargo cannot load the workspace
+                  without the vendored crates, so a new vendor tree is generated
+                  elsewhere and moved into place)
   features        no GPUI test-support in a normal build; present with `parity`
   release-audit   build asrs-app in release with and without `parity` and check that
                   test-support code reaches the artifacts only with it
 
-The crates.io archive comes from cargo's registry cache or is downloaded to
-$ASRS_CACHE/crates and checked against its sha256.";
+The crates.io archives come from cargo's registry cache or is downloaded to
+$ASRS_CACHE/crates and are checked against their sha256.";
 
-const NAME: &str = "gpui-pre";
-const VERSION: &str = "0.3.12";
-const SHA256: &str = "29db89613527079737f53752eab27fb65c9a7dd94979256c65a0e590c9fd34d8";
-const VENDOR_DIR: &str = "vendor/gpui-pre";
-const PATCH: &str = "patches/gpui-pre-0.3.12.patch";
-const NOT_VENDORED: &[&str] = &["examples/"];
+struct Vendored {
+    name: &'static str,
+    version: &'static str,
+    sha256: &'static str,
+    not_vendored: &'static [&'static str],
+}
+
+const VENDORED: &[Vendored] = &[
+    Vendored {
+        name: "gpui-pre",
+        version: "0.3.12",
+        sha256: "29db89613527079737f53752eab27fb65c9a7dd94979256c65a0e590c9fd34d8",
+        not_vendored: &["examples/"],
+    },
+    Vendored {
+        name: "gpui-pre-scheduler",
+        version: "0.3.12",
+        sha256: "b1d3fa97eeb4ea233635b756684affe96db9e29fc2af8cdc269268bd7ff649fc",
+        not_vendored: &[],
+    },
+];
+
 // rlib metadata lists the names of cfg-stripped items (`TestPlatform`, `VisualTestPlatform`, ...)
 // even without test-support, so markers must be names and literals that only compiled code carries.
 const TEST_SUPPORT_MARKERS: &[&str] = &["HeadlessAppContext", "no HeadlessRenderer configured"];
@@ -37,9 +56,9 @@ const TEST_SUPPORT_MARKERS: &[&str] = &["HeadlessAppContext", "no HeadlessRender
 pub fn run(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("verify") => verify_vendor(),
-        Some("vendor") => match args.get(1) {
-            Some(dir) => write_vendor(Path::new(dir)),
-            None => Err(USAGE.to_owned()),
+        Some("vendor") => match &args[1..] {
+            [name, dir] => write_vendor(name, Path::new(dir)),
+            _ => Err(USAGE.to_owned()),
         },
         Some("features") => check_features(),
         Some("release-audit") => release_audit(),
@@ -48,40 +67,26 @@ pub fn run(args: &[String]) -> Result {
 }
 
 pub fn verify_vendor() -> Result {
-    let expected = patched_tree()?;
-    let dir = workspace_root().join(VENDOR_DIR);
-    let mut actual = BTreeMap::new();
-    collect_tree(&dir, &dir, &mut actual)?;
-    let mut problems = Vec::new();
-    for (path, bytes) in &expected {
-        match actual.get(path) {
-            None => problems.push(format!("missing {path}")),
-            Some(found) if found != bytes => problems.push(format!("differs {path}")),
-            Some(_) => {}
-        }
-    }
-    for path in actual.keys().filter(|p| !expected.contains_key(*p)) {
-        problems.push(format!("extra {path}"));
-    }
+    let problems: Vec<String> = VENDORED
+        .iter()
+        .filter_map(|krate| krate.verify().err())
+        .collect();
     if problems.is_empty() {
-        eprintln!(
-            "{VENDOR_DIR} ok: {} files equal {NAME} {VERSION} plus {PATCH}",
-            expected.len()
-        );
         Ok(())
     } else {
-        Err(format!(
-            "{VENDOR_DIR} is not {NAME} {VERSION} plus {PATCH}:\n  {}",
-            problems.join("\n  ")
-        ))
+        Err(problems.join("\n"))
     }
 }
 
-fn write_vendor(dir: &Path) -> Result {
+fn write_vendor(name: &str, dir: &Path) -> Result {
+    let krate = VENDORED
+        .iter()
+        .find(|krate| krate.name == name)
+        .ok_or_else(|| format!("{name} is not a vendored crate\n\n{USAGE}"))?;
     if dir.exists() {
         return Err(format!("{} exists; remove it first", dir.display()));
     }
-    let tree = patched_tree()?;
+    let tree = krate.patched_tree()?;
     for (path, bytes) in &tree {
         let out = dir.join(path);
         if let Some(parent) = out.parent() {
@@ -93,51 +98,126 @@ fn write_vendor(dir: &Path) -> Result {
     Ok(())
 }
 
-fn patched_tree() -> Result<BTreeMap<String, Vec<u8>>> {
-    let mut tree = crate_tree(&crate_archive()?)?;
-    let patch_path = workspace_root().join(PATCH);
-    let patch =
-        fs::read_to_string(&patch_path).map_err(|e| format!("{}: {e}", patch_path.display()))?;
-    apply_patch(&mut tree, &patch).map_err(|e| format!("{PATCH}: {e}"))?;
-    Ok(tree)
-}
+impl Vendored {
+    fn vendor_dir(&self) -> String {
+        format!("vendor/{}", self.name)
+    }
 
-fn crate_archive() -> Result<Vec<u8>> {
-    let file = format!("{NAME}-{VERSION}.crate");
-    let mut candidates = registry_caches()
-        .into_iter()
-        .map(|dir| dir.join(&file))
-        .collect::<Vec<_>>();
-    let download = Paths::new()?.cache.join("crates").join(&file);
-    candidates.push(download.clone());
-    for path in candidates.iter().filter(|p| p.is_file()) {
-        let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        if sha256_hex(&bytes) == SHA256 {
-            return Ok(bytes);
+    fn patch(&self) -> String {
+        format!("patches/{}-{}.patch", self.name, self.version)
+    }
+
+    fn verify(&self) -> Result {
+        let expected = self.patched_tree()?;
+        let vendor_dir = self.vendor_dir();
+        let dir = workspace_root().join(&vendor_dir);
+        let mut actual = BTreeMap::new();
+        collect_tree(&dir, &dir, &mut actual)?;
+        let mut problems = Vec::new();
+        for (path, bytes) in &expected {
+            match actual.get(path) {
+                None => problems.push(format!("missing {path}")),
+                Some(found) if found != bytes => problems.push(format!("differs {path}")),
+                Some(_) => {}
+            }
         }
-        eprintln!("ignoring {}: sha256 mismatch", path.display());
+        for path in actual.keys().filter(|p| !expected.contains_key(*p)) {
+            problems.push(format!("extra {path}"));
+        }
+        let (name, version, patch) = (self.name, self.version, self.patch());
+        if problems.is_empty() {
+            eprintln!(
+                "{vendor_dir} ok: {} files equal {name} {version} plus {patch}",
+                expected.len()
+            );
+            Ok(())
+        } else {
+            Err(format!(
+                "{vendor_dir} is not {name} {version} plus {patch}:\n  {}",
+                problems.join("\n  ")
+            ))
+        }
     }
-    let url = format!("https://static.crates.io/crates/{NAME}/{file}");
-    eprintln!("downloading {url}");
-    if let Some(parent) = download.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+
+    fn patched_tree(&self) -> Result<BTreeMap<String, Vec<u8>>> {
+        let mut tree = self.crate_tree(&self.crate_archive()?)?;
+        let patch_name = self.patch();
+        let patch_path = workspace_root().join(&patch_name);
+        let patch = fs::read_to_string(&patch_path)
+            .map_err(|e| format!("{}: {e}", patch_path.display()))?;
+        apply_patch(&mut tree, &patch).map_err(|e| format!("{patch_name}: {e}"))?;
+        Ok(tree)
     }
-    let partial = download.with_extension("crate.part");
-    let status = Command::new("curl")
-        .args(["-fsSL", "-o"])
-        .arg(&partial)
-        .arg(&url)
-        .status()
-        .map_err(|e| format!("failed to run curl: {e}"))?;
-    if !status.success() {
-        return Err(format!("downloading {url} failed ({status})"));
+
+    fn crate_archive(&self) -> Result<Vec<u8>> {
+        let file = format!("{}-{}.crate", self.name, self.version);
+        let mut candidates = registry_caches()
+            .into_iter()
+            .map(|dir| dir.join(&file))
+            .collect::<Vec<_>>();
+        let download = Paths::new()?.cache.join("crates").join(&file);
+        candidates.push(download.clone());
+        for path in candidates.iter().filter(|p| p.is_file()) {
+            let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+            if sha256_hex(&bytes) == self.sha256 {
+                return Ok(bytes);
+            }
+            eprintln!("ignoring {}: sha256 mismatch", path.display());
+        }
+        let url = format!("https://static.crates.io/crates/{}/{file}", self.name);
+        eprintln!("downloading {url}");
+        if let Some(parent) = download.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        let partial = download.with_extension("crate.part");
+        let status = Command::new("curl")
+            .args(["-fsSL", "-o"])
+            .arg(&partial)
+            .arg(&url)
+            .status()
+            .map_err(|e| format!("failed to run curl: {e}"))?;
+        if !status.success() {
+            return Err(format!("downloading {url} failed ({status})"));
+        }
+        let bytes = fs::read(&partial).map_err(|e| format!("{}: {e}", partial.display()))?;
+        if sha256_hex(&bytes) != self.sha256 {
+            return Err(format!("{url}: sha256 is not {}", self.sha256));
+        }
+        fs::rename(&partial, &download).map_err(|e| format!("{}: {e}", download.display()))?;
+        Ok(bytes)
     }
-    let bytes = fs::read(&partial).map_err(|e| format!("{}: {e}", partial.display()))?;
-    if sha256_hex(&bytes) != SHA256 {
-        return Err(format!("{url}: sha256 is not {SHA256}"));
+
+    fn crate_tree(&self, archive: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
+        let prefix = format!("{}-{}/", self.name, self.version);
+        let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(archive));
+        let mut tree = BTreeMap::new();
+        for entry in tar.entries().map_err(|e| format!("crate archive: {e}"))? {
+            let mut entry = entry.map_err(|e| format!("crate archive: {e}"))?;
+            let path = entry
+                .path()
+                .map_err(|e| format!("crate archive: {e}"))?
+                .to_string_lossy()
+                .replace('\\', "/");
+            let Some(rel) = path.strip_prefix(&prefix) else {
+                return Err(format!("crate archive: unexpected entry {path}"));
+            };
+            if entry.header().entry_type().is_dir() {
+                continue;
+            }
+            if !entry.header().entry_type().is_file() {
+                return Err(format!("crate archive: {path} is not a regular file"));
+            }
+            if self.not_vendored.iter().any(|p| rel.starts_with(p)) {
+                continue;
+            }
+            let mut bytes = Vec::new();
+            entry
+                .read_to_end(&mut bytes)
+                .map_err(|e| format!("crate archive: {path}: {e}"))?;
+            tree.insert(rel.to_owned(), bytes);
+        }
+        Ok(tree)
     }
-    fs::rename(&partial, &download).map_err(|e| format!("{}: {e}", download.display()))?;
-    Ok(bytes)
 }
 
 fn registry_caches() -> Vec<PathBuf> {
@@ -163,38 +243,6 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
-}
-
-fn crate_tree(archive: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
-    let prefix = format!("{NAME}-{VERSION}/");
-    let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(archive));
-    let mut tree = BTreeMap::new();
-    for entry in tar.entries().map_err(|e| format!("crate archive: {e}"))? {
-        let mut entry = entry.map_err(|e| format!("crate archive: {e}"))?;
-        let path = entry
-            .path()
-            .map_err(|e| format!("crate archive: {e}"))?
-            .to_string_lossy()
-            .replace('\\', "/");
-        let Some(rel) = path.strip_prefix(&prefix) else {
-            return Err(format!("crate archive: unexpected entry {path}"));
-        };
-        if entry.header().entry_type().is_dir() {
-            continue;
-        }
-        if !entry.header().entry_type().is_file() {
-            return Err(format!("crate archive: {path} is not a regular file"));
-        }
-        if NOT_VENDORED.iter().any(|p| rel.starts_with(p)) {
-            continue;
-        }
-        let mut bytes = Vec::new();
-        entry
-            .read_to_end(&mut bytes)
-            .map_err(|e| format!("crate archive: {path}: {e}"))?;
-        tree.insert(rel.to_owned(), bytes);
-    }
-    Ok(tree)
 }
 
 fn collect_tree(base: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) -> Result {
@@ -347,7 +395,7 @@ pub fn check_features() -> Result {
         ));
     }
     let parity = enabled_features(&["-p", "asrs-app", "--features", "parity"])?;
-    for package in [NAME, "gpui-pre-platform"] {
+    for package in ["gpui-pre", "gpui-pre-platform"] {
         let on = parity
             .iter()
             .any(|(p, f)| p == package && f.iter().any(|f| f == "test-support"));

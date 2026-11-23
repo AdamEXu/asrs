@@ -116,7 +116,7 @@ jobs:
           tool: cargo-about@0.9.3
       - name: Build
         run: cargo build --workspace --all-targets --locked
-      - name: Layout, vendored gpui-pre and generated tables
+      - name: Layout, vendored gpui crates and generated tables
         run: |
           cargo xtask layout
           cargo xtask harness
