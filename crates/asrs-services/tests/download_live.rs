@@ -387,6 +387,17 @@ fn run_client(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<
                     fixture.drop_all(&text(step, "how"));
                     continue;
                 }
+                "stall" => {
+                    fixture.drop_all("stall");
+                    continue;
+                }
+                "sftp" => {
+                    if let Err(message) = clients.sftp(client) {
+                        let message = effects.text(&message);
+                        effects.push(Json::object([k("sftp"), ("threw", message)]));
+                    }
+                    continue;
+                }
                 "await" => (Some(text(step, "name")), LIMIT),
                 "settle" | "wait" => (
                     None,
@@ -406,6 +417,13 @@ fn run_client(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<
                             }
                         }
                         ClientEvent::Ready(_) => effects.push(Json::object([k("ready")])),
+                        ClientEvent::Sftp(_, _, result) => {
+                            let error = match result {
+                                Ok(_) => Json::Null,
+                                Err(message) => effects.text(&message),
+                            };
+                            effects.push(Json::object([k("sftp"), ("error", error)]));
+                        }
                         ClientEvent::Close(_) => effects.push(Json::object([k("close")])),
                         ClientEvent::StartTimeout(_, ms) => {
                             ready_timeout = Some(

@@ -16,7 +16,8 @@ import { World, electronFake, fakeFs } from "./world";
 //           username goes through upstream's own password authentication and fails.
 //   proxy   every sshd scenario connects through a byte-counting proxy that can drop the
 //           connection after `bytes` from the server, or on a `drop` step
-//   raw     a TCP server that sends `send` (latin1), then holds, closes or resets the connection
+//   raw     a TCP server that sends `send` (latin1), then holds, closes or resets the connection, or
+//           lingers: holds it and never closes its own side
 //           (`when`: at once, after the client's ident, or after its KEXINIT)
 //   closed  a port nothing listens on
 //   blackhole  no server: `host` is a TEST-NET address that never answers
@@ -96,6 +97,8 @@ class Fixture {
   root: string;
   port = 0;
   key = "";
+  /** The proxy forwards nothing more from the server. */
+  stalled = false;
   private sshd: ChildProcess | null = null;
   private servers: net.Server[] = [];
   private links: { client: net.Socket; server: net.Socket; dropped: boolean }[] = [];
@@ -123,6 +126,7 @@ class Fixture {
             else if (server.then === "rst") socket.resetAndDestroy();
           };
           let received = Buffer.alloc(0);
+          if (server.then === "linger") socket.allowHalfOpen = true;
           if (server.send !== "") socket.write(Buffer.from(server.send, "latin1"), () => server.when === "accept" && act());
           else if (server.when === "accept") act();
           socket.on("data", (data) => {
@@ -194,6 +198,7 @@ class Fixture {
       await sleep(25);
     }
     const proxy = net.createServer({ allowHalfOpen: true }, (client) => {
+      if (this.stalled) return;
       const link = { client, server: net.connect({ port: sshdPort, host: "127.0.0.1", allowHalfOpen: true }), dropped: false };
       this.links.push(link);
       client.on("error", () => link.server.destroy());
@@ -203,7 +208,7 @@ class Fixture {
       let sent = 0;
       const limit: number = server.drop?.bytes ?? Infinity;
       link.server.on("data", (data) => {
-        if (link.dropped) return;
+        if (link.dropped || this.stalled) return;
         const left = limit - sent;
         sent += data.length;
         client.write(data.subarray(0, Math.max(0, Math.min(left, data.length))));
@@ -475,6 +480,16 @@ async function runClient(scenario: Scenario, fixture: Fixture, ssh2: any, push: 
         break;
       case "drop":
         fixture.dropAll(step.how);
+        break;
+      case "stall":
+        fixture.stalled = true;
+        break;
+      case "sftp":
+        try {
+          client.sftp((error: Error | undefined) => push({ k: "sftp", error: error ? error.message : null }));
+        } catch (error) {
+          push({ k: "sftp", threw: (error as Error).message });
+        }
         break;
       default:
         throw new Error(`unknown step ${step.op}`);

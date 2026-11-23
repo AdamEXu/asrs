@@ -124,6 +124,7 @@ fn how(name: &str) -> &'static str {
     match name {
         "fin" => "fin",
         "rst" => "rst",
+        "stall" => "stall",
         other => panic!("unknown drop {other}"),
     }
 }
@@ -469,13 +470,14 @@ async fn raw(mut socket: TcpStream, send: Vec<u8>, then: String, when: String) {
                     reset(socket);
                     return;
                 }
-                "hold" => {}
+                "hold" | "linger" => {}
                 other => panic!("unknown then {other}"),
             }
         }
         let mut buffer = [0; 4096];
         match socket.read(&mut buffer).await {
             Ok(n) if n > 0 => received.extend_from_slice(&buffer[..n]),
+            Ok(_) if then == "linger" => std::future::pending().await,
             _ => return,
         }
     }
@@ -494,6 +496,7 @@ async fn proxy(
     let mut from_client = vec![0; 65536];
     let mut from_server = vec![0; 65536];
     let (mut client_open, mut server_open) = (true, true);
+    let mut stalled = false;
     let how = loop {
         if !client_open && !server_open {
             return;
@@ -507,7 +510,7 @@ async fn proxy(
                 Ok(n) => if server.write_all(&from_client[..n]).await.is_err() { return },
                 Err(_) => return,
             },
-            result = server.read(&mut from_server), if server_open => match result {
+            result = server.read(&mut from_server), if server_open && !stalled => match result {
                 Ok(0) | Err(_) => {
                     server_open = false;
                     let _ = client.shutdown().await;
@@ -528,6 +531,7 @@ async fn proxy(
             result = drops.changed() => {
                 let how = *drops.borrow_and_update();
                 match (result, how) {
+                    (Ok(()), Some("stall")) => stalled = true,
                     (Ok(()), Some(how)) => break how,
                     (Ok(()), None) => {}
                     (Err(_), _) => return,
