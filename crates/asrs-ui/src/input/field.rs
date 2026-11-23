@@ -503,7 +503,6 @@ impl<M: FieldModel> Render for TextField<M> {
                 this.hovered = *hovered;
                 cx.notify();
             }))
-            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.blur(window, cx)))
             .child(frame.absolute().inset_0())
             .child(editor_box);
         if focused {

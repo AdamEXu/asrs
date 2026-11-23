@@ -714,7 +714,14 @@ impl<H: FrameHost> HubFrame<H> {
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
         header = header
             .child(header_cell(grid, first_cell, count > 1, border, &palette))
-            .child(grid.place(jump_at).child(jump))
+            .child(
+                grid.place(jump_at)
+                    .on_mouse_down_out({
+                        let jump = jump.clone();
+                        move |_, window, cx| jump.update(cx, |field, cx| field.blur(window, cx))
+                    })
+                    .child(jump),
+            )
             .child(grid.button(button, button_at));
         probes = probes
             .child(probed("input.data-table-jump-input", grid.place(jump_at)))
