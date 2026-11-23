@@ -38,6 +38,7 @@ use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
 
 use super::console::ConsoleViews;
+use super::documentation::DocumentationViews;
 use super::field_2d::Field2dViews;
 use super::field3d::Field3dViews;
 use super::line_graph::LineGraphViews;
@@ -153,6 +154,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) field3d: Field3dViews,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
+    pub(super) documentation: DocumentationViews,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -239,6 +241,7 @@ impl<H: FrameHost> HubFrame<H> {
             field3d: Field3dViews::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
+            documentation: DocumentationViews::default(),
         }
     }
 
@@ -931,6 +934,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 }
                 if let Some(console) = self.console_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(console);
+                }
+                if let Some(page) = self.documentation_element(rect, appearance, scale, window, cx)
+                {
+                    renderer = renderer.child(page);
                 }
                 viewer = viewer.child(probe(FrameElement::RendererContent, renderer));
             }

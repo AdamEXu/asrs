@@ -21,7 +21,9 @@ parity = [
 [dependencies]
 anyhow = { version = "=1.0.104", optional = true }
 asrs-canvas = { path = "../asrs-canvas" }
+async-channel = "=2.5.0"
 gpui-kit.workspace = true
+gpui-webview = "=0.10.0"
 gpui-pre = { workspace = true, optional = true }
 gpui-pre-platform = { workspace = true, optional = true }
 icu_properties = "=1.4.3"
@@ -30,6 +32,7 @@ roxmltree = "=0.21.2"
 simplecss = "=0.2.2"
 svgtypes = "=0.16.2"
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
+wry = { package = "lb-wry", version = "=0.53.3" }
 
 [dev-dependencies]
 asrs-js = { path = "../asrs-js" }

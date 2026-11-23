@@ -1,5 +1,6 @@
 pub mod console;
 pub mod console_layout;
+pub mod documentation;
 pub mod field3d;
 pub mod field_2d;
 mod field_image;

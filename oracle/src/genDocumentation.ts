@@ -15,6 +15,9 @@ import { fileURLToPath } from "node:url";
 //
 //   genDocumentation hash
 //
+// `load` steps wait for the page to settle too: its router writes the first hash around the load
+// event, before or after it.
+//
 // This file runs twice: as the generator, and as the main process of the Electron it spawns.
 
 const STATES: unknown[] = [
@@ -77,7 +80,10 @@ const PAGE = (renderer: string) => `
     save: () => {},
     restore: (op) => window.renderer.restoreState(op.state),
     render: () => window.renderer.render(null),
-    load: () => window.until(() => window.renderer.loaded),
+    load: async () => {
+      await window.until(() => window.renderer.loaded);
+      await window.ops.settle();
+    },
     click: async (op) => {
       let link;
       await window.until(() => (link = window.frame.contentDocument.querySelector(op.selector)));

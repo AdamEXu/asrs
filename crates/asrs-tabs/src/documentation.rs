@@ -59,6 +59,10 @@ impl DocumentationFrame {
         self.src
     }
 
+    pub fn loaded(&self) -> bool {
+        self.loaded
+    }
+
     pub fn hash(&self) -> &JsString {
         &self.hash
     }
