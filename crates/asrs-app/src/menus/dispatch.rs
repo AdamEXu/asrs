@@ -18,6 +18,7 @@ use super::bridge::{self, MenuAction};
 use super::click::{self, ClickEnv, Effect, Failure, Reply, Then};
 use super::context;
 use super::model::Command;
+use crate::export_flow;
 use crate::main_process::MainProcess;
 use crate::windows::{
     self, FileFilter, MessageBoxOptions, MessageBoxType, OpenDialogOptions, SaveDialogOptions,
@@ -134,7 +135,12 @@ fn perform(effect: Effect, what: &str, cx: &mut App) -> Result<(), Unavailable> 
         Effect::OpenSatellite(_) => return open_satellite(),
         Effect::OpenWindow { kind, parent } => return open_window(kind, parent, cx),
         Effect::NewTabPopup { window, rect } => new_tab_popup(window, &rect, cx),
-        Effect::Close(window) | Effect::Destroy(window) => windows::close(cx, window),
+        Effect::Close(window) => {
+            if export_flow::may_close(window, cx) {
+                windows::close(cx, window);
+            }
+        }
+        Effect::Destroy(window) => windows::close(cx, window),
         Effect::MoveTop(window) => {
             if let Some(handle) = Windows::handle(cx, window) {
                 let _ = handle.update(cx, |_, window, _| window.activate_window());
@@ -250,7 +256,7 @@ fn show_failure(e: &JsError, cx: &mut App) {
     );
 }
 
-fn show_error(message: &str, detail: &str, cx: &mut App) {
+pub(crate) fn show_error(message: &str, detail: &str, cx: &mut App) {
     let options = MessageBoxOptions {
         kind: MessageBoxType::Error,
         title: "Error".to_owned(),
@@ -264,7 +270,7 @@ fn show_error(message: &str, detail: &str, cx: &mut App) {
 
 /// Off macOS the platform dialogs answer for the user when they have no window or no button, so
 /// a box without them goes on the focused or most recent hub window with Electron's default "OK".
-fn show_message_box(
+pub(crate) fn show_message_box(
     window: Option<WindowId>,
     mut options: MessageBoxOptions,
     cx: &mut App,
@@ -287,7 +293,7 @@ fn show_message_box(
     });
 }
 
-fn with_window(
+pub(crate) fn with_window(
     window: Option<WindowId>,
     cx: &mut App,
     show: impl FnOnce(Option<&mut Window>, &mut App),
@@ -358,7 +364,7 @@ pub(crate) fn save_dialog_options(options: &services::SaveDialog) -> SaveDialogO
         title: options.title.to_owned(),
         message: String::new(),
         button_label: String::new(),
-        default_path: Some(PathBuf::from(&options.default_path)),
+        default_path: options.default_path.as_ref().map(PathBuf::from),
         filters: vec![file_filter(&options.filters)],
         create_directory: options.properties.contains(&"createDirectory"),
     }

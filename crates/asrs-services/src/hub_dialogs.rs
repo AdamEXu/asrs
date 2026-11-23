@@ -29,7 +29,7 @@ pub fn error(data: &JsValue) -> Result<MessageBox, JsError> {
 pub fn console_export(now_ms: f64, zone: &impl LocalZone) -> SaveDialog {
     SaveDialog {
         title: "Select export location for console log",
-        default_path: format!("Console {}.txt", format_date(now_ms, zone)),
+        default_path: Some(format!("Console {}.txt", format_date(now_ms, zone))),
         properties: &[
             "createDirectory",
             "showOverwriteConfirmation",
@@ -58,7 +58,10 @@ mod tests {
     fn dialogs_match_the_console_scenario() {
         let dialog = console_export(1_795_392_000_000.0, &FixedZone::UTC);
         assert_eq!(dialog.title, "Select export location for console log");
-        assert_eq!(dialog.default_path, "Console 2026-11-23.txt");
+        assert_eq!(
+            dialog.default_path.as_deref(),
+            Some("Console 2026-11-23.txt")
+        );
         assert_eq!(
             dialog.properties,
             [

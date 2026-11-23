@@ -1,0 +1,16 @@
+{
+  "entry": "exportRuns",
+  "args": [
+    "parity/specs/export/runs.json"
+  ],
+  "inputs": [
+    "runs.json",
+    "../hub/logs/akit.csv",
+    "../hub/logs/corpus-a-struct-wpilib.wpilog",
+    "../hub/logs/corpus-b-random-r2-3.rlog",
+    "../hub/logs/enabled.csv",
+    "../hub/logs/match.csv",
+    "../hub/logs/partial.wpilog",
+    "undefined.csv"
+  ]
+}

@@ -397,6 +397,10 @@ Decode order:
 3. `loadAllFields()` on the root and settle; repeat from step 2 until a whole pass does nothing.
    Child sources (embedded `log:` fields) go through the same steps. This is the `full` phase.
 
+`exportRuns` (`src/exportRuns.ts`) opens logs the same way and runs the real export worker on each
+once per `ExportOptions`, recording every value it posts through `WorkerManager`'s progress
+callback and the bytes main would write.
+
 The dump is CVE-1 JSONL, written for `initial` and then for `full`:
 
 ```text
@@ -1194,6 +1198,19 @@ worker message. Its generator hash also covers the `dom` entry's inputs
 
 `crates/asrs-hub/tests/hub_lifecycle.rs` replays `parity/specs/hub/lifecycle-*.entry.json`
 through `asrs_hub::hub::HubModel` with the same scheduling and compares every record.
+
+A `lifecycle-*` fixture may also watch the loading glow: its first capture installs a
+`MutationObserver` on the document element's style, and `window.__glow.splice(0)` reads every
+value the glow took since the last read, one per page task.
+
+## Log routing and the export flow
+
+`genFiles routing 0 0 dev <scenario>` (`src/files/routing.ts`) runs the real `main.ts` against the
+`files` fakes: `isDsLog` and `openFilesSmart` through every caller (dropped files, the Open Log(s)
+dialog, `open-file`, the AdvantageKit poll, startup), the windows they open with their `dom-ready`
+sends, and the export flow from `prompt-export` to `write-export` and the closing warning. The
+scenarios are `running`, `startup-plain`, `startup-argv`, `startup-ds` and `startup-ds-saved`; the
+records are described in the file. `crates/asrs-app/tests/routing_vectors.rs` replays them.
 
 ## Electron app driver
 

@@ -30,6 +30,7 @@ use super::{
     Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Theme, Wheel,
     patch_colours,
 };
+use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
 use crate::main_process::{MainProcess, process_platform};
@@ -40,8 +41,7 @@ use crate::menus::model::{Command, MenuItem};
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
-use crate::views::prompts;
-use crate::windows::{self, WindowId, WindowKind, Windows};
+use crate::windows::{self, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
@@ -382,24 +382,6 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
         wheel.wheel_ticks_x as f32,
         wheel.wheel_ticks_y as f32,
     )))
-}
-
-/// `prompt-export` up to the window: confirming it is P08's export flow.
-fn open_export(id: WindowId, hub: &Entity<Hub>, data: &JsValue, cx: &mut App) {
-    let supports_akit = data.get("supportsAkit").and_then(JsValue::as_bool) == Some(true);
-    let hub = hub.downgrade();
-    let opened = prompts::open_export(cx, id, supports_akit, move |value, prompt, cx| {
-        if value.is_null() {
-            windows::close(cx, prompt);
-            if let Some(hub) = hub.upgrade() {
-                let message = NamedMessage::new(MainToHub::CancelExport, JsValue::Undefined);
-                hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
-            }
-        }
-    });
-    if let Err(e) = opened {
-        eprintln!("asrs: opening the export prompt: {e}");
-    }
 }
 
 fn click_app_menu(labels: &[String], cx: &mut App) -> Result<(), String> {
@@ -890,10 +872,11 @@ impl Variant<'_> {
                 let screen = self.screen();
                 self.headless.context().update(|cx| {
                     let id = Windows::adopt_hub(cx, window.into());
-                    cx.global_mut::<MainProcess>().adopt_hub(id, &hub);
+                    cx.global_mut::<MainProcess>()
+                        .adopt_hub(id, hub.downgrade());
                     cx.set_global(ScriptedMenu::default());
                     cx.set_global(Script::default());
-                    cx.subscribe(&hub, move |hub, event, cx| match event {
+                    cx.subscribe(&hub, move |_, event, cx| match event {
                         HubEvent::Main(m) => {
                             hub_dialogs::show(m, handle, cx);
                             let main = cx.global_mut::<MainProcess>().state_mut();
@@ -908,9 +891,7 @@ impl Variant<'_> {
                                     .borrow_mut()
                                     .push(format!("main {}: {e:?}", m.name.name()));
                             }
-                            if m.name == HubToMain::PromptExport {
-                                open_export(id, &hub, &m.data, cx);
-                            }
+                            export_flow::hub_message(id, m, cx);
                             if m.name == HubToMain::SaveState {
                                 let mut saves = saves.borrow_mut();
                                 saves.count += 1;

@@ -13,6 +13,8 @@ use mac as imp;
 pub mod dialog;
 pub mod probe;
 
+use std::path::Path;
+
 use gpui_kit::{App, ScrollDelta, ScrollEvent, Window};
 
 /// Chromium's pixel size of one notched wheel tick on macOS (`kScrollbarPixelsPerCocoaTick`).
@@ -137,6 +139,18 @@ pub type MenuPath = Vec<usize>;
 pub struct WheelDelta {
     pub x: f32,
     pub y: f32,
+}
+
+/// Electron's `app.addRecentDocument(path)`. Only macOS has it so far (#279).
+pub fn add_recent_document(cx: &mut App, path: &Path) {
+    #[cfg(feature = "parity")]
+    if cx.has_global::<dialog::Script>() {
+        let script = cx.global_mut::<dialog::Script>();
+        script.recent_documents.push(path.to_owned());
+        return;
+    }
+    let _ = cx;
+    imp::add_recent_document(path);
 }
 
 /// Installs the process-wide hooks (the raw wheel monitor on macOS). Idempotent.

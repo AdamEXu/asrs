@@ -22,7 +22,7 @@ use asrs_log::log::log_value_sets::LogValueSetAny;
 use asrs_log::log::{Log, LoggableType};
 use asrs_log::util::upper_bound;
 
-use crate::export::ExportError;
+use crate::export::{ExportError, fraction};
 use crate::mcap::{McapError, McapWriter, Message, Time};
 
 fn schema_json(value: &str) -> Vec<u8> {
@@ -107,6 +107,7 @@ pub fn generate_mcap(
     log: &Log,
     fields: &[JsString],
     timestamps: &Option<Vec<f64>>,
+    progress: &mut dyn FnMut(f64),
 ) -> Result<Vec<u8>, ExportError> {
     let mut writer = McapWriter::new();
     writer.start(&JsString::new(), &JsString::from("AdvantageScope"));
@@ -154,6 +155,7 @@ pub fn generate_mcap(
                 for (i, &timestamp) in field_timestamps.iter().enumerate() {
                     add_value(&mut writer, channel_id, &field_data, timestamp, i, i)
                         .map_err(|()| ExportError::Rejected)?;
+                    progress(fraction(field_index, i, field_data.len(), filtered.len()));
                 }
             }
             Some(timestamps) => {
@@ -170,6 +172,7 @@ pub fn generate_mcap(
                             i,
                         );
                     }
+                    progress(fraction(field_index, i, timestamps.len(), fields.len()));
                 }
             }
         }
@@ -258,7 +261,7 @@ mod tests {
         log.put_number(&key("undefined"), 1.0, 0.5);
         log.put_number(&key("/Value"), 1.0, 2.0);
         let fields = ["/Flags", "/Names", "undefined", "/Value"].map(key);
-        let file = generate_mcap(&log, &fields, &None).unwrap();
+        let file = generate_mcap(&log, &fields, &None, &mut |_| {}).unwrap();
         assert_eq!(
             summary_channels(&file),
             [
@@ -278,11 +281,12 @@ mod tests {
         log.put_number(&key("/Value"), 1.0, 2.0);
         let fields = ["/Value", "undefined"].map(key);
         assert!(matches!(
-            generate_mcap(&log, &fields, &None),
+            generate_mcap(&log, &fields, &None, &mut |_| {}),
             Err(ExportError::Rejected)
         ));
 
-        let file = generate_mcap(&log, &fields, &Some(vec![1.0, 2.0, 1.8e299])).unwrap();
+        let file =
+            generate_mcap(&log, &fields, &Some(vec![1.0, 2.0, 1.8e299]), &mut |_| {}).unwrap();
         assert_eq!(
             summary_channels(&file),
             [(0, 2, "/Value".to_owned()), (1, 0, String::new())]

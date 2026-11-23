@@ -28,11 +28,11 @@ pub struct OpenDialog {
     pub filters: Option<FileFilter>,
 }
 
-/// One `showSaveDialog` call.
+/// One `showSaveDialog` call. `default_path: None` is a `defaultPath` of `undefined`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SaveDialog {
     pub title: &'static str,
-    pub default_path: String,
+    pub default_path: Option<String>,
     pub properties: &'static [&'static str],
     pub filters: FileFilter,
 }

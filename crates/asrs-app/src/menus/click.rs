@@ -369,7 +369,7 @@ pub fn click(
             window: None,
             options: SaveDialog {
                 title: "Select export location for layout file",
-                default_path: env.identity.text(&env.layout_default_path),
+                default_path: Some(env.identity.text(&env.layout_default_path)),
                 properties: &[
                     "createDirectory",
                     "showOverwriteConfirmation",

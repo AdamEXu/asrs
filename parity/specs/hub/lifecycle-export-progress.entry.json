@@ -1,0 +1,365 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "(() => { const read = () => [document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]; window.__glow = []; let last = JSON.stringify(read()); new MutationObserver(() => { const now = read(); if (JSON.stringify(now) !== last) { last = JSON.stringify(now); window.__glow.push(now); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] }); return read(); })()"
+          }
+        ],
+        "label": "boot"
+      },
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "opened"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/x.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "changes",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "table-exported"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "table-waiting"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "table-finished"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "table-later"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/x.csv",
+          "options": {
+            "format": "csv-list",
+            "samplingMode": "fixed",
+            "samplingPeriod": 500,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "list-exported"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "list-waiting"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "list-finished"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "list-later"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/x.wpilog",
+          "options": {
+            "format": "wpilog",
+            "samplingMode": "fixed",
+            "samplingPeriod": 700,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "wpilog-exported"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "wpilog-waiting"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "wpilog-finished"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "wpilog-later"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/x.mcap",
+          "options": {
+            "format": "mcap",
+            "samplingMode": "changes",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "mcap-exported"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "mcap-waiting"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "mcap-finished"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "mcap-later"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/x.csv",
+          "options": {
+            "format": "csv-table",
+            "samplingMode": "akit",
+            "samplingPeriod": 20,
+            "prefixes": "",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "rejected-exported"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "rejected-waiting"
+      },
+      {
+        "main": "prepare-export",
+        "data": {
+          "path": "/out/x.mcap",
+          "options": {
+            "format": "mcap",
+            "samplingMode": "changes",
+            "samplingPeriod": 20,
+            "prefixes": "/None",
+            "includeGenerated": true
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "silent-exported"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "silent-waiting"
+      },
+      {
+        "main": "finish-export"
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "silent-finished"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "window.__glow.splice(0)"
+          }
+        ],
+        "label": "silent-later"
+      }
+    ]
+  }
+}
