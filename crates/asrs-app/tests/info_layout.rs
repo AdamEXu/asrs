@@ -160,7 +160,7 @@ fn css_rect(r: LuRect, scale: f32) -> Rect {
 struct Laid {
     items: Vec<Item>,
     scale: f32,
-    /// Items compared within [`BOLD_25PX`].
+    /// Items whose `x` and width are compared within [`BOLD_25PX`].
     bold_25px: Vec<usize>,
 }
 
@@ -184,20 +184,23 @@ impl Laid {
     }
 }
 
-fn near(a: &Rect, b: &Rect, tolerance: f64) -> bool {
-    a.iter().zip(b).all(|(a, b)| (a - b).abs() <= tolerance)
+/// `x` and `width` within `across`, `y` and `height` within `tolerance`.
+fn near(a: &Rect, b: &Rect, across: f64, tolerance: f64) -> bool {
+    let within = [across, tolerance, across, tolerance];
+    (0..4).all(|i| (a[i] - b[i]).abs() <= within[i])
 }
 
 /// Compares and returns how many line boxes and boxes were equal.
 fn same(page: &Page, laid: &Laid, height: Lu, failures: &mut Vec<String>) -> usize {
     let mut equal = 0;
     for (i, (want, got)) in page.items.iter().zip(&laid.items).enumerate() {
-        let tolerance = if laid.bold_25px.contains(&i) {
+        let tolerance = tolerance(page.scale);
+        let across = if laid.bold_25px.contains(&i) {
             BOLD_25PX
         } else {
-            tolerance(page.scale)
+            tolerance
         };
-        let near = |a: &Rect, b: &Rect| near(a, b, tolerance);
+        let near = |a: &Rect, b: &Rect| near(a, b, across, tolerance);
         let matches = match (want, got) {
             (Item::Box(a, ra), Item::Box(b, rb)) => a == b && near(ra, rb),
             (Item::Text(a), Item::Text(b)) => {

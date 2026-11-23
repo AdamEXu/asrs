@@ -5,6 +5,8 @@
 //! dialogs answered by a script. What the handlers do is `menu_click_vectors`' business; this
 //! checks that their effects reach the hubs, the windows, the files and the dialogs.
 
+use std::io::{ErrorKind, Read};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Command as Process;
 use std::sync::Arc;
@@ -23,10 +25,13 @@ use asrs_model::json_file;
 use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Theme, Timestamps};
 use asrs_model::source_list::configs;
 use asrs_model::tab_type::TabType;
+use asrs_services::download::client::Target;
+use asrs_services::download::{DownloadConfig, DownloadService};
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::lifecycle;
+use asrs_services::path::PathStyle;
 use asrs_services::window_manager::Platform;
-use asrs_ui::gpui::{HeadlessAppContext, Keystroke, NoopTextSystem};
+use asrs_ui::gpui::{HeadlessAppContext, KeyUpEvent, Keystroke, NoopTextSystem, PlatformInput};
 use asrs_ui::platform::dialog::{Reply, Script, Shown};
 use asrs_ui::theme::ThemeSource;
 
@@ -207,7 +212,9 @@ impl AppUnderTest {
             let handle = app.cx.update(|cx| Windows::handle(cx, window));
             app.cx
                 .update_window(handle.expect("open"), |_, window, cx| {
-                    window.dispatch_keystroke(Keystroke::parse(key).expect("a keystroke"), cx)
+                    let keystroke = Keystroke::parse(key).expect("a keystroke");
+                    window.dispatch_keystroke(keystroke.clone(), cx);
+                    window.dispatch_event(PlatformInput::KeyUp(KeyUpEvent { keystroke }), cx);
                 })
                 .expect("open");
         })
@@ -287,6 +294,7 @@ fn in_a_fresh_home() {
     the_preferences_window_writes_the_file(&mut app, hub);
     the_licenses_window_opens_once(&mut app, hub);
     help_windows_open_beside_the_hub(&mut app, hub);
+    closing_licenses_or_help_stops_the_download(&mut app, hub);
     accelerators_reach_the_window_they_were_pressed_in(&mut app, hub);
     let hub = windows_open_and_close(&mut app, hub);
     layouts_round_trip(&mut app, hub);
@@ -357,13 +365,23 @@ fn the_licenses_window_opens_once(app: &mut AppUnderTest, hub: WindowId) {
 fn help_windows_open_beside_the_hub(app: &mut AppUnderTest, hub: WindowId) {
     let parent = app.bounds(hub);
     let mut opened = Vec::new();
-    for config in [configs::line_graph_numeric(), configs::mechanism()] {
+    let path = app.prefs_path();
+    let saved = std::fs::read_to_string(&path).expect("prefs.json");
+    let edited = saved.replace("\"liveDiscard\":1200", "\"liveDiscard\":1100");
+    assert_ne!(edited, saved);
+    for (config, prefs, discard) in [
+        (configs::line_graph_numeric(), edited, 1100.0),
+        (configs::mechanism(), saved, 1200.0),
+    ] {
+        std::fs::write(&path, prefs).expect("prefs.json");
         let data = config.to_js();
         let opened_help = app
             .cx
             .update(|cx| MainProcess::open_source_list_help(cx, hub, &data));
         let (window, page) = opened_help.expect("a help window");
         app.settle();
+        let held = app.hub(hub, |hub| hub.page().preferences().map(|p| p.live_discard));
+        assert_eq!(held, Some(discard));
         let bounds = app.bounds(window);
         assert_eq!((bounds.width, bounds.height), (350.0, 500.0));
         assert_eq!(bounds.x, parent.x + 30.0);
@@ -379,6 +397,50 @@ fn help_windows_open_beside_the_hub(app: &mut AppUnderTest, hub: WindowId) {
         app.close(window);
     }
     app.focus(hub);
+}
+
+fn closing_licenses_or_help_stops_the_download(app: &mut AppUnderTest, hub: WindowId) {
+    for kind in [WindowKind::Licenses, WindowKind::SourceListHelp] {
+        let robot = TcpListener::bind("127.0.0.1:0").expect("a port");
+        let port = robot.local_addr().expect("an address").port();
+        let mut config = DownloadConfig::new(PathStyle::host());
+        let target = config.target;
+        config.target = Box::new(move |options| Target {
+            port,
+            ready_timeout_ms: 600_000.0,
+            ..target(options)
+        });
+        let (service, _events) = DownloadService::spawn(config).expect("the service");
+        service.window_opened();
+        service.start("127.0.0.1", "/");
+        let (mut connection, _) = robot.accept().expect("a connection");
+        app.cx.update(|cx| MainProcess::set_download(cx, service));
+        if kind == WindowKind::Licenses {
+            assert!(app.click(Command::OpenLicenses, &[]).is_empty());
+        } else {
+            let data = configs::mechanism().to_js();
+            app.cx
+                .update(|cx| MainProcess::open_source_list_help(cx, hub, &data))
+                .expect("a help window");
+        }
+        app.settle();
+        let timeout = Some(Duration::from_millis(300));
+        connection.set_read_timeout(timeout).expect("a timeout");
+        let mut ident = Vec::new();
+        let open = connection.read_to_end(&mut ident).expect_err("no end yet");
+        assert!(
+            matches!(open.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut),
+            "{open}"
+        );
+        let window = app.window(kind).expect("the window");
+        app.close(window);
+        let timeout = Some(Duration::from_secs(60));
+        connection.set_read_timeout(timeout).expect("a timeout");
+        connection
+            .read_to_end(&mut ident)
+            .unwrap_or_else(|e| panic!("{kind:?}: {e}"));
+        app.focus(hub);
+    }
 }
 
 fn messages_reach_the_focused_hub(app: &mut AppUnderTest, hub: WindowId) {

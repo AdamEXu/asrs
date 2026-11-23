@@ -7,6 +7,9 @@ use asrs_parity::json::{self, Json};
 
 use crate::{Result, cargo, workspace_root};
 
+/// The programs a release ships, and the listing of the crates compiled into each.
+const PROGRAMS: &[(&str, &str)] = &[("asrs-app", "THIRD_PARTY_LICENSES.txt")];
+
 const BUNDLED: &[&str] = &["LICENSE", "THIRD_PARTY_NOTICES.md"];
 const LIBM_CRATE: &str = "crates/asrs-libm-lgpl";
 const LIBM_STANDALONE_MANIFEST: &str = concat!(
@@ -34,12 +37,16 @@ pub fn run() -> Result {
         fs::remove_dir_all(&dest).map_err(|e| format!("clearing {}: {e}", dest.display()))?;
     }
     fs::create_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
-    let about = about(&dest)?;
-    let listing = dest.join("THIRD_PARTY_LICENSES.txt");
-    fs::write(&listing, listing_text(&about)?)
-        .map_err(|e| format!("{}: {e}", listing.display()))?;
+    let mut reports = Vec::new();
+    for (package, listing) in PROGRAMS {
+        let report = about(package, &dest)?;
+        let listing = dest.join(listing);
+        fs::write(&listing, listing_text(&report)?)
+            .map_err(|e| format!("{}: {e}", listing.display()))?;
+        reports.push(report);
+    }
     let window = dest.join("licenses.json");
-    fs::write(&window, window_list(&about, &root)?.to_compact())
+    fs::write(&window, window_list(&reports, &root)?.to_compact())
         .map_err(|e| format!("{}: {e}", window.display()))?;
     for name in BUNDLED {
         fs::copy(root.join(name), dest.join(name)).map_err(|e| format!("{name}: {e}"))?;
@@ -53,8 +60,8 @@ pub fn run() -> Result {
     Ok(())
 }
 
-/// cargo-about's report on the crates in the app.
-fn about(dir: &Path) -> Result<Json> {
+/// cargo-about's report on the crates in `package`.
+fn about(package: &str, dir: &Path) -> Result<Json> {
     let report = dir.join("about.json");
     cargo(&[
         "about",
@@ -66,7 +73,7 @@ fn about(dir: &Path) -> Result<Json> {
         "--config",
         "about.toml",
         "--manifest-path",
-        "crates/asrs-app/Cargo.toml",
+        &format!("crates/{package}/Cargo.toml"),
         "--output-file",
         &report.to_string_lossy(),
     ])
@@ -126,7 +133,7 @@ fn listing_text(about: &Json) -> Result<String> {
 
 /// The Licenses window's list, in the shape of upstream's licenses.json: asrs, the crates compiled
 /// into it, and the projects its ported sources come from.
-fn window_list(about: &Json, root: &Path) -> Result<Json> {
+fn window_list(reports: &[Json], root: &Path) -> Result<Json> {
     let read = |path: &Path| {
         fs::read_to_string(path)
             .map(|text| text.replace("\r\n", "\n"))
@@ -140,13 +147,18 @@ fn window_list(about: &Json, root: &Path) -> Result<Json> {
         ),
     ];
     let mut crates: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
-    for license in list(about, "licenses")? {
-        for used_by in list(license, "used_by")? {
-            let package = crate_of(used_by)?;
-            crates
-                .entry((text(package, "name")?, text(package, "version")?))
-                .or_default()
-                .push(text(license, "text")?);
+    for report in reports {
+        for license in list(report, "licenses")? {
+            let license_text = text(license, "text")?;
+            for used_by in list(license, "used_by")? {
+                let package = crate_of(used_by)?;
+                let texts = crates
+                    .entry((text(package, "name")?, text(package, "version")?))
+                    .or_default();
+                if !texts.contains(&license_text) {
+                    texts.push(license_text.clone());
+                }
+            }
         }
     }
     let mut versions: HashMap<String, usize> = HashMap::new();
@@ -165,6 +177,7 @@ fn window_list(about: &Json, root: &Path) -> Result<Json> {
     let mut names: Vec<_> = fs::read_dir(&dir)
         .and_then(|files| files.map(|f| Ok(f?.path())).collect::<std::io::Result<_>>())
         .map_err(|e| format!("{}: {e}", dir.display()))?;
+    names.retain(|path| path.extension().is_some_and(|e| e == "txt"));
     names.sort();
     for path in names {
         let name = path.file_stem().unwrap_or_default();

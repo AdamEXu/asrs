@@ -8,8 +8,8 @@ use asrs_tabs::info::BetaWelcome;
 use asrs_tabs::info::beta_welcome::CHECKBOXES;
 use asrs_ui::gpui::{
     AnyElement, App, Context, Div, EventEmitter, FocusHandle, Focusable, HoverListenerMode,
-    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement,
-    Render, StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
+    InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton, MouseDownEvent,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
 };
 use asrs_ui::input::{Checkbox, PointerState};
 use asrs_ui::parity::probed;
@@ -56,6 +56,8 @@ pub struct BetaWelcomePage {
     /// GPUI's own hover styles end at a key press.
     hovered: Option<Control>,
     pressed: Option<Control>,
+    /// The control a held Space is pressing.
+    space: Option<Control>,
     fade: Option<Fade>,
     _keys: Subscription,
 }
@@ -76,13 +78,14 @@ impl BetaWelcomePage {
             button_from_keyboard: false,
             hovered: None,
             pressed: None,
+            space: None,
             fade: None,
             _keys: Self::keys(window, cx),
         }
     }
 
-    /// Tab moves between the controls from anywhere, and Space and Enter act at the press: GPUI
-    /// would click at the release.
+    /// Tab moves between the controls from anywhere. Enter clicks the button at the press and Space
+    /// clicks at the release, where GPUI would click for both.
     fn keys(window: &Window, cx: &mut Context<'_, Self>) -> Subscription {
         let handle = window.window_handle();
         let this = cx.entity().downgrade();
@@ -96,22 +99,37 @@ impl BetaWelcomePage {
                     view.tab(modifiers.shift, window, cx);
                     cx.stop_propagation();
                 }
-                key @ ("space" | "enter") => match view.active(window) {
-                    Some(Control::Checkbox(index)) => {
-                        if key == "space" {
-                            view.toggle(index, cx);
-                        }
-                        cx.stop_propagation();
-                    }
-                    Some(Control::Button) => {
+                key @ ("space" | "enter") => {
+                    let Some(control) = view.active(window) else {
+                        return;
+                    };
+                    if key == "space" {
+                        view.space = Some(control);
+                        cx.notify();
+                    } else if control == Control::Button {
                         view.click_continue(cx);
-                        cx.stop_propagation();
                     }
-                    None => {}
-                },
+                    cx.stop_propagation();
+                }
                 _ => {}
             });
         })
+    }
+
+    fn key_up(&mut self, event: &KeyUpEvent, window: &Window, cx: &mut Context<'_, Self>) {
+        if event.keystroke.key != "space" {
+            return;
+        }
+        match self
+            .space
+            .take()
+            .filter(|c| self.active(window) == Some(*c))
+        {
+            Some(Control::Checkbox(index)) => self.toggle(index, cx),
+            Some(Control::Button) => self.click_continue(cx),
+            None => {}
+        }
+        cx.notify();
     }
 
     pub fn page(&self) -> &BetaWelcome {
@@ -139,6 +157,7 @@ impl BetaWelcomePage {
             None => &self.body,
         };
         window.focus(handle, cx);
+        self.space = None;
     }
 
     /// Past either end the focus leaves the page, and from there enters at the other.
@@ -240,6 +259,9 @@ impl ScrolledPage for BetaWelcomePage {
 
 impl BetaWelcomePage {
     fn pointer(&self, control: Control) -> PointerState {
+        if self.space == Some(control) {
+            return PointerState::Pressed;
+        }
         match (self.hovered == Some(control), self.pressed == Some(control)) {
             (true, true) => PointerState::Pressed,
             (true, false) => PointerState::Hovered,
@@ -398,6 +420,9 @@ impl Render for BetaWelcomePage {
                 if view.scroll.key(&event.keystroke, cx) {
                     cx.notify();
                 }
+            }))
+            .on_key_up(cx.listener(|view, event: &KeyUpEvent, window, cx| {
+                view.key_up(event, window, cx);
             }))
             .on_mouse_down(
                 MouseButton::Left,

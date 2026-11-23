@@ -439,9 +439,11 @@ impl MainProcess {
             eprintln!("asrs: source list help: not a config: {config:?}");
             return None;
         };
-        info::open_source_list_help(cx, parent, &config)
+        let opened = info::open_source_list_help(cx, parent, &config)
             .inspect_err(|e| eprintln!("asrs: opening a source list help window: {e}"))
-            .ok()
+            .ok()?;
+        Self::send_all_preferences(cx);
+        Some(opened)
     }
 
     /// `downloadStop()`, which closing a licenses or source list help window calls too.

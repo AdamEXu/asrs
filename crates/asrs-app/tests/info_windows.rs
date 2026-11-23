@@ -15,9 +15,9 @@ use asrs_app::views::info::{Acknowledged, BetaWelcomePage};
 use asrs_parity::cve1::Value;
 use asrs_parity::vectors;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Bounds, Entity, HeadlessAppContext, Keystroke, Modifiers,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, NoopTextSystem, PlatformInput,
-    WindowBounds, WindowOptions, point, px, size,
+    AnyWindowHandle, AppContext, Bounds, Entity, HeadlessAppContext, KeyDownEvent, KeyUpEvent,
+    Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    NoopTextSystem, PlatformInput, WindowBounds, WindowOptions, point, px, size,
 };
 
 const SIZE: (f32, f32) = (450.0, 490.0);
@@ -144,7 +144,8 @@ impl Beta {
         };
         self.cx
             .update_window(self.window, |_, window, cx| {
-                window.dispatch_keystroke(keystroke, cx);
+                window.dispatch_keystroke(keystroke.clone(), cx);
+                window.dispatch_event(PlatformInput::KeyUp(KeyUpEvent { keystroke }), cx);
             })
             .expect("open");
         self.settle();
@@ -229,4 +230,42 @@ fn beta_welcome_flows() {
         .filter(|r| r.string("kind").as_deref() == Some("step"));
     assert_eq!(steps, recorded.count());
     assert_eq!(flows, 26);
+}
+
+#[test]
+fn a_held_space_clicks_once_at_its_release() {
+    let records = vectors::load("info/beta-welcome").expect("the vector");
+    let data = records[0].value("data").expect("data");
+    let mut beta = Beta::open(&data);
+    beta.key("Tab");
+    let keystroke = Keystroke {
+        modifiers: Modifiers::default(),
+        key: "space".to_owned(),
+        key_char: None,
+    };
+    let checked = |beta: &mut Beta| {
+        let page = beta.page.clone();
+        beta.cx.update(|cx| page.read(cx).page().checked())
+    };
+    for is_held in [false, true, true] {
+        beta.input(PlatformInput::KeyDown(KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held,
+            prefer_character_input: false,
+        }));
+        assert_eq!(checked(&mut beta), [false; 3]);
+    }
+    beta.input(PlatformInput::KeyUp(KeyUpEvent {
+        keystroke: keystroke.clone(),
+    }));
+    assert_eq!(checked(&mut beta), [true, false, false]);
+
+    beta.input(PlatformInput::KeyDown(KeyDownEvent {
+        keystroke: keystroke.clone(),
+        is_held: false,
+        prefer_character_input: false,
+    }));
+    beta.key("Tab");
+    beta.input(PlatformInput::KeyUp(KeyUpEvent { keystroke }));
+    assert_eq!(checked(&mut beta), [true, false, false]);
 }
